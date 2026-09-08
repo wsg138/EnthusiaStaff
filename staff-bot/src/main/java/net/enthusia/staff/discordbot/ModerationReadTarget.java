@@ -4,10 +4,14 @@ import java.util.OptionalLong;
 import java.util.regex.Pattern;
 
 /** Strict target carried from a signed Discord launch into the read-only moderation session. */
-sealed interface ModerationReadTarget permits ModerationReadTarget.DiscordUser, ModerationReadTarget.MessageContext {
+sealed interface ModerationReadTarget permits ModerationReadTarget.DiscordUser,
+        ModerationReadTarget.DiscordUserContext,
+        ModerationReadTarget.MessageContext {
     int DISCORD_PARTS = 2;
+    int DISCORD_CONTEXT_PARTS = 3;
     int MESSAGE_PARTS = 4;
     String DISCORD_KIND = "discord";
+    String DISCORD_CONTEXT_KIND = "discord-channel";
     String MESSAGE_KIND = "message";
     Pattern SNOWFLAKE = Pattern.compile("[1-9][0-9]{0,19}");
 
@@ -30,6 +34,12 @@ sealed interface ModerationReadTarget permits ModerationReadTarget.DiscordUser, 
         String[] parts = key.split(":", -1);
         if (parts.length == DISCORD_PARTS && DISCORD_KIND.equals(parts[0])) {
             return new DiscordUser(snowflake(parts[1], "user"));
+        }
+        if (parts.length == DISCORD_CONTEXT_PARTS && DISCORD_CONTEXT_KIND.equals(parts[0])) {
+            return new DiscordUserContext(
+                    snowflake(parts[1], "channel"),
+                    snowflake(parts[2], "user")
+            );
         }
         if (parts.length == MESSAGE_PARTS && MESSAGE_KIND.equals(parts[0])) {
             return new MessageContext(
@@ -66,6 +76,25 @@ sealed interface ModerationReadTarget permits ModerationReadTarget.DiscordUser, 
         @Override
         public String key() {
             return "discord:" + Long.toUnsignedString(userId);
+        }
+    }
+
+    record DiscordUserContext(long channelIdValue, long userId) implements ModerationReadTarget {
+        public DiscordUserContext {
+            if (channelIdValue <= 0 || userId <= 0) {
+                throw new IllegalArgumentException("Discord channel target IDs must be positive");
+            }
+        }
+
+        @Override
+        public OptionalLong channelId() {
+            return OptionalLong.of(channelIdValue);
+        }
+
+        @Override
+        public String key() {
+            return "discord-channel:" + Long.toUnsignedString(channelIdValue)
+                    + ":" + Long.toUnsignedString(userId);
         }
     }
 

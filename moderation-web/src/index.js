@@ -8,6 +8,7 @@ const SESSION_TTL_SECONDS = 15 * 60;
 const MAX_REQUEST_BYTES = 65_536;
 const STATIC_PATHS = new Set([
   '/assets/app.css',
+  '/assets/live.css',
   '/assets/model.js',
   '/assets/app.js',
   '/assets/workflow.js',
@@ -15,7 +16,8 @@ const STATIC_PATHS = new Set([
   '/assets/real-data.js',
   '/assets/direct-read.js',
   '/assets/live-loading.js',
-  '/assets/real-policy.js'
+  '/assets/real-policy.js',
+  '/assets/live-enhancements.js'
 ]);
 const encoder = new TextEncoder();
 
@@ -277,7 +279,7 @@ function secure(response) {
   const headers = secured.headers;
   headers.set('Cache-Control', 'private, no-store');
   headers.set('Pragma', 'no-cache');
-  headers.set('Content-Security-Policy', "default-src 'self'; img-src 'self' data: https://cdn.discordapp.com https://media.discordapp.net; style-src 'self'; script-src 'self'; connect-src 'self' https://moderation-read-staging.enthusia.info; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'");
+  headers.set('Content-Security-Policy', "default-src 'self'; img-src 'self' data: https://cdn.discordapp.com https://media.discordapp.net https://textures.minecraft.net https://enthusia.info; style-src 'self'; script-src 'self'; connect-src 'self' https://moderation-read-staging.enthusia.info; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'");
   headers.set('Referrer-Policy', 'no-referrer');
   headers.set('X-Content-Type-Options', 'nosniff');
   headers.set('X-Frame-Options', 'DENY'); // nosemgrep: javascript.express.security.x-frame-options-misconfiguration.x-frame-options-misconfiguration

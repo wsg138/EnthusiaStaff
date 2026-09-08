@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
+import java.util.OptionalLong;
 import net.dv8tion.jda.api.Permission;
 import net.dv8tion.jda.api.entities.Member;
 import net.dv8tion.jda.api.entities.Message;
@@ -35,6 +36,10 @@ final class ModerationDiscordMessageReader {
         if (context.readTarget() instanceof ModerationReadTarget.MessageContext messageTarget) {
             return surrounding(context, messageTarget, DEFAULT_PAGE);
         }
+        OptionalLong boundChannel = initialChannel(context.readTarget());
+        if (boundChannel.isPresent()) {
+            return recentTargetInChannel(context, boundChannel.orElseThrow(), DEFAULT_PAGE);
+        }
         return recentTarget(context, channels, emptyQuery(), MAX_PAGE);
     }
 
@@ -49,6 +54,26 @@ final class ModerationDiscordMessageReader {
         long channelId = ModerationReadRequestAuthorizer.snowflake(query.channelId().orElseThrow(), "channel");
         TextChannel channel = visibleChannel(context, channelId);
         return mapper.page(context, filterAndLimit(page(channel, query, limit), query, limit), limit);
+    }
+
+    static OptionalLong initialChannel(ModerationReadTarget target) {
+        if (target instanceof ModerationReadTarget.DiscordUserContext) {
+            return target.channelId();
+        }
+        return OptionalLong.empty();
+    }
+
+    private ModerationReadApiModel.MessagePageDto recentTargetInChannel(
+            ModerationReadContext context,
+            long channelId,
+            int limit
+    ) {
+        TextChannel channel = visibleChannel(context, channelId);
+        List<Message> targetMessages = channel.getHistory().retrievePast(MAX_PAGE).complete().stream()
+                .filter(message -> message.getAuthor().getIdLong() == context.readTarget().userId())
+                .limit(boundedLimit(limit))
+                .toList();
+        return mapper.page(context, targetMessages, boundedLimit(limit));
     }
 
     private ModerationReadApiModel.MessagePageDto surrounding(

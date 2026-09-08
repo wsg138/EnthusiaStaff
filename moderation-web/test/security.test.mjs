@@ -22,6 +22,13 @@ test('accepts a valid bounded staging user launch token', async () => {
   assert.equal(claims.targetKey, TARGET);
 });
 
+test('accepts a user target bound to the command invocation channel', async () => {
+  const target = 'discord-channel:1541286004298752091:1049827163345127424';
+  const value = await token({target});
+  const claims = await verifyLaunchToken(value, KEY_HEX, GUILD, 1_787_000_050);
+  assert.equal(claims.targetKey, target);
+});
+
 test('accepts exact message-context target syntax', async () => {
   const target = 'message:1541286004298752091:1541300000000000001:1049827163345127424';
   const value = await token({target});
@@ -40,7 +47,10 @@ test('rejects tampering, expiration, wrong guild and malformed tokens', async ()
 test('rejects excessive lifetime and unsigned target shapes', async () => {
   const longLived = await token({ expires: 1_787_000_500 });
   assert.equal(await verifyLaunchToken(longLived, KEY_HEX, GUILD, 1_787_000_050), null);
-  for (const target of ['sample-river-ash', 'bad|target', 'discord:0', 'message:1:2']) {
+  for (const target of [
+    'sample-river-ash', 'bad|target', 'discord:0', 'discord-channel:1',
+    'discord-channel:0:1', 'discord-channel:1:0', 'message:1:2'
+  ]) {
     assert.equal(parseLaunchToken(await token({target})), null);
   }
 });

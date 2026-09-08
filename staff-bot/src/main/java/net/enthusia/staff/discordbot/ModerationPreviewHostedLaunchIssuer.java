@@ -45,6 +45,16 @@ final class ModerationPreviewHostedLaunchIssuer {
         }
     }
 
+    URI issueUserLaunchUri(long actorId, long guildId, long channelId, long targetUserId) {
+        requireSnowflake(channelId, "channel");
+        requireSnowflake(targetUserId, "target user");
+        return issueLaunchUri(
+                actorId,
+                guildId,
+                "discord-channel:" + Long.toUnsignedString(channelId)
+                        + ":" + Long.toUnsignedString(targetUserId));
+    }
+
     URI issueUserLaunchUri(long actorId, long guildId, long targetUserId) {
         return issueLaunchUri(actorId, guildId, userTarget(targetUserId));
     }

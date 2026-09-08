@@ -8,7 +8,10 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import net.dv8tion.jda.api.JDA;
 import net.dv8tion.jda.api.entities.ApplicationInfo;
 import net.dv8tion.jda.api.entities.Guild;
+import net.dv8tion.jda.api.entities.Member;
 import net.dv8tion.jda.api.entities.Message;
+import net.dv8tion.jda.api.entities.User;
+import net.dv8tion.jda.api.entities.channel.concrete.TextChannel;
 import net.dv8tion.jda.api.events.interaction.command.MessageContextInteractionEvent;
 import net.dv8tion.jda.api.events.interaction.command.SlashCommandInteractionEvent;
 import net.dv8tion.jda.api.events.interaction.command.UserContextInteractionEvent;
@@ -130,7 +133,9 @@ final class JdaModerationUiPreviewListener extends ListenerAdapter implements Au
             unavailable(event);
             return;
         }
-        reply(event, userLaunch(event.getUser().getIdLong(), option.getAsUser().getIdLong()));
+        User target = option.getAsUser();
+        long channelId = event.getChannel().getIdLong();
+        reply(event, userLaunch(event.getUser().getIdLong(), channelId, target.getIdLong()), target, channelId);
     }
 
     @Override
@@ -142,7 +147,9 @@ final class JdaModerationUiPreviewListener extends ListenerAdapter implements Au
             unavailable(event);
             return;
         }
-        reply(event, userLaunch(event.getUser().getIdLong(), event.getTarget().getIdLong()));
+        User target = event.getTarget();
+        long channelId = event.getChannel().getIdLong();
+        reply(event, userLaunch(event.getUser().getIdLong(), channelId, target.getIdLong()), target, channelId);
     }
 
     @Override
@@ -155,7 +162,8 @@ final class JdaModerationUiPreviewListener extends ListenerAdapter implements Au
             return;
         }
         Message message = event.getTarget();
-        reply(event, messageLaunch(event.getUser().getIdLong(), message));
+        reply(event, messageLaunch(event.getUser().getIdLong(), message),
+                message.getAuthor(), message.getChannelIdLong());
     }
 
     private boolean startReadApi(JDA jda) {
@@ -192,8 +200,9 @@ final class JdaModerationUiPreviewListener extends ListenerAdapter implements Au
                 || flags.contains(ApplicationInfo.Flag.GATEWAY_MESSAGE_CONTENT_LIMITED));
     }
 
-    private Optional<URI> userLaunch(long actorId, long targetUserId) {
-        return hostedLaunchIssuer.map(issuer -> issuer.issueUserLaunchUri(actorId, guildId, targetUserId));
+    private Optional<URI> userLaunch(long actorId, long channelId, long targetUserId) {
+        return hostedLaunchIssuer.map(issuer -> issuer.issueUserLaunchUri(
+                actorId, guildId, channelId, targetUserId));
     }
 
     private Optional<URI> messageLaunch(long actorId, Message message) {
@@ -201,9 +210,23 @@ final class JdaModerationUiPreviewListener extends ListenerAdapter implements Au
                 actorId, guildId, message.getChannelIdLong(), message.getIdLong(), message.getAuthor().getIdLong()));
     }
 
-    private void reply(IReplyCallback event, Optional<URI> launchUri) {
-        ModerationPreviewLauncherPresentation.Rendered rendered = presentation.render(launchUri);
+    private void reply(IReplyCallback event, Optional<URI> launchUri, User target, long channelId) {
+        ModerationPreviewLauncherPresentation.Rendered rendered = presentation.render(
+                launchUri, targetSummary(event.getGuild(), target, channelId));
         event.replyEmbeds(rendered.embed()).addComponents(rendered.rows()).setEphemeral(true).queue();
+    }
+
+    private static ModerationPreviewLauncherPresentation.TargetSummary targetSummary(
+            Guild guild,
+            User target,
+            long channelId
+    ) {
+        Member member = guild == null ? null : guild.getMember(target);
+        String displayName = member == null ? ModerationDiscordMessageMapper.displayName(target) : member.getEffectiveName();
+        TextChannel channel = guild == null ? null : guild.getTextChannelById(channelId);
+        String channelLabel = channel == null ? "Channel " + Long.toUnsignedString(channelId) : "#" + channel.getName();
+        return new ModerationPreviewLauncherPresentation.TargetSummary(
+                displayName, target.getName(), target.getId(), channelLabel, target.getEffectiveAvatarUrl());
     }
 
     static List<CommandData> commands() {

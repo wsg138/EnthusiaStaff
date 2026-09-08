@@ -22,7 +22,22 @@ class ModerationPreviewHostedLaunchIssuerTest {
     private static final String TOKEN = "staging-test-discord-token-value";
 
     @Test
-    void hostedUserTicketIsActorGuildAndRealTargetBound() throws Exception {
+    void hostedUserTicketIsActorGuildChannelAndRealTargetBound() throws Exception {
+        ModerationPreviewHostedLaunchIssuer issuer = issuer();
+
+        URI uri = issuer.issueUserLaunchUri(
+                123456789012345678L,
+                1410303324745371709L,
+                1541286004298752091L,
+                1049827163345127424L);
+
+        String[] fields = fields(uri);
+        assertEquals("discord-channel:1541286004298752091:1049827163345127424", fields[5]);
+        assertSignedAndBounded(uri, fields);
+    }
+
+    @Test
+    void legacyHostedUserTicketRemainsReadableForExistingLinks() throws Exception {
         ModerationPreviewHostedLaunchIssuer issuer = issuer();
 
         URI uri = issuer.issueUserLaunchUri(
@@ -30,9 +45,7 @@ class ModerationPreviewHostedLaunchIssuerTest {
                 1410303324745371709L,
                 1049827163345127424L);
 
-        String[] fields = fields(uri);
-        assertEquals("discord:1049827163345127424", fields[5]);
-        assertSignedAndBounded(uri, fields);
+        assertEquals("discord:1049827163345127424", fields(uri)[5]);
     }
 
     @Test
@@ -63,6 +76,14 @@ class ModerationPreviewHostedLaunchIssuerTest {
         assertThrows(IllegalArgumentException.class, () -> issuer.issueMessageLaunchUri(
                 123456789012345678L, 1410303324745371709L,
                 1541286004298752091L, 1541300000000000001L, -1L));
+    }
+
+    @Test
+    void hostedChannelBoundUserTicketRejectsInvalidChannel() throws Exception {
+        ModerationPreviewHostedLaunchIssuer issuer = issuer();
+
+        assertThrows(IllegalArgumentException.class, () -> issuer.issueUserLaunchUri(
+                123456789012345678L, 1410303324745371709L, 0L, 1049827163345127424L));
     }
 
     private static ModerationPreviewHostedLaunchIssuer issuer() throws Exception {

@@ -8,6 +8,7 @@ import java.lang.reflect.Proxy;
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Optional;
+import java.util.OptionalLong;
 import net.dv8tion.jda.api.entities.Message;
 import net.dv8tion.jda.api.entities.User;
 import org.junit.jupiter.api.Test;
@@ -20,6 +21,17 @@ class ModerationDiscordMessageReaderTest {
         assertFalse(ModerationDiscordMessageReader.hasReadPermissions(true, true, false, true));
         assertFalse(ModerationDiscordMessageReader.hasReadPermissions(true, true, true, false));
         assertTrue(ModerationDiscordMessageReader.hasReadPermissions(true, true, true, true));
+    }
+
+    @Test
+    void invocationChannelIsUsedOnlyForChannelBoundUserLaunches() {
+        ModerationReadTarget contextual = ModerationReadTarget.parse("discord-channel:1541286004298752091:222");
+        ModerationReadTarget legacy = ModerationReadTarget.parse("discord:222");
+        ModerationReadTarget exactMessage = ModerationReadTarget.parse("message:1541286004298752091:333:222");
+
+        assertEquals(OptionalLong.of(1541286004298752091L), ModerationDiscordMessageReader.initialChannel(contextual));
+        assertEquals(OptionalLong.empty(), ModerationDiscordMessageReader.initialChannel(legacy));
+        assertEquals(OptionalLong.empty(), ModerationDiscordMessageReader.initialChannel(exactMessage));
     }
 
     @Test

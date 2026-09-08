@@ -19,6 +19,17 @@ class ModerationReadTargetTest {
     }
 
     @Test
+    void parsesDiscordUserTargetBoundToInvocationChannel() {
+        ModerationReadTarget target = ModerationReadTarget.parse(
+                "discord-channel:1541286004298752091:1049827163345127424");
+
+        assertEquals(1049827163345127424L, target.userId());
+        assertEquals(1541286004298752091L, target.channelId().orElseThrow());
+        assertEquals(OptionalLong.empty(), target.messageId());
+        assertEquals("discord-channel:1541286004298752091:1049827163345127424", target.key());
+    }
+
+    @Test
     void parsesExactMessageTarget() {
         ModerationReadTarget target = ModerationReadTarget.parse(
                 "message:1541286004298752091:1541300000000000001:1049827163345127424");
@@ -32,7 +43,8 @@ class ModerationReadTargetTest {
     @Test
     void rejectsLegacyAndMalformedTargets() {
         for (String value : new String[] {
-                "sample-river-ash", "discord:0", "discord:-1", "message:1:2", "message:1:2:0", "bad|target"
+                "sample-river-ash", "discord:0", "discord:-1", "discord-channel:1:0",
+                "discord-channel:1", "message:1:2", "message:1:2:0", "bad|target"
         }) {
             assertThrows(IllegalArgumentException.class, () -> ModerationReadTarget.parse(value));
         }

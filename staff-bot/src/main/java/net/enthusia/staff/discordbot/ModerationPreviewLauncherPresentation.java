@@ -12,17 +12,36 @@ import net.dv8tion.jda.api.entities.MessageEmbed;
 final class ModerationPreviewLauncherPresentation {
     private static final int PANEL_COLOR = 0x313338;
 
+    record TargetSummary(
+            String displayName,
+            String username,
+            String discordId,
+            String channelLabel,
+            String avatarUrl
+    ) {
+        TargetSummary {
+            if (blank(displayName) || blank(username) || blank(discordId) || blank(channelLabel) || blank(avatarUrl)) {
+                throw new IllegalArgumentException("moderation preview target summary is incomplete");
+            }
+        }
+
+        private static boolean blank(String value) {
+            return value == null || value.isBlank();
+        }
+    }
+
     record Rendered(MessageEmbed embed, List<ActionRow> rows) {
     }
 
-    Rendered render(Optional<URI> launchUri) {
+    Rendered render(Optional<URI> launchUri, TargetSummary target) {
         EmbedBuilder embed = new EmbedBuilder()
                 .setColor(PANEL_COLOR)
-                .setTitle("Moderation · RiverAsh")
-                .setDescription("@riverash  ·  RiverAshMC")
-                .addField("Status", "Discord mute · 1h 18m remaining", true)
-                .addField("Linked accounts", "Main + 1 alt", true)
-                .addField("Recent history", "2 relevant spam incidents · 4 total records", false)
+                .setTitle("Moderation · " + target.displayName())
+                .setDescription("@" + target.username())
+                .setThumbnail(target.avatarUrl())
+                .addField("Target", target.displayName() + " · " + target.discordId(), false)
+                .addField("Channel", target.channelLabel(), true)
+                .addField("Workspace", "Real read-only context · staging moderation simulation", true)
                 .setFooter("STAGING PREVIEW");
         return new Rendered(embed.build(), List.of(ActionRow.of(button(launchUri))));
     }

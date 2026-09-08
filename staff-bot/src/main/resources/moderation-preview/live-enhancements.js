@@ -171,3 +171,263 @@ function accountAvatarFallback(label, kind) {
     attrs:{'aria-hidden':'true'}
   });
 }
+
+const liveBaseMapMessage = window.mapMessage;
+window.mapMessage = function mapLiveMessage(message) {
+  const mapped = liveBaseMapMessage(message);
+  mapped.avatarUrl = optionalText(message?.author?.avatarUrl);
+  return mapped;
+};
+
+window.applyIdentity = function applyLiveIdentity(source) {
+  const main = liveModeration.accounts.find((account) => account.main) || liveModeration.accounts[0];
+  const alts = liveModeration.accounts.filter((account) => account !== main).map(mapLinkedAlt);
+  Object.assign(identity, {
+    displayName:firstText(source.displayName, source.serverName, source.globalName, source.username, source.discordId, 'Unknown Discord user'),
+    username:firstText(source.username, 'unknown'),
+    discordId:firstText(source.discordId, 'Unavailable'),
+    minecraft:firstText(source.minecraftMain, linkedAccountName(main), 'No linked Minecraft account'),
+    minecraftUuid:firstText(main?.playerId, 'Unavailable'),
+    alts,
+    status:firstText(source.targetStatus, 'Unknown'),
+    statusDetail:sanctionStatusDetail(),
+    avatarUrl:optionalText(source.avatarUrl),
+    linkState:firstText(source.linkState, 'Unknown'),
+    globalName:optionalText(source.globalName),
+    serverName:optionalText(source.serverName)
+  });
+};
+
+const liveBaseApplyBootstrap = window.applyLiveBootstrap;
+window.applyLiveBootstrap = function applyContextualBootstrap(payload) {
+  liveBaseApplyBootstrap(payload);
+  const channelId = sessionBoundChannelId();
+  if (channelId && liveModeration.channels.some((channel) => channel.id === channelId)) {
+    state.channel = channelId;
+    renderAll();
+  }
+};
+
+function sessionBoundChannelId() {
+  const key = state.session?.targetKey;
+  if (typeof key !== 'string') return '';
+  const parts = key.split(':');
+  if (parts[0] === 'discord-channel' && parts.length === 3) return parts[1];
+  if (parts[0] === 'message' && parts.length === 4) return parts[1];
+  return '';
+}
+
+window.messageNode = function liveMessageNode(message) {
+  const selected = state.selected.has(message.id);
+  const focused = state.contextId === message.id;
+  const classes = ['message-row', selected ? 'selected' : '', message.deleted ? 'deleted' : '', focused ? 'context-focus' : '']
+    .filter(Boolean).join(' ');
+  const checkbox = element('input', {type:'checkbox', className:'message-select', checked:selected,
+    attrs:{'aria-label':`Select message from ${message.author} at ${formatExact(message.time)}`}});
+  return element('article', {className:classes, dataset:{messageId:message.id}},
+    element('div', {}, checkbox), messageAvatarNode(message), messageBodyNode(message), messageActionsNode(message));
+};
+
+function messageAvatarNode(message) {
+  if (!message.avatarUrl) {
+    return element('div', {className:`message-avatar${message.target ? ' target' : ''}`, text:message.initials, attrs:{'aria-hidden':'true'}});
+  }
+  const image = document.createElement('img');
+  image.className = `message-avatar message-avatar-image${message.target ? ' target' : ''}`;
+  image.src = message.avatarUrl;
+  image.alt = `${message.author} profile picture`;
+  image.referrerPolicy = 'no-referrer';
+  image.addEventListener('error', () => image.replaceWith(
+    element('div', {className:`message-avatar${message.target ? ' target' : ''}`, text:message.initials, attrs:{'aria-hidden':'true'}})));
+  return image;
+}
+
+function messageActionsNode(message) {
+  const menu = element('details', {className:'message-actions'});
+  const summary = element('summary', {className:'icon-button', text:'•••', attrs:{'aria-label':`Message actions for ${message.id}`}});
+  const items = element('div', {className:'message-action-menu'},
+    messageActionButton('Show context', 'context', message.id),
+    messageActionButton(state.evidence.has(message.id) ? 'Remove evidence' : 'Add to evidence', 'evidence', message.id),
+    messageActionButton(state.deleting.has(message.id) ? 'Preserve message' : 'Delete on confirm (simulation)', 'delete', message.id));
+  menu.append(summary, items);
+  return menu;
+}
+
+function messageActionButton(label, action, messageId) {
+  return buttonNode(label, 'message-action-item', {messageAction:action, messageId});
+}
+
+window.bindMessageEvents = function bindLiveMessageEvents() {
+  $('[data-exit-context]')?.addEventListener('click', exitLiveContext);
+  $('#messageSearch')?.addEventListener('input', (event) => { state.search = event.target.value; renderWorkspace(); });
+  $('#authorFilter')?.addEventListener('input', (event) => { state.author = event.target.value; renderWorkspace(); });
+  $('#channelFilter')?.addEventListener('change', (event) => {
+    state.channel = event.target.value;
+    state.contextId = null;
+    state.contextReturn = null;
+    loadChannelPage();
+  });
+  $('#dateFilter')?.addEventListener('change', (event) => { state.date = event.target.value || 'all'; renderWorkspace(); });
+  $('#selectedFilter')?.addEventListener('change', (event) => { state.selectedOnly = event.target.checked; renderWorkspace(); });
+  $$('.message-select').forEach((checkbox) => checkbox.addEventListener('click', selectMessage));
+  $$('[data-message-action]').forEach((button) => button.addEventListener('click', handleMessageAction));
+  $$('[data-load-direction]').forEach((button) => button.addEventListener('click', () => loadMoreMessages(button.dataset.loadDirection)));
+};
+
+async function handleMessageAction(event) {
+  const button = event.currentTarget;
+  const id = button.dataset.messageId;
+  const action = button.dataset.messageAction;
+  button.closest('details')?.removeAttribute('open');
+  if (action === 'context') {
+    await showTwoMinuteContext(id);
+    return;
+  }
+  const target = action === 'evidence' ? state.evidence : state.deleting;
+  toggleSet(target, id, !target.has(id));
+  state.evidenceRevision++;
+  renderAll();
+}
+
+async function showTwoMinuteContext(id) {
+  const trigger = baseMessages.find((message) => message.id === id);
+  if (!trigger) return;
+  const previous = rememberMessageView();
+  try {
+    const [before, after] = await Promise.all([
+      fetchContextPage(trigger.channelId, 'before', id),
+      fetchContextPage(trigger.channelId, 'after', id)
+    ]);
+    const context = boundedTimeContext(trigger, before, after);
+    state.contextReturn = previous;
+    baseMessages.splice(0, baseMessages.length, ...context);
+    state.search = '';
+    state.author = '';
+    state.channel = trigger.channelId;
+    state.date = 'all';
+    state.selectedOnly = false;
+    state.contextId = id;
+    liveModeration.olderCursor = null;
+    liveModeration.newerCursor = null;
+    renderAll();
+  } catch (error) {
+    showToast(error.message || 'Discord context is temporarily unavailable.', true);
+  }
+}
+
+function rememberMessageView() {
+  return {
+    messages:baseMessages.slice(),
+    search:state.search,
+    author:state.author,
+    channel:state.channel,
+    date:state.date,
+    selectedOnly:state.selectedOnly,
+    olderCursor:liveModeration.olderCursor,
+    newerCursor:liveModeration.newerCursor
+  };
+}
+
+async function fetchContextPage(channelId, direction, messageId) {
+  const filters = {channel:channelId, limit:'50'};
+  filters[direction] = messageId;
+  const response = await requestDirectModerationRead('/api/messages', {
+    method:'POST',
+    headers:{Accept:'application/json', 'Content-Type':'application/json'},
+    body:JSON.stringify(filters)
+  });
+  const page = await readJsonResponse(response);
+  if (!response.ok) throw new Error(page.message || 'Discord context unavailable');
+  return asArray(page.messages).map(window.mapMessage);
+}
+
+function boundedTimeContext(trigger, before, after) {
+  const triggerTime = new Date(trigger.time).getTime();
+  const byId = new Map([[trigger.id, trigger]]);
+  for (const message of [...before, ...after]) {
+    if (Math.abs(new Date(message.time).getTime() - triggerTime) <= 120_000) byId.set(message.id, message);
+  }
+  return [...byId.values()].sort((left, right) => new Date(right.time) - new Date(left.time));
+}
+
+function exitLiveContext() {
+  const previous = state.contextReturn;
+  state.contextId = null;
+  state.contextReturn = null;
+  if (!previous) {
+    renderAll();
+    return;
+  }
+  baseMessages.splice(0, baseMessages.length, ...previous.messages);
+  state.search = previous.search;
+  state.author = previous.author;
+  state.channel = previous.channel;
+  state.date = previous.date;
+  state.selectedOnly = previous.selectedOnly;
+  liveModeration.olderCursor = previous.olderCursor;
+  liveModeration.newerCursor = previous.newerCursor;
+  renderAll();
+}
+
+window.contextMessageIds = function liveContextMessageIds() {
+  return new Set(baseMessages.map((message) => message.id));
+};
+
+window.contextAlertNode = function liveContextAlertNode() {
+  return element('div', {className:'alert info'},
+    element('strong', {text:'Two-minute conversation context'}),
+    element('span', {text:'The selected message is highlighted with messages from all authors within two minutes before and after it.'}),
+    buttonNode('Exit context', 'text-button', {exitContext:''}));
+};
+
+const liveBaseOpenWorkflow = window.openWorkflow;
+window.openWorkflow = function openOrResumeWorkflow() {
+  if (!state.workflow) {
+    liveBaseOpenWorkflow();
+    return;
+  }
+  renderWorkflow();
+  const dialog = $('#punishmentDialog');
+  if (!dialog.open) dialog.showModal();
+};
+
+window.renderOffenseStep = function renderLiveOffenseStep() {
+  const w = state.workflow;
+  if (!w.offenseTab) w.offenseTab = 'discord';
+  const suggested = scenarioOffense();
+  const offenses = OFFENSES.filter(([key]) => w.offenseTab === 'game' ? key === 'cheating' : key !== 'cheating');
+  replaceChildrenOf($('#workflowBody'),
+    stepIntro('What happened?', 'Choose Discord/chat policy by default, or switch to in-game policy for gameplay violations.'),
+    punishmentScopeTabs(w.offenseTab),
+    element('div', {className:'option-grid'}, offenses.map(([key, label]) => offenseChoiceNode(key, label, suggested))));
+  replaceChildrenOf($('#workflowFooter'), buttonNode('Cancel', 'button ghost', {cancel:''}));
+  $$('[data-offense-tab]').forEach((button) => button.addEventListener('click', () => {
+    w.offenseTab = button.dataset.offenseTab;
+    renderWorkflow();
+  }));
+  $$('[data-offense]').forEach((button) => button.addEventListener('click', () => chooseOffense(button.dataset.offense)));
+  $('[data-cancel]').addEventListener('click', closeWorkflow);
+};
+
+function punishmentScopeTabs(selected) {
+  return element('div', {className:'punishment-scope-tabs', attrs:{role:'tablist', 'aria-label':'Punishment policy scope'}},
+    punishmentScopeTab('discord', 'Discord / chat', selected),
+    punishmentScopeTab('game', 'In-game', selected));
+}
+
+function punishmentScopeTab(value, label, selected) {
+  return buttonNode(label, `punishment-scope-tab${selected === value ? ' active' : ''}`, {offenseTab:value});
+}
+
+function installEnthusiaBrandLogo() {
+  const mark = $('.brand-mark');
+  if (!mark) return;
+  const logo = document.createElement('img');
+  logo.className = 'brand-logo-image';
+  logo.src = 'https://enthusia.info/assets/enthusia-logo-v2.png';
+  logo.alt = 'Enthusia';
+  logo.referrerPolicy = 'no-referrer';
+  mark.replaceChildren(logo);
+}
+
+installEnthusiaBrandLogo();
