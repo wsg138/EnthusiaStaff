@@ -32,13 +32,13 @@ final class ModerationDiscordMessageMapper {
     private ModerationReadApiModel.MessageDto message(ModerationReadContext context, Message message) {
         TextChannel channel = (TextChannel) message.getChannel();
         Category category = channel.getParentCategory();
-        String raw = message.getContentRaw();
+        String display = message.getContentDisplay();
         return new ModerationReadApiModel.MessageDto(
                 message.getId(), context.guild().getId(), channel.getId(), channel.getName(),
                 category == null ? Optional.empty() : Optional.of(category.getName()),
                 author(context.guild(), message.getAuthor()), message.getTimeCreated().toInstant(),
                 Optional.ofNullable(message.getTimeEdited()).map(value -> value.toInstant()),
-                raw.isEmpty() ? Optional.empty() : Optional.of(raw),
+                display.isEmpty() ? Optional.empty() : Optional.of(display),
                 Optional.ofNullable(message.getMessageReference()).map(reference -> reference.getMessageId()),
                 message.getAttachments().stream().map(attachment -> new ModerationReadApiModel.AttachmentDto(
                         attachment.getId(), attachment.getFileName(), Optional.ofNullable(attachment.getContentType()),

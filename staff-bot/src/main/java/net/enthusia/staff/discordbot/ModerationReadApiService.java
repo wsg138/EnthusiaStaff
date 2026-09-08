@@ -24,11 +24,12 @@ final class ModerationReadApiService {
     ModerationReadApiModel.BootstrapResponse bootstrap(ModerationReadApiModel.ReadRequest request) {
         ModerationReadContext context = authorizer.authorize(request);
         StaffModerationReadService.Snapshot snapshot = moderation.reads().snapshot(context.target());
+        List<ModerationReadApiModel.LinkedAccountDto> linkedAccounts = snapshots.linked(snapshot);
         List<ModerationReadApiModel.ChannelDto> channels = messages.visibleChannels(context);
         return new ModerationReadApiModel.BootstrapResponse(
                 snapshots.actor(context),
-                snapshots.identity(context, snapshot),
-                snapshots.linked(snapshot),
+                snapshots.identity(context, snapshot, linkedAccounts),
+                linkedAccounts,
                 snapshots.sanctions(snapshot),
                 snapshots.history(snapshot),
                 snapshot.totalHistoryCount(),

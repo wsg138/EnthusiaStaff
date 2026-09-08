@@ -19,19 +19,22 @@ class ModerationPreviewWebResourcesTest {
     private static final String REAL_DATA_SCRIPT = "/moderation-preview/real-data.js";
     private static final String DIRECT_READ_SCRIPT = "/moderation-preview/direct-read.js";
     private static final String REAL_POLICY_SCRIPT = "/moderation-preview/real-policy.js";
+    private static final String LIVE_ENHANCEMENTS_SCRIPT = "/moderation-preview/live-enhancements.js";
     private static final List<String> RESOURCES = List.of(
             "/moderation-preview/index.html",
             "/moderation-preview/app.css",
+            "/moderation-preview/live.css",
             MODEL_SCRIPT,
             APP_SCRIPT,
             WORKFLOW_SCRIPT,
             REVIEW_SCRIPT,
             REAL_DATA_SCRIPT,
             DIRECT_READ_SCRIPT,
-            REAL_POLICY_SCRIPT);
+            REAL_POLICY_SCRIPT,
+            LIVE_ENHANCEMENTS_SCRIPT);
     private static final List<String> SCRIPTS = List.of(
             MODEL_SCRIPT, APP_SCRIPT, WORKFLOW_SCRIPT, REVIEW_SCRIPT,
-            REAL_DATA_SCRIPT, DIRECT_READ_SCRIPT, REAL_POLICY_SCRIPT);
+            REAL_DATA_SCRIPT, DIRECT_READ_SCRIPT, REAL_POLICY_SCRIPT, LIVE_ENHANCEMENTS_SCRIPT);
 
     @Test
     void everyModerationWorkspaceResourceIsPackaged() {
@@ -52,7 +55,9 @@ class ModerationPreviewWebResourcesTest {
                 "/assets/real-data.js",
                 "/assets/direct-read.js",
                 "/assets/live-loading.js",
-                "/assets/real-policy.js");
+                "/assets/real-policy.js",
+                "/assets/live-enhancements.js");
+        assertTrue(html.contains("/assets/live.css"));
         assertEquals(1, occurrences(html, "STAGING PREVIEW"));
         assertTrue(html.contains("Live data"));
         assertFalse(html.contains("Sample case"));
@@ -68,6 +73,30 @@ class ModerationPreviewWebResourcesTest {
         assertTrue(adapter.contains("Read data unavailable"));
         assertTrue(adapter.contains("Text content unavailable from Discord"));
         assertFalse(adapter.contains("sample-river-ash"));
+    }
+
+    @Test
+    void liveIdentityCardsUseResolvedMinecraftAndDiscordProfileFields() throws IOException {
+        String enhancements = resourceText(LIVE_ENHANCEMENTS_SCRIPT);
+
+        assertTrue(enhancements.contains("identity.avatarUrl"));
+        assertTrue(enhancements.contains("identity.serverName"));
+        assertTrue(enhancements.contains("identity.globalName"));
+        assertTrue(enhancements.contains("account.username"));
+        assertTrue(enhancements.contains("account.skinTextureUrl"));
+        assertTrue(enhancements.contains("['Username', username]"));
+        assertTrue(enhancements.contains("['Display name', discordName]"));
+        assertTrue(enhancements.contains("['UUID', account.playerId]"));
+    }
+
+    @Test
+    void liveMessagesRenderDiscordFormattingThroughSafeDomNodes() throws IOException {
+        String enhancements = resourceText(LIVE_ENHANCEMENTS_SCRIPT);
+
+        assertTrue(enhancements.contains("discordMessageContentNode(message.text)"));
+        assertTrue(enhancements.contains("discord-heading"));
+        assertTrue(enhancements.contains("discord-inline-code"));
+        assertTrue(enhancements.contains("document.createTextNode"));
     }
 
     @Test

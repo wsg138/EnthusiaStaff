@@ -88,9 +88,16 @@ final class ModerationReadApiModel {
         }
     }
 
-    record LinkedAccountDto(String playerId, Optional<String> username, String platform, boolean main) {
+    record LinkedAccountDto(
+            String playerId,
+            Optional<String> username,
+            Optional<String> skinTextureUrl,
+            String platform,
+            boolean main
+    ) {
         LinkedAccountDto {
             username = username == null ? Optional.empty() : username;
+            skinTextureUrl = skinTextureUrl == null ? Optional.empty() : skinTextureUrl;
         }
     }
 

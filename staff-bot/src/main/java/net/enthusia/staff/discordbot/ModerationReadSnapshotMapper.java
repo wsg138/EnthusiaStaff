@@ -4,6 +4,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.UUID;
 import net.enthusia.staff.domain.casefile.CaseReview;
 import net.enthusia.staff.domain.history.ModerationHistoryEntry;
 import net.enthusia.staff.domain.ports.StaffNoteStore.StaffNote;
@@ -15,9 +16,18 @@ import net.dv8tion.jda.api.entities.User;
 /** Maps already-authorized D06/JDA read state into explicit browser DTO allowlists. */
 final class ModerationReadSnapshotMapper {
     private final JDA jda;
+    private final MinecraftProfileLookup minecraftProfiles;
 
     ModerationReadSnapshotMapper(JDA jda) {
+        this(jda, MinecraftProfileLookup.mojang());
+    }
+
+    ModerationReadSnapshotMapper(JDA jda, MinecraftProfileLookup minecraftProfiles) {
+        if (jda == null || minecraftProfiles == null) {
+            throw new IllegalArgumentException("snapshot mapper dependencies must be present");
+        }
         this.jda = jda;
+        this.minecraftProfiles = minecraftProfiles;
     }
 
     ModerationReadApiModel.ActorDto actor(ModerationReadContext context) {
@@ -27,13 +37,14 @@ final class ModerationReadSnapshotMapper {
 
     ModerationReadApiModel.IdentityDto identity(
             ModerationReadContext context,
-            StaffModerationReadService.Snapshot snapshot
+            StaffModerationReadService.Snapshot snapshot,
+            List<ModerationReadApiModel.LinkedAccountDto> linkedAccounts
     ) {
         User user = jda.retrieveUserById(context.readTarget().userId()).complete();
         Member member = ModerationDiscordMessageMapper.memberIfPresent(context.guild(), context.readTarget().userId());
-        Optional<String> main = snapshot.linkedMinecraft().stream()
-                .filter(StaffModerationReadService.LinkedMinecraft::main)
-                .map(account -> account.username().orElse(account.playerId().toString()))
+        Optional<String> main = linkedAccounts.stream()
+                .filter(ModerationReadApiModel.LinkedAccountDto::main)
+                .map(account -> account.username().orElse(account.playerId()))
                 .findFirst();
         String status = snapshot.activeMinecraftSanctions().isEmpty() ? "No active sanctions" : "Active moderation";
         return new ModerationReadApiModel.IdentityDto(
@@ -45,8 +56,10 @@ final class ModerationReadSnapshotMapper {
     }
 
     List<ModerationReadApiModel.LinkedAccountDto> linked(StaffModerationReadService.Snapshot snapshot) {
-        return snapshot.linkedMinecraft().stream().map(account -> new ModerationReadApiModel.LinkedAccountDto(
-                account.playerId().toString(), account.username(), account.platform().name(), account.main())).toList();
+        List<StaffModerationReadService.LinkedMinecraft> linked = snapshot.linkedMinecraft();
+        Map<UUID, MinecraftProfileLookup.Profile> profiles = minecraftProfiles.profiles(
+                linked.stream().map(StaffModerationReadService.LinkedMinecraft::playerId).toList());
+        return linked.stream().map(account -> linked(account, profiles.get(account.playerId()))).toList();
     }
 
     List<ModerationReadApiModel.SanctionDto> sanctions(StaffModerationReadService.Snapshot snapshot) {
@@ -76,6 +89,16 @@ final class ModerationReadSnapshotMapper {
 
     List<ModerationReadApiModel.NoteDto> notes(StaffModerationReadService.Snapshot snapshot) {
         return snapshot.recentNotes().stream().map(this::note).toList();
+    }
+
+    private ModerationReadApiModel.LinkedAccountDto linked(
+            StaffModerationReadService.LinkedMinecraft account,
+            MinecraftProfileLookup.Profile profile
+    ) {
+        Optional<String> username = profile == null ? account.username() : Optional.of(profile.username());
+        Optional<String> skinTextureUrl = profile == null ? Optional.empty() : profile.skinTextureUrl();
+        return new ModerationReadApiModel.LinkedAccountDto(
+                account.playerId().toString(), username, skinTextureUrl, account.platform().name(), account.main());
     }
 
     private ModerationReadApiModel.SanctionDto sanction(ActiveSanction sanction) {
