@@ -89,7 +89,7 @@ class InspectFreezeSectionTest {
 
     private static FreezeStore store(Optional<FreezeRecord> record) {
         return (FreezeStore) Proxy.newProxyInstance(
-                FreezeStore.class.getClassLoader(),
+                Thread.currentThread().getContextClassLoader(),
                 new Class<?>[]{FreezeStore.class},
                 (proxy, method, arguments) -> {
                     if ("readActive".equals(method.getName())) {
