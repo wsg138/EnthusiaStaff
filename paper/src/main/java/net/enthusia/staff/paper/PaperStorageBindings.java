@@ -26,6 +26,7 @@ import net.enthusia.staff.domain.ports.EconomyJournalStore;
 import net.enthusia.staff.domain.ports.FreezeStore;
 import net.enthusia.staff.domain.ports.InventoryJournalStore;
 import net.enthusia.staff.domain.ports.InventoryRecoveryStore;
+import net.enthusia.staff.domain.ports.MarketComplianceStore;
 import net.enthusia.staff.domain.ports.ModerationHistoryStore;
 import net.enthusia.staff.domain.ports.ModerationStore;
 import net.enthusia.staff.domain.ports.PlayerDirectory;
@@ -71,7 +72,8 @@ record PaperStorageBindings(
                 runtime.vanishStore(),
                 runtime.inventoryJournalStore(),
                 runtime.inventoryRecoveryStore(),
-                runtime.economyJournalStore()
+                runtime.economyJournalStore(),
+                runtime.marketComplianceStore()
         );
         Clock clock = Clock.systemUTC();
         SecureRandom secureRandom = new SecureRandom();
@@ -172,6 +174,7 @@ record PaperStorageBindings(
     InventoryJournalStore inventoryJournalStore() { return assets.inventoryJournalStore(); }
     InventoryRecoveryStore inventoryRecoveryStore() { return assets.inventoryRecoveryStore(); }
     EconomyJournalStore economyJournalStore() { return assets.economyJournalStore(); }
+    MarketComplianceStore marketComplianceStore() { return assets.marketComplianceStore(); }
     PunishmentService punishmentService() { return services.punishmentService(); }
     PunishmentDraftWorkflow punishmentDraftWorkflow() { return services.punishmentDraftWorkflow(); }
     PunishmentRequestService punishmentRequestService() { return services.punishmentRequestService(); }
@@ -197,7 +200,8 @@ record PaperStorageBindings(
             VanishStore vanishStore,
             InventoryJournalStore inventoryJournalStore,
             InventoryRecoveryStore inventoryRecoveryStore,
-            EconomyJournalStore economyJournalStore
+            EconomyJournalStore economyJournalStore,
+            MarketComplianceStore marketComplianceStore
     ) {
     }
 

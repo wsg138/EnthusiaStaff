@@ -1,0 +1,324 @@
+package net.badgersmc.em.interaction.gui
+
+import com.github.stefvanschie.inventoryframework.adventuresupport.ComponentHolder
+import com.github.stefvanschie.inventoryframework.gui.GuiItem
+import com.github.stefvanschie.inventoryframework.gui.type.ChestGui
+import com.github.stefvanschie.inventoryframework.pane.StaticPane
+import net.badgersmc.em.application.ItemStackSerializer
+import net.badgersmc.em.application.ShopFactory
+import net.badgersmc.em.application.ShopSignRenderer
+import net.badgersmc.em.domain.shop.Shop
+import net.badgersmc.em.domain.shop.ShopRepository
+import net.badgersmc.em.domain.shop.SignDirection
+import net.badgersmc.em.interaction.Menu
+import net.badgersmc.em.interaction.blockItemTheft
+import net.badgersmc.nexus.i18n.LangService
+import net.kyori.adventure.text.Component
+import net.kyori.adventure.text.format.TextDecoration
+import org.bukkit.Location
+import org.bukkit.Material
+import org.bukkit.block.Sign
+import org.bukkit.block.sign.Side
+import org.bukkit.entity.Player
+import org.bukkit.inventory.ItemStack
+import java.time.Instant
+import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
+
+/**
+ * IFramework GUI for creating a sign shop (REQ-012, REQ-289).
+ * Collects direction (SELL/BUY/TRADE), per-trade amount, and cost
+ * (Vault currency or barter item) before persisting via [ShopFactory].
+ *
+ * Step buttons: +1, +5, +10, -10, -5, -1 for both trade amount and price/cost.
+ */
+class CreateShopMenu(
+    private val stallId: String,
+    private val stallOwner: UUID,
+    private val signLoc: Location,
+    private val containerLoc: Location,
+    private val sellItemBase64: String,
+    private val shopRepository: ShopRepository,
+    private val lang: LangService,
+    private val initialDirection: SignDirection = SignDirection.SELL,
+    private val initialAmount: Int = 1,
+    private val initialPrice: Long = 100,
+    private val initialCostItemB64: String? = null,
+    private val initialCostAmount: Int? = null,
+    private val signRenderer: ShopSignRenderer = ShopSignRenderer(),
+) : Menu {
+
+    private var direction: SignDirection = initialDirection
+    private var price: Long = initialPrice
+    private var amount: Int = initialAmount
+    // Barter-mode cost (TRADE shops use an item, not Vault currency)
+    private var costItemB64: String? = initialCostItemB64
+    private var costItemAmount: Int = initialCostAmount ?: 1
+
+    /** "price" (Vault cost) or "amount" (trade amount) — which field the player is typing for. */
+    private var priceInputTarget: String = "price"
+
+    internal val internalLang: LangService get() = lang
+
+    internal fun setPrice(value: Long) { price = value }
+    internal fun internalNotifyTimeout(playerId: UUID) {
+        org.bukkit.Bukkit.getPlayer(playerId)?.sendMessage(lang.msg("gui.shop.create.custom_price_timeout"))
+    }
+
+    override fun open(player: Player) {
+        render(player)
+    }
+
+    @Suppress("LongMethod")
+    private fun render(player: Player) {
+        val gui = ChestGui(4, ComponentHolder.of(lang.msg("gui.shop.create.title")))
+        val pane = StaticPane(9, 4)
+
+        // Row 0: direction selector
+        val dirColors = mapOf(
+            SignDirection.SELL to Material.LIME_STAINED_GLASS_PANE,
+            SignDirection.BUY to Material.GOLD_BLOCK,
+            SignDirection.TRADE to Material.PURPLE_STAINED_GLASS_PANE,
+        )
+        SignDirection.entries.forEachIndexed { idx, dir ->
+            val mat = dirColors[dir] ?: Material.WHITE_STAINED_GLASS_PANE
+            val sel = if (dir == direction) " \u2714" else ""
+            pane.addItem(GuiItem(decorated(mat, lang.msg("gui.shop.create.dir_${dir.name.lowercase()}", "sel" to sel))) { event ->
+                event.isCancelled = true
+                direction = dir
+                if (dir != SignDirection.TRADE) costItemB64 = null
+                render(player)
+            }, 1 + idx * 3, 0)
+        }
+
+        // Row 1: sell item preview + amount controls
+        // Layout: [preview] [+1][+5][+10][AMOUNT][-10][-5][-1]
+        val preview = ItemStackSerializer.deserialize(sellItemBase64) ?: ItemStack(Material.BARRIER)
+        pane.addItem(GuiItem(preview), 0, 1)
+        addStepButtons(pane, 1, 1,
+            get = { amount.toLong() },
+            set = { amount = it.toInt() },
+            rerender = { render(player) },
+            coerce = { coerceAtLeast(1L) },
+            displayLabel = { lang.msg("gui.shop.create.amount", "amount" to amount) },
+        )
+
+        // Row 2: cost configuration
+        if (direction == SignDirection.TRADE) {
+            renderBarterCost(pane, player)
+        } else {
+            renderCurrencyCost(pane, player)
+        }
+
+        // Row 3: confirm + cancel
+        pane.addItem(GuiItem(decorated(Material.LIME_STAINED_GLASS_PANE, lang.msg("gui.shop.create.confirm"))) { event ->
+            event.isCancelled = true
+            val shop = ShopFactory.build(
+                stallId = stallId, owner = stallOwner,
+                signWorld = signLoc.world?.name ?: "world",
+                signX = signLoc.blockX, signY = signLoc.blockY, signZ = signLoc.blockZ,
+                containerWorld = containerLoc.world?.name ?: "world",
+                containerX = containerLoc.blockX, containerY = containerLoc.blockY, containerZ = containerLoc.blockZ,
+                sellItemBase64 = sellItemBase64, sellAmount = amount, price = price,
+                direction = direction,
+                searchEnabled = true,
+                costItemBase64 = costItemB64,
+                costAmountOverride = if (direction == SignDirection.TRADE) costItemAmount else null,
+            )
+            if (!writeSignText(shop)) {
+                player.closeInventory()
+                player.sendMessage(lang.msg("shop.create.sign_failed"))
+                return@GuiItem
+            }
+            shopRepository.upsert(shop)
+            player.closeInventory()
+            player.sendMessage(lang.msg("shop.create.success"))
+        }, 7, 3)
+        pane.addItem(GuiItem(decorated(Material.RED_CONCRETE, lang.msg("gui.shop.create.cancel"))) { event ->
+            event.isCancelled = true; player.closeInventory()
+        }, 1, 3)
+
+        gui.addPane(pane)
+        gui.blockItemTheft()
+        gui.show(player)
+    }
+
+    /**
+     * Add 6 step buttons + center display in a row:
+     *   [+1][+5][+10]  [VALUE]  [-10][-5][-1]
+     */
+    @Suppress("LongParameterList")
+    private fun addStepButtons(
+        pane: StaticPane,
+        col: Int,
+        row: Int,
+        get: () -> Long,
+        set: (Long) -> Unit,
+        rerender: () -> Unit,
+        coerce: Long.() -> Long,
+        displayLabel: () -> Component,
+    ) {
+        data class Step(val delta: Int, val mat: Material, val langKey: String)
+
+        val steps = listOf(
+            Step(1, Material.LIME_DYE, "gui.shop.create.btn_plus1"),
+            Step(5, Material.LIME_STAINED_GLASS, "gui.shop.create.btn_plus5"),
+            Step(10, Material.LIME_STAINED_GLASS_PANE, "gui.shop.create.btn_plus10"),
+            // display at col+3
+            Step(-10, Material.RED_STAINED_GLASS_PANE, "gui.shop.create.btn_minus10"),
+            Step(-5, Material.RED_STAINED_GLASS, "gui.shop.create.btn_minus5"),
+            Step(-1, Material.RED_DYE, "gui.shop.create.btn_minus1"),
+        )
+
+        // +1, +5, +10
+        for (i in 0..2) {
+            val s = steps[i]
+            pane.addItem(GuiItem(decorated(s.mat, lang.msg(s.langKey, "delta" to s.delta, "val" to (get() + s.delta)))) { event ->
+                event.isCancelled = true
+                set((get() + s.delta).coerce())
+                rerender()
+            }, col + i, row)
+        }
+
+        // Value display
+        pane.addItem(GuiItem(decorated(Material.PAPER, displayLabel())), col + 3, row)
+
+        // -10, -5, -1
+        for (i in 3..5) {
+            val s = steps[i]
+            pane.addItem(GuiItem(decorated(s.mat, lang.msg(s.langKey, "delta" to s.delta, "val" to (get() + s.delta)))) { event ->
+                event.isCancelled = true
+                set((get() + s.delta).coerce())
+                rerender()
+            }, col + 4 + (i - 3), row)
+        }
+    }
+
+    private fun renderCurrencyCost(pane: StaticPane, player: Player) {
+        addStepButtons(pane, 1, 2,
+            get = { price.coerceIn(1, Long.MAX_VALUE) },
+            set = { price = it },
+            rerender = { render(player) },
+            coerce = { coerceIn(1, Long.MAX_VALUE) },
+            displayLabel = { lang.msg("gui.shop.create.price", "price" to price) },
+        )
+        // Custom price input button — right of the paper price display
+        pane.addItem(GuiItem(decorated(Material.OAK_SIGN, lang.msg("gui.shop.create.custom_price"))) { event ->
+            event.isCancelled = true
+            priceInputTarget = "price"
+            player.closeInventory()
+            player.sendMessage(lang.msg("gui.shop.create.custom_price_prompt"))
+            pendingPriceInputs[player.uniqueId] = this to Instant.now()
+        }, 4, 3)
+    }
+
+    private fun renderBarterCost(pane: StaticPane, player: Player) {
+        // Cost item slot — indicator when empty, set item when player clicks with cursor item
+        val costB64 = costItemB64
+        val costPreview = if (costB64 != null) {
+            ItemStackSerializer.deserialize(costB64)?.let { item ->
+                val meta = item.itemMeta
+                if (meta != null) {
+                    meta.displayName(lang.msg("gui.shop.create.cost_item_set"))
+                    meta.lore(listOf(lang.msg("gui.shop.create.cost_item_lore")))
+                    item.itemMeta = meta
+                }
+                item
+            } ?: ItemStack(Material.BARRIER)
+        } else {
+            // Empty indicator — gray glass pane hinting "drop item here"
+            decorated(Material.GRAY_STAINED_GLASS_PANE,
+                lang.msg("gui.shop.create.cost_item_empty"),
+                listOf(lang.msg("gui.shop.create.cost_item_empty_lore")),
+            )
+        }
+        pane.addItem(GuiItem(costPreview) { event ->
+            event.isCancelled = true
+            val cursor = event.cursor
+            if (cursor != null && cursor.type != Material.AIR && cursor.amount > 0) {
+                costItemB64 = ItemStackSerializer.serialize(cursor.clone().apply { amount = 1 })
+                costItemAmount = cursor.amount.coerceAtLeast(1)
+                render(player)
+            }
+        }, 0, 2)
+
+        // Cost amount controls with step buttons
+        addStepButtons(pane, 1, 2,
+            get = { costItemAmount.toLong() },
+            set = { costItemAmount = it.toInt() },
+            rerender = { render(player) },
+            coerce = { coerceAtLeast(1L) },
+            displayLabel = { lang.msg("gui.shop.create.cost_amount", "amount" to costItemAmount) },
+        )
+    }
+
+    private fun decorated(material: Material, name: Component, lore: List<Component> = emptyList()): ItemStack {
+        val item = ItemStack(material)
+        val meta = item.itemMeta ?: return item
+        meta.displayName(name.decoration(TextDecoration.ITALIC, false))
+        if (lore.isNotEmpty()) meta.lore(lore)
+        item.itemMeta = meta
+        return item
+    }
+
+    /** Write the shop's sign text via the shared [ShopSignRenderer], matching SignPlaceListener and ShopCommands. */
+    private fun writeSignText(shop: Shop): Boolean {
+        val world = signLoc.world ?: return false
+        val block = world.getBlockAt(signLoc.blockX, signLoc.blockY, signLoc.blockZ)
+        val sign = block.state as? Sign ?: return false
+        val side = sign.getSide(Side.FRONT)
+
+        val deserialized = try { ItemStackSerializer.deserialize(sellItemBase64) } catch (_: Exception) { null }
+        val sellMatName = deserialized?.type?.name?.lowercase() ?: "?"
+        val displayName = deserialized?.itemMeta?.displayName()
+        val costDisplay = if (shop.direction == SignDirection.TRADE) {
+            val costItem = try { ItemStackSerializer.deserialize(shop.costItem) } catch (_: Exception) { null }
+            "${shop.costAmount}x ${costItem?.type?.name?.lowercase() ?: "?"}"
+        } else {
+            "${shop.costAmount}"
+        }
+
+        signRenderer.lines(shop.direction, sellMatName, shop.sellAmount, costDisplay, displayName)
+            .forEachIndexed { i, c -> side.line(i, c) }
+        return sign.update(true, false)
+    }
+
+    companion object {
+        private const val CUSTOM_PRICE_TIMEOUT_SEC = 60L
+
+        /** Pending custom-price prompts: player UUID → (menu, when prompted). */
+        val pendingPriceInputs: ConcurrentHashMap<UUID, Pair<CreateShopMenu, Instant>> = ConcurrentHashMap()
+
+        /** Handle a chat message that might be a custom price input. Returns true if consumed. */
+        /** True when [playerId] has an active custom-price prompt. */
+        fun isWaiting(playerId: UUID): Boolean =
+            pendingPriceInputs.containsKey(playerId)
+
+        fun handleChat(player: Player, message: String, lang: LangService): Boolean {
+            val entry = pendingPriceInputs.remove(player.uniqueId) ?: return false
+            val (menu, promptedAt) = entry
+            if (java.time.Duration.between(promptedAt, Instant.now()).seconds > CUSTOM_PRICE_TIMEOUT_SEC) {
+                player.sendMessage(lang.msg("gui.shop.create.custom_price_timeout"))
+                return true
+            }
+            val trimmed = message.trim()
+            if (trimmed.equals("cancel", ignoreCase = true)) {
+                player.sendMessage(lang.msg("gui.shop.create.custom_price_cancelled"))
+                return true
+            }
+            val value = trimmed.toLongOrNull()?.takeIf { it > 0 }
+            if (value == null) {
+                player.sendMessage(lang.msg("gui.shop.create.custom_price_invalid"))
+                // Re-register so they can try again
+                pendingPriceInputs[player.uniqueId] = menu to promptedAt
+                return true
+            }
+            when (menu.priceInputTarget) {
+                "price" -> menu.price = value
+                "amount" -> menu.amount = value.toInt()
+            }
+            menu.open(player)
+            return true
+        }
+    }
+}

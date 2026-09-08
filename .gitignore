@@ -28,3 +28,6 @@ migration-evidence/private/
 # Repository-owned Flyway migrations remain tracked.
 !persistence/src/main/resources/db/migration/*.sql
 !persistence/src/main/resources/db/migration/**/*.sql
+
+# Repository-owned mirrored Market migrations remain tracked.
+!components/enthusia-market/src/main/resources/migrations/*.sql
