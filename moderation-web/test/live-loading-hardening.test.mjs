@@ -126,5 +126,5 @@ test('live browser seed is neutral and hardening exposes accessible menu/tab sem
   assert.match(loading, /'aria-haspopup':'menu'/);
   assert.match(loading, /setAttribute\('role', 'menuitem'\)/);
   assert.match(loading, /setAttribute\('aria-selected'/);
-  assert.match(loading, /maxContextPagesPerDirection = 4/);
+  assert.match(loading, /MAX_CONTEXT_PAGES_PER_DIRECTION = 4/);
 });
