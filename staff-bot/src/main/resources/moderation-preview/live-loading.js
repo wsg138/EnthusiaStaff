@@ -109,13 +109,8 @@ function contextReadComplete(trigger, page, direction) {
 }
 
 function contextPageCursor(messages, direction) {
-  const ordered = messages.filter(hasValidMessageTime).slice().sort(compareMessageTimeAscending);
-  if (!ordered.length) return '';
+  const ordered = messages.slice().sort(compareMessageTimeAscending);
   return direction === 'before' ? ordered[0].id : ordered[ordered.length - 1].id;
-}
-
-function hasValidMessageTime(message) {
-  return Number.isFinite(new Date(message.time).getTime());
 }
 
 function compareMessageTimeAscending(left, right) {
@@ -124,11 +119,10 @@ function compareMessageTimeAscending(left, right) {
 
 function contextBoundaryReached(trigger, messages, direction) {
   const triggerTime = new Date(trigger.time).getTime();
-  if (!Number.isFinite(triggerTime)) return true;
-  const times = messages.map((message) => new Date(message.time).getTime()).filter(Number.isFinite);
-  if (!times.length) return true;
-  if (direction === 'before') return Math.min(...times) <= triggerTime - CONTEXT_WINDOW_MS;
-  return Math.max(...times) >= triggerTime + CONTEXT_WINDOW_MS;
+  const times = messages.map((message) => new Date(message.time).getTime());
+  return direction === 'before'
+    ? Math.min(...times) <= triggerTime - CONTEXT_WINDOW_MS
+    : Math.max(...times) >= triggerTime + CONTEXT_WINDOW_MS;
 }
 
 function boundedContextMessages(trigger, before, after) {
@@ -141,7 +135,6 @@ function boundedContextMessages(trigger, before, after) {
 function addContextMessage(byId, trigger, triggerTime, message) {
   if (message.channelId !== trigger.channelId) return;
   const messageTime = new Date(message.time).getTime();
-  if (!Number.isFinite(messageTime)) return;
   if (Math.abs(messageTime - triggerTime) <= CONTEXT_WINDOW_MS) byId.set(message.id, message);
 }
 
@@ -153,7 +146,7 @@ function exitPaginatedContext() {
   const previous = state.contextReturn;
   state.contextId = null;
   state.contextReturn = null;
-  state.contextTruncated = previous ? Boolean(previous.contextTruncated) : false;
+  state.contextTruncated = Boolean(previous?.contextTruncated);
   if (!previous) {
     renderAll();
     return;
