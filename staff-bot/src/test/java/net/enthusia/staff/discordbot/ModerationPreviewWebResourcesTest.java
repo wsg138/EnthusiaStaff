@@ -18,6 +18,9 @@ class ModerationPreviewWebResourcesTest {
     private static final String REVIEW_SCRIPT = "/moderation-preview/review.js";
     private static final String REAL_DATA_SCRIPT = "/moderation-preview/real-data.js";
     private static final String DIRECT_READ_SCRIPT = "/moderation-preview/direct-read.js";
+    private static final String LIVE_CONTEXT_PAGINATION_SCRIPT =
+            "/moderation-preview/live-context-pagination.js";
+    private static final String LIVE_LOADING_SCRIPT = "/moderation-preview/live-loading.js";
     private static final String REAL_POLICY_SCRIPT = "/moderation-preview/real-policy.js";
     private static final String LIVE_ENHANCEMENTS_SCRIPT = "/moderation-preview/live-enhancements.js";
     private static final List<String> RESOURCES = List.of(
@@ -30,11 +33,14 @@ class ModerationPreviewWebResourcesTest {
             REVIEW_SCRIPT,
             REAL_DATA_SCRIPT,
             DIRECT_READ_SCRIPT,
+            LIVE_CONTEXT_PAGINATION_SCRIPT,
+            LIVE_LOADING_SCRIPT,
             REAL_POLICY_SCRIPT,
             LIVE_ENHANCEMENTS_SCRIPT);
     private static final List<String> SCRIPTS = List.of(
             MODEL_SCRIPT, APP_SCRIPT, WORKFLOW_SCRIPT, REVIEW_SCRIPT,
-            REAL_DATA_SCRIPT, DIRECT_READ_SCRIPT, REAL_POLICY_SCRIPT, LIVE_ENHANCEMENTS_SCRIPT);
+            REAL_DATA_SCRIPT, DIRECT_READ_SCRIPT, LIVE_CONTEXT_PAGINATION_SCRIPT,
+            LIVE_LOADING_SCRIPT, REAL_POLICY_SCRIPT, LIVE_ENHANCEMENTS_SCRIPT);
 
     @Test
     void everyModerationWorkspaceResourceIsPackaged() {
@@ -54,6 +60,7 @@ class ModerationPreviewWebResourcesTest {
                 "/assets/review.js",
                 "/assets/real-data.js",
                 "/assets/direct-read.js",
+                "/assets/live-context-pagination.js",
                 "/assets/live-loading.js",
                 "/assets/real-policy.js",
                 "/assets/live-enhancements.js");

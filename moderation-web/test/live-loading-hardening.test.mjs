@@ -4,10 +4,11 @@ import test from 'node:test';
 import vm from 'node:vm';
 
 const LIVE_LOADING = new URL('../../staff-bot/src/main/resources/moderation-preview/live-loading.js', import.meta.url);
+const LIVE_CONTEXT_PAGINATION = new URL('../../staff-bot/src/main/resources/moderation-preview/live-context-pagination.js', import.meta.url);
 const MODEL = new URL('../../staff-bot/src/main/resources/moderation-preview/model.js', import.meta.url);
 
 async function loadPagination(singlePageRead, trigger) {
-  const source = await readFile(LIVE_LOADING, 'utf8');
+  const source = await readFile(LIVE_CONTEXT_PAGINATION, 'utf8');
   let domReady;
   const context = {
     document:{addEventListener:(type, callback) => { if (type === 'DOMContentLoaded') domReady = callback; }},
@@ -17,7 +18,7 @@ async function loadPagination(singlePageRead, trigger) {
   };
   context.window = context;
   vm.createContext(context);
-  vm.runInContext(source, context, {filename:'live-loading.js'});
+  vm.runInContext(source, context, {filename:'live-context-pagination.js'});
   context.fetchContextPage = singlePageRead;
   assert.equal(typeof domReady, 'function');
   domReady();
@@ -59,6 +60,24 @@ test('context reader paginates until the two-minute boundary and keeps the reque
   assert.ok(new Date(result.at(-1).time).getTime() <= triggerTime - 120_000);
 });
 
+test('context reader rejects a non-advancing cursor instead of repeating the same page', async () => {
+  const triggerTime = Date.parse('2026-09-08T16:00:00Z');
+  const trigger = message('trigger', new Date(triggerTime).toISOString());
+  const page = fifty('fixed', triggerTime - 30_000, 100);
+  page[0] = message('trigger', new Date(triggerTime - 30_000).toISOString());
+  let calls = 0;
+  const context = await loadPagination(async () => {
+    calls++;
+    return page;
+  }, trigger);
+
+  await assert.rejects(
+    context.window.fetchContextPage('channel-a', 'before', 'trigger'),
+    /pagination did not advance/
+  );
+  assert.equal(calls, 1);
+});
+
 test('context reader fails explicitly when the bounded safety cap cannot reach the time boundary', async () => {
   const triggerTime = Date.parse('2026-09-08T16:00:00Z');
   const trigger = message('trigger', new Date(triggerTime).toISOString());
@@ -77,15 +96,20 @@ test('context reader fails explicitly when the bounded safety cap cannot reach t
 });
 
 test('live loading state stays neutral and pagination does not duplicate context UI orchestration', async () => {
-  const [model, loading] = await Promise.all([readFile(MODEL, 'utf8'), readFile(LIVE_LOADING, 'utf8')]);
+  const [model, loading, pagination] = await Promise.all([
+    readFile(MODEL, 'utf8'),
+    readFile(LIVE_LOADING, 'utf8'),
+    readFile(LIVE_CONTEXT_PAGINATION, 'utf8')
+  ]);
 
   assert.doesNotMatch(model, /RiverAsh|RiverAshMC|sample-river-ash/i);
   assert.match(model, /const LOADING_TEXT = 'Loading…';/);
   assert.match(model, /discordId:LOADING_TEXT/);
   assert.match(model, /const baseMessages = \[\];/);
   assert.match(loading, /discordId:LOADING_TEXT/);
-  assert.match(loading, /MAX_CONTEXT_PAGES_PER_DIRECTION = 4/);
-  assert.match(loading, /window\.fetchContextPage/);
-  assert.doesNotMatch(loading, /function showTwoMinuteContext/);
-  assert.doesNotMatch(loading, /function exitLiveContext/);
+  assert.doesNotMatch(loading, /MAX_CONTEXT_PAGES_PER_DIRECTION/);
+  assert.match(pagination, /MAX_CONTEXT_PAGES_PER_DIRECTION = 4/);
+  assert.match(pagination, /window\.fetchContextPage/);
+  assert.doesNotMatch(pagination, /function showTwoMinuteContext/);
+  assert.doesNotMatch(pagination, /function exitLiveContext/);
 });

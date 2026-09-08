@@ -15,6 +15,7 @@ const STATIC_PATHS = new Set([
   '/assets/review.js',
   '/assets/real-data.js',
   '/assets/direct-read.js',
+  '/assets/live-context-pagination.js',
   '/assets/live-loading.js',
   '/assets/real-policy.js',
   '/assets/live-enhancements.js'
