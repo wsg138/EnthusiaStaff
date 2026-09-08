@@ -75,7 +75,7 @@ Case records are intended to preserve moderation context and audit history. In t
 
 ## Freeze / investigation
 
-`/freeze <player> <reason>` creates a durable staff investigation restriction. `/unfreeze <player> <reason> CONFIRM` releases it.
+`/freeze <player> <reason>` creates a durable staff investigation restriction. `/freeze keep <player> <reason> CONFIRM` prevents its normal offline timeout. `/freeze status <player|uuid>` shows one player's current freeze, and `/freeze list` shows the oldest active freezes. `/unfreeze <player> <reason> CONFIRM` releases a freeze. Staff can use the status and list commands while moderation writes are disabled; those reads do not expire or otherwise change stored freeze rows.
 
 Freeze state is designed to survive ordinary runtime transitions rather than being a memory-only toggle. Chat behavior has a separate permission/control boundary.
 

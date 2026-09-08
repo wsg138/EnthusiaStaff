@@ -16,6 +16,9 @@ For implementation status and source files, use [[Staff Tools, Investigations, a
 /staff
 /vanish
 /freeze <player> <reason>
+/freeze keep <player> <reason> CONFIRM
+/freeze status <player|uuid>
+/freeze list
 /unfreeze <player> <reason> CONFIRM
 /stafftools
 /stafftools random
@@ -110,10 +113,15 @@ Apply and release with:
 
 ```text
 /freeze <player> <reason>
+/freeze keep <player> <reason> CONFIRM
+/freeze status <player|uuid>
+/freeze list
 /unfreeze <player> <reason> CONFIRM
 ```
 
 Freeze is an investigation restriction, not a punishment duration. Keep an active staff member responsible for a frozen player and release/handoff the restriction when the investigation cannot continue.
+
+Use `/freeze status` before changing an uncertain freeze. `/freeze list` shows up to 25 active freezes, oldest first, including the original reason and current offline handling. These two commands remain read-only when moderation changes are disabled.
 
 Freeze must survive the durable lifecycle it claims to support and must not rely on one movement event while inventory, interaction, teleport, backend-switch or other bypasses remain open.
 

@@ -33,6 +33,7 @@ final class FreezeCommandRouteTest {
 
         assertEquals(List.of(Component.text(
                 "Usage: /freeze <player> <reason> | /freeze keep <player> <reason> CONFIRM"
+                        + " | /freeze status <player|uuid> | /freeze list"
         )), messages);
     }
 
@@ -44,7 +45,8 @@ final class FreezeCommandRouteTest {
                 () -> null,
                 () -> null,
                 null,
-                null
+                null,
+                (sender, responses) -> responses.forEach(sender::sendMessage)
         );
     }
 

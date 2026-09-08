@@ -83,8 +83,8 @@ commands:
     usage: /reports
     permission: enthusiastaff.reports.manage
   freeze:
-    description: Durably restrict a player for staff investigation
-    usage: /freeze <player> <reason>
+    description: Manage and inspect durable player freezes
+    usage: /freeze <player> <reason> | /freeze keep <player> <reason> CONFIRM | /freeze status <player|uuid> | /freeze list
     permission: enthusiastaff.freeze
   unfreeze:
     description: Release a durable staff freeze
