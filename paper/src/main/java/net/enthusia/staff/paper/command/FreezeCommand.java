@@ -145,19 +145,27 @@ public final class FreezeCommand implements CommandExecutor, TabCompleter {
             return null;
         }
         boolean confirmed = arguments[arguments.length - 1].equals("CONFIRM");
-        if ((release || keep) && !confirmed) {
+        if (confirmationMissing(release, keep, confirmed)) {
             sender.sendMessage(Component.text("No change was made. Append the exact word CONFIRM to commit."));
             return null;
         }
         int reasonEnd = confirmed ? arguments.length - 1 : arguments.length;
         String reason = String.join(" ", Arrays.copyOfRange(arguments, reasonStart, reasonEnd)).trim();
-        if (reason.isBlank() || reason.length() > MAX_REASON_LENGTH) {
+        if (invalidReason(reason)) {
             sender.sendMessage(Component.text(
                     "A written reason of at most " + MAX_REASON_LENGTH + " characters is required."
             ));
             return null;
         }
         return new ChangeArguments(arguments[targetIndex], reason, keep);
+    }
+
+    private static boolean confirmationMissing(boolean release, boolean keep, boolean confirmed) {
+        return (release || keep) && !confirmed;
+    }
+
+    private static boolean invalidReason(String reason) {
+        return reason.isBlank() || reason.length() > MAX_REASON_LENGTH;
     }
 
     private static String changeUsage(boolean release) {
