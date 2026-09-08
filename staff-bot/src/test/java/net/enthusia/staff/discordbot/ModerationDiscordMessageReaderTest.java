@@ -14,11 +14,12 @@ import org.junit.jupiter.api.Test;
 
 class ModerationDiscordMessageReaderTest {
     @Test
-    void messageReadsRequireChannelViewAndMessageHistory() {
-        assertFalse(ModerationDiscordMessageReader.hasReadPermissions(false, false));
-        assertFalse(ModerationDiscordMessageReader.hasReadPermissions(false, true));
-        assertFalse(ModerationDiscordMessageReader.hasReadPermissions(true, false));
-        assertTrue(ModerationDiscordMessageReader.hasReadPermissions(true, true));
+    void messageReadsRequireActorAndBotChannelAccess() {
+        assertFalse(ModerationDiscordMessageReader.hasReadPermissions(false, false, true, true));
+        assertFalse(ModerationDiscordMessageReader.hasReadPermissions(true, false, true, true));
+        assertFalse(ModerationDiscordMessageReader.hasReadPermissions(true, true, false, true));
+        assertFalse(ModerationDiscordMessageReader.hasReadPermissions(true, true, true, false));
+        assertTrue(ModerationDiscordMessageReader.hasReadPermissions(true, true, true, true));
     }
 
     @Test

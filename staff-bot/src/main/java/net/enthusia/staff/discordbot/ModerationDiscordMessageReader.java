@@ -5,6 +5,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 import net.dv8tion.jda.api.Permission;
+import net.dv8tion.jda.api.entities.Member;
 import net.dv8tion.jda.api.entities.Message;
 import net.dv8tion.jda.api.entities.channel.concrete.Category;
 import net.dv8tion.jda.api.entities.channel.concrete.TextChannel;
@@ -116,14 +117,22 @@ final class ModerationDiscordMessageReader {
         return channel;
     }
 
-    static boolean hasReadPermissions(boolean canView, boolean canReadHistory) {
-        return canView && canReadHistory;
+    static boolean hasReadPermissions(
+            boolean actorCanView,
+            boolean actorCanReadHistory,
+            boolean botCanView,
+            boolean botCanReadHistory
+    ) {
+        return actorCanView && actorCanReadHistory && botCanView && botCanReadHistory;
     }
 
     private static boolean hasReadAccess(ModerationReadContext context, TextChannel channel) {
+        Member botMember = context.guild().getSelfMember();
         return hasReadPermissions(
                 context.actorMember().hasPermission(channel, Permission.VIEW_CHANNEL),
-                context.actorMember().hasPermission(channel, Permission.MESSAGE_HISTORY));
+                context.actorMember().hasPermission(channel, Permission.MESSAGE_HISTORY),
+                botMember.hasPermission(channel, Permission.VIEW_CHANNEL),
+                botMember.hasPermission(channel, Permission.MESSAGE_HISTORY));
     }
 
     private static ModerationReadApiModel.ChannelDto channelDto(TextChannel channel) {
