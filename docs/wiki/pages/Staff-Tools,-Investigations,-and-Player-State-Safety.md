@@ -142,6 +142,8 @@ Remaining work includes richer operational acceptance, key rotation and producti
 
 Inspector/client surfaces assemble authorized context such as identity, location/server, platform/client information, moderation history, reports and related investigation state. Provider evidence is context, not automatic proof of cheating.
 
+The inspector shows the player's current durable freeze state and reason. Staff with freeze permission also receive direct Freeze or Unfreeze command suggestions; viewing the inspector never changes freeze state.
+
 Primary paths:
 
 - `paper/.../command/InspectCommand.java`
