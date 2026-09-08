@@ -62,15 +62,7 @@ final class FreezeQueryHandlerTest {
     void listRequestsOneExtraRowAndClearlyReportsTruncation() {
         List<FreezeRecord> records = new ArrayList<>();
         for (int index = 0; index < 26; index++) {
-            records.add(new FreezeRecord(
-                    new UUID(0L, index + 1L),
-                    ACTOR_ID,
-                    "Investigation " + index,
-                    NOW.plusSeconds(index),
-                    Optional.empty(),
-                    false,
-                    0L
-            ));
+            records.add(record(index));
         }
         AtomicInteger requestedLimit = new AtomicInteger();
         FreezeStore store = proxy(FreezeStore.class, (method, arguments) -> switch (method.getName()) {
@@ -91,6 +83,18 @@ final class FreezeQueryHandlerTest {
         assertEquals(Component.text("Active player freezes (oldest first):"), messages.getFirst());
         assertEquals(Component.text("Showing the first 25 active freezes."), messages.getLast());
         assertFalse(messages.toString().contains(records.getLast().playerId().toString()));
+    }
+
+    private static FreezeRecord record(int index) {
+        return new FreezeRecord(
+                new UUID(0L, index + 1L),
+                ACTOR_ID,
+                "Investigation " + index,
+                NOW.plusSeconds(index),
+                Optional.empty(),
+                false,
+                0L
+        );
     }
 
     private static FreezeQueryHandler handler(

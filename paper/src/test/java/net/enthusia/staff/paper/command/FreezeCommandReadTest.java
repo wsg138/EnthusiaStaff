@@ -25,6 +25,7 @@ import org.bukkit.command.CommandSender;
 import org.junit.jupiter.api.Test;
 
 final class FreezeCommandReadTest {
+    private static final String COMMAND_NAME = "freeze";
     private static final Instant NOW = Instant.parse("2026-09-08T12:30:00Z");
     private static final UUID PLAYER_ID = UUID.fromString("41000000-0000-0000-0000-000000000001");
 
@@ -47,8 +48,8 @@ final class FreezeCommandReadTest {
 
         handler.onCommand(
                 sender(messages),
-                command("freeze"),
-                "freeze",
+                command(COMMAND_NAME),
+                COMMAND_NAME,
                 new String[]{"status", "FrozenPlayer"}
         );
 
@@ -64,8 +65,8 @@ final class FreezeCommandReadTest {
 
         handler.onCommand(
                 sender(messages),
-                command("freeze"),
-                "freeze",
+                command(COMMAND_NAME),
+                COMMAND_NAME,
                 new String[]{"FrozenPlayer", "Investigation"}
         );
 
