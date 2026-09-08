@@ -31,8 +31,8 @@ function applyScenario() {
   baseMessages.splice(0);
   RESTRICTION_TARGETS.splice(0);
   Object.assign(identity, {
-    displayName:'Loading moderation data…', username:'loading', discordId:'Loading…', minecraft:'Loading…',
-    minecraftUuid:'Loading…', alts:[], status:'Loading', statusDetail:'Waiting for authoritative read data',
+    displayName:'Loading moderation data…', username:'loading', discordId:LOADING_TEXT, minecraft:LOADING_TEXT,
+    minecraftUuid:LOADING_TEXT, alts:[], status:'Loading', statusDetail:'Waiting for authoritative read data',
     avatarUrl:'', linkState:'Loading'
   });
   renderAll();

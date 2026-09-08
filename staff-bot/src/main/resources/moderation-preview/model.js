@@ -2,6 +2,7 @@
 
 const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
+const LOADING_TEXT = 'Loading…';
 
 const OFFENSES = [
   ['spam', 'Spam / flooding'], ['harassment', 'Harassment'], ['hate', 'Hate / slurs'],
@@ -26,8 +27,8 @@ const NAV = [
 ];
 
 const identity = {
-  displayName:'Loading moderation data…', username:'loading', discordId:'Loading…',
-  minecraft:'Loading…', minecraftUuid:'Loading…', alts:[], status:'Loading',
+  displayName:'Loading moderation data…', username:'loading', discordId:LOADING_TEXT,
+  minecraft:LOADING_TEXT, minecraftUuid:LOADING_TEXT, alts:[], status:'Loading',
   statusDetail:'Waiting for authoritative read data'
 };
 

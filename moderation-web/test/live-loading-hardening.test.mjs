@@ -80,7 +80,10 @@ test('live loading state stays neutral and pagination does not duplicate context
   const [model, loading] = await Promise.all([readFile(MODEL, 'utf8'), readFile(LIVE_LOADING, 'utf8')]);
 
   assert.doesNotMatch(model, /RiverAsh|RiverAshMC|sample-river-ash/i);
+  assert.match(model, /const LOADING_TEXT = 'Loading…';/);
+  assert.match(model, /discordId:LOADING_TEXT/);
   assert.match(model, /const baseMessages = \[\];/);
+  assert.match(loading, /discordId:LOADING_TEXT/);
   assert.match(loading, /MAX_CONTEXT_PAGES_PER_DIRECTION = 4/);
   assert.match(loading, /window\.fetchContextPage/);
   assert.doesNotMatch(loading, /function showTwoMinuteContext/);
