@@ -61,40 +61,18 @@ function paginatedContextRead(singlePageRead, channelId, direction, triggerId) {
 
 async function readContextPage(request) {
   const page = await request.singlePageRead(request.channelId, request.direction, request.cursor);
-  const collected = request.messages.concat(
-    page.filter((message) => message.channelId === request.channelId)
-  );
-  if (contextReadComplete(request.trigger, page, request.direction)) return collected;
-  const nextCursor = contextPageCursor(page, request.direction);
-  return readContextPage(nextContextRequest(request, collected, nextCursor));
-}
-
-function contextReadComplete(trigger, page, direction) {
-  return page.length < CONTEXT_PAGE_SIZE || contextBoundaryReached(trigger, page, direction);
-}
-
-function nextContextRequest(request, messages, nextCursor) {
+  const messages = request.messages.concat(page.filter((message) => message.channelId === request.channelId));
+  const triggerTime = new Date(request.trigger.time).getTime();
+  const times = page.map((message) => new Date(message.time).getTime());
+  const boundary = request.direction === 'before'
+    ? Math.min(...times) <= triggerTime - CONTEXT_WINDOW_MS
+    : Math.max(...times) >= triggerTime + CONTEXT_WINDOW_MS;
+  if (page.length < CONTEXT_PAGE_SIZE || boundary) return messages;
   if (request.pageNumber + 1 >= MAX_CONTEXT_PAGES_PER_DIRECTION) {
     throw new Error('Discord context is too dense to display safely within the two-minute window.');
   }
-  if (nextCursor === request.cursor) throw new Error('Discord context pagination did not advance.');
-  return {
-    ...request,
-    cursor: nextCursor,
-    pageNumber: request.pageNumber + 1,
-    messages
-  };
-}
-
-function contextBoundaryReached(trigger, messages, direction) {
-  const triggerTime = new Date(trigger.time).getTime();
-  const times = messages.map((message) => new Date(message.time).getTime());
-  return direction === 'before'
-    ? Math.min(...times) <= triggerTime - CONTEXT_WINDOW_MS
-    : Math.max(...times) >= triggerTime + CONTEXT_WINDOW_MS;
-}
-
-function contextPageCursor(messages, direction) {
-  const ordered = messages.slice().sort((left, right) => new Date(left.time) - new Date(right.time));
-  return direction === 'before' ? ordered[0].id : ordered[ordered.length - 1].id;
+  const ordered = page.slice().sort((left, right) => new Date(left.time) - new Date(right.time));
+  const cursor = request.direction === 'before' ? ordered[0].id : ordered[ordered.length - 1].id;
+  if (cursor === request.cursor) throw new Error('Discord context pagination did not advance.');
+  return readContextPage({...request, cursor, pageNumber: request.pageNumber + 1, messages});
 }
