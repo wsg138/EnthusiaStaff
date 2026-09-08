@@ -8,6 +8,7 @@ test('protected router serves live moderation enhancement assets', async () => {
   const source = await readFile(sourceUrl, 'utf8');
 
   assert.match(source, /'\/assets\/live\.css'/);
+  assert.match(source, /'\/assets\/live-context-page-policy\.js'/);
   assert.match(source, /'\/assets\/live-context-pagination\.js'/);
   assert.match(source, /'\/assets\/live-enhancements\.js'/);
 });

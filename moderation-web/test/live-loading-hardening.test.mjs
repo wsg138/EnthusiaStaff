@@ -4,11 +4,15 @@ import test from 'node:test';
 import vm from 'node:vm';
 
 const LIVE_LOADING = new URL('../../staff-bot/src/main/resources/moderation-preview/live-loading.js', import.meta.url);
+const LIVE_CONTEXT_PAGE_POLICY = new URL('../../staff-bot/src/main/resources/moderation-preview/live-context-page-policy.js', import.meta.url);
 const LIVE_CONTEXT_PAGINATION = new URL('../../staff-bot/src/main/resources/moderation-preview/live-context-pagination.js', import.meta.url);
 const MODEL = new URL('../../staff-bot/src/main/resources/moderation-preview/model.js', import.meta.url);
 
 async function loadPagination(singlePageRead, trigger) {
-  const source = await readFile(LIVE_CONTEXT_PAGINATION, 'utf8');
+  const [policySource, paginationSource] = await Promise.all([
+    readFile(LIVE_CONTEXT_PAGE_POLICY, 'utf8'),
+    readFile(LIVE_CONTEXT_PAGINATION, 'utf8')
+  ]);
   let domReady;
   const context = {
     document:{addEventListener:(type, callback) => { if (type === 'DOMContentLoaded') domReady = callback; }},
@@ -18,7 +22,8 @@ async function loadPagination(singlePageRead, trigger) {
   };
   context.window = context;
   vm.createContext(context);
-  vm.runInContext(source, context, {filename:'live-context-pagination.js'});
+  vm.runInContext(policySource, context, {filename:'live-context-page-policy.js'});
+  vm.runInContext(paginationSource, context, {filename:'live-context-pagination.js'});
   context.fetchContextPage = singlePageRead;
   assert.equal(typeof domReady, 'function');
   domReady();
@@ -96,9 +101,10 @@ test('context reader fails explicitly when the bounded safety cap cannot reach t
 });
 
 test('live loading state stays neutral and pagination does not duplicate context UI orchestration', async () => {
-  const [model, loading, pagination] = await Promise.all([
+  const [model, loading, policy, pagination] = await Promise.all([
     readFile(MODEL, 'utf8'),
     readFile(LIVE_LOADING, 'utf8'),
+    readFile(LIVE_CONTEXT_PAGE_POLICY, 'utf8'),
     readFile(LIVE_CONTEXT_PAGINATION, 'utf8')
   ]);
 
@@ -108,8 +114,10 @@ test('live loading state stays neutral and pagination does not duplicate context
   assert.match(model, /const baseMessages = \[\];/);
   assert.match(loading, /discordId:LOADING_TEXT/);
   assert.doesNotMatch(loading, /MAX_CONTEXT_PAGES_PER_DIRECTION/);
-  assert.match(pagination, /MAX_CONTEXT_PAGES_PER_DIRECTION = 4/);
+  assert.match(policy, /MAX_CONTEXT_PAGES_PER_DIRECTION = 4/);
+  assert.match(policy, /CONTEXT_WINDOW_MS = 120_000/);
   assert.match(pagination, /window\.fetchContextPage/);
+  assert.doesNotMatch(policy, /function showTwoMinuteContext/);
   assert.doesNotMatch(pagination, /function showTwoMinuteContext/);
   assert.doesNotMatch(pagination, /function exitLiveContext/);
 });
