@@ -6,36 +6,19 @@ import vm from 'node:vm';
 const LIVE_LOADING = new URL('../../staff-bot/src/main/resources/moderation-preview/live-loading.js', import.meta.url);
 const MODEL = new URL('../../staff-bot/src/main/resources/moderation-preview/model.js', import.meta.url);
 
-async function loadHardening(fetchContextPage) {
+async function loadPagination(singlePageRead, trigger) {
   const source = await readFile(LIVE_LOADING, 'utf8');
   let domReady;
-  const state = {
-    contextId:null, contextReturn:null, contextTruncated:false, search:'term', author:'author', channel:'channel-a',
-    date:'2026-09-08', selectedOnly:true, evidence:new Set(), deleting:new Set()
-  };
-  const baseMessages = [];
-  const liveModeration = {olderCursor:'older', newerCursor:'newer'};
   const context = {
-    window:{},
     document:{addEventListener:(type, callback) => { if (type === 'DOMContentLoaded') domReady = callback; }},
     queueMicrotask:(callback) => callback(),
-    state,
-    baseMessages,
-    liveModeration,
-    fetchContextPage,
-    rememberMessageView:() => ({
-      messages:baseMessages.slice(), search:state.search, author:state.author, channel:state.channel,
-      date:state.date, selectedOnly:state.selectedOnly,
-      olderCursor:liveModeration.olderCursor, newerCursor:liveModeration.newerCursor
-    }),
-    renderAll:() => {},
-    showToast:() => {},
-    element:() => ({}),
-    buttonNode:() => ({}),
+    baseMessages:[trigger],
     console
   };
+  context.window = context;
   vm.createContext(context);
   vm.runInContext(source, context, {filename:'live-loading.js'});
+  context.fetchContextPage = singlePageRead;
   assert.equal(typeof domReady, 'function');
   domReady();
   return context;
@@ -45,84 +28,61 @@ function message(id, time, channelId = 'channel-a', author = `author-${id}`) {
   return {id, time, channelId, author};
 }
 
-function fifty(prefix, startMillis, stepMillis) {
+function fifty(prefix, startMillis, stepMillis, channelId = 'channel-a') {
   return Array.from({length:50}, (_, index) => message(
     `${prefix}-${index}`,
-    new Date(startMillis + stepMillis * index).toISOString()
+    new Date(startMillis + stepMillis * index).toISOString(),
+    channelId
   ));
 }
 
-test('two-minute context paginates until both timestamp boundaries and restores the prior view', async () => {
+test('context reader paginates until the two-minute boundary and keeps the requested channel', async () => {
   const triggerTime = Date.parse('2026-09-08T16:00:00Z');
   const trigger = message('trigger', new Date(triggerTime).toISOString());
-  const calls = {before:0, after:0};
-  const beforeFirst = fifty('before-one', triggerTime - 60_000, 500);
-  const afterFirst = fifty('after-one', triggerTime + 1_000, 500);
-  const beforeSecond = [
-    message('before-inside', new Date(triggerTime - 119_000).toISOString()),
-    message('before-outside', new Date(triggerTime - 121_000).toISOString()),
-    message('wrong-channel', new Date(triggerTime - 30_000).toISOString(), 'channel-b')
-  ];
-  const afterSecond = [
-    message('after-inside', new Date(triggerTime + 119_000).toISOString()),
-    message('after-outside', new Date(triggerTime + 121_000).toISOString())
-  ];
-  const context = await loadHardening(async (_channelId, direction) => {
-    calls[direction]++;
-    if (direction === 'before') return calls.before === 1 ? beforeFirst : beforeSecond;
-    return calls.after === 1 ? afterFirst : afterSecond;
-  });
-  context.baseMessages.push(trigger, message('original', new Date(triggerTime - 10_000).toISOString()));
+  const calls = [];
+  const first = fifty('first', triggerTime - 60_000, 500);
+  const second = fifty('second', triggerTime - 90_000, -1_000);
+  second[10] = message('wrong-channel', new Date(triggerTime - 100_000).toISOString(), 'channel-b');
+  const context = await loadPagination(async (channelId, direction, cursor) => {
+    calls.push({channelId, direction, cursor});
+    return calls.length === 1 ? first : second;
+  }, trigger);
 
-  await context.window.showTwoMinuteContext('trigger');
+  const result = await context.window.fetchContextPage('channel-a', 'before', 'trigger');
 
-  assert.equal(calls.before, 2);
-  assert.equal(calls.after, 2);
-  assert.equal(context.state.contextId, 'trigger');
-  assert.equal(context.state.contextTruncated, false);
-  assert.equal(context.state.channel, 'channel-a');
-  assert.ok(context.baseMessages.some((entry) => entry.id === 'trigger'));
-  assert.ok(context.baseMessages.some((entry) => entry.id === 'before-inside'));
-  assert.ok(context.baseMessages.some((entry) => entry.id === 'after-inside'));
-  assert.ok(!context.baseMessages.some((entry) => entry.id === 'before-outside'));
-  assert.ok(!context.baseMessages.some((entry) => entry.id === 'after-outside'));
-  assert.ok(!context.baseMessages.some((entry) => entry.id === 'wrong-channel'));
-
-  context.window.exitLiveContext();
-  assert.deepEqual(Array.from(context.baseMessages, (entry) => entry.id), ['trigger', 'original']);
-  assert.equal(context.state.search, 'term');
-  assert.equal(context.state.author, 'author');
-  assert.equal(context.state.channel, 'channel-a');
-  assert.equal(context.state.date, '2026-09-08');
-  assert.equal(context.state.selectedOnly, true);
-  assert.equal(context.liveModeration.olderCursor, 'older');
-  assert.equal(context.liveModeration.newerCursor, 'newer');
+  assert.equal(calls.length, 2);
+  assert.deepEqual(calls[0], {channelId:'channel-a', direction:'before', cursor:'trigger'});
+  assert.equal(calls[1].cursor, 'first-0');
+  assert.ok(result.some((entry) => entry.id === 'first-1'));
+  assert.ok(result.some((entry) => entry.id === 'second-49'));
+  assert.ok(!result.some((entry) => entry.id === 'wrong-channel'));
+  assert.ok(new Date(result.at(-1).time).getTime() <= triggerTime - 120_000);
 });
 
-test('context read cap is fail-soft and explicitly marks the view truncated', async () => {
+test('context reader fails explicitly when the bounded safety cap cannot reach the time boundary', async () => {
   const triggerTime = Date.parse('2026-09-08T16:00:00Z');
   const trigger = message('trigger', new Date(triggerTime).toISOString());
-  const calls = {before:0, after:0};
-  const context = await loadHardening(async (_channelId, direction) => {
-    calls[direction]++;
+  let calls = 0;
+  const context = await loadPagination(async (_channelId, direction) => {
+    calls++;
     const sign = direction === 'before' ? -1 : 1;
-    return fifty(`${direction}-${calls[direction]}`, triggerTime + sign * 30_000, sign * 10);
-  });
-  context.baseMessages.push(trigger);
+    return fifty(`${direction}-${calls}`, triggerTime + sign * 30_000, sign * 10);
+  }, trigger);
 
-  await context.window.showTwoMinuteContext('trigger');
-
-  assert.equal(calls.before, 4);
-  assert.equal(calls.after, 4);
-  assert.equal(context.state.contextTruncated, true);
-  assert.ok(context.baseMessages.some((entry) => entry.id === 'trigger'));
+  await assert.rejects(
+    context.window.fetchContextPage('channel-a', 'after', 'trigger'),
+    /too dense to display safely/
+  );
+  assert.equal(calls, 4);
 });
 
-test('live browser seed is neutral and context hardening keeps an explicit safety cap', async () => {
+test('live loading state stays neutral and pagination does not duplicate context UI orchestration', async () => {
   const [model, loading] = await Promise.all([readFile(MODEL, 'utf8'), readFile(LIVE_LOADING, 'utf8')]);
 
   assert.doesNotMatch(model, /RiverAsh|RiverAshMC|sample-river-ash/i);
   assert.match(model, /const baseMessages = \[\];/);
   assert.match(loading, /MAX_CONTEXT_PAGES_PER_DIRECTION = 4/);
-  assert.match(loading, /contextTruncated/);
+  assert.match(loading, /window\.fetchContextPage/);
+  assert.doesNotMatch(loading, /function showTwoMinuteContext/);
+  assert.doesNotMatch(loading, /function exitLiveContext/);
 });

@@ -38,83 +38,28 @@ function applyScenario() {
   renderAll();
 }
 
-/** Replaces the single-page context read after every deferred live script is loaded. */
-document.addEventListener('DOMContentLoaded', () => queueMicrotask(installContextHardening));
+/** Extends the existing single-page context reader without duplicating UI/context orchestration. */
+document.addEventListener('DOMContentLoaded', () => queueMicrotask(installContextReadPagination));
 
-function installContextHardening() {
-  window.showTwoMinuteContext = showPaginatedTwoMinuteContext;
-  window.exitLiveContext = exitPaginatedContext;
-  window.contextAlertNode = paginatedContextAlertNode;
+function installContextReadPagination() {
+  const singlePageRead = window.fetchContextPage;
+  window.fetchContextPage = (channelId, direction, triggerId) =>
+    paginatedContextRead(singlePageRead, channelId, direction, triggerId);
 }
 
-async function showPaginatedTwoMinuteContext(id) {
-  const trigger = baseMessages.find((message) => message.id === id);
-  if (!trigger) return;
-  const previous = rememberMessageView();
-  previous.contextTruncated = Boolean(state.contextTruncated);
-  try {
-    const contextRead = await readContextWindow(trigger);
-    applyContextView(trigger, id, previous, contextRead);
-  } catch (error) {
-    showToast(error.message || 'Discord context is temporarily unavailable.', true);
-  }
-}
-
-async function readContextWindow(trigger) {
-  const [before, after] = await Promise.all([
-    fetchContextDirection(trigger, 'before'),
-    fetchContextDirection(trigger, 'after')
-  ]);
-  return {
-    messages:boundedContextMessages(trigger, before.messages, after.messages),
-    complete:before.complete && after.complete
-  };
-}
-
-function applyContextView(trigger, id, previous, contextRead) {
-  state.contextReturn = previous;
-  baseMessages.splice(0, baseMessages.length, ...contextRead.messages);
-  resetContextFilters(trigger.channelId);
-  state.contextId = id;
-  state.contextTruncated = !contextRead.complete;
-  liveModeration.olderCursor = null;
-  liveModeration.newerCursor = null;
-  renderAll();
-}
-
-function resetContextFilters(channelId) {
-  state.search = '';
-  state.author = '';
-  state.channel = channelId;
-  state.date = 'all';
-  state.selectedOnly = false;
-}
-
-async function fetchContextDirection(trigger, direction) {
+async function paginatedContextRead(singlePageRead, channelId, direction, triggerId) {
+  const trigger = baseMessages.find((message) => message.id === triggerId);
   const messages = [];
-  let cursor = trigger.id;
+  let cursor = triggerId;
   for (let pageNumber = 0; pageNumber < MAX_CONTEXT_PAGES_PER_DIRECTION; pageNumber++) {
-    const page = await fetchContextPage(trigger.channelId, direction, cursor);
-    messages.push(...page);
-    if (contextReadComplete(trigger, page, direction)) return {messages, complete:true};
+    const page = await singlePageRead(channelId, direction, cursor);
+    messages.push(...page.filter((message) => message.channelId === channelId));
+    if (page.length < CONTEXT_PAGE_SIZE || contextBoundaryReached(trigger, page, direction)) return messages;
     const nextCursor = contextPageCursor(page, direction);
-    if (!nextCursor || nextCursor === cursor) return {messages, complete:false};
+    if (nextCursor === cursor) throw new Error('Discord context pagination did not advance.');
     cursor = nextCursor;
   }
-  return {messages, complete:false};
-}
-
-function contextReadComplete(trigger, page, direction) {
-  return page.length < CONTEXT_PAGE_SIZE || contextBoundaryReached(trigger, page, direction);
-}
-
-function contextPageCursor(messages, direction) {
-  const ordered = messages.slice().sort(compareMessageTimeAscending);
-  return direction === 'before' ? ordered[0].id : ordered[ordered.length - 1].id;
-}
-
-function compareMessageTimeAscending(left, right) {
-  return new Date(left.time) - new Date(right.time);
+  throw new Error('Discord context is too dense to display safely within the two-minute window.');
 }
 
 function contextBoundaryReached(trigger, messages, direction) {
@@ -125,53 +70,7 @@ function contextBoundaryReached(trigger, messages, direction) {
     : Math.max(...times) >= triggerTime + CONTEXT_WINDOW_MS;
 }
 
-function boundedContextMessages(trigger, before, after) {
-  const triggerTime = new Date(trigger.time).getTime();
-  const byId = new Map([[trigger.id, trigger]]);
-  for (const message of [...before, ...after]) addContextMessage(byId, trigger, triggerTime, message);
-  return [...byId.values()].sort(compareMessageTimeDescending);
-}
-
-function addContextMessage(byId, trigger, triggerTime, message) {
-  if (message.channelId !== trigger.channelId) return;
-  const messageTime = new Date(message.time).getTime();
-  if (Math.abs(messageTime - triggerTime) <= CONTEXT_WINDOW_MS) byId.set(message.id, message);
-}
-
-function compareMessageTimeDescending(left, right) {
-  return new Date(right.time) - new Date(left.time);
-}
-
-function exitPaginatedContext() {
-  const previous = state.contextReturn;
-  state.contextId = null;
-  state.contextReturn = null;
-  state.contextTruncated = Boolean(previous?.contextTruncated);
-  if (!previous) {
-    renderAll();
-    return;
-  }
-  restoreMessageView(previous);
-  renderAll();
-}
-
-function restoreMessageView(previous) {
-  baseMessages.splice(0, baseMessages.length, ...previous.messages);
-  state.search = previous.search;
-  state.author = previous.author;
-  state.channel = previous.channel;
-  state.date = previous.date;
-  state.selectedOnly = previous.selectedOnly;
-  liveModeration.olderCursor = previous.olderCursor;
-  liveModeration.newerCursor = previous.newerCursor;
-}
-
-function paginatedContextAlertNode() {
-  const detail = state.contextTruncated
-    ? 'The selected message is highlighted with bounded context. The safety read limit was reached, so additional messages inside the two-minute window may exist.'
-    : 'The selected message is highlighted with messages from all authors within two minutes before and after it.';
-  return element('div', {className:'alert info'},
-    element('strong', {text:'Two-minute conversation context'}),
-    element('span', {text:detail}),
-    buttonNode('Exit context', 'text-button', {exitContext:''}));
+function contextPageCursor(messages, direction) {
+  const ordered = messages.slice().sort((left, right) => new Date(left.time) - new Date(right.time));
+  return direction === 'before' ? ordered[0].id : ordered[ordered.length - 1].id;
 }
