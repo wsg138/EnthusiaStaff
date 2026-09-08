@@ -19,10 +19,16 @@ final class FakeBaseCommandRouter {
 
     private final JavaPlugin plugin;
     private final FakeBaseManager manager;
+    private final String commandPrefix;
 
     FakeBaseCommandRouter(JavaPlugin plugin, FakeBaseManager manager) {
+        this(plugin, manager, "/cheattester base");
+    }
+
+    FakeBaseCommandRouter(JavaPlugin plugin, FakeBaseManager manager, String commandPrefix) {
         this.plugin = java.util.Objects.requireNonNull(plugin, "plugin");
         this.manager = java.util.Objects.requireNonNull(manager, "manager");
+        this.commandPrefix = java.util.Objects.requireNonNull(commandPrefix, "commandPrefix");
     }
 
     boolean handle(Player staff, String[] args) {
@@ -96,9 +102,11 @@ final class FakeBaseCommandRouter {
         return true;
     }
 
-    private static boolean usage(Player staff) {
+    private boolean usage(Player staff) {
         staff.sendMessage(Component.text(
-                "Usage: /cheattester base <create|extend|clear|teleport|status> [player]", NamedTextColor.YELLOW));
+                "Usage: " + commandPrefix + " <create|extend|clear|teleport|status> [player]",
+                NamedTextColor.YELLOW
+        ));
         return true;
     }
 }

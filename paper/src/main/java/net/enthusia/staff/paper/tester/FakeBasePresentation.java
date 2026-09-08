@@ -6,6 +6,8 @@ import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Location;
 
 final class FakeBasePresentation {
+    private static final String COMMAND_PREFIX = "/fakebase ";
+
     private FakeBasePresentation() {
     }
 
@@ -19,12 +21,12 @@ final class FakeBasePresentation {
     static Component controls(String prefix, String targetName, NamedTextColor color) {
         return Component.text(prefix + " ", color)
                 .append(Component.text("[Extend]", NamedTextColor.GREEN)
-                        .clickEvent(ClickEvent.runCommand("/cheattester base extend " + targetName)))
+                        .clickEvent(ClickEvent.runCommand(COMMAND_PREFIX + "extend " + targetName)))
                 .append(Component.space())
                 .append(Component.text("[Clear]", NamedTextColor.RED)
-                        .clickEvent(ClickEvent.runCommand("/cheattester base clear " + targetName)))
+                        .clickEvent(ClickEvent.runCommand(COMMAND_PREFIX + "clear " + targetName)))
                 .append(Component.space())
                 .append(Component.text("[Teleport]", NamedTextColor.AQUA)
-                        .clickEvent(ClickEvent.runCommand("/cheattester base teleport " + targetName)));
+                        .clickEvent(ClickEvent.runCommand(COMMAND_PREFIX + "teleport " + targetName)));
     }
 }
