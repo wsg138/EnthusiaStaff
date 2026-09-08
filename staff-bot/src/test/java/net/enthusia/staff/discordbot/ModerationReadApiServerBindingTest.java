@@ -7,9 +7,9 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.datatype.jdk8.Jdk8Module;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
+import java.time.Instant;
 import java.util.List;
 import java.util.Locale;
 import org.junit.jupiter.api.Test;
@@ -60,7 +60,7 @@ class ModerationReadApiServerBindingTest {
 
     @Test
     void malformedReadJsonIsRejectedBeforeServiceDispatch() throws Exception {
-        ObjectMapper json = new ObjectMapper().registerModule(new Jdk8Module());
+        ObjectMapper json = ModerationReadApiServer.jsonMapper();
 
         assertThrows(IllegalArgumentException.class, () -> ModerationReadApiServer.parseRequest(
                 json, "{".getBytes(StandardCharsets.UTF_8)));
@@ -70,5 +70,15 @@ class ModerationReadApiServerBindingTest {
                 json,
                 "{\"actorId\":\"1\",\"guildId\":\"2\",\"targetKey\":\"discord:3\",\"messages\":null}"
                         .getBytes(StandardCharsets.UTF_8)));
+    }
+
+    @Test
+    void responseJsonSerializesInstantsAsIsoText() throws Exception {
+        Instant createdAt = Instant.parse("2026-09-08T16:24:30Z");
+
+        String body = ModerationReadApiServer.jsonMapper().writeValueAsString(
+                new ModerationReadApiModel.NoteDto("note-1", "text", createdAt, "actor-1"));
+
+        assertTrue(body.contains("\"createdAt\":\"2026-09-08T16:24:30Z\""));
     }
 }

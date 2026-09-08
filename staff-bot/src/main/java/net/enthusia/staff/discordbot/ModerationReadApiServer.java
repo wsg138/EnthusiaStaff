@@ -2,7 +2,9 @@ package net.enthusia.staff.discordbot;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jdk8.Jdk8Module;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 import java.io.IOException;
@@ -53,7 +55,7 @@ final class ModerationReadApiServer implements AutoCloseable {
         this.service = Objects.requireNonNull(service, "service");
         this.authenticator = new ModerationReadApiAuthenticator(discordBotToken);
         this.rateLimiter = new ModerationReadApiRateLimiter(REQUESTS_PER_MINUTE, Duration.ofMinutes(1));
-        this.json = new ObjectMapper().registerModule(new Jdk8Module());
+        this.json = jsonMapper();
         this.server = HttpServer.create(bindAddress(), 0);
         this.executor = Executors.newFixedThreadPool(WORKER_THREADS, runnable -> {
             Thread thread = new Thread(runnable, "enthusia-moderation-read-api");
@@ -67,6 +69,13 @@ final class ModerationReadApiServer implements AutoCloseable {
 
     static InetSocketAddress bindAddress() {
         return new InetSocketAddress(BIND_HOST, BIND_PORT);
+    }
+
+    static ObjectMapper jsonMapper() {
+        return new ObjectMapper()
+                .registerModule(new Jdk8Module())
+                .registerModule(new JavaTimeModule())
+                .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
     }
 
     void start() {
