@@ -38,41 +38,16 @@ function applyScenario() {
   renderAll();
 }
 
-/** Installs final live-only UI behavior after the base preview scripts register. */
-document.addEventListener('DOMContentLoaded', () => queueMicrotask(installLiveHardening));
+/** Replaces the single-page context read after every deferred live script is loaded. */
+document.addEventListener('DOMContentLoaded', () => queueMicrotask(installContextHardening));
 
-function installLiveHardening() {
-  window.messageActionsNode = hardenedMessageActionsNode;
-  window.messageActionButton = hardenedMessageActionButton;
-  window.showTwoMinuteContext = showHardenedTwoMinuteContext;
-  window.exitLiveContext = exitHardenedContext;
-  window.contextAlertNode = hardenedContextAlertNode;
-  window.punishmentScopeTab = hardenedPunishmentScopeTab;
-  renderAll();
+function installContextHardening() {
+  window.showTwoMinuteContext = showPaginatedTwoMinuteContext;
+  window.exitLiveContext = exitPaginatedContext;
+  window.contextAlertNode = paginatedContextAlertNode;
 }
 
-function hardenedMessageActionsNode(message) {
-  const menu = element('details', {className:'message-actions'});
-  const summary = element('summary', {
-    className:'icon-button',
-    text:'•••',
-    attrs:{'aria-label':`Message actions for ${message.id}`, 'aria-haspopup':'menu'}
-  });
-  const items = element('div', {className:'message-action-menu', attrs:{role:'menu'}},
-    hardenedMessageActionButton('Show context', 'context', message.id),
-    hardenedMessageActionButton(state.evidence.has(message.id) ? 'Remove evidence' : 'Add to evidence', 'evidence', message.id),
-    hardenedMessageActionButton(state.deleting.has(message.id) ? 'Preserve message' : 'Delete on confirm (simulation)', 'delete', message.id));
-  menu.append(summary, items);
-  return menu;
-}
-
-function hardenedMessageActionButton(label, action, messageId) {
-  const button = buttonNode(label, 'message-action-item', {messageAction:action, messageId});
-  button.setAttribute('role', 'menuitem');
-  return button;
-}
-
-async function showHardenedTwoMinuteContext(id) {
+async function showPaginatedTwoMinuteContext(id) {
   const trigger = baseMessages.find((message) => message.id === id);
   if (!trigger) return;
   const previous = rememberMessageView();
@@ -91,7 +66,7 @@ async function readContextWindow(trigger) {
     fetchContextDirection(trigger, 'after')
   ]);
   return {
-    messages:boundedTimeContext(trigger, before.messages, after.messages),
+    messages:boundedContextMessages(trigger, before.messages, after.messages),
     complete:before.complete && after.complete
   };
 }
@@ -134,10 +109,7 @@ function contextReadComplete(trigger, page, direction) {
 }
 
 function contextPageCursor(messages, direction) {
-  const ordered = messages
-    .filter(hasValidMessageTime)
-    .slice()
-    .sort(compareMessageTimeAscending);
+  const ordered = messages.filter(hasValidMessageTime).slice().sort(compareMessageTimeAscending);
   if (!ordered.length) return '';
   return direction === 'before' ? ordered[0].id : ordered[ordered.length - 1].id;
 }
@@ -159,7 +131,7 @@ function contextBoundaryReached(trigger, messages, direction) {
   return Math.max(...times) >= triggerTime + CONTEXT_WINDOW_MS;
 }
 
-function boundedTimeContext(trigger, before, after) {
+function boundedContextMessages(trigger, before, after) {
   const triggerTime = new Date(trigger.time).getTime();
   const byId = new Map([[trigger.id, trigger]]);
   for (const message of [...before, ...after]) addContextMessage(byId, trigger, triggerTime, message);
@@ -177,21 +149,17 @@ function compareMessageTimeDescending(left, right) {
   return new Date(right.time) - new Date(left.time);
 }
 
-function exitHardenedContext() {
+function exitPaginatedContext() {
   const previous = state.contextReturn;
-  clearContextState(previous);
+  state.contextId = null;
+  state.contextReturn = null;
+  state.contextTruncated = previous ? Boolean(previous.contextTruncated) : false;
   if (!previous) {
     renderAll();
     return;
   }
   restoreMessageView(previous);
   renderAll();
-}
-
-function clearContextState(previous) {
-  state.contextId = null;
-  state.contextReturn = null;
-  state.contextTruncated = previous ? Boolean(previous.contextTruncated) : false;
 }
 
 function restoreMessageView(previous) {
@@ -205,7 +173,7 @@ function restoreMessageView(previous) {
   liveModeration.newerCursor = previous.newerCursor;
 }
 
-function hardenedContextAlertNode() {
+function paginatedContextAlertNode() {
   const detail = state.contextTruncated
     ? 'The selected message is highlighted with bounded context. The safety read limit was reached, so additional messages inside the two-minute window may exist.'
     : 'The selected message is highlighted with messages from all authors within two minutes before and after it.';
@@ -213,11 +181,4 @@ function hardenedContextAlertNode() {
     element('strong', {text:'Two-minute conversation context'}),
     element('span', {text:detail}),
     buttonNode('Exit context', 'text-button', {exitContext:''}));
-}
-
-function hardenedPunishmentScopeTab(value, label, selected) {
-  const button = buttonNode(label, `punishment-scope-tab${selected === value ? ' active' : ''}`, {offenseTab:value});
-  button.setAttribute('role', 'tab');
-  button.setAttribute('aria-selected', selected === value ? 'true' : 'false');
-  return button;
 }

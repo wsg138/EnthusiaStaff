@@ -31,7 +31,7 @@ async function loadHardening(fetchContextPage) {
     renderAll:() => {},
     showToast:() => {},
     element:() => ({}),
-    buttonNode:() => ({setAttribute:() => {}}),
+    buttonNode:() => ({}),
     console
   };
   vm.createContext(context);
@@ -118,13 +118,11 @@ test('context read cap is fail-soft and explicitly marks the view truncated', as
   assert.ok(context.baseMessages.some((entry) => entry.id === 'trigger'));
 });
 
-test('live browser seed is neutral and hardening exposes accessible menu/tab semantics', async () => {
+test('live browser seed is neutral and context hardening keeps an explicit safety cap', async () => {
   const [model, loading] = await Promise.all([readFile(MODEL, 'utf8'), readFile(LIVE_LOADING, 'utf8')]);
 
   assert.doesNotMatch(model, /RiverAsh|RiverAshMC|sample-river-ash/i);
   assert.match(model, /const baseMessages = \[\];/);
-  assert.match(loading, /'aria-haspopup':'menu'/);
-  assert.match(loading, /setAttribute\('role', 'menuitem'\)/);
-  assert.match(loading, /setAttribute\('aria-selected'/);
   assert.match(loading, /MAX_CONTEXT_PAGES_PER_DIRECTION = 4/);
+  assert.match(loading, /contextTruncated/);
 });
