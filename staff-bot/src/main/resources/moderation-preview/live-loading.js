@@ -47,19 +47,21 @@ function installContextReadPagination() {
     paginatedContextRead(singlePageRead, channelId, direction, triggerId);
 }
 
-async function paginatedContextRead(singlePageRead, channelId, direction, triggerId) {
+function paginatedContextRead(singlePageRead, channelId, direction, triggerId) {
   const trigger = baseMessages.find((message) => message.id === triggerId);
-  const messages = [];
-  let cursor = triggerId;
-  for (let pageNumber = 0; pageNumber < MAX_CONTEXT_PAGES_PER_DIRECTION; pageNumber++) {
-    const page = await singlePageRead(channelId, direction, cursor);
-    messages.push(...page.filter((message) => message.channelId === channelId));
-    if (page.length < CONTEXT_PAGE_SIZE || contextBoundaryReached(trigger, page, direction)) return messages;
-    const nextCursor = contextPageCursor(page, direction);
-    if (nextCursor === cursor) throw new Error('Discord context pagination did not advance.');
-    cursor = nextCursor;
+  return readContextPage(singlePageRead, trigger, channelId, direction, triggerId, 0, []);
+}
+
+async function readContextPage(singlePageRead, trigger, channelId, direction, cursor, pageNumber, messages) {
+  const page = await singlePageRead(channelId, direction, cursor);
+  const collected = messages.concat(page.filter((message) => message.channelId === channelId));
+  if (page.length < CONTEXT_PAGE_SIZE || contextBoundaryReached(trigger, page, direction)) return collected;
+  if (pageNumber + 1 >= MAX_CONTEXT_PAGES_PER_DIRECTION) {
+    throw new Error('Discord context is too dense to display safely within the two-minute window.');
   }
-  throw new Error('Discord context is too dense to display safely within the two-minute window.');
+  const nextCursor = contextPageCursor(page, direction);
+  if (nextCursor === cursor) throw new Error('Discord context pagination did not advance.');
+  return readContextPage(singlePageRead, trigger, channelId, direction, nextCursor, pageNumber + 1, collected);
 }
 
 function contextBoundaryReached(trigger, messages, direction) {
