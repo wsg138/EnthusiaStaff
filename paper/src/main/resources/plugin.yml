@@ -102,6 +102,10 @@ commands:
     description: Configure and run bounded evidence-only cheat tester probes and virtual fake bases
     usage: /cheattester <select|run|cancel|status|config|base>
     permission: enthusiastaff.cheattester
+  fakebase:
+    description: Manage bounded client-only fake-base probes
+    usage: /fakebase <create|extend|clear|teleport|status> [player]
+    permission: enthusiastaff.cheattester.fake-base
   vanish:
     description: Toggle durable rank-aware vanish or spectator tab presentation
     usage: /vanish | /vanish tab <show|hide>
