@@ -14,11 +14,11 @@ Cheat Tester is limited to authorized advanced staff sessions and the relevant p
 /cheattester run <player> [type]
 /cheattester cancel <player>
 /cheattester status
-/cheattester base create <player>
-/cheattester base extend <player>
-/cheattester base clear <player>
-/cheattester base teleport <player>
-/cheattester base status
+/fakebase create <player>
+/fakebase extend <player>
+/fakebase clear <player>
+/fakebase teleport <player>
+/fakebase status
 ```
 
 The staff-mode blaze rod provides a Java interaction surface: right-click cycles the tester, left-clicking a target runs it, and shift-right-click shows configuration/status. The command forms are the supported text/Bedrock fallback.

@@ -71,6 +71,7 @@ Exact-sanction commands never accept an ambiguous multi-sanction case. Database 
 | `/unfreeze` | `/unfreeze <player> <reason> CONFIRM` | Release freeze | `enthusiastaff.freeze` |
 | `/staff` | `/staff` | Enter or leave durable staff mode | `enthusiastaff.staffmode` |
 | `/stafftools` | `/stafftools`, `/stafftools random`, `/stafftools spectate <player>` | Text/Bedrock fallback for staff hotbar menu, random teleport and follow/spectate | `enthusiastaff.stafftools.menu`; sub-actions also require their direct tool node |
+| `/fakebase` | `/fakebase <create\|extend\|clear\|teleport\|status> [player]` | Manage bounded virtual fake-base probes | `enthusiastaff.cheattester.fake-base` |
 | `/vanish` | `/vanish` or `/vanish tab <show\|hide>` | Toggle vanish or spectator tab presentation | `enthusiastaff.vanish` |
 | `/staffchat` | `/staffchat` | Toggle the configured RoseChat staff channel | `enthusiastaff.staffchat` |
 | `/invsee` | `/invsee <player\|uuid>` | View/edit inventory as authorized | `enthusiastaff.inventory.view` |
@@ -106,18 +107,6 @@ The proxy currently registers:
 exception, inheritance, GUI, alert and key-rotation workflow is finished. See
 [[Alt Investigations]] and
 [[Staff Tools, Investigations, and Player-State Safety]].
-
-## Required but not registered
-
-The goals require this top-level command, but current Paper metadata does not
-register it:
-
-```text
-/fakebase
-```
-
-Do not add it to staff training until registration, behavior, permissions and
-staging are complete.
 
 ## Permission nodes
 
