@@ -33,6 +33,12 @@ final class ModerationReadApiModel {
             text = safe(text);
             authorId = safe(authorId);
             date = safe(date);
+            int cursorCount = (beforeMessageId.isPresent() ? 1 : 0)
+                    + (afterMessageId.isPresent() ? 1 : 0)
+                    + (aroundMessageId.isPresent() ? 1 : 0);
+            if (cursorCount > 1) {
+                throw new IllegalArgumentException("message query cursors conflict");
+            }
         }
 
         MessageQuery(
