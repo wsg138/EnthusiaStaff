@@ -125,6 +125,10 @@ final class ModerationDiscordMessageReader {
             ModerationReadApiModel.MessageQuery query,
             int limit
     ) {
+        if (query.aroundMessageId().isPresent()) {
+            return channel.getHistoryAround(query.aroundMessageId().orElseThrow(), limit)
+                    .complete().getRetrievedHistory();
+        }
         if (query.beforeMessageId().isPresent()) {
             return channel.getHistoryBefore(query.beforeMessageId().orElseThrow(), limit).complete().getRetrievedHistory();
         }
