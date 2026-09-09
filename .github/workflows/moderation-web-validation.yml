@@ -26,7 +26,6 @@ jobs:
         uses: actions/checkout@v6
         with:
           persist-credentials: false
-          fetch-depth: 0
           ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
 
       - name: Record checked-out SHA
@@ -41,28 +40,6 @@ jobs:
         uses: actions/setup-node@v5
         with:
           node-version: "22"
-
-      - name: Diagnose ES-D16 complexity
-        shell: bash
-        run: |
-          set -Eeuo pipefail
-          python -m pip install --disable-pip-version-check lizard==1.23.0
-          base=a77c77c4362e6a20b1ce190159f0a1632149a4c0
-          git diff --name-only --diff-filter=ACMR "$base...HEAD" -- '*.java' '*.js' '*.mjs' > /tmp/es-d16-code.txt
-          echo '=== changed source ==='
-          cat /tmp/es-d16-code.txt
-          echo '=== Lizard default warnings ==='
-          while IFS= read -r file; do
-            [[ -f "$file" ]] || continue
-            echo "--- $file"
-            lizard -w "$file" || true
-          done < /tmp/es-d16-code.txt
-          echo '=== project limits: CCN 8 / 50 lines / 5 params ==='
-          while IFS= read -r file; do
-            [[ -f "$file" ]] || continue
-            echo "--- $file"
-            lizard -C 8 -L 50 -a 5 -w "$file" || true
-          done < /tmp/es-d16-code.txt
 
       - name: Validate Worker, assets and security contract
         working-directory: moderation-web

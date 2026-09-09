@@ -21,6 +21,14 @@ const STATIC_PATHS = new Set([
   '/assets/real-policy.js',
   '/assets/live-enhancements.js'
 ]);
+const ROUTE_HANDLERS = new Map([
+  ['/health', handleHealth],
+  ['/launch', handleLaunch],
+  ['/api/session', handleSession],
+  ['/api/bootstrap', handleBootstrap],
+  ['/api/messages', handleMessages],
+  ['/api/simulate', handleSimulation]
+]);
 const encoder = new TextEncoder();
 
 export class ModerationSessionStore extends DurableObject {
@@ -115,16 +123,14 @@ export default {
 
 async function route(request, env) {
   const url = new URL(request.url);
-  if (url.pathname === '/health') return handleHealth(request);
-  if (url.pathname === '/launch') return handleLaunch(request, env, url);
-  if (url.pathname === '/api/session') return handleSession(request, env);
-  if (url.pathname === '/api/bootstrap') return handleRead(request, env, 'bootstrap');
-  if (url.pathname === '/api/messages') return handleRead(request, env, 'messages');
-  if (url.pathname === '/api/simulate') return handleSimulation(request, env);
-  if (url.pathname === '/' || url.pathname === '/moderation' || STATIC_PATHS.has(url.pathname)) {
-    return serveProtectedAsset(request, env, url.pathname);
-  }
+  const handler = ROUTE_HANDLERS.get(url.pathname);
+  if (handler) return handler(request, env, url);
+  if (isProtectedAssetPath(url.pathname)) return serveProtectedAsset(request, env, url.pathname);
   return textResponse('Not found.', 404);
+}
+
+function isProtectedAssetPath(pathname) {
+  return pathname === '/' || pathname === '/moderation' || STATIC_PATHS.has(pathname);
 }
 
 function handleHealth(request) {
@@ -156,6 +162,14 @@ async function handleSession(request, env) {
     expiresAt: new Date(session.expiresAt * 1000).toISOString(),
     staging: true
   });
+}
+
+function handleBootstrap(request, env) {
+  return handleRead(request, env, 'bootstrap');
+}
+
+function handleMessages(request, env) {
+  return handleRead(request, env, 'messages');
 }
 
 async function handleRead(request, env, endpoint) {
