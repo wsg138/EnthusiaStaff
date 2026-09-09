@@ -82,7 +82,73 @@ function hardenedAccountsNode() {
     element('div',{className:'account-grid'},cards));
 }
 
+function productReviewEvidenceNode(workflow) {
+  const status = workflowReviewStatus(workflow);
+  return element('section',{className:'card review-evidence'},
+    sectionHeadingNode('Case readiness','Review every item before confirming the action.'),
+    readinessChecklistNode(workflow),
+    reviewValidationAlert(status),
+    policyLinkNode(offensePolicy(workflow.offense.key),'Open applicable rule'),
+    reviewEvidenceSummaryNode(workflow),
+    staffExplanationNode(workflow),
+    productNotificationMessageNode(workflow),
+    testEnvironmentBoundary());
+}
+
+function productNotificationMessageNode(workflow) {
+  const detail = workflow.dm ? actionDmText(workflow) : 'No DM is included with this action.';
+  return element('div',{className:'dm-preview'},
+    element('span',{text:'Notification message'}), element('p',{text:detail}));
+}
+
+function productReviewFooterNode(stale) {
+  const status = workflowReviewStatus(state.workflow);
+  const right = element('div',{className:'inline'});
+  if (stale) right.append(buttonNode('Recalculate','button secondary',{recalculate:''}));
+  const confirm = buttonNode('Confirm action','button primary',{confirm:''});
+  confirm.disabled = stale || !status.ready;
+  if (confirm.disabled) confirm.setAttribute('title',stale ? 'Recalculate after evidence changes.' : status.errors.join(' '));
+  right.append(confirm);
+  return [buttonNode('Back','button ghost',{back:''}),right];
+}
+
+async function productConfirmAction() {
+  if (!state.session) {
+    showToast('Session unavailable. Reopen from Discord.', true);
+    return;
+  }
+  const button = $('[data-confirm]');
+  if (button) button.disabled = true;
+  try {
+    const response = await fetch('/api/simulate', simulationRequest(state.session));
+    if (!response.ok) throw new Error('Action review rejected');
+    await response.json();
+    state.workflow.step = 'complete';
+    renderWorkflow();
+    showToast('Action review complete.');
+  } catch {
+    showToast('Action review could not be completed. Reopen the panel from Discord if the session expired.', true);
+    if (button) button.disabled = false;
+  }
+}
+
+function productRenderCompleteStep() {
+  $('#workflowTitle').textContent = 'Complete';
+  $('#workflowSteps').replaceChildren();
+  replaceChildrenOf($('#workflowBody'), element('div', {className:'completion-state'},
+    element('div', {className:'completion-icon', text:'✓', attrs:{'aria-hidden':'true'}}),
+    element('h3', {text:'Action review complete'}),
+    element('p', {text:'The review flow completed successfully.'}),
+    element('span', {text:'Review completed. No changes were sent.'})));
+  replaceChildrenOf($('#workflowFooter'), buttonNode('Done','button primary',{done:''}));
+  $('[data-done]').addEventListener('click',closeWorkflow);
+}
+
 window.historyNode = hardenedHistoryNode;
 window.casesNode = hardenedCasesNode;
 window.notesNode = hardenedNotesNode;
 window.accountsNode = hardenedAccountsNode;
+window.reviewEvidenceNode = productReviewEvidenceNode;
+window.reviewFooterNode = productReviewFooterNode;
+window.confirmSimulation = productConfirmAction;
+window.renderCompleteStep = productRenderCompleteStep;
