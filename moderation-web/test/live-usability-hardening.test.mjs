@@ -81,10 +81,11 @@ test('offense choices and recommendations link to public Enthusia rules', async 
 test('record views distinguish empty and unavailable states and clarify identity counts', async () => {
   const source = await readFile(RECORD, 'utf8');
 
-  assert.match(source, /History is unavailable/);
+  assert.match(source, /recordUnavailableOrLoading\('history'\)/);
   assert.match(source, /No moderation history/);
-  assert.match(source, /Cases are unavailable/);
-  assert.match(source, /Notes are unavailable/);
+  assert.match(source, /recordUnavailableOrLoading\('cases'\)/);
+  assert.match(source, /recordUnavailableOrLoading\('notes'\)/);
+  assert.match(source, /capitalize\(label\).*unavailable/);
   assert.match(source, /Accounts .* = 1 Discord identity/);
   assert.match(source, /linked alts.*alternate Minecraft accounts/);
 });
