@@ -146,60 +146,95 @@ final class StaffBotCommandLine {
         private String previewPublicUrl;
 
         private void accept(String argument) {
-            if (SMOKE_TEST_ARGUMENT.equals(argument)) {
-                smokeTest = setOnce(smokeTest);
-                return;
-            }
-            if (STAGING_UI_PREVIEW_ARGUMENT.equals(argument)) {
-                stagingUiPreview = setOnce(stagingUiPreview);
-                return;
-            }
-            if (argument.startsWith(TOKEN_FILE_PREFIX)) {
-                tokenFile = setPathOnce(tokenFile, argument, TOKEN_FILE_PREFIX);
-                return;
-            }
-            if (argument.startsWith(MODERATION_CONFIG_FILE_PREFIX)) {
-                moderationConfigFile = setPathOnce(
-                        moderationConfigFile, argument, MODERATION_CONFIG_FILE_PREFIX);
-                return;
-            }
-            if (argument.startsWith(TUNNEL_BINARY_FILE_PREFIX)) {
-                tunnelBinaryFile = setPathOnce(tunnelBinaryFile, argument, TUNNEL_BINARY_FILE_PREFIX);
-                return;
-            }
-            if (argument.startsWith(TUNNEL_TOKEN_FILE_PREFIX)) {
-                tunnelTokenFile = setPathOnce(tunnelTokenFile, argument, TUNNEL_TOKEN_FILE_PREFIX);
-                return;
-            }
-            if (argument.startsWith(PREVIEW_WEB_BIND_PREFIX)) {
-                if (previewWebBind != null) {
-                    throw invalidArguments();
-                }
-                previewWebBind = parseNonBlank(argument.substring(PREVIEW_WEB_BIND_PREFIX.length()));
-                return;
-            }
-            if (argument.startsWith(PREVIEW_PUBLIC_URL_PREFIX)) {
-                if (previewPublicUrl != null) {
-                    throw invalidArguments();
-                }
-                previewPublicUrl = parseNonBlank(argument.substring(PREVIEW_PUBLIC_URL_PREFIX.length()));
+            if (acceptFlag(argument) || acceptPath(argument) || acceptValue(argument)) {
                 return;
             }
             throw invalidArguments();
         }
 
+        private boolean acceptFlag(String argument) {
+            if (SMOKE_TEST_ARGUMENT.equals(argument)) {
+                smokeTest = setOnce(smokeTest);
+                return true;
+            }
+            if (STAGING_UI_PREVIEW_ARGUMENT.equals(argument)) {
+                stagingUiPreview = setOnce(stagingUiPreview);
+                return true;
+            }
+            return false;
+        }
+
+        private boolean acceptPath(String argument) {
+            if (argument.startsWith(TOKEN_FILE_PREFIX)) {
+                tokenFile = setPathOnce(tokenFile, argument, TOKEN_FILE_PREFIX);
+                return true;
+            }
+            if (argument.startsWith(MODERATION_CONFIG_FILE_PREFIX)) {
+                moderationConfigFile = setPathOnce(
+                        moderationConfigFile, argument, MODERATION_CONFIG_FILE_PREFIX);
+                return true;
+            }
+            if (argument.startsWith(TUNNEL_BINARY_FILE_PREFIX)) {
+                tunnelBinaryFile = setPathOnce(tunnelBinaryFile, argument, TUNNEL_BINARY_FILE_PREFIX);
+                return true;
+            }
+            if (argument.startsWith(TUNNEL_TOKEN_FILE_PREFIX)) {
+                tunnelTokenFile = setPathOnce(tunnelTokenFile, argument, TUNNEL_TOKEN_FILE_PREFIX);
+                return true;
+            }
+            return false;
+        }
+
+        private boolean acceptValue(String argument) {
+            if (argument.startsWith(PREVIEW_WEB_BIND_PREFIX)) {
+                previewWebBind = setStringOnce(previewWebBind, argument, PREVIEW_WEB_BIND_PREFIX);
+                return true;
+            }
+            if (argument.startsWith(PREVIEW_PUBLIC_URL_PREFIX)) {
+                previewPublicUrl = setStringOnce(previewPublicUrl, argument, PREVIEW_PUBLIC_URL_PREFIX);
+                return true;
+            }
+            return false;
+        }
+
         private StaffBotCommandLine finish() {
+            validatePreviewTokenPair();
+            boolean tunnelRequested = tunnelRequested();
+            validateTunnelConfiguration(tunnelRequested);
+            validatePreviewOnlyConfiguration(tunnelRequested);
+            return commandLine();
+        }
+
+        private void validatePreviewTokenPair() {
             if (stagingUiPreview != (tokenFile != null)) {
                 throw invalidArguments();
             }
-            boolean tunnelRequested = tunnelBinaryFile != null || tunnelTokenFile != null;
-            if (tunnelRequested && (tunnelBinaryFile == null || tunnelTokenFile == null || moderationConfigFile == null)) {
+        }
+
+        private boolean tunnelRequested() {
+            return tunnelBinaryFile != null || tunnelTokenFile != null;
+        }
+
+        private void validateTunnelConfiguration(boolean tunnelRequested) {
+            if (!tunnelRequested) {
+                return;
+            }
+            if (tunnelBinaryFile == null || tunnelTokenFile == null || moderationConfigFile == null) {
                 throw invalidArguments();
             }
-            if (!stagingUiPreview && (moderationConfigFile != null
-                    || tunnelRequested || previewWebBind != null || previewPublicUrl != null)) {
+        }
+
+        private void validatePreviewOnlyConfiguration(boolean tunnelRequested) {
+            if (stagingUiPreview) {
+                return;
+            }
+            if (moderationConfigFile != null
+                    || tunnelRequested || previewWebBind != null || previewPublicUrl != null) {
                 throw invalidArguments();
             }
+        }
+
+        private StaffBotCommandLine commandLine() {
             return new StaffBotCommandLine(
                     smokeTest,
                     stagingUiPreview,
@@ -216,6 +251,13 @@ final class StaffBotCommandLine {
                 throw invalidArguments();
             }
             return parsePath(argument.substring(prefix.length()));
+        }
+
+        private static String setStringOnce(String current, String argument, String prefix) {
+            if (current != null) {
+                throw invalidArguments();
+            }
+            return parseNonBlank(argument.substring(prefix.length()));
         }
 
         private static boolean setOnce(boolean currentValue) {

@@ -26,7 +26,6 @@ jobs:
         uses: actions/checkout@v6
         with:
           persist-credentials: false
-          fetch-depth: 0
           ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
 
       - name: Record checked-out SHA
@@ -41,31 +40,6 @@ jobs:
         uses: actions/setup-node@v5
         with:
           node-version: "22"
-
-      - name: Diagnose Codacy Lizard thresholds
-        shell: bash
-        run: |
-          set -Eeuo pipefail
-          python -m pip install --disable-pip-version-check lizard==1.23.0
-          git diff --name-only --diff-filter=ACMR origin/main...HEAD -- '*.java' '*.js' '*.mjs' | sort -u > /tmp/pr-code.txt
-          echo '=== all current PR code files ==='
-          cat /tmp/pr-code.txt
-          echo '=== enabled medium NLOC>50 / params>8 candidates ==='
-          while IFS= read -r file; do
-            [[ -f "$file" ]] || continue
-            lizard -T nloc=50 -C 999 -a 8 -w "$file" || true
-          done < /tmp/pr-code.txt
-          echo '=== enabled minor CCN>10 candidates ==='
-          while IFS= read -r file; do
-            [[ -f "$file" ]] || continue
-            lizard -T nloc=999 -C 10 -a 999 -w "$file" || true
-          done < /tmp/pr-code.txt
-          echo '=== files above Codacy medium file-NLOC threshold by physical lines (upper-bound screen) ==='
-          while IFS= read -r file; do
-            [[ -f "$file" ]] || continue
-            lines=$(wc -l < "$file")
-            if (( lines > 500 )); then printf '%s %s\n' "$lines" "$file"; fi
-          done < /tmp/pr-code.txt
 
       - name: Validate Worker, assets and security contract
         working-directory: moderation-web
