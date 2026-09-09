@@ -47,28 +47,25 @@ jobs:
         run: |
           set -Eeuo pipefail
           python -m pip install --disable-pip-version-check lizard==1.23.0
-          base=a77c77c4362e6a20b1ce190159f0a1632149a4c0
-          git diff --name-only --diff-filter=ACMR "$base...HEAD" -- '*.java' '*.js' '*.mjs' | sort -u > /tmp/post-green.txt
           git diff --name-only --diff-filter=ACMR origin/main...HEAD -- '*.java' '*.js' '*.mjs' | sort -u > /tmp/pr-code.txt
-          comm -12 /tmp/post-green.txt /tmp/pr-code.txt > /tmp/es-d16-code.txt
-          echo '=== post-green files that remain in PR diff ==='
-          cat /tmp/es-d16-code.txt
+          echo '=== all current PR code files ==='
+          cat /tmp/pr-code.txt
           echo '=== enabled medium NLOC>50 / params>8 candidates ==='
           while IFS= read -r file; do
             [[ -f "$file" ]] || continue
             lizard -T nloc=50 -C 999 -a 8 -w "$file" || true
-          done < /tmp/es-d16-code.txt
+          done < /tmp/pr-code.txt
           echo '=== enabled minor CCN>10 candidates ==='
           while IFS= read -r file; do
             [[ -f "$file" ]] || continue
             lizard -T nloc=999 -C 10 -a 999 -w "$file" || true
-          done < /tmp/es-d16-code.txt
+          done < /tmp/pr-code.txt
           echo '=== files above Codacy medium file-NLOC threshold by physical lines (upper-bound screen) ==='
           while IFS= read -r file; do
             [[ -f "$file" ]] || continue
             lines=$(wc -l < "$file")
             if (( lines > 500 )); then printf '%s %s\n' "$lines" "$file"; fi
-          done < /tmp/es-d16-code.txt
+          done < /tmp/pr-code.txt
 
       - name: Validate Worker, assets and security contract
         working-directory: moderation-web
