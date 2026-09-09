@@ -145,6 +145,7 @@ function productRenderCompleteStep() {
 }
 
 const LIVE_MESSAGE_PAGE_LIMIT = '50';
+const DURATION_VALUE_PATTERN = /^([1-9][0-9]*)\s*([a-z]+)$/i;
 const DURATION_UNITS = Object.freeze({
   m:'minute', min:'minute', mins:'minute', minute:'minute', minutes:'minute',
   h:'hour', hr:'hour', hrs:'hour', hour:'hour', hours:'hour',
@@ -238,12 +239,17 @@ function freeformDurationField(workflow) {
 function normalizePunishmentDuration(raw) {
   const value = String(raw || '').trim();
   if (value.toLowerCase() === 'permanent') return 'Permanent';
-  const match = /^([1-9][0-9]*)\s*([a-z]+)$/i.exec(value);
+  const match = DURATION_VALUE_PATTERN.exec(value);
   if (!match) return null;
+  return normalizedDurationMatch(match);
+}
+
+function normalizedDurationMatch(match) {
   const amount = Number(match[1]);
   const unit = DURATION_UNITS[match[2].toLowerCase()];
   if (!Number.isSafeInteger(amount) || !unit) return null;
-  return `${amount} ${amount === 1 ? unit : `${unit}s`}`;
+  const suffix = amount === 1 ? '' : 's';
+  return String(amount) + ' ' + unit + suffix;
 }
 
 function actionHasDuration(workflow) {
