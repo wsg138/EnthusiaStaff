@@ -28,27 +28,58 @@ sealed interface ModerationReadTarget permits ModerationReadTarget.DiscordUser,
     }
 
     static ModerationReadTarget parse(String key) {
-        if (key == null || key.isBlank() || key.length() > 96) {
-            throw new IllegalArgumentException("moderation read target is invalid");
+        validateKey(key);
+        return parseParts(key.split(":", -1));
+    }
+
+    private static void validateKey(String key) {
+        if (key == null) {
+            throw invalidTarget();
         }
-        String[] parts = key.split(":", -1);
-        if (parts.length == DISCORD_PARTS && DISCORD_KIND.equals(parts[0])) {
-            return new DiscordUser(snowflake(parts[1], "user"));
+        if (key.isBlank() || key.length() > 96) {
+            throw invalidTarget();
         }
-        if (parts.length == DISCORD_CONTEXT_PARTS && DISCORD_CONTEXT_KIND.equals(parts[0])) {
-            return new DiscordUserContext(
-                    snowflake(parts[1], "channel"),
-                    snowflake(parts[2], "user")
-            );
+    }
+
+    private static ModerationReadTarget parseParts(String[] parts) {
+        return switch (parts[0]) {
+            case DISCORD_KIND -> parseDiscordUser(parts);
+            case DISCORD_CONTEXT_KIND -> parseDiscordUserContext(parts);
+            case MESSAGE_KIND -> parseMessageContext(parts);
+            default -> throw invalidTarget();
+        };
+    }
+
+    private static ModerationReadTarget parseDiscordUser(String[] parts) {
+        requireParts(parts, DISCORD_PARTS);
+        return new DiscordUser(snowflake(parts[1], "user"));
+    }
+
+    private static ModerationReadTarget parseDiscordUserContext(String[] parts) {
+        requireParts(parts, DISCORD_CONTEXT_PARTS);
+        return new DiscordUserContext(
+                snowflake(parts[1], "channel"),
+                snowflake(parts[2], "user")
+        );
+    }
+
+    private static ModerationReadTarget parseMessageContext(String[] parts) {
+        requireParts(parts, MESSAGE_PARTS);
+        return new MessageContext(
+                snowflake(parts[1], "channel"),
+                snowflake(parts[2], "message"),
+                snowflake(parts[3], "user")
+        );
+    }
+
+    private static void requireParts(String[] parts, int expected) {
+        if (parts.length != expected) {
+            throw invalidTarget();
         }
-        if (parts.length == MESSAGE_PARTS && MESSAGE_KIND.equals(parts[0])) {
-            return new MessageContext(
-                    snowflake(parts[1], "channel"),
-                    snowflake(parts[2], "message"),
-                    snowflake(parts[3], "user")
-            );
-        }
-        throw new IllegalArgumentException("moderation read target is invalid");
+    }
+
+    private static IllegalArgumentException invalidTarget() {
+        return new IllegalArgumentException("moderation read target is invalid");
     }
 
     private static long snowflake(String value, String label) {
