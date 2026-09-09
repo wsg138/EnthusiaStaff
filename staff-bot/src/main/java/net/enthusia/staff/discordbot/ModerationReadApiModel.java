@@ -19,6 +19,7 @@ final class ModerationReadApiModel {
             Optional<String> channelId,
             Optional<String> beforeMessageId,
             Optional<String> afterMessageId,
+            Optional<String> aroundMessageId,
             Optional<String> text,
             Optional<String> authorId,
             Optional<String> date,
@@ -28,9 +29,22 @@ final class ModerationReadApiModel {
             channelId = safe(channelId);
             beforeMessageId = safe(beforeMessageId);
             afterMessageId = safe(afterMessageId);
+            aroundMessageId = safe(aroundMessageId);
             text = safe(text);
             authorId = safe(authorId);
             date = safe(date);
+        }
+
+        MessageQuery(
+                Optional<String> channelId,
+                Optional<String> beforeMessageId,
+                Optional<String> afterMessageId,
+                Optional<String> text,
+                Optional<String> authorId,
+                Optional<String> date,
+                int limit
+        ) {
+            this(channelId, beforeMessageId, afterMessageId, Optional.empty(), text, authorId, date, limit);
         }
 
         private static Optional<String> safe(Optional<String> value) {
