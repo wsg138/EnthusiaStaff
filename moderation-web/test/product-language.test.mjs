@@ -18,6 +18,10 @@ test('moderation workspace presents product language on every active final layer
   assert.doesNotMatch(direct, /moderation preview/i);
   assert.doesNotMatch(shell, /Simulated deletions|simulation preview|staging preview/i);
   assert.match(hardening, /Testing note/);
+  assert.match(hardening, /Notification message/);
+  assert.match(hardening, /Confirm action/);
+  assert.match(hardening, /Action review complete/);
+  assert.doesNotMatch(hardening, /text:'DM preview'|buttonNode\('Confirm preview'|text:'Action preview complete'|showToast\('Action preview/i);
   assert.match(finalLayer, /Notification message/);
   assert.match(finalLayer, /Confirm action/);
   assert.match(finalLayer, /Action review complete/);
