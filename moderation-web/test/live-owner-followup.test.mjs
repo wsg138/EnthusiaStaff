@@ -12,7 +12,7 @@ test('message context loads an around-message neighborhood from every author', a
   const end = source.indexOf('function browseContextAlertNode', start);
   const contextCode = source.slice(start, end);
 
-  assert.match(contextCode, /fetchContextAround\(trigger\.channelId,id\)/);
+  assert.match(contextCode, /fetchBrowseContextAround\(trigger\.channelId,id\)/);
   assert.match(contextCode, /message\.channelId === trigger\.channelId/);
   assert.doesNotMatch(contextCode, /CONTEXT_WINDOW_MS|120_000|boundedTimeContext/);
   assert.match(source, /up to 50 surrounding messages from this channel/);
@@ -47,7 +47,7 @@ test('custom punishment duration accepts arbitrary positive lengths and permanen
   const end = source.indexOf('function actionHasDuration', start);
   assert.ok(start >= 0 && end > start);
 
-  const context = {};
+  const context = {window:{}};
   vm.runInNewContext(`${source.slice(start, end)}; result = [
     normalizePunishmentDuration('60 days'),
     normalizePunishmentDuration('12 hours'),
