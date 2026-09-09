@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 
 import java.net.URI;
+import java.util.Locale;
 import java.util.Optional;
 import net.dv8tion.jda.api.components.buttons.Button;
 import net.dv8tion.jda.api.entities.MessageEmbed;
@@ -22,6 +23,7 @@ class ModerationPreviewLauncherPresentationTest {
         ModerationPreviewLauncherPresentation.Rendered rendered = presentation.render(Optional.of(launch), target);
         MessageEmbed embed = rendered.embed();
         String serialized = embed.toData().toString();
+        String normalized = serialized.toLowerCase(Locale.ROOT);
 
         assertEquals("Moderation · P2wn", embed.getTitle());
         assertEquals("Review @p2wn in #staff-chat", embed.getDescription());
@@ -33,9 +35,9 @@ class ModerationPreviewLauncherPresentationTest {
         assertFalse(fieldValue(embed, "Channel").contains(target.discordId()));
         assertFalse(embed.getFooter().getText().contains(target.discordId()));
         assertFalse(serialized.contains("RiverAsh"));
-        assertFalse(serialized.toLowerCase().contains("staging"));
-        assertFalse(serialized.toLowerCase().contains("simulation"));
-        assertFalse(serialized.toLowerCase().contains("preview"));
+        assertFalse(normalized.contains("staging"));
+        assertFalse(normalized.contains("simulation"));
+        assertFalse(normalized.contains("preview"));
         Button button = (Button) rendered.rows().getFirst().getComponents().getFirst();
         assertEquals("Open Moderation Workspace", button.getLabel());
         assertEquals(launch.toString(), button.getUrl());

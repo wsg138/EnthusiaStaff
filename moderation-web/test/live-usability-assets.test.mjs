@@ -13,7 +13,7 @@ const ASSETS = [
 
 test('protected router serves every live usability asset', async () => {
   const source = await readFile(ROUTER, 'utf8');
-  for (const asset of ASSETS) assert.match(source, new RegExp(`'${asset.replaceAll('.', '\\.')}'`));
+  for (const asset of ASSETS) assert.ok(source.includes(`'${asset}'`), `${asset} must be explicitly allowlisted`);
 });
 
 test('live usability scripts load after base live enhancements in dependency order', async () => {
