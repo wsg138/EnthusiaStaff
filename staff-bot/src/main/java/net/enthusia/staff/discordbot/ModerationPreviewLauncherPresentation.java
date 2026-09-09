@@ -36,8 +36,7 @@ final class ModerationPreviewLauncherPresentation {
     Rendered render(Optional<URI> launchUri, TargetSummary target) {
         MessageEmbed embed = new EmbedBuilder()
                 .setColor(PANEL_COLOR)
-                .setTitle("Moderation · " + target.displayName())
-                .setDescription("Review @" + target.username() + " in " + target.channelLabel())
+                .setTitle("@" + target.username())
                 .setThumbnail(target.avatarUrl())
                 .addField("Channel", target.channelLabel(), false)
                 .setFooter("Enthusia Staff · Moderation Workspace")

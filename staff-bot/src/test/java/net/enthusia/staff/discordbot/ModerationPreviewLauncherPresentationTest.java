@@ -2,6 +2,7 @@ package net.enthusia.staff.discordbot;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 
 import java.net.URI;
 import java.util.Locale;
@@ -25,13 +26,12 @@ class ModerationPreviewLauncherPresentationTest {
         String serialized = embed.toData().toString();
         String normalized = serialized.toLowerCase(Locale.ROOT);
 
-        assertEquals("Moderation · P2wn", embed.getTitle());
-        assertEquals("Review @p2wn in #staff-chat", embed.getDescription());
+        assertEquals("@p2wn", embed.getTitle());
+        assertNull(embed.getDescription());
         assertEquals(target.avatarUrl(), embed.getThumbnail().getUrl());
         assertEquals("#staff-chat", fieldValue(embed, "Channel"));
         assertEquals("Enthusia Staff · Moderation Workspace", embed.getFooter().getText());
         assertFalse(embed.getTitle().contains(target.discordId()));
-        assertFalse(embed.getDescription().contains(target.discordId()));
         assertFalse(fieldValue(embed, "Channel").contains(target.discordId()));
         assertFalse(embed.getFooter().getText().contains(target.discordId()));
         assertFalse(serialized.contains("RiverAsh"));
