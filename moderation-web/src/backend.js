@@ -5,8 +5,8 @@ const DEFAULT_LIMIT = 25;
 const MAX_FILTER_TEXT = 200;
 const MAX_LIMIT = 50;
 const READ_API_ORIGIN = 'https://moderation-read-staging.enthusia.info';
-const MESSAGE_FILTER_KEYS = new Set(['channel', 'before', 'after', 'author', 'text', 'date', 'limit']);
-const SIGNED_MESSAGE_FIELDS = Object.freeze(['afterMessageId', 'authorId', 'beforeMessageId', 'channelId', 'date', 'limit', 'text']);
+const MESSAGE_FILTER_KEYS = new Set(['channel', 'before', 'after', 'around', 'author', 'text', 'date', 'limit']);
+const SIGNED_MESSAGE_FIELDS = Object.freeze(['afterMessageId', 'aroundMessageId', 'authorId', 'beforeMessageId', 'channelId', 'date', 'limit', 'text']);
 const JSON_ESCAPES = new Map([
   ['"', '\\"'], ['\\', '\\\\'], ['\b', '\\b'], ['\f', '\\f'], ['\n', '\\n'], ['\r', '\\r'], ['\t', '\\t']
 ]);
@@ -45,6 +45,7 @@ export function browserMessageQuery(input) {
   addSnowflakeFilter(query, 'channelId', input.channel, 'channel');
   addSnowflakeFilter(query, 'beforeMessageId', input.before, 'before');
   addSnowflakeFilter(query, 'afterMessageId', input.after, 'after');
+  addSnowflakeFilter(query, 'aroundMessageId', input.around, 'around');
   addSnowflakeFilter(query, 'authorId', input.author, 'author');
   addTextFilter(query, input.text);
   addDateFilter(query, input.date);
@@ -117,7 +118,8 @@ function addDateFilter(query, value) {
 }
 
 function requireCompatibleCursors(query) {
-  if (query.beforeMessageId && query.afterMessageId) throw new Error('conflicting cursors');
+  const cursors = [query.beforeMessageId, query.afterMessageId, query.aroundMessageId].filter(Boolean);
+  if (cursors.length > 1) throw new Error('conflicting cursors');
 }
 
 function readSigningKey(env) {
