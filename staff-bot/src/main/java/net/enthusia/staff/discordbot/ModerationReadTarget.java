@@ -13,6 +13,7 @@ sealed interface ModerationReadTarget permits ModerationReadTarget.ChannelContex
     int DISCORD_CONTEXT_PARTS = 3;
     int MESSAGE_PARTS = 4;
     String CHANNEL_KIND = "channel";
+    String CHANNEL_LABEL = "channel";
     String DISCORD_KIND = "discord";
     String DISCORD_CONTEXT_KIND = "discord-channel";
     String MESSAGE_KIND = "message";
@@ -53,7 +54,7 @@ sealed interface ModerationReadTarget permits ModerationReadTarget.ChannelContex
 
     private static ModerationReadTarget parseChannel(String[] parts) {
         requireParts(parts, CHANNEL_PARTS);
-        return new ChannelContext(snowflake(parts[1], "channel"));
+        return new ChannelContext(snowflake(parts[1], CHANNEL_LABEL));
     }
 
     private static ModerationReadTarget parseDiscordUser(String[] parts) {
@@ -64,7 +65,7 @@ sealed interface ModerationReadTarget permits ModerationReadTarget.ChannelContex
     private static ModerationReadTarget parseDiscordUserContext(String[] parts) {
         requireParts(parts, DISCORD_CONTEXT_PARTS);
         return new DiscordUserContext(
-                snowflake(parts[1], "channel"),
+                snowflake(parts[1], CHANNEL_LABEL),
                 snowflake(parts[2], "user")
         );
     }
@@ -72,7 +73,7 @@ sealed interface ModerationReadTarget permits ModerationReadTarget.ChannelContex
     private static ModerationReadTarget parseMessageContext(String[] parts) {
         requireParts(parts, MESSAGE_PARTS);
         return new MessageContext(
-                snowflake(parts[1], "channel"),
+                snowflake(parts[1], CHANNEL_LABEL),
                 snowflake(parts[2], "message"),
                 snowflake(parts[3], "user")
         );
@@ -122,7 +123,7 @@ sealed interface ModerationReadTarget permits ModerationReadTarget.ChannelContex
 
         @Override
         public String key() {
-            return "channel:" + Long.toUnsignedString(channelIdValue);
+            return CHANNEL_KIND + ":" + Long.toUnsignedString(channelIdValue);
         }
     }
 
