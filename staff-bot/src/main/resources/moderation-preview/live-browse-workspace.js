@@ -248,8 +248,9 @@ function browseMessageActionsNode(message) {
   const menu = hardenedMessageActionsNode(message);
   if (!message.authorId) return menu;
   const items = menu.querySelector('.message-action-menu');
-  items?.prepend(element('button',{type:'button',className:'message-action-item',text:'View player',
-    dataset:{selectPlayer:message.authorId},attrs:{role:'menuitem','aria-label':`View moderation details for ${message.author}`}}));
+  const viewPlayer = element('button',{type:'button',className:'message-action-item',text:'View player',
+    dataset:{selectPlayer:message.authorId},attrs:{role:'menuitem','aria-label':`View moderation details for ${message.author}`}});
+  if (items) items.insertBefore(viewPlayer, items.firstChild);
   return menu;
 }
 
@@ -326,7 +327,7 @@ function browseRenderSelectionBar() {
   const actions = $('#selectionBar .selection-actions');
   if (!actions) return;
   const button = buttonNode('Show context','button secondary',{selectedContext:''});
-  actions.prepend(button);
+  actions.insertBefore(button, actions.firstChild);
   button.addEventListener('click',() => browseShowMessageContext([...state.selected][0]));
 }
 

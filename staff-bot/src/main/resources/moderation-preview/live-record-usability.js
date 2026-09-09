@@ -175,6 +175,10 @@ async function fasterLoadChannelPage() {
   await fasterLoadMessageRequest(new URLSearchParams({channel:state.channel, limit:LIVE_MESSAGE_PAGE_LIMIT}), 'replace');
 }
 
+function messagePagingButton(direction) {
+  return $$('[data-load-direction]').find((button) => button.dataset.loadDirection === direction) || null;
+}
+
 async function fasterLoadMoreMessages(direction) {
   if (state.channel === 'all') return;
   const cursor = direction === 'older' ? liveModeration.olderCursor : liveModeration.newerCursor;
@@ -182,7 +186,7 @@ async function fasterLoadMoreMessages(direction) {
     showToast(`No ${direction} cursor is available.`);
     return;
   }
-  const button = $(`[data-load-direction="${direction}"]`);
+  const button = messagePagingButton(direction);
   if (button) {
     button.disabled = true;
     button.textContent = `Loading ${direction}…`;
@@ -209,75 +213,6 @@ async function fasterLoadMessageRequest(params, mode, pendingButton = null) {
     showToast(error.message || 'Discord messages are temporarily unavailable.', true);
     if (pendingButton?.isConnected) pendingButton.disabled = false;
   }
-}
-
-async function fasterShowTwoMinuteContext(id) {
-  const trigger = baseMessages.find((message) => message.id === id);
-  if (!trigger) {
-    showToast('That message is no longer in the loaded view.', true);
-    return;
-  }
-  const previous = rememberMessageView();
-  showToast('Loading message context…');
-  try {
-    const around = await fetchContextAround(trigger.channelId, id);
-    const needs = contextFallbackDirections(trigger, around);
-    const [before, after] = await Promise.all([
-      needs.before ? fetchContextPage(trigger.channelId, 'before', id) : Promise.resolve([]),
-      needs.after ? fetchContextPage(trigger.channelId, 'after', id) : Promise.resolve([])
-    ]);
-    const context = boundedTimeContext(trigger, [...around, ...before], after);
-    state.contextReturn = previous;
-    baseMessages.splice(0, baseMessages.length, ...context);
-    state.search = '';
-    state.author = '';
-    state.channel = trigger.channelId;
-    state.date = 'all';
-    state.dateFrom = '';
-    state.dateTo = '';
-    state.selectedOnly = false;
-    state.contextId = id;
-    liveModeration.olderCursor = null;
-    liveModeration.newerCursor = null;
-    renderAll();
-  } catch (error) {
-    showToast(error.message || 'Discord context is temporarily unavailable.', true);
-  }
-}
-
-async function fetchContextAround(channelId, messageId) {
-  const response = await requestDirectModerationRead('/api/messages', {
-    method:'POST',
-    headers:{Accept:'application/json', 'Content-Type':'application/json'},
-    body:JSON.stringify({channel:channelId, around:messageId, limit:LIVE_MESSAGE_PAGE_LIMIT})
-  });
-  const page = await readJsonResponse(response);
-  if (!response.ok) throw new Error(page.message || 'Discord context unavailable');
-  return asArray(page.messages).map(window.mapMessage);
-}
-
-function contextFallbackDirections(trigger, around) {
-  if (around.length < Number(LIVE_MESSAGE_PAGE_LIMIT)) return {before:false, after:false};
-  const triggerTime = new Date(trigger.time).getTime();
-  const times = around
-    .filter((message) => message.channelId === trigger.channelId)
-    .map((message) => new Date(message.time).getTime())
-    .filter(Number.isFinite);
-  if (!times.length) return {before:true, after:true};
-  return {
-    before:Math.min(...times) > triggerTime - CONTEXT_WINDOW_MS,
-    after:Math.max(...times) < triggerTime + CONTEXT_WINDOW_MS
-  };
-}
-
-function contextAwareSelectionBar() {
-  hardenedRenderSelectionBar();
-  if (state.selected.size !== 1) return;
-  const actions = $('#selectionBar .selection-actions');
-  if (!actions) return;
-  const button = buttonNode('Show context', 'button secondary', {selectedContext:''});
-  actions.prepend(button);
-  button.addEventListener('click', () => fasterShowTwoMinuteContext([...state.selected][0]));
 }
 
 function freeformDurationField(workflow) {
@@ -379,8 +314,6 @@ window.loadSession = fasterLoadSession;
 window.loadChannelPage = fasterLoadChannelPage;
 window.loadMoreMessages = fasterLoadMoreMessages;
 window.loadMessageRequest = fasterLoadMessageRequest;
-window.showTwoMinuteContext = fasterShowTwoMinuteContext;
-window.renderSelectionBar = contextAwareSelectionBar;
 window.durationField = freeformDurationField;
 window.workflowReviewStatus = durationAwareWorkflowReviewStatus;
 window.workflowCanEnterReview = durationAwareWorkflowCanEnterReview;

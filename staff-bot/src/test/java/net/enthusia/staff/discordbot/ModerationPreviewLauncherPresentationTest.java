@@ -12,13 +12,14 @@ import net.dv8tion.jda.api.entities.MessageEmbed;
 import org.junit.jupiter.api.Test;
 
 class ModerationPreviewLauncherPresentationTest {
+    private static final String STAFF_CHAT = "#staff-chat";
     private final ModerationPreviewLauncherPresentation presentation = new ModerationPreviewLauncherPresentation();
 
     @Test
     void launcherUsesSelectedTargetWithoutDiagnosticOrTechnicalClutter() {
         URI launch = URI.create("https://staff-staging.enthusia.info/launch?t=signed");
         var target = new ModerationPreviewLauncherPresentation.TargetSummary(
-                "P2wn", "p2wn", "846729778400460871", "#staff-chat",
+                "P2wn", "p2wn", "846729778400460871", STAFF_CHAT,
                 "https://cdn.discordapp.com/avatars/846729778400460871/avatar.png");
 
         ModerationPreviewLauncherPresentation.Rendered rendered = presentation.render(Optional.of(launch), target);
@@ -29,7 +30,7 @@ class ModerationPreviewLauncherPresentationTest {
         assertEquals("@p2wn", embed.getTitle());
         assertNull(embed.getDescription());
         assertEquals(target.avatarUrl(), embed.getThumbnail().getUrl());
-        assertEquals("#staff-chat", fieldValue(embed, "Channel"));
+        assertEquals(STAFF_CHAT, fieldValue(embed, "Channel"));
         assertEquals("Enthusia Staff · Moderation Workspace", embed.getFooter().getText());
         assertFalse(embed.getTitle().contains(target.discordId()));
         assertFalse(fieldValue(embed, "Channel").contains(target.discordId()));
@@ -48,13 +49,13 @@ class ModerationPreviewLauncherPresentationTest {
         URI launch = URI.create("https://staff-staging.enthusia.info/launch?t=channel");
 
         ModerationPreviewLauncherPresentation.Rendered rendered = presentation.renderChannel(
-                Optional.of(launch), "#staff-chat");
+                Optional.of(launch), STAFF_CHAT);
         MessageEmbed embed = rendered.embed();
 
         assertEquals("Moderation Workspace", embed.getTitle());
         assertNull(embed.getDescription());
         assertNull(embed.getThumbnail());
-        assertEquals("#staff-chat", fieldValue(embed, "Channel"));
+        assertEquals(STAFF_CHAT, fieldValue(embed, "Channel"));
         assertFalse(embed.toData().toString().contains("@"));
     }
 

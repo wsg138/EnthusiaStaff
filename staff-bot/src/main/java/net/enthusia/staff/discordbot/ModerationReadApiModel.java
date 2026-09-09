@@ -6,6 +6,8 @@ import java.util.Optional;
 
 /** Explicit allowlisted DTOs for the private moderation read API. */
 final class ModerationReadApiModel {
+    private static final int MAX_MESSAGE_CURSORS = 1;
+
     private ModerationReadApiModel() {
     }
 
@@ -36,7 +38,7 @@ final class ModerationReadApiModel {
             int cursorCount = (beforeMessageId.isPresent() ? 1 : 0)
                     + (afterMessageId.isPresent() ? 1 : 0)
                     + (aroundMessageId.isPresent() ? 1 : 0);
-            if (cursorCount > 1) {
+            if (cursorCount > MAX_MESSAGE_CURSORS) {
                 throw new IllegalArgumentException("message query cursors conflict");
             }
         }
