@@ -262,6 +262,17 @@ function browseBindMessageEvents() {
   }));
 }
 
+async function fetchBrowseContextAround(channelId,messageId) {
+  const response = await requestDirectModerationRead('/api/messages',{
+    method:'POST',
+    headers:{Accept:'application/json','Content-Type':'application/json'},
+    body:JSON.stringify({channel:channelId,around:messageId,limit:LIVE_MESSAGE_PAGE_LIMIT})
+  });
+  const page = await readJsonResponse(response);
+  if (!response.ok) throw new Error(page.message || 'Discord context unavailable');
+  return asArray(page.messages).map(window.mapMessage);
+}
+
 async function browseShowMessageContext(id) {
   const trigger = baseMessages.find((message) => message.id === id);
   if (!trigger) {
@@ -271,7 +282,7 @@ async function browseShowMessageContext(id) {
   const previous = rememberMessageView();
   showToast('Loading surrounding conversation…');
   try {
-    const around = await fetchContextAround(trigger.channelId,id);
+    const around = await fetchBrowseContextAround(trigger.channelId,id);
     const context = surroundingConversation(trigger,around);
     showContextWorkspace(trigger,context,previous);
   } catch (error) {
