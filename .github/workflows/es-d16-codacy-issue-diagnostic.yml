@@ -19,4 +19,4 @@ jobs:
           url='https://api.codacy.com/api/v3/analysis/organizations/gh/wsg138/repositories/EnthusiaStaff/pull-requests/187/issues?status=new&limit=100'
           curl --fail-with-body --silent --show-error \
             -H 'Accept: application/json' \
-            "$url" | jq '{first: .data[0], pagination}'
+            "$url" | jq '{issues: [.data[].commitIssue | {filePath, lineNumber, message, pattern: .patternInfo.id, category: .patternInfo.category, level: .patternInfo.level, tool: .toolInfo.name}], pagination}'
