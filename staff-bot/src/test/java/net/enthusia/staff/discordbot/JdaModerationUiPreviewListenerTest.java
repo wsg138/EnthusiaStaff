@@ -12,16 +12,20 @@ import net.dv8tion.jda.api.entities.ApplicationInfo;
 import net.dv8tion.jda.api.interactions.commands.Command;
 import net.dv8tion.jda.api.interactions.commands.DefaultMemberPermissions;
 import net.dv8tion.jda.api.interactions.commands.build.CommandData;
+import net.dv8tion.jda.api.interactions.commands.build.SlashCommandData;
 import org.junit.jupiter.api.Test;
 
 class JdaModerationUiPreviewListenerTest {
     @Test
-    void previewRegistersTargetedSlashAndContextCommandsDisabledByDefault() {
+    void previewRegistersOptionalTargetSlashAndContextCommandsDisabledByDefault() {
         Map<String, CommandData> commands = JdaModerationUiPreviewListener.commands().stream()
                 .collect(Collectors.toMap(CommandData::getName, Function.identity()));
+        SlashCommandData slash = (SlashCommandData) commands.get("moderate-preview");
 
         assertEquals(3, commands.size());
-        assertEquals(Command.Type.SLASH, commands.get("moderate-preview").getType());
+        assertEquals(Command.Type.SLASH, slash.getType());
+        assertEquals(1, slash.getOptions().size());
+        assertFalse(slash.getOptions().getFirst().isRequired());
         assertEquals(Command.Type.USER, commands.get("Moderate Preview").getType());
         assertEquals(Command.Type.MESSAGE, commands.get("Moderate Message Preview").getType());
         assertTrue(commands.values().stream().allMatch(command ->

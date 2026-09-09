@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { browserMessageQuery, prepareModerationRead, readRequest } from '../src/backend.js';
+import { browserBootstrapTarget, browserMessageQuery, prepareModerationRead, readRequest } from '../src/backend.js';
 
 const READ_ORIGIN = 'https://moderation-read-staging.enthusia.info';
 const READ_KEY_HEX = '11'.repeat(32);
@@ -13,45 +13,71 @@ function readContext() {
     },
     session: {
       actorId: '846729778400460871', guildId: '1410303324745371709',
-      targetKey: 'discord:1049827163345127424'
+      targetKey: 'channel:1541286004298752091'
     }
   };
 }
 
 test('message query allowlists bounded filters', () => {
-  const filters = {channel:'1541286004298752091', before:'1541300000000000001', author:'1049827163345127424', date:'2026-08-31', text:'hello', limit:'50'};
+  const filters = {
+    channel:'1541286004298752091', around:'1541300000000000001',
+    author:'1049827163345127424', date:'2026-08-31', text:'hello', limit:'50'
+  };
   assert.deepEqual(browserMessageQuery(filters), {
-    channelId: '1541286004298752091', beforeMessageId: '1541300000000000001',
-    authorId: '1049827163345127424', date: '2026-08-31', text: 'hello', limit: 50
+    channelId:'1541286004298752091', aroundMessageId:'1541300000000000001',
+    authorId:'1049827163345127424', date:'2026-08-31', text:'hello', limit:50
   });
 });
 
 test('message query rejects retargeting-shaped and unbounded inputs', () => {
   for (const filters of [
-    {channel:'0'}, {before:'1', after:'2'}, {author:'abc'}, {date:'August-31'},
-    {limit:'51'}, {limit:'01'}, {limit:1.5}, {text:'x'.repeat(201)}, {target:'discord:999'}, {actor:'999'}, {guild:'999'}
+    {channel:'0'}, {before:'1', after:'2'}, {before:'1', around:'2'}, {after:'1', around:'2'},
+    {author:'abc'}, {date:'August-31'}, {limit:'51'}, {limit:'01'}, {limit:1.5},
+    {text:'x'.repeat(201)}, {target:'discord:999'}, {actor:'999'}, {guild:'999'}
   ]) assert.throws(() => browserMessageQuery(filters));
 });
 
-test('read request binds actor guild and target only from server session', () => {
+test('bootstrap target selection is explicitly allowlisted', () => {
+  const {session} = readContext();
+  const channel = '1541286004298752091';
+  const user = '1049827163345127424';
+
+  assert.equal(browserBootstrapTarget(session, {}), session.targetKey);
+  assert.equal(browserBootstrapTarget(session, {browse:true, channel}), `channel:${channel}`);
+  assert.equal(browserBootstrapTarget(session, {target:user, channel}), `discord-channel:${channel}:${user}`);
+  assert.equal(browserBootstrapTarget(session, {target:user}), `discord:${user}`);
+});
+
+test('bootstrap target selection rejects ambiguous or unallowlisted shapes', () => {
+  const {session} = readContext();
+  for (const input of [
+    {browse:false,channel:'1'}, {browse:true,target:'2',channel:'1'}, {channel:'1'},
+    {target:'0'}, {target:'2',channel:'0'}, {target:'2',admin:true}
+  ]) assert.throws(() => browserBootstrapTarget(session,input));
+});
+
+test('message requests stay session-bound while bootstrap may select an authorized read target', () => {
   const {session} = readContext();
   assert.deepEqual(readRequest(session, 'messages', {channel:'1541286004298752091'}), {
     actorId: session.actorId, guildId: session.guildId, targetKey: session.targetKey,
-    messages: {channelId: '1541286004298752091', limit: 25}
+    messages: {channelId:'1541286004298752091', limit:25}
   });
+  assert.equal(readRequest(session,'bootstrap',{target:'1049827163345127424',channel:'1541286004298752091'}).targetKey,
+    'discord-channel:1541286004298752091:1049827163345127424');
 });
 
 test('signed message request serialization is canonical across browser key order', async () => {
   const {env, session} = readContext();
   const channel = '1541286004298752091';
   const author = '1049827163345127424';
-  const first = await prepareModerationRead(env, session, 'messages', {text:'hello', channel, author});
-  const second = await prepareModerationRead(env, session, 'messages', {author, channel, text:'hello'});
+  const around = '1541300000000000001';
+  const first = await prepareModerationRead(env, session, 'messages', {text:'hello', channel, author, around});
+  const second = await prepareModerationRead(env, session, 'messages', {around, author, channel, text:'hello'});
   const firstEnvelope = await first.json();
   const secondEnvelope = await second.json();
 
   assert.equal(firstEnvelope.body, secondEnvelope.body);
-  assert.deepEqual(JSON.parse(firstEnvelope.body), readRequest(session, 'messages', {channel, author, text:'hello'}));
+  assert.deepEqual(JSON.parse(firstEnvelope.body), readRequest(session, 'messages', {channel, author, around, text:'hello'}));
   assert.notEqual(firstEnvelope.nonce, secondEnvelope.nonce);
 });
 
@@ -86,8 +112,8 @@ test('missing signing key fails closed without exposing diagnostics', async () =
   const response = await prepareModerationRead({READ_API_SIGNING_KEY_HEX:'not-a-key'}, session, 'bootstrap');
   assert.equal(response.status, 503);
   assert.deepEqual(await response.json(), {
-    code: 'source_unavailable',
-    message: 'Moderation data is temporarily unavailable.'
+    code:'source_unavailable',
+    message:'Moderation data is temporarily unavailable.'
   });
 });
 

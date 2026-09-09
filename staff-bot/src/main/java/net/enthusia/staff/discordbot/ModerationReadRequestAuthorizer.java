@@ -2,6 +2,7 @@ package net.enthusia.staff.discordbot;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.OptionalLong;
 import java.util.regex.Pattern;
 import net.enthusia.staff.domain.auth.Actor;
 import net.enthusia.staff.domain.auth.DiscordModerationOperation;
@@ -35,10 +36,18 @@ final class ModerationReadRequestAuthorizer {
         Member actorMember = requireActorMember(guild, actorId);
         Actor actor = moderation.actors().invoker(
                 new DiscordUserId(Long.toUnsignedString(actorId)), actorMember.getEffectiveName());
-        StaffModerationReadService.Target target = moderation.reads().discordTarget(
-                new DiscordUserId(Long.toUnsignedString(readTarget.userId())));
+        Optional<StaffModerationReadService.Target> target = resolveTarget(readTarget);
         requireReadAuthority(actor, target);
         return new ModerationReadContext(actorId, actorMember, guild, target, readTarget);
+    }
+
+    private Optional<StaffModerationReadService.Target> resolveTarget(ModerationReadTarget readTarget) {
+        OptionalLong userId = readTarget.userId();
+        if (userId.isEmpty()) {
+            return Optional.empty();
+        }
+        return Optional.of(moderation.reads().discordTarget(
+                new DiscordUserId(Long.toUnsignedString(userId.orElseThrow()))));
     }
 
     private void requireGuildBinding(ModerationReadApiModel.ReadRequest request) {
@@ -62,12 +71,18 @@ final class ModerationReadRequestAuthorizer {
         return response == ErrorResponse.UNKNOWN_MEMBER || response == ErrorResponse.UNKNOWN_USER;
     }
 
-    private void requireReadAuthority(Actor actor, StaffModerationReadService.Target target) {
-        Optional<Actor> targetStaff = moderation.actors().targetStaff(target);
+    private void requireReadAuthority(Actor actor, Optional<StaffModerationReadService.Target> target) {
+        if (target.isEmpty()) {
+            moderation.authorization().require(
+                    actor, Optional.empty(), DiscordModerationOperation.VIEW_EVIDENCE, ModerationPlatform.DISCORD);
+            return;
+        }
+        Optional<Actor> targetStaff = moderation.actors().targetStaff(target.orElseThrow());
         for (DiscordModerationOperation operation : List.of(
                 DiscordModerationOperation.VIEW_LINKED_ACCOUNTS,
                 DiscordModerationOperation.VIEW_HISTORY,
-                DiscordModerationOperation.VIEW_NOTES)) {
+                DiscordModerationOperation.VIEW_NOTES,
+                DiscordModerationOperation.VIEW_EVIDENCE)) {
             moderation.authorization().require(actor, targetStaff, operation, ModerationPlatform.DISCORD);
         }
     }

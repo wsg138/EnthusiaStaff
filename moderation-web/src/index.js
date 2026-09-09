@@ -1,5 +1,5 @@
 import { DurableObject } from 'cloudflare:workers';
-import { inspectLaunchToken } from './security.js';
+import { inspectLaunchToken, validTargetKey } from './security.js';
 import { readBoundedBody } from './request-body.js';
 import { prepareModerationRead } from './backend.js';
 
@@ -19,7 +19,12 @@ const STATIC_PATHS = new Set([
   '/assets/live-context-pagination.js',
   '/assets/live-loading.js',
   '/assets/real-policy.js',
-  '/assets/live-enhancements.js'
+  '/assets/live-enhancements.js',
+  '/assets/live-review-hardening.js',
+  '/assets/live-shell-usability.js',
+  '/assets/live-message-usability.js',
+  '/assets/live-record-usability.js',
+  '/assets/live-browse-workspace.js'
 ]);
 const ROUTE_HANDLERS = new Map([
   ['/health', handleHealth],
@@ -173,11 +178,10 @@ function handleMessages(request, env) {
 }
 
 async function handleRead(request, env, endpoint) {
-  const expectedMethod = endpoint === 'messages' ? 'POST' : 'GET';
-  if (request.method !== expectedMethod) return methodNotAllowed();
+  if (!readMethodAllowed(request.method, endpoint)) return methodNotAllowed();
   const session = await currentSession(request, env);
   if (!session) return textResponse('Session expired.', 401);
-  const parsed = endpoint === 'messages' ? await readMessagePayload(request) : {value: {}};
+  const parsed = await readInput(request, endpoint);
   if (parsed.error) return parsed.error;
   try {
     return await prepareModerationRead(env, session, endpoint, parsed.value);
@@ -186,7 +190,17 @@ async function handleRead(request, env, endpoint) {
   }
 }
 
-async function readMessagePayload(request) {
+function readMethodAllowed(method, endpoint) {
+  if (endpoint === 'messages') return method === 'POST';
+  return method === 'GET' || method === 'POST';
+}
+
+async function readInput(request, endpoint) {
+  if (endpoint === 'bootstrap' && request.method === 'GET') return {value: {}};
+  return readJsonPayload(request);
+}
+
+async function readJsonPayload(request) {
   const body = await readBoundedBody(request, MAX_REQUEST_BYTES);
   if (!body) return {error: textResponse('Read request is too large.', 413)};
   try {
@@ -247,9 +261,14 @@ function store(env) {
 
 function validSimulation(payload, session) {
   if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return false;
-  if (payload.target !== session.targetKey) return false;
+  if (!validActionTarget(payload.target, session.targetKey)) return false;
   if (!boundedString(payload.offense, 64) || !boundedString(payload.action, 32)) return false;
   return idList(payload.evidence) && idList(payload.delete);
+}
+
+function validActionTarget(target, sessionTarget) {
+  if (typeof target !== 'string' || target.startsWith('channel:')) return false;
+  return target === sessionTarget || validTargetKey(target);
 }
 
 function idList(value) {

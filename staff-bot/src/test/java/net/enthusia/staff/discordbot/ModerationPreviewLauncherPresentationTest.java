@@ -2,9 +2,10 @@ package net.enthusia.staff.discordbot;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertNull;
 
 import java.net.URI;
+import java.util.Locale;
 import java.util.Optional;
 import net.dv8tion.jda.api.components.buttons.Button;
 import net.dv8tion.jda.api.entities.MessageEmbed;
@@ -14,7 +15,7 @@ class ModerationPreviewLauncherPresentationTest {
     private final ModerationPreviewLauncherPresentation presentation = new ModerationPreviewLauncherPresentation();
 
     @Test
-    void launcherUsesRealTargetIdentityChannelAndAvatarWithoutPlaceholderData() {
+    void launcherUsesSelectedTargetWithoutDiagnosticOrTechnicalClutter() {
         URI launch = URI.create("https://staff-staging.enthusia.info/launch?t=signed");
         var target = new ModerationPreviewLauncherPresentation.TargetSummary(
                 "P2wn", "p2wn", "846729778400460871", "#staff-chat",
@@ -22,15 +23,39 @@ class ModerationPreviewLauncherPresentationTest {
 
         ModerationPreviewLauncherPresentation.Rendered rendered = presentation.render(Optional.of(launch), target);
         MessageEmbed embed = rendered.embed();
+        String serialized = embed.toData().toString();
+        String normalized = serialized.toLowerCase(Locale.ROOT);
 
-        assertEquals("Moderation · P2wn", embed.getTitle());
-        assertEquals("@p2wn", embed.getDescription());
+        assertEquals("@p2wn", embed.getTitle());
+        assertNull(embed.getDescription());
         assertEquals(target.avatarUrl(), embed.getThumbnail().getUrl());
-        assertTrue(fieldValue(embed, "Target").contains(target.discordId()));
         assertEquals("#staff-chat", fieldValue(embed, "Channel"));
-        assertFalse(embed.toData().toString().contains("RiverAsh"));
+        assertEquals("Enthusia Staff · Moderation Workspace", embed.getFooter().getText());
+        assertFalse(embed.getTitle().contains(target.discordId()));
+        assertFalse(fieldValue(embed, "Channel").contains(target.discordId()));
+        assertFalse(embed.getFooter().getText().contains(target.discordId()));
+        assertFalse(serialized.contains("RiverAsh"));
+        assertFalse(normalized.contains("staging"));
+        assertFalse(normalized.contains("simulation"));
+        assertFalse(normalized.contains("preview"));
         Button button = (Button) rendered.rows().getFirst().getComponents().getFirst();
+        assertEquals("Open Moderation Workspace", button.getLabel());
         assertEquals(launch.toString(), button.getUrl());
+    }
+
+    @Test
+    void channelLauncherHasNoSyntheticPlayer() {
+        URI launch = URI.create("https://staff-staging.enthusia.info/launch?t=channel");
+
+        ModerationPreviewLauncherPresentation.Rendered rendered = presentation.renderChannel(
+                Optional.of(launch), "#staff-chat");
+        MessageEmbed embed = rendered.embed();
+
+        assertEquals("Moderation Workspace", embed.getTitle());
+        assertNull(embed.getDescription());
+        assertNull(embed.getThumbnail());
+        assertEquals("#staff-chat", fieldValue(embed, "Channel"));
+        assertFalse(embed.toData().toString().contains("@"));
     }
 
     private static String fieldValue(MessageEmbed embed, String name) {

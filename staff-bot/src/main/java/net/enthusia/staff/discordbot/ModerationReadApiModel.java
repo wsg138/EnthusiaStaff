@@ -19,6 +19,7 @@ final class ModerationReadApiModel {
             Optional<String> channelId,
             Optional<String> beforeMessageId,
             Optional<String> afterMessageId,
+            Optional<String> aroundMessageId,
             Optional<String> text,
             Optional<String> authorId,
             Optional<String> date,
@@ -28,9 +29,28 @@ final class ModerationReadApiModel {
             channelId = safe(channelId);
             beforeMessageId = safe(beforeMessageId);
             afterMessageId = safe(afterMessageId);
+            aroundMessageId = safe(aroundMessageId);
             text = safe(text);
             authorId = safe(authorId);
             date = safe(date);
+            int cursorCount = (beforeMessageId.isPresent() ? 1 : 0)
+                    + (afterMessageId.isPresent() ? 1 : 0)
+                    + (aroundMessageId.isPresent() ? 1 : 0);
+            if (cursorCount > 1) {
+                throw new IllegalArgumentException("message query cursors conflict");
+            }
+        }
+
+        MessageQuery(
+                Optional<String> channelId,
+                Optional<String> beforeMessageId,
+                Optional<String> afterMessageId,
+                Optional<String> text,
+                Optional<String> authorId,
+                Optional<String> date,
+                int limit
+        ) {
+            this(channelId, beforeMessageId, afterMessageId, Optional.empty(), text, authorId, date, limit);
         }
 
         private static Optional<String> safe(Optional<String> value) {
@@ -40,7 +60,9 @@ final class ModerationReadApiModel {
 
     record BootstrapResponse(
             ActorDto actor,
-            IdentityDto identity,
+            String targetKey,
+            boolean targetSelected,
+            Optional<IdentityDto> identity,
             List<LinkedAccountDto> linkedAccounts,
             List<SanctionDto> activeSanctions,
             List<HistoryDto> history,
@@ -53,6 +75,7 @@ final class ModerationReadApiModel {
             Optional<String> centeredMessageId
     ) {
         BootstrapResponse {
+            identity = identity == null ? Optional.empty() : identity;
             linkedAccounts = List.copyOf(linkedAccounts);
             activeSanctions = List.copyOf(activeSanctions);
             history = List.copyOf(history);
@@ -61,6 +84,12 @@ final class ModerationReadApiModel {
             notes = List.copyOf(notes);
             channels = List.copyOf(channels);
             centeredMessageId = centeredMessageId == null ? Optional.empty() : centeredMessageId;
+            if (targetKey == null || targetKey.isBlank()) {
+                throw new IllegalArgumentException("target key must be present");
+            }
+            if (targetSelected != identity.isPresent()) {
+                throw new IllegalArgumentException("target selection and identity must agree");
+            }
             if (totalHistoryCount < 0) {
                 throw new IllegalArgumentException("history total must not be negative");
             }

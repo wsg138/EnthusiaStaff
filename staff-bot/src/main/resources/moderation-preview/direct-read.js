@@ -174,7 +174,7 @@ function diagnosticSessionUnavailable() {
     status:'Session unavailable', badge:'Reopen from Discord',
     actorMeta:'Session unavailable · reopen from Discord',
     detail:'The signed moderation session is unavailable',
-    warning:'Session unavailable. Reopen the moderation preview from Discord.',
+    warning:'Session unavailable. Reopen the moderation panel from Discord.',
     toast:'Session unavailable. Reopen the panel from Discord.'
   };
 }

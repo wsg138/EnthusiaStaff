@@ -45,6 +45,11 @@ final class ModerationPreviewHostedLaunchIssuer {
         }
     }
 
+    URI issueChannelLaunchUri(long actorId, long guildId, long channelId) {
+        requireSnowflake(channelId, "channel");
+        return issueLaunchUri(actorId, guildId, "channel:" + Long.toUnsignedString(channelId));
+    }
+
     URI issueUserLaunchUri(long actorId, long guildId, long channelId, long targetUserId) {
         requireSnowflake(channelId, "channel");
         requireSnowflake(targetUserId, "target user");
