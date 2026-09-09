@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { browserMessageQuery, prepareModerationRead, readRequest } from '../src/backend.js';
+import { browserBootstrapTarget, browserMessageQuery, prepareModerationRead, readRequest } from '../src/backend.js';
 
 const READ_ORIGIN = 'https://moderation-read-staging.enthusia.info';
 const READ_KEY_HEX = '11'.repeat(32);
@@ -13,7 +13,7 @@ function readContext() {
     },
     session: {
       actorId: '846729778400460871', guildId: '1410303324745371709',
-      targetKey: 'discord:1049827163345127424'
+      targetKey: 'channel:1541286004298752091'
     }
   };
 }
@@ -37,12 +37,33 @@ test('message query rejects retargeting-shaped and unbounded inputs', () => {
   ]) assert.throws(() => browserMessageQuery(filters));
 });
 
-test('read request binds actor guild and target only from server session', () => {
+test('bootstrap target selection is explicitly allowlisted', () => {
+  const {session} = readContext();
+  const channel = '1541286004298752091';
+  const user = '1049827163345127424';
+
+  assert.equal(browserBootstrapTarget(session, {}), session.targetKey);
+  assert.equal(browserBootstrapTarget(session, {browse:true, channel}), `channel:${channel}`);
+  assert.equal(browserBootstrapTarget(session, {target:user, channel}), `discord-channel:${channel}:${user}`);
+  assert.equal(browserBootstrapTarget(session, {target:user}), `discord:${user}`);
+});
+
+test('bootstrap target selection rejects ambiguous or unallowlisted shapes', () => {
+  const {session} = readContext();
+  for (const input of [
+    {browse:false,channel:'1'}, {browse:true,target:'2',channel:'1'}, {channel:'1'},
+    {target:'0'}, {target:'2',channel:'0'}, {target:'2',admin:true}
+  ]) assert.throws(() => browserBootstrapTarget(session,input));
+});
+
+test('message requests stay session-bound while bootstrap may select an authorized read target', () => {
   const {session} = readContext();
   assert.deepEqual(readRequest(session, 'messages', {channel:'1541286004298752091'}), {
     actorId: session.actorId, guildId: session.guildId, targetKey: session.targetKey,
     messages: {channelId:'1541286004298752091', limit:25}
   });
+  assert.equal(readRequest(session,'bootstrap',{target:'1049827163345127424',channel:'1541286004298752091'}).targetKey,
+    'discord-channel:1541286004298752091:1049827163345127424');
 });
 
 test('signed message request serialization is canonical across browser key order', async () => {

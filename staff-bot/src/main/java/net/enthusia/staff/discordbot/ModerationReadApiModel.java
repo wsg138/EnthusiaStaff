@@ -60,7 +60,9 @@ final class ModerationReadApiModel {
 
     record BootstrapResponse(
             ActorDto actor,
-            IdentityDto identity,
+            String targetKey,
+            boolean targetSelected,
+            Optional<IdentityDto> identity,
             List<LinkedAccountDto> linkedAccounts,
             List<SanctionDto> activeSanctions,
             List<HistoryDto> history,
@@ -73,6 +75,7 @@ final class ModerationReadApiModel {
             Optional<String> centeredMessageId
     ) {
         BootstrapResponse {
+            identity = identity == null ? Optional.empty() : identity;
             linkedAccounts = List.copyOf(linkedAccounts);
             activeSanctions = List.copyOf(activeSanctions);
             history = List.copyOf(history);
@@ -81,6 +84,12 @@ final class ModerationReadApiModel {
             notes = List.copyOf(notes);
             channels = List.copyOf(channels);
             centeredMessageId = centeredMessageId == null ? Optional.empty() : centeredMessageId;
+            if (targetKey == null || targetKey.isBlank()) {
+                throw new IllegalArgumentException("target key must be present");
+            }
+            if (targetSelected != identity.isPresent()) {
+                throw new IllegalArgumentException("target selection and identity must agree");
+            }
             if (totalHistoryCount < 0) {
                 throw new IllegalArgumentException("history total must not be negative");
             }

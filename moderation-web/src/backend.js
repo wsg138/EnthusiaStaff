@@ -6,6 +6,7 @@ const MAX_FILTER_TEXT = 200;
 const MAX_LIMIT = 50;
 const READ_API_ORIGIN = 'https://moderation-read-staging.enthusia.info';
 const MESSAGE_FILTER_KEYS = new Set(['channel', 'before', 'after', 'around', 'author', 'text', 'date', 'limit']);
+const BOOTSTRAP_FILTER_KEYS = new Set(['browse', 'channel', 'target']);
 const SIGNED_MESSAGE_FIELDS = Object.freeze(['afterMessageId', 'aroundMessageId', 'authorId', 'beforeMessageId', 'channelId', 'date', 'limit', 'text']);
 const JSON_ESCAPES = new Map([
   ['"', '\\"'], ['\\', '\\\\'], ['\b', '\\b'], ['\f', '\\f'], ['\n', '\\n'], ['\r', '\\r'], ['\t', '\\t']
@@ -40,7 +41,7 @@ export async function prepareModerationRead(env, session, endpoint, browserInput
 
 export function browserMessageQuery(input) {
   requireFilterObject(input);
-  requireFilterKeys(input);
+  requireFilterKeys(input, MESSAGE_FILTER_KEYS);
   const query = {};
   addSnowflakeFilter(query, 'channelId', input.channel, 'channel');
   addSnowflakeFilter(query, 'beforeMessageId', input.before, 'before');
@@ -54,8 +55,33 @@ export function browserMessageQuery(input) {
   return query;
 }
 
+export function browserBootstrapTarget(session, input = {}) {
+  requireFilterObject(input);
+  requireFilterKeys(input, BOOTSTRAP_FILTER_KEYS);
+  if (Object.keys(input).length === 0) return session.targetKey;
+  if (input.browse !== undefined) return browseTarget(input);
+  return userTarget(input);
+}
+
+function browseTarget(input) {
+  if (input.browse !== true || input.target !== undefined) throw new Error('invalid browse target');
+  const channel = requiredSnowflake(input.channel, 'channel');
+  return `channel:${channel}`;
+}
+
+function userTarget(input) {
+  if (input.target === undefined || input.browse !== undefined) throw new Error('invalid user target');
+  const target = requiredSnowflake(input.target, 'target');
+  if (input.channel === undefined) return `discord:${target}`;
+  const channel = requiredSnowflake(input.channel, 'channel');
+  return `discord-channel:${channel}:${target}`;
+}
+
 export function readRequest(session, endpoint, browserInput = {}) {
-  const request = {actorId: session.actorId, guildId: session.guildId, targetKey: session.targetKey, messages: null};
+  const targetKey = endpoint === 'bootstrap'
+    ? browserBootstrapTarget(session, browserInput)
+    : session.targetKey;
+  const request = {actorId: session.actorId, guildId: session.guildId, targetKey, messages: null};
   if (endpoint === 'messages') request.messages = browserMessageQuery(browserInput);
   return request;
 }
@@ -91,18 +117,24 @@ function escapeJsonCharacter(character) {
 }
 
 function requireFilterObject(input) {
-  if (!input || typeof input !== 'object' || Array.isArray(input)) throw new Error('invalid message filters');
+  if (!input || typeof input !== 'object' || Array.isArray(input)) throw new Error('invalid read filters');
 }
 
-function requireFilterKeys(input) {
+function requireFilterKeys(input, allowed) {
   for (const key of Object.keys(input)) {
-    if (!MESSAGE_FILTER_KEYS.has(key)) throw new Error('invalid message filter');
+    if (!allowed.has(key)) throw new Error('invalid read filter');
   }
 }
 
 function addSnowflakeFilter(query, targetKey, value, label) {
   const parsed = snowflakeFilter(value, label);
   if (parsed !== null) query[targetKey] = parsed;
+}
+
+function requiredSnowflake(value, label) {
+  const parsed = snowflakeFilter(value, label);
+  if (parsed === null) throw new Error(`invalid ${label}`);
+  return parsed;
 }
 
 function addTextFilter(query, value) {

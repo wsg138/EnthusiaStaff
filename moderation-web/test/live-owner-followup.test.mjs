@@ -4,16 +4,32 @@ import vm from 'node:vm';
 import test from 'node:test';
 
 const RECORD = new URL('../../staff-bot/src/main/resources/moderation-preview/live-record-usability.js', import.meta.url);
+const BROWSE = new URL('../../staff-bot/src/main/resources/moderation-preview/live-browse-workspace.js', import.meta.url);
 
-test('message context uses an around-message fast path with bounded fallback', async () => {
-  const source = await readFile(RECORD, 'utf8');
+test('message context loads an around-message neighborhood from every author', async () => {
+  const source = await readFile(BROWSE, 'utf8');
+  const start = source.indexOf('async function browseShowMessageContext');
+  const end = source.indexOf('function browseContextAlertNode', start);
+  const contextCode = source.slice(start, end);
 
-  assert.match(source, /around:messageId/);
-  assert.match(source, /contextFallbackDirections/);
-  assert.match(source, /CONTEXT_WINDOW_MS/);
-  assert.match(source, /fetchContextPage\(trigger\.channelId, 'before', id\)/);
-  assert.match(source, /fetchContextPage\(trigger\.channelId, 'after', id\)/);
-  assert.match(source, /Show context/);
+  assert.match(contextCode, /fetchContextAround\(trigger\.channelId,id\)/);
+  assert.match(contextCode, /message\.channelId === trigger\.channelId/);
+  assert.doesNotMatch(contextCode, /CONTEXT_WINDOW_MS|120_000|boundedTimeContext/);
+  assert.match(source, /up to 50 surrounding messages from this channel/);
+  assert.match(source, /including messages from every author/);
+});
+
+test('channel browse keeps no player selected until staff chooses an author', async () => {
+  const source = await readFile(BROWSE, 'utf8');
+
+  assert.match(source, /No player selected/);
+  assert.match(source, /workspaceChannelPicker/);
+  assert.match(source, /workspacePlayerPicker/);
+  assert.match(source, /data-select-player|selectPlayer/);
+  assert.match(source, /fetchBrowseBootstrap\(\{browse:true,channel:currentBrowseChannel\(\)\}\)/);
+  assert.match(source, /fetchBrowseBootstrap\(\{target:userId,channel:currentBrowseChannel\(\)\}\)/);
+  assert.match(source, /TARGET_ONLY_VIEWS/);
+  assert.match(source, /state\.activeTargetKey/);
 });
 
 test('message paging and initial session loading avoid unnecessary serial and full-shell work', async () => {

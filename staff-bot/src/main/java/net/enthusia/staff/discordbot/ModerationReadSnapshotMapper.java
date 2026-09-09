@@ -40,8 +40,9 @@ final class ModerationReadSnapshotMapper {
             StaffModerationReadService.Snapshot snapshot,
             List<ModerationReadApiModel.LinkedAccountDto> linkedAccounts
     ) {
-        User user = jda.retrieveUserById(context.readTarget().userId()).complete();
-        Member member = ModerationDiscordMessageMapper.memberIfPresent(context.guild(), context.readTarget().userId());
+        long userId = context.readTarget().userId().orElseThrow();
+        User user = jda.retrieveUserById(userId).complete();
+        Member member = ModerationDiscordMessageMapper.memberIfPresent(context.guild(), userId);
         Optional<String> main = linkedAccounts.stream()
                 .filter(ModerationReadApiModel.LinkedAccountDto::main)
                 .map(account -> account.username().orElse(account.playerId()))

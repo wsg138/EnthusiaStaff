@@ -22,6 +22,20 @@ class ModerationPreviewHostedLaunchIssuerTest {
     private static final String TOKEN = "staging-test-discord-token-value";
 
     @Test
+    void hostedChannelTicketHasNoSyntheticPlayerTarget() throws Exception {
+        ModerationPreviewHostedLaunchIssuer issuer = issuer();
+
+        URI uri = issuer.issueChannelLaunchUri(
+                123456789012345678L,
+                1410303324745371709L,
+                1541286004298752091L);
+
+        String[] fields = fields(uri);
+        assertEquals("channel:1541286004298752091", fields[5]);
+        assertSignedAndBounded(uri, fields);
+    }
+
+    @Test
     void hostedUserTicketIsActorGuildChannelAndRealTargetBound() throws Exception {
         ModerationPreviewHostedLaunchIssuer issuer = issuer();
 
@@ -79,9 +93,11 @@ class ModerationPreviewHostedLaunchIssuerTest {
     }
 
     @Test
-    void hostedChannelBoundUserTicketRejectsInvalidChannel() throws Exception {
+    void hostedChannelTicketsRejectInvalidChannel() throws Exception {
         ModerationPreviewHostedLaunchIssuer issuer = issuer();
 
+        assertThrows(IllegalArgumentException.class, () -> issuer.issueChannelLaunchUri(
+                123456789012345678L, 1410303324745371709L, 0L));
         assertThrows(IllegalArgumentException.class, () -> issuer.issueUserLaunchUri(
                 123456789012345678L, 1410303324745371709L, 0L, 1049827163345127424L));
     }

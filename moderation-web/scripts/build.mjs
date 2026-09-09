@@ -12,7 +12,7 @@ const webAssets = [
   'app.css', 'live.css', 'model.js', 'app.js', 'workflow.js', 'review.js', 'real-data.js',
   'direct-read.js', 'live-context-page-policy.js', 'live-context-pagination.js', 'live-loading.js',
   'real-policy.js', 'live-enhancements.js', 'live-review-hardening.js', 'live-shell-usability.js',
-  'live-message-usability.js', 'live-record-usability.js'
+  'live-message-usability.js', 'live-record-usability.js', 'live-browse-workspace.js'
 ];
 
 await rm(output, { recursive: true, force: true });

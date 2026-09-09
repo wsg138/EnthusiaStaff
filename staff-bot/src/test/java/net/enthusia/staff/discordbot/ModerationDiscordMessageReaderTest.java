@@ -24,11 +24,13 @@ class ModerationDiscordMessageReaderTest {
     }
 
     @Test
-    void invocationChannelIsUsedOnlyForChannelBoundUserLaunches() {
+    void invocationChannelIsUsedForChannelBrowseAndChannelBoundUserLaunches() {
+        ModerationReadTarget browse = ModerationReadTarget.parse("channel:1541286004298752091");
         ModerationReadTarget contextual = ModerationReadTarget.parse("discord-channel:1541286004298752091:222");
         ModerationReadTarget legacy = ModerationReadTarget.parse("discord:222");
         ModerationReadTarget exactMessage = ModerationReadTarget.parse("message:1541286004298752091:333:222");
 
+        assertEquals(OptionalLong.of(1541286004298752091L), ModerationDiscordMessageReader.initialChannel(browse));
         assertEquals(OptionalLong.of(1541286004298752091L), ModerationDiscordMessageReader.initialChannel(contextual));
         assertEquals(OptionalLong.empty(), ModerationDiscordMessageReader.initialChannel(legacy));
         assertEquals(OptionalLong.empty(), ModerationDiscordMessageReader.initialChannel(exactMessage));

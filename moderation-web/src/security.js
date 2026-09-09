@@ -75,8 +75,9 @@ function validClaimText(version, environment, nonce, actorId, guildId, targetKey
   ].every(Boolean);
 }
 
-function validTargetKey(targetKey) {
+export function validTargetKey(targetKey) {
   if (typeof targetKey !== 'string' || !/^[A-Za-z0-9:_-]{1,96}$/.test(targetKey)) return false;
+  if (/^channel:[1-9][0-9]{0,19}$/.test(targetKey)) return true;
   if (/^discord:[1-9][0-9]{0,19}$/.test(targetKey)) return true;
   if (/^discord-channel:[1-9][0-9]{0,19}:[1-9][0-9]{0,19}$/.test(targetKey)) return true;
   return /^message:[1-9][0-9]{0,19}:[1-9][0-9]{0,19}:[1-9][0-9]{0,19}$/.test(targetKey);

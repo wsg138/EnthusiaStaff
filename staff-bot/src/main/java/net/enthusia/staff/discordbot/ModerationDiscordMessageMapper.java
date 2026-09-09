@@ -2,6 +2,7 @@ package net.enthusia.staff.discordbot;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.OptionalLong;
 import net.dv8tion.jda.api.entities.Guild;
 import net.dv8tion.jda.api.entities.Member;
 import net.dv8tion.jda.api.entities.Message;
@@ -43,7 +44,12 @@ final class ModerationDiscordMessageMapper {
                 message.getAttachments().stream().map(attachment -> new ModerationReadApiModel.AttachmentDto(
                         attachment.getId(), attachment.getFileName(), Optional.ofNullable(attachment.getContentType()),
                         attachment.getSize(), attachment.getUrl())).toList(),
-                message.getAuthor().getIdLong() == context.readTarget().userId(), false);
+                isTargetAuthor(context, message), false);
+    }
+
+    private static boolean isTargetAuthor(ModerationReadContext context, Message message) {
+        OptionalLong targetUser = context.readTarget().userId();
+        return targetUser.isPresent() && message.getAuthor().getIdLong() == targetUser.orElseThrow();
     }
 
     private ModerationReadApiModel.AuthorDto author(Guild guild, User user) {

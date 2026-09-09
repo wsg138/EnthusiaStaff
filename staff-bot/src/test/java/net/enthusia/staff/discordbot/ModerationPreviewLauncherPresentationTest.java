@@ -43,6 +43,21 @@ class ModerationPreviewLauncherPresentationTest {
         assertEquals(launch.toString(), button.getUrl());
     }
 
+    @Test
+    void channelLauncherHasNoSyntheticPlayer() {
+        URI launch = URI.create("https://staff-staging.enthusia.info/launch?t=channel");
+
+        ModerationPreviewLauncherPresentation.Rendered rendered = presentation.renderChannel(
+                Optional.of(launch), "#staff-chat");
+        MessageEmbed embed = rendered.embed();
+
+        assertEquals("Moderation Workspace", embed.getTitle());
+        assertNull(embed.getDescription());
+        assertNull(embed.getThumbnail());
+        assertEquals("#staff-chat", fieldValue(embed, "Channel"));
+        assertFalse(embed.toData().toString().contains("@"));
+    }
+
     private static String fieldValue(MessageEmbed embed, String name) {
         return embed.getFields().stream()
                 .filter(field -> name.equals(field.getName()))

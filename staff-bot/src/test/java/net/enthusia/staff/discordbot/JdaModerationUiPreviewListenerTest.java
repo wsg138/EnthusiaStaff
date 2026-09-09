@@ -16,12 +16,14 @@ import org.junit.jupiter.api.Test;
 
 class JdaModerationUiPreviewListenerTest {
     @Test
-    void previewRegistersTargetedSlashAndContextCommandsDisabledByDefault() {
+    void previewRegistersOptionalTargetSlashAndContextCommandsDisabledByDefault() {
         Map<String, CommandData> commands = JdaModerationUiPreviewListener.commands().stream()
                 .collect(Collectors.toMap(CommandData::getName, Function.identity()));
 
         assertEquals(3, commands.size());
         assertEquals(Command.Type.SLASH, commands.get("moderate-preview").getType());
+        assertEquals(1, commands.get("moderate-preview").getOptions().size());
+        assertFalse(commands.get("moderate-preview").getOptions().getFirst().isRequired());
         assertEquals(Command.Type.USER, commands.get("Moderate Preview").getType());
         assertEquals(Command.Type.MESSAGE, commands.get("Moderate Message Preview").getType());
         assertTrue(commands.values().stream().allMatch(command ->

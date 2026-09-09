@@ -23,7 +23,7 @@ import net.dv8tion.jda.api.interactions.commands.OptionType;
 import net.dv8tion.jda.api.interactions.commands.build.CommandData;
 import net.dv8tion.jda.api.interactions.commands.build.Commands;
 
-/** Staging-only Discord launcher and private read-API owner for the Cloudflare moderation preview. */
+/** Discord launcher and private read-API owner for the web-first moderation workspace. */
 final class JdaModerationUiPreviewListener extends ListenerAdapter implements AutoCloseable {
     private static final System.Logger LOGGER = System.getLogger(JdaModerationUiPreviewListener.class.getName());
     private static final String SLASH_COMMAND = "moderate-preview";
@@ -128,13 +128,13 @@ final class JdaModerationUiPreviewListener extends ListenerAdapter implements Au
             unavailable(event);
             return;
         }
+        long channelId = event.getChannel().getIdLong();
         var option = event.getOption(TARGET_OPTION);
         if (option == null) {
-            unavailable(event);
+            replyChannel(event, channelLaunch(event.getUser().getIdLong(), channelId), channelId);
             return;
         }
         User target = option.getAsUser();
-        long channelId = event.getChannel().getIdLong();
         reply(event, userLaunch(event.getUser().getIdLong(), channelId, target.getIdLong()), target, channelId);
     }
 
@@ -200,6 +200,10 @@ final class JdaModerationUiPreviewListener extends ListenerAdapter implements Au
                 || flags.contains(ApplicationInfo.Flag.GATEWAY_MESSAGE_CONTENT_LIMITED));
     }
 
+    private Optional<URI> channelLaunch(long actorId, long channelId) {
+        return hostedLaunchIssuer.map(issuer -> issuer.issueChannelLaunchUri(actorId, guildId, channelId));
+    }
+
     private Optional<URI> userLaunch(long actorId, long channelId, long targetUserId) {
         return hostedLaunchIssuer.map(issuer -> issuer.issueUserLaunchUri(
                 actorId, guildId, channelId, targetUserId));
@@ -213,6 +217,16 @@ final class JdaModerationUiPreviewListener extends ListenerAdapter implements Au
     private void reply(IReplyCallback event, Optional<URI> launchUri, User target, long channelId) {
         ModerationPreviewLauncherPresentation.Rendered rendered = presentation.render(
                 launchUri, targetSummary(event.getGuild(), target, channelId));
+        send(event, rendered);
+    }
+
+    private void replyChannel(IReplyCallback event, Optional<URI> launchUri, long channelId) {
+        ModerationPreviewLauncherPresentation.Rendered rendered = presentation.renderChannel(
+                launchUri, channelLabel(event.getGuild(), channelId));
+        send(event, rendered);
+    }
+
+    private static void send(IReplyCallback event, ModerationPreviewLauncherPresentation.Rendered rendered) {
         event.replyEmbeds(rendered.embed()).addComponents(rendered.rows()).setEphemeral(true).queue();
     }
 
@@ -223,16 +237,20 @@ final class JdaModerationUiPreviewListener extends ListenerAdapter implements Au
     ) {
         Member member = guild == null ? null : guild.getMember(target);
         String displayName = member == null ? ModerationDiscordMessageMapper.displayName(target) : member.getEffectiveName();
-        TextChannel channel = guild == null ? null : guild.getTextChannelById(channelId);
-        String channelLabel = channel == null ? "Channel " + Long.toUnsignedString(channelId) : "#" + channel.getName();
         return new ModerationPreviewLauncherPresentation.TargetSummary(
-                displayName, target.getName(), target.getId(), channelLabel, target.getEffectiveAvatarUrl());
+                displayName, target.getName(), target.getId(), channelLabel(guild, channelId),
+                target.getEffectiveAvatarUrl());
+    }
+
+    private static String channelLabel(Guild guild, long channelId) {
+        TextChannel channel = guild == null ? null : guild.getTextChannelById(channelId);
+        return channel == null ? "Channel " + Long.toUnsignedString(channelId) : "#" + channel.getName();
     }
 
     static List<CommandData> commands() {
         return List.of(
-                Commands.slash(SLASH_COMMAND, "Open the staging moderation web panel for a Discord user")
-                        .addOption(OptionType.USER, TARGET_OPTION, "Discord user to inspect", true)
+                Commands.slash(SLASH_COMMAND, "Open the moderation workspace for this channel")
+                        .addOption(OptionType.USER, TARGET_OPTION, "Optional Discord user to inspect", false)
                         .setDefaultPermissions(DefaultMemberPermissions.DISABLED),
                 Commands.user(USER_COMMAND).setDefaultPermissions(DefaultMemberPermissions.DISABLED),
                 Commands.message(MESSAGE_COMMAND).setDefaultPermissions(DefaultMemberPermissions.DISABLED)
@@ -268,7 +286,7 @@ final class JdaModerationUiPreviewListener extends ListenerAdapter implements Au
 
     private static void unavailable(IReplyCallback event) {
         if (!event.isAcknowledged()) {
-            event.reply("The staging moderation preview is unavailable in this context.")
+            event.reply("The moderation workspace is unavailable in this context.")
                     .setEphemeral(true).queue();
         }
     }

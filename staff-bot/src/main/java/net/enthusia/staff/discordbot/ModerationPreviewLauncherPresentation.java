@@ -34,13 +34,32 @@ final class ModerationPreviewLauncherPresentation {
     }
 
     Rendered render(Optional<URI> launchUri, TargetSummary target) {
-        MessageEmbed embed = new EmbedBuilder()
-                .setColor(PANEL_COLOR)
+        MessageEmbed embed = base()
                 .setTitle("@" + target.username())
                 .setThumbnail(target.avatarUrl())
                 .addField("Channel", target.channelLabel(), false)
-                .setFooter("Enthusia Staff · Moderation Workspace")
                 .build();
+        return rendered(launchUri, embed);
+    }
+
+    Rendered renderChannel(Optional<URI> launchUri, String channelLabel) {
+        if (channelLabel == null || channelLabel.isBlank()) {
+            throw new IllegalArgumentException("moderation channel label is required");
+        }
+        MessageEmbed embed = base()
+                .setTitle("Moderation Workspace")
+                .addField("Channel", channelLabel, false)
+                .build();
+        return rendered(launchUri, embed);
+    }
+
+    private static EmbedBuilder base() {
+        return new EmbedBuilder()
+                .setColor(PANEL_COLOR)
+                .setFooter("Enthusia Staff · Moderation Workspace");
+    }
+
+    private static Rendered rendered(Optional<URI> launchUri, MessageEmbed embed) {
         return new Rendered(embed, List.of(ActionRow.of(button(launchUri))));
     }
 

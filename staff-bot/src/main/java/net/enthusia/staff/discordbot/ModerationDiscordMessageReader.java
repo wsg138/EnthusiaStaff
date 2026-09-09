@@ -34,13 +34,13 @@ final class ModerationDiscordMessageReader {
             List<ModerationReadApiModel.ChannelDto> channels
     ) {
         if (context.readTarget() instanceof ModerationReadTarget.MessageContext messageTarget) {
-            return surrounding(context, messageTarget, DEFAULT_PAGE);
+            return surrounding(context, messageTarget, MAX_PAGE);
         }
         OptionalLong boundChannel = initialChannel(context.readTarget());
         if (boundChannel.isPresent()) {
-            return recentTargetInChannel(context, boundChannel.orElseThrow(), DEFAULT_PAGE);
+            return recentInChannel(context, boundChannel.orElseThrow(), MAX_PAGE);
         }
-        return recentTarget(context, channels, emptyQuery(), MAX_PAGE);
+        return recentAcrossVisibleChannels(context, channels, emptyQuery(), MAX_PAGE);
     }
 
     ModerationReadApiModel.MessagePageDto query(
@@ -49,7 +49,7 @@ final class ModerationDiscordMessageReader {
     ) {
         int limit = boundedLimit(query.limit());
         if (query.channelId().isEmpty()) {
-            return recentTarget(context, visibleChannels(context), query, limit);
+            return recentAcrossVisibleChannels(context, visibleChannels(context), query, limit);
         }
         long channelId = ModerationReadRequestAuthorizer.snowflake(query.channelId().orElseThrow(), "channel");
         TextChannel channel = visibleChannel(context, channelId);
@@ -57,23 +57,22 @@ final class ModerationDiscordMessageReader {
     }
 
     static OptionalLong initialChannel(ModerationReadTarget target) {
-        if (target instanceof ModerationReadTarget.DiscordUserContext) {
+        if (target instanceof ModerationReadTarget.ChannelContext
+                || target instanceof ModerationReadTarget.DiscordUserContext) {
             return target.channelId();
         }
         return OptionalLong.empty();
     }
 
-    private ModerationReadApiModel.MessagePageDto recentTargetInChannel(
+    private ModerationReadApiModel.MessagePageDto recentInChannel(
             ModerationReadContext context,
             long channelId,
             int limit
     ) {
         TextChannel channel = visibleChannel(context, channelId);
-        List<Message> targetMessages = channel.getHistory().retrievePast(MAX_PAGE).complete().stream()
-                .filter(message -> message.getAuthor().getIdLong() == context.readTarget().userId())
-                .limit(boundedLimit(limit))
-                .toList();
-        return mapper.page(context, targetMessages, boundedLimit(limit));
+        int bounded = boundedLimit(limit);
+        List<Message> messages = channel.getHistory().retrievePast(bounded).complete();
+        return mapper.page(context, messages, bounded);
     }
 
     private ModerationReadApiModel.MessagePageDto surrounding(
@@ -83,7 +82,7 @@ final class ModerationDiscordMessageReader {
     ) {
         TextChannel channel = visibleChannel(context, target.channelIdValue());
         Message exact = channel.retrieveMessageById(target.messageIdValue()).complete();
-        if (exact.getAuthor().getIdLong() != target.userId()) {
+        if (exact.getAuthor().getIdLong() != target.userIdValue()) {
             throw new IllegalArgumentException("signed message target author no longer matches Discord");
         }
         List<Message> messages = channel.getHistoryAround(target.messageIdValue(), boundedLimit(limit))
@@ -91,17 +90,18 @@ final class ModerationDiscordMessageReader {
         return mapper.page(context, messages, boundedLimit(limit));
     }
 
-    private ModerationReadApiModel.MessagePageDto recentTarget(
+    private ModerationReadApiModel.MessagePageDto recentAcrossVisibleChannels(
             ModerationReadContext context,
             List<ModerationReadApiModel.ChannelDto> channels,
             ModerationReadApiModel.MessageQuery query,
             int limit
     ) {
         List<Message> messages = new ArrayList<>();
+        OptionalLong targetUser = context.readTarget().userId();
         channels.stream().limit(MAX_RECENT_CHANNELS)
                 .map(channel -> context.guild().getTextChannelById(channel.id()))
                 .filter(java.util.Objects::nonNull)
-                .forEach(channel -> collectTargetMessages(channel, context.readTarget().userId(), messages));
+                .forEach(channel -> collectRecentMessages(channel, targetUser, messages));
         messages.sort(Comparator.comparing(Message::getTimeCreated).reversed());
         return mapper.page(context, filterAndLimit(messages, query, limit), limit);
     }
@@ -114,9 +114,9 @@ final class ModerationDiscordMessageReader {
         return ModerationMessageFilter.apply(messages, query).stream().limit(limit).toList();
     }
 
-    private static void collectTargetMessages(TextChannel channel, long targetId, List<Message> target) {
+    private static void collectRecentMessages(TextChannel channel, OptionalLong targetUser, List<Message> target) {
         channel.getHistory().retrievePast(RECENT_PER_CHANNEL).complete().stream()
-                .filter(message -> message.getAuthor().getIdLong() == targetId)
+                .filter(message -> targetUser.isEmpty() || message.getAuthor().getIdLong() == targetUser.orElseThrow())
                 .forEach(target::add);
     }
 
