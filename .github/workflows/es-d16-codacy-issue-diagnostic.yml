@@ -1,0 +1,22 @@
+name: ES-D16 Codacy Issue Diagnostic
+
+on:
+  push:
+    branches:
+      - diagnostic/es-d16-codacy-issue-20260909
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Query public Codacy PR issues
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          url='https://api.codacy.com/api/v3/analysis/organizations/gh/wsg138/repositories/EnthusiaStaff/pull-requests/187/issues?status=new&limit=100'
+          curl --fail-with-body --silent --show-error \
+            -H 'Accept: application/json' \
+            "$url" | jq '{data: [.data[] | {id, filePath, lineNumber, patternInfo, toolInfo, category, message, commitInfo}], pagination}'
