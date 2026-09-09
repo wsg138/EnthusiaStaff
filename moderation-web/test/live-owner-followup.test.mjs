@@ -43,7 +43,7 @@ test('message paging and initial session loading avoid unnecessary serial and fu
 
 test('custom punishment duration accepts arbitrary positive lengths and permanent', async () => {
   const source = await readFile(RECORD, 'utf8');
-  const start = source.indexOf('const DURATION_UNITS');
+  const start = source.indexOf('const DURATION_VALUE_PATTERN');
   const end = source.indexOf('function actionHasDuration', start);
   assert.ok(start >= 0 && end > start);
 
