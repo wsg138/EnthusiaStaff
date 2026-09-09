@@ -6,7 +6,7 @@ Canonical package handoff: `ai-agents/reports/package-handoffs/2026-09-09-es-d16
 
 Current product checkpoint:
 - PR #187 remains open/unmerged and mergeable on `package/es-d16-moderation-read-bridge`;
-- frozen executable head is `8bef6775d411ac0c22321b0edd0485a0f9c84d5e`;
+- frozen executable head is `8bef6775d411ac0c22321b0edd0485a0f9c84d5e`; current state-only head is this file's containing commit and differs after the product freeze only in `ai-agents` Markdown records;
 - owner review exposed and repaired a real Cloudflare packaging defect: the latest usability scripts were present in StaffBot resources but omitted from the Worker build. The build now copies every page-referenced local asset and regression coverage guards that contract;
 - the Discord launcher now has an `@username`-only title and shows the channel once below;
 - exact frozen-head Coverage `34364743352`, web validation `34364743253`, StaffBot artifact `34364743331`, configuration-cache `34364743259`, Sentinel artifact `34364743324`, protected staging `34364735886`, Pi supersession `34364738724`, Codacy static `102510993058`, diff coverage `102514180788`, and coverage variation `102514180125` all pass; Codacy static has zero annotations / zero new valid findings;
