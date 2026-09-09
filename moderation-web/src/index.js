@@ -19,7 +19,11 @@ const STATIC_PATHS = new Set([
   '/assets/live-context-pagination.js',
   '/assets/live-loading.js',
   '/assets/real-policy.js',
-  '/assets/live-enhancements.js'
+  '/assets/live-enhancements.js',
+  '/assets/live-review-hardening.js',
+  '/assets/live-shell-usability.js',
+  '/assets/live-message-usability.js',
+  '/assets/live-record-usability.js'
 ]);
 const ROUTE_HANDLERS = new Map([
   ['/health', handleHealth],

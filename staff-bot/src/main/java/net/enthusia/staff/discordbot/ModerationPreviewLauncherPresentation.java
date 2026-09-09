@@ -36,13 +36,14 @@ final class ModerationPreviewLauncherPresentation {
     Rendered render(Optional<URI> launchUri, TargetSummary target) {
         EmbedBuilder embed = new EmbedBuilder()
                 .setColor(PANEL_COLOR)
-                .setTitle("Moderation · " + target.displayName())
-                .setDescription("@" + target.username())
+                .setTitle("Moderation preview · " + target.displayName())
+                .setDescription("Selected target: @" + target.username())
                 .setThumbnail(target.avatarUrl())
-                .addField("Target", target.displayName() + " · " + target.discordId(), false)
-                .addField("Channel", target.channelLabel(), true)
-                .addField("Workspace", "Real read-only context · staging moderation simulation", true)
-                .setFooter("STAGING PREVIEW");
+                .addField("Selected target", target.displayName() + " · Discord " + target.discordId(), false)
+                .addField("Investigation channel", target.channelLabel(), true)
+                .addField("Panel data", "Real reads for this selected target", true)
+                .addField("Actions", "Simulation only — no punishment, DM, restriction, or message deletion is applied.", false)
+                .setFooter("STAGING · REAL READS / SIMULATED ACTIONS");
         return new Rendered(embed.build(), List.of(ActionRow.of(button(launchUri))));
     }
 
