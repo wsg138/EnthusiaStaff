@@ -15,12 +15,13 @@ test('protected router serves live moderation enhancement assets', async () => {
   assert.match(source, /'\/assets\/live-enhancements\.js'/);
 });
 
-test('cloudflare build copies every asset referenced by the moderation page', async () => {
+test('cloudflare build copies every local asset referenced by the moderation page', async () => {
   const [index, build] = await Promise.all([
     readFile(indexUrl, 'utf8'),
     readFile(buildUrl, 'utf8')
   ]);
-  const references = [...index.matchAll(/\/assets\/([^"']+)/g)].map(match => match[1]);
+  const references = [...index.matchAll(/(?:src|href)="\/assets\/([^"]+)"/g)]
+    .map(match => match[1]);
 
   assert.ok(references.length > 0);
   for (const name of references) {
