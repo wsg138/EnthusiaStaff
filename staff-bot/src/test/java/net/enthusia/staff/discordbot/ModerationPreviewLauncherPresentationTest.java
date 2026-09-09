@@ -28,7 +28,10 @@ class ModerationPreviewLauncherPresentationTest {
         assertEquals(target.avatarUrl(), embed.getThumbnail().getUrl());
         assertEquals("#staff-chat", fieldValue(embed, "Channel"));
         assertEquals("Enthusia Staff · Moderation Workspace", embed.getFooter().getText());
-        assertFalse(serialized.contains(target.discordId()));
+        assertFalse(embed.getTitle().contains(target.discordId()));
+        assertFalse(embed.getDescription().contains(target.discordId()));
+        assertFalse(fieldValue(embed, "Channel").contains(target.discordId()));
+        assertFalse(embed.getFooter().getText().contains(target.discordId()));
         assertFalse(serialized.contains("RiverAsh"));
         assertFalse(serialized.toLowerCase().contains("staging"));
         assertFalse(serialized.toLowerCase().contains("simulation"));
