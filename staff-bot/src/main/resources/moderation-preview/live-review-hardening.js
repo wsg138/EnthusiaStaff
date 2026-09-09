@@ -10,7 +10,7 @@ function installWorkflowOverrides() {
   window.reviewEvidenceNode = hardenedReviewEvidenceNode;
   window.reviewFooterNode = hardenedReviewFooterNode;
   window.staleEvidenceAlert = hardenedStaleEvidenceAlert;
-  window.confirmSimulation = hardenedConfirmPreview;
+  window.confirmSimulation = hardenedConfirmAction;
   window.renderCompleteStep = hardenedRenderCompleteStep;
 }
 
@@ -252,7 +252,7 @@ function hardenedReviewFooterNode(stale) {
   return [buttonNode('Back','button ghost',{back:''}),right];
 }
 
-async function hardenedConfirmPreview() {
+async function hardenedConfirmAction() {
   if (!state.session) {
     showToast('Session unavailable. Reopen from Discord.', true);
     return;
