@@ -16,6 +16,7 @@ jobs:
         shell: bash
         run: |
           set -Eeuo pipefail
+          # Query the current PR issue set after exact-head validation.
           url='https://api.codacy.com/api/v3/analysis/organizations/gh/wsg138/repositories/EnthusiaStaff/pull-requests/187/issues?status=new&limit=100'
           curl --fail-with-body --silent --show-error \
             -H 'Accept: application/json' \
