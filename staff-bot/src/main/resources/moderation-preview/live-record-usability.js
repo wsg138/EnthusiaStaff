@@ -145,6 +145,14 @@ function productRenderCompleteStep() {
 }
 
 const LIVE_MESSAGE_PAGE_LIMIT = '50';
+const DURATION_UNITS = Object.freeze({
+  m:'minute', min:'minute', mins:'minute', minute:'minute', minutes:'minute',
+  h:'hour', hr:'hour', hrs:'hour', hour:'hour', hours:'hour',
+  d:'day', day:'day', days:'day',
+  w:'week', wk:'week', wks:'week', week:'week', weeks:'week',
+  mo:'month', mos:'month', month:'month', months:'month',
+  y:'year', yr:'year', yrs:'year', year:'year', years:'year'
+});
 const baseWorkflowReviewStatus = window.workflowReviewStatus;
 const baseCaptureOptions = window.captureOptions;
 const baseFocusFirstMissingReviewField = window.focusFirstMissingReviewField;
@@ -229,23 +237,13 @@ function freeformDurationField(workflow) {
 
 function normalizePunishmentDuration(raw) {
   const value = String(raw || '').trim();
-  if (/^permanent$/i.test(value)) return 'Permanent';
-  const match = /^([1-9][0-9]*)\s*(m|min|mins|minute|minutes|h|hr|hrs|hour|hours|d|day|days|w|wk|wks|week|weeks|mo|mos|month|months|y|yr|yrs|year|years)$/i.exec(value);
+  if (value.toLowerCase() === 'permanent') return 'Permanent';
+  const match = /^([1-9][0-9]*)\s*([a-z]+)$/i.exec(value);
   if (!match) return null;
   const amount = Number(match[1]);
-  if (!Number.isSafeInteger(amount)) return null;
-  const unit = durationUnitName(match[2]);
+  const unit = DURATION_UNITS[match[2].toLowerCase()];
+  if (!Number.isSafeInteger(amount) || !unit) return null;
   return `${amount} ${amount === 1 ? unit : `${unit}s`}`;
-}
-
-function durationUnitName(raw) {
-  const unit = raw.toLowerCase();
-  if (['m','min','mins','minute','minutes'].includes(unit)) return 'minute';
-  if (['h','hr','hrs','hour','hours'].includes(unit)) return 'hour';
-  if (['d','day','days'].includes(unit)) return 'day';
-  if (['w','wk','wks','week','weeks'].includes(unit)) return 'week';
-  if (['mo','mos','month','months'].includes(unit)) return 'month';
-  return 'year';
 }
 
 function actionHasDuration(workflow) {
