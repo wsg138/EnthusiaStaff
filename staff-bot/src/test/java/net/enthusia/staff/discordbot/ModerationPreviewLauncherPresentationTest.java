@@ -2,7 +2,6 @@ package net.enthusia.staff.discordbot;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.net.URI;
 import java.util.Optional;
@@ -14,7 +13,7 @@ class ModerationPreviewLauncherPresentationTest {
     private final ModerationPreviewLauncherPresentation presentation = new ModerationPreviewLauncherPresentation();
 
     @Test
-    void launcherUsesSelectedTargetAndMakesSimulationBoundaryExplicit() {
+    void launcherUsesSelectedTargetWithoutDiagnosticOrTechnicalClutter() {
         URI launch = URI.create("https://staff-staging.enthusia.info/launch?t=signed");
         var target = new ModerationPreviewLauncherPresentation.TargetSummary(
                 "P2wn", "p2wn", "846729778400460871", "#staff-chat",
@@ -22,19 +21,20 @@ class ModerationPreviewLauncherPresentationTest {
 
         ModerationPreviewLauncherPresentation.Rendered rendered = presentation.render(Optional.of(launch), target);
         MessageEmbed embed = rendered.embed();
+        String serialized = embed.toData().toString();
 
-        assertEquals("Moderation preview · P2wn", embed.getTitle());
-        assertEquals("Selected target: @p2wn", embed.getDescription());
+        assertEquals("Moderation · P2wn", embed.getTitle());
+        assertEquals("Review @p2wn in #staff-chat", embed.getDescription());
         assertEquals(target.avatarUrl(), embed.getThumbnail().getUrl());
-        assertTrue(fieldValue(embed, "Selected target").contains(target.discordId()));
-        assertEquals("#staff-chat", fieldValue(embed, "Investigation channel"));
-        assertEquals("Real reads for this selected target", fieldValue(embed, "Panel data"));
-        assertTrue(fieldValue(embed, "Actions").contains("Simulation only"));
-        assertEquals("STAGING · REAL READS / SIMULATED ACTIONS", embed.getFooter().getText());
-        assertFalse(embed.toData().toString().contains("RiverAsh"));
-        assertFalse(embed.toData().toString().contains("mute"));
-        assertFalse(embed.toData().toString().contains("prior incidents"));
+        assertEquals("#staff-chat", fieldValue(embed, "Channel"));
+        assertEquals("Enthusia Staff · Moderation Workspace", embed.getFooter().getText());
+        assertFalse(serialized.contains(target.discordId()));
+        assertFalse(serialized.contains("RiverAsh"));
+        assertFalse(serialized.toLowerCase().contains("staging"));
+        assertFalse(serialized.toLowerCase().contains("simulation"));
+        assertFalse(serialized.toLowerCase().contains("preview"));
         Button button = (Button) rendered.rows().getFirst().getComponents().getFirst();
+        assertEquals("Open Moderation Workspace", button.getLabel());
         assertEquals(launch.toString(), button.getUrl());
     }
 

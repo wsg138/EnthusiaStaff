@@ -9,6 +9,9 @@ function installWorkflowOverrides() {
   window.reviewGridNode = hardenedReviewGridNode;
   window.reviewEvidenceNode = hardenedReviewEvidenceNode;
   window.reviewFooterNode = hardenedReviewFooterNode;
+  window.staleEvidenceAlert = hardenedStaleEvidenceAlert;
+  window.confirmSimulation = hardenedConfirmPreview;
+  window.renderCompleteStep = hardenedRenderCompleteStep;
 }
 
 function hardenedRenderOffenseStep() {
@@ -49,20 +52,19 @@ function policyLinkNode(policy, label) {
 
 function hardenedEvidenceActionsNode() {
   return element('section',{className:'card option-section'},
-    sectionHeadingNode('Evidence & message actions','Evidence selection and simulated Discord deletion remain separate.'),
+    sectionHeadingNode('Evidence & message actions','Evidence and deletion choices remain separate.'),
     summaryList([
       ['Discord evidence messages',state.evidence.size],
-      ['Marked for simulated deletion',state.deleting.size],
+      ['Marked for deletion',state.deleting.size],
       ['Preserved evidence messages',preservedEvidenceCount()]
-    ]),buttonNode('Review selected messages','button secondary',{reviewMessages:''}),
-    element('p',{className:'muted small',text:'Nothing is deleted from Discord in staging. Deletion choices are previewed only.'}));
+    ]),buttonNode('Review selected messages','button secondary',{reviewMessages:''}));
 }
 
 function hardenedCommunicationOptionsNode(w) {
   if (w.externalEvidence === undefined) w.externalEvidence = '';
   if (w.approvalConfirmed === undefined) w.approvalConfirmed = false;
   const children = [
-    element('label',{className:'checkbox-control prominent'},element('input',{id:'dmUserOption',type:'checkbox',checked:w.dm}),' Include a DM in the simulation preview (not sent)'),
+    element('label',{className:'checkbox-control prominent'},element('input',{id:'dmUserOption',type:'checkbox',checked:w.dm}),' Include a DM with this action'),
     fieldLabel('Staff explanation / case note',element('textarea',{id:'reasonInput',text:w.reason,placeholder:'Required: explain what happened and why this action fits',attrs:{rows:'3',maxlength:'300'}})),
     element('p',{className:'field-help',text:'Required before Final review; use at least 10 characters.'}),
     fieldLabel('Outside-Discord evidence reference',element('textarea',{id:'externalEvidenceInput',text:w.externalEvidence,placeholder:'Ticket, recording, game log, screenshot set, or other evidence location',attrs:{rows:'2',maxlength:'300'}})),
@@ -75,7 +77,7 @@ function hardenedCommunicationOptionsNode(w) {
 function approvalConfirmationNode(w) {
   return element('label',{className:'checkbox-control prominent approval-confirmation'},
     element('input',{id:'approvalConfirmed',type:'checkbox',checked:w.approvalConfirmed}),
-    ' Admin+ approval has been verified for this case (required before simulation confirmation)');
+    ' Admin+ approval has been verified for this case');
 }
 
 function hardenedBindOptionsEvents() {
@@ -137,12 +139,12 @@ function hardenedReviewGridNode(w, recommendation) {
     ['Offense',w.offense.label],
     ['Rule',policy.label],
     ['Ladder recommendation',`${recommendation.action} · ${recommendation.duration}`],
-    ['Simulated action',`${w.actual.action}${w.custom ? ' · Custom override' : ''}`],
+    ['Action',`${w.actual.action}${w.custom ? ' · Custom override' : ''}`],
     ['Scope / platform',w.scope],
     ['Discord evidence',String(state.evidence.size)],
     ['Outside-Discord evidence',workflowExternalEvidenceReady(w) ? 'Referenced' : 'None'],
-    ['Simulated message deletion',String(state.deleting.size)],
-    ['DM behavior',w.dm ? 'Preview only · not sent' : 'No DM selected'],
+    ['Messages to delete',String(state.deleting.size)],
+    ['DM',w.dm ? 'Included' : 'Not included'],
     ['Approval',approvalReviewText(w)]
   ];
   if (w.duration !== '—') items.splice(5,0,['Duration',w.duration]);
@@ -157,16 +159,14 @@ function approvalReviewText(w) {
 function hardenedReviewEvidenceNode(w) {
   const status = workflowReviewStatus(w);
   return element('section',{className:'card review-evidence'},
-    sectionHeadingNode('Case readiness','Review every item before confirming the simulation.'),
+    sectionHeadingNode('Case readiness','Review every item before confirming the action.'),
     readinessChecklistNode(w),
     reviewValidationAlert(status),
     policyLinkNode(offensePolicy(w.offense.key),'Open applicable rule'),
     reviewEvidenceSummaryNode(w),
     staffExplanationNode(w),
     dmPreviewNode(w),
-    element('div',{className:'simulation-boundary'},
-      element('strong',{text:'Simulation boundary'}),
-      element('span',{text:'Confirming this preview does not punish the player, send a DM, change Discord permissions, or delete messages.'})));
+    testEnvironmentBoundary());
 }
 
 function reviewValidationAlert(status) {
@@ -191,30 +191,37 @@ function staffExplanationNode(w) {
 }
 
 function dmPreviewNode(w) {
-  const detail = w.dm ? simulatedDmText(w) : 'No DM is selected for this simulation.';
-  return element('div',{className:'dm-preview'},element('span',{text:'DM preview'}),element('p',{text:detail}),
-    element('small',{text:'Preview only. This staging workflow does not send DMs.'}));
+  const detail = w.dm ? actionDmText(w) : 'No DM is included with this action.';
+  return element('div',{className:'dm-preview'},element('span',{text:'DM preview'}),element('p',{text:detail}));
 }
 
-function simulatedDmText(w) {
+function actionDmText(w) {
   const duration = w.duration && w.duration !== '—' ? ` for ${w.duration}` : '';
   return `Enthusia moderation: ${w.actual.action}${duration} for ${w.offense.label}. Staff explanation: ${String(w.reason || '').trim()}`;
 }
 
+function testEnvironmentBoundary() {
+  return element('div',{className:'simulation-boundary'},
+    element('strong',{text:'Testing note'}),
+    element('span',{text:'This environment currently reviews the action but does not send punishments or DMs, change Discord permissions, or delete messages.'}));
+}
+
 function readinessChecklistNode(workflow) {
-  if (!workflow?.actual) {
-    return element('div',{className:'readiness-list'},
-      readinessRow('Reason','Not started','pending'),
-      readinessRow('Evidence',state.evidence.size ? `${state.evidence.size} Discord message${state.evidence.size === 1 ? '' : 's'} selected` : 'Not selected','pending'),
-      readinessRow('Notification','Set during punishment options','pending'),
-      readinessRow('Approval','Known after an action is selected','pending'));
-  }
+  if (!workflow?.actual) return pendingReadinessChecklist();
   const status = workflowReviewStatus(workflow);
   return element('div',{className:'readiness-list'},
     readinessRow('Reason',status.reasonReady ? 'Ready' : 'Missing',status.reasonReady ? 'ready' : 'missing'),
     readinessRow('Evidence',evidenceReadinessText(workflow,status),status.evidenceReady ? 'ready' : 'missing'),
-    readinessRow('Notification',workflow.dm ? 'DM preview on · not sent' : 'No DM selected','ready'),
+    readinessRow('Notification',workflow.dm ? 'DM included' : 'No DM selected','ready'),
     readinessRow('Approval',approvalReviewText(workflow),status.approvalReady ? 'ready' : 'missing'));
+}
+
+function pendingReadinessChecklist() {
+  return element('div',{className:'readiness-list'},
+    readinessRow('Reason','Not started','pending'),
+    readinessRow('Evidence',state.evidence.size ? `${state.evidence.size} Discord message${state.evidence.size === 1 ? '' : 's'} selected` : 'Not selected','pending'),
+    readinessRow('Notification','Set during punishment options','pending'),
+    readinessRow('Approval','Known after an action is selected','pending'));
 }
 
 function evidenceReadinessText(workflow, status) {
@@ -228,15 +235,53 @@ function readinessRow(label, value, tone) {
   return element('div',{className:'readiness-row'},element('span',{text:label}),element('strong',{className:`readiness-state ${tone}`,text:value}));
 }
 
+function hardenedStaleEvidenceAlert() {
+  return element('div',{className:'alert warning'},
+    element('strong',{text:'Evidence changed after the recommendation.'}),
+    element('span',{text:'Recalculate so the final review matches the current incident.'}));
+}
+
 function hardenedReviewFooterNode(stale) {
   const status = workflowReviewStatus(state.workflow);
   const right = element('div',{className:'inline'});
   if (stale) right.append(buttonNode('Recalculate','button secondary',{recalculate:''}));
-  const confirm = buttonNode('Confirm simulation','button primary',{confirm:''});
+  const confirm = buttonNode('Confirm preview','button primary',{confirm:''});
   confirm.disabled = stale || !status.ready;
   if (confirm.disabled) confirm.setAttribute('title',stale ? 'Recalculate after evidence changes.' : status.errors.join(' '));
   right.append(confirm);
   return [buttonNode('Back','button ghost',{back:''}),right];
+}
+
+async function hardenedConfirmPreview() {
+  if (!state.session) {
+    showToast('Session unavailable. Reopen from Discord.', true);
+    return;
+  }
+  const button = $('[data-confirm]');
+  if (button) button.disabled = true;
+  try {
+    const response = await fetch('/api/simulate', simulationRequest(state.session));
+    if (!response.ok) throw new Error('Preview rejected');
+    await response.json();
+    state.workflow.step = 'complete';
+    renderWorkflow();
+    showToast('Action preview complete.');
+  } catch {
+    showToast('Action preview could not be completed. Reopen the panel from Discord if the session expired.', true);
+    if (button) button.disabled = false;
+  }
+}
+
+function hardenedRenderCompleteStep() {
+  $('#workflowTitle').textContent = 'Complete';
+  $('#workflowSteps').replaceChildren();
+  replaceChildrenOf($('#workflowBody'), element('div', {className:'completion-state'},
+    element('div', {className:'completion-icon', text:'✓', attrs:{'aria-hidden':'true'}}),
+    element('h3', {text:'Action preview complete'}),
+    element('p', {text:'The review flow completed successfully.'}),
+    element('span', {text:'No live moderation action was applied in this test environment.'})));
+  replaceChildrenOf($('#workflowFooter'), buttonNode('Done','button primary',{done:''}));
+  $('[data-done]').addEventListener('click',closeWorkflow);
 }
 
 installWorkflowOverrides();

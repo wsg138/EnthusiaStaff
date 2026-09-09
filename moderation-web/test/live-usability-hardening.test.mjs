@@ -9,20 +9,22 @@ const REVIEW = new URL('../../staff-bot/src/main/resources/moderation-preview/li
 const POLICY = new URL('../../staff-bot/src/main/resources/moderation-preview/real-policy.js', import.meta.url);
 const CSS = new URL('../../staff-bot/src/main/resources/moderation-preview/live.css', import.meta.url);
 
-test('staging UI distinguishes real reads from simulated actions everywhere staff confirms', async () => {
+test('product chrome removes staging diagnostics while final review keeps one truthful test boundary', async () => {
   const [shell, review] = await Promise.all([readFile(SHELL, 'utf8'), readFile(REVIEW, 'utf8')]);
 
-  assert.match(shell, /STAGING · REAL READS \/ SIMULATED ACTIONS/);
-  assert.match(shell, /Punishments, DMs, restrictions, and message deletion are previewed only/);
-  assert.match(shell, /Simulate punishment/);
-  assert.match(review, /Confirm simulation/);
-  assert.match(review, /does not punish the player, send a DM, change Discord permissions, or delete messages/);
+  assert.match(shell, /\.scenario-control'\)\?\.remove\(\)/);
+  assert.match(shell, /\.staging-badge'\)\?\.remove\(\)/);
+  assert.match(shell, /Issue punishment/);
+  assert.doesNotMatch(shell, /STAGING · REAL READS|Simulate punishment|Real data, simulated actions/);
+  assert.match(review, /Testing note/);
+  assert.match(review, /does not send punishments or DMs, change Discord permissions, or delete messages/);
+  assert.match(review, /Confirm preview/);
 });
 
 test('message investigation explains partial coverage and supports paging, ranges, clearing, and Discord links', async () => {
   const [shell, message] = await Promise.all([readFile(SHELL, 'utf8'), readFile(MESSAGE, 'utf8')]);
 
-  assert.match(shell, /Filter behavior', 'Loaded messages only/);
+  assert.match(shell, /Filters search', 'Loaded messages only/);
   assert.match(shell, /up to 50 target messages from at most 8 readable channels/);
   assert.match(shell, /up to 25 Discord messages at a time/);
   assert.match(shell, /four-page cap per direction/);
@@ -33,15 +35,41 @@ test('message investigation explains partial coverage and supports paging, range
   assert.match(message, /https:\/\/discord\.com\/channels\//);
 });
 
-test('message actions have explicit accessible names and keyboard menu behavior', async () => {
+test('message menus are exclusive, dismiss outside, support keyboard use, and copy message IDs', async () => {
   const source = await readFile(MESSAGE, 'utf8');
 
   assert.match(source, /aria-label':`Actions for message/);
   assert.match(source, /'aria-haspopup':'menu'/);
   assert.match(source, /role:'menuitem'/);
+  assert.match(source, /closeOpenMessageMenus\(details\)/);
+  assert.match(source, /document\.addEventListener\('pointerdown'/);
+  assert.match(source, /Copy message ID/);
+  assert.match(source, /navigator\.clipboard\?\.writeText/);
   assert.match(source, /ArrowDown/);
   assert.match(source, /ArrowUp/);
   assert.match(source, /Escape/);
+});
+
+test('whole message rows toggle selection without stealing clicks from controls', async () => {
+  const source = await readFile(MESSAGE, 'utf8');
+
+  assert.match(source, /row\.addEventListener\('click', handleMessageRowClick\)/);
+  assert.match(source, /row\.addEventListener\('keydown', handleMessageRowKeydown\)/);
+  assert.match(source, /a,button,input,summary,details/);
+  assert.match(source, /selectRange\(state\.anchor, id, checked\)/);
+  assert.match(source, /Press Space to toggle selection/);
+});
+
+test('message rows keep technical IDs in the menu and visually separate author metadata from content', async () => {
+  const [message, css] = await Promise.all([readFile(MESSAGE, 'utf8'), readFile(CSS, 'utf8')]);
+
+  const bodyStart = message.indexOf('function polishedMessageBodyNode');
+  const bodyEnd = message.indexOf('function polishedMessageMetaNode', bodyStart);
+  assert.ok(bodyStart >= 0 && bodyEnd > bodyStart);
+  assert.doesNotMatch(message.slice(bodyStart, bodyEnd), /Message ID/);
+  assert.doesNotMatch(message, /target-chip/);
+  assert.match(message, /message-author-name/);
+  assert.match(css, /\.message-meta \.message-author-name\{font-size:14px;font-weight:800/);
 });
 
 test('safe Discord renderer handles headings, inline code, and custom emoji without HTML parsing', async () => {
@@ -90,11 +118,11 @@ test('record views distinguish empty and unavailable states and clarify identity
   assert.match(source, /linked alts.*alternate Minecraft accounts/);
 });
 
-test('readability overrides increase tiny metadata sizes and muted contrast', async () => {
+test('readability overrides increase metadata sizes and muted contrast', async () => {
   const css = await readFile(CSS, 'utf8');
 
   assert.match(css, /--m:#b6c0cd/);
   assert.match(css, /\.tiny\{font-size:11px\}/);
   assert.match(css, /\.message-meta span,.message-meta time,.message-id\{font-size:11px/);
-  assert.match(css, /\.message-action-item,.punishment-scope-tab\{font-size:12px\}/);
+  assert.match(css, /\.message-action-item\{[^}]*font-size:12px/);
 });

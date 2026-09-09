@@ -8,7 +8,7 @@ import net.dv8tion.jda.api.components.actionrow.ActionRow;
 import net.dv8tion.jda.api.components.buttons.Button;
 import net.dv8tion.jda.api.entities.MessageEmbed;
 
-/** Compact Discord launch surface for the web-first staging moderation console. */
+/** Compact Discord launch surface for the web-first moderation workspace. */
 final class ModerationPreviewLauncherPresentation {
     private static final int PANEL_COLOR = 0x313338;
 
@@ -34,22 +34,20 @@ final class ModerationPreviewLauncherPresentation {
     }
 
     Rendered render(Optional<URI> launchUri, TargetSummary target) {
-        EmbedBuilder embed = new EmbedBuilder()
+        MessageEmbed embed = new EmbedBuilder()
                 .setColor(PANEL_COLOR)
-                .setTitle("Moderation preview · " + target.displayName())
-                .setDescription("Selected target: @" + target.username())
+                .setTitle("Moderation · " + target.displayName())
+                .setDescription("Review @" + target.username() + " in " + target.channelLabel())
                 .setThumbnail(target.avatarUrl())
-                .addField("Selected target", target.displayName() + " · Discord " + target.discordId(), false)
-                .addField("Investigation channel", target.channelLabel(), true)
-                .addField("Panel data", "Real reads for this selected target", true)
-                .addField("Actions", "Simulation only — no punishment, DM, restriction, or message deletion is applied.", false)
-                .setFooter("STAGING · REAL READS / SIMULATED ACTIONS");
-        return new Rendered(embed.build(), List.of(ActionRow.of(button(launchUri))));
+                .addField("Channel", target.channelLabel(), false)
+                .setFooter("Enthusia Staff · Moderation Workspace")
+                .build();
+        return new Rendered(embed, List.of(ActionRow.of(button(launchUri))));
     }
 
     private static Button button(Optional<URI> launchUri) {
         return launchUri
-                .map(uri -> Button.link(uri.toString(), "Open Moderation Panel"))
-                .orElseGet(() -> Button.secondary("preview-web-unavailable", "Panel deployment required").asDisabled());
+                .map(uri -> Button.link(uri.toString(), "Open Moderation Workspace"))
+                .orElseGet(() -> Button.secondary("preview-web-unavailable", "Workspace unavailable").asDisabled());
     }
 }
