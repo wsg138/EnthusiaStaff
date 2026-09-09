@@ -1,6 +1,5 @@
 package net.enthusia.staff.discordbot;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -54,7 +53,7 @@ class ModerationPreviewWebResourcesTest {
     }
 
     @Test
-    void pageLoadsSplitScriptsInDependencyOrderAndUsesOneStagingIndicator() throws IOException {
+    void pageLoadsSplitScriptsInDependencyOrderWithoutDiagnosticBanner() throws IOException {
         String html = resourceText("/moderation-preview/index.html");
 
         assertOrdered(html,
@@ -70,7 +69,7 @@ class ModerationPreviewWebResourcesTest {
                 "/assets/real-policy.js",
                 "/assets/live-enhancements.js");
         assertTrue(html.contains("/assets/live.css"));
-        assertEquals(1, occurrences(html, "STAGING PREVIEW"));
+        assertFalse(html.contains("STAGING PREVIEW"));
         assertTrue(html.contains("Live data"));
         assertFalse(html.contains("Sample case"));
         assertFalse(html.contains("Preview scenario"));
@@ -235,15 +234,5 @@ class ModerationPreviewWebResourcesTest {
             assertTrue(current > previous, () -> value + " must appear in dependency order");
             previous = current;
         }
-    }
-
-    private static int occurrences(String text, String value) {
-        int count = 0;
-        int position = text.indexOf(value);
-        while (position >= 0) {
-            count++;
-            position = text.indexOf(value, position + value.length());
-        }
-        return count;
     }
 }
