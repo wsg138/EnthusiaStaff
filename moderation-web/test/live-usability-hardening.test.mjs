@@ -18,7 +18,8 @@ test('product chrome removes staging diagnostics while final review keeps one tr
   assert.doesNotMatch(shell, /STAGING · REAL READS|Simulate punishment|Real data, simulated actions/);
   assert.match(review, /Testing note/);
   assert.match(review, /does not send punishments or DMs, change Discord permissions, or delete messages/);
-  assert.match(review, /Confirm preview/);
+  assert.match(review, /Confirm action/);
+  assert.doesNotMatch(review, /Confirm preview/);
 });
 
 test('message investigation explains partial coverage and supports paging, ranges, clearing, and Discord links', async () => {
@@ -88,7 +89,8 @@ test('final review requires explanation and appropriate evidence while allowing 
 
   assert.match(review, /Outside-Discord evidence reference/);
   assert.match(review, /Staff explanation/);
-  assert.match(review, /DM preview/);
+  assert.match(review, /Notification message/);
+  assert.doesNotMatch(review, /text:'DM preview'/);
   assert.match(review, /Case readiness/);
   assert.match(policy, /length >= 10/);
   assert.match(policy, /state\.evidence\.size > 0 \|\| workflowExternalEvidenceReady/);
