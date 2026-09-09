@@ -192,7 +192,7 @@ function staffExplanationNode(w) {
 
 function dmPreviewNode(w) {
   const detail = w.dm ? actionDmText(w) : 'No DM is included with this action.';
-  return element('div',{className:'dm-preview'},element('span',{text:'DM preview'}),element('p',{text:detail}));
+  return element('div',{className:'dm-preview'},element('span',{text:'Notification message'}),element('p',{text:detail}));
 }
 
 function actionDmText(w) {
@@ -245,7 +245,7 @@ function hardenedReviewFooterNode(stale) {
   const status = workflowReviewStatus(state.workflow);
   const right = element('div',{className:'inline'});
   if (stale) right.append(buttonNode('Recalculate','button secondary',{recalculate:''}));
-  const confirm = buttonNode('Confirm preview','button primary',{confirm:''});
+  const confirm = buttonNode('Confirm action','button primary',{confirm:''});
   confirm.disabled = stale || !status.ready;
   if (confirm.disabled) confirm.setAttribute('title',stale ? 'Recalculate after evidence changes.' : status.errors.join(' '));
   right.append(confirm);
@@ -261,13 +261,13 @@ async function hardenedConfirmPreview() {
   if (button) button.disabled = true;
   try {
     const response = await fetch('/api/simulate', simulationRequest(state.session));
-    if (!response.ok) throw new Error('Preview rejected');
+    if (!response.ok) throw new Error('Action rejected');
     await response.json();
     state.workflow.step = 'complete';
     renderWorkflow();
-    showToast('Action preview complete.');
+    showToast('Action review complete.');
   } catch {
-    showToast('Action preview could not be completed. Reopen the panel from Discord if the session expired.', true);
+    showToast('Action review could not be completed. Reopen the panel from Discord if the session expired.', true);
     if (button) button.disabled = false;
   }
 }
@@ -277,8 +277,8 @@ function hardenedRenderCompleteStep() {
   $('#workflowSteps').replaceChildren();
   replaceChildrenOf($('#workflowBody'), element('div', {className:'completion-state'},
     element('div', {className:'completion-icon', text:'✓', attrs:{'aria-hidden':'true'}}),
-    element('h3', {text:'Action preview complete'}),
-    element('p', {text:'The review flow completed successfully.'}),
+    element('h3', {text:'Action review complete'}),
+    element('p', {text:'Review completed. No changes were sent.'}),
     element('span', {text:'No live moderation action was applied in this test environment.'})));
   replaceChildrenOf($('#workflowFooter'), buttonNode('Done','button primary',{done:''}));
   $('[data-done]').addEventListener('click',closeWorkflow);
