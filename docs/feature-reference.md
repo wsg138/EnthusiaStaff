@@ -69,7 +69,7 @@ Staff manage reports through `/reports`. The report system is designed around co
 
 ## Cases
 
-Moderation actions can be grouped/linked to durable cases. `/case` supports case detail and recovery actions, while `/inspect` provides a player-centric entry into case-linked staff actions.
+Moderation actions can be grouped/linked to durable cases. `/case` supports case detail and recovery actions. `/inspect` shows the player's identity and provider status, then offers only the history, client-evidence, inventory, Ender chest, punishment and freeze controls that the viewer is allowed to use.
 
 Case records are intended to preserve moderation context and audit history. In the wider Enthusia design, inactive cases should auto-expire after 30 days without activity; deployment documentation should confirm that policy once the final production version is cut over.
 

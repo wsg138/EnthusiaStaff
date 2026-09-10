@@ -105,7 +105,8 @@ public final class InspectCommand implements CommandExecutor, TabCompleter {
         }
         if (arguments.length == IDENTITY_ARGUMENT_COUNT) {
             boolean canManageFreeze = CommandPermissionGate.allows(viewer::hasPermission, FREEZE_PERMISSION);
-            submitOrMessage(viewer, () -> showIdentity(viewer, arguments[0], canManageFreeze));
+            InspectActionSection.Access actions = availableActions(viewer);
+            submitOrMessage(viewer, () -> showIdentity(viewer, arguments[0], canManageFreeze, actions));
             return true;
         }
         if (arguments.length == 2
@@ -154,7 +155,12 @@ public final class InspectCommand implements CommandExecutor, TabCompleter {
         return true;
     }
 
-    private void showIdentity(Player viewer, String targetInput, boolean canManageFreeze) {
+    private void showIdentity(
+            Player viewer,
+            String targetInput,
+            boolean canManageFreeze,
+            InspectActionSection.Access actions
+    ) {
         PlayerDirectory loaded = directory.get();
         if (loaded == null) {
             message(viewer, "Player directory storage is not ready.");
@@ -175,9 +181,9 @@ public final class InspectCommand implements CommandExecutor, TabCompleter {
                     + " | UUID " + target.playerId()
                     + " | platform " + target.platform()
                     + " | server " + server
-                    + " | last seen " + target.lastSeenAt()
-                    + ". Use /inspect inventory, /inspect ender, or the case-linked economy action.";
+                    + " | last seen " + target.lastSeenAt();
             message(viewer, summary);
+            showActions(viewer, target.playerId(), actions);
             showFreeze(viewer, target.playerId(), canManageFreeze);
             showReputation(viewer, target.playerId());
             showMarket(viewer, target.playerId());
@@ -185,6 +191,19 @@ public final class InspectCommand implements CommandExecutor, TabCompleter {
             plugin.getLogger().log(java.util.logging.Level.SEVERE, "Player inspector lookup failed", exception);
             message(viewer, "Player inspector storage lookup failed.");
         }
+    }
+
+    private InspectActionSection.Access availableActions(Player viewer) {
+        Actor actor = PaperActorResolver.resolve(viewer).orElse(null);
+        boolean canPunish = actor != null
+                && (authorization.permits(actor, ModerationAction.ISSUE_POLICY_SANCTION)
+                || authorization.permits(actor, ModerationAction.REQUEST_POLICY_SANCTION));
+        return InspectActionSection.access(viewer::hasPermission, canPunish);
+    }
+
+    private void showActions(Player viewer, UUID playerId, InspectActionSection.Access access) {
+        List<Component> lines = InspectActionSection.render(playerId, access);
+        onViewer(viewer, () -> lines.forEach(viewer::sendMessage));
     }
 
     private void showFreeze(Player viewer, UUID playerId, boolean canManageFreeze) {
