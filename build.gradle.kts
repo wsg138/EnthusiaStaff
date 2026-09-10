@@ -86,6 +86,11 @@ tasks.register<JacocoReport>("jacocoAggregateReport") {
 
 tasks.register("runtimeJars") {
     group = "build"
-    description = "Builds the deployable Paper, Velocity, and staff-bot runtime jars."
-    dependsOn(":paper:shadowJar", ":velocity:shadowJar", ":staff-bot:shadowJar")
+    description = "Builds the deployable Paper, authority-bridge, Velocity, and staff-bot runtime jars."
+    dependsOn(
+        ":paper:shadowJar",
+        ":paper-authority-bridge:shadowJar",
+        ":velocity:shadowJar",
+        ":staff-bot:shadowJar"
+    )
 }

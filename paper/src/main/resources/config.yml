@@ -8,10 +8,13 @@ operational-mode: BOOTSTRAP
 # startup. Changing them requires a full server restart; /estaff reload rejects
 # the entire candidate when any of these values differ from the active snapshot.
 storage:
-  # Secrets are read from the environment and are never written into this file.
+  # Environment variables remain supported. When none of the three configured
+  # variables has a value, credentials-file is used instead. Never put secrets
+  # directly in this YAML file.
   jdbc-url-environment: ES_DATABASE_URL
   username-environment: ES_DATABASE_USER
   password-environment: ES_DATABASE_PASSWORD
+  credentials-file: plugins/EnthusiaStaff/database.properties
   maximum-pool-size: 8
   connection-timeout-millis: 5000
 

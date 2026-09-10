@@ -31,12 +31,12 @@
   },
   "vars": {
     "EXPECTED_GUILD_ID": "1410303324745371709",
-    "EXPECTED_TARGET_KEY": "sample-river-ash",
     "STAGING_LABEL": "staging"
   },
   "secrets": {
     "required": [
-      "LAUNCH_SIGNING_KEY_HEX"
+      "LAUNCH_SIGNING_KEY_HEX",
+      "READ_API_SIGNING_KEY_HEX"
     ]
   }
 }

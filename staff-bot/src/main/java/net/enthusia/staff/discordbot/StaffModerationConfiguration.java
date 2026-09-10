@@ -2,19 +2,21 @@ package net.enthusia.staff.discordbot;
 
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import net.enthusia.staff.persistence.DatabaseConfig;
 
-/** Optional environment-only configuration for D06 read-only moderation interactions. */
+/** Optional read-only moderation configuration sourced from a validated runtime map or file. */
 final class StaffModerationConfiguration {
     static final String JDBC_URL_ENV = "ENTHUSIA_STAFF_BOT_DB_JDBC_URL";
     static final String DB_USERNAME_ENV = "ENTHUSIA_STAFF_BOT_DB_USERNAME";
     static final String DB_CREDENTIAL_ENV = "ENTHUSIA_STAFF_BOT_DB_PASSWORD";
     static final String AUTHORITY_URL_ENV = "ENTHUSIA_STAFF_BOT_AUTHORITY_URL";
     static final String AUTHORITY_CREDENTIAL_ENV = "ENTHUSIA_STAFF_DISCORD_AUTHORITY_SECRET";
+    static final String AUTHORITY_TRANSPORT_ENV = "ENTHUSIA_STAFF_BOT_AUTHORITY_TRANSPORT";
     static final String COMPONENT_SIGNING_ENV = "ENTHUSIA_STAFF_BOT_COMPONENT_SECRET";
     static final String DB_POOL_SIZE_ENV = "ENTHUSIA_STAFF_BOT_DB_POOL_SIZE";
     static final String DB_TIMEOUT_MILLIS_ENV = "ENTHUSIA_STAFF_BOT_DB_TIMEOUT_MILLIS";
@@ -43,22 +45,30 @@ final class StaffModerationConfiguration {
     private final DatabaseConfig databaseConfig;
     private final URI authorityEndpoint;
     private final String authorityCredential;
+    private final AuthorityTransport authorityTransport;
     private final String componentSigningSecret;
 
     private StaffModerationConfiguration(
             DatabaseConfig database,
             URI authorityUri,
             String authoritySecret,
+            AuthorityTransport transport,
             String componentSecret
     ) {
         this.databaseConfig = Objects.requireNonNull(database, "database");
         this.authorityEndpoint = Objects.requireNonNull(authorityUri, "authorityUri");
         this.authorityCredential = cryptoSecret(authoritySecret, AUTHORITY_CREDENTIAL_ENV);
+        this.authorityTransport = Objects.requireNonNull(transport, "transport");
         this.componentSigningSecret = cryptoSecret(componentSecret, COMPONENT_SIGNING_ENV);
     }
 
     static Optional<StaffModerationConfiguration> fromSystemEnvironment() {
         return fromEnvironment(System.getenv());
+    }
+
+    static StaffModerationConfiguration fromFile(Path path) {
+        return fromEnvironment(StaffModerationConfigFile.read(path))
+                .orElseThrow(() -> new IllegalArgumentException("moderation config file is empty"));
     }
 
     static Optional<StaffModerationConfiguration> fromEnvironment(Map<String, String> values) {
@@ -85,10 +95,12 @@ final class StaffModerationConfiguration {
                 poolSize,
                 timeout
         );
+        AuthorityTransport transport = AuthorityTransport.parse(values.get(AUTHORITY_TRANSPORT_ENV));
         return Optional.of(new StaffModerationConfiguration(
                 database,
-                authorityUri(values.get(AUTHORITY_URL_ENV)),
+                authorityUri(values.get(AUTHORITY_URL_ENV), transport),
                 values.get(AUTHORITY_CREDENTIAL_ENV),
+                transport,
                 values.get(COMPONENT_SIGNING_ENV)
         ));
     }
@@ -105,20 +117,25 @@ final class StaffModerationConfiguration {
         return authorityCredential;
     }
 
+    AuthorityTransport authorityTransport() {
+        return authorityTransport;
+    }
+
     String componentSecret() {
         return componentSigningSecret;
     }
 
     @Override
     public String toString() {
-        return "StaffModerationConfiguration[authorityUri=%s, database=<redacted>, authoritySecret=<redacted>, componentSecret=<redacted>]"
-                .formatted(authorityEndpoint);
+        return "StaffModerationConfiguration[authority=<configured>, authorityTransport=%s, "
+                + "database=<redacted>, authoritySecret=<redacted>, componentSecret=<redacted>]"
+                .formatted(authorityTransport.externalName());
     }
 
-    private static URI authorityUri(String raw) {
+    private static URI authorityUri(String raw, AuthorityTransport transport) {
         URI uri = parseUri(raw);
-        if (!validAuthorityNetwork(uri) || !validAuthorityResource(uri)) {
-            throw new IllegalArgumentException("staff authority endpoint must be an explicit loopback HTTP URL");
+        if (!validAuthorityResource(uri) || !transport.validNetwork(uri)) {
+            throw new IllegalArgumentException("staff authority endpoint is invalid for its configured transport");
         }
         return uri;
     }
@@ -129,13 +146,6 @@ final class StaffModerationConfiguration {
         } catch (URISyntaxException exception) {
             throw new IllegalArgumentException("staff authority endpoint URL is invalid", exception);
         }
-    }
-
-    private static boolean validAuthorityNetwork(URI uri) {
-        return HTTP_SCHEME.equalsIgnoreCase(uri.getScheme())
-                && AUTHORITY_HOST.equals(uri.getHost())
-                && uri.getPort() >= MIN_PORT
-                && uri.getPort() <= MAX_PORT;
     }
 
     private static boolean validAuthorityResource(URI uri) {
@@ -178,5 +188,44 @@ final class StaffModerationConfiguration {
 
     private static boolean present(String value) {
         return value != null && !value.isBlank();
+    }
+
+    enum AuthorityTransport {
+        LOOPBACK("loopback"),
+        BLOOM_PRIVATE_SPLIT("bloom-private-split");
+
+        private final String externalName;
+
+        AuthorityTransport(String externalName) {
+            this.externalName = externalName;
+        }
+
+        String externalName() {
+            return externalName;
+        }
+
+        boolean validNetwork(URI uri) {
+            if (!HTTP_SCHEME.equalsIgnoreCase(uri.getScheme())
+                    || uri.getPort() < MIN_PORT
+                    || uri.getPort() > MAX_PORT
+                    || uri.getHost() == null
+                    || uri.getHost().isBlank()) {
+                return false;
+            }
+            return this != LOOPBACK || AUTHORITY_HOST.equals(uri.getHost());
+        }
+
+        static AuthorityTransport parse(String raw) {
+            if (!present(raw)) {
+                return LOOPBACK;
+            }
+            String normalized = raw.trim();
+            for (AuthorityTransport transport : values()) {
+                if (transport.externalName.equals(normalized)) {
+                    return transport;
+                }
+            }
+            throw new IllegalArgumentException(AUTHORITY_TRANSPORT_ENV + " is unsupported");
+        }
     }
 }

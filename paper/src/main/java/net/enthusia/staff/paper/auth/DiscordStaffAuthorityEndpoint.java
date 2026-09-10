@@ -6,7 +6,6 @@ import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
 import java.time.Duration;
 import java.util.Optional;
 import java.util.UUID;
@@ -15,13 +14,14 @@ import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import net.enthusia.staff.domain.auth.StaffRank;
+import net.enthusia.staff.protocol.StaffAuthorityHttpSigning;
 import net.luckperms.api.LuckPerms;
 import net.luckperms.api.LuckPermsProvider;
 import net.luckperms.api.model.user.User;
 import org.bukkit.plugin.java.JavaPlugin;
 
 /**
- * Optional loopback-only authority bridge for the isolated Discord staff bot.
+ * Optional authority bridge for the isolated Discord staff bot.
  * Rank is calculated from current LuckPerms data on every request; Discord roles are never inputs.
  */
 public final class DiscordStaffAuthorityEndpoint implements AutoCloseable {
@@ -33,30 +33,29 @@ public final class DiscordStaffAuthorityEndpoint implements AutoCloseable {
     private static final int MAX_PORT = 65_535;
     private static final int BACKLOG = 16;
     private static final int WORKER_THREADS = 2;
-    private static final int MIN_SECRET_LENGTH = 32;
     private static final Duration LOOKUP_TIMEOUT = Duration.ofSeconds(3);
     private static final Duration SHUTDOWN_TIMEOUT = Duration.ofSeconds(2);
     private static final String PATH = "/v1/staff-rank";
     private static final String GET_METHOD = "GET";
 
     private final JavaPlugin plugin;
-    private final String bearer;
     private final LuckPerms luckPerms;
     private final HttpServer server;
     private final ThreadPoolExecutor executor;
+    private final DiscordStaffAuthorityAuthenticator authenticator;
 
     private DiscordStaffAuthorityEndpoint(
             JavaPlugin plugin,
-            String credential,
-            int port,
+            DiscordStaffAuthorityConfiguration.Value configuration,
             LuckPerms luckPerms
     ) throws IOException {
         this.plugin = plugin;
-        this.bearer = "Bearer " + credential;
         this.luckPerms = luckPerms;
-        // nosemgrep -- Literal IPv4 loopback bind; this endpoint is an inbound local authority bridge only.
-        HttpServer createdServer = HttpServer.create(new InetSocketAddress("127.0.0.1", port), BACKLOG);
-        ThreadPoolExecutor createdExecutor = new ThreadPoolExecutor( // NOPMD - ownership transfers to this AutoCloseable; close() and startup rollback shut it down.
+        this.authenticator = new DiscordStaffAuthorityAuthenticator(
+                configuration.secret(), configuration.privateSplit());
+        HttpServer createdServer = HttpServer.create(
+                bindAddress(configuration.bindHost(), configuration.port()), BACKLOG);
+        ThreadPoolExecutor createdExecutor = new ThreadPoolExecutor(
                 WORKER_THREADS,
                 WORKER_THREADS,
                 0L,
@@ -82,32 +81,19 @@ public final class DiscordStaffAuthorityEndpoint implements AutoCloseable {
         if (plugin == null) {
             throw new IllegalArgumentException("plugin must be present");
         }
-        Optional<String> credential = configuredCredential(plugin);
-        Optional<Integer> port = configuredPort(plugin);
+        Optional<DiscordStaffAuthorityConfiguration.Value> configuration = configuredAuthority(plugin);
         Optional<LuckPerms> luckPerms = configuredLuckPerms(plugin);
-        if (credential.isEmpty() || port.isEmpty() || luckPerms.isEmpty()) {
+        if (configuration.isEmpty() || luckPerms.isEmpty()) {
             return Optional.empty();
         }
-        return bind(plugin, credential.orElseThrow(), port.orElseThrow(), luckPerms.orElseThrow());
+        return bind(plugin, configuration.orElseThrow(), luckPerms.orElseThrow());
     }
 
-    private static Optional<String> configuredCredential(JavaPlugin plugin) {
-        String credential = System.getenv(CREDENTIAL_ENV);
-        if (credential == null || credential.isBlank()) {
-            return Optional.empty();
-        }
-        if (credential.length() < MIN_SECRET_LENGTH) {
-            log(plugin, "discord_staff_authority_secret_too_short", null);
-            return Optional.empty();
-        }
-        return Optional.of(credential);
-    }
-
-    private static Optional<Integer> configuredPort(JavaPlugin plugin) {
+    private static Optional<DiscordStaffAuthorityConfiguration.Value> configuredAuthority(JavaPlugin plugin) {
         try {
-            return Optional.of(parsePort(System.getenv(PORT_ENV)));
+            return DiscordStaffAuthorityConfiguration.fromRuntime(plugin);
         } catch (IllegalArgumentException exception) {
-            log(plugin, "discord_staff_authority_invalid_port", exception);
+            log(plugin, "discord_staff_authority_configuration_invalid", exception);
             return Optional.empty();
         }
     }
@@ -127,12 +113,11 @@ public final class DiscordStaffAuthorityEndpoint implements AutoCloseable {
 
     private static Optional<DiscordStaffAuthorityEndpoint> bind(
             JavaPlugin plugin,
-            String credential,
-            int port,
+            DiscordStaffAuthorityConfiguration.Value configuration,
             LuckPerms luckPerms
     ) {
         try {
-            return Optional.of(new DiscordStaffAuthorityEndpoint(plugin, credential, port, luckPerms));
+            return Optional.of(new DiscordStaffAuthorityEndpoint(plugin, configuration, luckPerms));
         } catch (IOException | RuntimeException exception) {
             log(plugin, "discord_staff_authority_bind_failed", exception);
             return Optional.empty();
@@ -140,34 +125,51 @@ public final class DiscordStaffAuthorityEndpoint implements AutoCloseable {
     }
 
     private void handle(HttpExchange exchange) throws IOException {
+        DiscordStaffAuthorityAuthenticator.Result authorization = null;
         try {
             if (!GET_METHOD.equals(exchange.getRequestMethod())) {
-                respond(exchange, 405, "");
+                respond(exchange, 405, "", null);
                 return;
             }
-            if (!authorized(exchange.getRequestHeaders().getFirst("Authorization"))) {
-                respond(exchange, 401, "");
+            authorization = authenticate(exchange);
+            if (!authorization.accepted()) {
+                respond(exchange, 401, "", null);
                 return;
             }
             UUID playerId = playerId(exchange.getRequestURI().getRawQuery());
             if (playerId == null) {
-                respond(exchange, 400, "");
+                respond(exchange, 400, "", authorization);
                 return;
             }
             Optional<StaffRank> rank = resolve(playerId);
             if (rank.isEmpty()) {
-                respond(exchange, 404, "");
+                respond(exchange, 404, "", authorization);
                 return;
             }
-            respond(exchange, 200, rank.orElseThrow().name());
+            respond(exchange, 200, rank.orElseThrow().name(), authorization);
         } catch (RuntimeException exception) {
             log(plugin, "discord_staff_authority_request_failed", exception);
             if (exchange.getResponseCode() == -1) {
-                respond(exchange, 503, "");
+                respond(exchange, 503, "", authorization);
             }
         } finally {
             exchange.close();
         }
+    }
+
+    private DiscordStaffAuthorityAuthenticator.Result authenticate(HttpExchange exchange) {
+        String rawQuery = exchange.getRequestURI().getRawQuery();
+        String target = exchange.getRequestURI().getRawPath()
+                + (rawQuery == null ? "" : "?" + rawQuery);
+        return authenticator.authenticate(
+                exchange.getRemoteAddress().getAddress(),
+                exchange.getRequestMethod(),
+                target,
+                exchange.getRequestHeaders().getFirst("Authorization"),
+                exchange.getRequestHeaders().getFirst(StaffAuthorityHttpSigning.TIMESTAMP_HEADER),
+                exchange.getRequestHeaders().getFirst(StaffAuthorityHttpSigning.NONCE_HEADER),
+                exchange.getRequestHeaders().getFirst(StaffAuthorityHttpSigning.SIGNATURE_HEADER)
+        );
     }
 
     private Optional<StaffRank> resolve(UUID playerId) {
@@ -186,16 +188,6 @@ public final class DiscordStaffAuthorityEndpoint implements AutoCloseable {
         }
     }
 
-    private boolean authorized(String supplied) {
-        if (supplied == null) {
-            return false;
-        }
-        return MessageDigest.isEqual(
-                bearer.getBytes(StandardCharsets.UTF_8),
-                supplied.getBytes(StandardCharsets.UTF_8)
-        );
-    }
-
     private static UUID playerId(String rawQuery) {
         if (rawQuery == null || !rawQuery.startsWith("player=") || rawQuery.indexOf('&') >= 0) {
             return null;
@@ -207,14 +199,33 @@ public final class DiscordStaffAuthorityEndpoint implements AutoCloseable {
         }
     }
 
-    private static void respond(HttpExchange exchange, int status, String body) throws IOException {
+    private void respond(
+            HttpExchange exchange,
+            int status,
+            String body,
+            DiscordStaffAuthorityAuthenticator.Result authorization
+    ) throws IOException {
         byte[] encoded = body.getBytes(StandardCharsets.UTF_8);
         exchange.getResponseHeaders().set("Content-Type", "text/plain; charset=utf-8");
         exchange.getResponseHeaders().set("Cache-Control", "no-store");
+        if (authorization != null) {
+            String signature = authenticator.responseSignature(authorization, status, body);
+            if (signature != null) {
+                exchange.getResponseHeaders().set(StaffAuthorityHttpSigning.RESPONSE_SIGNATURE_HEADER, signature);
+            }
+        }
         exchange.sendResponseHeaders(status, encoded.length);
         if (encoded.length > 0) {
             exchange.getResponseBody().write(encoded);
         }
+    }
+
+    static InetSocketAddress bindAddress(String host, int port) {
+        return switch (host) {
+            case "127.0.0.1" -> new InetSocketAddress("127.0.0.1", port);
+            case "0.0.0.0" -> new InetSocketAddress("0.0.0.0", port);
+            default -> throw new IllegalArgumentException("authority bind host is unsupported");
+        };
     }
 
     static int parsePort(String raw) {
