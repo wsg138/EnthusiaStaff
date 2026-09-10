@@ -140,7 +140,7 @@ Remaining work includes richer operational acceptance, key rotation and producti
 
 ## Inspector and client evidence
 
-The inspector shows identity, server, platform, provider and freeze information. It also offers shortcuts to punishment history, client evidence, inventory, Ender chest and the punishment workflow when the viewer has permission for those commands. Provider evidence is context, not automatic proof of cheating.
+The inspector shows identity, server, platform, active reports, provider and freeze information. It also offers shortcuts to report details, punishment history, client evidence, inventory, Ender chest and the punishment workflow when the viewer has permission for those commands. Provider evidence is context, not automatic proof of cheating.
 
 The inspector shows the player's current durable freeze state and reason. Staff with freeze permission also receive direct Freeze or Unfreeze command suggestions; viewing the inspector never changes freeze state.
 
