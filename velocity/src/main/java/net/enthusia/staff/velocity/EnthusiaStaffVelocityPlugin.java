@@ -1332,7 +1332,9 @@ public final class EnthusiaStaffVelocityPlugin {
         try {
             return Optional.of(links.currentLinkedMinecraftAccounts(playerId, MAX_LINKED_ACCOUNTS_SHOWN));
         } catch (RuntimeException exception) {
-            logger.warn("Current linked-account view is unavailable ({})", exception.getClass().getSimpleName());
+            if (logger.isWarnEnabled()) {
+                logger.warn("Current linked-account view is unavailable ({})", exception.getClass().getSimpleName());
+            }
             return Optional.empty();
         }
     }
