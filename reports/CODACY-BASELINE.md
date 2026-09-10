@@ -1065,3 +1065,23 @@ follow-up review approval is claimed.
    behavior.
 5. Run all available local analyzers, the clean build, artifact inspection, and
    remote Codacy reanalysis before declaring the root checkpoint clean.
+
+## 2026-09-10 current main and inspector checkpoint
+
+`main` is currently `bdc1c4524134a02c511e972ffe3f98b69236d9b9`, the merge
+commit for PR #196. The recent focused checkpoint sequence merged PR #191
+(freeze status/listing), PR #192 (direct fake-base routing), PR #193 (inspector
+freeze context), PR #195 (inspector action shortcuts), and PR #196 (active
+report context).
+
+PR #196 code head `2a48af72161493ecc985b101cde98c293de2d413` passed Codacy
+Static Code Analysis with zero introduced issues and zero potential issues. Its
+Codacy coverage gates, Java 21 hosted build/test/aggregate-coverage workflow,
+Sentinel exact-artifact workflow, and Wiki validation all passed. CodeRabbit
+reported a passing check but skipped automated review because the repository
+requires manual invocation; this is not claimed as an independent review.
+
+The hosted/current CLI response used for that PR does not provide a reliable
+repository-wide active-total or letter-grade snapshot at this revision. The
+319-warning PR #126 inventory remains historical context only; no current
+repository grade or total is claimed here.

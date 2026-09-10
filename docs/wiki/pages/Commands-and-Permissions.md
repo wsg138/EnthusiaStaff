@@ -103,10 +103,11 @@ The proxy currently registers:
 /alt
 ```
 
-`/alts` and `/alt` being registered does not mean the complete confidence,
-exception, inheritance, GUI, alert and key-rotation workflow is finished. See
-[[Alt Investigations]] and
-[[Staff Tools, Investigations, and Player-State Safety]].
+`/alts` includes a separate current verified-link section before the network relationship
+evidence. It shows other currently linked Minecraft accounts only; it does not reveal Discord
+IDs or historical links. `/alts` and `/alt` being registered does not mean the complete
+confidence, exception, inheritance, GUI, alert and key-rotation workflow is finished. See
+[[Alt Investigations]] and [[Staff Tools, Investigations, and Player-State Safety]].
 
 ## Permission nodes
 

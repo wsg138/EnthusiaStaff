@@ -1,6 +1,6 @@
 # EnthusiaStaff workspace manifest
 
-Last updated: 2026-08-11 (`America/Indiana/Indianapolis`)
+Last updated: 2026-09-10 (`America/Indiana/Indianapolis`)
 
 This manifest records project orchestration and authority boundaries. It does not authorize deployment, production data, LiteBans cutover, or punishment authority.
 
@@ -10,14 +10,14 @@ This manifest records project orchestration and authority boundaries. It does no
 | --- | --- |
 | Repository | `wsg138/EnthusiaStaff` |
 | Setup baseline | `af9aa3d0d54afc84de7c90cb3fdc5ce3cdf9118a` |
-| Current `main` | `efcd2275b9825a059f3ff2e1b0974be97f4e1191` (PR #126 merge commit; second parent `446f59f1d260e6ace8bb6b0e842a209638aefdba`) |
+| Current `main` | `bdc1c4524134a02c511e972ffe3f98b69236d9b9` (PR #196 merge commit; second parent `2a48af72161493ecc985b101cde98c293de2d413`) |
 | Canonical package registry | `ai-agents/work-packages/PACKAGE-REGISTRY.md` |
 | Canonical component registry | `ai-agents/work-packages/COMPONENT-REGISTRY.md` |
 | Intended state | `ROOT PLUGIN REMEDIATION AND FUNCTIONAL COMPLETION` |
-| Latest completed checkpoints | PR #124 Velocity runtime boundaries, PR #125 website appeal transactions, PR #126 economy recovery and confiscation coordination |
-| Active implementation | `section/plugin`: exact-sanction transaction and link-validation boundaries |
-| Codacy checkpoint | 319 active warnings on PR #126 code head `446f59f1d260e6ace8bb6b0e842a209638aefdba`, down from 334 on its base; merge commit `efcd2275b9825a059f3ff2e1b0974be97f4e1191`; grade is not asserted because the current CLI response does not expose it |
-| Migration boundary | V18; V1-V18 immutable |
+| Latest completed checkpoints | PR #191 freeze status/listing, PR #192 direct fake-base routing, PR #193 inspector freeze context, PR #195 inspector shortcuts, and PR #196 active report context |
+| Active implementation | `section/plugin`: bounded verified linked-Minecraft-account context for `/alts` (unmerged) |
+| Codacy checkpoint | PR #196 code head `2a48af72161493ecc985b101cde98c293de2d413` has zero introduced issues and zero potential issues; hosted static analysis and coverage gates passed. Repository-wide grade/totals have not been remeasured at this main revision and are not asserted. |
+| Migration boundary | V20; V1-V20 immutable |
 | Production authority | LiteBans remains authoritative |
 
 ## Repository model
