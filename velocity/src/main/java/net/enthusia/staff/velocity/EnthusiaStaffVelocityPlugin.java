@@ -54,12 +54,14 @@ import net.enthusia.staff.domain.alt.AltRelationshipSummary;
 import net.enthusia.staff.domain.application.SanctionChangeService;
 import net.enthusia.staff.domain.auth.AuthorizationPolicy;
 import net.enthusia.staff.domain.auth.DefaultAuthorizationPolicy;
+import net.enthusia.staff.domain.moderation.CurrentLinkedMinecraftAccount;
 import net.enthusia.staff.domain.migration.CutoverAssessment;
 import net.enthusia.staff.domain.migration.CutoverEvidence;
 import net.enthusia.staff.domain.migration.DecisionComparison;
 import net.enthusia.staff.domain.migration.FounderOverride;
 import net.enthusia.staff.domain.migration.MigrationMode;
 import net.enthusia.staff.domain.player.PlayerPlatform;
+import net.enthusia.staff.domain.ports.AccountLinkingStore;
 import net.enthusia.staff.domain.ports.DiscordOutboxStore;
 import net.enthusia.staff.domain.ports.EconomyJournalStore;
 import net.enthusia.staff.domain.ports.FreezeStore;
@@ -106,6 +108,7 @@ public final class EnthusiaStaffVelocityPlugin {
     private static final int CONFIRMATION_INDEX = 4;
     private static final int SINGLE_OPERATION_ARGUMENT = 1;
     private static final int MINIMUM_ALT_ARGUMENTS = 4;
+    private static final int MAX_LINKED_ACCOUNTS_SHOWN = 20;
     private static final int WEBSITE_STATUS_ARGUMENTS = 2;
     private static final int WEBSITE_SHOW_ARGUMENTS = 4;
     private static final int WEBSITE_MUTATION_ARGUMENTS = 5;
@@ -142,6 +145,7 @@ public final class EnthusiaStaffVelocityPlugin {
     private volatile InventoryJournalStore inventoryJournalStore;
     private volatile EconomyJournalStore economyJournalStore;
     private volatile NetworkIdentityStore networkIdentityStore;
+    private volatile AccountLinkingStore accountLinkingStore;
     private volatile NetworkIdentityProtector networkIdentityProtector;
     private volatile boolean activeAuthorityObserved;
     private volatile ScheduledTask operationalStateTask;
@@ -401,7 +405,8 @@ public final class EnthusiaStaffVelocityPlugin {
                 runtime.freezeStore(),
                 runtime.staffSessionStore(),
                 runtime.inventoryJournalStore(),
-                runtime.economyJournalStore()
+                runtime.economyJournalStore(),
+                runtime.accountLinkingStore()
         );
     }
 
@@ -428,6 +433,7 @@ public final class EnthusiaStaffVelocityPlugin {
         staffSessionStore = bindings.sessions();
         inventoryJournalStore = bindings.inventories();
         economyJournalStore = bindings.economies();
+        accountLinkingStore = bindings.accountLinks();
         reloadCoordinator = new VelocityConfigurationReloadCoordinator(
                 loaded,
                 () -> VelocityConfiguration.load(dataDirectory),
@@ -510,6 +516,7 @@ public final class EnthusiaStaffVelocityPlugin {
         inventoryJournalStore = null;
         economyJournalStore = null;
         networkIdentityStore = null;
+        accountLinkingStore = null;
         networkIdentityProtector = null;
         websiteModerationStore = null;
     }
@@ -1300,21 +1307,35 @@ public final class EnthusiaStaffVelocityPlugin {
                     source.sendMessage(Component.text("That player has never joined the network."));
                     return;
                 }
+                Optional<List<CurrentLinkedMinecraftAccount>> linkedAccounts = currentLinkedAccounts(target.playerId());
                 List<AltRelationshipSummary> relationships = store.relationships(target.playerId());
-                source.sendMessage(Component.text("Alt relationships for "
-                        + target.currentUsername().orElse(target.playerId().toString()) + ": " + relationships.size()));
-                for (AltRelationshipSummary relationship : relationships) {
-                    source.sendMessage(Component.text("- " + relationship.otherPlayerId() + " "
-                            + relationship.state() + " confidence="
-                            + Math.round(relationship.confidence() * 100.0) + "%"
-                            + (relationship.lockedUntilReopened() ? " locked" : "")));
-                }
+                AltRelationshipPresentation.render(
+                        target,
+                        linkedAccounts.orElseGet(List::of),
+                        linkedAccounts.isPresent(),
+                        relationships
+                ).forEach(source::sendMessage);
             });
         }
 
         @Override
         public boolean hasPermission(Invocation invocation) {
             return invocation.source().hasPermission("enthusiastaff.alts.view");
+        }
+    }
+
+    private Optional<List<CurrentLinkedMinecraftAccount>> currentLinkedAccounts(UUID playerId) {
+        AccountLinkingStore links = accountLinkingStore;
+        if (links == null) {
+            return Optional.empty();
+        }
+        try {
+            return Optional.of(links.currentLinkedMinecraftAccounts(playerId, MAX_LINKED_ACCOUNTS_SHOWN));
+        } catch (RuntimeException exception) {
+            if (logger.isWarnEnabled()) {
+                logger.warn("Current linked-account view is unavailable ({})", exception.getClass().getSimpleName());
+            }
+            return Optional.empty();
         }
     }
 
@@ -2146,7 +2167,8 @@ public final class EnthusiaStaffVelocityPlugin {
             FreezeStore freezes,
             StaffSessionStore sessions,
             InventoryJournalStore inventories,
-            EconomyJournalStore economies
+            EconomyJournalStore economies,
+            AccountLinkingStore accountLinks
     ) {
     }
 
