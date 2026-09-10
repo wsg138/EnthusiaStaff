@@ -76,7 +76,7 @@ Exact-sanction commands never accept an ambiguous multi-sanction case. Database 
 | `/staffchat` | `/staffchat` | Toggle the configured RoseChat staff channel | `enthusiastaff.staffchat` |
 | `/invsee` | `/invsee <player\|uuid>` | View/edit inventory as authorized | `enthusiastaff.inventory.view` |
 | `/endersee` | `/endersee <player\|uuid>` | View/edit Ender chest as authorized | `enthusiastaff.inventory.view` |
-| `/inspect` | `/inspect <player>` | Player inspector and case-linked actions | `enthusiastaff.inspect` |
+| `/inspect` | `/inspect <player>` | Player inspector with freeze status/controls and case-linked actions | `enthusiastaff.inspect`; freeze actions also require `enthusiastaff.freeze` |
 | `/case` | `/case restoreitems <case-id>` | Founder-only confiscated-item restoration; case viewing is documented above | `enthusiastaff.case.restoreitems` |
 | `/case` | `/case recoveritems <case-id>` | Founder-only authorization to requeue one coherent quarantined confiscation/restoration operation; the command itself does not edit inventory | `enthusiastaff.owner.recovery` plus Founder service authorization |
 
