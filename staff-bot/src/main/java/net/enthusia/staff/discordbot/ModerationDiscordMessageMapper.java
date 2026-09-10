@@ -9,8 +9,6 @@ import net.dv8tion.jda.api.entities.Message;
 import net.dv8tion.jda.api.entities.User;
 import net.dv8tion.jda.api.entities.channel.concrete.Category;
 import net.dv8tion.jda.api.entities.channel.concrete.TextChannel;
-import net.dv8tion.jda.api.exceptions.ErrorResponseException;
-import net.dv8tion.jda.api.requests.ErrorResponse;
 
 final class ModerationDiscordMessageMapper {
     ModerationReadApiModel.MessagePageDto page(
@@ -41,10 +39,22 @@ final class ModerationDiscordMessageMapper {
                 Optional.ofNullable(message.getTimeEdited()).map(value -> value.toInstant()),
                 display.isEmpty() ? Optional.empty() : Optional.of(display),
                 Optional.ofNullable(message.getMessageReference()).map(reference -> reference.getMessageId()),
+                replyPreview(context.guild(), message),
                 message.getAttachments().stream().map(attachment -> new ModerationReadApiModel.AttachmentDto(
                         attachment.getId(), attachment.getFileName(), Optional.ofNullable(attachment.getContentType()),
                         attachment.getSize(), attachment.getUrl())).toList(),
                 isTargetAuthor(context, message), false);
+    }
+
+    static Optional<ModerationReadApiModel.ReplyPreviewDto> replyPreview(Guild guild, Message message) {
+        Message referenced = message.getReferencedMessage();
+        if (referenced == null) {
+            return Optional.empty();
+        }
+        String display = referenced.getContentDisplay();
+        return Optional.of(new ModerationReadApiModel.ReplyPreviewDto(
+                referenced.getId(), author(guild, referenced.getAuthor()),
+                display.isEmpty() ? Optional.empty() : Optional.of(display)));
     }
 
     private static boolean isTargetAuthor(ModerationReadContext context, Message message) {
@@ -52,7 +62,7 @@ final class ModerationDiscordMessageMapper {
         return targetUser.isPresent() && message.getAuthor().getIdLong() == targetUser.orElseThrow();
     }
 
-    private ModerationReadApiModel.AuthorDto author(Guild guild, User user) {
+    private static ModerationReadApiModel.AuthorDto author(Guild guild, User user) {
         Member member = memberIfPresent(guild, user.getIdLong());
         return new ModerationReadApiModel.AuthorDto(
                 user.getId(), user.getName(), Optional.ofNullable(user.getGlobalName()),
@@ -61,14 +71,7 @@ final class ModerationDiscordMessageMapper {
     }
 
     static Member memberIfPresent(Guild guild, long userId) {
-        try {
-            return guild.retrieveMemberById(userId).complete();
-        } catch (ErrorResponseException exception) {
-            if (exception.getErrorResponse() == ErrorResponse.UNKNOWN_MEMBER) {
-                return null;
-            }
-            throw exception;
-        }
+        return guild.getMemberById(userId);
     }
 
     static String displayName(User user) {

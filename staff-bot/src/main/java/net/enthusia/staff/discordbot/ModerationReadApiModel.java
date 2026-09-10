@@ -227,6 +227,7 @@ final class ModerationReadApiModel {
             Optional<Instant> editedAt,
             Optional<String> content,
             Optional<String> replyToMessageId,
+            Optional<ReplyPreviewDto> replyPreview,
             List<AttachmentDto> attachments,
             boolean targetAuthor,
             boolean deletedKnown
@@ -236,7 +237,14 @@ final class ModerationReadApiModel {
             editedAt = editedAt == null ? Optional.empty() : editedAt;
             content = content == null ? Optional.empty() : content;
             replyToMessageId = replyToMessageId == null ? Optional.empty() : replyToMessageId;
+            replyPreview = replyPreview == null ? Optional.empty() : replyPreview;
             attachments = List.copyOf(attachments);
+        }
+    }
+
+    record ReplyPreviewDto(String messageId, AuthorDto author, Optional<String> content) {
+        ReplyPreviewDto {
+            content = content == null ? Optional.empty() : content;
         }
     }
 

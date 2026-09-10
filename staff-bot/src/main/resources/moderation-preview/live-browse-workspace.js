@@ -362,3 +362,172 @@ window.contextAlertNode = browseContextAlertNode;
 window.messageCoverageNode = browseMessageCoverageNode;
 window.renderSelectionBar = browseRenderSelectionBar;
 window.simulationRequest = browseSimulationRequest;
+
+const browseReplyBaseReadJsonResponse = window.readJsonResponse;
+const browseReplyBaseMessageNode = window.messageNode;
+const browseReplyBaseBindMessageEvents = window.bindMessageEvents;
+const browseReplyPreviews = new Map();
+
+async function browseReplyReadJsonResponse(response) {
+  const payload = await browseReplyBaseReadJsonResponse(response);
+  rememberBrowseReplyPayload(payload);
+  return payload;
+}
+
+function rememberBrowseReplyPayload(payload) {
+  const page = Array.isArray(payload?.messages) ? payload : payload?.messages;
+  if (!page || !Array.isArray(page.messages)) return;
+  for (const message of page.messages) rememberBrowseReplyPreview(message);
+}
+
+function rememberBrowseReplyPreview(message) {
+  if (!message?.id) return;
+  if (!message.replyPreview) {
+    browseReplyPreviews.delete(message.id);
+    return;
+  }
+  const author = message.replyPreview.author ?? {};
+  browseReplyPreviews.set(message.id, {
+    id:String(message.replyPreview.messageId || message.replyToMessageId || ''),
+    author:browseReplyAuthor(author),
+    text:typeof message.replyPreview.content === 'string' ? message.replyPreview.content : ''
+  });
+}
+
+function browseReplyAuthor(author) {
+  for (const value of [author.displayName, author.serverName, author.globalName, author.username]) {
+    if (typeof value === 'string' && value.length > 0) return value;
+  }
+  return 'Unknown author';
+}
+
+function browseReplyMessageNode(message) {
+  const row = browseReplyBaseMessageNode(message);
+  decorateBrowseReply(row,message);
+  decorateBrowseAuthorTargets(row,message);
+  return row;
+}
+
+function decorateBrowseReply(row,message) {
+  if (!message.replyTo) return;
+  const reference = row.querySelector('.reply-reference');
+  if (!reference) return;
+  const preview = browseReplyPreviewFor(message);
+  reference.replaceChildren(...browseReplyChildren(preview));
+  reference.classList.add('reply-preview');
+  reference.dataset.replyJump = message.replyTo;
+  reference.dataset.replyChannel = message.channelId;
+  reference.setAttribute('role','button');
+  reference.setAttribute('tabindex','0');
+  reference.setAttribute('aria-label',preview ? `Open replied-to message from ${preview.author}` : 'Open replied-to message');
+  reference.setAttribute('title','Open replied-to message');
+}
+
+function browseReplyPreviewFor(message) {
+  const remembered = browseReplyPreviews.get(message.id);
+  if (remembered) return remembered;
+  const loaded = baseMessages.find((candidate) => candidate.id === message.replyTo);
+  return loaded ? {id:loaded.id,author:loaded.author,text:loaded.text} : null;
+}
+
+function browseReplyChildren(preview) {
+  if (!preview) return [element('span',{className:'reply-preview-text',text:'Referenced message'})];
+  const text = preview.text || 'Attachment or text unavailable';
+  return [
+    element('strong',{className:'reply-preview-author',text:`${preview.author} — `}),
+    element('span',{className:'reply-preview-text',text})
+  ];
+}
+
+function decorateBrowseAuthorTargets(row,message) {
+  if (liveModeration.targetSelected || !message.authorId) return;
+  const targets = [row.querySelector('.message-avatar'),row.querySelector('.message-author-name')].filter(Boolean);
+  for (const target of targets) {
+    target.dataset.doubleSelectPlayer = message.authorId;
+    target.setAttribute('role','button');
+    target.setAttribute('tabindex','0');
+    target.setAttribute('title','Double-click to select this player');
+    target.style.cursor = 'pointer';
+    if (target.getAttribute('aria-hidden') === 'true') target.removeAttribute('aria-hidden');
+  }
+}
+
+function browseReplyBindMessageEvents() {
+  browseReplyBaseBindMessageEvents();
+  $$('[data-reply-jump]').forEach(bindBrowseReplyTarget);
+  $$('[data-double-select-player]').forEach(bindBrowseAuthorTarget);
+}
+
+function bindBrowseReplyTarget(target) {
+  target.addEventListener('click',handleBrowseReplyClick);
+  target.addEventListener('keydown',handleBrowseReplyKey);
+}
+
+function handleBrowseReplyClick(event) {
+  event.preventDefault();
+  event.stopPropagation();
+  void jumpToBrowseReply(event.currentTarget);
+}
+
+function handleBrowseReplyKey(event) {
+  if (!['Enter',' '].includes(event.key)) return;
+  event.preventDefault();
+  event.stopPropagation();
+  void jumpToBrowseReply(event.currentTarget);
+}
+
+function bindBrowseAuthorTarget(target) {
+  target.addEventListener('click',(event) => event.stopPropagation());
+  target.addEventListener('dblclick',handleBrowseAuthorDoubleClick);
+  target.addEventListener('keydown',handleBrowseAuthorKey);
+}
+
+function handleBrowseAuthorDoubleClick(event) {
+  event.preventDefault();
+  event.stopPropagation();
+  void selectBrowseAuthorTarget(event.currentTarget);
+}
+
+function handleBrowseAuthorKey(event) {
+  if (event.key !== 'Enter') return;
+  event.preventDefault();
+  event.stopPropagation();
+  void selectBrowseAuthorTarget(event.currentTarget);
+}
+
+async function selectBrowseAuthorTarget(target) {
+  if (liveModeration.targetSelected) return;
+  const userId = target.dataset.doubleSelectPlayer;
+  if (userId) await selectBrowsePlayer(userId);
+}
+
+async function jumpToBrowseReply(target) {
+  const messageId = target.dataset.replyJump;
+  if (scrollToBrowseMessage(messageId)) return;
+  const channelId = target.dataset.replyChannel;
+  if (!messageId || !channelId) return;
+  showToast('Loading replied-to message…');
+  try {
+    const around = await fetchBrowseContextAround(channelId,messageId);
+    const trigger = around.find((message) => message.id === messageId);
+    if (!trigger) throw new Error('The replied-to message was not returned by Discord.');
+    const context = surroundingConversation(trigger,around);
+    showContextWorkspace(trigger,context,rememberMessageView());
+    scrollToBrowseMessage(messageId);
+  } catch (error) {
+    showToast(error.message || 'The replied-to message is temporarily unavailable.',true);
+  }
+}
+
+function scrollToBrowseMessage(messageId) {
+  const row = [...document.querySelectorAll('.message-row[data-message-id]')]
+    .find((candidate) => candidate.dataset.messageId === messageId);
+  if (!row) return false;
+  row.scrollIntoView({behavior:'smooth',block:'center'});
+  row.focus({preventScroll:true});
+  return true;
+}
+
+window.readJsonResponse = browseReplyReadJsonResponse;
+window.messageNode = browseReplyMessageNode;
+window.bindMessageEvents = browseReplyBindMessageEvents;
