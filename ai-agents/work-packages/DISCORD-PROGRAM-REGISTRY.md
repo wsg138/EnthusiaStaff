@@ -14,7 +14,7 @@ Dedicated Discord-program workers must reconcile the global `PACKAGE-REGISTRY.md
 | `ES-D04` | Account linking and DiscordSRV migration | `COMPLETE` | 133 | `ES-D01`–`ES-D03` |
 | `ES-D05` | Staff bot runtime foundation | `COMPLETE` | 134 | `ES-D01`–`ES-D03` |
 | `ES-D06` | Read-only staff moderation UX | `COMPLETE` | 135 | `ES-D04`, `ES-D05` |
-| `ES-D16` | Moderation console real-data read bridge | `BLOCKED` | 135.5 | `ES-D03`, `ES-D05`, `ES-D06`, merged PR #186 |
+| `ES-D16` | Moderation console real-data read bridge | `COMPLETE` | 135.5 | `ES-D03`, `ES-D05`, `ES-D06`, merged PR #186 |
 | `ES-D07` | Discord punishment enforcement | `READY` | 136 | `ES-D03`, `ES-D05`, `ES-D06` |
 | `ES-D08` | Cross-platform moderation integration | `PLANNED` | 137 | `ES-D07` |
 | `ES-D09` | Discord evidence, cases, notes and linked-alt alerts | `PLANNED` | 138 | `ES-D06`, `ES-D07` |
@@ -27,7 +27,7 @@ Dedicated Discord-program workers must reconcile the global `PACKAGE-REGISTRY.md
 
 ## Active packages
 
-ES-D16 is `BLOCKED` / `PARKED_BLOCKED` after full implementation and exact-head validation on frozen executable head `f2b901f731558224e2df6ee1d8ed38d06063a150`. PR #187 remains open/non-draft/unmerged and mergeable. Exact Coverage, web validation, StaffBot artifact/configuration-cache, Sentinel, Codacy, protected staging, and Pi supersession all pass; all visible inline review threads are resolved. The historical Paper migration/classloader blocker is resolved and superseded. The sole remaining condition is owner-operated **StaffBot-only** live acceptance on authorized non-production Bloom staging using artifact `10105100891`; Paper does not need replacement or restart. No authenticated Bloom/Pterodactyl mutation surface is available to the worker. D07 and D13 remain dependency-complete `READY`; while this external condition is unchanged, future Discord workers skip D16. Once sanitized StaffBot live acceptance is supplied, D16 becomes the higher-priority `ACTIONABLE_CONTINUATION`.
+No Discord package is activated by this terminal publication. ES-D16 is `COMPLETE` after owner UI acceptance, current-main reconciliation, exact-head hosted/static/protected-staging validation, normal PR #187 merge, exact containment, and branch cleanup. D07 and D13 remain dependency-complete `READY`; a future Discord worker must reconcile live GitHub and select according to the normal routing rules. This D16 worker does not begin either package.
 
 ## ES-D04 terminal record
 
@@ -57,7 +57,7 @@ For exact final head `da0371681f5a44c72a614c8d6637b85d9080291d`:
 
 PR #151 merged normally, never squash/rebase/force/auto-merge. Merge commit `4e7621b7a42e812cc7bf806a029f37a753cdd9f3` has parents pre-merge `main` `36af6fc85052cbc38bb9840899b415fc53503af3` and exact feature head `da0371681f5a44c72a614c8d6637b85d9080291d`.
 
-The merge and feature trees are identical at `63c2a0924d38ac9ce8e0a208f0eb79a671af37fc`. Post-merge compare is one commit ahead and zero behind, so the validated product is exactly contained. `V20__discord_account_linking.sql` is canonical on `main`, and the D04 branch is absent.
+The merge and feature trees are identical at `63c2a0924d38ac9ce8e0a208f0eb79a671af37fc`. Post-merge compare is one commit ahead, zero behind, so the validated product is exactly contained. `V20__discord_account_linking.sql` is canonical on `main`, and the D04 branch is absent.
 
 ## ES-D05 terminal record
 
@@ -133,21 +133,21 @@ The implementation branch is absent. The temporary diagnostic-only workflow was 
 
 No production deployment/configuration/data access, moderation mutation, secret access, LiteBans authority change, issue #43 acceptance, or cutover occurred.
 
-## ES-D16 parked record
+## ES-D16 terminal record
 
-Status: `BLOCKED` / `PARKED_BLOCKED`.
+Status: `COMPLETE`.
 
-PR #187 remains open/non-draft/unmerged and mergeable on `package/es-d16-moderation-read-bridge`; frozen reviewed executable head `f2b901f731558224e2df6ee1d8ed38d06063a150`. Canonical handoff: `ai-agents/reports/package-handoffs/2026-09-09-es-d16-staffbot-live-acceptance-blocked.md`.
+PR #187 merged normally as `848aba7ac6a115dc3723c034b281917d63f1f1bd` from exact reviewed/validated pre-merge head `aa32355a0d378ca4c6b03041b80d005df73f6fcd`. Frozen reconciled executable head was `8811294c17532825aeae1d271fe2a3163042ba9c`; owner-accepted UI candidate was `3a79000eaa139ec107118d3fdb05b29e5e52097c`. Canonical terminal handoff: `ai-agents/reports/package-handoffs/2026-09-13-es-d16-complete.md`.
 
-All exact-head repository gates pass. Coverage `34354348704` / job `102475585346`, Moderation Web Validation `34354348838`, Staff Bot PR Artifact `34354348823`, Staff Bot Configuration Cache `34354348705`, Sentinel Restart Artifact `34354348794`, Moderation Web Staging Deploy `34354344064`, Pi Staging Supersession `34354346426`, and Codacy Static Code Analysis `102475650447` are all successful on the frozen head; Codacy reports zero annotations / zero new valid findings. All visible PR #187 inline review threads are resolved. `main` `423e72c764c9acfce6bb80918f07367fea2cfccf` is fully contained and the branch is zero behind.
+The owner accepted the UI (`The UI looks good.`). Final exact-head Coverage `34766165648` / job `103747432981`, Moderation Web Validation `34766165643`, Staff Bot PR Artifact `34766165650`, Staff Bot Configuration Cache `34766165642`, Sentinel Restart Artifact `34766165664`, Pi Staging Supersession `34766164245`, protected Moderation Web Staging Deploy `34766163166`, Codacy Static `103747616510`, Codacy Diff Coverage `103748653603`, and Codacy Coverage Variation `103748653922` all passed. Codacy static reported zero annotations / zero new valid findings. All three substantive CodeRabbit correctness threads are resolved; the final automatic CodeRabbit skip is retained as non-pass evidence rather than called a pass.
 
-Exact owner-test StaffBot artifact: id `10105100891`, ZIP digest `sha256:15704b385d674e5c1536f1c78b8d4cc0d24094580aee74eb1211e76bd71b33ea`, contained JAR SHA-256 `a496a340e3bfbe76c7db2da146f021b7b9dce4e3275b2ae55bb42fc1eb5474e0`. Independent inspection confirms exact source provenance, expected runtime/JDA classes, required moderation assets, no sample identity, no old visible staging/preview copy, exactly one truthful Testing note, and simulation-only browser mutation.
+PR #187 merge commit parents are pre-merge `main` `06519c0c5acdcf6276278204201f3c8b20767805` and exact feature head `aa32355a0d378ca4c6b03041b80d005df73f6fcd`. Merge and feature trees are identical at `c5c02a86d4db3861b4d9b7abfc2636323e9d9c12`. Post-merge comparison proves exact containment (`ahead 0 / behind 1 / files []` when comparing merge to feature). The temporary implementation branch is absent after merge.
 
-The previous Paper migration/classloader blocker is resolved and superseded. Current blocker is owner-operated **StaffBot-only live acceptance**. Exact unblock: replace only Bloom `EnthusiaStaff-StaffBot.jar` with artifact `10105100891`, restart StaffBot only with existing runtime files/flags, do not replace or restart Paper, open a fresh Discord-generated moderation link from the investigated channel, and verify sanitized real identity, channel-scoped messages, avatar/action/context UX, workflow resume, Discord-vs-In-game offense split, product language, and the non-destructive boundary. Do not merge PR #187 until that passes.
+D16 remains read-only/simulation-only and did not authorize or perform destructive moderation, message deletion, production Discord configuration/data changes, LiteBans mutation/cutover, or issue #43 acceptance.
 
 ## Latest completion
 
-`ES-D06 — Read-only staff moderation UX` remains the latest completed Discord package. D16 is parked only on owner-operated StaffBot live acceptance; its exact repository and protected staging gates pass. D07 and D13 remain dependency-complete `READY`. This D16 worker does not begin either ready package.
+`ES-D16 — Moderation console real-data read bridge` is the latest completed Discord package. D07 and D13 remain dependency-complete `READY`. This D16 worker does not begin either ready package.
 
 ## Selection
 
