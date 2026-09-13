@@ -1,6 +1,6 @@
 # Package registry
 
-Last updated: 2026-09-09
+Last updated: 2026-09-13
 
 Live GitHub overrides stale text. Detailed historical evidence remains in package files and canonical handoffs; this registry is the current routing authority.
 
@@ -32,9 +32,9 @@ The later live Sentinel restart attempts remain explicit non-passing diagnostic 
 
 ### Dedicated Discord program checkpoint
 
-`ES-D16 — Moderation console real-data read bridge` is `BLOCKED` / `PARKED_BLOCKED` in the dedicated Discord lane. PR #187 remains open/non-draft/unmerged and mergeable. Frozen executable head `f2b901f731558224e2df6ee1d8ed38d06063a150` has complete exact-head repository validation: Coverage `34354348704` / job `102475585346`, web validation `34354348838`, StaffBot artifact/configuration-cache `34354348823`/`34354348705`, Sentinel `34354348794`, protected staging `34354344064`, Pi supersession `34354346426`, and Codacy static check `102475650447` all pass; Codacy reports zero annotations / zero new valid findings and all visible PR #187 inline review threads are resolved. Exact owner-test StaffBot artifact id `10105100891` has ZIP digest `sha256:15704b385d674e5c1536f1c78b8d4cc0d24094580aee74eb1211e76bd71b33ea`; contained JAR SHA-256 `a496a340e3bfbe76c7db2da146f021b7b9dce4e3275b2ae55bb42fc1eb5474e0`. Independent inspection confirms exact source provenance, required runtime/assets, no sample identity, no old visible staging/preview copy, one truthful Testing note, and simulation-only browser mutation. The historical Paper migration/classloader blocker is resolved and superseded. Current blocker is owner-operated **StaffBot-only** live acceptance: replace only the Bloom StaffBot JAR with artifact `10105100891`, restart StaffBot only with existing runtime files/flags, do not replace/restart Paper, and verify sanitized real identity/channel/context/workflow/offense-split/product-language behavior. This parked Discord package does not preempt unrelated dependency-complete universal work.
+`ES-D16 — Moderation console real-data read bridge` is `COMPLETE`. Owner UI acceptance passed; current-main reconciliation produced normal two-parent executable commit `8811294c17532825aeae1d271fe2a3163042ba9c`; final reviewed/validated pre-merge head `aa32355a0d378ca4c6b03041b80d005df73f6fcd` passed Coverage `34766165648`, web validation `34766165643`, StaffBot artifact/configuration-cache `34766165650`/`34766165642`, Sentinel `34766165664`, Pi supersession `34766164245`, protected staging `34766163166`, Codacy static `103747616510`, diff coverage `103748653603`, and coverage variation `103748653922`. Codacy static reported zero annotations / zero new valid findings; all three substantive CodeRabbit correctness threads are resolved and the final automatic CodeRabbit skip remains explicit non-pass diagnostic history. PR #187 merged normally as `848aba7ac6a115dc3723c034b281917d63f1f1bd`; merge and feature trees are identical at `c5c02a86d4db3861b4d9b7abfc2636323e9d9c12`; post-merge comparison proves exact containment and no file delta. The temporary implementation branch is absent. D07 and D13 remain `READY`; this worker does not start them.
 
-Canonical D16 blocked handoff: `ai-agents/reports/package-handoffs/2026-09-09-es-d16-staffbot-live-acceptance-blocked.md`.
+Canonical D16 terminal handoff: `ai-agents/reports/package-handoffs/2026-09-13-es-d16-complete.md`.
 
 ## Canonical package index
 
@@ -172,4 +172,4 @@ Canonical D16 blocked handoff: `ai-agents/reports/package-handoffs/2026-09-09-es
 
 ## Next sequential action
 
-This X01 worker stops with ES-X01 truthfully `BLOCKED` / `PARKED_BLOCKED` after publishing the changed blocker. Do not activate another universal package in this run. X03 remains independently parked on D04 serialization, so `ES-V02` and `ES-V03` remain dependency-blocked; `ES-A01` and `ES-QA01` remain downstream/deferred. A future universal package worker must reconcile live GitHub and this registry again; X01 becomes actionable only when the verified redistribution/aggregate-publication blocker is durably removed, while X03 becomes actionable when D04's V20/shared-file work has durably serialized.
+This D16 worker stops after terminal publication with ES-D16 truthfully `COMPLETE`. It does not activate another package. In the dedicated Discord lane, D07 and D13 remain dependency-complete `READY` for a future worker after fresh live reconciliation. In the universal lane, X03 remains an independent `ACTIONABLE_CONTINUATION`; X01 remains `BLOCKED` / `PARKED_BLOCKED`; downstream V02/V03/A01/QA01 remain gated as recorded above.
