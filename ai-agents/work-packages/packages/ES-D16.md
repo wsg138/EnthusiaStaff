@@ -1,63 +1,80 @@
 # ES-D16 — Moderation console real-data read bridge
 
-Status: `BLOCKED` / `PARKED_BLOCKED`. Priority: 135.5. Depends on `ES-D03`, `ES-D05`, `ES-D06`, and merged web-first moderation foundation PR #186. Internal package.
+Status: `MERGE_PENDING`
+Priority: 135.5
+Implementation PR: #187
+Branch: `package/es-d16-moderation-read-bridge`
+Frozen reconciled executable head: `8811294c17532825aeae1d271fe2a3163042ba9c`
+Owner-accepted D16 UI candidate: `3a79000eaa139ec107118d3fdb05b29e5e52097c`
+Canonical checkpoint handoff: `ai-agents/reports/package-handoffs/2026-09-13-es-d16-merge-pending.md`
 
-Run ref: `ES-D16-20260831-real-data-read-bridge`.
-Implementation PR: #187, open/unmerged on `package/es-d16-moderation-read-bridge`.
-Frozen executable candidate: `83bc4e102b85b9db904e9df4e7f956896fa938bf`.
-Validated branch head: `587ea47f6e30aa468021497af6bed77d97c2975a`; exact compare from the executable candidate changes only `moderation-web/README.md`.
+## Scope
 
-## Objective
-Connect the owner-approved Cloudflare moderation console to real, read-only Enthusia Discord/Minecraft/moderation data while preserving simulation-only punishment/deletion behavior and the existing D03 authority model.
+ES-D16 extends the completed D05/D06 Discord moderation foundation with the real-data browser/Worker/StaffBot read bridge and the bounded transition support needed to exercise that bridge safely. It does not grant destructive moderation, message deletion, LiteBans cutover, production Discord configuration changes, or issue #43 acceptance.
 
-## Owner production-acceptance authorization
-The owner authorized the dedicated live Paper `paper-authority-bridge` instead of deploying the full `EnthusiaStaff-Paper.jar`. After live D16 reads exposed an empty EnthusiaStaff MariaDB, the owner further authorized that temporary bridge to apply the repository's existing Flyway migrations to that owner-configured database and gather bounded transition observations, especially current/cached Minecraft identity and existing DiscordSRV links.
+## Implemented product state
 
-The exception remains narrow: DiscordSRV is read-only, LiteBans remains authoritative and untouched, ports `8771` and `8766` remain non-public, and no warn/mute/kick/ban/restrict/freeze/inventory/economy/reputation/automod/message-deletion or other player-facing moderation mutation is authorized. Production-derived private values, player data, credentials, raw messages, or reconstructable evidence must not be copied into GitHub, ChatGPT, CI artifacts, or public logs.
+The D16 product delivers:
 
-## Delivered implementation
-PR #187 provides the real-data read bridge, loopback-only Staff Bot read API, signed and replay-resistant Worker/session/direct-read path, explicit response allowlists, D03/D06 authorization, bounded JDA message reads, private Paper authority bridge, and simulation-only destructive controls.
+- signed, session-bound browser/Worker/StaffBot reads with explicit protected-route dispatch and fail-closed authorization;
+- `/moderate-preview` with optional player context, channel/player switching, real Discord message/context/reply/attachment presentation, and real structured moderation-history/account reads;
+- bounded Discord REST reads, server-side actor/guild/target binding, rate limiting, replay resistance, private/no-store responses, and a fixed private Bloom read origin;
+- a Message Content entitlement fence with no unnecessary Gateway intents;
+- independent evidence, violating-message, and future-delete-message selection;
+- explicit public response allowlists and neutral loading/empty/error states;
+- simulation/test-only destructive review. D16 does not send punishments or DMs, mutate Discord permissions, delete messages, mutate punishment/case/note storage, enforce on Minecraft, change LiteBans authority, or perform production cutover.
 
-The temporary transition collector is opt-in through runtime-only `collector.properties`. It opens the narrow write-capable `TransitionDataRuntime`, applies repository migrations, records bounded player observations, and imports eligible DiscordSRV snapshot links through existing idempotency/conflict semantics. DiscordSRV mutators are never called, LiteBans is not ingested, overlapping passes are skipped, snapshot/cached-player work is bounded, and logs contain aggregate counts/failure classes only. The separate Staff Bot remains JDBC read-only and never runs Flyway.
+## Owner UI acceptance — PASS
 
-## Live acceptance findings and repair
-A real Discord-generated preview reached the private Staff Bot API but returned allowlisted `503 source_unavailable`. Bloom then recorded MariaDB 1146/42S02 for missing moderation tables, proving the browser/Worker/session/proof/CORS/tunnel/read-API path reached Bloom while the authoritative EnthusiaStaff database had not been initialized.
+The owner reviewed the current moderation UI and stated: `The UI looks good.`
 
-The first owner-authorized transition-collector start connected to MariaDB successfully, but Paper logged `Successfully validated 0 migrations` and `No migrations found`, created only `flyway_schema_history`, and treated the empty schema as current. The shaded bridge JAR did contain the migrations; Flyway was scanning Paper's host thread-context classloader instead of the plugin's owning loader.
+That acceptance is bound to D16 executable candidate `3a79000eaa139ec107118d3fdb05b29e5e52097c`. Live GitHub provenance confirmed that the four commits from that candidate through documentation checkpoint `a0bec2d4071ee46c8f55bea1ade7cb03cd021960` changed only `ai-agents` Markdown/process records. The subsequent required moving-main merge preserved all D16 product paths from that accepted candidate; the additional runtime changes came only from already-current `main` and therefore require fresh automated exact-head validation, not a repeat of the same owner visual approval.
 
-Frozen executable candidate `83bc4e102b85b9db904e9df4e7f956896fa938bf` repairs that Paper-only discovery defect: `TransitionDataRuntime` deliberately gives Flyway its owning classloader, verifies required V1/V19/V20 resources are visible, and fails closed otherwise. Tests emulate a host context classloader that cannot see plugin resources. Clean-database MariaDB/Testcontainers integration coverage proves migration/import/restart behavior. The narrow PMD `UseProperClassLoader` suppression is individually documented because the owning plugin loader is the required behavior for this confirmed Paper boundary.
+No signed launch material, credentials, private message bodies, moderation records, backend signatures, or secrets are recorded as acceptance evidence.
 
-## Exact-head validation — PASS
-Exact branch head `587ea47f6e30aa468021497af6bed77d97c2975a` is documentation-only after executable candidate `83bc4e102b85b9db904e9df4e7f956896fa938bf` and passed the applicable full gates:
+## Moving-main reconciliation — COMPLETE
 
-- Coverage/full Java 21 `33846514820` / job `100939581796`: PASS; clean build/integration tests; 27 provider API source types / zero runtime leaks; JaCoCo 51.97% lines / 42.27% branches / 54.27% instructions; artifact `9927145819`, digest `sha256:ef4a707b496a61d466af78909333fb7234b54419e062164ffb17dca6e153ba0a`.
-- Moderation Web Staging Deploy `33846511302`: PASS, including permanent Worker deployment, fixed private tunnel/DNS, signed launch/session proof, exact staging-origin CORS, synthetic unauthorized 403, direct-read replay rejection, and one-time launch replay rejection without querying real player/message data.
-- Moderation Web Validation `33846514771`: PASS.
-- Staff Bot Configuration Cache `33846514753`: PASS.
-- Staff Bot PR Artifact `33846514759`: PASS.
-- Sentinel Restart Artifact `33846514754`: PASS.
-- Codacy Static Code Analysis: PASS, zero annotations/new valid findings.
-- Manual final-delta review: no new valid blocker; all historical correctness threads resolved.
+Current `main` at reconciliation was `06519c0c5acdcf6276278204201f3c8b20767805`. It was merged normally into the D16 branch with two-parent merge commit `8811294c17532825aeae1d271fe2a3163042ba9c`:
 
-Exact authority-bridge artifact from `33846514754`:
-- artifact `9926742858`, `enthusiastaff-authority-bridge`;
-- ZIP digest `sha256:79a561c98ed05298f571cd9b214157bde3390b0fcf66af83ea7db14ead66deca`;
-- source marker `587ea47f6e30aa468021497af6bed77d97c2975a`;
-- contained `EnthusiaStaff-AuthorityBridge.jar` SHA-256 `af0e39fa63b84a397efa28fce0160008d4d65562ddb9c0461d00f9d3b5fb5a80`;
-- independent archive inspection confirms repository migrations V1 through V20 under `db/migration/`.
+1. prior D16 checkpoint `a0bec2d4071ee46c8f55bea1ade7cb03cd021960`;
+2. current `main` `06519c0c5acdcf6276278204201f3c8b20767805`.
 
-Historical failed/cancelled/superseded runs remain non-passing history and are not relabeled.
+The live common-base comparison found 29 changed `main` paths and no exact file-path or Flyway migration collision with D16. The merge overlaid exactly those current-main blobs and no others. No rebase, squash, force push, or concurrent-package takeover occurred.
 
-## Current blocker and exact unblock
-All safe repository work is complete for this checkpoint. The remaining action requires the owner-operated live Paper process; this worker has no authenticated Bloom mutation surface.
+## Reconciled executable-head validation
 
-The owner must perform one controlled Paper restart after replacing only `plugins/EnthusiaStaff-AuthorityBridge.jar` with the exact artifact above. Existing `plugins/EnthusiaStaffAuthorityBridge/authority.properties` and the already-created `collector.properties` stay unchanged; ports `8771` and `8766` stay without public Bloom allocations. Do not hot-reload the plugin.
+Exact reconciled executable head: `8811294c17532825aeae1d271fe2a3163042ba9c`.
 
-Successful unblock evidence is sanitized startup output showing Flyway discovers/applies the repository migrations rather than `0 migrations`, followed by transition collector startup and an aggregate collector pass. The MariaDB 11.8 newer-than-verified Flyway warning is informational unless a migration actually fails. Do not expose the JDBC URL, credentials, secrets, raw player rows, or private messages.
+Already terminal green on that exact head at this checkpoint:
 
-## Remaining acceptance after restart
-After schema/transition data is available, open a fresh Discord-generated moderation preview and complete sanitized D16 acceptance for real linked identity and target data, sanction/history semantics, bounded readable Discord messages, actor/guild/target/session binding, unauthorized denial, replay rejection, truthful outage behavior, and zero destructive mutation/deletion. Then reconcile moving `main`, rerun any invalidated exact-head gates, update canonical records, merge PR #187 normally, prove containment/cleanup, publish `COMPLETE`, and stop without starting another package.
+- Moderation Web Validation run `34765815458`: **SUCCESS**.
+- Staff Bot PR Artifact run `34765815488`: **SUCCESS**; exact-head artifact `10320286377`, digest `sha256:9a92c853ffee5b13889dd03742e494326c6eaaa95ba0447325b6985d91d35a9e`.
+- Staff Bot Configuration Cache run `34765815539`: **SUCCESS**.
+- Sentinel Restart Artifact run `34765815467`: **SUCCESS**.
+- Pi Staging Supersession run `34765813881`: **SUCCESS**.
+- Codacy Static Code Analysis check `103746859043`: **SUCCESS**, zero annotations / zero new valid findings.
 
-ES-D13 PR #178 and ES-X03 PR #139 remain separate and untouched. Do not begin ES-D07 as part of this worker.
+Coverage run `34765815457` was still executing when this checkpoint was prepared and is explicitly **not** counted as a pass here. CodeRabbit's automatic status on the merge head reported that manual review was required, so it is also **not** counted as terminal review evidence. Protected Moderation Web Staging Deploy must be refreshed for the final pre-merge head.
 
-Canonical blocked handoff: `ai-agents/reports/package-handoffs/2026-09-04-es-d16-paper-migration-classloader-blocked.md`.
+## Remaining terminal work
+
+There is no remaining owner/live-UI blocker. The package is `MERGE_PENDING` while the same worker finishes the repository gates and normal merge:
+
+1. freeze the final documentation-only pre-merge head without changing D16 runtime bytes;
+2. require terminal Java 21 Coverage/build/tests and runtime-JAR inspection;
+3. require Staff Bot executable-JAR, Configuration Cache, Moderation Web Validation, Sentinel, and Pi supersession evidence;
+4. require protected Cloudflare staging deploy and its fixed private read transport checks on the final head;
+5. require Codacy static analysis plus diff-coverage/coverage-variation checks;
+6. request and receive a real CodeRabbit exact-head re-review; do not count an inappropriate automatic skip;
+7. prove no unresolved valid review threads remain;
+8. re-read `main` immediately before merge and reconcile again if it moved;
+9. update PR #187 to terminal truth and merge it with GitHub's normal merge method using the exact expected head;
+10. prove post-merge containment/health, clean safe temporary state, publish the `COMPLETE` handoff/status, and stop without starting ES-D07.
+
+## Concurrency / exclusions
+
+- ES-D13 PR #178 and ES-X03 PR #139 remain separate and untouched.
+- ES-D07 is not started by this worker.
+- Website/competition/wiki/provider/hosting/Market work is not absorbed.
+- LiteBans remains authoritative and untouched.
+- No production deployment/configuration/data access, destructive moderation, message deletion, issue #43 acceptance, or cutover is authorized by this package.

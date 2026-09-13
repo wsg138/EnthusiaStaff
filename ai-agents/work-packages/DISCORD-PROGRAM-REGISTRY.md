@@ -27,7 +27,7 @@ Dedicated Discord-program workers must reconcile the global `PACKAGE-REGISTRY.md
 
 ## Active packages
 
-ES-D16 is `BLOCKED` / `PARKED_BLOCKED` after full implementation, exact-head repository validation, and successful protected Cloudflare staging on `066b97f4344ab83d3e226b3f4ff3ab614dee6430`. PR #187 remains open/draft/unmerged because final sanitized live acceptance requires owner-operated deployment to authorized non-production Bloom staging, and no authenticated Bloom/DuckPanel mutation surface is available to the worker. D07 and D13 remain dependency-complete `READY`; while this external condition is unchanged, future Discord workers skip D16. Once Bloom staging is deployed, D16 becomes the higher-priority `ACTIONABLE_CONTINUATION`.
+ES-D16 is `BLOCKED` / `PARKED_BLOCKED` after full implementation and exact-head validation on frozen executable head `f2b901f731558224e2df6ee1d8ed38d06063a150`. PR #187 remains open/non-draft/unmerged and mergeable. Exact Coverage, web validation, StaffBot artifact/configuration-cache, Sentinel, Codacy, protected staging, and Pi supersession all pass; all visible inline review threads are resolved. The historical Paper migration/classloader blocker is resolved and superseded. The sole remaining condition is owner-operated **StaffBot-only** live acceptance on authorized non-production Bloom staging using artifact `10105100891`; Paper does not need replacement or restart. No authenticated Bloom/Pterodactyl mutation surface is available to the worker. D07 and D13 remain dependency-complete `READY`; while this external condition is unchanged, future Discord workers skip D16. Once sanitized StaffBot live acceptance is supplied, D16 becomes the higher-priority `ACTIONABLE_CONTINUATION`.
 
 ## ES-D04 terminal record
 
@@ -137,15 +137,17 @@ No production deployment/configuration/data access, moderation mutation, secret 
 
 Status: `BLOCKED` / `PARKED_BLOCKED`.
 
-PR #187 remains open/draft/unmerged on `package/es-d16-moderation-read-bridge`; frozen reviewed executable head `066b97f4344ab83d3e226b3f4ff3ab614dee6430`. Canonical handoff: `ai-agents/reports/package-handoffs/2026-09-02-es-d16-bloom-live-acceptance-blocked.md`.
+PR #187 remains open/non-draft/unmerged and mergeable on `package/es-d16-moderation-read-bridge`; frozen reviewed executable head `f2b901f731558224e2df6ee1d8ed38d06063a150`. Canonical handoff: `ai-agents/reports/package-handoffs/2026-09-09-es-d16-staffbot-live-acceptance-blocked.md`.
 
-All exact-head repository gates pass. Protected Cloudflare staging run `33688133318` / job `100440387112` also passes on `066b97f4344ab83d3e226b3f4ff3ab614dee6430`: fixed tunnel/DNS, 14 web tests/Wrangler, Worker `5fb4931b-65a7-4df7-9444-ad354323e228`, private-origin/session/replay checks, and simulation-only mode. Historical HTTP-403 staging is non-passing history only. Message Content entitlement is verified present without subscribing to that Gateway intent.
+All exact-head repository gates pass. Coverage `34354348704` / job `102475585346`, Moderation Web Validation `34354348838`, Staff Bot PR Artifact `34354348823`, Staff Bot Configuration Cache `34354348705`, Sentinel Restart Artifact `34354348794`, Moderation Web Staging Deploy `34354344064`, Pi Staging Supersession `34354346426`, and Codacy Static Code Analysis `102475650447` are all successful on the frozen head; Codacy reports zero annotations / zero new valid findings. All visible PR #187 inline review threads are resolved. `main` `423e72c764c9acfce6bb80918f07367fea2cfccf` is fully contained and the branch is zero behind.
 
-Current blocker is owner-operated Bloom staging deployment/live acceptance. Exact unblock: deploy the exact validated Staff Bot/Paper artifacts and runtime-only database/private-authority/tunnel files to authorized non-production Bloom staging, keep 8766/8771 non-public, start Paper then Staff Bot, and prove sanitized private-authority plus bounded real D06/Discord reads. Do not merge PR #187 until that passes.
+Exact owner-test StaffBot artifact: id `10105100891`, ZIP digest `sha256:15704b385d674e5c1536f1c78b8d4cc0d24094580aee74eb1211e76bd71b33ea`, contained JAR SHA-256 `a496a340e3bfbe76c7db2da146f021b7b9dce4e3275b2ae55bb42fc1eb5474e0`. Independent inspection confirms exact source provenance, expected runtime/JDA classes, required moderation assets, no sample identity, no old visible staging/preview copy, exactly one truthful Testing note, and simulation-only browser mutation.
+
+The previous Paper migration/classloader blocker is resolved and superseded. Current blocker is owner-operated **StaffBot-only live acceptance**. Exact unblock: replace only Bloom `EnthusiaStaff-StaffBot.jar` with artifact `10105100891`, restart StaffBot only with existing runtime files/flags, do not replace or restart Paper, open a fresh Discord-generated moderation link from the investigated channel, and verify sanitized real identity, channel-scoped messages, avatar/action/context UX, workflow resume, Discord-vs-In-game offense split, product language, and the non-destructive boundary. Do not merge PR #187 until that passes.
 
 ## Latest completion
 
-`ES-D06 — Read-only staff moderation UX` remains the latest completed Discord package. D16 is parked only on owner-operated Bloom staging deployment/live acceptance; protected Cloudflare staging now passes. D07 and D13 remain dependency-complete `READY`. This D16 worker does not begin either ready package.
+`ES-D06 — Read-only staff moderation UX` remains the latest completed Discord package. D16 is parked only on owner-operated StaffBot live acceptance; its exact repository and protected staging gates pass. D07 and D13 remain dependency-complete `READY`. This D16 worker does not begin either ready package.
 
 ## Selection
 

@@ -36,21 +36,34 @@ jobs:
           distribution: temurin
           java-version: "21"
 
-      - name: Build the deployable Paper plugin
+      - name: Build deployable Paper artifacts
         shell: bash
         run: |
           set -Eeuo pipefail
           chmod +x ./gradlew
-          ./gradlew :paper:shadowJar --no-daemon --no-build-cache --no-configuration-cache --console=plain
+          ./gradlew :paper:shadowJar :paper-authority-bridge:shadowJar --no-daemon --no-build-cache --no-configuration-cache --console=plain
           runtime_jar="$(find paper/build/libs -maxdepth 1 -type f -name 'EnthusiaStaff-Paper-*.jar' ! -name '*-sources.jar' ! -name '*-javadoc.jar' -print -quit)"
+          bridge_jar="$(find paper-authority-bridge/build/libs -maxdepth 1 -type f -name 'EnthusiaStaff-AuthorityBridge-*.jar' ! -name '*-sources.jar' ! -name '*-javadoc.jar' -print -quit)"
           [[ -n "$runtime_jar" && -f "$runtime_jar" ]] || { echo 'Expected Paper runtime JAR was not produced.' >&2; exit 1; }
-          mkdir -p sentinel-artifact
+          [[ -n "$bridge_jar" && -f "$bridge_jar" ]] || { echo 'Expected authority bridge JAR was not produced.' >&2; exit 1; }
+          mkdir -p sentinel-artifact authority-bridge-artifact
           cp -- "$runtime_jar" sentinel-artifact/EnthusiaStaff-Paper.jar
+          cp -- "$bridge_jar" authority-bridge-artifact/EnthusiaStaff-AuthorityBridge.jar
+          sha256sum authority-bridge-artifact/EnthusiaStaff-AuthorityBridge.jar > authority-bridge-artifact/EnthusiaStaff-AuthorityBridge.jar.sha256
+          printf '%s\n' '${{ github.event.pull_request.head.sha }}' > authority-bridge-artifact/source.txt
 
       - name: Publish the exact Sentinel artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: enthusiastaff-sentinel-paper
           path: sentinel-artifact/EnthusiaStaff-Paper.jar
+          if-no-files-found: error
+          retention-days: 2
+
+      - name: Publish the exact authority bridge artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: enthusiastaff-authority-bridge
+          path: authority-bridge-artifact/
           if-no-files-found: error
           retention-days: 2
