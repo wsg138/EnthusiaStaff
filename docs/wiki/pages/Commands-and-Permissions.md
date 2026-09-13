@@ -76,7 +76,7 @@ Exact-sanction commands never accept an ambiguous multi-sanction case. Database 
 | `/staffchat` | `/staffchat` | Toggle the configured RoseChat staff channel | `enthusiastaff.staffchat` |
 | `/invsee` | `/invsee <player\|uuid>` | View/edit inventory as authorized | `enthusiastaff.inventory.view` |
 | `/endersee` | `/endersee <player\|uuid>` | View/edit Ender chest as authorized | `enthusiastaff.inventory.view` |
-| `/inspect` | `/inspect <player>` | Player inspector and case-linked actions | `enthusiastaff.inspect` |
+| `/inspect` | `/inspect <player>` | Player inspector with active reports, freeze status and authorized shortcuts to investigation tools | `enthusiastaff.inspect`; report details and each shortcut also require their normal command permissions |
 | `/case` | `/case restoreitems <case-id>` | Founder-only confiscated-item restoration; case viewing is documented above | `enthusiastaff.case.restoreitems` |
 | `/case` | `/case recoveritems <case-id>` | Founder-only authorization to requeue one coherent quarantined confiscation/restoration operation; the command itself does not edit inventory | `enthusiastaff.owner.recovery` plus Founder service authorization |
 
@@ -103,10 +103,11 @@ The proxy currently registers:
 /alt
 ```
 
-`/alts` and `/alt` being registered does not mean the complete confidence,
-exception, inheritance, GUI, alert and key-rotation workflow is finished. See
-[[Alt Investigations]] and
-[[Staff Tools, Investigations, and Player-State Safety]].
+`/alts` includes a separate current verified-link section before the network relationship
+evidence. It shows other currently linked Minecraft accounts only; it does not reveal Discord
+IDs or historical links. `/alts` and `/alt` being registered does not mean the complete
+confidence, exception, inheritance, GUI, alert and key-rotation workflow is finished. See
+[[Alt Investigations]] and [[Staff Tools, Investigations, and Player-State Safety]].
 
 ## Permission nodes
 

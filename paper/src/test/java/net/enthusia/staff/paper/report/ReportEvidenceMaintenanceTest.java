@@ -92,6 +92,11 @@ final class ReportEvidenceMaintenanceTest {
         }
 
         @Override
+        public List<ReportSummary> listActiveForTarget(UUID targetId, int limit) {
+            return List.of();
+        }
+
+        @Override
         public Optional<ReportDetails> details(UUID reportId) {
             return Optional.empty();
         }

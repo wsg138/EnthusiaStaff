@@ -20,7 +20,9 @@ import net.enthusia.staff.domain.auth.ModerationAction;
 import net.enthusia.staff.domain.player.PlayerIdentity;
 import net.enthusia.staff.domain.player.PlayerPresence;
 import net.enthusia.staff.domain.ports.CaseLookup;
+import net.enthusia.staff.domain.ports.FreezeStore;
 import net.enthusia.staff.domain.ports.PlayerDirectory;
+import net.enthusia.staff.domain.ports.ReportStore;
 import net.enthusia.staff.domain.sanction.SanctionType;
 import net.enthusia.staff.paper.auth.PaperActorResolver;
 import net.enthusia.staff.paper.economy.EconomyCoordinator;
@@ -41,6 +43,7 @@ public final class InspectCommand implements CommandExecutor, TabCompleter {
     private static final long MINIMUM_CONFISCATION_AMOUNT = 1L;
     private static final String INSPECT_PERMISSION = "enthusiastaff.inspect";
     private static final String INVENTORY_VIEW_PERMISSION = "enthusiastaff.inventory.view";
+    private static final String FREEZE_PERMISSION = "enthusiastaff.freeze";
     private static final String ECONOMY_CONFISCATION_PERMISSION = "enthusiastaff.confiscate.economy";
     private static final String ECONOMY_SUBCOMMAND = "economy";
     private static final String ENDER_SUBCOMMAND = "ender";
@@ -51,6 +54,8 @@ public final class InspectCommand implements CommandExecutor, TabCompleter {
     private final Clock clock;
     private final Supplier<PlayerDirectory> directory;
     private final Supplier<CaseLookup> cases;
+    private final InspectFreezeSection freeze;
+    private final InspectReportSection reports;
     private final Supplier<EconomyCoordinator> economy;
     private final Supplier<ConfiscationCoordinator> confiscation;
     private final InventoryCoordinator inventories;
@@ -64,6 +69,8 @@ public final class InspectCommand implements CommandExecutor, TabCompleter {
             Clock clock,
             Supplier<PlayerDirectory> directory,
             Supplier<CaseLookup> cases,
+            Supplier<FreezeStore> freezes,
+            Supplier<ReportStore> reports,
             Supplier<EconomyCoordinator> economy,
             Supplier<ConfiscationCoordinator> confiscation,
             InventoryCoordinator inventories,
@@ -76,6 +83,8 @@ public final class InspectCommand implements CommandExecutor, TabCompleter {
         this.clock = java.util.Objects.requireNonNull(clock, "clock");
         this.directory = java.util.Objects.requireNonNull(directory, "directory");
         this.cases = java.util.Objects.requireNonNull(cases, "cases");
+        this.freeze = new InspectFreezeSection(clock, freezes, plugin.getLogger());
+        this.reports = new InspectReportSection(reports, plugin.getLogger());
         this.economy = java.util.Objects.requireNonNull(economy, "economy");
         this.confiscation = java.util.Objects.requireNonNull(confiscation, "confiscation");
         this.inventories = java.util.Objects.requireNonNull(inventories, "inventories");
@@ -99,7 +108,19 @@ public final class InspectCommand implements CommandExecutor, TabCompleter {
             return true;
         }
         if (arguments.length == IDENTITY_ARGUMENT_COUNT) {
-            submitOrMessage(viewer, () -> showIdentity(viewer, arguments[0]));
+            boolean canManageFreeze = CommandPermissionGate.allows(viewer::hasPermission, FREEZE_PERMISSION);
+            boolean canManageReports = CommandPermissionGate.allows(
+                    viewer::hasPermission,
+                    ReportsCommand.MANAGE_PERMISSION
+            );
+            InspectActionSection.Access actions = availableActions(viewer);
+            submitOrMessage(viewer, () -> showIdentity(
+                    viewer,
+                    arguments[0],
+                    canManageFreeze,
+                    canManageReports,
+                    actions
+            ));
             return true;
         }
         if (arguments.length == 2
@@ -148,7 +169,13 @@ public final class InspectCommand implements CommandExecutor, TabCompleter {
         return true;
     }
 
-    private void showIdentity(Player viewer, String targetInput) {
+    private void showIdentity(
+            Player viewer,
+            String targetInput,
+            boolean canManageFreeze,
+            boolean canManageReports,
+            InspectActionSection.Access actions
+    ) {
         PlayerDirectory loaded = directory.get();
         if (loaded == null) {
             message(viewer, "Player directory storage is not ready.");
@@ -169,15 +196,40 @@ public final class InspectCommand implements CommandExecutor, TabCompleter {
                     + " | UUID " + target.playerId()
                     + " | platform " + target.platform()
                     + " | server " + server
-                    + " | last seen " + target.lastSeenAt()
-                    + ". Use /inspect inventory, /inspect ender, or the case-linked economy action.";
+                    + " | last seen " + target.lastSeenAt();
             message(viewer, summary);
+            showActions(viewer, target.playerId(), actions);
+            showReports(viewer, target.playerId(), canManageReports);
+            showFreeze(viewer, target.playerId(), canManageFreeze);
             showReputation(viewer, target.playerId());
             showMarket(viewer, target.playerId());
         } catch (RuntimeException exception) {
             plugin.getLogger().log(java.util.logging.Level.SEVERE, "Player inspector lookup failed", exception);
             message(viewer, "Player inspector storage lookup failed.");
         }
+    }
+
+    private InspectActionSection.Access availableActions(Player viewer) {
+        Actor actor = PaperActorResolver.resolve(viewer).orElse(null);
+        boolean canPunish = actor != null
+                && (authorization.permits(actor, ModerationAction.ISSUE_POLICY_SANCTION)
+                || authorization.permits(actor, ModerationAction.REQUEST_POLICY_SANCTION));
+        return InspectActionSection.access(viewer::hasPermission, canPunish);
+    }
+
+    private void showActions(Player viewer, UUID playerId, InspectActionSection.Access access) {
+        List<Component> lines = InspectActionSection.render(playerId, access);
+        onViewer(viewer, () -> lines.forEach(viewer::sendMessage));
+    }
+
+    private void showReports(Player viewer, UUID playerId, boolean canManage) {
+        List<Component> lines = reports.render(playerId, canManage);
+        onViewer(viewer, () -> lines.forEach(viewer::sendMessage));
+    }
+
+    private void showFreeze(Player viewer, UUID playerId, boolean canManageFreeze) {
+        List<Component> lines = freeze.render(playerId, canManageFreeze);
+        onViewer(viewer, () -> lines.forEach(viewer::sendMessage));
     }
 
     private void showReputation(Player viewer, UUID playerId) {

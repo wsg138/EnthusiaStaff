@@ -56,6 +56,11 @@ public final class JdbcReportStore implements ReportStore {
     }
 
     @Override
+    public List<ReportSummary> listActiveForTarget(UUID targetId, int limit) {
+        return queries.listActiveForTarget(targetId, limit);
+    }
+
+    @Override
     public Optional<ReportDetails> details(UUID reportId) {
         return queries.details(reportId);
     }

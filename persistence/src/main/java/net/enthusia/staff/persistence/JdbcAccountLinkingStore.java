@@ -11,6 +11,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import javax.sql.DataSource;
+import net.enthusia.staff.domain.moderation.CurrentLinkedMinecraftAccount;
 import net.enthusia.staff.domain.moderation.DiscordMinecraftLinkSource;
 import net.enthusia.staff.domain.moderation.DiscordUserId;
 import net.enthusia.staff.domain.ports.AccountLinkingStore;
@@ -123,6 +124,11 @@ public final class JdbcAccountLinkingStore implements AccountLinkingStore {
     public List<VersionedLink> historyForDiscord(DiscordUserId discordUserId) {
         require(discordUserId, "discordUserId");
         return JdbcAccountLinkHistoryReader.historyForDiscord(dataSource, discordUserId);
+    }
+
+    @Override
+    public List<CurrentLinkedMinecraftAccount> currentLinkedMinecraftAccounts(UUID minecraftPlayerId, int limit) {
+        return JdbcCurrentAccountLinkReader.currentLinkedMinecraftAccounts(dataSource, minecraftPlayerId, limit);
     }
 
     private VersionedLink complete(CompletionRequest request) {
