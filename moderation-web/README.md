@@ -29,3 +29,5 @@ npm run check
 ```
 
 The permanent staging workflow lives at `.github/workflows/moderation-web-staging-deploy.yml` in this repository. It runs the build/tests and Wrangler dry run, deploys to Cloudflare, then proves health/origin, unauthenticated rejection, signed first use, authenticated session page access, the fixed-tunnel direct-read CORS contract, a signed synthetic unauthorized read, direct-read replay rejection, and exact-link replay rejection on the permanent staging hostname. The live direct-read check preserves the exact JSON bytes returned in the signed envelope; adding a trailing newline would intentionally invalidate the body-bound HMAC and must not be used as a transport test.
+
+The same workflow supports `workflow_dispatch` for an exact-ref staging refresh when reconciliation changes executable context without touching a path covered by the push filter. Operators must bind that refresh to the intended package head and verify the workflow's recorded source SHA; an earlier staging run is never evidence for a different executable head.

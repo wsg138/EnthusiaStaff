@@ -1,11 +1,12 @@
 # ES-D16 — Moderation console real-data read bridge
 
-Status: `BLOCKED` / `PARKED_BLOCKED`
+Status: `MERGE_PENDING`
 Priority: 135.5
 Implementation PR: #187
 Branch: `package/es-d16-moderation-read-bridge`
-Frozen executable head: `3a79000eaa139ec107118d3fdb05b29e5e52097c`
-Canonical handoff: `ai-agents/reports/package-handoffs/2026-09-10-es-d16-live-acceptance-current.md`
+Frozen reconciled executable head: `8811294c17532825aeae1d271fe2a3163042ba9c`
+Owner-accepted D16 UI candidate: `3a79000eaa139ec107118d3fdb05b29e5e52097c`
+Canonical checkpoint handoff: `ai-agents/reports/package-handoffs/2026-09-13-es-d16-merge-pending.md`
 
 ## Scope
 
@@ -13,76 +14,67 @@ ES-D16 extends the completed D05/D06 Discord moderation foundation with the real
 
 ## Implemented product state
 
-The frozen product head delivers:
+The D16 product delivers:
 
 - signed, session-bound browser/Worker/StaffBot reads with explicit protected-route dispatch and fail-closed authorization;
-- `/moderate-preview` with an optional player: no-player launches open the invoking channel with no target selected, while targeted launches retain player-specific moderation context;
-- channel and player switching with target-specific History/Cases/Notes/Accounts/punishment controls disabled until a player is selected;
-- no-target channel browse mapped without blocking per-author Discord REST member retrieval, using cached member data for display enrichment;
-- Show Context that retrieves and displays surrounding messages from the same channel and all authors, centered on the selected message;
-- Discord-like reply references: when Discord supplies the referenced message, the site renders a compact author/text preview; activating it scrolls to the referenced loaded row or loads same-channel around-message context and then scrolls;
-- when no target is selected, player selection by double-click is restricted to the message author's name or avatar; the entire message row is not a player-selection trigger;
-- author and message-text filters that preserve focus and caret across message-workspace rerenders so normal continuous typing works;
-- whole-row evidence selection, exclusive `•••` menus, outside-click/keyboard dismissal, message-ID copy, Discord deep links, and clear author/message hierarchy;
-- optimized message paging using pages of up to 50 where supported;
-- arbitrary custom punishment durations such as `60 days`, `12 hours`, `90 minutes`, shorthand like `12h`, or `Permanent`, with invalid/zero durations rejected before review;
-- punishment draft resume, Discord/chat versus In-game offense separation, final-review validation, explicit allowlisted public fields, and neutral loading/empty/error states;
-- professional product copy with one truthful Testing note at the non-destructive boundary;
-- Cloudflare packaging regression coverage that fails if a local page asset is omitted from the Worker bundle;
-- a compact Discord launcher with the target shown once and channel shown once;
-- simulation/test-only destructive review: D16 does not send punishments/DMs, mutate Discord permissions, delete messages, change LiteBans authority, or perform production cutover.
+- `/moderate-preview` with optional player context, channel/player switching, real Discord message/context/reply/attachment presentation, and real structured moderation-history/account reads;
+- bounded Discord REST reads, server-side actor/guild/target binding, rate limiting, replay resistance, private/no-store responses, and a fixed private Bloom read origin;
+- a Message Content entitlement fence with no unnecessary Gateway intents;
+- independent evidence, violating-message, and future-delete-message selection;
+- explicit public response allowlists and neutral loading/empty/error states;
+- simulation/test-only destructive review. D16 does not send punishments or DMs, mutate Discord permissions, delete messages, mutate punishment/case/note storage, enforce on Minecraft, change LiteBans authority, or perform production cutover.
 
-## Exact executable-head validation — PASS
+## Owner UI acceptance — PASS
 
-For exact executable head `3a79000eaa139ec107118d3fdb05b29e5e52097c`:
+The owner reviewed the current moderation UI and stated: `The UI looks good.`
 
-- Coverage run `34434155437`: **SUCCESS**. Clean Java 21 repository build/tests, runtime-JAR inspection, aggregate coverage, validation-artifact upload, and Codacy coverage upload all passed.
-- Moderation Web Validation `34434155472`: **SUCCESS**.
-- Staff Bot PR Artifact `34434155529`: **SUCCESS**.
-- Staff Bot Configuration Cache `34434155616`: **SUCCESS**.
-- Sentinel Restart Artifact `34434155596`: **SUCCESS**.
-- Pi Staging Supersession `34434153678`: **SUCCESS**.
-- Moderation Web Staging Deploy `34434152711`: **SUCCESS** on the exact executable head, including the protected Cloudflare deployment path.
-- Codacy Static Code Analysis `102735847147`: **SUCCESS**, zero annotations / zero new valid findings.
-- Codacy Diff Coverage `102739125713`: **SUCCESS**, 52.54% diff coverage.
-- Codacy Coverage Variation `102739126122`: **SUCCESS**, +0.04% against the -1.0% target.
-- CodeRabbit exact-head status: **SUCCESS**.
+That acceptance is bound to D16 executable candidate `3a79000eaa139ec107118d3fdb05b29e5e52097c`. Live GitHub provenance confirmed that the four commits from that candidate through documentation checkpoint `a0bec2d4071ee46c8f55bea1ade7cb03cd021960` changed only `ai-agents` Markdown/process records. The subsequent required moving-main merge preserved all D16 product paths from that accepted candidate; the additional runtime changes came only from already-current `main` and therefore require fresh automated exact-head validation, not a repeat of the same owner visual approval.
 
-## Exact StaffBot artifact
+No signed launch material, credentials, private message bodies, moderation records, backend signatures, or secrets are recorded as acceptance evidence.
 
-Owner live testing must use Staff Bot PR Artifact run `34434155529`:
+## Moving-main reconciliation — COMPLETE
 
-- artifact id: `10135569887`;
-- artifact name: `staff-bot-pr-187-3a79000eaa139ec107118d3fdb05b29e5e52097c`;
-- artifact ZIP digest: `sha256:2eb7b2645110dac922aeb1e8f1d4d04ab510162e9e7d8ccb9d3ab0fa8c203498`;
-- source marker: `3a79000eaa139ec107118d3fdb05b29e5e52097c`;
-- contained `EnthusiaStaff-StaffBot.jar` SHA-256: `1f61d87b71341c4d9fe1d4702b164862359b29ea0808ce5daf7afa135dc6ecb3`.
+Current `main` at reconciliation was `06519c0c5acdcf6276278204201f3c8b20767805`. It was merged normally into the D16 branch with two-parent merge commit `8811294c17532825aeae1d271fe2a3163042ba9c`:
 
-Independent artifact inspection confirmed exact source provenance, the packaged checksum, runtime manifest/JDA classes, and the current channel-browse, reply-preview, and filter-focus resources.
+1. prior D16 checkpoint `a0bec2d4071ee46c8f55bea1ade7cb03cd021960`;
+2. current `main` `06519c0c5acdcf6276278204201f3c8b20767805`.
 
-## Moving-main checkpoint
+The live common-base comparison found 29 changed `main` paths and no exact file-path or Flyway migration collision with D16. The merge overlaid exactly those current-main blobs and no others. No rebase, squash, force push, or concurrent-package takeover occurred.
 
-`main` moved after the executable freeze. At the latest reconciliation before publication it was `06519c0c5acdcf6276278204201f3c8b20767805`. Owner live acceptance intentionally occurs against the exact frozen artifact first. After acceptance, the same D16 continuation must reconcile the then-current `main` normally, preserve concurrent work, rerun all gates invalidated by the changed executable state, and only then merge PR #187.
+## Reconciled executable-head validation
 
-## Current blocker
+Exact reconciled executable head: `8811294c17532825aeae1d271fe2a3163042ba9c`.
 
-The only remaining gate is owner-operated **StaffBot-only live acceptance** on authorized non-production Bloom staging. Protected Cloudflare staging is already deployed for the exact executable head. The connected worker has no authenticated Bloom/Pterodactyl mutation surface, so it cannot replace/restart the live StaffBot itself.
+Already terminal green on that exact head at this checkpoint:
 
-Exact unblock:
+- Moderation Web Validation run `34765815458`: **SUCCESS**.
+- Staff Bot PR Artifact run `34765815488`: **SUCCESS**; exact-head artifact `10320286377`, digest `sha256:9a92c853ffee5b13889dd03742e494326c6eaaa95ba0447325b6985d91d35a9e`.
+- Staff Bot Configuration Cache run `34765815539`: **SUCCESS**.
+- Sentinel Restart Artifact run `34765815467`: **SUCCESS**.
+- Pi Staging Supersession run `34765813881`: **SUCCESS**.
+- Codacy Static Code Analysis check `103746859043`: **SUCCESS**, zero annotations / zero new valid findings.
 
-1. Replace only Bloom `EnthusiaStaff-StaffBot.jar` with artifact `10135569887`, or with the contained JAR matching the SHA-256 above.
-2. Restart StaffBot only, preserving the existing runtime files and flags.
-3. Do **not** replace or restart Paper.
-4. Open a fresh `/moderate-preview` launch.
-5. Verify sanitized live behavior for no-player launch speed, channel/player switching, Show Context with surrounding all-author messages, compact reply previews and click-to-jump/context-load navigation, double-click author selection only on name/avatar, continuous author/text-filter typing, prior message menus/selection, arbitrary custom durations, and the non-destructive final-review boundary.
-6. Record only sanitized acceptance evidence. Do not expose signed launch material, credentials, private request data, raw private messages, or secrets.
+Coverage run `34765815457` was still executing when this checkpoint was prepared and is explicitly **not** counted as a pass here. CodeRabbit's automatic status on the merge head reported that manual review was required, so it is also **not** counted as terminal review evidence. Protected Moderation Web Staging Deploy must be refreshed for the final pre-merge head.
 
-If live acceptance passes, resume this same PR as the higher-priority `ACTIONABLE_CONTINUATION`, reconcile moving `main`, rerun invalidated exact-head gates, merge #187 normally only when green, prove containment/cleanup, publish `COMPLETE`, and stop.
+## Remaining terminal work
+
+There is no remaining owner/live-UI blocker. The package is `MERGE_PENDING` while the same worker finishes the repository gates and normal merge:
+
+1. freeze the final documentation-only pre-merge head without changing D16 runtime bytes;
+2. require terminal Java 21 Coverage/build/tests and runtime-JAR inspection;
+3. require Staff Bot executable-JAR, Configuration Cache, Moderation Web Validation, Sentinel, and Pi supersession evidence;
+4. require protected Cloudflare staging deploy and its fixed private read transport checks on the final head;
+5. require Codacy static analysis plus diff-coverage/coverage-variation checks;
+6. request and receive a real CodeRabbit exact-head re-review; do not count an inappropriate automatic skip;
+7. prove no unresolved valid review threads remain;
+8. re-read `main` immediately before merge and reconcile again if it moved;
+9. update PR #187 to terminal truth and merge it with GitHub's normal merge method using the exact expected head;
+10. prove post-merge containment/health, clean safe temporary state, publish the `COMPLETE` handoff/status, and stop without starting ES-D07.
 
 ## Concurrency / exclusions
 
-- PR #187 remains intentionally open and unmerged while owner acceptance is outstanding.
 - ES-D13 PR #178 and ES-X03 PR #139 remain separate and untouched.
 - ES-D07 is not started by this worker.
+- Website/competition/wiki/provider/hosting/Market work is not absorbed.
 - LiteBans remains authoritative and untouched.
 - No production deployment/configuration/data access, destructive moderation, message deletion, issue #43 acceptance, or cutover is authorized by this package.
