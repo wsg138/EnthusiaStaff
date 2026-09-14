@@ -9,7 +9,7 @@ import java.util.Objects;
 import java.util.Optional;
 import net.enthusia.staff.persistence.DatabaseConfig;
 
-/** Optional read-only moderation configuration sourced from a validated runtime map or file. */
+/** Optional moderation/runtime configuration sourced from a validated runtime map or file. */
 final class StaffModerationConfiguration {
     static final String JDBC_URL_ENV = "ENTHUSIA_STAFF_BOT_DB_JDBC_URL";
     static final String DB_USERNAME_ENV = "ENTHUSIA_STAFF_BOT_DB_USERNAME";
@@ -47,19 +47,22 @@ final class StaffModerationConfiguration {
     private final String authorityCredential;
     private final AuthorityTransport authorityTransport;
     private final String componentSigningSecret;
+    private final Optional<DiscordRoleSyncConfiguration> roleSyncConfiguration;
 
     private StaffModerationConfiguration(
             DatabaseConfig database,
             URI authorityUri,
             String authoritySecret,
             AuthorityTransport transport,
-            String componentSecret
+            String componentSecret,
+            Optional<DiscordRoleSyncConfiguration> roleSync
     ) {
         this.databaseConfig = Objects.requireNonNull(database, "database");
         this.authorityEndpoint = Objects.requireNonNull(authorityUri, "authorityUri");
         this.authorityCredential = cryptoSecret(authoritySecret, AUTHORITY_CREDENTIAL_ENV);
         this.authorityTransport = Objects.requireNonNull(transport, "transport");
         this.componentSigningSecret = cryptoSecret(componentSecret, COMPONENT_SIGNING_ENV);
+        this.roleSyncConfiguration = Objects.requireNonNull(roleSync, "roleSync");
     }
 
     static Optional<StaffModerationConfiguration> fromSystemEnvironment() {
@@ -73,12 +76,16 @@ final class StaffModerationConfiguration {
 
     static Optional<StaffModerationConfiguration> fromEnvironment(Map<String, String> values) {
         Objects.requireNonNull(values, "values");
+        Optional<DiscordRoleSyncConfiguration> roleSync = DiscordRoleSyncConfiguration.fromEnvironment(values);
         long configured = REQUIRED.stream().filter(envName -> present(values.get(envName))).count();
         if (configured == 0) {
+            if (roleSync.isPresent()) {
+                throw new IllegalArgumentException("role sync requires the staff moderation database and authority configuration");
+            }
             return Optional.empty();
         }
         if (configured != REQUIRED.size()) {
-            throw new IllegalArgumentException("read-only staff moderation configuration is incomplete");
+            throw new IllegalArgumentException("staff moderation configuration is incomplete");
         }
         int poolSize = integer(values, DB_POOL_SIZE_ENV, DEFAULT_POOL_SIZE, MIN_POOL_SIZE, MAX_POOL_SIZE);
         int timeout = integer(
@@ -101,7 +108,8 @@ final class StaffModerationConfiguration {
                 authorityUri(values.get(AUTHORITY_URL_ENV), transport),
                 values.get(AUTHORITY_CREDENTIAL_ENV),
                 transport,
-                values.get(COMPONENT_SIGNING_ENV)
+                values.get(COMPONENT_SIGNING_ENV),
+                roleSync
         ));
     }
 
@@ -125,11 +133,15 @@ final class StaffModerationConfiguration {
         return componentSigningSecret;
     }
 
+    Optional<DiscordRoleSyncConfiguration> roleSync() {
+        return roleSyncConfiguration;
+    }
+
     @Override
     public String toString() {
-        return "StaffModerationConfiguration[authority=<configured>, authorityTransport=%s, "
+        return "StaffModerationConfiguration[authority=<configured>, authorityTransport=%s, roleSync=%s, "
                 + "database=<redacted>, authoritySecret=<redacted>, componentSecret=<redacted>]"
-                .formatted(authorityTransport.externalName());
+                .formatted(authorityTransport.externalName(), roleSyncConfiguration.isPresent() ? "<configured>" : "<none>");
     }
 
     private static URI authorityUri(String raw, AuthorityTransport transport) {
