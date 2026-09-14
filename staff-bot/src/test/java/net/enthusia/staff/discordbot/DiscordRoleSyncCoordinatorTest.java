@@ -28,7 +28,7 @@ class DiscordRoleSyncCoordinatorTest {
 
     @Test
     void reconnectPreservesImmediateCycleRequest() throws Exception {
-        TestRuntime runtime = new TestRuntime();
+        RuntimeHarness runtime = new RuntimeHarness();
         BlockingReconciler first = new BlockingReconciler();
         CountingReconciler second = new CountingReconciler();
         try {
@@ -50,7 +50,7 @@ class DiscordRoleSyncCoordinatorTest {
 
     @Test
     void closeWaitsForActiveCycleBeforeReturning() throws Exception {
-        TestRuntime runtime = new TestRuntime();
+        RuntimeHarness runtime = new RuntimeHarness();
         BlockingReconciler reconciler = new BlockingReconciler();
         runtime.coordinator.enable(reconciler);
         assertTrue(reconciler.entered.await(2, TimeUnit.SECONDS));
@@ -64,7 +64,7 @@ class DiscordRoleSyncCoordinatorTest {
         runtime.workers.close();
     }
 
-    private static final class TestRuntime implements AutoCloseable {
+    private static final class RuntimeHarness implements AutoCloseable {
         private final StaffBotWorkerPool workers = new StaffBotWorkerPool(
                 1, 4, new StaffBotHealth(StaffBotEnvironment.STAGING));
         private final DiscordRoleSyncCoordinator coordinator = new DiscordRoleSyncCoordinator(service(), workers);
