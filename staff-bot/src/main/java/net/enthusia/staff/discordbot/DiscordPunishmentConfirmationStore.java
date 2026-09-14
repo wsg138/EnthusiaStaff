@@ -14,7 +14,7 @@ import net.enthusia.staff.domain.discord.DiscordPunishmentIntent;
 import net.enthusia.staff.domain.discord.DiscordPunishmentTermination;
 import net.enthusia.staff.domain.moderation.DiscordUserId;
 
-/** Bounded single-use confirmation drafts; no external effect is possible before claim. */
+/** Bounded single-use confirmation drafts; no external effect is possible before actor-bound claim. */
 final class DiscordPunishmentConfirmationStore {
     enum Kind {
         ISSUE,
@@ -77,14 +77,22 @@ final class DiscordPunishmentConfirmationStore {
         return token;
     }
 
-    synchronized Draft claim(UUID token) {
-        if (token == null) {
-            throw new IllegalArgumentException("confirmation token must be present");
+    synchronized Draft claimForActor(UUID token, UUID actorId) {
+        if (token == null || actorId == null) {
+            throw new IllegalArgumentException("confirmation token and actor must be present");
         }
-        Draft draft = drafts.remove(token);
-        if (draft == null || !clock.instant().isBefore(draft.expiresAt())) {
-            throw new IllegalStateException("confirmation is missing, expired, or already used");
+        Draft draft = drafts.get(token);
+        if (draft == null) {
+            throw unavailable();
         }
+        if (!clock.instant().isBefore(draft.expiresAt())) {
+            drafts.remove(token);
+            throw unavailable();
+        }
+        if (!draft.authorization().actorId().equals(actorId)) {
+            throw new SecurityException("confirmation belongs to another staff actor");
+        }
+        drafts.remove(token);
         return draft;
     }
 
@@ -96,6 +104,10 @@ final class DiscordPunishmentConfirmationStore {
     private void purgeExpired() {
         Instant now = clock.instant();
         drafts.entrySet().removeIf(entry -> !now.isBefore(entry.getValue().expiresAt()));
+    }
+
+    private static IllegalStateException unavailable() {
+        return new IllegalStateException("confirmation is missing, expired, or already used");
     }
 
     @FunctionalInterface

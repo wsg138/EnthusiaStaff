@@ -90,12 +90,12 @@ final class DiscordPunishmentService {
     }
 
     MutationResult confirmIssue(long actorDiscordId, String actorName, UUID token) {
-        DiscordPunishmentConfirmationStore.Draft draft = confirmations.claim(token);
+        Actor actor = actor(actorDiscordId, actorName);
+        DiscordPunishmentConfirmationStore.Draft draft = confirmations.claimForActor(token, actor.id());
         if (draft.kind() != DiscordPunishmentConfirmationStore.Kind.ISSUE) {
             throw new IllegalArgumentException("confirmation does not issue a punishment");
         }
         StaffModerationReadService.Target target = reads.discordTarget(draft.targetUserId());
-        Actor actor = actor(actorDiscordId, actorName);
         Optional<Actor> targetStaff = actors.targetStaff(target);
         authorization.reauthorize(draft.authorization(), actor, targetStaff);
         DiscordPunishmentIntent intent = draft.intent().orElseThrow();
@@ -140,12 +140,12 @@ final class DiscordPunishmentService {
     }
 
     MutationResult confirmRemoval(long actorDiscordId, String actorName, UUID token) {
-        DiscordPunishmentConfirmationStore.Draft draft = confirmations.claim(token);
+        Actor actor = actor(actorDiscordId, actorName);
+        DiscordPunishmentConfirmationStore.Draft draft = confirmations.claimForActor(token, actor.id());
         if (draft.kind() != DiscordPunishmentConfirmationStore.Kind.REMOVE) {
             throw new IllegalArgumentException("confirmation does not remove a punishment");
         }
         StaffModerationReadService.Target target = reads.discordTarget(draft.targetUserId());
-        Actor actor = actor(actorDiscordId, actorName);
         authorization.reauthorize(draft.authorization(), actor, actors.targetStaff(target));
         UUID punishmentId = draft.punishmentId().orElseThrow();
         StoredPunishment current = punishments.find(punishmentId)
