@@ -1,6 +1,6 @@
 # Package registry
 
-Last updated: 2026-09-13
+Last updated: 2026-09-14
 
 Live GitHub overrides stale text. Detailed historical evidence remains in package files and canonical handoffs; this registry is the current routing authority.
 
@@ -32,9 +32,12 @@ The later live Sentinel restart attempts remain explicit non-passing diagnostic 
 
 ### Dedicated Discord program checkpoint
 
-`ES-D16 — Moderation console real-data read bridge` is `COMPLETE`. Owner UI acceptance passed; current-main reconciliation produced normal two-parent executable commit `8811294c17532825aeae1d271fe2a3163042ba9c`; final reviewed/validated pre-merge head `aa32355a0d378ca4c6b03041b80d005df73f6fcd` passed Coverage `34766165648`, web validation `34766165643`, StaffBot artifact/configuration-cache `34766165650`/`34766165642`, Sentinel `34766165664`, Pi supersession `34766164245`, protected staging `34766163166`, Codacy static `103747616510`, diff coverage `103748653603`, and coverage variation `103748653922`. Codacy static reported zero annotations / zero new valid findings; all three substantive CodeRabbit correctness threads are resolved and the final automatic CodeRabbit skip remains explicit non-pass diagnostic history. PR #187 merged normally as `848aba7ac6a115dc3723c034b281917d63f1f1bd`; merge and feature trees are identical at `c5c02a86d4db3861b4d9b7abfc2636323e9d9c12`; post-merge comparison proves exact containment and no file delta. The temporary implementation branch is absent. D07 and D13 remain `READY`; this worker does not start them.
+`ES-D16 — Moderation console real-data read bridge` is `COMPLETE`. Owner UI acceptance passed; current-main reconciliation produced normal two-parent executable commit `8811294c17532825aeae1d271fe2a3163042ba9c`; final reviewed/validated pre-merge head `aa32355a0d378ca4c6b03041b80d005df73f6fcd` passed Coverage `34766165648`, web validation `34766165643`, StaffBot artifact/configuration-cache `34766165650`/`34766165642`, Sentinel `34766165664`, Pi supersession `34766164245`, protected staging `34766163166`, Codacy static `103747616510`, diff coverage `103748653603`, and coverage variation `103748653922`. Codacy static reported zero annotations / zero new valid findings; all three substantive CodeRabbit correctness threads are resolved and the final automatic CodeRabbit skip remains explicit non-pass diagnostic history. PR #187 merged normally as `848aba7ac6a115dc3723c034b281917d63f1f1bd`; merge and feature trees are identical at `c5c02a86d4db3861b4d9b7abfc2636323e9d9c12`; post-merge comparison proves exact containment and no file delta. The temporary implementation branch is absent.
+
+`ES-D13 — Discord role-sync replacement` is now `BLOCKED` / `PARKED_BLOCKED`. Implementation PR #178 remains open/unmerged at exact frozen head `92b207d67a1098acc2dcfbddd35ac56e01711f95`. Hosted product CI, Codacy, and resolved CodeRabbit findings are green, but canonical Pi `34893930914` failed before private dispatch because staging workflow-history revalidation returned HTTP `401 Bad credentials`; no private Pi runtime ran. Sentinel has no durable `PAPER_RESTART_OK`. Most importantly, the original package-required DiscordSRV staging parity is `NOT RUN` because no authorized non-production legacy managed-role mapping/effective state or staging D13 runtime/parity harness is available. D07 remains dependency-complete `READY`; this D13 worker does not begin it.
 
 Canonical D16 terminal handoff: `ai-agents/reports/package-handoffs/2026-09-13-es-d16-complete.md`.
+Canonical D13 blocker handoff: `ai-agents/reports/package-handoffs/2026-09-14-es-d13-role-sync-blocked.md`.
 
 ## Canonical package index
 
@@ -170,6 +173,17 @@ Canonical D16 terminal handoff: `ai-agents/reports/package-handoffs/2026-09-13-e
 - V18 remains the immutable migration ceiling; ES-P07 added no migration. Issue #43 remains open/deferred; LiteBans remains authoritative. No production data, deployment, shadow window, cutover, punishment-authority change, source rewrite, or unrelated package work occurred.
 - Canonical terminal handoff: `ai-agents/reports/package-handoffs/2026-08-10-es-p07-inventory-runtime-complete.md`.
 
+## ES-D13 current parked record
+
+- Implementation PR #178 remains open/unmerged on `package/es-d13-role-sync-replacement` at exact frozen candidate `92b207d67a1098acc2dcfbddd35ac56e01711f95`.
+- Hosted product validation, artifacts, Codacy static/diff coverage, and the six repaired CodeRabbit findings are green/resolved for that exact head.
+- Canonical Pi `34893930914` did not reach private runtime: bridge job `104146199543` failed before dispatch because staging workflow-history revalidation returned HTTP `401 Bad credentials`; transfer cleanup succeeded. This is not called a Pi runtime pass or product failure.
+- Sentinel artifact build passed, but no durable exact-head `PAPER_RESTART_OK` is visible after the submitted restart/status requests; Sentinel is not called a pass.
+- The original D13 package contract requires staging parity with legacy DiscordSRV role sync. Authorized non-production staging currently exposes neither the legacy Minecraft-group→Discord-role/effective managed-role state nor a D13 StaffBot runtime/parity harness, so parity is `NOT RUN`.
+- Exact unblock: provide those authorized non-production parity inputs/runtime, keep legacy role sync enabled, run D13 in SHADOW across current linked identities, require zero unexplained managed-role drift, retain only sanitized evidence, then reconcile/revalidate before any implementation merge.
+- Production/cutover is not authorized or performed. Preserve PR #178 and its branch while parked.
+- Canonical handoff: `ai-agents/reports/package-handoffs/2026-09-14-es-d13-role-sync-blocked.md`.
+
 ## Next sequential action
 
-This D16 worker stops after terminal publication with ES-D16 truthfully `COMPLETE`. It does not activate another package. In the dedicated Discord lane, D07 and D13 remain dependency-complete `READY` for a future worker after fresh live reconciliation. In the universal lane, X03 remains an independent `ACTIONABLE_CONTINUATION`; X01 remains `BLOCKED` / `PARKED_BLOCKED`; downstream V02/V03/A01/QA01 remain gated as recorded above.
+This D13 worker stops after durable `BLOCKED` / `PARKED_BLOCKED` publication. It does not activate D07, X03, or another package. D07 remains dependency-complete `READY`; D13 remains parked until its exact non-production DiscordSRV parity inputs/runtime become available. In the universal lane, X03 remains an independent `ACTIONABLE_CONTINUATION`; X01 remains `BLOCKED` / `PARKED_BLOCKED`; downstream V02/V03/A01/QA01 remain gated as recorded above.
