@@ -57,8 +57,15 @@ final class JdaDiscordPunishmentGateway implements DiscordPunishmentGateway {
     }
 
     void bind(JDA value) {
-        if (value == null || !jda.compareAndSet(null, value)) {
-            throw new IllegalStateException("Discord punishment gateway is already bound or JDA is missing");
+        if (value == null) {
+            throw new IllegalArgumentException("JDA must be present");
+        }
+        JDA current = jda.get();
+        if (current == value) {
+            return;
+        }
+        if (current != null || !jda.compareAndSet(null, value)) {
+            throw new IllegalStateException("Discord punishment gateway is already bound");
         }
     }
 
@@ -84,6 +91,21 @@ final class JdaDiscordPunishmentGateway implements DiscordPunishmentGateway {
     }
 
     @Override
+    public DiscordPermissionSnapshot captureRestrictionSnapshot(DiscordPunishment punishment) {
+        try {
+            Guild guild = guild(punishment.guildId());
+            Member member = memberRequired(guild, punishment.targetUserId());
+            requireHierarchy(guild, member);
+            IPermissionContainer container = restrictionContainer(
+                    guild, punishment.intent().restriction().orElseThrow()
+            );
+            return snapshot(container.getPermissionOverride(member));
+        } catch (RuntimeException failure) {
+            throw classify("SNAPSHOT", failure, DiscordDeliveryOutcome.NOT_ATTEMPTED);
+        }
+    }
+
+    @Override
     public ApplyResult apply(DiscordPunishment punishment) {
         Guild guild = guild(punishment.guildId());
         DiscordDeliveryOutcome delivery = notify(punishment);
@@ -94,8 +116,8 @@ final class JdaDiscordPunishmentGateway implements DiscordPunishmentGateway {
             return new ApplyResult(delivery, Optional.empty());
         }
         try {
-            Optional<DiscordPermissionSnapshot> snapshot = applyEffect(guild, punishment);
-            return new ApplyResult(delivery, snapshot);
+            applyEffect(guild, punishment);
+            return new ApplyResult(delivery, punishment.previousRestriction());
         } catch (RuntimeException failure) {
             throw classify("APPLY", failure, delivery);
         }
@@ -122,9 +144,8 @@ final class JdaDiscordPunishmentGateway implements DiscordPunishmentGateway {
             Guild guild = guild(punishment.guildId());
             switch (punishment.intent().type()) {
                 case MUTE -> reconcileMute(guild, punishment.targetUserId());
-                case BAN -> guild.ban(UserSnowflake.fromId(punishment.targetUserId().value()), 0, TimeUnit.SECONDS)
-                        .reason(auditReason(punishment)).complete();
-                case CHANNEL_RESTRICTION -> reconcileRestriction(guild, punishment);
+                case BAN -> reconcileBan(guild, punishment);
+                case CHANNEL_RESTRICTION -> applyRestriction(guild, punishment);
                 case WARNING, KICK -> { }
             }
         } catch (RuntimeException failure) {
@@ -132,36 +153,48 @@ final class JdaDiscordPunishmentGateway implements DiscordPunishmentGateway {
         }
     }
 
-    private Optional<DiscordPermissionSnapshot> applyEffect(Guild guild, DiscordPunishment punishment) {
+    private void applyEffect(Guild guild, DiscordPunishment punishment) {
         DiscordUserId target = punishment.targetUserId();
-        return switch (punishment.intent().type()) {
-            case MUTE -> {
-                applyMute(guild, target, auditReason(punishment));
-                yield Optional.empty();
+        switch (punishment.intent().type()) {
+            case MUTE -> applyMute(guild, target, auditReason(punishment));
+            case KICK -> kick(guild, target, punishment);
+            case BAN -> ban(guild, target, punishment);
+            case CHANNEL_RESTRICTION -> applyRestriction(guild, punishment);
+            case WARNING -> { }
+        }
+    }
+
+    private void kick(Guild guild, DiscordUserId target, DiscordPunishment punishment) {
+        Member member = memberOrNull(guild, target);
+        if (member == null) {
+            return;
+        }
+        requireHierarchy(guild, member);
+        guild.kick(UserSnowflake.fromId(target.value())).reason(auditReason(punishment)).complete();
+    }
+
+    private void ban(Guild guild, DiscordUserId target, DiscordPunishment punishment) {
+        Member member = memberOrNull(guild, target);
+        if (member != null) {
+            requireHierarchy(guild, member);
+        }
+        guild.ban(
+                UserSnowflake.fromId(target.value()),
+                punishment.intent().messageDeleteSeconds(),
+                TimeUnit.SECONDS
+        ).reason(auditReason(punishment)).complete();
+    }
+
+    private void reconcileBan(Guild guild, DiscordPunishment punishment) {
+        UserSnowflake target = UserSnowflake.fromId(punishment.targetUserId().value());
+        try {
+            guild.retrieveBan(target).complete();
+        } catch (ErrorResponseException exception) {
+            if (!"UNKNOWN_BAN".equals(exception.getErrorResponse().name())) {
+                throw exception;
             }
-            case KICK -> {
-                Member member = memberOrNull(guild, target);
-                if (member != null) {
-                    requireHierarchy(guild, member);
-                    guild.kick(UserSnowflake.fromId(target.value())).reason(auditReason(punishment)).complete();
-                }
-                yield Optional.empty();
-            }
-            case BAN -> {
-                Member member = memberOrNull(guild, target);
-                if (member != null) {
-                    requireHierarchy(guild, member);
-                }
-                guild.ban(
-                        UserSnowflake.fromId(target.value()),
-                        punishment.intent().messageDeleteSeconds(),
-                        TimeUnit.SECONDS
-                ).reason(auditReason(punishment)).complete();
-                yield Optional.empty();
-            }
-            case CHANNEL_RESTRICTION -> Optional.of(applyRestriction(guild, punishment));
-            case WARNING -> Optional.empty();
-        };
+            guild.ban(target, 0, TimeUnit.SECONDS).reason(auditReason(punishment)).complete();
+        }
     }
 
     private void applyMute(Guild guild, DiscordUserId target, String reason) {
@@ -169,21 +202,13 @@ final class JdaDiscordPunishmentGateway implements DiscordPunishmentGateway {
         Member member = memberRequired(guild, target);
         requireHierarchy(guild, member);
         Role role = requireMuteRole(guild);
-        guild.addRoleToMember(UserSnowflake.fromId(target.value()), role).reason(reason).complete();
+        if (!member.getRoles().contains(role)) {
+            guild.addRoleToMember(UserSnowflake.fromId(target.value()), role).reason(reason).complete();
+        }
     }
 
     private void reconcileMute(Guild guild, DiscordUserId target) {
-        ensureMutePolicy(guild);
-        Member member = memberOrNull(guild, target);
-        if (member == null) {
-            return;
-        }
-        requireHierarchy(guild, member);
-        Role role = requireMuteRole(guild);
-        if (!member.getRoles().contains(role)) {
-            guild.addRoleToMember(UserSnowflake.fromId(target.value()), role)
-                    .reason("Enthusia D07 mute reconciliation").complete();
-        }
+        applyMute(guild, target, "Enthusia D07 mute reconciliation");
     }
 
     private void removeMute(Guild guild, DiscordUserId target) {
@@ -202,62 +227,45 @@ final class JdaDiscordPunishmentGateway implements DiscordPunishmentGateway {
     private void ensureMutePolicy(Guild guild) {
         Role role = requireMuteRole(guild);
         for (GuildChannel channel : guild.getChannels()) {
-            if (!(channel instanceof IPermissionContainer container)) {
-                continue;
-            }
-            boolean support = supportScope(channel, configuration.supportScopeIds());
-            PermissionOverride override = container.getPermissionOverride(role);
-            long allowed = override == null ? 0L : override.getAllowedRaw();
-            long denied = override == null ? 0L : override.getDeniedRaw();
-            long nextAllowed = support ? allowed | COMMUNICATION_MASK : allowed & ~COMMUNICATION_MASK;
-            long nextDenied = support ? denied & ~COMMUNICATION_MASK : denied | COMMUNICATION_MASK;
-            if (nextAllowed != allowed || nextDenied != denied || override == null) {
-                container.upsertPermissionOverride(role)
-                        .setAllowed(nextAllowed)
-                        .setDenied(nextDenied)
-                        .reason("Enthusia D07 managed mute policy")
-                        .complete();
+            if (channel instanceof IPermissionContainer container) {
+                enforceMuteOverride(channel, container, role);
             }
         }
     }
 
-    private DiscordPermissionSnapshot applyRestriction(Guild guild, DiscordPunishment punishment) {
+    private void enforceMuteOverride(GuildChannel channel, IPermissionContainer container, Role role) {
+        boolean support = supportScope(channel, configuration.supportScopeIds());
+        PermissionOverride override = container.getPermissionOverride(role);
+        long allowed = override == null ? 0L : override.getAllowedRaw();
+        long denied = override == null ? 0L : override.getDeniedRaw();
+        long nextAllowed = support ? allowed | COMMUNICATION_MASK : allowed & ~COMMUNICATION_MASK;
+        long nextDenied = support ? denied & ~COMMUNICATION_MASK : denied | COMMUNICATION_MASK;
+        if (nextAllowed != allowed || nextDenied != denied || override == null) {
+            container.upsertPermissionOverride(role)
+                    .setAllowed(nextAllowed)
+                    .setDenied(nextDenied)
+                    .reason("Enthusia D07 managed mute policy")
+                    .complete();
+        }
+    }
+
+    private void applyRestriction(Guild guild, DiscordPunishment punishment) {
         Member member = memberRequired(guild, punishment.targetUserId());
         requireHierarchy(guild, member);
         DiscordRestrictionTarget target = punishment.intent().restriction().orElseThrow();
         IPermissionContainer container = restrictionContainer(guild, target);
-        PermissionOverride previous = container.getPermissionOverride(member);
-        DiscordPermissionSnapshot snapshot = previous == null
-                ? DiscordPermissionSnapshot.absent()
-                : new DiscordPermissionSnapshot(true, previous.getAllowedRaw(), previous.getDeniedRaw());
-        enforceRestriction(container, member, target.mode());
-        return snapshot;
-    }
-
-    private void reconcileRestriction(Guild guild, DiscordPunishment punishment) {
-        Member member = memberOrNull(guild, punishment.targetUserId());
-        if (member == null) {
+        DiscordPermissionSnapshot original = punishment.previousRestriction().orElseThrow(
+                () -> failure("RESTRICTION_SNAPSHOT_MISSING", false)
+        );
+        DiscordPermissionSnapshot current = snapshot(container.getPermissionOverride(member));
+        DiscordPermissionSnapshot desired = restricted(original, target.mode());
+        if (same(current, desired)) {
             return;
         }
-        requireHierarchy(guild, member);
-        DiscordRestrictionTarget target = punishment.intent().restriction().orElseThrow();
-        enforceRestriction(restrictionContainer(guild, target), member, target.mode());
-    }
-
-    private void enforceRestriction(
-            IPermissionContainer container,
-            Member member,
-            DiscordRestrictionTarget.Mode mode
-    ) {
-        long mask = restrictionMask(mode);
-        PermissionOverride current = container.getPermissionOverride(member);
-        long allowed = current == null ? 0L : current.getAllowedRaw();
-        long denied = current == null ? 0L : current.getDeniedRaw();
-        container.upsertPermissionOverride(member)
-                .setAllowed(allowed & ~mask)
-                .setDenied(denied | mask)
-                .reason("Enthusia D07 member restriction")
-                .complete();
+        if (!same(current, original)) {
+            throw failure("RESTRICTION_STATE_CHANGED", false);
+        }
+        writeSnapshot(container, member, desired, "Enthusia D07 member restriction");
     }
 
     private void removeRestriction(Guild guild, DiscordPunishment punishment) {
@@ -267,23 +275,61 @@ final class JdaDiscordPunishmentGateway implements DiscordPunishmentGateway {
         }
         DiscordRestrictionTarget target = punishment.intent().restriction().orElseThrow();
         IPermissionContainer container = restrictionContainer(guild, target);
-        PermissionOverride current = container.getPermissionOverride(member);
-        if (current == null) {
+        DiscordPermissionSnapshot original = punishment.previousRestriction().orElseThrow(
+                () -> failure("RESTRICTION_SNAPSHOT_MISSING", false)
+        );
+        DiscordPermissionSnapshot current = snapshot(container.getPermissionOverride(member));
+        if (same(current, original)) {
             return;
         }
-        DiscordPermissionSnapshot snapshot = punishment.previousRestriction().orElseThrow();
-        long mask = restrictionMask(target.mode());
-        long allowed = (current.getAllowedRaw() & ~mask) | (snapshot.allowedRaw() & mask);
-        long denied = (current.getDeniedRaw() & ~mask) | (snapshot.deniedRaw() & mask);
-        if (!snapshot.existed() && allowed == 0L && denied == 0L) {
-            current.delete().reason("Enthusia D07 restriction removal").complete();
-        } else {
-            container.upsertPermissionOverride(member)
-                    .setAllowed(allowed)
-                    .setDenied(denied)
-                    .reason("Enthusia D07 restriction removal")
-                    .complete();
+        if (!same(current, restricted(original, target.mode()))) {
+            throw failure("RESTRICTION_STATE_CHANGED", false);
         }
+        writeSnapshot(container, member, original, "Enthusia D07 restriction removal");
+    }
+
+    private static DiscordPermissionSnapshot snapshot(PermissionOverride override) {
+        return override == null
+                ? DiscordPermissionSnapshot.absent()
+                : new DiscordPermissionSnapshot(true, override.getAllowedRaw(), override.getDeniedRaw());
+    }
+
+    private static DiscordPermissionSnapshot restricted(
+            DiscordPermissionSnapshot original,
+            DiscordRestrictionTarget.Mode mode
+    ) {
+        long mask = restrictionMask(mode);
+        return new DiscordPermissionSnapshot(
+                true,
+                original.allowedRaw() & ~mask,
+                original.deniedRaw() | mask
+        );
+    }
+
+    private static boolean same(DiscordPermissionSnapshot first, DiscordPermissionSnapshot second) {
+        return first.existed() == second.existed()
+                && first.allowedRaw() == second.allowedRaw()
+                && first.deniedRaw() == second.deniedRaw();
+    }
+
+    private static void writeSnapshot(
+            IPermissionContainer container,
+            Member member,
+            DiscordPermissionSnapshot desired,
+            String reason
+    ) {
+        PermissionOverride current = container.getPermissionOverride(member);
+        if (!desired.existed()) {
+            if (current != null) {
+                current.delete().reason(reason).complete();
+            }
+            return;
+        }
+        container.upsertPermissionOverride(member)
+                .setAllowed(desired.allowedRaw())
+                .setDenied(desired.deniedRaw())
+                .reason(reason)
+                .complete();
     }
 
     private void unban(Guild guild, DiscordUserId target) {

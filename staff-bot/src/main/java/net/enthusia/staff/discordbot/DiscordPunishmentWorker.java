@@ -6,7 +6,9 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import net.enthusia.staff.domain.auth.DiscordConsequenceType;
 import net.enthusia.staff.domain.discord.DiscordDeliveryOutcome;
+import net.enthusia.staff.domain.discord.DiscordPermissionSnapshot;
 import net.enthusia.staff.domain.discord.DiscordPunishment;
 import net.enthusia.staff.domain.discord.DiscordPunishmentState;
 import net.enthusia.staff.domain.discord.DiscordPunishmentTermination;
@@ -70,8 +72,7 @@ final class DiscordPunishmentWorker {
 
     private void apply(WorkLease work, StoredPunishment stored) {
         DiscordPunishment punishment = stored.punishment();
-        if (punishment.state() != DiscordPunishmentState.PENDING_APPLY
-                && punishment.state() != DiscordPunishmentState.RETRY_APPLY) {
+        if (!applyPending(punishment)) {
             settle(work, stored, punishment, List.of());
             return;
         }
@@ -79,14 +80,43 @@ final class DiscordPunishmentWorker {
             settle(work, stored, terminalWithoutEffect(punishment, work), List.of());
             return;
         }
+        if (requiresRestrictionSnapshot(punishment)) {
+            captureRestrictionSnapshot(work, stored);
+            return;
+        }
+        applyExternalEffect(work, stored);
+    }
+
+    private void captureRestrictionSnapshot(WorkLease work, StoredPunishment stored) {
         try {
-            DiscordPunishmentGateway.ApplyResult result = gateway.apply(punishment);
-            DiscordPunishmentState state = punishment.intent().reversible()
+            DiscordPermissionSnapshot snapshot = gateway.captureRestrictionSnapshot(stored.punishment());
+            DiscordPunishment replacement = stored.punishment().withProcessingResult(
+                    stored.punishment().state(),
+                    stored.punishment().dmOutcome(),
+                    false,
+                    Optional.of(snapshot),
+                    Optional.empty(),
+                    operationKey(work)
+            );
+            settle(work, stored, replacement, List.of(new WorkSchedule(WorkType.APPLY, clock.instant())));
+        } catch (DiscordPunishmentGateway.EffectException failure) {
+            settleApplyFailure(work, stored, failure);
+        }
+    }
+
+    private void applyExternalEffect(WorkLease work, StoredPunishment stored) {
+        try {
+            DiscordPunishmentGateway.ApplyResult result = gateway.apply(stored.punishment());
+            DiscordPunishmentState state = stored.punishment().intent().reversible()
                     ? DiscordPunishmentState.APPLIED
                     : DiscordPunishmentState.COMPLETED;
-            DiscordPunishment replacement = punishment.withProcessingResult(
-                    state, result.deliveryOutcome(), true, result.previousRestriction(),
-                    Optional.empty(), operationKey(work)
+            DiscordPunishment replacement = stored.punishment().withProcessingResult(
+                    state,
+                    result.deliveryOutcome(),
+                    true,
+                    result.previousRestriction(),
+                    Optional.empty(),
+                    operationKey(work)
             );
             settle(work, stored, replacement, followUp(replacement));
         } catch (DiscordPunishmentGateway.EffectException failure) {
@@ -125,14 +155,19 @@ final class DiscordPunishmentWorker {
             settle(work, stored, replacement, List.of(new WorkSchedule(WorkType.REMOVE, clock.instant())));
             return;
         }
+        reconcileExternalEffect(work, stored);
+    }
+
+    private void reconcileExternalEffect(WorkLease work, StoredPunishment stored) {
         try {
-            gateway.reconcile(punishment);
-            settle(work, stored, reconciled(punishment, Optional.empty(), work), List.of(reconcileLater()));
+            gateway.reconcile(stored.punishment());
+            settle(work, stored, reconciled(stored.punishment(), Optional.empty(), work),
+                    List.of(reconcileLater()));
         } catch (DiscordPunishmentGateway.EffectException failure) {
             List<WorkSchedule> next = failure.retryable()
                     ? List.of(retry(work, WorkType.RECONCILE))
                     : List.of();
-            settle(work, stored, reconciled(punishment, Optional.of(failure.errorCode()), work), next);
+            settle(work, stored, reconciled(stored.punishment(), Optional.of(failure.errorCode()), work), next);
         }
     }
 
@@ -164,8 +199,12 @@ final class DiscordPunishmentWorker {
                 ? stored.punishment().dmOutcome()
                 : failure.deliveryOutcome();
         DiscordPunishment replacement = stored.punishment().withProcessingResult(
-                state, delivery, false, stored.punishment().previousRestriction(),
-                Optional.of(failure.errorCode()), operationKey(work)
+                state,
+                delivery,
+                stored.punishment().externalApplied(),
+                stored.punishment().previousRestriction(),
+                Optional.of(failure.errorCode()),
+                operationKey(work)
         );
         settle(work, stored, replacement, retry ? List.of(retry(work, WorkType.APPLY)) : List.of());
     }
@@ -181,8 +220,12 @@ final class DiscordPunishmentWorker {
                 : DiscordPunishmentState.FAILED_REMOVE;
         DiscordPunishment punishment = stored.punishment();
         DiscordPunishment replacement = punishment.withProcessingResult(
-                state, punishment.dmOutcome(), true, punishment.previousRestriction(),
-                Optional.of(failure.errorCode()), operationKey(work)
+                state,
+                punishment.dmOutcome(),
+                true,
+                punishment.previousRestriction(),
+                Optional.of(failure.errorCode()),
+                operationKey(work)
         );
         settle(work, stored, replacement, retry ? List.of(retry(work, WorkType.REMOVE)) : List.of());
     }
@@ -221,6 +264,16 @@ final class DiscordPunishmentWorker {
 
     private boolean expired(DiscordPunishment punishment) {
         return punishment.expiresAt().map(expiry -> !clock.instant().isBefore(expiry)).orElse(false);
+    }
+
+    private static boolean applyPending(DiscordPunishment punishment) {
+        return punishment.state() == DiscordPunishmentState.PENDING_APPLY
+                || punishment.state() == DiscordPunishmentState.RETRY_APPLY;
+    }
+
+    private static boolean requiresRestrictionSnapshot(DiscordPunishment punishment) {
+        return punishment.intent().type() == DiscordConsequenceType.CHANNEL_RESTRICTION
+                && punishment.previousRestriction().isEmpty();
     }
 
     private static DiscordPunishment terminalWithoutEffect(DiscordPunishment punishment, WorkLease work) {

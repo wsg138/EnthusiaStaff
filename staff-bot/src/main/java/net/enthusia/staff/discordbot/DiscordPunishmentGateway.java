@@ -12,6 +12,8 @@ import net.enthusia.staff.domain.moderation.DiscordUserId;
 interface DiscordPunishmentGateway {
     void preflight(DiscordGuildId guildId, DiscordUserId target, DiscordPunishmentIntent intent);
 
+    DiscordPermissionSnapshot captureRestrictionSnapshot(DiscordPunishment punishment);
+
     ApplyResult apply(DiscordPunishment punishment);
 
     void remove(DiscordPunishment punishment);
