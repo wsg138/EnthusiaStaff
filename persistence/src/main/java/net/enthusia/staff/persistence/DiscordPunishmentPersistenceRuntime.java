@@ -1,6 +1,9 @@
 package net.enthusia.staff.persistence;
 
 import com.zaxxer.hikari.HikariDataSource;
+import java.time.Instant;
+import net.enthusia.staff.domain.moderation.DiscordUserId;
+import net.enthusia.staff.domain.moderation.ModerationSubjectId;
 import net.enthusia.staff.domain.ports.DiscordPunishmentRepository;
 
 /**
@@ -12,10 +15,12 @@ import net.enthusia.staff.domain.ports.DiscordPunishmentRepository;
 public final class DiscordPunishmentPersistenceRuntime implements AutoCloseable {
     private final HikariDataSource dataSource;
     private final JdbcDiscordPunishmentRepository punishments;
+    private final JdbcDiscordModerationPersistenceStore identities;
 
     private DiscordPunishmentPersistenceRuntime(HikariDataSource dataSource) {
         this.dataSource = dataSource;
         this.punishments = new JdbcDiscordPunishmentRepository(dataSource);
+        this.identities = new JdbcDiscordModerationPersistenceStore(dataSource);
     }
 
     public static DiscordPunishmentPersistenceRuntime open(DatabaseConfig database) {
@@ -27,6 +32,10 @@ public final class DiscordPunishmentPersistenceRuntime implements AutoCloseable 
 
     public DiscordPunishmentRepository punishments() {
         return punishments;
+    }
+
+    public ModerationSubjectId ensureDiscordSubject(DiscordUserId userId, Instant now) {
+        return identities.ensureDiscordSubject(userId, now).subject().subjectId();
     }
 
     @Override

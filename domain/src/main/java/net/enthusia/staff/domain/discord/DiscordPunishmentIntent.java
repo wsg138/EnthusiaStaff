@@ -30,6 +30,9 @@ public record DiscordPunishmentIntent(
         internalExplanation = bounded(internalExplanation, "internalExplanation", MAX_EXPLANATION_LENGTH, true);
         validateRestriction(type, restriction);
         validateDeletion(type, messageDeleteSeconds);
+        if (type == DiscordConsequenceType.WARNING && !notifyTarget) {
+            throw new IllegalArgumentException("Discord warnings must notify the target");
+        }
         // Reuse D03 validation for instant/temporary/permanent and custom-duration shape.
         new DiscordConsequenceIntent(
                 ModerationPlatform.DISCORD,
