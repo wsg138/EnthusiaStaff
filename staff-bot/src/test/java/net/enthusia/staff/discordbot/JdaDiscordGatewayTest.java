@@ -1,6 +1,7 @@
 package net.enthusia.staff.discordbot;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -23,5 +24,24 @@ class JdaDiscordGatewayTest {
         assertFalse(invoked.get());
         assertTrue(fence.runIfCurrent(currentSession, () -> invoked.set(true)));
         assertTrue(invoked.get());
+    }
+
+    @Test
+    void productionRoleSyncEnforcementIsRejectedWhileSafeModesRemainAllowed() {
+        assertFalse(JdaDiscordGateway.roleSyncModeAllowed(
+                StaffBotEnvironment.PRODUCTION,
+                DiscordRoleSyncConfiguration.Mode.ENFORCE));
+        assertTrue(JdaDiscordGateway.roleSyncModeAllowed(
+                StaffBotEnvironment.PRODUCTION,
+                DiscordRoleSyncConfiguration.Mode.SHADOW));
+        assertTrue(JdaDiscordGateway.roleSyncModeAllowed(
+                StaffBotEnvironment.STAGING,
+                DiscordRoleSyncConfiguration.Mode.ENFORCE));
+        assertThrows(IllegalArgumentException.class, () -> JdaDiscordGateway.roleSyncModeAllowed(
+                null,
+                DiscordRoleSyncConfiguration.Mode.SHADOW));
+        assertThrows(IllegalArgumentException.class, () -> JdaDiscordGateway.roleSyncModeAllowed(
+                StaffBotEnvironment.STAGING,
+                null));
     }
 }
