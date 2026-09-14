@@ -21,13 +21,13 @@ Dedicated Discord-program workers must reconcile the global `PACKAGE-REGISTRY.md
 | `ES-D10` | AutoMod shadow engine | `PLANNED` | 139 | `ES-D05`, `ES-D09` |
 | `ES-D11` | AutoMod enforcement and security locks | `PLANNED` | 140 | accepted `ES-D10` shadow evidence |
 | `ES-D12` | Staff website Discord expansion | `PLANNED` | 141 | `ES-D02`, `ES-D07`, `ES-D09` |
-| `ES-D13` | Discord role-sync replacement | `READY` | 142 | `ES-D04`, `ES-D05` |
+| `ES-D13` | Discord role-sync replacement | `BLOCKED` / `PARKED_BLOCKED` | 142 | `ES-D04`, `ES-D05`; original DiscordSRV staging-parity input/runtime unavailable |
 | `ES-D14` | Public bot and sanitized public API | `PLANNED` | 143 | sanitized public contracts and completed identity foundation |
 | `ES-D15` | Discord migration/cutover acceptance | `PLANNED` | 144 | `ES-D01`–`ES-D14` as applicable |
 
 ## Active packages
 
-No Discord package is activated by this terminal publication. ES-D16 is `COMPLETE` after owner UI acceptance, current-main reconciliation, exact-head hosted/static/protected-staging validation, normal PR #187 merge, exact containment, and branch cleanup. D07 and D13 remain dependency-complete `READY`; a future Discord worker must reconcile live GitHub and select according to the normal routing rules. This D16 worker does not begin either package.
+No Discord package is activated after this D13 blocker publication. ES-D16 remains `COMPLETE`. ES-D13 is `BLOCKED` / `PARKED_BLOCKED` with implementation PR #178 preserved open/unmerged at exact frozen head `92b207d67a1098acc2dcfbddd35ac56e01711f95`; required legacy DiscordSRV staging parity is `NOT RUN` because authorized non-production legacy managed-role state and staging D13 runtime/parity configuration are unavailable. ES-D07 remains dependency-complete `READY`. This D13 worker stops and does not begin D07 or another package.
 
 ## ES-D04 terminal record
 
@@ -145,9 +145,27 @@ PR #187 merge commit parents are pre-merge `main` `06519c0c5acdcf6276278204201f3
 
 D16 remains read-only/simulation-only and did not authorize or perform destructive moderation, message deletion, production Discord configuration/data changes, LiteBans mutation/cutover, or issue #43 acceptance.
 
-## Latest completion
+## ES-D13 current parked record
 
-`ES-D16 — Moderation console real-data read bridge` is the latest completed Discord package. D07 and D13 remain dependency-complete `READY`. This D16 worker does not begin either ready package.
+Status: `BLOCKED` / `PARKED_BLOCKED`.
+
+Implementation PR #178 remains open/unmerged on `package/es-d13-role-sync-replacement` at exact frozen candidate head `92b207d67a1098acc2dcfbddd35ac56e01711f95`.
+
+Hosted exact-head product validation is green: Coverage/full validation `34893756317` / job `104142632033`, Staff Bot PR Artifact `34893756524`, Staff Bot Configuration Cache `34893756377`, Sentinel Restart Artifact `34893756520` / job `104142890224`, Codacy Static `104143227910` with zero annotations/new valid findings, and Codacy Diff Coverage `104145475928` at 55.93% all succeeded. All six concrete CodeRabbit findings were repaired and the visible review threads are resolved; no fresh automatic full-review pass is fabricated where repository policy skips it.
+
+Canonical Pi public run `34893930914` is not a runtime pass. Its exact-head public build succeeded, then bridge job `104146199543` failed before private dispatch during exact-candidate/stale-staging revalidation because the staging workflow-history request returned HTTP `401 Bad credentials`. No private staging/Pi/Paper/database runtime executed; transient transfer cleanup succeeded. The identical path is not rerun without evidence the credential/authorization condition changed.
+
+The exact-head Sentinel restart and status commands were submitted. The artifact gate is green, but no durable `PAPER_RESTART_OK` is visible; Sentinel is `NOT PASS / unavailable` for this publication.
+
+The package's original validation contract requires staging parity with legacy DiscordSRV role sync before replacement/cutover. Authorized non-production state currently exposes neither the legacy Minecraft-group→Discord-role/effective managed-role mapping nor a staging StaffBot D13 role-sync runtime configuration/parity harness. Required parity is therefore `NOT RUN` and cannot be substituted by unit tests, hosted CI, Sentinel artifact creation, or an ordinary Pi boot.
+
+Exact unblock: provide the authorized non-production legacy mapping/effective managed-role state and staging D13 runtime configuration, keep legacy role sync enabled, run D13 in SHADOW across current linked identities, require zero unexplained managed-role drift, retain only sanitized evidence, then reconcile and revalidate before any implementation merge. Production cutover remains separately gated.
+
+Canonical blocker handoff: `ai-agents/reports/package-handoffs/2026-09-14-es-d13-role-sync-blocked.md`.
+
+## Latest completion / parked state
+
+`ES-D16 — Moderation console real-data read bridge` remains the latest completed Discord package. `ES-D13 — Discord role-sync replacement` is `BLOCKED` / `PARKED_BLOCKED`. `ES-D07 — Discord punishment enforcement` remains dependency-complete `READY`. This D13 worker stops without beginning another package.
 
 ## Selection
 
