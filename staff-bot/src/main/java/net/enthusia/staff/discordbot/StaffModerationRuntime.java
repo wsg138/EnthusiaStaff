@@ -5,9 +5,10 @@ import java.security.SecureRandom;
 import java.time.Clock;
 import java.time.Duration;
 import java.util.Optional;
+import net.enthusia.staff.persistence.DiscordRoleSyncPersistenceRuntime;
 import net.enthusia.staff.persistence.DiscordStaffReadRuntime;
 
-/** Owns every D06 database/authority/component resource. */
+/** Owns every D06/D13/D16 database, authority, component and role-sync resource. */
 final class StaffModerationRuntime implements AutoCloseable {
     private final DiscordStaffReadRuntime data;
     private final StaffModerationReadService readService;
@@ -15,6 +16,8 @@ final class StaffModerationRuntime implements AutoCloseable {
     private final StaffReadAuthorization readAuthorization;
     private final SignedComponentCodec componentCodec;
     private final MinecraftProfileLookup minecraftProfiles;
+    private final Optional<DiscordRoleSyncService> roleSyncService;
+    private final Optional<DiscordRoleSyncPersistenceRuntime> roleSyncPersistence;
 
     private StaffModerationRuntime(
             DiscordStaffReadRuntime data,
@@ -22,7 +25,9 @@ final class StaffModerationRuntime implements AutoCloseable {
             LinkedStaffActorResolver actors,
             StaffReadAuthorization authorization,
             SignedComponentCodec components,
-            MinecraftProfileLookup profiles
+            MinecraftProfileLookup profiles,
+            Optional<DiscordRoleSyncService> roleSync,
+            Optional<DiscordRoleSyncPersistenceRuntime> rolePersistence
     ) {
         this.data = data;
         this.readService = reads;
@@ -30,6 +35,8 @@ final class StaffModerationRuntime implements AutoCloseable {
         this.readAuthorization = authorization;
         this.componentCodec = components;
         this.minecraftProfiles = profiles;
+        this.roleSyncService = roleSync;
+        this.roleSyncPersistence = rolePersistence;
     }
 
     static Optional<StaffModerationRuntime> open(
@@ -50,9 +57,10 @@ final class StaffModerationRuntime implements AutoCloseable {
     ) {
         Clock clock = Clock.systemUTC();
         DiscordStaffReadRuntime data = DiscordStaffReadRuntime.open(configuration.database(), clock);
+        DiscordRoleSyncPersistenceRuntime rolePersistence = null;
         try {
             StaffModerationReadService reads = new StaffModerationReadService(data, clock);
-            StaffAuthorityClient authority = new HttpStaffAuthorityClient(
+            HttpStaffAuthorityClient authority = new HttpStaffAuthorityClient(
                     configuration.authorityUri(),
                     configuration.authoritySecret(),
                     configuration.authorityTransport());
@@ -67,8 +75,30 @@ final class StaffModerationRuntime implements AutoCloseable {
             LinkedStaffActorResolver actors = new LinkedStaffActorResolver(reads, authority);
             StaffReadAuthorization authorization = new StaffReadAuthorization();
             MinecraftProfileLookup profiles = MinecraftProfileLookup.mojang();
-            return new StaffModerationRuntime(data, reads, actors, authorization, components, profiles);
+            Optional<DiscordRoleSyncService> roleSync = Optional.empty();
+            if (configuration.roleSync().isPresent()) {
+                rolePersistence = DiscordRoleSyncPersistenceRuntime.open(configuration.database());
+                roleSync = Optional.of(new DiscordRoleSyncService(
+                        rolePersistence,
+                        authority,
+                        configuration.roleSync().orElseThrow(),
+                        clock
+                ));
+            }
+            return new StaffModerationRuntime(
+                    data,
+                    reads,
+                    actors,
+                    authorization,
+                    components,
+                    profiles,
+                    roleSync,
+                    Optional.ofNullable(rolePersistence)
+            );
         } catch (RuntimeException exception) {
+            if (rolePersistence != null) {
+                rolePersistence.close();
+            }
             data.close();
             throw exception;
         }
@@ -94,12 +124,20 @@ final class StaffModerationRuntime implements AutoCloseable {
         return minecraftProfiles;
     }
 
+    Optional<DiscordRoleSyncService> roleSync() {
+        return roleSyncService;
+    }
+
     @Override
     public void close() {
         try {
             minecraftProfiles.close();
         } finally {
-            data.close();
+            try {
+                roleSyncPersistence.ifPresent(DiscordRoleSyncPersistenceRuntime::close);
+            } finally {
+                data.close();
+            }
         }
     }
 }
