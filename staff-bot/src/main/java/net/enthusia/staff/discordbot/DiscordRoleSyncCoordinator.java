@@ -96,34 +96,40 @@ final class DiscordRoleSyncCoordinator implements AutoCloseable {
         try {
             evaluation = service.evaluate(userId);
         } catch (RuntimeException exception) {
-            recordRetry(userId, Set.of(), Set.of(), "eligibility_unavailable", exception);
+            recordEvaluationRetry(userId, exception);
             return;
         }
+        reconcile(active, evaluation);
+    }
+
+    private void reconcile(DiscordRoleReconciler active, DiscordRoleSyncService.Evaluation evaluation) {
         try {
             DiscordRoleReconciler.Result result = active.reconcile(evaluation);
             service.recordSuccess(evaluation, result.observedRoleIds(), result.state());
         } catch (DiscordRoleReconciler.RetryableException exception) {
-            recordRetry(
-                    userId,
-                    evaluation.desiredRoleIds(),
-                    exception.observedRoleIds(),
-                    exception.errorCode(),
-                    exception
-            );
+            recordRetry(evaluation, exception.observedRoleIds(), exception.errorCode(), exception);
         } catch (RuntimeException exception) {
-            recordRetry(userId, evaluation.desiredRoleIds(), Set.of(), "role_sync_failure", exception);
+            recordRetry(evaluation, Set.of(), "role_sync_failure", exception);
         }
     }
 
+    private void recordEvaluationRetry(DiscordUserId userId, RuntimeException original) {
+        try {
+            service.recordEvaluationRetry(userId, "eligibility_unavailable");
+        } catch (RuntimeException persistenceFailure) {
+            original.addSuppressed(persistenceFailure);
+        }
+        log("eligibility_unavailable", original);
+    }
+
     private void recordRetry(
-            DiscordUserId userId,
-            Set<String> desired,
+            DiscordRoleSyncService.Evaluation evaluation,
             Set<String> observed,
             String errorCode,
             RuntimeException original
     ) {
         try {
-            service.recordRetry(userId, desired, observed, errorCode);
+            service.recordRetry(evaluation.userId(), evaluation.desiredRoleIds(), observed, errorCode);
         } catch (RuntimeException persistenceFailure) {
             original.addSuppressed(persistenceFailure);
         }

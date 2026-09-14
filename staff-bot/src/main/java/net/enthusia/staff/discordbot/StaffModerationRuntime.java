@@ -64,20 +64,11 @@ final class StaffModerationRuntime implements AutoCloseable {
                     configuration.authorityUri(),
                     configuration.authoritySecret(),
                     configuration.authorityTransport());
-            InteractionReplayGuard componentReplay = new InteractionReplayGuard(interactionCapacity, interactionTtl);
-            SignedComponentCodec components = new SignedComponentCodec(
-                    clock,
-                    interactionTtl,
-                    configuration.componentSecret(),
-                    new SecureRandom(),
-                    componentReplay
-            );
+            SignedComponentCodec components = componentCodec(clock, interactionCapacity, interactionTtl, configuration);
             LinkedStaffActorResolver actors = new LinkedStaffActorResolver(reads, authority);
-            StaffReadAuthorization authorization = new StaffReadAuthorization();
-            MinecraftProfileLookup profiles = MinecraftProfileLookup.mojang();
             Optional<DiscordRoleSyncService> roleSync = Optional.empty();
             if (configuration.roleSync().isPresent()) {
-                rolePersistence = DiscordRoleSyncPersistenceRuntime.open(configuration.database());
+                rolePersistence = DiscordRoleSyncPersistenceRuntime.open(configuration.roleSyncDatabase().orElseThrow());
                 roleSync = Optional.of(new DiscordRoleSyncService(
                         rolePersistence,
                         authority,
@@ -85,11 +76,12 @@ final class StaffModerationRuntime implements AutoCloseable {
                         clock
                 ));
             }
+            MinecraftProfileLookup profiles = MinecraftProfileLookup.mojang();
             return new StaffModerationRuntime(
                     data,
                     reads,
                     actors,
-                    authorization,
+                    new StaffReadAuthorization(),
                     components,
                     profiles,
                     roleSync,
@@ -102,6 +94,22 @@ final class StaffModerationRuntime implements AutoCloseable {
             data.close();
             throw exception;
         }
+    }
+
+    private static SignedComponentCodec componentCodec(
+            Clock clock,
+            int interactionCapacity,
+            Duration interactionTtl,
+            StaffModerationConfiguration configuration
+    ) {
+        InteractionReplayGuard componentReplay = new InteractionReplayGuard(interactionCapacity, interactionTtl);
+        return new SignedComponentCodec(
+                clock,
+                interactionTtl,
+                configuration.componentSecret(),
+                new SecureRandom(),
+                componentReplay
+        );
     }
 
     StaffModerationReadService reads() {

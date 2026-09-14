@@ -98,7 +98,7 @@ final class DiscordRoleSyncService {
     }
 
     void recordSuccess(Evaluation evaluation, Set<String> observedRoleIds, String state) {
-        save(evaluation.userId(), evaluation.desiredRoleIds(), observedRoleIds, state, Optional.empty(), false);
+        saveRoles(evaluation.userId(), evaluation.desiredRoleIds(), observedRoleIds, state, Optional.empty(), false);
     }
 
     void recordRetry(
@@ -107,14 +107,33 @@ final class DiscordRoleSyncService {
             Set<String> observedRoleIds,
             String errorCode
     ) {
-        save(userId, desiredRoleIds, observedRoleIds, "RETRY", Optional.of(normalizeError(errorCode)), true);
+        saveRoles(userId, desiredRoleIds, observedRoleIds, "RETRY", Optional.of(normalizeError(errorCode)), true);
+    }
+
+    void recordEvaluationRetry(DiscordUserId userId, String errorCode) {
+        Instant now = clock.instant();
+        Optional<ReconciliationState> current = store.reconciliation(key(userId));
+        int attempts = nextAttemptCount(current);
+        ReconciliationState proposed = new ReconciliationState(
+                key(userId),
+                RESOURCE_TYPE,
+                userId.value(),
+                current.map(ReconciliationState::desiredStateJson).orElseGet(() -> rolesJson(Set.of())),
+                current.flatMap(ReconciliationState::observedStateJson),
+                "RETRY",
+                attempts,
+                Optional.of(now.plus(retryDelay(attempts))),
+                Optional.of(normalizeError(errorCode)),
+                current.map(ReconciliationState::revision).orElse(0L)
+        );
+        persistWithConflictRetry(proposed, current, now);
     }
 
     DiscordRoleSyncConfiguration configuration() {
         return configuration;
     }
 
-    private void save(
+    private void saveRoles(
             DiscordUserId userId,
             Set<String> desired,
             Set<String> observed,
@@ -124,13 +143,17 @@ final class DiscordRoleSyncService {
     ) {
         Instant now = clock.instant();
         Optional<ReconciliationState> current = store.reconciliation(key(userId));
-        int attempts = retry ? Math.addExact(current.map(ReconciliationState::attemptCount).orElse(0), 1) : 0;
+        int attempts = retry ? nextAttemptCount(current) : 0;
         Optional<Instant> next = retry ? Optional.of(now.plus(retryDelay(attempts))) : Optional.empty();
         ReconciliationState proposed = new ReconciliationState(
                 key(userId), RESOURCE_TYPE, userId.value(), rolesJson(desired), Optional.of(rolesJson(observed)),
                 state, attempts, next, error, current.map(ReconciliationState::revision).orElse(0L)
         );
         persistWithConflictRetry(proposed, current, now);
+    }
+
+    private int nextAttemptCount(Optional<ReconciliationState> current) {
+        return Math.addExact(current.map(ReconciliationState::attemptCount).orElse(0), 1);
     }
 
     private void persistWithConflictRetry(

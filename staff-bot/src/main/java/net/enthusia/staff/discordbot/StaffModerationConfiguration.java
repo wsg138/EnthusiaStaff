@@ -20,10 +20,13 @@ final class StaffModerationConfiguration {
     static final String COMPONENT_SIGNING_ENV = "ENTHUSIA_STAFF_BOT_COMPONENT_SECRET";
     static final String DB_POOL_SIZE_ENV = "ENTHUSIA_STAFF_BOT_DB_POOL_SIZE";
     static final String DB_TIMEOUT_MILLIS_ENV = "ENTHUSIA_STAFF_BOT_DB_TIMEOUT_MILLIS";
+    static final String ROLE_SYNC_DB_USERNAME_ENV = "ENTHUSIA_STAFF_BOT_ROLE_SYNC_DB_USERNAME";
+    static final String ROLE_SYNC_DB_CREDENTIAL_ENV = "ENTHUSIA_STAFF_BOT_ROLE_SYNC_DB_PASSWORD";
 
     private static final int DEFAULT_POOL_SIZE = 4;
     private static final int MIN_POOL_SIZE = 2;
     private static final int MAX_POOL_SIZE = 16;
+    private static final int ROLE_SYNC_POOL_SIZE = 2;
     private static final int DEFAULT_TIMEOUT_MILLIS = 3_000;
     private static final int MIN_TIMEOUT_MILLIS = 250;
     private static final int MAX_TIMEOUT_MILLIS = 60_000;
@@ -48,6 +51,7 @@ final class StaffModerationConfiguration {
     private final AuthorityTransport authorityTransport;
     private final String componentSigningSecret;
     private final Optional<DiscordRoleSyncConfiguration> roleSyncConfiguration;
+    private final Optional<DatabaseConfig> roleSyncDatabaseConfig;
 
     private StaffModerationConfiguration(
             DatabaseConfig database,
@@ -55,7 +59,8 @@ final class StaffModerationConfiguration {
             String authoritySecret,
             AuthorityTransport transport,
             String componentSecret,
-            Optional<DiscordRoleSyncConfiguration> roleSync
+            Optional<DiscordRoleSyncConfiguration> roleSync,
+            Optional<DatabaseConfig> roleSyncDatabase
     ) {
         this.databaseConfig = Objects.requireNonNull(database, "database");
         this.authorityEndpoint = Objects.requireNonNull(authorityUri, "authorityUri");
@@ -63,6 +68,10 @@ final class StaffModerationConfiguration {
         this.authorityTransport = Objects.requireNonNull(transport, "transport");
         this.componentSigningSecret = cryptoSecret(componentSecret, COMPONENT_SIGNING_ENV);
         this.roleSyncConfiguration = Objects.requireNonNull(roleSync, "roleSync");
+        this.roleSyncDatabaseConfig = Objects.requireNonNull(roleSyncDatabase, "roleSyncDatabase");
+        if (roleSyncConfiguration.isPresent() != roleSyncDatabaseConfig.isPresent()) {
+            throw new IllegalArgumentException("role-sync policy and write database configuration must be configured together");
+        }
     }
 
     static Optional<StaffModerationConfiguration> fromSystemEnvironment() {
@@ -79,22 +88,14 @@ final class StaffModerationConfiguration {
         Optional<DiscordRoleSyncConfiguration> roleSync = DiscordRoleSyncConfiguration.fromEnvironment(values);
         long configured = REQUIRED.stream().filter(envName -> present(values.get(envName))).count();
         if (configured == 0) {
-            if (roleSync.isPresent()) {
-                throw new IllegalArgumentException("role sync requires the staff moderation database and authority configuration");
-            }
+            rejectOrphanRoleSyncSettings(values, roleSync);
             return Optional.empty();
         }
         if (configured != REQUIRED.size()) {
             throw new IllegalArgumentException("staff moderation configuration is incomplete");
         }
         int poolSize = integer(values, DB_POOL_SIZE_ENV, DEFAULT_POOL_SIZE, MIN_POOL_SIZE, MAX_POOL_SIZE);
-        int timeout = integer(
-                values,
-                DB_TIMEOUT_MILLIS_ENV,
-                DEFAULT_TIMEOUT_MILLIS,
-                MIN_TIMEOUT_MILLIS,
-                MAX_TIMEOUT_MILLIS
-        );
+        int timeout = integer(values, DB_TIMEOUT_MILLIS_ENV, DEFAULT_TIMEOUT_MILLIS, MIN_TIMEOUT_MILLIS, MAX_TIMEOUT_MILLIS);
         DatabaseConfig database = new DatabaseConfig(
                 values.get(JDBC_URL_ENV).trim(),
                 values.get(DB_USERNAME_ENV).trim(),
@@ -102,6 +103,7 @@ final class StaffModerationConfiguration {
                 poolSize,
                 timeout
         );
+        Optional<DatabaseConfig> roleSyncDatabase = roleSyncDatabase(values, roleSync, database.jdbcUrl(), timeout);
         AuthorityTransport transport = AuthorityTransport.parse(values.get(AUTHORITY_TRANSPORT_ENV));
         return Optional.of(new StaffModerationConfiguration(
                 database,
@@ -109,7 +111,8 @@ final class StaffModerationConfiguration {
                 values.get(AUTHORITY_CREDENTIAL_ENV),
                 transport,
                 values.get(COMPONENT_SIGNING_ENV),
-                roleSync
+                roleSync,
+                roleSyncDatabase
         ));
     }
 
@@ -137,11 +140,52 @@ final class StaffModerationConfiguration {
         return roleSyncConfiguration;
     }
 
+    Optional<DatabaseConfig> roleSyncDatabase() {
+        return roleSyncDatabaseConfig;
+    }
+
     @Override
     public String toString() {
         return "StaffModerationConfiguration[authority=<configured>, authorityTransport=%s, roleSync=%s, "
-                + "database=<redacted>, authoritySecret=<redacted>, componentSecret=<redacted>]"
+                + "database=<redacted>, roleSyncDatabase=<redacted>, authoritySecret=<redacted>, componentSecret=<redacted>]"
                 .formatted(authorityTransport.externalName(), roleSyncConfiguration.isPresent() ? "<configured>" : "<none>");
+    }
+
+    private static Optional<DatabaseConfig> roleSyncDatabase(
+            Map<String, String> values,
+            Optional<DiscordRoleSyncConfiguration> roleSync,
+            String jdbcUrl,
+            int timeout
+    ) {
+        boolean username = present(values.get(ROLE_SYNC_DB_USERNAME_ENV));
+        boolean password = present(values.get(ROLE_SYNC_DB_CREDENTIAL_ENV));
+        if (roleSync.isEmpty()) {
+            if (username || password) {
+                throw new IllegalArgumentException("role-sync database credentials require role-sync mappings");
+            }
+            return Optional.empty();
+        }
+        if (!username || !password) {
+            throw new IllegalArgumentException("role-sync requires separate write database credentials");
+        }
+        return Optional.of(new DatabaseConfig(
+                jdbcUrl,
+                values.get(ROLE_SYNC_DB_USERNAME_ENV).trim(),
+                required(values.get(ROLE_SYNC_DB_CREDENTIAL_ENV), ROLE_SYNC_DB_CREDENTIAL_ENV),
+                ROLE_SYNC_POOL_SIZE,
+                timeout
+        ));
+    }
+
+    private static void rejectOrphanRoleSyncSettings(
+            Map<String, String> values,
+            Optional<DiscordRoleSyncConfiguration> roleSync
+    ) {
+        if (roleSync.isPresent()
+                || present(values.get(ROLE_SYNC_DB_USERNAME_ENV))
+                || present(values.get(ROLE_SYNC_DB_CREDENTIAL_ENV))) {
+            throw new IllegalArgumentException("role sync requires the staff moderation database and authority configuration");
+        }
     }
 
     private static URI authorityUri(String raw, AuthorityTransport transport) {
