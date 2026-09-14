@@ -35,7 +35,8 @@ final class JdaDiscordRoleReconciler implements DiscordRoleReconciler {
             return new Result(Set.of(), "MEMBER_ABSENT");
         }
         Set<String> observed = roleIds(member);
-        RoleDelta delta = delta(evaluation.desiredRoleIds(), observed);
+        DiscordRoleDelta delta = DiscordRoleDelta.calculate(
+                evaluation.desiredRoleIds(), observed, configuration.managedRoleIds());
         if (configuration.mode() == DiscordRoleSyncConfiguration.Mode.SHADOW) {
             return new Result(observed, delta.empty() ? "SHADOW_MATCH" : "SHADOW_DRIFT");
         }
@@ -66,16 +67,7 @@ final class JdaDiscordRoleReconciler implements DiscordRoleReconciler {
         }
     }
 
-    private RoleDelta delta(Set<String> desired, Set<String> observed) {
-        Set<String> add = new LinkedHashSet<>(desired);
-        add.removeAll(observed);
-        Set<String> remove = new LinkedHashSet<>(observed);
-        remove.retainAll(configuration.managedRoleIds());
-        remove.removeAll(desired);
-        return new RoleDelta(Set.copyOf(add), Set.copyOf(remove));
-    }
-
-    private void apply(Member member, RoleDelta delta, Set<String> observed) {
+    private void apply(Member member, DiscordRoleDelta delta, Set<String> observed) {
         for (String roleId : delta.add()) {
             Role role = mutableRole(roleId, observed);
             await(guild.addRoleToMember(member, role).submit(), "role_add_failed", observed);
@@ -118,17 +110,6 @@ final class JdaDiscordRoleReconciler implements DiscordRoleReconciler {
                     ? exception.getCause()
                     : exception;
             throw new RetryableException(errorCode, observed, cause);
-        }
-    }
-
-    private record RoleDelta(Set<String> add, Set<String> remove) {
-        private RoleDelta {
-            add = Set.copyOf(add);
-            remove = Set.copyOf(remove);
-        }
-
-        boolean empty() {
-            return add.isEmpty() && remove.isEmpty();
         }
     }
 }
