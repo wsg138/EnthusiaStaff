@@ -84,6 +84,7 @@ final class DiscordPunishmentJsonCodec {
             String state,
             String termination,
             String dmOutcome,
+            String removalDmOutcome,
             boolean externalApplied,
             Boolean previousOverrideExisted,
             Long previousAllowedRaw,
@@ -121,6 +122,7 @@ final class DiscordPunishmentJsonCodec {
                     punishment.state().name(),
                     punishment.termination().name(),
                     punishment.dmOutcome().name(),
+                    punishment.removalDmOutcome().name(),
                     punishment.externalApplied(),
                     snapshot == null ? null : snapshot.existed(),
                     snapshot == null ? null : snapshot.allowedRaw(),
@@ -153,12 +155,23 @@ final class DiscordPunishmentJsonCodec {
                     Optional.ofNullable(expiresAt),
                     DiscordPunishmentState.valueOf(state),
                     DiscordPunishmentTermination.valueOf(termination),
-                    DiscordDeliveryOutcome.valueOf(dmOutcome),
+                    delivery(dmOutcome),
+                    delivery(removalDmOutcome),
                     externalApplied,
                     permissionSnapshot(),
                     Optional.ofNullable(lastErrorCode),
                     Optional.ofNullable(lastTransitionOperationKey)
             );
+        }
+
+        private static DiscordDeliveryOutcome delivery(String value) {
+            if (value == null) {
+                return DiscordDeliveryOutcome.NOT_ATTEMPTED;
+            }
+            if ("FAILED".equals(value)) {
+                return DiscordDeliveryOutcome.FAILED_TERMINAL;
+            }
+            return DiscordDeliveryOutcome.valueOf(value);
         }
 
         private SanctionLength length() {
@@ -209,6 +222,7 @@ final class DiscordPunishmentJsonCodec {
     private record Observation(
             boolean externalApplied,
             String dmOutcome,
+            String removalDmOutcome,
             Boolean previousOverrideExisted,
             Long previousAllowedRaw,
             Long previousDeniedRaw,
@@ -219,6 +233,7 @@ final class DiscordPunishmentJsonCodec {
             return new Observation(
                     punishment.externalApplied(),
                     punishment.dmOutcome().name(),
+                    punishment.removalDmOutcome().name(),
                     snapshot == null ? null : snapshot.existed(),
                     snapshot == null ? null : snapshot.allowedRaw(),
                     snapshot == null ? null : snapshot.deniedRaw(),

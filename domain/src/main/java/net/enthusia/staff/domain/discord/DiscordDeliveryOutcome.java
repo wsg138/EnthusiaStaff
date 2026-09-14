@@ -4,5 +4,14 @@ package net.enthusia.staff.domain.discord;
 public enum DiscordDeliveryOutcome {
     NOT_ATTEMPTED,
     DELIVERED,
-    FAILED
+    FAILED_RETRYABLE,
+    FAILED_TERMINAL;
+
+    public boolean failed() {
+        return this == FAILED_RETRYABLE || this == FAILED_TERMINAL;
+    }
+
+    public boolean retryable() {
+        return this == FAILED_RETRYABLE;
+    }
 }

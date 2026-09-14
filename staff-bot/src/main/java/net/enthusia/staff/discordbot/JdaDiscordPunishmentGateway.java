@@ -1,8 +1,6 @@
 package net.enthusia.staff.discordbot;
 
-import java.util.Optional;
 import java.util.Set;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import net.dv8tion.jda.api.JDA;
 import net.dv8tion.jda.api.Permission;
@@ -10,7 +8,6 @@ import net.dv8tion.jda.api.entities.Guild;
 import net.dv8tion.jda.api.entities.Member;
 import net.dv8tion.jda.api.entities.PermissionOverride;
 import net.dv8tion.jda.api.entities.Role;
-import net.dv8tion.jda.api.entities.User;
 import net.dv8tion.jda.api.entities.UserSnowflake;
 import net.dv8tion.jda.api.entities.channel.attribute.ICategorizableChannel;
 import net.dv8tion.jda.api.entities.channel.attribute.IPermissionContainer;
@@ -47,6 +44,8 @@ final class JdaDiscordPunishmentGateway implements DiscordPunishmentGateway {
     private static final int MAX_AUDIT_REASON = 500;
 
     private final DiscordPunishmentConfiguration configuration;
+    private final JdaNativeBanEnforcer nativeBans = new JdaNativeBanEnforcer();
+    private final JdaPunishmentNotifier notifier;
     private final AtomicReference<JDA> jda = new AtomicReference<>();
 
     JdaDiscordPunishmentGateway(DiscordPunishmentConfiguration configuration) {
@@ -54,6 +53,7 @@ final class JdaDiscordPunishmentGateway implements DiscordPunishmentGateway {
             throw new IllegalArgumentException("Discord punishment configuration must be present");
         }
         this.configuration = configuration;
+        this.notifier = new JdaPunishmentNotifier(configuration);
     }
 
     void bind(JDA value) {
@@ -75,18 +75,23 @@ final class JdaDiscordPunishmentGateway implements DiscordPunishmentGateway {
 
     @Override
     public void preflight(DiscordGuildId guildId, DiscordUserId target, DiscordPunishmentIntent intent) {
-        Guild guild = guild(guildId);
-        Member member = memberOrNull(guild, target);
-        if (intent.type() != DiscordConsequenceType.BAN && member == null) {
-            throw failure("TARGET_NOT_IN_GUILD", false);
-        }
-        if (member != null) {
-            requireHierarchy(guild, member);
-        }
-        switch (intent.type()) {
-            case MUTE -> requireMuteRole(guild);
-            case CHANNEL_RESTRICTION -> restrictionContainer(guild, intent.restriction().orElseThrow());
-            case WARNING, KICK, BAN -> { }
+        try {
+            Guild guild = guild(guildId);
+            Member member = memberOrNull(guild, target);
+            if (intent.type() != DiscordConsequenceType.BAN && member == null) {
+                throw failure("TARGET_NOT_IN_GUILD", false);
+            }
+            if (member != null) {
+                requireHierarchy(guild, member);
+            }
+            switch (intent.type()) {
+                case MUTE -> requireMuteRole(guild);
+                case BAN -> nativeBans.preflight(guild, target);
+                case CHANNEL_RESTRICTION -> restrictionContainer(guild, intent.restriction().orElseThrow());
+                case WARNING, KICK -> { }
+            }
+        } catch (RuntimeException failure) {
+            throw classify("PREFLIGHT", failure);
         }
     }
 
@@ -101,26 +106,22 @@ final class JdaDiscordPunishmentGateway implements DiscordPunishmentGateway {
             );
             return snapshot(container.getPermissionOverride(member));
         } catch (RuntimeException failure) {
-            throw classify("SNAPSHOT", failure, DiscordDeliveryOutcome.NOT_ATTEMPTED);
+            throw classify("SNAPSHOT", failure);
         }
     }
 
     @Override
-    public ApplyResult apply(DiscordPunishment punishment) {
-        Guild guild = guild(punishment.guildId());
-        DiscordDeliveryOutcome delivery = notify(punishment);
-        if (punishment.intent().type() == DiscordConsequenceType.WARNING) {
-            if (delivery != DiscordDeliveryOutcome.DELIVERED) {
-                throw new EffectException("WARNING_DM_FAILED", false, delivery, null);
-            }
-            return new ApplyResult(delivery, Optional.empty());
-        }
+    public void apply(DiscordPunishment punishment) {
         try {
-            applyEffect(guild, punishment);
-            return new ApplyResult(delivery, punishment.previousRestriction());
+            applyEffect(guild(punishment.guildId()), punishment);
         } catch (RuntimeException failure) {
-            throw classify("APPLY", failure, delivery);
+            throw classify("APPLY", failure);
         }
+    }
+
+    @Override
+    public DiscordDeliveryOutcome notifyApplied(DiscordPunishment punishment) {
+        return notifySafely(punishment, false);
     }
 
     @Override
@@ -129,13 +130,18 @@ final class JdaDiscordPunishmentGateway implements DiscordPunishmentGateway {
             Guild guild = guild(punishment.guildId());
             switch (punishment.intent().type()) {
                 case MUTE -> removeMute(guild, punishment.targetUserId());
-                case BAN -> unban(guild, punishment.targetUserId());
+                case BAN -> nativeBans.remove(guild, punishment);
                 case CHANNEL_RESTRICTION -> removeRestriction(guild, punishment);
                 case WARNING, KICK -> { }
             }
         } catch (RuntimeException failure) {
-            throw classify("REMOVE", failure, DiscordDeliveryOutcome.NOT_ATTEMPTED);
+            throw classify("REMOVE", failure);
         }
+    }
+
+    @Override
+    public DiscordDeliveryOutcome notifyRemoved(DiscordPunishment punishment) {
+        return notifySafely(punishment, true);
     }
 
     @Override
@@ -144,12 +150,25 @@ final class JdaDiscordPunishmentGateway implements DiscordPunishmentGateway {
             Guild guild = guild(punishment.guildId());
             switch (punishment.intent().type()) {
                 case MUTE -> reconcileMute(guild, punishment.targetUserId());
-                case BAN -> reconcileBan(guild, punishment);
+                case BAN -> nativeBans.reconcile(guild, punishment);
                 case CHANNEL_RESTRICTION -> applyRestriction(guild, punishment);
                 case WARNING, KICK -> { }
             }
         } catch (RuntimeException failure) {
-            throw classify("RECONCILE", failure, DiscordDeliveryOutcome.NOT_ATTEMPTED);
+            throw classify("RECONCILE", failure);
+        }
+    }
+
+    private DiscordDeliveryOutcome notifySafely(DiscordPunishment punishment, boolean removal) {
+        try {
+            JDA current = boundJda();
+            return removal
+                    ? notifier.notifyRemoved(current, punishment)
+                    : notifier.notifyApplied(current, punishment);
+        } catch (EffectException failure) {
+            return failure.retryable()
+                    ? DiscordDeliveryOutcome.FAILED_RETRYABLE
+                    : DiscordDeliveryOutcome.FAILED_TERMINAL;
         }
     }
 
@@ -158,7 +177,7 @@ final class JdaDiscordPunishmentGateway implements DiscordPunishmentGateway {
         switch (punishment.intent().type()) {
             case MUTE -> applyMute(guild, target, auditReason(punishment));
             case KICK -> kick(guild, target, punishment);
-            case BAN -> ban(guild, target, punishment);
+            case BAN -> applyBan(guild, punishment);
             case CHANNEL_RESTRICTION -> applyRestriction(guild, punishment);
             case WARNING -> { }
         }
@@ -173,28 +192,12 @@ final class JdaDiscordPunishmentGateway implements DiscordPunishmentGateway {
         guild.kick(UserSnowflake.fromId(target.value())).reason(auditReason(punishment)).complete();
     }
 
-    private void ban(Guild guild, DiscordUserId target, DiscordPunishment punishment) {
-        Member member = memberOrNull(guild, target);
+    private void applyBan(Guild guild, DiscordPunishment punishment) {
+        Member member = memberOrNull(guild, punishment.targetUserId());
         if (member != null) {
             requireHierarchy(guild, member);
         }
-        guild.ban(
-                UserSnowflake.fromId(target.value()),
-                punishment.intent().messageDeleteSeconds(),
-                TimeUnit.SECONDS
-        ).reason(auditReason(punishment)).complete();
-    }
-
-    private void reconcileBan(Guild guild, DiscordPunishment punishment) {
-        UserSnowflake target = UserSnowflake.fromId(punishment.targetUserId().value());
-        try {
-            guild.retrieveBan(target).complete();
-        } catch (ErrorResponseException exception) {
-            if (!"UNKNOWN_BAN".equals(exception.getErrorResponse().name())) {
-                throw exception;
-            }
-            guild.ban(target, 0, TimeUnit.SECONDS).reason(auditReason(punishment)).complete();
-        }
+        nativeBans.apply(guild, punishment);
     }
 
     private void applyMute(Guild guild, DiscordUserId target, String reason) {
@@ -332,44 +335,6 @@ final class JdaDiscordPunishmentGateway implements DiscordPunishmentGateway {
                 .complete();
     }
 
-    private void unban(Guild guild, DiscordUserId target) {
-        try {
-            guild.unban(UserSnowflake.fromId(target.value())).reason("Enthusia D07 ban removal").complete();
-        } catch (ErrorResponseException exception) {
-            if (!"UNKNOWN_BAN".equals(exception.getErrorResponse().name())) {
-                throw exception;
-            }
-        }
-    }
-
-    private DiscordDeliveryOutcome notify(DiscordPunishment punishment) {
-        if (!punishment.intent().notifyTarget()) {
-            return DiscordDeliveryOutcome.NOT_ATTEMPTED;
-        }
-        try {
-            User user = boundJda().retrieveUserById(punishment.targetUserId().value()).complete();
-            user.openPrivateChannel().complete().sendMessage(dmMessage(punishment)).complete();
-            return DiscordDeliveryOutcome.DELIVERED;
-        } catch (RuntimeException failure) {
-            return DiscordDeliveryOutcome.FAILED;
-        }
-    }
-
-    private String dmMessage(DiscordPunishment punishment) {
-        return "Enthusia moderation action: " + punishment.intent().type()
-                + "\nDuration: " + duration(punishment)
-                + "\nReason: " + punishment.intent().publicReason()
-                + "\n" + configuration.supportMessage();
-    }
-
-    private static String duration(DiscordPunishment punishment) {
-        return switch (punishment.intent().length().kind()) {
-            case INSTANT -> "instant";
-            case PERMANENT -> "permanent";
-            case TEMPORARY -> punishment.intent().length().temporary().orElseThrow().toString();
-        };
-    }
-
     private IPermissionContainer restrictionContainer(Guild guild, DiscordRestrictionTarget target) {
         GuildChannel channel = guild.getGuildChannelById(target.snowflake());
         if (!(channel instanceof IPermissionContainer container)) {
@@ -410,7 +375,8 @@ final class JdaDiscordPunishmentGateway implements DiscordPunishmentGateway {
         try {
             return guild.retrieveMemberById(target.value()).complete();
         } catch (ErrorResponseException exception) {
-            if ("UNKNOWN_MEMBER".equals(exception.getErrorResponse().name())) {
+            String code = exception.getErrorResponse().name();
+            if ("UNKNOWN_MEMBER".equals(code) || "UNKNOWN_USER".equals(code)) {
                 return null;
             }
             throw exception;
@@ -449,23 +415,23 @@ final class JdaDiscordPunishmentGateway implements DiscordPunishmentGateway {
         return mode == DiscordRestrictionTarget.Mode.NO_ACCESS ? NO_ACCESS_MASK : READ_ONLY_MASK;
     }
 
-    private static EffectException classify(
-            String phase,
-            RuntimeException failure,
-            DiscordDeliveryOutcome delivery
-    ) {
+    private static EffectException classify(String phase, RuntimeException failure) {
         if (failure instanceof EffectException effect) {
             return effect;
         }
         if (failure instanceof InsufficientPermissionException || failure instanceof HierarchyException) {
-            return new EffectException(phase + "_PERMISSION_DENIED", false, delivery, failure);
+            return new EffectException(phase + "_PERMISSION_DENIED", false, failure);
         }
         if (failure instanceof ErrorResponseException response) {
             String code = response.getErrorResponse().name();
-            boolean retryable = code.contains("SERVER") || code.contains("TEMPORAR");
-            return new EffectException(phase + "_DISCORD_" + code, retryable, delivery, failure);
+            boolean retryable = retryableCode(code);
+            return new EffectException(phase + "_DISCORD_" + code, retryable, failure);
         }
-        return new EffectException(phase + "_TRANSPORT_FAILURE", true, delivery, failure);
+        return new EffectException(phase + "_TRANSPORT_FAILURE", true, failure);
+    }
+
+    private static boolean retryableCode(String code) {
+        return code.contains("SERVER") || code.contains("TEMPORAR") || code.contains("RATE_LIMIT");
     }
 
     private static EffectException failure(String code, boolean retryable) {
@@ -473,7 +439,8 @@ final class JdaDiscordPunishmentGateway implements DiscordPunishmentGateway {
     }
 
     private static String auditReason(DiscordPunishment punishment) {
-        String reason = "Enthusia D07 " + punishment.intent().type() + ": " + punishment.intent().publicReason();
+        String reason = "Enthusia D07 " + punishment.punishmentId() + " "
+                + punishment.intent().type() + ": " + punishment.intent().publicReason();
         return reason.length() <= MAX_AUDIT_REASON ? reason : reason.substring(0, MAX_AUDIT_REASON);
     }
 }

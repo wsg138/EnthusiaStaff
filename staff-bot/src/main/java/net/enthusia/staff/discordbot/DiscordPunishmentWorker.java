@@ -72,6 +72,10 @@ final class DiscordPunishmentWorker {
 
     private void apply(WorkLease work, StoredPunishment stored) {
         DiscordPunishment punishment = stored.punishment();
+        if (needsApplyNotificationRetry(punishment)) {
+            retryApplyNotification(work, stored);
+            return;
+        }
         if (!applyPending(punishment)) {
             settle(work, stored, punishment, List.of());
             return;
@@ -82,6 +86,10 @@ final class DiscordPunishmentWorker {
         }
         if (requiresRestrictionSnapshot(punishment)) {
             captureRestrictionSnapshot(work, stored);
+            return;
+        }
+        if (punishment.intent().type() == DiscordConsequenceType.WARNING) {
+            applyWarning(work, stored);
             return;
         }
         applyExternalEffect(work, stored);
@@ -104,42 +112,102 @@ final class DiscordPunishmentWorker {
         }
     }
 
+    private void applyWarning(WorkLease work, StoredPunishment stored) {
+        DiscordDeliveryOutcome delivery = gateway.notifyApplied(stored.punishment());
+        boolean retry = retryDelivery(delivery, work);
+        DiscordDeliveryOutcome recorded = recordedDelivery(delivery, retry);
+        DiscordPunishmentState state = warningState(recorded, retry);
+        DiscordPunishment replacement = stored.punishment().withProcessingResult(
+                state,
+                recorded,
+                recorded == DiscordDeliveryOutcome.DELIVERED,
+                stored.punishment().previousRestriction(),
+                deliveryError("WARNING", recorded, retry),
+                operationKey(work)
+        );
+        settle(work, stored, replacement, retry ? List.of(retry(work, WorkType.APPLY)) : List.of());
+    }
+
     private void applyExternalEffect(WorkLease work, StoredPunishment stored) {
         try {
-            DiscordPunishmentGateway.ApplyResult result = gateway.apply(stored.punishment());
+            gateway.apply(stored.punishment());
+            DiscordDeliveryOutcome delivery = gateway.notifyApplied(stored.punishment());
+            boolean retry = retryDelivery(delivery, work);
+            DiscordDeliveryOutcome recorded = recordedDelivery(delivery, retry);
             DiscordPunishmentState state = stored.punishment().intent().reversible()
                     ? DiscordPunishmentState.APPLIED
                     : DiscordPunishmentState.COMPLETED;
             DiscordPunishment replacement = stored.punishment().withProcessingResult(
                     state,
-                    result.deliveryOutcome(),
+                    recorded,
                     true,
-                    result.previousRestriction(),
-                    Optional.empty(),
+                    stored.punishment().previousRestriction(),
+                    deliveryError("APPLY", recorded, retry),
                     operationKey(work)
             );
-            settle(work, stored, replacement, followUp(replacement));
+            settle(work, stored, replacement, applyFollowUp(replacement, work, retry));
         } catch (DiscordPunishmentGateway.EffectException failure) {
             settleApplyFailure(work, stored, failure);
         }
     }
 
+    private void retryApplyNotification(WorkLease work, StoredPunishment stored) {
+        DiscordDeliveryOutcome delivery = gateway.notifyApplied(stored.punishment());
+        boolean retry = retryDelivery(delivery, work);
+        DiscordDeliveryOutcome recorded = recordedDelivery(delivery, retry);
+        DiscordPunishment replacement = stored.punishment().withApplyDeliveryOutcome(
+                recorded,
+                deliveryError("APPLY", recorded, retry),
+                operationKey(work)
+        );
+        settle(work, stored, replacement, retry ? List.of(retry(work, WorkType.APPLY)) : List.of());
+    }
+
     private void remove(WorkLease work, StoredPunishment stored) {
         DiscordPunishment punishment = stored.punishment();
+        if (needsRemovalNotificationRetry(punishment)) {
+            retryRemovalNotification(work, stored);
+            return;
+        }
         if (!punishment.state().removalPending()) {
             settle(work, stored, punishment, List.of());
             return;
         }
         if (!punishment.externalApplied()) {
-            settle(work, stored, punishment.markRemoved(operationKey(work)), List.of());
+            completeRemoval(work, stored, punishment);
             return;
         }
         try {
             gateway.remove(punishment);
-            settle(work, stored, punishment.markRemoved(operationKey(work)), List.of());
+            completeRemoval(work, stored, punishment);
         } catch (DiscordPunishmentGateway.EffectException failure) {
             settleRemoveFailure(work, stored, failure);
         }
+    }
+
+    private void completeRemoval(WorkLease work, StoredPunishment stored, DiscordPunishment punishment) {
+        DiscordPunishment removed = punishment.markRemoved(operationKey(work));
+        DiscordDeliveryOutcome delivery = gateway.notifyRemoved(removed);
+        boolean retry = retryDelivery(delivery, work);
+        DiscordDeliveryOutcome recorded = recordedDelivery(delivery, retry);
+        DiscordPunishment replacement = removed.withRemovalDeliveryOutcome(
+                recorded,
+                deliveryError("REMOVE", recorded, retry),
+                operationKey(work)
+        );
+        settle(work, stored, replacement, retry ? List.of(retry(work, WorkType.REMOVE)) : List.of());
+    }
+
+    private void retryRemovalNotification(WorkLease work, StoredPunishment stored) {
+        DiscordDeliveryOutcome delivery = gateway.notifyRemoved(stored.punishment());
+        boolean retry = retryDelivery(delivery, work);
+        DiscordDeliveryOutcome recorded = recordedDelivery(delivery, retry);
+        DiscordPunishment replacement = stored.punishment().withRemovalDeliveryOutcome(
+                recorded,
+                deliveryError("REMOVE", recorded, retry),
+                operationKey(work)
+        );
+        settle(work, stored, replacement, retry ? List.of(retry(work, WorkType.REMOVE)) : List.of());
     }
 
     private void reconcile(WorkLease work, StoredPunishment stored) {
@@ -179,7 +247,7 @@ final class DiscordPunishmentWorker {
         return punishment.withProcessingResult(
                 DiscordPunishmentState.APPLIED,
                 punishment.dmOutcome(),
-                true,
+                punishment.externalApplied(),
                 punishment.previousRestriction(),
                 error,
                 operationKey(work)
@@ -195,12 +263,9 @@ final class DiscordPunishmentWorker {
         DiscordPunishmentState state = retry
                 ? DiscordPunishmentState.RETRY_APPLY
                 : DiscordPunishmentState.FAILED_APPLY;
-        DiscordDeliveryOutcome delivery = failure.deliveryOutcome() == DiscordDeliveryOutcome.NOT_ATTEMPTED
-                ? stored.punishment().dmOutcome()
-                : failure.deliveryOutcome();
         DiscordPunishment replacement = stored.punishment().withProcessingResult(
                 state,
-                delivery,
+                stored.punishment().dmOutcome(),
                 stored.punishment().externalApplied(),
                 stored.punishment().previousRestriction(),
                 Optional.of(failure.errorCode()),
@@ -222,12 +287,24 @@ final class DiscordPunishmentWorker {
         DiscordPunishment replacement = punishment.withProcessingResult(
                 state,
                 punishment.dmOutcome(),
-                true,
+                punishment.externalApplied(),
                 punishment.previousRestriction(),
                 Optional.of(failure.errorCode()),
                 operationKey(work)
         );
         settle(work, stored, replacement, retry ? List.of(retry(work, WorkType.REMOVE)) : List.of());
+    }
+
+    private List<WorkSchedule> applyFollowUp(
+            DiscordPunishment punishment,
+            WorkLease current,
+            boolean retryNotification
+    ) {
+        List<WorkSchedule> schedules = new ArrayList<>(followUp(punishment));
+        if (retryNotification) {
+            schedules.add(retry(current, WorkType.APPLY));
+        }
+        return List.copyOf(schedules);
     }
 
     private List<WorkSchedule> followUp(DiscordPunishment punishment) {
@@ -274,6 +351,58 @@ final class DiscordPunishmentWorker {
     private static boolean requiresRestrictionSnapshot(DiscordPunishment punishment) {
         return punishment.intent().type() == DiscordConsequenceType.CHANNEL_RESTRICTION
                 && punishment.previousRestriction().isEmpty();
+    }
+
+    private static boolean needsApplyNotificationRetry(DiscordPunishment punishment) {
+        return (punishment.state() == DiscordPunishmentState.APPLIED
+                || punishment.state() == DiscordPunishmentState.COMPLETED)
+                && punishment.dmOutcome() == DiscordDeliveryOutcome.FAILED_RETRYABLE;
+    }
+
+    private static boolean needsRemovalNotificationRetry(DiscordPunishment punishment) {
+        return switch (punishment.state()) {
+            case ENDED, REVOKED, OVERTURNED, EXPIRED ->
+                    punishment.removalDmOutcome() == DiscordDeliveryOutcome.FAILED_RETRYABLE;
+            default -> false;
+        };
+    }
+
+    private static boolean retryDelivery(DiscordDeliveryOutcome delivery, WorkLease work) {
+        return delivery.retryable() && work.attemptCount() < MAX_ATTEMPTS;
+    }
+
+    private static DiscordDeliveryOutcome recordedDelivery(
+            DiscordDeliveryOutcome delivery,
+            boolean retry
+    ) {
+        if (delivery == DiscordDeliveryOutcome.FAILED_RETRYABLE && !retry) {
+            return DiscordDeliveryOutcome.FAILED_TERMINAL;
+        }
+        return delivery;
+    }
+
+    private static DiscordPunishmentState warningState(
+            DiscordDeliveryOutcome delivery,
+            boolean retry
+    ) {
+        if (delivery == DiscordDeliveryOutcome.DELIVERED) {
+            return DiscordPunishmentState.COMPLETED;
+        }
+        return retry ? DiscordPunishmentState.RETRY_APPLY : DiscordPunishmentState.FAILED_APPLY;
+    }
+
+    private static Optional<String> deliveryError(
+            String phase,
+            DiscordDeliveryOutcome delivery,
+            boolean retry
+    ) {
+        if (!delivery.failed()) {
+            return Optional.empty();
+        }
+        if (delivery == DiscordDeliveryOutcome.FAILED_RETRYABLE && !retry) {
+            return Optional.of(phase + "_DM_RETRY_EXHAUSTED");
+        }
+        return Optional.of(phase + (retry ? "_DM_RETRYABLE" : "_DM_FAILED"));
     }
 
     private static DiscordPunishment terminalWithoutEffect(DiscordPunishment punishment, WorkLease work) {

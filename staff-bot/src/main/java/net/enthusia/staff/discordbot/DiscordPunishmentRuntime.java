@@ -96,12 +96,15 @@ final class DiscordPunishmentRuntime implements AutoCloseable {
         if (closed.get()) {
             throw new IllegalStateException("Discord punishment runtime is closed");
         }
+        coordinator.pause();
+        gateway.unbind();
         gateway.bind(jda);
         coordinator.resume();
     }
 
     void pause() {
         coordinator.pause();
+        gateway.unbind();
     }
 
     @Override

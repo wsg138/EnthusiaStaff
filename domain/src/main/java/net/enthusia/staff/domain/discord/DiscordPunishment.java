@@ -23,6 +23,7 @@ public record DiscordPunishment(
         DiscordPunishmentState state,
         DiscordPunishmentTermination termination,
         DiscordDeliveryOutcome dmOutcome,
+        DiscordDeliveryOutcome removalDmOutcome,
         boolean externalApplied,
         Optional<DiscordPermissionSnapshot> previousRestriction,
         Optional<String> lastErrorCode,
@@ -33,7 +34,7 @@ public record DiscordPunishment(
 
     public DiscordPunishment {
         requireCore(punishmentId, subjectId, targetUserId, guildId, issuer, intent, issuedAt);
-        requireState(expiresAt, state, termination, dmOutcome, previousRestriction,
+        requireState(expiresAt, state, termination, dmOutcome, removalDmOutcome, previousRestriction,
                 lastErrorCode, lastTransitionOperationKey);
         validateExpiry(intent, issuedAt, expiresAt);
         validateRestrictionObservation(intent, previousRestriction);
@@ -57,6 +58,7 @@ public record DiscordPunishment(
                 DiscordPunishmentState.PENDING_APPLY,
                 DiscordPunishmentTermination.NONE,
                 DiscordDeliveryOutcome.NOT_ATTEMPTED,
+                DiscordDeliveryOutcome.NOT_ATTEMPTED,
                 false,
                 Optional.empty(),
                 Optional.empty(),
@@ -74,8 +76,24 @@ public record DiscordPunishment(
     ) {
         return new DiscordPunishment(
                 punishmentId, subjectId, targetUserId, guildId, issuer, intent, issuedAt, expiresAt,
-                nextState, termination, delivery, applied, previous, errorCode, Optional.of(operationKey)
+                nextState, termination, delivery, removalDmOutcome, applied, previous, errorCode, Optional.of(operationKey)
         );
+    }
+
+    public DiscordPunishment withApplyDeliveryOutcome(
+            DiscordDeliveryOutcome delivery,
+            Optional<String> errorCode,
+            String operationKey
+    ) {
+        return withDeliveryOutcomes(delivery, removalDmOutcome, errorCode, operationKey);
+    }
+
+    public DiscordPunishment withRemovalDeliveryOutcome(
+            DiscordDeliveryOutcome delivery,
+            Optional<String> errorCode,
+            String operationKey
+    ) {
+        return withDeliveryOutcomes(dmOutcome, delivery, errorCode, operationKey);
     }
 
     public DiscordPunishment requestRemoval(DiscordPunishmentTermination requested, String operationKey) {
@@ -87,15 +105,15 @@ public record DiscordPunishment(
         }
         return new DiscordPunishment(
                 punishmentId, subjectId, targetUserId, guildId, issuer, intent, issuedAt, expiresAt,
-                DiscordPunishmentState.PENDING_REMOVE, requested, dmOutcome, externalApplied,
-                previousRestriction, Optional.empty(), Optional.of(operationKey)
+                DiscordPunishmentState.PENDING_REMOVE, requested, dmOutcome, DiscordDeliveryOutcome.NOT_ATTEMPTED,
+                externalApplied, previousRestriction, Optional.empty(), Optional.of(operationKey)
         );
     }
 
     public DiscordPunishment markRemoved(String operationKey) {
         return new DiscordPunishment(
                 punishmentId, subjectId, targetUserId, guildId, issuer, intent, issuedAt, expiresAt,
-                terminalState(termination), termination, dmOutcome, false,
+                terminalState(termination), termination, dmOutcome, removalDmOutcome, false,
                 previousRestriction, Optional.empty(), Optional.of(operationKey)
         );
     }
@@ -104,10 +122,23 @@ public record DiscordPunishment(
         return intent.type() == DiscordConsequenceType.BAN;
     }
 
+    private DiscordPunishment withDeliveryOutcomes(
+            DiscordDeliveryOutcome applyDelivery,
+            DiscordDeliveryOutcome removalDelivery,
+            Optional<String> errorCode,
+            String operationKey
+    ) {
+        return new DiscordPunishment(
+                punishmentId, subjectId, targetUserId, guildId, issuer, intent, issuedAt, expiresAt,
+                state, termination, applyDelivery, removalDelivery, externalApplied,
+                previousRestriction, errorCode, Optional.of(operationKey)
+        );
+    }
+
     private DiscordPunishment markTerminal(DiscordPunishmentTermination requested, String operationKey) {
         return new DiscordPunishment(
                 punishmentId, subjectId, targetUserId, guildId, issuer, intent, issuedAt, expiresAt,
-                terminalState(requested), requested, dmOutcome, externalApplied,
+                terminalState(requested), requested, dmOutcome, removalDmOutcome, externalApplied,
                 previousRestriction, Optional.empty(), Optional.of(operationKey)
         );
     }
@@ -133,12 +164,14 @@ public record DiscordPunishment(
             DiscordPunishmentState state,
             DiscordPunishmentTermination termination,
             DiscordDeliveryOutcome dmOutcome,
+            DiscordDeliveryOutcome removalDmOutcome,
             Optional<DiscordPermissionSnapshot> previousRestriction,
             Optional<String> lastErrorCode,
             Optional<String> lastTransitionOperationKey
     ) {
         if (expiresAt == null || state == null || termination == null || dmOutcome == null
-                || previousRestriction == null || lastErrorCode == null || lastTransitionOperationKey == null) {
+                || removalDmOutcome == null || previousRestriction == null || lastErrorCode == null
+                || lastTransitionOperationKey == null) {
             throw new IllegalArgumentException("punishment state fields must be present");
         }
         if (state.removalPending() && termination == DiscordPunishmentTermination.NONE) {
