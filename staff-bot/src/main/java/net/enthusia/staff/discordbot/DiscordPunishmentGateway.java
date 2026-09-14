@@ -22,7 +22,7 @@ interface DiscordPunishmentGateway {
             DiscordDeliveryOutcome deliveryOutcome,
             Optional<DiscordPermissionSnapshot> previousRestriction
     ) {
-        ApplyResult {
+        public ApplyResult {
             if (deliveryOutcome == null || previousRestriction == null) {
                 throw new IllegalArgumentException("Discord apply result fields must be present");
             }
