@@ -6,17 +6,19 @@ import net.dv8tion.jda.api.components.buttons.Button;
 import net.dv8tion.jda.api.entities.MessageEmbed;
 import net.dv8tion.jda.api.entities.emoji.Emoji;
 
-/** Discord-only presentation for the read-only moderation surface. */
+/** Discord-only presentation for the private moderation surface. */
 final class StaffModerationDiscordPresentation {
     private static final int EMBED_COLOR = 0x5865F2;
     private static final String FALLBACK_TITLE = "Moderation";
-    private static final String FOOTER = "Private staff view • Read only";
+    private static final String READ_FOOTER = "Private staff view • Read only";
+    private static final String ACTION_FOOTER = "Private staff view • Actions require confirmation";
     private static final Map<String, String> DISPLAY_LABELS = Map.of(
             "Refresh", "Overview",
             "Linked", "Accounts"
     );
     private static final Map<String, String> ICONS = Map.ofEntries(
             Map.entry("Refresh", "🏠"),
+            Map.entry("Punish", "⚖️"),
             Map.entry("History", "🕘"),
             Map.entry("Linked", "🔗"),
             Map.entry("Notes", "📝"),
@@ -30,12 +32,16 @@ final class StaffModerationDiscordPresentation {
     }
 
     static MessageEmbed embed(String content) {
+        return embed(content, false);
+    }
+
+    static MessageEmbed embed(String content, boolean actionsEnabled) {
         Heading heading = splitHeading(content);
         EmbedBuilder builder = new EmbedBuilder()
                 .setColor(EMBED_COLOR)
                 .setTitle("🛡️ " + friendlyTitle(heading.title()))
                 .setDescription(heading.body())
-                .setFooter(FOOTER);
+                .setFooter(actionsEnabled ? ACTION_FOOTER : READ_FOOTER);
         return builder.build();
     }
 

@@ -25,13 +25,29 @@ class JdaStaffModerationListenerTest {
                 "history",
                 "notes",
                 "case"
-        ), commands.stream().map(CommandData::getName).collect(Collectors.toSet()));
+        ), names(commands));
         assertTrue(commands.stream().allMatch(command ->
                 DefaultMemberPermissions.DISABLED.equals(command.getDefaultPermissions())));
 
         assertEquals(Command.Type.USER, command(commands, "Moderate User").getType());
         assertEquals(Command.Type.MESSAGE, command(commands, "Moderate Message").getType());
         assertEquals(Command.Type.SLASH, command(commands, "moderate").getType());
+    }
+
+    @Test
+    void enforcementRuntimeAddsExactlyTheEightApprovedQuickCommands() {
+        var commands = JdaStaffModerationListener.commands(true);
+
+        assertEquals(16, commands.size());
+        assertTrue(names(commands).containsAll(Set.of(
+                "warn", "mute", "unmute", "kick", "ban", "unban", "restrict", "unrestrict"
+        )));
+        assertTrue(commands.stream().allMatch(command ->
+                DefaultMemberPermissions.DISABLED.equals(command.getDefaultPermissions())));
+    }
+
+    private static Set<String> names(java.util.List<CommandData> commands) {
+        return commands.stream().map(CommandData::getName).collect(Collectors.toSet());
     }
 
     private static CommandData command(java.util.List<CommandData> commands, String name) {
