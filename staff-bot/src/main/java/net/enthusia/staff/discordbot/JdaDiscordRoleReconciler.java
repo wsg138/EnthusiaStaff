@@ -43,11 +43,7 @@ final class JdaDiscordRoleReconciler implements DiscordRoleReconciler {
         if (delta.empty()) {
             return new Result(observed, "IN_SYNC");
         }
-        apply(member, delta, observed);
-        Set<String> finalObserved = new LinkedHashSet<>(observed);
-        finalObserved.addAll(delta.add());
-        finalObserved.removeAll(delta.remove());
-        return new Result(finalObserved, "APPLIED");
+        return new Result(apply(member, delta, observed), "APPLIED");
     }
 
     private Member retrieveMember(DiscordRoleSyncService.Evaluation evaluation) {
@@ -67,15 +63,19 @@ final class JdaDiscordRoleReconciler implements DiscordRoleReconciler {
         }
     }
 
-    private void apply(Member member, DiscordRoleDelta delta, Set<String> observed) {
+    private Set<String> apply(Member member, DiscordRoleDelta delta, Set<String> observed) {
+        MutationProgress progress = new MutationProgress(observed);
         for (String roleId : delta.add()) {
-            Role role = mutableRole(roleId, observed);
-            await(guild.addRoleToMember(member, role).submit(), "role_add_failed", observed);
+            Role role = mutableRole(roleId, progress.snapshot());
+            await(guild.addRoleToMember(member, role).submit(), "role_add_failed", progress.snapshot());
+            progress.added(roleId);
         }
         for (String roleId : delta.remove()) {
-            Role role = mutableRole(roleId, observed);
-            await(guild.removeRoleFromMember(member, role).submit(), "role_remove_failed", observed);
+            Role role = mutableRole(roleId, progress.snapshot());
+            await(guild.removeRoleFromMember(member, role).submit(), "role_remove_failed", progress.snapshot());
+            progress.removed(roleId);
         }
+        return progress.snapshot();
     }
 
     private Role mutableRole(String roleId, Set<String> observed) {
@@ -111,6 +111,29 @@ final class JdaDiscordRoleReconciler implements DiscordRoleReconciler {
             throw new RetryableException(errorCode, observed, cause);
         } catch (TimeoutException exception) {
             throw new RetryableException(errorCode, observed, exception);
+        }
+    }
+
+    static final class MutationProgress {
+        private final Set<String> observed;
+
+        MutationProgress(Set<String> initial) {
+            if (initial == null) {
+                throw new IllegalArgumentException("initial observed roles must be present");
+            }
+            observed = new LinkedHashSet<>(initial);
+        }
+
+        void added(String roleId) {
+            observed.add(roleId);
+        }
+
+        void removed(String roleId) {
+            observed.remove(roleId);
+        }
+
+        Set<String> snapshot() {
+            return Set.copyOf(observed);
         }
     }
 }
