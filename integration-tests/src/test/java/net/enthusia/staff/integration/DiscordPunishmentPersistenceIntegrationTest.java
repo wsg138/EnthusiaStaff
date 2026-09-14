@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.zaxxer.hikari.HikariDataSource;
+import java.sql.SQLException;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
@@ -36,6 +37,7 @@ import net.enthusia.staff.persistence.JdbcDiscordPunishmentRepository;
 import net.enthusia.staff.persistence.MariaDb;
 import net.enthusia.staff.persistence.ModerationPersistenceException;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.testcontainers.containers.MariaDBContainer;
 import org.testcontainers.junit.jupiter.Container;
@@ -56,6 +58,17 @@ class DiscordPunishmentPersistenceIntegrationTest {
     static void migrate() {
         try (HikariDataSource dataSource = MariaDb.open(MariaDbIntegrationSupport.databaseConfig(DATABASE))) {
             MariaDb.migrate(dataSource);
+        }
+    }
+
+    @BeforeEach
+    void clearD07WorkQueue() throws SQLException {
+        try (HikariDataSource dataSource = open();
+             var connection = dataSource.getConnection();
+             var statement = connection.prepareStatement(
+                     "DELETE FROM discord_maintenance_work WHERE work_type IN ('D07_APPLY', 'D07_REMOVE', 'D07_RECONCILE')"
+             )) {
+            statement.executeUpdate();
         }
     }
 
