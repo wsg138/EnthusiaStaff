@@ -2,6 +2,7 @@
 
 const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
+const LOADING_TEXT = 'Loading…';
 
 const OFFENSES = [
   ['spam', 'Spam / flooding'], ['harassment', 'Harassment'], ['hate', 'Hate / slurs'],
@@ -26,23 +27,12 @@ const NAV = [
 ];
 
 const identity = {
-  displayName:'RiverAsh', username:'riverash', discordId:'1049827163345127424',
-  minecraft:'RiverAshMC', minecraftUuid:'3a6d1a43-c4e4-4bc4-9d42-a4f7b7a2d9e1',
-  alts:[{name:'AshRiverAlt', platform:'Bedrock', status:'Linked'}], status:'Discord mute', statusDetail:'1h 18m remaining'
+  displayName:'Loading moderation data…', username:'loading', discordId:LOADING_TEXT,
+  minecraft:LOADING_TEXT, minecraftUuid:LOADING_TEXT, alts:[], status:'Loading',
+  statusDetail:'Waiting for authoritative read data'
 };
 
-const baseMessages = [
-  {id:'19001', author:'Mossy', username:'mossy', initials:'MO', target:false, channel:'general', time:'2026-08-29T17:41:03-04:00', text:'Are we still doing the build event tonight?'},
-  {id:'19002', author:'RiverAsh', username:'riverash', initials:'RA', target:true, channel:'general', time:'2026-08-29T17:41:26-04:00', text:'join my shop join my shop join my shop'},
-  {id:'19003', author:'RiverAsh', username:'riverash', initials:'RA', target:true, channel:'general', time:'2026-08-29T17:41:39-04:00', text:'seriously everyone check #market right now'},
-  {id:'19004', author:'Juniper', username:'juniper', initials:'JU', target:false, channel:'general', time:'2026-08-29T17:41:51-04:00', text:'You already posted that a few times.'},
-  {id:'19005', author:'RiverAsh', username:'riverash', initials:'RA', target:true, channel:'general', time:'2026-08-29T17:42:04-04:00', text:'last chance, best prices on the server', edited:true},
-  {id:'19006', author:'RiverAsh', username:'riverash', initials:'RA', target:true, channel:'market', time:'2026-08-29T17:44:11-04:00', text:'Selling kits. DM me for bulk prices.', attachment:{name:'price-list.png', detail:'PNG · 184 KB'}},
-  {id:'19007', author:'Cedar', username:'cedar', initials:'CE', target:false, channel:'market', time:'2026-08-29T17:44:39-04:00', text:'This should probably stay in one post.', replyTo:'19006'},
-  {id:'18890', author:'RiverAsh', username:'riverash', initials:'RA', target:true, channel:'general', time:'2026-08-28T20:06:18-04:00', text:'anyone need iron? I have a lot left over'},
-  {id:'18720', author:'RiverAsh', username:'riverash', initials:'RA', target:true, channel:'market', time:'2026-08-24T14:16:01-04:00', text:'Old listing removed by the author.', deleted:true},
-  {id:'18721', author:'Spruce', username:'spruce', initials:'SP', target:false, channel:'market', time:'2026-08-24T14:17:44-04:00', text:'I think they already sold it.'}
-];
+const baseMessages = [];
 
 const historyTemplates = {
   repeat: [

@@ -1,0 +1,11 @@
+name: EnthusiaStaffAuthorityBridge
+version: '${version}'
+main: net.enthusia.staff.authoritybridge.EnthusiaStaffAuthorityBridgePlugin
+api-version: '1.21'
+author: P2wn
+description: Owner-authorized authority and transition-observation bridge for ES-D16 acceptance
+load: POSTWORLD
+depend:
+  - LuckPerms
+softdepend:
+  - DiscordSRV

@@ -1,19 +1,22 @@
 # Latest agent handoff
 
-Current handoff: `ES-D16 — Moderation console real-data read bridge` — `BLOCKED` / `PARKED_BLOCKED`.
+Current handoff: `ES-D16 — Moderation console real-data read bridge` — `COMPLETE`.
 
-Canonical package handoff: `ai-agents/reports/package-handoffs/2026-09-04-es-d16-paper-migration-classloader-blocked.md`.
+Canonical package handoff: `ai-agents/reports/package-handoffs/2026-09-13-es-d16-complete.md`.
 
-Current product checkpoint:
-- implementation PR #187 remains open/unmerged on `package/es-d16-moderation-read-bridge`;
-- frozen executable candidate is `83bc4e102b85b9db904e9df4e7f956896fa938bf`; validated branch head `587ea47f6e30aa468021497af6bed77d97c2975a` differs afterward only in `moderation-web/README.md`;
-- real Bloom reads proved the private browser/Worker/tunnel/StaffBot route reaches the backend but the EnthusiaStaff DB was initially empty;
-- the owner-authorized transition collector then connected successfully but Paper's host context classloader caused Flyway to discover `0 migrations`; the executable candidate now pins Flyway to the plugin-owning classloader and fail-closes on missing migration resources;
-- exact 587 Coverage `33846514820` / `100939581796` passed clean build/integration tests, 27 provider API types / zero leaks, and 51.97% line / 42.27% branch / 54.27% instruction coverage; artifact `9927145819`, digest `sha256:ef4a707b496a61d466af78909333fb7234b54419e062164ffb17dca6e153ba0a`;
-- exact 587 staging `33846511302`, web validation `33846514771`, Staff Bot config/artifact `33846514753`/`33846514759`, Sentinel artifact `33846514754`, Codacy zero-annotation static analysis, and manual final-delta review all pass;
-- exact authority bridge artifact is `9926742858`; contained JAR SHA-256 `af0e39fa63b84a397efa28fce0160008d4d65562ddb9c0461d00f9d3b5fb5a80`; archive inspection confirms V1-V20 migration resources;
-- the only remaining blocker at this checkpoint is owner-operated replacement of the temporary Paper authority bridge JAR plus one controlled Paper restart and sanitized migration/collector evidence;
-- existing `authority.properties` and `collector.properties` stay unchanged, ports 8771/8766 remain non-public, and no full Paper runtime/destructive moderation/LiteBans/cutover authority is granted;
-- D07/D13, PR #178, PR #139, issue #43, and unrelated work remain untouched.
+Terminal implementation state:
+- PR #187 merged normally as `848aba7ac6a115dc3723c034b281917d63f1f1bd`;
+- final reviewed/validated pre-merge head was `aa32355a0d378ca4c6b03041b80d005df73f6fcd`;
+- frozen reconciled executable head was `8811294c17532825aeae1d271fe2a3163042ba9c`;
+- owner-accepted UI candidate was `3a79000eaa139ec107118d3fdb05b29e5e52097c`;
+- Coverage `34766165648`, web validation `34766165643`, StaffBot artifact `34766165650`, configuration-cache `34766165642`, Sentinel `34766165664`, Pi supersession `34766164245`, protected staging `34766163166`, Codacy static `103747616510`, diff coverage `103748653603`, and coverage variation `103748653922` all passed on the exact final head;
+- Codacy static reported zero annotations / zero new valid findings;
+- all three visible CodeRabbit correctness threads are resolved; the final automatic CodeRabbit skip is preserved as non-pass evidence rather than relabeled;
+- owner UI acceptance passed and no secrets/private evidence are recorded;
+- merge commit parents are pre-merge `main` `06519c0c5acdcf6276278204201f3c8b20767805` and exact feature head `aa32355a0d378ca4c6b03041b80d005df73f6fcd`;
+- merge and feature trees are identical at `c5c02a86d4db3861b4d9b7abfc2636323e9d9c12`;
+- post-merge containment is exact (`ahead 0 / behind 1 / files []` when comparing merge to feature);
+- temporary branch `package/es-d16-moderation-read-bridge` is absent after merge;
+- LiteBans remains authoritative; no destructive moderation, production Discord configuration/data change, issue #43 acceptance, or cutover was performed.
 
-When the owner completes that restart, resume PR #187 as the same higher-priority `ACTIONABLE_CONTINUATION`; do not create replacement implementation work or start another package.
+`ES-D07` and `ES-D13` remain dependency-complete `READY`. This worker does not start either package.
