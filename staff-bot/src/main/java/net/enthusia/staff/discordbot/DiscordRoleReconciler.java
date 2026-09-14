@@ -7,7 +7,7 @@ interface DiscordRoleReconciler {
     Result reconcile(DiscordRoleSyncService.Evaluation evaluation);
 
     record Result(Set<String> observedRoleIds, String state) {
-        Result {
+        public Result {
             if (observedRoleIds == null || state == null || state.isBlank()) {
                 throw new IllegalArgumentException("role reconciliation result is invalid");
             }
@@ -19,7 +19,7 @@ interface DiscordRoleReconciler {
         private static final long serialVersionUID = 1L;
 
         private final String errorCode;
-        private final Set<String> observedRoleIds;
+        private final transient Set<String> observedRoleIds;
 
         RetryableException(String errorCode, Set<String> observedRoleIds, Throwable cause) {
             super(errorCode, cause);
