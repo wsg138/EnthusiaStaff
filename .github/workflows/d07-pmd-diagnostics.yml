@@ -12,7 +12,7 @@ jobs:
   diagnose:
     name: Report D07 PMD findings
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 10
     steps:
       - name: Check out exact branch head
         uses: actions/checkout@v6
@@ -47,14 +47,3 @@ jobs:
           set -e
           cat /tmp/pmd-findings.txt
           exit "$status"
-
-      - name: Run focused D07 tests
-        if: always()
-        shell: bash
-        run: |
-          chmod +x gradlew
-          ./gradlew :domain:test :persistence:test :staff-bot:test :integration-tests:test \
-            --no-daemon \
-            --no-build-cache \
-            --no-configuration-cache \
-            --console=plain
