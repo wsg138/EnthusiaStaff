@@ -70,7 +70,7 @@ Exact-sanction commands never accept an ambiguous multi-sanction case. Database 
 | `/freeze` | `/freeze <player> <reason>` | Apply durable investigation freeze | `enthusiastaff.freeze` |
 | `/unfreeze` | `/unfreeze <player> <reason> CONFIRM` | Release freeze | `enthusiastaff.freeze` |
 | `/staff` | `/staff` | Enter or leave durable staff mode | `enthusiastaff.staffmode` |
-| `/stafftools` | `/stafftools`, `/stafftools random`, `/stafftools spectate <player>` | Text/Bedrock fallback for staff hotbar menu, random teleport and follow/spectate | `enthusiastaff.stafftools.menu`; sub-actions also require their direct tool node |
+| `/stafftools` | `/stafftools`, `/stafftools random`, `/stafftools spectate <player>` | Open the Staff Tools menu, random teleport, or follow/spectate | `enthusiastaff.stafftools.menu`; sub-actions also require their direct tool node |
 | `/fakebase` | `/fakebase <create\|extend\|clear\|teleport\|status> [player]` | Manage bounded virtual fake-base probes | `enthusiastaff.cheattester.fake-base` |
 | `/vanish` | `/vanish` or `/vanish tab <show\|hide>` | Toggle vanish or spectator tab presentation | `enthusiastaff.vanish` |
 | `/staffchat` | `/staffchat` | Toggle the configured RoseChat staff channel | `enthusiastaff.staffchat` |
