@@ -10,7 +10,6 @@ permissions:
 
 jobs:
   diagnose:
-    if: github.event.head_commit.message == 'chore(es-d07): stage PMD diagnostics'
     name: Report D07 PMD findings
     runs-on: ubuntu-latest
     timeout-minutes: 20
