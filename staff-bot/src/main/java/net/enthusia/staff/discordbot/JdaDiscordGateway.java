@@ -64,11 +64,21 @@ final class JdaDiscordGateway implements DiscordGateway {
 
     private void validateRoleSyncBoundary() {
         moderation.flatMap(StaffModerationRuntime::roleSync).ifPresent(service -> {
-            if (configuration.environment() == StaffBotEnvironment.PRODUCTION
-                    && service.configuration().mode() == DiscordRoleSyncConfiguration.Mode.ENFORCE) {
+            if (!roleSyncModeAllowed(configuration.environment(), service.configuration().mode())) {
                 throw new IllegalArgumentException("ES-D13 does not authorize production role-sync enforcement");
             }
         });
+    }
+
+    static boolean roleSyncModeAllowed(
+            StaffBotEnvironment environment,
+            DiscordRoleSyncConfiguration.Mode mode
+    ) {
+        if (environment == null || mode == null) {
+            throw new IllegalArgumentException("role-sync authorization inputs must be present");
+        }
+        return environment != StaffBotEnvironment.PRODUCTION
+                || mode != DiscordRoleSyncConfiguration.Mode.ENFORCE;
     }
 
     @Override
