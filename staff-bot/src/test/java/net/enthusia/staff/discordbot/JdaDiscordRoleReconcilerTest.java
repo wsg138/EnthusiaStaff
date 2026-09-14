@@ -12,6 +12,7 @@ import org.junit.jupiter.api.Test;
 
 class JdaDiscordRoleReconcilerTest {
     private static final String ROLE_ID = "1001";
+    private static final String SECOND_ROLE_ID = "1002";
 
     @Test
     void mutationPolicyRejectsPublicManagedAndHigherRoles() {
@@ -34,5 +35,26 @@ class JdaDiscordRoleReconcilerTest {
         assertEquals("role_add_failed", failure.errorCode());
         assertEquals(Set.of(ROLE_ID), failure.observedRoleIds());
         assertSame(discordFailure, failure.getCause());
+    }
+
+    @Test
+    void partialMutationProgressIsIncludedInLaterFailureSnapshot() {
+        JdaDiscordRoleReconciler.MutationProgress progress =
+                new JdaDiscordRoleReconciler.MutationProgress(Set.of(ROLE_ID));
+        progress.added(SECOND_ROLE_ID);
+        IllegalStateException discordFailure = new IllegalStateException("later mutation failed");
+
+        DiscordRoleReconciler.RetryableException failure = assertThrows(
+                DiscordRoleReconciler.RetryableException.class,
+                () -> JdaDiscordRoleReconciler.await(
+                        CompletableFuture.failedFuture(discordFailure),
+                        "role_remove_failed",
+                        progress.snapshot()
+                )
+        );
+
+        assertEquals(Set.of(ROLE_ID, SECOND_ROLE_ID), failure.observedRoleIds());
+        progress.removed(ROLE_ID);
+        assertEquals(Set.of(SECOND_ROLE_ID), progress.snapshot());
     }
 }
