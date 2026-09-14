@@ -1,3 +1,4 @@
+# Temporary ES-D13 diagnostic; remove after identifying the current Codacy finding.
 name: ES-D13 Codacy Diagnostic
 
 on:
