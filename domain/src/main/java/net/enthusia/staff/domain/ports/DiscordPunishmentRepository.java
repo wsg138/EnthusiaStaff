@@ -17,7 +17,7 @@ public interface DiscordPunishmentRepository {
             StoredPunishment expected,
             DiscordPunishment replacement,
             String operationKey,
-            Optional<WorkSchedule> work,
+            List<WorkSchedule> work,
             Instant now
     );
 
@@ -27,7 +27,7 @@ public interface DiscordPunishmentRepository {
             WorkLease work,
             StoredPunishment expected,
             DiscordPunishment replacement,
-            Optional<WorkSchedule> nextWork,
+            List<WorkSchedule> nextWork,
             Instant now
     );
 
@@ -70,9 +70,6 @@ public interface DiscordPunishmentRepository {
                     || leaseOwner == null || leaseOwner.isBlank() || leaseUntil == null
                     || attemptCount < 1 || revision < 1) {
                 throw new IllegalArgumentException("work lease fields are invalid");
-            }
-            if (!leaseUntil.isAfter(dueAt) && leaseUntil.equals(dueAt)) {
-                throw new IllegalArgumentException("lease must be time-bounded");
             }
         }
     }
