@@ -24,4 +24,21 @@ class FakeBasePluginMetadataTest {
             assertEquals("true", manageAny.path("children").path(FakeBaseManager.PERMISSION).asText());
         }
     }
+
+    @Test
+    void topLevelCommandUsesTheDedicatedFakeBasePermission() throws IOException {
+        try (InputStream stream = FakeBasePluginMetadataTest.class.getResourceAsStream("/plugin.yml")) {
+            assertNotNull(stream);
+            JsonNode command = new ObjectMapper(new YAMLFactory())
+                    .readTree(stream)
+                    .path("commands")
+                    .path("fakebase");
+
+            assertEquals(FakeBaseManager.PERMISSION, command.path("permission").asText());
+            assertEquals(
+                    "/fakebase <create|extend|clear|teleport|status> [player]",
+                    command.path("usage").asText()
+            );
+        }
+    }
 }

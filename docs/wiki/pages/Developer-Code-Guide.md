@@ -312,6 +312,7 @@ Important stores include:
 | `JdbcVanishStore` | durable vanish intent |
 | `JdbcFreezeStore` | durable freeze state |
 | `JdbcNetworkIdentityStore` | protected network identity/alt data |
+| `JdbcAccountLinkingStore` and `JdbcCurrentAccountLinkReader` | durable link-code state and bounded current verified-link staff projection |
 | `JdbcNetworkOutboxStore` | durable Paper-Velocity queue |
 | `JdbcDiscordOutboxStore` | durable legacy Discord webhook queue |
 | `JdbcDiscordModerationPersistenceStore` and related `JdbcDiscord*Repository` classes | V19 Discord moderation identity/link/operational foundation |
@@ -480,8 +481,11 @@ Relevant paths:
 - `common/security/NetworkIdentityProtector.java`
 - `common/security/HmacTokenService.java`
 - `domain/alt/`
+- `domain/moderation/CurrentLinkedMinecraftAccount.java`
+- `JdbcCurrentAccountLinkReader.java`
 - `JdbcNetworkIdentityStore.java`
-- Velocity login/session observation and `/alts`/`/alt` handling.
+- Velocity login/session observation and `/alts`/`/alt` handling. The verified-link section is
+  read-only and deliberately separate from network confidence/inheritance.
 
 Protect raw addresses from ordinary logs, Discord, public/site output and staff-facing equality workflows.
 

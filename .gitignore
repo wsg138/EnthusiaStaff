@@ -13,6 +13,9 @@ libs/private/
 .env.*
 !.env.example
 
+# Runtime-only staging staff-bot secret file.
+staging-bot-token.txt
+
 # Database exports and private migration inputs must never be committed.
 *.sql
 *.sql.gz

@@ -32,6 +32,7 @@ import net.enthusia.staff.paper.staff.StaffToolTransferListener;
 import net.enthusia.staff.paper.tester.CheatTesterCommand;
 import net.enthusia.staff.paper.tester.CheatTesterManager;
 import net.enthusia.staff.paper.tester.CheatTesterSettings;
+import net.enthusia.staff.paper.tester.FakeBaseCommand;
 import net.enthusia.staff.paper.tester.FakeBaseManager;
 import net.enthusia.staff.paper.visibility.DefaultStaffVisibilityService;
 import net.enthusia.staff.paper.visibility.VanishManager;
@@ -240,6 +241,13 @@ record PaperRuntimeComponents(
         );
         command.setExecutor(commandHandler);
         command.setTabCompleter(commandHandler);
+        FakeBaseCommand fakeBaseHandler = new FakeBaseCommand(plugin, fakeBases);
+        var fakeBaseCommand = java.util.Objects.requireNonNull(
+                plugin.getCommand("fakebase"),
+                "fakebase command is missing from plugin.yml"
+        );
+        fakeBaseCommand.setExecutor(fakeBaseHandler);
+        fakeBaseCommand.setTabCompleter(fakeBaseHandler);
         return manager;
     }
 

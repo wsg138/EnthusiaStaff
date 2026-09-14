@@ -15,8 +15,10 @@ import net.enthusia.staff.domain.application.SanctionChangeService;
 import net.enthusia.staff.domain.auth.AuthorizationPolicy;
 import net.enthusia.staff.domain.ports.AtomicReasonPolicyRepository;
 import net.enthusia.staff.domain.ports.CaseLookup;
+import net.enthusia.staff.domain.ports.FreezeStore;
 import net.enthusia.staff.domain.ports.ModerationHistoryStore;
 import net.enthusia.staff.domain.ports.PlayerDirectory;
+import net.enthusia.staff.domain.ports.ReportStore;
 import net.enthusia.staff.paper.account.PaperOnlinePlayerVerifier;
 import net.enthusia.staff.paper.client.ClientEvidenceCollector;
 import net.enthusia.staff.paper.command.AccountLinkCommand;
@@ -226,8 +228,8 @@ final class PaperCommandRegistrar {
                 plugin(), clock(), writeMode(), storage(PaperStorageBindings::playerDirectory),
                 storage(PaperStorageBindings::freezeStore), dependencies.players().freeze(), workers()
         );
-        bind("freeze", freezes);
-        bind("unfreeze", freezes);
+        bindCompleting("freeze", freezes, freezes);
+        bindCompleting("unfreeze", freezes, freezes);
         bind("staff", new StaffModeCommand(writeMode(), dependencies.players().staffMode()));
         bind("vanish", new VanishCommand(writeMode(), dependencies.players().vanish()));
         bind("staffchat", new StaffChatCommand(dependencies.integrations().roseChat()));
@@ -244,9 +246,11 @@ final class PaperCommandRegistrar {
     private void registerInspectionCommands() {
         Supplier<PlayerDirectory> players = storage(PaperStorageBindings::playerDirectory);
         Supplier<CaseLookup> cases = storage(PaperStorageBindings::caseLookup);
+        Supplier<FreezeStore> freezes = storage(PaperStorageBindings::freezeStore);
+        Supplier<ReportStore> reports = storage(PaperStorageBindings::reportStore);
         Supplier<ModerationHistoryStore> histories = storage(PaperStorageBindings::moderationHistoryStore);
         InspectCommand inspect = new InspectCommand(
-                plugin(), clock(), players, cases,
+                plugin(), clock(), players, cases, freezes, reports,
                 dependencies.integrations().economy(), dependencies.integrations().confiscation(),
                 dependencies.players().inventory(), authorization(), dependencies.integrations().market(),
                 dependencies.integrations().reputation(), workers()

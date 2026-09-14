@@ -6,6 +6,8 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import javax.sql.DataSource;
@@ -177,6 +179,56 @@ public final class JdbcFreezeStore implements FreezeStore {
         }
     }
 
+    @Override
+    public Optional<FreezeRecord> readActive(UUID playerId, Instant now) {
+        if (playerId == null || now == null) {
+            throw new IllegalArgumentException("player and current time are required");
+        }
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement("""
+                     SELECT player_id, frozen_by, reason, frozen_at, offline_expires_at, keep_active, revision
+                     FROM player_freezes
+                     WHERE player_id = ? AND state = 'ACTIVE'
+                         AND (keep_active = TRUE OR offline_expires_at IS NULL OR offline_expires_at > ?)
+                     """)) {
+            statement.setBytes(1, UuidBytes.toBytes(playerId));
+            statement.setTimestamp(2, Timestamp.from(now));
+            try (ResultSet result = statement.executeQuery()) {
+                return result.next() ? Optional.of(readRecord(result)) : Optional.empty();
+            }
+        } catch (SQLException exception) {
+            throw new ModerationPersistenceException("Unable to read player freeze status", exception);
+        }
+    }
+
+    @Override
+    public List<FreezeRecord> listActive(Instant now, int limit) {
+        if (now == null || limit < 1 || limit > 100) {
+            throw new IllegalArgumentException("current time and a limit from 1 to 100 are required");
+        }
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement("""
+                     SELECT player_id, frozen_by, reason, frozen_at, offline_expires_at, keep_active, revision
+                     FROM player_freezes
+                     WHERE state = 'ACTIVE'
+                         AND (keep_active = TRUE OR offline_expires_at IS NULL OR offline_expires_at > ?)
+                     ORDER BY frozen_at ASC, player_id ASC
+                     LIMIT ?
+                     """)) {
+            statement.setTimestamp(1, Timestamp.from(now));
+            statement.setInt(2, limit);
+            try (ResultSet result = statement.executeQuery()) {
+                List<FreezeRecord> records = new ArrayList<>();
+                while (result.next()) {
+                    records.add(readRecord(result));
+                }
+                return List.copyOf(records);
+            }
+        } catch (SQLException exception) {
+            throw new ModerationPersistenceException("Unable to list active player freezes", exception);
+        }
+    }
+
     private static FreezeRecord lockAndRead(Connection connection, UUID playerId) throws SQLException {
         try (PreparedStatement statement = connection.prepareStatement("""
                 SELECT player_id, frozen_by, reason, frozen_at, offline_expires_at, keep_active, revision
@@ -187,18 +239,22 @@ public final class JdbcFreezeStore implements FreezeStore {
                 if (!result.next()) {
                     return null;
                 }
-                Timestamp offline = result.getTimestamp("offline_expires_at");
-                return new FreezeRecord(
-                        UuidBytes.fromBytes(result.getBytes("player_id")),
-                        UuidBytes.fromBytes(result.getBytes("frozen_by")),
-                        result.getString("reason"),
-                        result.getTimestamp("frozen_at").toInstant(),
-                        Optional.ofNullable(offline).map(Timestamp::toInstant),
-                        result.getBoolean("keep_active"),
-                        result.getLong("revision")
-                );
+                return readRecord(result);
             }
         }
+    }
+
+    private static FreezeRecord readRecord(ResultSet result) throws SQLException {
+        Timestamp offline = result.getTimestamp("offline_expires_at");
+        return new FreezeRecord(
+                UuidBytes.fromBytes(result.getBytes("player_id")),
+                UuidBytes.fromBytes(result.getBytes("frozen_by")),
+                result.getString("reason"),
+                result.getTimestamp("frozen_at").toInstant(),
+                Optional.ofNullable(offline).map(Timestamp::toInstant),
+                result.getBoolean("keep_active"),
+                result.getLong("revision")
+        );
     }
 
     private static void insertAudit(

@@ -71,6 +71,12 @@ Velocity registers:
 - `reopen` additionally requires `enthusiastaff.alts.reopen`.
 - Successful manual decisions are durably audited with the actor, ordered player pair, action, time, and privacy-checked reason.
 
+`/alts` begins with a separate **Verified linked Minecraft accounts** section. It lists only the
+other accounts that currently share the player's verified Discord link, with their current name
+(or UUID when no name is known) and link time. It does not include a Discord ID, past/unlinked
+accounts, or a network-confidence decision. Read that section alongside—not instead of—the
+network relationship evidence below it.
+
 Command permission is only the entry gate; production rank assignment must still follow the approved LuckPerms/rank policy.
 
 ## Punishment inheritance
@@ -128,7 +134,9 @@ The current key version is stored with every equality token and encrypted value.
 - `domain/.../alt/AltRelationshipState.java` — relationship states and inheritance-safe exceptions.
 - `domain/.../alt/AltInheritancePolicy.java` — narrow new-account and confident-relationship inheritance rules.
 - `domain/.../ports/NetworkIdentityStore.java` — graph/manual/retention persistence contract.
+- `domain/.../ports/AccountLinkingStore.java` — bounded current verified-link projection for staff review.
 - `persistence/.../JdbcNetworkIdentityStore.java` — protected observations, ambiguity controls, inheritance, audit, evidence, and retention.
+- `persistence/.../JdbcCurrentAccountLinkReader.java` — active linked-Minecraft-account read that excludes Discord IDs and history.
 - `persistence/.../migration/FencedNetworkIdentityStore.java` — authority/write fencing.
 - `velocity/.../EnthusiaStaffVelocityPlugin.java` — protected address capture and `/alts`/`/alt` operator surface.
 

@@ -18,6 +18,8 @@ public interface ReportStore {
 
     List<ReportSummary> list(ReportQueue queue, UUID actorId, int limit);
 
+    List<ReportSummary> listActiveForTarget(UUID targetId, int limit);
+
     Optional<ReportDetails> details(UUID reportId);
 
     ReportStateChangeResult changeState(ReportStateChangeRequest request);

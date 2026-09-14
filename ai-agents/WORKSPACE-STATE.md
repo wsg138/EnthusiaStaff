@@ -1,6 +1,6 @@
 # Workspace state
 
-Last updated: 2026-08-26
+Last updated: 2026-09-13
 
 Live GitHub overrides stale records. Detailed package evidence remains in the registries, selected package record, canonical handoff, and PR verification ledgers.
 
@@ -31,8 +31,15 @@ Live GitHub overrides stale records. Detailed package evidence remains in the re
 | X04 Sentinel | Exact-head Sentinel workflow `32882926734` PASS; durable job `250` reached `PAPER_RESTART_OK`. |
 | X04 canonical Pi | Public run `32882924737` and correlated private run `32883859152` / job `97919562717` PASS on trusted `Lincoln-PI-4`, including exact artifact verification, guarded disposable Paper boot/restart, durable sanitized evidence, and cleanup. |
 | X04 remaining work | No implementation, validation, synchronization, merge, or canonical-publication work remains. Only deletion of the fully contained standalone package branch is pending because the prior connected mutation surface did not expose branch deletion. |
-| Discord program live work | No Discord implementation package remains active after D04 terminal publication. `ES-D04` and `ES-D05` are `COMPLETE`; `ES-D06` and `ES-D13` are dependency-complete `READY` but are not started in this run. |
-| Discord latest completion | `ES-D04 — Account linking and DiscordSRV migration` is the latest completed Discord package. |
+| Discord program live work | No Discord package is activated by this terminal publication. `ES-D16 — Moderation console real-data read bridge` is `COMPLETE`; D07 and D13 remain dependency-complete `READY` and were not started. |
+| Discord latest completion | `ES-D16 — Moderation console real-data read bridge` is the latest completed Discord package. |
+| D16 product state | `3a79000eaa139ec107118d3fdb05b29e5e52097c` is the owner-accepted UI candidate; `8811294c17532825aeae1d271fe2a3163042ba9c` is the frozen reconciled executable head; `aa32355a0d378ca4c6b03041b80d005df73f6fcd` is the final reviewed/validated pre-merge head; PR #187 merged normally as `848aba7ac6a115dc3723c034b281917d63f1f1bd`. The merged product retains the signed real-data read bridge, channel/player browse, bounded same-channel message/context reads, explicit identity/profile allowlists, workflow/history/case/note/account views, product-language hardening, and simulation-only destructive behavior. |
+| D16 owner acceptance | `PASS`: the owner reviewed the moderation UI and stated `The UI looks good.` Acceptance evidence contains no signed launch material, credentials, private message bodies, raw moderation records, backend signatures, or secrets. |
+| D16 exact-head validation | Exact final head `aa32355a0d378ca4c6b03041b80d005df73f6fcd`: Coverage `34766165648` / job `103747432981` PASS; validation artifact `10320537834`, digest `sha256:fa9b77ee77fec9e73c140d9cc02685da25c23f600be087ea83663f07279e06c5`; Moderation Web Validation `34766165643` PASS; Staff Bot PR Artifact `34766165650` PASS; Staff Bot Configuration Cache `34766165642` PASS; Sentinel Restart Artifact `34766165664` PASS; Pi Staging Supersession `34766164245` PASS; Codacy Static Code Analysis `103747616510` PASS with zero annotations / zero new valid findings; Codacy Diff Coverage `103748653603` PASS at 52.54%; Codacy Coverage Variation `103748653922` PASS at +0.03% against the -1.0% target. |
+| D16 protected staging | Moderation Web Staging Deploy `34766163166` PASS on exact final head `aa32355a...`: fixed private tunnel/origin, Worker deployment, authenticated launch/session, exact-origin CORS, signed direct-read denial/replay behavior, one-time launch replay rejection, simulation-only runtime, and no real player/message query by the synthetic probe all passed. |
+| D16 review/analyzer state | All three substantive CodeRabbit correctness threads were fixed and resolved; valid unresolved review-thread count is zero. The final-head automatic CodeRabbit status was skipped for manual review and remains explicit non-pass diagnostic history rather than being called a pass. The later tracking edit that attempted to make a fresh exact-head CodeRabbit response a new blocker is non-authoritative under `VALIDATION-POLICY.md`. Protected staging also reported four high-severity npm audit findings in the Wrangler development dependency graph; D16 and then-current `main` share the identical `moderation-web/package-lock.json` blob `8f1ff002ef318cee4ffb8351adab12d612a5054b`, so this is recorded as pre-existing dependency debt rather than a D16-introduced finding. |
+| D16 merge/containment | PR #187 merge `848aba7ac6a115dc3723c034b281917d63f1f1bd` has parents pre-merge `main` `06519c0c5acdcf6276278204201f3c8b20767805` and exact feature head `aa32355a0d378ca4c6b03041b80d005df73f6fcd`. Merge and feature trees are identical at `c5c02a86d4db3861b4d9b7abfc2636323e9d9c12`; post-merge comparison is feature `ahead 0 / behind 1 / files []`, proving exact containment. Live branch search returns no `package/es-d16-moderation-read-bridge`; temporary implementation cleanup is complete. |
+| D16 remaining work | No implementation, validation, merge, containment, or implementation-branch cleanup remains. Only this documentation-only terminal publication must merge; it does not change product behavior or activate another package. |
 | D04 terminal state | `COMPLETE`. Final reviewed/validated head `da0371681f5a44c72a614c8d6637b85d9080291d`; Staff PR #151 merged normally as `4e7621b7a42e812cc7bf806a029f37a753cdd9f3`; exact product tree containment is proven and the temporary D04 branch is absent. |
 | D04 exact-head validation | Coverage `33029697612` / job `98379158884` PASS; Codacy static `98379478044` PASS with zero annotations; Codacy diff coverage `98380515790` PASS; Sentinel artifact `33029697604` / job `98379112319` PASS; all visible PR #151 inline review threads resolved. |
 | D04 Sentinel/canonical Pi | Durable Sentinel job `292` reached `PAPER_RESTART_OK`. Canonical public Pi `33029762105` and correlated private `33030278019` / job `98380970512` PASS on trusted `Lincoln-PI-4`, including exact bridge/artifact verification, guarded disposable Paper boot/restart, durable sanitized evidence, private/public cleanup, and terminal publication. |
@@ -44,11 +51,16 @@ Live GitHub overrides stale records. Detailed package evidence remains in the re
 | D05 final canonical Pi | Public run `33007222310` PASS through exact-head binding, runtime build, private dispatch, verdict collection, transient-transfer cleanup, and terminal publication. Correlated private run `33008160488` / job `98307232213` PASS on trusted runner ID 2 `Lincoln-PI-4`, including exact bridge verification, guarded disposable Paper boot/restart, durable sanitized evidence, and cleanup. |
 | D05 merge/containment | PR #160 merged normally as `7bc8739bdc3f77db23c8b649f8c227f008162e47` with final feature head `936155cc...` as second parent. Post-merge compare is one commit ahead, zero behind, with zero file differences. Temporary branch `package/es-d05-staff-bot-runtime` is absent. |
 | D05 remaining work | None. ES-D05 has no implementation, validation, merge, containment, or cleanup work remaining. |
-| Migration state | Canonical `main` now owns D04's forward-only `V20__discord_account_linking.sql`. D05 and X01 add no migration/source. X03 still carries branch-local V20 Market migration and must be renumbered to the next free forward-only migration during its own future fresh-main reconciliation (V21 at this publication). |
+| D06 product state | `COMPLETE`. Frozen reviewed/validated product head `b624ee799aea7db7c561b0b064733374d4c61067` delivers the full read-only Discord staff moderation UX with authoritative linked-staff authorization, exact IPv4 loopback authority binding, ambiguity-safe 25-choice selectors, signed expiring replay-resistant private components, read-time reauthorization, and no destructive moderation side effects. |
+| D06 final exact-head validation | Coverage `33204412446` / job `98961747084` PASS; Staff Bot Configuration Cache `33204412468` PASS; Sentinel Restart Artifact `33204412444` / job `98961683122` PASS; hosted Codacy static `98961965089` PASS with zero annotations; Codacy diff coverage `98963786634` PASS at 45.74% with no defined gate; all five visible PR #177 inline review threads resolved/outdated. |
+| D06 Sentinel/canonical Pi | Durable Sentinel job `327` reached `PAPER_RESTART_OK`. Canonical public Pi `33204694500` and correlated private `33205431529` / job `98965140421` PASS on trusted `Lincoln-PI-4`, including exact bridge verification, guarded disposable Paper boot/restart, sanitized/durable evidence, transient-transfer cleanup, and terminal publication. Sanitized runtime SHA-256 `728ab454b9cb546625985a02fa5d6c9fc7a6e37020974a409862f411e58dc96b`. |
+| D06 merge/containment | PR #177 merged normally as `5eab4d8ff7bf0c25253df828c837fbc8c96edfb3` with exact feature head `b624ee799aea7db7c561b0b064733374d4c61067` as second parent. Merge and feature trees are identical at `5b3fd4d313dd4437dc04c346bd39efcc4e00f007`; post-merge compare is one ahead/zero behind with zero file differences. The implementation branch is absent. |
+| D06 remaining work | None. The temporary diagnostic workflow is removed and its retained diagnostic branch has zero file differences from merged `main`; it is safe to delete when a branch-delete mutation is available. No unique D06 work remains. |
+| Migration state | Canonical `main` owns D04's forward-only `V20__discord_account_linking.sql`. D16's owner-authorized transition path successfully applied/populated the selected EnthusiaStaff schema during authorized staging, and D16 terminal publication adds or rewrites no migration. D05/D06/X01 add no migration/source migration. X03 still carries branch-local V20 Market migration and must be renumbered during its own future fresh-main reconciliation. |
 | Independently parked packages | `ES-X01` remains independently `BLOCKED` / `PARKED_BLOCKED` on verified license/public-aggregate authorization. X03 is no longer parked on D04 serialization; it is a future universal `ACTIONABLE_CONTINUATION` and was not modified in this run. |
-| Production boundary | No production Discord configuration, reputation/player rows, bot-token value, private production data, PM data, deployment, migration/import execution, LiteBans authority change, or cutover is authorized or performed. Issue #43 remains open and LiteBans remains authoritative. |
+| Production boundary | D16 is complete as a read-only/simulation-only moderation investigation bridge. No destructive moderation, Discord message deletion/permission override, production Discord configuration/data change, Minecraft enforcement, LiteBans data/authority change, issue #43 acceptance, or production cutover is authorized or performed. Credentials, private production data, raw player/message evidence, PM data, and secrets remain excluded from repository/CI/chat evidence. LiteBans remains authoritative. |
 | Universal current handoff | `ai-agents/reports/package-handoffs/2026-08-26-es-x01-license-redistribution-blocked.md` |
-| Discord current handoff | `ai-agents/reports/package-handoffs/2026-08-26-es-d04-complete.md` |
+| Discord current handoff | `ai-agents/reports/package-handoffs/2026-09-13-es-d16-complete.md` |
 
 ## X01 current parked record
 
@@ -72,6 +84,26 @@ X04 completed through normally merged Commend PR #12 and Staff PR #152 after exa
 
 The only residual cleanup is the fully contained standalone package branch. It has no unique work and is safe to delete when an authorized branch-deletion path is available; it is not an implementation or validation blocker.
 
+## D16 completed record
+
+D16 completed through Staff PR #187 after owner UI acceptance, normal moving-main reconciliation, fresh exact-head hosted/static/protected-staging validation, and zero valid unresolved review threads.
+
+Owner-accepted candidate `3a79000eaa139ec107118d3fdb05b29e5e52097c` was reconciled with current `main` into executable `8811294c17532825aeae1d271fe2a3163042ba9c`; final documentation/checkpoint head `aa32355a0d378ca4c6b03041b80d005df73f6fcd` retained the same executable state and passed Coverage `34766165648`, web validation `34766165643`, StaffBot artifact/configuration-cache `34766165650`/`34766165642`, Sentinel `34766165664`, Pi supersession `34766164245`, protected staging `34766163166`, Codacy static `103747616510`, diff coverage `103748653603`, and coverage variation `103748653922`.
+
+PR #187 merged normally as `848aba7ac6a115dc3723c034b281917d63f1f1bd`. Exact feature containment is proven: merge and feature trees are identical at `c5c02a86d4db3861b4d9b7abfc2636323e9d9c12`, post-merge comparison has no file delta, and the temporary implementation branch is absent.
+
+ES-D16 is `COMPLETE`. ES-D07 and ES-D13 remain dependency-complete `READY`, but this worker does not activate either one.
+
+## D06 completed record
+
+D06 completed through Staff PR #177 after every required exact-head gate passed on frozen product head `b624ee799aea7db7c561b0b064733374d4c61067`.
+
+Coverage `33204412446` / job `98961747084`, configuration-cache `33204412468`, Sentinel artifact `33204412444` / job `98961683122`, hosted Codacy static `98961965089`, durable Sentinel job `327`, and canonical public/private Pi `33204694500` -> `33205431529` / job `98965140421` all passed. All five visible inline review threads were resolved/outdated before merge.
+
+PR #177 merged normally as `5eab4d8ff7bf0c25253df828c837fbc8c96edfb3`. Exact containment is one commit ahead, zero behind, and zero file differences; merge and product tree are `5b3fd4d313dd4437dc04c346bd39efcc4e00f007`. The temporary implementation branch is absent. The diagnostic-only workflow was removed from the retained diagnostic branch, which now has zero file difference from merged `main` and no unique work.
+
+ES-D06 is `COMPLETE`. ES-D07 and ES-D13 are dependency-complete `READY`, but this worker does not activate either one.
+
 ## D05 completed record
 
 D05 completed through Staff PR #160 after the owner-authorized real Discord smoke, fresh exact-head hosted validation, and canonical Pi staging all passed.
@@ -80,7 +112,7 @@ Frozen product source `5f24ba1818c81e0a30a516fa70c8597586184b00` retains the rea
 
 PR #160 merged normally as `7bc8739bdc3f77db23c8b649f8c227f008162e47`. Exact containment is one commit ahead, zero behind, and zero file differences; the temporary D05 branch is absent. D05 added no migration and did not absorb D04/X03/production work.
 
-ES-D05 is `COMPLETE`. ES-D04 is also `COMPLETE`; D06 and D13 are dependency-complete `READY`, but this worker does not activate them.
+ES-D05 is `COMPLETE`. ES-D04 and ES-D06 are also `COMPLETE`; D07 and D13 are dependency-complete `READY`, but this worker does not activate them.
 
 ## D04 completed record
 
