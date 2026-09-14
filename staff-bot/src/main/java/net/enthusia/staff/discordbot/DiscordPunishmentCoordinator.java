@@ -6,7 +6,7 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-/** Single-thread worker scheduler with explicit cycle quiescence on shutdown. */
+/** Single-thread worker scheduler with explicit pause and cycle quiescence on shutdown. */
 final class DiscordPunishmentCoordinator implements AutoCloseable {
     private static final System.Logger LOGGER = System.getLogger(DiscordPunishmentCoordinator.class.getName());
 
@@ -14,6 +14,7 @@ final class DiscordPunishmentCoordinator implements AutoCloseable {
     private final Duration interval;
     private final ScheduledExecutorService executor;
     private final AtomicBoolean started = new AtomicBoolean();
+    private final AtomicBoolean active = new AtomicBoolean();
     private final AtomicBoolean closed = new AtomicBoolean();
 
     DiscordPunishmentCoordinator(DiscordPunishmentWorker worker, Duration interval) {
@@ -44,8 +45,19 @@ final class DiscordPunishmentCoordinator implements AutoCloseable {
         executor.scheduleWithFixedDelay(this::runSafely, 0, interval.toMillis(), TimeUnit.MILLISECONDS);
     }
 
+    void resume() {
+        if (!started.get() || closed.get()) {
+            throw new IllegalStateException("punishment coordinator is not available");
+        }
+        active.set(true);
+    }
+
+    void pause() {
+        active.set(false);
+    }
+
     private void runSafely() {
-        if (closed.get()) {
+        if (closed.get() || !active.get()) {
             return;
         }
         try {
@@ -63,6 +75,7 @@ final class DiscordPunishmentCoordinator implements AutoCloseable {
         if (!closed.compareAndSet(false, true)) {
             return;
         }
+        active.set(false);
         executor.shutdown();
         try {
             if (!executor.awaitTermination(30, TimeUnit.SECONDS)) {

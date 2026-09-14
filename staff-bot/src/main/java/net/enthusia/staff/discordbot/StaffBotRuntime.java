@@ -116,6 +116,7 @@ public final class StaffBotRuntime implements AutoCloseable {
         try {
             moderation = StaffModerationRuntime.open(
                     moderationConfigFile,
+                    configuration.environment().guildId(),
                     configuration.interactionCapacity(),
                     configuration.interactionTtl());
             StaffBotHealthServer healthServer = new StaffBotHealthServer(configuration.healthAddress(), health);
@@ -298,7 +299,12 @@ public final class StaffBotRuntime implements AutoCloseable {
                 failClosed(result.reason());
                 return;
             }
-            gateway.enableInteractions();
+            try {
+                gateway.enableInteractions();
+            } catch (RuntimeException exception) {
+                failClosed("interaction_enable_failed");
+                return;
+            }
             health.transition(StaffBotHealth.Phase.READY, result.reason());
             readiness.complete(true);
             logIfEnabled(System.Logger.Level.INFO,

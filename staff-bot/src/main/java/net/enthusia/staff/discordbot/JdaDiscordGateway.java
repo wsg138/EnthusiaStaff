@@ -75,7 +75,6 @@ final class JdaDiscordGateway implements DiscordGateway {
     }
 
     private JDABuilder baseBuilder(SessionListener listener) {
-        // D16 uses bounded on-demand Discord REST reads. No message Gateway event subscription is required.
         return JDABuilder.createLight(configuration.discordToken(), Set.of())
                 .setMemberCachePolicy(MemberCachePolicy.NONE)
                 .setChunkingFilter(ChunkingFilter.NONE)
@@ -113,6 +112,7 @@ final class JdaDiscordGateway implements DiscordGateway {
             if (jda == null) {
                 return;
             }
+            moderation.ifPresent(runtime -> runtime.resumePunishments(jda));
             if (previewListener != null) {
                 previewListener.enable(jda);
             } else if (moderationListener != null) {
@@ -123,6 +123,7 @@ final class JdaDiscordGateway implements DiscordGateway {
 
     private void disableInteractions() {
         synchronized (lifecycleLock) {
+            moderation.ifPresent(StaffModerationRuntime::pausePunishments);
             if (previewListener != null) {
                 previewListener.disable();
             }
@@ -153,6 +154,7 @@ final class JdaDiscordGateway implements DiscordGateway {
     }
 
     private void closeListeners() {
+        moderation.ifPresent(StaffModerationRuntime::pausePunishments);
         if (previewListener != null) {
             previewListener.close();
         }
