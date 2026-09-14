@@ -25,6 +25,7 @@ final class DiscordPunishmentWorker {
     private static final Duration LEASE = Duration.ofSeconds(45);
     private static final Duration BASE_RETRY = Duration.ofSeconds(5);
     private static final Duration MAX_RETRY = Duration.ofMinutes(5);
+    private static final String NATIVE_BAN_OWNERSHIP_CONFLICT = "NATIVE_BAN_OWNERSHIP_CONFLICT";
 
     private final DiscordPunishmentRepository repository;
     private final DiscordPunishmentGateway gateway;
@@ -122,7 +123,7 @@ final class DiscordPunishmentWorker {
                 recorded,
                 recorded == DiscordDeliveryOutcome.DELIVERED,
                 stored.punishment().previousRestriction(),
-                deliveryError("WARNING", recorded, retry),
+                deliveryError("WARNING", delivery, retry),
                 operationKey(work)
         );
         settle(work, stored, replacement, retry ? List.of(retry(work, WorkType.APPLY)) : List.of());
@@ -142,7 +143,7 @@ final class DiscordPunishmentWorker {
                     recorded,
                     true,
                     stored.punishment().previousRestriction(),
-                    deliveryError("APPLY", recorded, retry),
+                    deliveryError("APPLY", delivery, retry),
                     operationKey(work)
             );
             settle(work, stored, replacement, applyFollowUp(replacement, work, retry));
@@ -157,7 +158,7 @@ final class DiscordPunishmentWorker {
         DiscordDeliveryOutcome recorded = recordedDelivery(delivery, retry);
         DiscordPunishment replacement = stored.punishment().withApplyDeliveryOutcome(
                 recorded,
-                deliveryError("APPLY", recorded, retry),
+                deliveryError("APPLY", delivery, retry),
                 operationKey(work)
         );
         settle(work, stored, replacement, retry ? List.of(retry(work, WorkType.APPLY)) : List.of());
@@ -192,7 +193,7 @@ final class DiscordPunishmentWorker {
         DiscordDeliveryOutcome recorded = recordedDelivery(delivery, retry);
         DiscordPunishment replacement = removed.withRemovalDeliveryOutcome(
                 recorded,
-                deliveryError("REMOVE", recorded, retry),
+                deliveryError("REMOVE", delivery, retry),
                 operationKey(work)
         );
         settle(work, stored, replacement, retry ? List.of(retry(work, WorkType.REMOVE)) : List.of());
@@ -204,7 +205,7 @@ final class DiscordPunishmentWorker {
         DiscordDeliveryOutcome recorded = recordedDelivery(delivery, retry);
         DiscordPunishment replacement = stored.punishment().withRemovalDeliveryOutcome(
                 recorded,
-                deliveryError("REMOVE", recorded, retry),
+                deliveryError("REMOVE", delivery, retry),
                 operationKey(work)
         );
         settle(work, stored, replacement, retry ? List.of(retry(work, WorkType.REMOVE)) : List.of());
@@ -232,11 +233,22 @@ final class DiscordPunishmentWorker {
             settle(work, stored, reconciled(stored.punishment(), Optional.empty(), work),
                     List.of(reconcileLater()));
         } catch (DiscordPunishmentGateway.EffectException failure) {
-            List<WorkSchedule> next = failure.retryable()
-                    ? List.of(retry(work, WorkType.RECONCILE))
-                    : List.of();
-            settle(work, stored, reconciled(stored.punishment(), Optional.of(failure.errorCode()), work), next);
+            settle(work, stored, reconciled(stored.punishment(), Optional.of(failure.errorCode()), work),
+                    reconciliationFollowUp(work, failure));
         }
+    }
+
+    private List<WorkSchedule> reconciliationFollowUp(
+            WorkLease work,
+            DiscordPunishmentGateway.EffectException failure
+    ) {
+        if (failure.retryable()) {
+            return List.of(retry(work, WorkType.RECONCILE));
+        }
+        if (NATIVE_BAN_OWNERSHIP_CONFLICT.equals(failure.errorCode())) {
+            return List.of(reconcileLater());
+        }
+        return List.of();
     }
 
     private DiscordPunishment reconciled(

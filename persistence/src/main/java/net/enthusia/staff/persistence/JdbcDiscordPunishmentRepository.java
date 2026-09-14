@@ -48,6 +48,7 @@ public final class JdbcDiscordPunishmentRepository implements DiscordPunishmentR
                 return replay.stored(true);
             }
             requireDiscordMembership(connection, punishment);
+            requireNoConflictingActive(connection, punishment);
             insertTarget(connection, punishment, operationKey, now);
             insertReconciliation(connection, punishment, now);
             workQueue.upsert(connection, punishment.punishmentId(), new WorkSchedule(WorkType.APPLY, now), now);
@@ -138,7 +139,7 @@ public final class JdbcDiscordPunishmentRepository implements DiscordPunishmentR
             DiscordConsequenceType type,
             int limit
     ) throws SQLException {
-        return queryActive(connection, guildId, Optional.of(userId), type, limit);
+        return queryActive(connection, guildId, Optional.of(userId), type, limit, false);
     }
 
     private List<StoredPunishment> activeForGuildType(
@@ -150,7 +151,7 @@ public final class JdbcDiscordPunishmentRepository implements DiscordPunishmentR
             throw new IllegalArgumentException("active Discord punishment query is invalid");
         }
         return JdbcTransactionSupport.execute(dataSource, "Unable to read active Discord punishments", connection ->
-                queryActive(connection, guildId, Optional.empty(), type, limit));
+                queryActive(connection, guildId, Optional.empty(), type, limit, false));
     }
 
     private List<StoredPunishment> queryActive(
@@ -158,12 +159,14 @@ public final class JdbcDiscordPunishmentRepository implements DiscordPunishmentR
             DiscordGuildId guildId,
             Optional<DiscordUserId> userId,
             DiscordConsequenceType type,
-            int limit
+            int limit,
+            boolean lock
     ) throws SQLException {
         List<StoredPunishment> result = new ArrayList<>();
         String targetPredicate = userId.isPresent()
                 ? " AND JSON_UNQUOTE(JSON_EXTRACT(desired_state_json, '$.targetUserId')) = ?"
                 : "";
+        String lockSuffix = lock ? " FOR UPDATE" : "";
         String sql = """
                 SELECT desired_state_json, revision
                 FROM discord_reconciliation_state
@@ -172,7 +175,7 @@ public final class JdbcDiscordPunishmentRepository implements DiscordPunishmentR
                                 'PENDING_REMOVE', 'RETRY_REMOVE', 'FAILED_REMOVE')
                   AND JSON_UNQUOTE(JSON_EXTRACT(desired_state_json, '$.guildId')) = ?
                   AND JSON_UNQUOTE(JSON_EXTRACT(desired_state_json, '$.type')) = ?
-                """ + targetPredicate + " ORDER BY updated_at DESC, reconciliation_key DESC LIMIT ?";
+                """ + targetPredicate + " ORDER BY updated_at DESC, reconciliation_key DESC LIMIT ?" + lockSuffix;
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
             int index = 1;
             statement.setString(index++, RESOURCE_TYPE);
@@ -193,6 +196,27 @@ public final class JdbcDiscordPunishmentRepository implements DiscordPunishmentR
             }
         }
         return List.copyOf(result);
+    }
+
+    private void requireNoConflictingActive(
+            Connection connection,
+            DiscordPunishment punishment
+    ) throws SQLException {
+        DiscordConsequenceType type = punishment.intent().type();
+        if (type == DiscordConsequenceType.WARNING || type == DiscordConsequenceType.KICK) {
+            return;
+        }
+        List<StoredPunishment> active = queryActive(
+                connection,
+                punishment.guildId(),
+                Optional.of(punishment.targetUserId()),
+                type,
+                MAX_ACTIVE_QUERY,
+                true
+        );
+        if (DiscordPunishmentConflictPolicy.conflicts(punishment, active)) {
+            throw new SQLException("conflicting active Discord punishment already exists");
+        }
     }
 
     private Current requireCurrent(Connection connection, UUID punishmentId) throws SQLException {
@@ -260,6 +284,7 @@ public final class JdbcDiscordPunishmentRepository implements DiscordPunishmentR
                 SELECT 1
                 FROM moderation_subject_discord_identities
                 WHERE subject_id = ? AND discord_user_id = ?
+                FOR UPDATE
                 """)) {
             statement.setBytes(1, UuidBytes.toBytes(punishment.subjectId().value()));
             statement.setBigDecimal(2, new BigDecimal(punishment.targetUserId().value()));

@@ -2,6 +2,7 @@ package net.enthusia.staff.integration;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -11,6 +12,11 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import net.enthusia.staff.domain.auth.Actor;
 import net.enthusia.staff.domain.auth.DiscordConsequenceType;
 import net.enthusia.staff.domain.auth.StaffRank;
@@ -18,8 +24,10 @@ import net.enthusia.staff.domain.discord.DiscordDeliveryOutcome;
 import net.enthusia.staff.domain.discord.DiscordPunishment;
 import net.enthusia.staff.domain.discord.DiscordPunishmentIntent;
 import net.enthusia.staff.domain.discord.DiscordPunishmentState;
+import net.enthusia.staff.domain.discord.DiscordRestrictionTarget;
 import net.enthusia.staff.domain.moderation.DiscordGuildId;
 import net.enthusia.staff.domain.moderation.DiscordUserId;
+import net.enthusia.staff.domain.moderation.ModerationSubjectId;
 import net.enthusia.staff.domain.ports.DiscordPunishmentRepository.WorkSchedule;
 import net.enthusia.staff.domain.ports.DiscordPunishmentRepository.WorkType;
 import net.enthusia.staff.domain.sanction.SanctionLength;
@@ -36,6 +44,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 @Testcontainers
 class DiscordPunishmentPersistenceIntegrationTest {
     private static final Instant NOW = Instant.parse("2026-09-14T20:00:00Z");
+    private static final DiscordGuildId GUILD_ID = new DiscordGuildId("1410303324745371709");
 
     @Container
     private static final MariaDBContainer<?> DATABASE = new MariaDBContainer<>("mariadb:11.4.8")
@@ -53,14 +62,13 @@ class DiscordPunishmentPersistenceIntegrationTest {
     @Test
     void intentLeaseRecoveryRevisionConflictAndRestartAreDurable() {
         DiscordUserId userId = new DiscordUserId("18446744073709551001");
-        DiscordGuildId guildId = new DiscordGuildId("1410303324745371709");
         DiscordPunishment punishment;
         String operationKey;
 
         try (HikariDataSource dataSource = open()) {
             JdbcDiscordModerationPersistenceStore identities = new JdbcDiscordModerationPersistenceStore(dataSource);
             var subject = identities.ensureDiscordSubject(userId, NOW);
-            punishment = punishment(subject.subject().subjectId(), userId, guildId);
+            punishment = punishment(subject.subject().subjectId(), userId, muteIntent());
             operationKey = "d07-create-" + punishment.punishmentId();
             JdbcDiscordPunishmentRepository repository = new JdbcDiscordPunishmentRepository(dataSource);
 
@@ -105,7 +113,7 @@ class DiscordPunishmentPersistenceIntegrationTest {
                     recoveredAt
             );
             assertEquals(1, settled.revision());
-            assertEquals(1, repository.activeForTarget(guildId, userId, DiscordConsequenceType.MUTE, 10).size());
+            assertEquals(1, repository.activeForTarget(GUILD_ID, userId, DiscordConsequenceType.MUTE, 10).size());
 
             assertThrows(ModerationPersistenceException.class, () -> repository.transition(
                     persisted,
@@ -130,16 +138,112 @@ class DiscordPunishmentPersistenceIntegrationTest {
         }
     }
 
+    @Test
+    void concurrentDuplicateMuteCreationAllowsExactlyOneActivePunishment() throws Exception {
+        DiscordUserId userId = new DiscordUserId("18446744073709551002");
+        try (HikariDataSource dataSource = open()) {
+            ModerationSubjectId subjectId = ensureSubject(dataSource, userId);
+            JdbcDiscordPunishmentRepository repository = new JdbcDiscordPunishmentRepository(dataSource);
+            DiscordPunishment first = punishment(subjectId, userId, muteIntent());
+            DiscordPunishment second = punishment(subjectId, userId, muteIntent());
+            CountDownLatch ready = new CountDownLatch(2);
+            CountDownLatch start = new CountDownLatch(1);
+            ExecutorService executor = Executors.newFixedThreadPool(2);
+            try {
+                Future<CreateAttempt> firstAttempt = executor.submit(
+                        () -> createWhenReleased(repository, first, ready, start)
+                );
+                Future<CreateAttempt> secondAttempt = executor.submit(
+                        () -> createWhenReleased(repository, second, ready, start)
+                );
+                assertTrue(ready.await(2, TimeUnit.SECONDS));
+                start.countDown();
+
+                CreateAttempt firstResult = firstAttempt.get(10, TimeUnit.SECONDS);
+                CreateAttempt secondResult = secondAttempt.get(10, TimeUnit.SECONDS);
+                long successes = List.of(firstResult, secondResult).stream().filter(CreateAttempt::success).count();
+                assertEquals(1L, successes);
+                CreateAttempt rejected = firstResult.success() ? secondResult : firstResult;
+                assertInstanceOf(ModerationPersistenceException.class, rejected.failure());
+                assertEquals(1, repository.activeForTarget(
+                        GUILD_ID, userId, DiscordConsequenceType.MUTE, 10
+                ).size());
+            } finally {
+                start.countDown();
+                executor.shutdownNow();
+            }
+        }
+    }
+
+    @Test
+    void channelRestrictionConflictIsScopedToTheSameDiscordResource() {
+        DiscordUserId userId = new DiscordUserId("18446744073709551003");
+        try (HikariDataSource dataSource = open()) {
+            ModerationSubjectId subjectId = ensureSubject(dataSource, userId);
+            JdbcDiscordPunishmentRepository repository = new JdbcDiscordPunishmentRepository(dataSource);
+            DiscordPunishment first = punishment(subjectId, userId, restrictionIntent("5001"));
+            DiscordPunishment differentChannel = punishment(subjectId, userId, restrictionIntent("5002"));
+            DiscordPunishment sameChannel = punishment(subjectId, userId, restrictionIntent("5001"));
+
+            repository.create(first, "d07-create-" + first.punishmentId(), NOW);
+            repository.create(differentChannel, "d07-create-" + differentChannel.punishmentId(), NOW);
+            assertThrows(ModerationPersistenceException.class, () -> repository.create(
+                    sameChannel,
+                    "d07-create-" + sameChannel.punishmentId(),
+                    NOW
+            ));
+            assertEquals(2, repository.activeForTarget(
+                    GUILD_ID, userId, DiscordConsequenceType.CHANNEL_RESTRICTION, 10
+            ).size());
+        }
+    }
+
+    private static CreateAttempt createWhenReleased(
+            JdbcDiscordPunishmentRepository repository,
+            DiscordPunishment punishment,
+            CountDownLatch ready,
+            CountDownLatch start
+    ) throws InterruptedException {
+        ready.countDown();
+        start.await();
+        try {
+            repository.create(punishment, "d07-create-" + punishment.punishmentId(), NOW);
+            return new CreateAttempt(true, null);
+        } catch (RuntimeException failure) {
+            return new CreateAttempt(false, failure);
+        }
+    }
+
+    private static ModerationSubjectId ensureSubject(HikariDataSource dataSource, DiscordUserId userId) {
+        return new JdbcDiscordModerationPersistenceStore(dataSource)
+                .ensureDiscordSubject(userId, NOW)
+                .subject()
+                .subjectId();
+    }
+
     private static HikariDataSource open() {
         return MariaDb.open(MariaDbIntegrationSupport.databaseConfig(DATABASE));
     }
 
     private static DiscordPunishment punishment(
-            net.enthusia.staff.domain.moderation.ModerationSubjectId subjectId,
+            ModerationSubjectId subjectId,
             DiscordUserId userId,
-            DiscordGuildId guildId
+            DiscordPunishmentIntent intent
     ) {
-        DiscordPunishmentIntent intent = new DiscordPunishmentIntent(
+        return DiscordPunishment.pending(
+                UUID.randomUUID(),
+                subjectId,
+                userId,
+                GUILD_ID,
+                new Actor(UUID.randomUUID(), "IntegrationStaff", StaffRank.ADMIN),
+                intent,
+                NOW,
+                "pending"
+        );
+    }
+
+    private static DiscordPunishmentIntent muteIntent() {
+        return new DiscordPunishmentIntent(
                 DiscordConsequenceType.MUTE,
                 SanctionLength.temporary(Duration.ofHours(1)),
                 false,
@@ -150,15 +254,26 @@ class DiscordPunishmentPersistenceIntegrationTest {
                 0,
                 true
         );
-        return DiscordPunishment.pending(
-                UUID.randomUUID(),
-                subjectId,
-                userId,
-                guildId,
-                new Actor(UUID.randomUUID(), "IntegrationStaff", StaffRank.ADMIN),
-                intent,
-                NOW,
-                "pending"
+    }
+
+    private static DiscordPunishmentIntent restrictionIntent(String channelId) {
+        return new DiscordPunishmentIntent(
+                DiscordConsequenceType.CHANNEL_RESTRICTION,
+                SanctionLength.temporary(Duration.ofHours(1)),
+                false,
+                false,
+                Optional.of(new DiscordRestrictionTarget(
+                        DiscordRestrictionTarget.Kind.CHANNEL,
+                        channelId,
+                        DiscordRestrictionTarget.Mode.READ_ONLY
+                )),
+                "Repeated disruption",
+                "Integration test",
+                0,
+                true
         );
+    }
+
+    private record CreateAttempt(boolean success, Throwable failure) {
     }
 }

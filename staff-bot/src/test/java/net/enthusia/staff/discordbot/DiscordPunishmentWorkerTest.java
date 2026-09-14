@@ -110,7 +110,9 @@ class DiscordPunishmentWorkerTest {
 
     @Test
     void expiredTemporaryPunishmentNeverTouchesDiscord() {
-        FakeRepository repository = new FakeRepository(punishment(mute(Duration.ofMinutes(1)), NOW.minus(Duration.ofHours(1))));
+        FakeRepository repository = new FakeRepository(
+                punishment(mute(Duration.ofMinutes(1)), NOW.minus(Duration.ofHours(1)))
+        );
         FakeGateway gateway = new FakeGateway();
         repository.enqueue(WorkType.APPLY, NOW, 1);
 
@@ -204,7 +206,32 @@ class DiscordPunishmentWorkerTest {
     }
 
     @Test
-    void nativeBanReconciliationConflictStopsWithoutDuplicateMutationLoop() {
+    void removalNotificationRetryExhaustionDoesNotUndoSuccessfulReversal() {
+        DiscordPunishment initial = appliedMute()
+                .requestRemoval(DiscordPunishmentTermination.END, "remove")
+                .markRemoved("removed")
+                .withRemovalDeliveryOutcome(
+                        DiscordDeliveryOutcome.FAILED_RETRYABLE,
+                        Optional.of("REMOVE_DM_RETRYABLE"),
+                        "notify"
+                );
+        FakeRepository repository = new FakeRepository(initial);
+        FakeGateway gateway = new FakeGateway();
+        gateway.removalDelivery = DiscordDeliveryOutcome.FAILED_RETRYABLE;
+        repository.enqueue(WorkType.REMOVE, NOW, 5);
+
+        newWorker(repository, gateway).runCycle();
+
+        assertEquals(DiscordPunishmentState.ENDED, repository.current.punishment().state());
+        assertFalse(repository.current.punishment().externalApplied());
+        assertEquals(DiscordDeliveryOutcome.FAILED_TERMINAL, repository.current.punishment().removalDmOutcome());
+        assertEquals(Optional.of("REMOVE_DM_RETRY_EXHAUSTED"), repository.current.punishment().lastErrorCode());
+        assertEquals(0, gateway.removeCalls);
+        assertTrue(repository.work.isEmpty());
+    }
+
+    @Test
+    void nativeBanReconciliationConflictRemainsObservableWithoutMutationLoop() {
         DiscordPunishment initial = punishment(ban(Duration.ofHours(1)), NOW).withProcessingResult(
                 DiscordPunishmentState.APPLIED,
                 DiscordDeliveryOutcome.DELIVERED,
@@ -225,7 +252,9 @@ class DiscordPunishmentWorkerTest {
         assertEquals(DiscordPunishmentState.APPLIED, repository.current.punishment().state());
         assertEquals(Optional.of("NATIVE_BAN_OWNERSHIP_CONFLICT"), repository.current.punishment().lastErrorCode());
         assertEquals(1, gateway.reconcileCalls);
-        assertTrue(repository.work.isEmpty());
+        assertEquals(1, repository.work.size());
+        assertEquals(WorkType.RECONCILE, repository.work.peek().type());
+        assertTrue(repository.work.peek().dueAt().isAfter(NOW));
     }
 
     private static DiscordPunishmentWorker newWorker(FakeRepository repository, FakeGateway gateway) {

@@ -60,17 +60,22 @@ class DiscordPunishmentCoordinatorTest {
                 Duration.ofMillis(5),
                 scheduler
         );
-        coordinator.start();
-        coordinator.resume();
-        assertTrue(entered.await(2, TimeUnit.SECONDS));
+        try {
+            coordinator.start();
+            coordinator.resume();
+            assertTrue(entered.await(2, TimeUnit.SECONDS));
 
-        Future<?> closed = control.submit(coordinator::close);
-        assertThrows(TimeoutException.class, () -> closed.get(100, TimeUnit.MILLISECONDS));
-        release.countDown();
-        closed.get(2, TimeUnit.SECONDS);
+            Future<?> closed = control.submit(coordinator::close);
+            assertThrows(TimeoutException.class, () -> closed.get(100, TimeUnit.MILLISECONDS));
+            release.countDown();
+            closed.get(2, TimeUnit.SECONDS);
 
-        assertThrows(IllegalStateException.class, coordinator::resume);
-        control.shutdownNow();
+            assertThrows(IllegalStateException.class, coordinator::resume);
+        } finally {
+            release.countDown();
+            coordinator.close();
+            control.shutdownNow();
+        }
     }
 
     private static Runnable blockingFirstCycle(
