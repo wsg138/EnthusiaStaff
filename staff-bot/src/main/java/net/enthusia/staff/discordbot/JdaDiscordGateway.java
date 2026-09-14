@@ -33,6 +33,7 @@ final class JdaDiscordGateway implements DiscordGateway {
     private JDA jda;
     private JdaStaffModerationListener moderationListener;
     private JdaModerationUiPreviewListener previewListener;
+    private DiscordRoleSyncCoordinator roleSyncCoordinator;
 
     JdaDiscordGateway(StaffBotConfiguration configuration) {
         this(configuration, null, null, Optional.empty());
@@ -49,6 +50,7 @@ final class JdaDiscordGateway implements DiscordGateway {
         this.interactions = interactions;
         this.moderation = moderation == null ? Optional.empty() : moderation;
         validateInteractionResources();
+        validateRoleSyncBoundary();
     }
 
     private void validateInteractionResources() {
@@ -58,6 +60,15 @@ final class JdaDiscordGateway implements DiscordGateway {
         if (configuration.uiPreviewEnabled() && interactions == null) {
             throw new IllegalArgumentException("UI preview requires replay protection");
         }
+    }
+
+    private void validateRoleSyncBoundary() {
+        moderation.flatMap(StaffModerationRuntime::roleSync).ifPresent(service -> {
+            if (configuration.environment() == StaffBotEnvironment.PRODUCTION
+                    && service.configuration().mode() == DiscordRoleSyncConfiguration.Mode.ENFORCE) {
+                throw new IllegalArgumentException("ES-D13 does not authorize production role-sync enforcement");
+            }
+        });
     }
 
     @Override
@@ -75,7 +86,7 @@ final class JdaDiscordGateway implements DiscordGateway {
     }
 
     private JDABuilder baseBuilder(SessionListener listener) {
-        // D16 uses bounded on-demand Discord REST reads. No message Gateway event subscription is required.
+        // D13/D16 use bounded on-demand Discord REST reads; no member/message Gateway intents are required.
         return JDABuilder.createLight(configuration.discordToken(), Set.of())
                 .setMemberCachePolicy(MemberCachePolicy.NONE)
                 .setChunkingFilter(ChunkingFilter.NONE)
@@ -118,7 +129,21 @@ final class JdaDiscordGateway implements DiscordGateway {
             } else if (moderationListener != null) {
                 moderationListener.enable(jda);
             }
+            enableRoleSync();
         }
+    }
+
+    private void enableRoleSync() {
+        moderation.flatMap(StaffModerationRuntime::roleSync).ifPresent(service -> {
+            Guild guild = jda.getGuildById(configuration.environment().guildId());
+            if (guild == null) {
+                throw new IllegalStateException("validated role-sync guild is unavailable");
+            }
+            if (roleSyncCoordinator == null) {
+                roleSyncCoordinator = new DiscordRoleSyncCoordinator(service, workers);
+            }
+            roleSyncCoordinator.enable(new JdaDiscordRoleReconciler(guild, service.configuration()));
+        });
     }
 
     private void disableInteractions() {
@@ -128,6 +153,9 @@ final class JdaDiscordGateway implements DiscordGateway {
             }
             if (moderationListener != null) {
                 moderationListener.disable();
+            }
+            if (roleSyncCoordinator != null) {
+                roleSyncCoordinator.disable();
             }
         }
     }
@@ -153,6 +181,10 @@ final class JdaDiscordGateway implements DiscordGateway {
     }
 
     private void closeListeners() {
+        if (roleSyncCoordinator != null) {
+            roleSyncCoordinator.close();
+            roleSyncCoordinator = null;
+        }
         if (previewListener != null) {
             previewListener.close();
         }
