@@ -37,12 +37,8 @@ final class StaffModerationConfiguration {
     private static final String AUTHORITY_HOST = "127.0.0.1";
     private static final String AUTHORITY_PATH = "/v1/staff-rank";
     private static final List<String> REQUIRED = List.of(
-            JDBC_URL_ENV,
-            DB_USERNAME_ENV,
-            DB_CREDENTIAL_ENV,
-            AUTHORITY_URL_ENV,
-            AUTHORITY_CREDENTIAL_ENV,
-            COMPONENT_SIGNING_ENV
+            JDBC_URL_ENV, DB_USERNAME_ENV, DB_CREDENTIAL_ENV, AUTHORITY_URL_ENV,
+            AUTHORITY_CREDENTIAL_ENV, COMPONENT_SIGNING_ENV
     );
 
     private final DatabaseConfig databaseConfig;
@@ -97,57 +93,28 @@ final class StaffModerationConfiguration {
         int poolSize = integer(values, DB_POOL_SIZE_ENV, DEFAULT_POOL_SIZE, MIN_POOL_SIZE, MAX_POOL_SIZE);
         int timeout = integer(values, DB_TIMEOUT_MILLIS_ENV, DEFAULT_TIMEOUT_MILLIS, MIN_TIMEOUT_MILLIS, MAX_TIMEOUT_MILLIS);
         DatabaseConfig database = new DatabaseConfig(
-                values.get(JDBC_URL_ENV).trim(),
-                values.get(DB_USERNAME_ENV).trim(),
-                required(values.get(DB_CREDENTIAL_ENV), DB_CREDENTIAL_ENV),
-                poolSize,
-                timeout
-        );
+                values.get(JDBC_URL_ENV).trim(), values.get(DB_USERNAME_ENV).trim(),
+                required(values.get(DB_CREDENTIAL_ENV), DB_CREDENTIAL_ENV), poolSize, timeout);
         Optional<DatabaseConfig> roleSyncDatabase = roleSyncDatabase(values, roleSync, database.jdbcUrl(), timeout);
         AuthorityTransport transport = AuthorityTransport.parse(values.get(AUTHORITY_TRANSPORT_ENV));
         return Optional.of(new StaffModerationConfiguration(
-                database,
-                authorityUri(values.get(AUTHORITY_URL_ENV), transport),
-                values.get(AUTHORITY_CREDENTIAL_ENV),
-                transport,
-                values.get(COMPONENT_SIGNING_ENV),
-                roleSync,
-                roleSyncDatabase
-        ));
+                database, authorityUri(values.get(AUTHORITY_URL_ENV), transport),
+                values.get(AUTHORITY_CREDENTIAL_ENV), transport, values.get(COMPONENT_SIGNING_ENV),
+                roleSync, roleSyncDatabase));
     }
 
-    DatabaseConfig database() {
-        return databaseConfig;
-    }
-
-    URI authorityUri() {
-        return authorityEndpoint;
-    }
-
-    String authoritySecret() {
-        return authorityCredential;
-    }
-
-    AuthorityTransport authorityTransport() {
-        return authorityTransport;
-    }
-
-    String componentSecret() {
-        return componentSigningSecret;
-    }
-
-    Optional<DiscordRoleSyncConfiguration> roleSync() {
-        return roleSyncConfiguration;
-    }
-
-    Optional<DatabaseConfig> roleSyncDatabase() {
-        return roleSyncDatabaseConfig;
-    }
+    DatabaseConfig database() { return databaseConfig; }
+    URI authorityUri() { return authorityEndpoint; }
+    String authoritySecret() { return authorityCredential; }
+    AuthorityTransport authorityTransport() { return authorityTransport; }
+    String componentSecret() { return componentSigningSecret; }
+    Optional<DiscordRoleSyncConfiguration> roleSync() { return roleSyncConfiguration; }
+    Optional<DatabaseConfig> roleSyncDatabase() { return roleSyncDatabaseConfig; }
 
     @Override
     public String toString() {
-        return "StaffModerationConfiguration[authority=<configured>, authorityTransport=%s, roleSync=%s, "
-                + "database=<redacted>, roleSyncDatabase=<redacted>, authoritySecret=<redacted>, componentSecret=<redacted>]"
+        return ("StaffModerationConfiguration[authority=<configured>, authorityTransport=%s, roleSync=%s, "
+                + "database=<redacted>, roleSyncDatabase=<redacted>, authoritySecret=<redacted>, componentSecret=<redacted>]")
                 .formatted(authorityTransport.externalName(), roleSyncConfiguration.isPresent() ? "<configured>" : "<none>");
     }
 
@@ -169,12 +136,9 @@ final class StaffModerationConfiguration {
             throw new IllegalArgumentException("role-sync requires separate write database credentials");
         }
         return Optional.of(new DatabaseConfig(
-                jdbcUrl,
-                values.get(ROLE_SYNC_DB_USERNAME_ENV).trim(),
+                jdbcUrl, values.get(ROLE_SYNC_DB_USERNAME_ENV).trim(),
                 required(values.get(ROLE_SYNC_DB_CREDENTIAL_ENV), ROLE_SYNC_DB_CREDENTIAL_ENV),
-                ROLE_SYNC_POOL_SIZE,
-                timeout
-        ));
+                ROLE_SYNC_POOL_SIZE, timeout));
     }
 
     private static void rejectOrphanRoleSyncSettings(
@@ -206,9 +170,7 @@ final class StaffModerationConfiguration {
 
     private static boolean validAuthorityResource(URI uri) {
         return AUTHORITY_PATH.equals(uri.getPath())
-                && uri.getUserInfo() == null
-                && uri.getQuery() == null
-                && uri.getFragment() == null;
+                && uri.getUserInfo() == null && uri.getQuery() == null && uri.getFragment() == null;
     }
 
     private static int integer(Map<String, String> values, String envName, int fallback, int min, int max) {
@@ -252,20 +214,13 @@ final class StaffModerationConfiguration {
 
         private final String externalName;
 
-        AuthorityTransport(String externalName) {
-            this.externalName = externalName;
-        }
-
-        String externalName() {
-            return externalName;
-        }
+        AuthorityTransport(String externalName) { this.externalName = externalName; }
+        String externalName() { return externalName; }
 
         boolean validNetwork(URI uri) {
             if (!HTTP_SCHEME.equalsIgnoreCase(uri.getScheme())
-                    || uri.getPort() < MIN_PORT
-                    || uri.getPort() > MAX_PORT
-                    || uri.getHost() == null
-                    || uri.getHost().isBlank()) {
+                    || uri.getPort() < MIN_PORT || uri.getPort() > MAX_PORT
+                    || uri.getHost() == null || uri.getHost().isBlank()) {
                 return false;
             }
             return this != LOOPBACK || AUTHORITY_HOST.equals(uri.getHost());

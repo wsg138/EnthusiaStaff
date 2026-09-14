@@ -45,10 +45,7 @@ class DiscordRoleSyncServiceTest {
         store.subjects.put(DISCORD, subject(Optional.empty(), FIRST, SECOND));
         Map<UUID, Set<String>> groups = Map.of(FIRST, Set.of(HELPER_GROUP), SECOND, Set.of(MOD_GROUP, "vip"));
         DiscordRoleSyncService service = service(store, player -> groups.getOrDefault(player, Set.of()), NOW);
-
-        DiscordRoleSyncService.Evaluation result = service.evaluate(DISCORD);
-
-        assertEquals(Set.of(HELPER_ROLE, MOD_ROLE), result.desiredRoleIds());
+        assertEquals(Set.of(HELPER_ROLE, MOD_ROLE), service.evaluate(DISCORD).desiredRoleIds());
     }
 
     @Test
@@ -56,12 +53,10 @@ class DiscordRoleSyncServiceTest {
         FakeStore store = new FakeStore();
         Map<UUID, Set<String>> groups = Map.of(FIRST, Set.of(HELPER_GROUP), SECOND, Set.of(MOD_GROUP));
         DiscordRoleSyncService service = service(store, player -> groups.getOrDefault(player, Set.of()), NOW);
-
         store.subjects.put(DISCORD, subject(Optional.of(main(FIRST)), FIRST, SECOND));
         Set<String> firstMain = service.evaluate(DISCORD).desiredRoleIds();
         store.subjects.put(DISCORD, subject(Optional.of(main(SECOND)), FIRST, SECOND));
         Set<String> secondMain = service.evaluate(DISCORD).desiredRoleIds();
-
         assertEquals(Set.of(HELPER_ROLE, MOD_ROLE), firstMain);
         assertEquals(firstMain, secondMain);
     }
@@ -71,7 +66,6 @@ class DiscordRoleSyncServiceTest {
         FakeStore store = new FakeStore();
         store.subjects.put(DISCORD, discordOnlySubject());
         DiscordRoleSyncService service = service(store, ignored -> Set.of(MOD_GROUP), NOW);
-
         assertTrue(service.evaluate(DISCORD).desiredRoleIds().isEmpty());
     }
 
@@ -80,7 +74,6 @@ class DiscordRoleSyncServiceTest {
         FakeStore store = new FakeStore();
         DiscordRoleSyncService first = service(store, ignored -> Set.of(), NOW);
         first.recordRetry(DISCORD, Set.of(HELPER_ROLE), Set.of(), "role_add_failed");
-
         assertFalse(first.due(DISCORD));
         DiscordRoleSyncService restarted = service(store, ignored -> Set.of(), NOW.plusSeconds(61));
         assertTrue(restarted.due(DISCORD));
@@ -92,14 +85,9 @@ class DiscordRoleSyncServiceTest {
     void eligibilityFailurePreservesLastKnownDesiredAndObservedSnapshots() {
         FakeStore store = new FakeStore();
         DiscordRoleSyncService service = service(store, ignored -> Set.of(), NOW);
-        service.recordSuccess(
-                new DiscordRoleSyncService.Evaluation(DISCORD, Set.of(MOD_ROLE)),
-                Set.of(HELPER_ROLE),
-                "SHADOW_DRIFT"
-        );
-
+        service.recordSuccess(new DiscordRoleSyncService.Evaluation(DISCORD, Set.of(MOD_ROLE)),
+                Set.of(HELPER_ROLE), "SHADOW_DRIFT");
         service.recordEvaluationRetry(DISCORD, "eligibility_unavailable");
-
         ReconciliationState state = store.state();
         assertEquals("{\"roles\":[\"1002\"]}", state.desiredStateJson());
         assertEquals(Optional.of("{\"roles\":[\"1001\"]}"), state.observedStateJson());
@@ -108,21 +96,20 @@ class DiscordRoleSyncServiceTest {
     }
 
     @Test
-    void revisionConflictIsRereadAndRetriedOnce() {
+    void revisionConflictPreservesCompetingNewerState() {
         ConflictStore store = new ConflictStore();
         DiscordRoleSyncService service = service(store, ignored -> Set.of(), NOW);
-
         service.recordRetry(DISCORD, Set.of(HELPER_ROLE), Set.of(), "role_add_failed");
-
-        assertEquals(2, store.saveAttempts);
-        assertEquals(1L, store.state().revision());
+        assertEquals(1, store.saveAttempts);
+        assertEquals("{\"roles\":[\"9999\"]}", store.state().desiredStateJson());
+        assertEquals(Optional.of("{\"roles\":[\"8888\"]}"), store.state().observedStateJson());
+        assertEquals("IN_SYNC", store.state().state());
     }
 
     @Test
     void persistenceFailureWithoutRevisionChangePropagates() {
         SameRevisionFailureStore store = new SameRevisionFailureStore();
         DiscordRoleSyncService service = service(store, ignored -> Set.of(), NOW);
-
         assertThrows(ModerationPersistenceException.class,
                 () -> service.recordRetry(DISCORD, Set.of(), Set.of(), "role_sync_failure"));
     }
@@ -132,18 +119,12 @@ class DiscordRoleSyncServiceTest {
             MinecraftRoleEligibilityClient eligibility,
             Instant now
     ) {
-        return new DiscordRoleSyncService(
-                store,
-                eligibility,
+        return new DiscordRoleSyncService(store, eligibility,
                 new DiscordRoleSyncConfiguration(
                         DiscordRoleSyncConfiguration.Mode.SHADOW,
-                        Map.of(HELPER_GROUP, HELPER_ROLE, MOD_GROUP, MOD_ROLE),
-                        Set.of("9000"),
-                        Duration.ofSeconds(60),
-                        25
-                ),
-                Clock.fixed(now, ZoneOffset.UTC)
-        );
+                        Map.of(HELPER_GROUP, HELPER_ROLE, MOD_GROUP, MOD_ROLE), Set.of("9000"),
+                        Duration.ofSeconds(60), 25),
+                Clock.fixed(now, ZoneOffset.UTC));
     }
 
     private static MainMinecraftAccount main(UUID playerId) {
@@ -157,20 +138,13 @@ class DiscordRoleSyncServiceTest {
             identities.add(new MinecraftIdentityRef(player));
         }
         return new VersionedSubject(
-                new ModerationSubject(new ModerationSubjectId(UUID.randomUUID()), Set.copyOf(identities), main),
-                0
-        );
+                new ModerationSubject(new ModerationSubjectId(UUID.randomUUID()), Set.copyOf(identities), main), 0);
     }
 
     private static VersionedSubject discordOnlySubject() {
         return new VersionedSubject(
-                new ModerationSubject(
-                        new ModerationSubjectId(UUID.randomUUID()),
-                        Set.of(new DiscordIdentityRef(DISCORD)),
-                        Optional.empty()
-                ),
-                0
-        );
+                new ModerationSubject(new ModerationSubjectId(UUID.randomUUID()),
+                        Set.of(new DiscordIdentityRef(DISCORD)), Optional.empty()), 0);
     }
 
     private static class FakeStore implements DiscordRoleSyncService.StateStore {
@@ -178,20 +152,9 @@ class DiscordRoleSyncServiceTest {
         final Map<String, ReconciliationState> reconciliations = new HashMap<>();
         int saveAttempts;
 
-        @Override
-        public List<DiscordUserId> discordUsersAfter(Optional<DiscordUserId> cursor, int limit) {
-            return List.of();
-        }
-
-        @Override
-        public Optional<VersionedSubject> subjectForDiscord(DiscordUserId userId) {
-            return Optional.ofNullable(subjects.get(userId));
-        }
-
-        @Override
-        public Optional<ReconciliationState> reconciliation(String key) {
-            return Optional.ofNullable(reconciliations.get(key));
-        }
+        @Override public List<DiscordUserId> discordUsersAfter(Optional<DiscordUserId> cursor, int limit) { return List.of(); }
+        @Override public Optional<VersionedSubject> subjectForDiscord(DiscordUserId userId) { return Optional.ofNullable(subjects.get(userId)); }
+        @Override public Optional<ReconciliationState> reconciliation(String key) { return Optional.ofNullable(reconciliations.get(key)); }
 
         @Override
         public ReconciliationState save(ReconciliationState state, long expectedRevision, Instant now) {
@@ -202,9 +165,7 @@ class DiscordRoleSyncServiceTest {
             return saved;
         }
 
-        ReconciliationState state() {
-            return reconciliations.values().stream().findFirst().orElseThrow();
-        }
+        ReconciliationState state() { return reconciliations.values().stream().findFirst().orElseThrow(); }
     }
 
     private static final class ConflictStore extends FakeStore {
@@ -215,7 +176,10 @@ class DiscordRoleSyncServiceTest {
             if (!conflicted) {
                 conflicted = true;
                 saveAttempts++;
-                reconciliations.put(state.reconciliationKey(), withRevision(state, 0));
+                reconciliations.put(state.reconciliationKey(), new ReconciliationState(
+                        state.reconciliationKey(), state.resourceType(), state.resourceId(),
+                        "{\"roles\":[\"9999\"]}", Optional.of("{\"roles\":[\"8888\"]}"),
+                        "IN_SYNC", 0, Optional.empty(), Optional.empty(), 0));
                 throw new ModerationPersistenceException("simulated revision race");
             }
             return super.save(state, expectedRevision, now);
@@ -232,16 +196,8 @@ class DiscordRoleSyncServiceTest {
 
     private static ReconciliationState withRevision(ReconciliationState state, long revision) {
         return new ReconciliationState(
-                state.reconciliationKey(),
-                state.resourceType(),
-                state.resourceId(),
-                state.desiredStateJson(),
-                state.observedStateJson(),
-                state.state(),
-                state.attemptCount(),
-                state.nextAttemptAt(),
-                state.lastErrorCode(),
-                revision
-        );
+                state.reconciliationKey(), state.resourceType(), state.resourceId(), state.desiredStateJson(),
+                state.observedStateJson(), state.state(), state.attemptCount(), state.nextAttemptAt(),
+                state.lastErrorCode(), revision);
     }
 }

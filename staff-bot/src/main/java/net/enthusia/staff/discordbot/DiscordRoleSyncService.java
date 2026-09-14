@@ -24,11 +24,8 @@ final class DiscordRoleSyncService {
 
     interface StateStore {
         List<DiscordUserId> discordUsersAfter(Optional<DiscordUserId> cursor, int limit);
-
         Optional<VersionedSubject> subjectForDiscord(DiscordUserId userId);
-
         Optional<ReconciliationState> reconciliation(String key);
-
         ReconciliationState save(ReconciliationState state, long expectedRevision, Instant now);
     }
 
@@ -115,18 +112,13 @@ final class DiscordRoleSyncService {
         Optional<ReconciliationState> current = store.reconciliation(key(userId));
         int attempts = nextAttemptCount(current);
         ReconciliationState proposed = new ReconciliationState(
-                key(userId),
-                RESOURCE_TYPE,
-                userId.value(),
+                key(userId), RESOURCE_TYPE, userId.value(),
                 current.map(ReconciliationState::desiredStateJson).orElseGet(() -> rolesJson(Set.of())),
                 current.flatMap(ReconciliationState::observedStateJson),
-                "RETRY",
-                attempts,
-                Optional.of(now.plus(retryDelay(attempts))),
-                Optional.of(normalizeError(errorCode)),
-                current.map(ReconciliationState::revision).orElse(0L)
+                "RETRY", attempts, Optional.of(now.plus(retryDelay(attempts))),
+                Optional.of(normalizeError(errorCode)), current.map(ReconciliationState::revision).orElse(0L)
         );
-        persistWithConflictRetry(proposed, current, now);
+        persistUnlessConflicted(proposed, current, now);
     }
 
     DiscordRoleSyncConfiguration configuration() {
@@ -149,14 +141,14 @@ final class DiscordRoleSyncService {
                 key(userId), RESOURCE_TYPE, userId.value(), rolesJson(desired), Optional.of(rolesJson(observed)),
                 state, attempts, next, error, current.map(ReconciliationState::revision).orElse(0L)
         );
-        persistWithConflictRetry(proposed, current, now);
+        persistUnlessConflicted(proposed, current, now);
     }
 
     private int nextAttemptCount(Optional<ReconciliationState> current) {
         return Math.addExact(current.map(ReconciliationState::attemptCount).orElse(0), 1);
     }
 
-    private void persistWithConflictRetry(
+    private void persistUnlessConflicted(
             ReconciliationState proposed,
             Optional<ReconciliationState> current,
             Instant now
@@ -165,12 +157,13 @@ final class DiscordRoleSyncService {
         try {
             store.save(proposed, expected, now);
         } catch (ModerationPersistenceException exception) {
-            Optional<ReconciliationState> latest = store.reconciliation(proposed.reconciliationKey());
-            long latestRevision = latest.map(ReconciliationState::revision).orElse(-1L);
+            long latestRevision = store.reconciliation(proposed.reconciliationKey())
+                    .map(ReconciliationState::revision)
+                    .orElse(-1L);
             if (latestRevision == expected) {
                 throw exception;
             }
-            store.save(proposed, latestRevision, now);
+            // A newer writer owns the current state. Preserve it and let a later evaluation reconcile afresh.
         }
     }
 

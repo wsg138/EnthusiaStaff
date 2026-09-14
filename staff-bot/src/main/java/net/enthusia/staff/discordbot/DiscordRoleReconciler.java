@@ -6,6 +6,10 @@ import java.util.Set;
 interface DiscordRoleReconciler {
     Result reconcile(DiscordRoleSyncService.Evaluation evaluation);
 
+    default void cancel() {
+        // Adapters without asynchronous work need no cancellation hook.
+    }
+
     record Result(Set<String> observedRoleIds, String state) {
         public Result {
             if (observedRoleIds == null || state == null || state.isBlank()) {

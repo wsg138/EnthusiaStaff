@@ -8,6 +8,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.RejectedExecutionException;
 import org.junit.jupiter.api.Test;
 
 class JdaDiscordRoleReconcilerTest {
@@ -25,16 +26,25 @@ class JdaDiscordRoleReconcilerTest {
     @Test
     void asynchronousDiscordFailureBecomesDurableRetrySignal() {
         IllegalStateException discordFailure = new IllegalStateException("rate limited or unavailable");
-        CompletableFuture<Void> future = CompletableFuture.failedFuture(discordFailure);
-
         DiscordRoleReconciler.RetryableException failure = assertThrows(
                 DiscordRoleReconciler.RetryableException.class,
-                () -> JdaDiscordRoleReconciler.await(future, "role_add_failed", Set.of(ROLE_ID))
-        );
-
+                () -> JdaDiscordRoleReconciler.await(
+                        CompletableFuture.failedFuture(discordFailure), "role_add_failed", Set.of(ROLE_ID)));
         assertEquals("role_add_failed", failure.errorCode());
         assertEquals(Set.of(ROLE_ID), failure.observedRoleIds());
         assertSame(discordFailure, failure.getCause());
+    }
+
+    @Test
+    void synchronousSubmissionFailurePreservesCurrentObservedSnapshot() {
+        RejectedExecutionException rejection = new RejectedExecutionException("JDA shutting down");
+        DiscordRoleReconciler.RetryableException failure = assertThrows(
+                DiscordRoleReconciler.RetryableException.class,
+                () -> JdaDiscordRoleReconciler.submitAndAwait(
+                        () -> { throw rejection; }, "role_remove_failed", Set.of(ROLE_ID, SECOND_ROLE_ID)));
+        assertEquals("role_remove_failed", failure.errorCode());
+        assertEquals(Set.of(ROLE_ID, SECOND_ROLE_ID), failure.observedRoleIds());
+        assertSame(rejection, failure.getCause());
     }
 
     @Test
@@ -43,16 +53,11 @@ class JdaDiscordRoleReconcilerTest {
                 new JdaDiscordRoleReconciler.MutationProgress(Set.of(ROLE_ID));
         progress.added(SECOND_ROLE_ID);
         IllegalStateException discordFailure = new IllegalStateException("later mutation failed");
-
         DiscordRoleReconciler.RetryableException failure = assertThrows(
                 DiscordRoleReconciler.RetryableException.class,
                 () -> JdaDiscordRoleReconciler.await(
                         CompletableFuture.failedFuture(discordFailure),
-                        "role_remove_failed",
-                        progress.snapshot()
-                )
-        );
-
+                        "role_remove_failed", progress.snapshot()));
         assertEquals(Set.of(ROLE_ID, SECOND_ROLE_ID), failure.observedRoleIds());
         progress.removed(ROLE_ID);
         assertEquals(Set.of(SECOND_ROLE_ID), progress.snapshot());

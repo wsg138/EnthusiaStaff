@@ -15,6 +15,7 @@ import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
+import java.util.regex.Pattern;
 import net.enthusia.staff.domain.auth.StaffRank;
 import net.enthusia.staff.protocol.StaffAuthorityHttpSigning;
 import net.luckperms.api.LuckPerms;
@@ -38,6 +39,7 @@ public final class DiscordStaffAuthorityEndpoint implements AutoCloseable {
     private static final int MAX_ROLE_GROUPS = 128;
     private static final Duration LOOKUP_TIMEOUT = Duration.ofSeconds(3);
     private static final Duration SHUTDOWN_TIMEOUT = Duration.ofSeconds(2);
+    private static final Pattern ROLE_GROUP = Pattern.compile("[a-z0-9_.-]{1,64}");
     private static final String RANK_PATH = "/v1/staff-rank";
     private static final String ROLE_ELIGIBILITY_PATH = "/v1/role-eligibility";
     private static final String GET_METHOD = "GET";
@@ -207,7 +209,8 @@ public final class DiscordStaffAuthorityEndpoint implements AutoCloseable {
 
     private String roleGroups(User user) {
         List<String> groups = user.getInheritedGroups(user.getQueryOptions()).stream()
-                .map(group -> group.getName().trim().toLowerCase(Locale.ROOT))
+                .map(group -> normalizedRoleGroup(group.getName()))
+                .flatMap(Optional::stream)
                 .distinct()
                 .sorted()
                 .toList();
@@ -215,6 +218,14 @@ public final class DiscordStaffAuthorityEndpoint implements AutoCloseable {
             throw new IllegalStateException("role eligibility exceeds the bounded group limit");
         }
         return String.join("\n", groups);
+    }
+
+    static Optional<String> normalizedRoleGroup(String raw) {
+        if (raw == null) {
+            return Optional.empty();
+        }
+        String normalized = raw.trim().toLowerCase(Locale.ROOT);
+        return ROLE_GROUP.matcher(normalized).matches() ? Optional.of(normalized) : Optional.empty();
     }
 
     private static UUID playerId(String rawQuery) {

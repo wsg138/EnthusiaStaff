@@ -7,6 +7,8 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Supplier;
 import net.dv8tion.jda.api.entities.Guild;
 import net.dv8tion.jda.api.entities.Member;
 import net.dv8tion.jda.api.entities.Role;
@@ -19,6 +21,7 @@ final class JdaDiscordRoleReconciler implements DiscordRoleReconciler {
 
     private final Guild guild;
     private final DiscordRoleSyncConfiguration configuration;
+    private final AtomicBoolean cancelled = new AtomicBoolean();
 
     JdaDiscordRoleReconciler(Guild guild, DiscordRoleSyncConfiguration configuration) {
         if (guild == null || configuration == null) {
@@ -30,11 +33,13 @@ final class JdaDiscordRoleReconciler implements DiscordRoleReconciler {
 
     @Override
     public Result reconcile(DiscordRoleSyncService.Evaluation evaluation) {
+        requireActive(Set.of());
         Member member = retrieveMember(evaluation);
         if (member == null) {
             return new Result(Set.of(), "MEMBER_ABSENT");
         }
         Set<String> observed = roleIds(member);
+        requireActive(observed);
         DiscordRoleDelta delta = DiscordRoleDelta.calculate(
                 evaluation.desiredRoleIds(), observed, configuration.managedRoleIds());
         if (configuration.mode() == DiscordRoleSyncConfiguration.Mode.SHADOW) {
@@ -46,10 +51,15 @@ final class JdaDiscordRoleReconciler implements DiscordRoleReconciler {
         return new Result(apply(member, delta, observed), "APPLIED");
     }
 
+    @Override
+    public void cancel() {
+        cancelled.set(true);
+    }
+
     private Member retrieveMember(DiscordRoleSyncService.Evaluation evaluation) {
         try {
-            return await(
-                    guild.retrieveMemberById(evaluation.userId().value()).submit(),
+            return submitAndAwait(
+                    () -> guild.retrieveMemberById(evaluation.userId().value()).submit(),
                     "member_lookup_failed",
                     Set.of()
             );
@@ -66,16 +76,26 @@ final class JdaDiscordRoleReconciler implements DiscordRoleReconciler {
     private Set<String> apply(Member member, DiscordRoleDelta delta, Set<String> observed) {
         MutationProgress progress = new MutationProgress(observed);
         for (String roleId : delta.add()) {
+            requireActive(progress.snapshot());
             Role role = mutableRole(roleId, progress.snapshot());
-            await(guild.addRoleToMember(member, role).submit(), "role_add_failed", progress.snapshot());
+            submitAndAwait(() -> guild.addRoleToMember(member, role).submit(),
+                    "role_add_failed", progress.snapshot());
             progress.added(roleId);
         }
         for (String roleId : delta.remove()) {
+            requireActive(progress.snapshot());
             Role role = mutableRole(roleId, progress.snapshot());
-            await(guild.removeRoleFromMember(member, role).submit(), "role_remove_failed", progress.snapshot());
+            submitAndAwait(() -> guild.removeRoleFromMember(member, role).submit(),
+                    "role_remove_failed", progress.snapshot());
             progress.removed(roleId);
         }
         return progress.snapshot();
+    }
+
+    private void requireActive(Set<String> observed) {
+        if (cancelled.get()) {
+            throw new RetryableException("role_sync_cancelled", observed, null);
+        }
     }
 
     private Role mutableRole(String roleId, Set<String> observed) {
@@ -96,11 +116,21 @@ final class JdaDiscordRoleReconciler implements DiscordRoleReconciler {
         return Set.copyOf(roleIds);
     }
 
-    static <T> T await(
-            CompletableFuture<T> future,
+    static <T> T submitAndAwait(
+            Supplier<CompletableFuture<T>> submission,
             String errorCode,
             Set<String> observed
     ) {
+        try {
+            return await(submission.get(), errorCode, observed);
+        } catch (RetryableException exception) {
+            throw exception;
+        } catch (RuntimeException exception) {
+            throw new RetryableException(errorCode, observed, exception);
+        }
+    }
+
+    static <T> T await(CompletableFuture<T> future, String errorCode, Set<String> observed) {
         try {
             return future.get(REST_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS);
         } catch (InterruptedException exception) {
