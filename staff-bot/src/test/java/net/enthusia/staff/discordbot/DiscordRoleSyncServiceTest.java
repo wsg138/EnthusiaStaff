@@ -34,6 +34,8 @@ class DiscordRoleSyncServiceTest {
     private static final UUID FIRST = UUID.fromString("11111111-1111-1111-1111-111111111111");
     private static final UUID SECOND = UUID.fromString("22222222-2222-2222-2222-222222222222");
     private static final Instant NOW = Instant.parse("2026-09-14T13:00:00Z");
+    private static final String HELPER_GROUP = "helper";
+    private static final String MOD_GROUP = "mod";
     private static final String HELPER_ROLE = "1001";
     private static final String MOD_ROLE = "1002";
 
@@ -41,7 +43,7 @@ class DiscordRoleSyncServiceTest {
     void unionsEligibilityAcrossEveryCurrentLinkedMinecraftAccount() {
         FakeStore store = new FakeStore();
         store.subjects.put(DISCORD, subject(Optional.empty(), FIRST, SECOND));
-        Map<UUID, Set<String>> groups = Map.of(FIRST, Set.of("helper"), SECOND, Set.of("mod", "vip"));
+        Map<UUID, Set<String>> groups = Map.of(FIRST, Set.of(HELPER_GROUP), SECOND, Set.of(MOD_GROUP, "vip"));
         DiscordRoleSyncService service = service(store, player -> groups.getOrDefault(player, Set.of()), NOW);
 
         DiscordRoleSyncService.Evaluation result = service.evaluate(DISCORD);
@@ -52,7 +54,7 @@ class DiscordRoleSyncServiceTest {
     @Test
     void mainAccountSelectionDoesNotLimitRoleUnion() {
         FakeStore store = new FakeStore();
-        Map<UUID, Set<String>> groups = Map.of(FIRST, Set.of("helper"), SECOND, Set.of("mod"));
+        Map<UUID, Set<String>> groups = Map.of(FIRST, Set.of(HELPER_GROUP), SECOND, Set.of(MOD_GROUP));
         DiscordRoleSyncService service = service(store, player -> groups.getOrDefault(player, Set.of()), NOW);
 
         store.subjects.put(DISCORD, subject(Optional.of(main(FIRST)), FIRST, SECOND));
@@ -68,7 +70,7 @@ class DiscordRoleSyncServiceTest {
     void unlinkingAllMinecraftAccountsProjectsNoManagedRoles() {
         FakeStore store = new FakeStore();
         store.subjects.put(DISCORD, discordOnlySubject());
-        DiscordRoleSyncService service = service(store, ignored -> Set.of("mod"), NOW);
+        DiscordRoleSyncService service = service(store, ignored -> Set.of(MOD_GROUP), NOW);
 
         assertTrue(service.evaluate(DISCORD).desiredRoleIds().isEmpty());
     }
@@ -135,7 +137,7 @@ class DiscordRoleSyncServiceTest {
                 eligibility,
                 new DiscordRoleSyncConfiguration(
                         DiscordRoleSyncConfiguration.Mode.SHADOW,
-                        Map.of("helper", HELPER_ROLE, "mod", MOD_ROLE),
+                        Map.of(HELPER_GROUP, HELPER_ROLE, MOD_GROUP, MOD_ROLE),
                         Set.of("9000"),
                         Duration.ofSeconds(60),
                         25
