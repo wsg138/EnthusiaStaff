@@ -1,22 +1,21 @@
 # Latest agent handoff
 
-Current handoff: `ES-D16 — Moderation console real-data read bridge` — `COMPLETE`.
+Current handoff: `ES-D13 — Discord role-sync replacement` — `BLOCKED` / `PARKED_BLOCKED`.
 
-Canonical package handoff: `ai-agents/reports/package-handoffs/2026-09-13-es-d16-complete.md`.
+Canonical package handoff: `ai-agents/reports/package-handoffs/2026-09-14-es-d13-role-sync-blocked.md`.
 
-Terminal implementation state:
-- PR #187 merged normally as `848aba7ac6a115dc3723c034b281917d63f1f1bd`;
-- final reviewed/validated pre-merge head was `aa32355a0d378ca4c6b03041b80d005df73f6fcd`;
-- frozen reconciled executable head was `8811294c17532825aeae1d271fe2a3163042ba9c`;
-- owner-accepted UI candidate was `3a79000eaa139ec107118d3fdb05b29e5e52097c`;
-- Coverage `34766165648`, web validation `34766165643`, StaffBot artifact `34766165650`, configuration-cache `34766165642`, Sentinel `34766165664`, Pi supersession `34766164245`, protected staging `34766163166`, Codacy static `103747616510`, diff coverage `103748653603`, and coverage variation `103748653922` all passed on the exact final head;
-- Codacy static reported zero annotations / zero new valid findings;
-- all three visible CodeRabbit correctness threads are resolved; the final automatic CodeRabbit skip is preserved as non-pass evidence rather than relabeled;
-- owner UI acceptance passed and no secrets/private evidence are recorded;
-- merge commit parents are pre-merge `main` `06519c0c5acdcf6276278204201f3c8b20767805` and exact feature head `aa32355a0d378ca4c6b03041b80d005df73f6fcd`;
-- merge and feature trees are identical at `c5c02a86d4db3861b4d9b7abfc2636323e9d9c12`;
-- post-merge containment is exact (`ahead 0 / behind 1 / files []` when comparing merge to feature);
-- temporary branch `package/es-d16-moderation-read-bridge` is absent after merge;
-- LiteBans remains authoritative; no destructive moderation, production Discord configuration/data change, issue #43 acceptance, or cutover was performed.
+Parked implementation state:
+- implementation PR #178 remains open/unmerged on `package/es-d13-role-sync-replacement`;
+- exact frozen candidate head is `92b207d67a1098acc2dcfbddd35ac56e01711f95`;
+- observed base/current `main` at blocker publication is `e7b338979c3824687147a0b3253638324571a3a7`;
+- hosted exact-head product CI is green: Coverage/full validation `34893756317` / job `104142632033`, Staff Bot PR Artifact `34893756524`, Staff Bot Configuration Cache `34893756377`, and Sentinel Restart Artifact `34893756520` / job `104142890224` succeeded;
+- Codacy Static `104143227910` succeeded with zero annotations / zero new valid findings; Codacy Diff Coverage `104145475928` succeeded at 55.93% with no repository diff-coverage gate defined;
+- all six concrete CodeRabbit findings were repaired and all visible review threads are resolved; no fresh automatic full-review pass is fabricated where repository policy skips it;
+- canonical Pi public run `34893930914` is **NOT PASS**: exact-head public build succeeded, but bridge job `104146199543` failed before private dispatch during exact-candidate/stale-staging revalidation because the staging workflow-history request returned HTTP `401 Bad credentials`; no private Pi/Paper/database runtime executed and transfer cleanup succeeded;
+- Sentinel durable state is **NOT PASS / unavailable**: the exact-head restart/status requests were submitted, the artifact gate is green, but no durable `PAPER_RESTART_OK` is visible;
+- required legacy DiscordSRV parity is **NOT RUN / unavailable** because authorized non-production legacy managed-role mapping/effective state and staging StaffBot D13 role-sync configuration/parity harness are not available;
+- production/cutover was not authorized or performed; DiscordSRV role sync remains enabled and PR #178 must not merge while parity is unsatisfied.
 
-`ES-D07` and `ES-D13` remain dependency-complete `READY`. This worker does not start either package.
+Exact unblock: provide authorized non-production legacy DiscordSRV mapping/effective managed-role state plus staging StaffBot D13 role-sync runtime configuration, keep legacy role sync enabled, run D13 in SHADOW across current linked identities, require zero unexplained managed-role drift, retain only sanitized acceptance evidence, then reconcile/revalidate the package before any merge.
+
+This worker stops after publishing the parked D13 state and does not begin D07, X03, or another package.
