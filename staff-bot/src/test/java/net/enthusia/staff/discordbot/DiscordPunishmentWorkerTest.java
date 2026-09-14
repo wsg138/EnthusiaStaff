@@ -28,6 +28,7 @@ import net.enthusia.staff.domain.moderation.DiscordGuildId;
 import net.enthusia.staff.domain.moderation.DiscordUserId;
 import net.enthusia.staff.domain.moderation.ModerationSubjectId;
 import net.enthusia.staff.domain.ports.DiscordPunishmentRepository;
+import net.enthusia.staff.domain.ports.DiscordPunishmentRepository.WorkType;
 import net.enthusia.staff.domain.sanction.SanctionLength;
 import org.junit.jupiter.api.Test;
 
