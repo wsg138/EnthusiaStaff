@@ -183,7 +183,6 @@ final class JdaDiscordGateway implements DiscordGateway {
     private void closeListeners() {
         if (roleSyncCoordinator != null) {
             roleSyncCoordinator.close();
-            roleSyncCoordinator = null;
         }
         if (previewListener != null) {
             previewListener.close();

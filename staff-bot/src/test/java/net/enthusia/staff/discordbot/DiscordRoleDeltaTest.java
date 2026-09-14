@@ -7,22 +7,25 @@ import java.util.Set;
 import org.junit.jupiter.api.Test;
 
 class DiscordRoleDeltaTest {
+    private static final String HELPER_ROLE = "1001";
+    private static final String MOD_ROLE = "1002";
+
     @Test
     void unmanagedRolesAreNeverRemovalCandidates() {
         DiscordRoleDelta delta = DiscordRoleDelta.calculate(
-                Set.of("1002"),
-                Set.of("1001", "7000", "9000"),
-                Set.of("1001", "1002")
+                Set.of(MOD_ROLE),
+                Set.of(HELPER_ROLE, "7000", "9000"),
+                Set.of(HELPER_ROLE, MOD_ROLE)
         );
 
-        assertEquals(Set.of("1002"), delta.add());
-        assertEquals(Set.of("1001"), delta.remove());
+        assertEquals(Set.of(MOD_ROLE), delta.add());
+        assertEquals(Set.of(HELPER_ROLE), delta.remove());
     }
 
     @Test
     void rejectsDesiredRolesOutsideManagedAllowlist() {
         assertThrows(IllegalArgumentException.class, () -> DiscordRoleDelta.calculate(
-                Set.of("7777"), Set.of(), Set.of("1001")
+                Set.of("7777"), Set.of(), Set.of(HELPER_ROLE)
         ));
     }
 }

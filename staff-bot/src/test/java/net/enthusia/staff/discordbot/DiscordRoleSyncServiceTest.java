@@ -18,6 +18,8 @@ import java.util.Set;
 import java.util.UUID;
 import net.enthusia.staff.domain.moderation.DiscordIdentityRef;
 import net.enthusia.staff.domain.moderation.DiscordUserId;
+import net.enthusia.staff.domain.moderation.MainAccountSelectionSource;
+import net.enthusia.staff.domain.moderation.MainMinecraftAccount;
 import net.enthusia.staff.domain.moderation.MinecraftIdentityRef;
 import net.enthusia.staff.domain.moderation.ModerationIdentity;
 import net.enthusia.staff.domain.moderation.ModerationSubject;
@@ -32,17 +34,34 @@ class DiscordRoleSyncServiceTest {
     private static final UUID FIRST = UUID.fromString("11111111-1111-1111-1111-111111111111");
     private static final UUID SECOND = UUID.fromString("22222222-2222-2222-2222-222222222222");
     private static final Instant NOW = Instant.parse("2026-09-14T13:00:00Z");
+    private static final String HELPER_ROLE = "1001";
+    private static final String MOD_ROLE = "1002";
 
     @Test
     void unionsEligibilityAcrossEveryCurrentLinkedMinecraftAccount() {
         FakeStore store = new FakeStore();
-        store.subjects.put(DISCORD, subject(FIRST, SECOND));
+        store.subjects.put(DISCORD, subject(Optional.empty(), FIRST, SECOND));
         Map<UUID, Set<String>> groups = Map.of(FIRST, Set.of("helper"), SECOND, Set.of("mod", "vip"));
         DiscordRoleSyncService service = service(store, player -> groups.getOrDefault(player, Set.of()), NOW);
 
         DiscordRoleSyncService.Evaluation result = service.evaluate(DISCORD);
 
-        assertEquals(Set.of("1001", "1002"), result.desiredRoleIds());
+        assertEquals(Set.of(HELPER_ROLE, MOD_ROLE), result.desiredRoleIds());
+    }
+
+    @Test
+    void mainAccountSelectionDoesNotLimitRoleUnion() {
+        FakeStore store = new FakeStore();
+        Map<UUID, Set<String>> groups = Map.of(FIRST, Set.of("helper"), SECOND, Set.of("mod"));
+        DiscordRoleSyncService service = service(store, player -> groups.getOrDefault(player, Set.of()), NOW);
+
+        store.subjects.put(DISCORD, subject(Optional.of(main(FIRST)), FIRST, SECOND));
+        Set<String> firstMain = service.evaluate(DISCORD).desiredRoleIds();
+        store.subjects.put(DISCORD, subject(Optional.of(main(SECOND)), FIRST, SECOND));
+        Set<String> secondMain = service.evaluate(DISCORD).desiredRoleIds();
+
+        assertEquals(Set.of(HELPER_ROLE, MOD_ROLE), firstMain);
+        assertEquals(firstMain, secondMain);
     }
 
     @Test
@@ -58,7 +77,7 @@ class DiscordRoleSyncServiceTest {
     void retryBackoffSurvivesServiceRestart() {
         FakeStore store = new FakeStore();
         DiscordRoleSyncService first = service(store, ignored -> Set.of(), NOW);
-        first.recordRetry(DISCORD, Set.of("1001"), Set.of(), "role_add_failed");
+        first.recordRetry(DISCORD, Set.of(HELPER_ROLE), Set.of(), "role_add_failed");
 
         assertFalse(first.due(DISCORD));
         DiscordRoleSyncService restarted = service(store, ignored -> Set.of(), NOW.plusSeconds(61));
@@ -71,7 +90,11 @@ class DiscordRoleSyncServiceTest {
     void eligibilityFailurePreservesLastKnownDesiredAndObservedSnapshots() {
         FakeStore store = new FakeStore();
         DiscordRoleSyncService service = service(store, ignored -> Set.of(), NOW);
-        service.recordSuccess(new DiscordRoleSyncService.Evaluation(DISCORD, Set.of("1002")), Set.of("1001"), "SHADOW_DRIFT");
+        service.recordSuccess(
+                new DiscordRoleSyncService.Evaluation(DISCORD, Set.of(MOD_ROLE)),
+                Set.of(HELPER_ROLE),
+                "SHADOW_DRIFT"
+        );
 
         service.recordEvaluationRetry(DISCORD, "eligibility_unavailable");
 
@@ -87,7 +110,7 @@ class DiscordRoleSyncServiceTest {
         ConflictStore store = new ConflictStore();
         DiscordRoleSyncService service = service(store, ignored -> Set.of(), NOW);
 
-        service.recordRetry(DISCORD, Set.of("1001"), Set.of(), "role_add_failed");
+        service.recordRetry(DISCORD, Set.of(HELPER_ROLE), Set.of(), "role_add_failed");
 
         assertEquals(2, store.saveAttempts);
         assertEquals(1L, store.state().revision());
@@ -112,7 +135,7 @@ class DiscordRoleSyncServiceTest {
                 eligibility,
                 new DiscordRoleSyncConfiguration(
                         DiscordRoleSyncConfiguration.Mode.SHADOW,
-                        Map.of("helper", "1001", "mod", "1002"),
+                        Map.of("helper", HELPER_ROLE, "mod", MOD_ROLE),
                         Set.of("9000"),
                         Duration.ofSeconds(60),
                         25
@@ -121,14 +144,18 @@ class DiscordRoleSyncServiceTest {
         );
     }
 
-    private static VersionedSubject subject(UUID... players) {
+    private static MainMinecraftAccount main(UUID playerId) {
+        return new MainMinecraftAccount(playerId, MainAccountSelectionSource.AUTOMATIC);
+    }
+
+    private static VersionedSubject subject(Optional<MainMinecraftAccount> main, UUID... players) {
         List<ModerationIdentity> identities = new ArrayList<>();
         identities.add(new DiscordIdentityRef(DISCORD));
         for (UUID player : players) {
             identities.add(new MinecraftIdentityRef(player));
         }
         return new VersionedSubject(
-                new ModerationSubject(new ModerationSubjectId(UUID.randomUUID()), Set.copyOf(identities), Optional.empty()),
+                new ModerationSubject(new ModerationSubjectId(UUID.randomUUID()), Set.copyOf(identities), main),
                 0
         );
     }

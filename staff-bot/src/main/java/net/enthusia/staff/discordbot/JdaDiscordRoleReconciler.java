@@ -83,7 +83,8 @@ final class JdaDiscordRoleReconciler implements DiscordRoleReconciler {
         if (role == null) {
             throw new RetryableException("managed_role_missing", observed, null);
         }
-        if (role.isPublicRole() || role.isManaged() || !guild.getSelfMember().canInteract(role)) {
+        boolean canInteract = guild.getSelfMember().canInteract(role);
+        if (!DiscordRoleMutationPolicy.canMutate(role.isPublicRole(), role.isManaged(), canInteract)) {
             throw new RetryableException("role_hierarchy_blocked", observed, null);
         }
         return role;
@@ -95,7 +96,7 @@ final class JdaDiscordRoleReconciler implements DiscordRoleReconciler {
         return Set.copyOf(roleIds);
     }
 
-    private static <T> T await(
+    static <T> T await(
             CompletableFuture<T> future,
             String errorCode,
             Set<String> observed
@@ -105,11 +106,11 @@ final class JdaDiscordRoleReconciler implements DiscordRoleReconciler {
         } catch (InterruptedException exception) {
             Thread.currentThread().interrupt();
             throw new RetryableException(errorCode, observed, exception);
-        } catch (ExecutionException | TimeoutException exception) {
-            Throwable cause = exception instanceof ExecutionException && exception.getCause() != null
-                    ? exception.getCause()
-                    : exception;
+        } catch (ExecutionException exception) {
+            Throwable cause = exception.getCause() == null ? exception : exception.getCause();
             throw new RetryableException(errorCode, observed, cause);
+        } catch (TimeoutException exception) {
+            throw new RetryableException(errorCode, observed, exception);
         }
     }
 }
