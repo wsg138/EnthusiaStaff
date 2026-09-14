@@ -10,6 +10,7 @@ import net.enthusia.staff.domain.auth.Actor;
 import net.enthusia.staff.domain.auth.DiscordAuthorizationSnapshot;
 import net.enthusia.staff.domain.auth.DiscordConsequenceType;
 import net.enthusia.staff.domain.auth.DiscordModerationOperation;
+import net.enthusia.staff.domain.auth.StaffRank;
 import net.enthusia.staff.domain.discord.DiscordPunishment;
 import net.enthusia.staff.domain.discord.DiscordPunishmentIntent;
 import net.enthusia.staff.domain.discord.DiscordPunishmentState;
@@ -69,9 +70,9 @@ final class DiscordPunishmentService {
     }
 
     Confirmation prepareIssue(long actorDiscordId, String actorName, long targetDiscordId, DiscordPunishmentIntent intent) {
-        DiscordUserId targetUserId = new DiscordUserId(Long.toUnsignedString(targetDiscordId));
+        DiscordUserId targetUserId = discordUser(targetDiscordId);
         StaffModerationReadService.Target target = reads.discordTarget(targetUserId);
-        Actor actor = actors.invoker(new DiscordUserId(Long.toUnsignedString(actorDiscordId)), actorName);
+        Actor actor = actor(actorDiscordId, actorName);
         Optional<Actor> targetStaff = actors.targetStaff(target);
         DiscordAuthorizationSnapshot snapshot = authorization.captureIssue(actor, targetStaff, intent);
         gateway.preflight(guildId, targetUserId, intent);
@@ -94,7 +95,7 @@ final class DiscordPunishmentService {
             throw new IllegalArgumentException("confirmation does not issue a punishment");
         }
         StaffModerationReadService.Target target = reads.discordTarget(draft.targetUserId());
-        Actor actor = actors.invoker(new DiscordUserId(Long.toUnsignedString(actorDiscordId)), actorName);
+        Actor actor = actor(actorDiscordId, actorName);
         Optional<Actor> targetStaff = actors.targetStaff(target);
         authorization.reauthorize(draft.authorization(), actor, targetStaff);
         DiscordPunishmentIntent intent = draft.intent().orElseThrow();
@@ -118,13 +119,12 @@ final class DiscordPunishmentService {
             DiscordPunishmentTermination termination
     ) {
         requireRemovable(type, termination);
-        DiscordUserId targetUserId = new DiscordUserId(Long.toUnsignedString(targetDiscordId));
+        DiscordUserId targetUserId = discordUser(targetDiscordId);
         StoredPunishment active = newestActive(targetUserId, type);
         StaffModerationReadService.Target target = reads.discordTarget(targetUserId);
-        Actor actor = actors.invoker(new DiscordUserId(Long.toUnsignedString(actorDiscordId)), actorName);
-        Optional<Actor> targetStaff = actors.targetStaff(target);
+        Actor actor = actor(actorDiscordId, actorName);
         DiscordAuthorizationSnapshot snapshot = authorization.captureMutation(
-                actor, targetStaff, operationFor(termination)
+                actor, actors.targetStaff(target), operationFor(termination)
         );
         UUID token = confirmations.put(expires -> new DiscordPunishmentConfirmationStore.Draft(
                 DiscordPunishmentConfirmationStore.Kind.REMOVE,
@@ -145,7 +145,7 @@ final class DiscordPunishmentService {
             throw new IllegalArgumentException("confirmation does not remove a punishment");
         }
         StaffModerationReadService.Target target = reads.discordTarget(draft.targetUserId());
-        Actor actor = actors.invoker(new DiscordUserId(Long.toUnsignedString(actorDiscordId)), actorName);
+        Actor actor = actor(actorDiscordId, actorName);
         authorization.reauthorize(draft.authorization(), actor, actors.targetStaff(target));
         UUID punishmentId = draft.punishmentId().orElseThrow();
         StoredPunishment current = punishments.find(punishmentId)
@@ -153,34 +153,53 @@ final class DiscordPunishmentService {
         if (current.punishment().state().terminal()) {
             return project(current);
         }
+        Instant now = clock.instant();
         String operationKey = "d07:remove:" + punishmentId + ":" + UUID.randomUUID();
         DiscordPunishment replacement = current.punishment().requestRemoval(draft.termination(), operationKey);
         StoredPunishment stored = punishments.transition(
                 current,
                 replacement,
                 operationKey,
-                List.of(new WorkSchedule(WorkType.REMOVE, clock.instant())),
-                clock.instant()
+                List.of(new WorkSchedule(WorkType.REMOVE, now)),
+                now
         );
         return project(stored);
     }
 
     void requireConcreteApproval(
+            long requesterDiscordId,
+            String requesterName,
             long approverDiscordId,
             String approverName,
             long targetDiscordId,
+            StaffRank requiredApprovalRank,
             DiscordPunishmentIntent intent
     ) {
-        DiscordUserId targetUserId = new DiscordUserId(Long.toUnsignedString(targetDiscordId));
+        DiscordUserId targetUserId = discordUser(targetDiscordId);
         StaffModerationReadService.Target target = reads.discordTarget(targetUserId);
-        Actor approver = actors.invoker(new DiscordUserId(Long.toUnsignedString(approverDiscordId)), approverName);
-        authorization.requireApprovalOfConcreteSanction(approver, actors.targetStaff(target), intent);
+        Actor requester = actor(requesterDiscordId, requesterName);
+        Actor approver = actor(approverDiscordId, approverName);
+        authorization.requireApprovalOfConcreteSanction(
+                requester,
+                approver,
+                actors.targetStaff(target),
+                requiredApprovalRank,
+                intent
+        );
     }
 
     private StoredPunishment newestActive(DiscordUserId targetUserId, DiscordConsequenceType type) {
         return punishments.activeForTarget(guildId, targetUserId, type, ACTIVE_LOOKUP_LIMIT).stream()
                 .findFirst()
                 .orElseThrow(() -> new IllegalStateException("no active Discord punishment matches the target and type"));
+    }
+
+    private Actor actor(long discordId, String name) {
+        return actors.invoker(discordUser(discordId), name);
+    }
+
+    private static DiscordUserId discordUser(long id) {
+        return new DiscordUserId(Long.toUnsignedString(id));
     }
 
     private static void requireRemovable(
