@@ -5,6 +5,7 @@ public enum DiscordPunishmentState {
     PENDING_APPLY,
     RETRY_APPLY,
     APPLIED,
+    COMPLETED,
     FAILED_APPLY,
     PENDING_REMOVE,
     RETRY_REMOVE,
@@ -16,7 +17,7 @@ public enum DiscordPunishmentState {
 
     public boolean terminal() {
         return switch (this) {
-            case FAILED_APPLY, FAILED_REMOVE, ENDED, REVOKED, OVERTURNED, EXPIRED -> true;
+            case COMPLETED, FAILED_APPLY, FAILED_REMOVE, ENDED, REVOKED, OVERTURNED, EXPIRED -> true;
             default -> false;
         };
     }

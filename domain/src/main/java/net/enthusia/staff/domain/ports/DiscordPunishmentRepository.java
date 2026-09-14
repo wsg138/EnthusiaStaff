@@ -4,14 +4,23 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import net.enthusia.staff.domain.auth.DiscordConsequenceType;
 import net.enthusia.staff.domain.discord.DiscordPunishment;
 import net.enthusia.staff.domain.moderation.DiscordGuildId;
+import net.enthusia.staff.domain.moderation.DiscordUserId;
 
 /** Durable D07 punishment intent, work leasing, and reconciliation state. */
 public interface DiscordPunishmentRepository {
     StoredPunishment create(DiscordPunishment punishment, String operationKey, Instant now);
 
     Optional<StoredPunishment> find(UUID punishmentId);
+
+    List<StoredPunishment> activeForTarget(
+            DiscordGuildId guildId,
+            DiscordUserId userId,
+            DiscordConsequenceType type,
+            int limit
+    );
 
     StoredPunishment transition(
             StoredPunishment expected,

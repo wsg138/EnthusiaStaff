@@ -18,13 +18,14 @@ import net.enthusia.staff.domain.auth.DiscordConsequenceType;
 import net.enthusia.staff.domain.discord.DiscordPunishment;
 import net.enthusia.staff.domain.discord.DiscordPunishmentState;
 import net.enthusia.staff.domain.moderation.DiscordGuildId;
+import net.enthusia.staff.domain.moderation.DiscordUserId;
 import net.enthusia.staff.domain.ports.DiscordPunishmentRepository;
 
 /** V19-backed D07 repository. No D07 migration is required. */
 public final class JdbcDiscordPunishmentRepository implements DiscordPunishmentRepository {
     private static final String RESOURCE_TYPE = "D07_DISCORD_PUNISHMENT";
     private static final String KEY_PREFIX = "d07:punishment:";
-    private static final int MAX_ACTIVE_BAN_QUERY = 500;
+    private static final int MAX_ACTIVE_QUERY = 500;
 
     private final DataSource dataSource;
     private final DiscordPunishmentJsonCodec codec = new DiscordPunishmentJsonCodec();
@@ -61,6 +62,18 @@ public final class JdbcDiscordPunishmentRepository implements DiscordPunishmentR
         }
         return JdbcTransactionSupport.execute(dataSource, "Unable to read Discord punishment", connection ->
                 Optional.ofNullable(byId(connection, punishmentId, false)).map(current -> current.stored(false)));
+    }
+
+    @Override
+    public List<StoredPunishment> activeForTarget(
+            DiscordGuildId guildId,
+            DiscordUserId userId,
+            DiscordConsequenceType type,
+            int limit
+    ) {
+        validateActiveQuery(guildId, userId, type, limit);
+        return JdbcTransactionSupport.execute(dataSource, "Unable to read active Discord punishment", connection ->
+                activeForTarget(connection, guildId, userId, type, limit));
     }
 
     @Override
@@ -115,38 +128,67 @@ public final class JdbcDiscordPunishmentRepository implements DiscordPunishmentR
 
     @Override
     public List<StoredPunishment> activeNativeBans(DiscordGuildId guildId, int limit) {
-        if (guildId == null || limit < 1 || limit > MAX_ACTIVE_BAN_QUERY) {
-            throw new IllegalArgumentException("active native-ban query is invalid");
-        }
-        return JdbcTransactionSupport.execute(dataSource, "Unable to read active Discord bans", connection ->
-                activeNativeBans(connection, guildId, limit));
+        return activeForGuildType(guildId, DiscordConsequenceType.BAN, limit);
     }
 
-    private List<StoredPunishment> activeNativeBans(
+    private List<StoredPunishment> activeForTarget(
             Connection connection,
             DiscordGuildId guildId,
+            DiscordUserId userId,
+            DiscordConsequenceType type,
+            int limit
+    ) throws SQLException {
+        return queryActive(connection, guildId, Optional.of(userId), type, limit);
+    }
+
+    private List<StoredPunishment> activeForGuildType(
+            DiscordGuildId guildId,
+            DiscordConsequenceType type,
+            int limit
+    ) {
+        if (guildId == null || type == null || limit < 1 || limit > MAX_ACTIVE_QUERY) {
+            throw new IllegalArgumentException("active Discord punishment query is invalid");
+        }
+        return JdbcTransactionSupport.execute(dataSource, "Unable to read active Discord punishments", connection ->
+                queryActive(connection, guildId, Optional.empty(), type, limit));
+    }
+
+    private List<StoredPunishment> queryActive(
+            Connection connection,
+            DiscordGuildId guildId,
+            Optional<DiscordUserId> userId,
+            DiscordConsequenceType type,
             int limit
     ) throws SQLException {
         List<StoredPunishment> result = new ArrayList<>();
-        try (PreparedStatement statement = connection.prepareStatement("""
+        String targetPredicate = userId.isPresent()
+                ? " AND JSON_UNQUOTE(JSON_EXTRACT(desired_state_json, '$.targetUserId')) = ?"
+                : "";
+        String sql = """
                 SELECT desired_state_json, revision
                 FROM discord_reconciliation_state
-                WHERE resource_type = ? AND state = 'APPLIED'
+                WHERE resource_type = ?
+                  AND state IN ('PENDING_APPLY', 'RETRY_APPLY', 'APPLIED',
+                                'PENDING_REMOVE', 'RETRY_REMOVE', 'FAILED_REMOVE')
                   AND JSON_UNQUOTE(JSON_EXTRACT(desired_state_json, '$.guildId')) = ?
-                  AND JSON_UNQUOTE(JSON_EXTRACT(desired_state_json, '$.type')) = 'BAN'
-                ORDER BY updated_at, reconciliation_key
-                LIMIT ?
-                """)) {
-            statement.setString(1, RESOURCE_TYPE);
-            statement.setString(2, guildId.value());
-            statement.setInt(3, limit);
+                  AND JSON_UNQUOTE(JSON_EXTRACT(desired_state_json, '$.type')) = ?
+                """ + targetPredicate + " ORDER BY updated_at DESC, reconciliation_key DESC LIMIT ?";
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            int index = 1;
+            statement.setString(index++, RESOURCE_TYPE);
+            statement.setString(index++, guildId.value());
+            statement.setString(index++, type.name());
+            if (userId.isPresent()) {
+                statement.setString(index++, userId.orElseThrow().value());
+            }
+            statement.setInt(index, limit);
             try (ResultSet rows = statement.executeQuery()) {
                 while (rows.next()) {
-                    DiscordPunishment punishment = codec.decode(rows.getString("desired_state_json"));
-                    if (punishment.intent().type() != DiscordConsequenceType.BAN) {
-                        throw new SQLException("D07 native-ban index returned a non-ban punishment");
-                    }
-                    result.add(new StoredPunishment(punishment, rows.getLong("revision"), false));
+                    result.add(new StoredPunishment(
+                            codec.decode(rows.getString("desired_state_json")),
+                            rows.getLong("revision"),
+                            false
+                    ));
                 }
             }
         }
@@ -425,6 +467,17 @@ public final class JdbcDiscordPunishmentRepository implements DiscordPunishmentR
             if (schedule == null || !types.add(schedule.type())) {
                 throw new IllegalArgumentException("work schedules must contain unique types");
             }
+        }
+    }
+
+    private static void validateActiveQuery(
+            DiscordGuildId guildId,
+            DiscordUserId userId,
+            DiscordConsequenceType type,
+            int limit
+    ) {
+        if (guildId == null || userId == null || type == null || limit < 1 || limit > MAX_ACTIVE_QUERY) {
+            throw new IllegalArgumentException("active Discord punishment query is invalid");
         }
     }
 
