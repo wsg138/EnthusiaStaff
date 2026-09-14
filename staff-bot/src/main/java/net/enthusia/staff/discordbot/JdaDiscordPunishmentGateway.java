@@ -85,7 +85,7 @@ final class JdaDiscordPunishmentGateway implements DiscordPunishmentGateway {
                 requireHierarchy(guild, member);
             }
             switch (intent.type()) {
-                case MUTE -> requireMuteRole(guild);
+                case MUTE -> requireMuteAvailable(guild, member);
                 case BAN -> nativeBans.preflight(guild, target);
                 case CHANNEL_RESTRICTION -> restrictionContainer(guild, intent.restriction().orElseThrow());
                 case WARNING, KICK -> { }
@@ -175,7 +175,7 @@ final class JdaDiscordPunishmentGateway implements DiscordPunishmentGateway {
     private void applyEffect(Guild guild, DiscordPunishment punishment) {
         DiscordUserId target = punishment.targetUserId();
         switch (punishment.intent().type()) {
-            case MUTE -> applyMute(guild, target, auditReason(punishment));
+            case MUTE -> applyMute(guild, punishment);
             case KICK -> kick(guild, target, punishment);
             case BAN -> applyBan(guild, punishment);
             case CHANNEL_RESTRICTION -> applyRestriction(guild, punishment);
@@ -200,18 +200,28 @@ final class JdaDiscordPunishmentGateway implements DiscordPunishmentGateway {
         nativeBans.apply(guild, punishment);
     }
 
-    private void applyMute(Guild guild, DiscordUserId target, String reason) {
-        ensureMutePolicy(guild);
+    private void applyMute(Guild guild, DiscordPunishment punishment) {
+        DiscordUserId target = punishment.targetUserId();
         Member member = memberRequired(guild, target);
         requireHierarchy(guild, member);
         Role role = requireMuteRole(guild);
-        if (!member.getRoles().contains(role)) {
-            guild.addRoleToMember(UserSnowflake.fromId(target.value()), role).reason(reason).complete();
-        }
+        requireMuteRoleUnowned(member.getRoles().contains(role));
+        ensureMutePolicy(guild);
+        guild.addRoleToMember(UserSnowflake.fromId(target.value()), role)
+                .reason(auditReason(punishment))
+                .complete();
     }
 
     private void reconcileMute(Guild guild, DiscordUserId target) {
-        applyMute(guild, target, "Enthusia D07 mute reconciliation");
+        Member member = memberRequired(guild, target);
+        requireHierarchy(guild, member);
+        Role role = requireMuteRole(guild);
+        ensureMutePolicy(guild);
+        if (!member.getRoles().contains(role)) {
+            guild.addRoleToMember(UserSnowflake.fromId(target.value()), role)
+                    .reason("Enthusia D07 mute reconciliation")
+                    .complete();
+        }
     }
 
     private void removeMute(Guild guild, DiscordUserId target) {
@@ -224,6 +234,20 @@ final class JdaDiscordPunishmentGateway implements DiscordPunishmentGateway {
         if (member.getRoles().contains(role)) {
             guild.removeRoleFromMember(UserSnowflake.fromId(target.value()), role)
                     .reason("Enthusia D07 mute removal").complete();
+        }
+    }
+
+    private void requireMuteAvailable(Guild guild, Member member) {
+        if (member == null) {
+            throw failure("TARGET_NOT_IN_GUILD", false);
+        }
+        Role role = requireMuteRole(guild);
+        requireMuteRoleUnowned(member.getRoles().contains(role));
+    }
+
+    static void requireMuteRoleUnowned(boolean rolePresent) {
+        if (rolePresent) {
+            throw failure("MUTE_ROLE_ALREADY_PRESENT", false);
         }
     }
 
