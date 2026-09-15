@@ -71,6 +71,11 @@ public final class JdbcDiscordInvestigationStore implements DiscordInvestigation
     }
 
     @Override
+    public Optional<InvestigationNote> findNote(UUID noteId) {
+        return notes.find(noteId);
+    }
+
+    @Override
     public List<InvestigationNote.Version> noteHistory(UUID noteId, int limit) {
         return notes.history(noteId, limit);
     }
@@ -111,6 +116,11 @@ public final class JdbcDiscordInvestigationStore implements DiscordInvestigation
     public EvasionAlert createEvasionAlert(EvasionAlertDraft draft) {
         require(draft, "evasion alert draft");
         return alerts.create(draft);
+    }
+
+    @Override
+    public Optional<EvasionAlert> findEvasionAlert(UUID alertId) {
+        return alerts.find(alertId);
     }
 
     @Override

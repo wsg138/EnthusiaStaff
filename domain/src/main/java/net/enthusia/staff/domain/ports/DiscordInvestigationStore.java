@@ -27,6 +27,8 @@ public interface DiscordInvestigationStore {
 
     InvestigationNote editNote(NoteEdit edit);
 
+    Optional<InvestigationNote> findNote(UUID noteId);
+
     List<InvestigationNote.Version> noteHistory(UUID noteId, int limit);
 
     InvestigationEvidence.Stored captureEvidence(InvestigationEvidence.Capture capture);
@@ -40,6 +42,8 @@ public interface DiscordInvestigationStore {
     int purgeEligibleEvidence(Instant now, int limit);
 
     EvasionAlert createEvasionAlert(EvasionAlertDraft draft);
+
+    Optional<EvasionAlert> findEvasionAlert(UUID alertId);
 
     List<EvasionAlert> pendingEvasionAlerts(Instant now, int limit);
 
@@ -118,14 +122,15 @@ public interface DiscordInvestigationStore {
     record NoteEdit(
             UUID noteId,
             String operationKey,
+            ModerationSubjectId subjectId,
             long expectedRevision,
             String text,
             UUID actorId,
             Instant now
     ) {
         public NoteEdit {
-            if (noteId == null || blank(operationKey) || operationKey.length() > 128 || expectedRevision < 0
-                    || actorId == null || now == null) {
+            if (noteId == null || blank(operationKey) || operationKey.length() > 128 || subjectId == null
+                    || expectedRevision < 0 || actorId == null || now == null) {
                 throw new IllegalArgumentException("note edit fields are invalid");
             }
             InvestigationNote.validateText(text);

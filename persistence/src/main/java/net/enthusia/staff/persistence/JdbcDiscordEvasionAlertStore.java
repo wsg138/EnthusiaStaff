@@ -37,6 +37,14 @@ final class JdbcDiscordEvasionAlertStore {
         });
     }
 
+    Optional<EvasionAlert> find(UUID alertId) {
+        if (alertId == null) {
+            throw new IllegalArgumentException("alertId must be present");
+        }
+        return JdbcTransactionSupport.execute(dataSource, "Unable to read linked-alt alert", connection ->
+                Optional.ofNullable(byId(connection, alertId, false)).map(current -> current.toDomain(false)));
+    }
+
     List<EvasionAlert> pending(Instant now, int limit) {
         if (now == null || limit < 1 || limit > 250) {
             throw new IllegalArgumentException("linked-alt alert query is invalid");
@@ -214,8 +222,7 @@ final class JdbcDiscordEvasionAlertStore {
     private static void requireReplay(Current current, EvasionAlertDraft draft) throws SQLException {
         if (!current.alertId().equals(draft.alertId()) || !current.subjectId().equals(draft.subjectId())
                 || !current.punishmentId().equals(draft.punishmentId())
-                || !current.triggeringPlayer().equals(draft.triggeringMinecraftPlayerId())
-                || !current.currentServer().equals(draft.currentServer()) || current.playerRevision() != draft.playerRevision()) {
+                || !current.triggeringPlayer().equals(draft.triggeringMinecraftPlayerId())) {
             throw new SQLException("linked-alt alert operation key was reused for a different request");
         }
     }

@@ -8,6 +8,7 @@ import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import javax.sql.DataSource;
 import net.enthusia.staff.domain.investigation.InvestigationNote;
@@ -39,7 +40,10 @@ final class JdbcDiscordInvestigationNoteStore {
     InvestigationNote edit(NoteEdit edit) {
         return JdbcTransactionSupport.execute(dataSource, "Unable to edit Discord private note", connection -> {
             Current current = requireById(connection, edit.noteId(), true);
-            if (versionOperationExists(connection, edit.operationKey())) {
+            requireSubject(current, edit.subjectId());
+            VersionReplay replay = versionReplay(connection, edit.operationKey());
+            if (replay != null) {
+                requireEditReplay(replay, edit);
                 return current.toDomain(true);
             }
             if (current.revision() != edit.expectedRevision()) {
@@ -52,6 +56,14 @@ final class JdbcDiscordInvestigationNoteStore {
             touchCaseScope(connection, current.scope(), edit.now());
             return requireById(connection, edit.noteId(), false).toDomain(false);
         });
+    }
+
+    Optional<InvestigationNote> find(UUID noteId) {
+        if (noteId == null) {
+            throw new IllegalArgumentException("noteId must be present");
+        }
+        return JdbcTransactionSupport.execute(dataSource, "Unable to read Discord private note", connection ->
+                Optional.ofNullable(byId(connection, noteId, false)).map(current -> current.toDomain(false)));
     }
 
     List<InvestigationNote.Version> history(UUID noteId, int limit) {
@@ -115,14 +127,15 @@ final class JdbcDiscordInvestigationNoteStore {
         try (PreparedStatement statement = connection.prepareStatement("""
                 UPDATE discord_private_notes
                 SET current_text = ?, updated_by = ?, updated_at = ?, revision = ?
-                WHERE note_id = ? AND revision = ?
+                WHERE note_id = ? AND subject_id = ? AND revision = ?
                 """)) {
             statement.setString(1, edit.text());
             statement.setBytes(2, UuidBytes.toBytes(edit.actorId()));
             statement.setTimestamp(3, Timestamp.from(edit.now()));
             statement.setLong(4, nextRevision);
             statement.setBytes(5, UuidBytes.toBytes(edit.noteId()));
-            statement.setLong(6, current.revision());
+            statement.setBytes(6, UuidBytes.toBytes(edit.subjectId().value()));
+            statement.setLong(7, current.revision());
             JdbcTransactionSupport.requireSingleUpdate(statement.executeUpdate(), "Discord private note revision changed");
         }
     }
@@ -223,14 +236,26 @@ final class JdbcDiscordInvestigationNoteStore {
         );
     }
 
-    private static boolean versionOperationExists(Connection connection, String operationKey) throws SQLException {
+    private static VersionReplay versionReplay(Connection connection, String operationKey) throws SQLException {
         try (PreparedStatement statement = connection.prepareStatement("""
-                SELECT 1 FROM discord_private_note_versions WHERE operation_key = ?
+                SELECT note_id, note_text, changed_by
+                FROM discord_private_note_versions
+                WHERE operation_key = ?
                 """)) {
             statement.setString(1, operationKey);
             try (ResultSet rows = statement.executeQuery()) {
-                return rows.next();
+                return rows.next() ? new VersionReplay(
+                        UuidBytes.fromBytes(rows.getBytes("note_id")),
+                        rows.getString("note_text"),
+                        UuidBytes.fromBytes(rows.getBytes("changed_by"))
+                ) : null;
             }
+        }
+    }
+
+    private static void requireSubject(Current current, ModerationSubjectId subjectId) throws SQLException {
+        if (!current.subjectId().equals(subjectId)) {
+            throw new SQLException("Discord private note subject does not match request");
         }
     }
 
@@ -242,9 +267,19 @@ final class JdbcDiscordInvestigationNoteStore {
         }
     }
 
+    private static void requireEditReplay(VersionReplay replay, NoteEdit edit) throws SQLException {
+        if (!replay.noteId().equals(edit.noteId()) || !replay.text().equals(edit.text())
+                || !replay.actorId().equals(edit.actorId())) {
+            throw new SQLException("Discord private note edit operation key was reused for a different request");
+        }
+    }
+
     @FunctionalInterface
     private interface Binder {
         void bind(PreparedStatement statement) throws SQLException;
+    }
+
+    private record VersionReplay(UUID noteId, String text, UUID actorId) {
     }
 
     private record Current(
