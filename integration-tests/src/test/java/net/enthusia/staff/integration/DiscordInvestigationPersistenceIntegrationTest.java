@@ -199,7 +199,7 @@ class DiscordInvestigationPersistenceIntegrationTest {
                 "Batch warning " + index,
                 "D09 bounded observation test",
                 0,
-                false
+                true
         );
         return DiscordPunishment.pending(
                 UUID.randomUUID(), subjectId, userId, GUILD,
