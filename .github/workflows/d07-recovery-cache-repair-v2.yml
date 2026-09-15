@@ -1,0 +1,185 @@
+name: D07 recovery cache and warning repair
+
+on:
+  push:
+    branches:
+      - "package/es-d07-discord-punishment-enforcement"
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    if: github.event.head_commit.message == '[ES-D07] Stage recovery cache repair v2'
+    name: Apply and validate D07 recovery/cache/warning repairs
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Check out exact branch head
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Apply exact repairs
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def read(path):
+              return Path(path).read_text(encoding="utf-8")
+
+          def write(path, text):
+              Path(path).write_text(text, encoding="utf-8")
+
+          def replace_once(text, old, new, label):
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"{label}: expected 1 match, found {count}")
+              return text.replace(old, new, 1)
+
+          # Restriction snapshots require only the member-override cache; gateway intents remain empty.
+          path = "staff-bot/src/main/java/net/enthusia/staff/discordbot/JdaDiscordGateway.java"
+          text = read(path)
+          text = replace_once(
+              text,
+              'import net.dv8tion.jda.api.utils.MemberCachePolicy;\n',
+              'import net.dv8tion.jda.api.utils.MemberCachePolicy;\nimport net.dv8tion.jda.api.utils.cache.CacheFlag;\n',
+              "gateway cache flag import",
+          )
+          text = replace_once(
+              text,
+              '''        return JDABuilder.createLight(configuration.discordToken(), Set.of())\n                .setMemberCachePolicy(MemberCachePolicy.NONE)\n''',
+              '''        return JDABuilder.createLight(configuration.discordToken(), Set.of())\n                .enableCache(requiredCacheFlags())\n                .setMemberCachePolicy(MemberCachePolicy.NONE)\n''',
+              "gateway cache enablement",
+          )
+          marker = '''    static final class CallbackFence {\n'''
+          helper = '''    static Set<CacheFlag> requiredCacheFlags() {\n        return Set.of(CacheFlag.MEMBER_OVERRIDES);\n    }\n\n'''
+          text = replace_once(text, marker, helper + marker, "gateway cache helper")
+          write(path, text)
+
+          path = "staff-bot/src/test/java/net/enthusia/staff/discordbot/JdaDiscordGatewayTest.java"
+          text = read(path)
+          text = replace_once(
+              text,
+              'import static org.junit.jupiter.api.Assertions.assertFalse;\n',
+              'import static org.junit.jupiter.api.Assertions.assertEquals;\nimport static org.junit.jupiter.api.Assertions.assertFalse;\n',
+              "gateway test equals import",
+          )
+          text = replace_once(
+              text,
+              'import java.util.concurrent.atomic.AtomicBoolean;\n',
+              'import java.util.Set;\nimport java.util.concurrent.atomic.AtomicBoolean;\nimport net.dv8tion.jda.api.utils.cache.CacheFlag;\n',
+              "gateway test cache imports",
+          )
+          text = replace_once(
+              text,
+              'class JdaDiscordGatewayTest {\n',
+              '''class JdaDiscordGatewayTest {\n    @Test\n    void restrictionRuntimeEnablesOnlyMemberOverrideCache() {\n        assertEquals(Set.of(CacheFlag.MEMBER_OVERRIDES), JdaDiscordGateway.requiredCacheFlags());\n    }\n\n''',
+              "gateway cache test",
+          )
+          write(path, text)
+
+          # A member-specific restriction cannot be truthfully restored while its member is absent.
+          path = "staff-bot/src/main/java/net/enthusia/staff/discordbot/JdaDiscordPunishmentGateway.java"
+          text = read(path)
+          text = replace_once(
+              text,
+              '''        Member member = memberOrNull(guild, punishment.targetUserId());\n        if (member == null) {\n            return;\n        }\n        DiscordRestrictionTarget target = punishment.intent().restriction().orElseThrow();\n''',
+              '''        Member member = memberOrNull(guild, punishment.targetUserId());\n        if (member == null) {\n            throw failure("TARGET_NOT_IN_GUILD", true);\n        }\n        DiscordRestrictionTarget target = punishment.intent().restriction().orElseThrow();\n''',
+              "restriction absent-member removal",
+          )
+          write(path, text)
+
+          path = "staff-bot/src/main/java/net/enthusia/staff/discordbot/DiscordPunishmentWorker.java"
+          text = read(path)
+
+          # DM delivery is independent from punishment success. Warnings are completed even when DM fails.
+          text = replace_once(
+              text,
+              '''    private void applyWarning(WorkLease work, StoredPunishment stored) {\n        DiscordDeliveryOutcome delivery = gateway.notifyApplied(stored.punishment());\n        boolean retry = retryDelivery(delivery, work);\n        DiscordDeliveryOutcome recorded = recordedDelivery(delivery, retry);\n        DiscordPunishmentState state = warningState(recorded, retry);\n        DiscordPunishment replacement = stored.punishment().withProcessingResult(\n                state,\n                recorded,\n                recorded == DiscordDeliveryOutcome.DELIVERED,\n                stored.punishment().previousRestriction(),\n                deliveryError("WARNING", delivery, retry),\n                operationKey(work)\n        );\n        settle(work, stored, replacement, retry ? List.of(retry(work, WorkType.APPLY)) : List.of());\n    }\n''',
+              '''    private void applyWarning(WorkLease work, StoredPunishment stored) {\n        DiscordDeliveryOutcome delivery = gateway.notifyApplied(stored.punishment());\n        boolean retry = retryDelivery(delivery, work);\n        DiscordDeliveryOutcome recorded = recordedDelivery(delivery, retry);\n        DiscordPunishment replacement = stored.punishment().withProcessingResult(\n                DiscordPunishmentState.COMPLETED,\n                recorded,\n                true,\n                stored.punishment().previousRestriction(),\n                deliveryError("WARNING", delivery, retry),\n                operationKey(work)\n        );\n        settle(work, stored, replacement, retry ? List.of(retry(work, WorkType.APPLY)) : List.of());\n    }\n''',
+              "warning delivery truthfulness",
+          )
+          text = replace_once(
+              text,
+              '''    private static DiscordPunishmentState warningState(\n            DiscordDeliveryOutcome delivery,\n            boolean retry\n    ) {\n        if (delivery == DiscordDeliveryOutcome.DELIVERED) {\n            return DiscordPunishmentState.COMPLETED;\n        }\n        return retry ? DiscordPunishmentState.RETRY_APPLY : DiscordPunishmentState.FAILED_APPLY;\n    }\n\n''',
+              '',
+              "obsolete warning state helper",
+          )
+
+          # Recoverable enforcement side effects never become falsely terminal solely from retry count.
+          text = replace_once(
+              text,
+              '''            "MUTE_ROLE_HIERARCHY_DENIED",\n            "RECONCILE_PERMISSION_DENIED"\n''',
+              '''            "MUTE_ROLE_HIERARCHY_DENIED",\n            "RECONCILE_PERMISSION_DENIED",\n            "RESTRICTION_STATE_CHANGED"\n''',
+              "worker restriction drift reconciliation",
+          )
+          old_retry = '        boolean retry = failure.retryable() && work.attemptCount() < MAX_ATTEMPTS;\n'
+          if text.count(old_retry) != 2:
+              raise SystemExit(f"worker effect retry guards: expected 2 matches, found {text.count(old_retry)}")
+          text = text.replace(old_retry, '        boolean retry = failure.retryable();\n')
+          write(path, text)
+
+          path = "staff-bot/src/test/java/net/enthusia/staff/discordbot/DiscordPunishmentWorkerTest.java"
+          text = read(path)
+          text = replace_once(
+              text,
+              '''    @Test\n    void terminalWarningDeliveryFailureIsARealApplyFailure() {\n        FakeRepository repository = new FakeRepository(punishment(warning(), NOW));\n        FakeGateway gateway = new FakeGateway();\n        gateway.applyDelivery = DiscordDeliveryOutcome.FAILED_TERMINAL;\n        repository.enqueue(WorkType.APPLY, NOW, 1);\n\n        newWorker(repository, gateway).runCycle();\n\n        assertEquals(DiscordPunishmentState.FAILED_APPLY, repository.current.punishment().state());\n        assertFalse(repository.current.punishment().externalApplied());\n        assertEquals(DiscordDeliveryOutcome.FAILED_TERMINAL, repository.current.punishment().dmOutcome());\n        assertTrue(repository.work.isEmpty());\n    }\n''',
+              '''    @Test\n    void terminalWarningDeliveryFailureDoesNotRollbackPunishment() {\n        FakeRepository repository = new FakeRepository(punishment(warning(), NOW));\n        FakeGateway gateway = new FakeGateway();\n        gateway.applyDelivery = DiscordDeliveryOutcome.FAILED_TERMINAL;\n        repository.enqueue(WorkType.APPLY, NOW, 1);\n\n        newWorker(repository, gateway).runCycle();\n\n        assertEquals(DiscordPunishmentState.COMPLETED, repository.current.punishment().state());\n        assertTrue(repository.current.punishment().externalApplied());\n        assertEquals(DiscordDeliveryOutcome.FAILED_TERMINAL, repository.current.punishment().dmOutcome());\n        assertTrue(repository.work.isEmpty());\n    }\n\n    @Test\n    void retryableWarningDeliveryRetriesDmWithoutRollingBackPunishment() {\n        FakeRepository repository = new FakeRepository(punishment(warning(), NOW));\n        FakeGateway gateway = new FakeGateway();\n        gateway.applyDelivery = DiscordDeliveryOutcome.FAILED_RETRYABLE;\n        repository.enqueue(WorkType.APPLY, NOW, 1);\n        DiscordPunishmentWorker worker = newWorker(repository, gateway);\n\n        worker.runCycle();\n\n        assertEquals(DiscordPunishmentState.COMPLETED, repository.current.punishment().state());\n        assertTrue(repository.current.punishment().externalApplied());\n        assertEquals(DiscordDeliveryOutcome.FAILED_RETRYABLE, repository.current.punishment().dmOutcome());\n        assertEquals(1, repository.work.size());\n        assertEquals(0, gateway.applyCalls);\n\n        gateway.applyDelivery = DiscordDeliveryOutcome.DELIVERED;\n        repository.makeNextDue();\n        worker.runCycle();\n\n        assertEquals(DiscordPunishmentState.COMPLETED, repository.current.punishment().state());\n        assertEquals(DiscordDeliveryOutcome.DELIVERED, repository.current.punishment().dmOutcome());\n        assertEquals(2, gateway.notifyAppliedCalls);\n        assertEquals(0, gateway.applyCalls);\n    }\n''',
+              "warning delivery tests",
+          )
+
+          insert_before = '''    @Test\n    void nativeBanReconciliationConflictRemainsObservableWithoutMutationLoop() {\n'''
+          tests = '''    @Test\n    void retryableApplyFailureRemainsRecoverablePastAttemptLimit() {\n        FakeRepository repository = new FakeRepository(punishment(mute(Duration.ofHours(1)), NOW));\n        FakeGateway gateway = new FakeGateway();\n        gateway.applyFailure = new DiscordPunishmentGateway.EffectException(\n                "MUTE_ROLE_OWNERSHIP_UNVERIFIED", true\n        );\n        repository.enqueue(WorkType.APPLY, NOW, 5);\n\n        newWorker(repository, gateway).runCycle();\n\n        assertEquals(DiscordPunishmentState.RETRY_APPLY, repository.current.punishment().state());\n        assertEquals(Optional.of("MUTE_ROLE_OWNERSHIP_UNVERIFIED"),\n                repository.current.punishment().lastErrorCode());\n        assertEquals(1, repository.work.size());\n        assertEquals(WorkType.APPLY, repository.work.peek().type());\n        assertTrue(repository.work.peek().dueAt().isAfter(NOW));\n    }\n\n    @Test\n    void absentRestrictionRemovalRemainsRecoverablePastAttemptLimit() {\n        DiscordPunishment initial = appliedRestriction()\n                .requestRemoval(DiscordPunishmentTermination.END, "remove");\n        FakeRepository repository = new FakeRepository(initial);\n        FakeGateway gateway = new FakeGateway();\n        gateway.removeFailure = new DiscordPunishmentGateway.EffectException("TARGET_NOT_IN_GUILD", true);\n        repository.enqueue(WorkType.REMOVE, NOW, 5);\n\n        newWorker(repository, gateway).runCycle();\n\n        assertEquals(DiscordPunishmentState.RETRY_REMOVE, repository.current.punishment().state());\n        assertTrue(repository.current.punishment().externalApplied());\n        assertEquals(Optional.of("TARGET_NOT_IN_GUILD"), repository.current.punishment().lastErrorCode());\n        assertEquals(1, repository.work.size());\n        assertEquals(WorkType.REMOVE, repository.work.peek().type());\n        assertTrue(repository.work.peek().dueAt().isAfter(NOW));\n    }\n\n    @Test\n    void restrictionDriftRemainsObservableAndScheduled() {\n        FakeRepository repository = new FakeRepository(appliedRestriction());\n        FakeGateway gateway = new FakeGateway();\n        gateway.reconcileFailure = new DiscordPunishmentGateway.EffectException(\n                "RESTRICTION_STATE_CHANGED", false\n        );\n        repository.enqueue(WorkType.RECONCILE, NOW, 1);\n\n        newWorker(repository, gateway).runCycle();\n\n        assertEquals(DiscordPunishmentState.APPLIED, repository.current.punishment().state());\n        assertEquals(Optional.of("RESTRICTION_STATE_CHANGED"), repository.current.punishment().lastErrorCode());\n        assertEquals(1, repository.work.size());\n        assertEquals(WorkType.RECONCILE, repository.work.peek().type());\n        assertEquals(NOW.plus(Duration.ofMinutes(1)), repository.work.peek().dueAt());\n    }\n\n'''
+          text = replace_once(text, insert_before, tests + insert_before, "worker recovery tests")
+          text = replace_once(
+              text,
+              '''    private static DiscordPunishment appliedMute() {\n        return punishment(mute(Duration.ofHours(1)), NOW).withProcessingResult(\n                DiscordPunishmentState.APPLIED,\n                DiscordDeliveryOutcome.DELIVERED,\n                true,\n                Optional.empty(),\n                Optional.empty(),\n                "applied"\n        );\n    }\n\n''',
+              '''    private static DiscordPunishment appliedMute() {\n        return punishment(mute(Duration.ofHours(1)), NOW).withProcessingResult(\n                DiscordPunishmentState.APPLIED,\n                DiscordDeliveryOutcome.DELIVERED,\n                true,\n                Optional.empty(),\n                Optional.empty(),\n                "applied"\n        );\n    }\n\n    private static DiscordPunishment appliedRestriction() {\n        return punishment(restriction(), NOW).withProcessingResult(\n                DiscordPunishmentState.APPLIED,\n                DiscordDeliveryOutcome.DELIVERED,\n                true,\n                Optional.of(DiscordPermissionSnapshot.absent()),\n                Optional.empty(),\n                "applied"\n        );\n    }\n\n''',
+              "worker applied restriction helper",
+          )
+          write(path, text)
+          PY
+
+      - name: Run focused staff-bot tests
+        run: ./gradlew --no-daemon :staff-bot:test
+
+      - name: Run repository PMD on changed Java
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --location --silent --show-error \
+            'https://github.com/pmd/pmd/releases/download/pmd_releases%2F6.55.0/pmd-bin-6.55.0.zip' \
+            --output /tmp/pmd.zip
+          unzip -q /tmp/pmd.zip -d /tmp
+          mapfile -t files < <(git diff --name-only origin/main...HEAD -- '*.java')
+          input="$(IFS=,; echo "${files[*]}")"
+          set +e
+          /tmp/pmd-bin-6.55.0/bin/run.sh pmd \
+            -d "${input}" \
+            -R ruleset.xml \
+            -f text \
+            -r /tmp/pmd-findings.txt
+          status=$?
+          set -e
+          cat /tmp/pmd-findings.txt
+          exit "$status"
+
+      - name: Commit validated repairs and remove temporary runners
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm .github/workflows/d07-recovery-cache-repair.yml
+          rm .github/workflows/d07-recovery-cache-repair-v2.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'fix(es-d07): preserve enforcement and notification truth'
+          git push origin HEAD:package/es-d07-discord-punishment-enforcement
