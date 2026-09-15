@@ -37,6 +37,7 @@ final class JdaStaffModerationListener extends ListenerAdapter {
     private static final long NO_GUILD = 0L;
     private static final int REQUIRED_SELECTION = 1;
     private static final String USER_OPTION = "user";
+    private static final String USER_ID_OPTION = "user-id";
     private static final String PLAYER_OPTION = "player";
     private static final String CASE_ID_OPTION = "id";
     private static final String REASON_OPTION = "reason";
@@ -179,14 +180,43 @@ final class JdaStaffModerationListener extends ListenerAdapter {
             unavailable(event);
             return;
         }
-        User target = event.getOption(USER_OPTION).getAsUser();
-        Supplier<DiscordPunishmentCommandController.Prepared> work = quickWork(
-                punishment, event, actorId, actorName, target.getIdLong()
-        );
-        dispatchPunishment(event, work);
+        dispatchPunishment(event, quickWork(punishment, event, actorId, actorName));
     }
 
     private static Supplier<DiscordPunishmentCommandController.Prepared> quickWork(
+            DiscordPunishmentCommandController punishment,
+            SlashCommandInteractionEvent event,
+            long actorId,
+            String actorName
+    ) {
+        if (isRemovalCommand(event.getName())) {
+            return quickRemovalWork(punishment, event, actorId, actorName);
+        }
+        User target = event.getOption(USER_OPTION).getAsUser();
+        return quickIssueWork(punishment, event, actorId, actorName, target.getIdLong());
+    }
+
+    private static boolean isRemovalCommand(String command) {
+        return UNMUTE.equals(command) || UNBAN.equals(command) || UNRESTRICT.equals(command);
+    }
+
+    private static Supplier<DiscordPunishmentCommandController.Prepared> quickRemovalWork(
+            DiscordPunishmentCommandController punishment,
+            SlashCommandInteractionEvent event,
+            long actorId,
+            String actorName
+    ) {
+        String targetId = option(event, USER_ID_OPTION, "");
+        return switch (event.getName()) {
+            case UNMUTE -> () -> punishment.remove(actorId, actorName, targetId, DiscordConsequenceType.MUTE);
+            case UNBAN -> () -> punishment.remove(actorId, actorName, targetId, DiscordConsequenceType.BAN);
+            case UNRESTRICT -> () -> punishment.unrestrict(
+                    actorId, actorName, targetId, option(event, SCOPE_ID_OPTION, ""));
+            default -> throw new IllegalArgumentException("not a Discord punishment removal command");
+        };
+    }
+
+    private static Supplier<DiscordPunishmentCommandController.Prepared> quickIssueWork(
             DiscordPunishmentCommandController punishment,
             SlashCommandInteractionEvent event,
             long actorId,
@@ -199,32 +229,15 @@ final class JdaStaffModerationListener extends ListenerAdapter {
             case WARN -> () -> punishment.warn(actorId, actorName, targetId, reason, explanation);
             case MUTE -> () -> punishment.mute(
                     actorId, actorName, targetId, option(event, DURATION_OPTION, ""), reason, explanation);
-            case UNMUTE -> () -> punishment.remove(actorId, actorName, targetId, DiscordConsequenceType.MUTE);
             case KICK -> () -> punishment.kick(actorId, actorName, targetId, reason, explanation);
             case BAN -> () -> punishment.ban(
-                    actorId,
-                    actorName,
-                    targetId,
-                    option(event, DURATION_OPTION, ""),
-                    reason,
-                    explanation,
-                    integerOption(event, DELETE_SECONDS_OPTION, 0)
-            );
-            case UNBAN -> () -> punishment.remove(actorId, actorName, targetId, DiscordConsequenceType.BAN);
+                    actorId, actorName, targetId, option(event, DURATION_OPTION, ""),
+                    reason, explanation, integerOption(event, DELETE_SECONDS_OPTION, 0));
             case RESTRICT -> () -> punishment.restrict(
-                    actorId,
-                    actorName,
-                    targetId,
-                    option(event, DURATION_OPTION, ""),
-                    reason,
-                    explanation,
-                    option(event, SCOPE_KIND_OPTION, ""),
-                    option(event, SCOPE_ID_OPTION, ""),
-                    option(event, MODE_OPTION, "")
-            );
-            case UNRESTRICT -> () -> punishment.unrestrict(
-                    actorId, actorName, targetId, option(event, SCOPE_ID_OPTION, ""));
-            default -> throw new IllegalArgumentException("not a Discord punishment command");
+                    actorId, actorName, targetId, option(event, DURATION_OPTION, ""), reason, explanation,
+                    option(event, SCOPE_KIND_OPTION, ""), option(event, SCOPE_ID_OPTION, ""),
+                    option(event, MODE_OPTION, ""));
+            default -> throw new IllegalArgumentException("not a Discord punishment issue command");
         };
     }
 
@@ -630,7 +643,7 @@ final class JdaStaffModerationListener extends ListenerAdapter {
     private static CommandData restrictionRemovalSlash(DefaultMemberPermissions discovery) {
         return Commands.slash(UNRESTRICT, "End a Discord restriction on one exact scope")
                 .addOptions(
-                        userOption(),
+                        stringOption(USER_ID_OPTION, "Exact Discord user ID", true),
                         stringOption(SCOPE_ID_OPTION, "Exact Discord channel/category ID", true)
                 )
                 .setDefaultPermissions(discovery);
@@ -642,7 +655,7 @@ final class JdaStaffModerationListener extends ListenerAdapter {
             DefaultMemberPermissions discovery
     ) {
         return Commands.slash(name, description)
-                .addOptions(userOption())
+                .addOptions(stringOption(USER_ID_OPTION, "Exact Discord user ID", true))
                 .setDefaultPermissions(discovery);
     }
 

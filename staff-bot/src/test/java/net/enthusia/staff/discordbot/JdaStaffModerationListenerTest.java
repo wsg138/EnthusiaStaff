@@ -7,11 +7,13 @@ import java.util.Set;
 import java.util.stream.Collectors;
 import net.dv8tion.jda.api.interactions.commands.Command;
 import net.dv8tion.jda.api.interactions.commands.DefaultMemberPermissions;
+import net.dv8tion.jda.api.interactions.commands.OptionType;
 import net.dv8tion.jda.api.interactions.commands.build.CommandData;
 import net.dv8tion.jda.api.interactions.commands.build.SlashCommandData;
 import org.junit.jupiter.api.Test;
 
 class JdaStaffModerationListenerTest {
+    private static final String USER_ID_OPTION = "user-id";
     @Test
     void staffReadCommandsAreCompleteAndDefaultDisabledForDiscovery() {
         var commands = JdaStaffModerationListener.commands();
@@ -48,13 +50,23 @@ class JdaStaffModerationListenerTest {
     }
 
     @Test
+    void removalCommandsUseExactDiscordUserIds() {
+        for (String name : java.util.List.of("unmute", "unban", "unrestrict")) {
+            SlashCommandData command = (SlashCommandData) command(JdaStaffModerationListener.commands(true), name);
+            assertEquals(USER_ID_OPTION, command.getOptions().getFirst().getName());
+            assertEquals(OptionType.STRING, command.getOptions().getFirst().getType());
+            assertTrue(command.getOptions().getFirst().isRequired());
+        }
+    }
+
+    @Test
     void unrestrictRequiresExactScopeId() {
         SlashCommandData unrestrict = (SlashCommandData) command(
                 JdaStaffModerationListener.commands(true), "unrestrict"
         );
 
         assertEquals(
-                java.util.List.of("user", "scope-id"),
+                java.util.List.of(USER_ID_OPTION, "scope-id"),
                 unrestrict.getOptions().stream().map(option -> option.getName()).toList()
         );
         assertTrue(unrestrict.getOptions().stream().allMatch(option -> option.isRequired()));

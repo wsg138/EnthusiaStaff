@@ -173,22 +173,22 @@ final class DiscordPunishmentCommandController {
         ));
     }
 
-    Prepared remove(long actorId, String actorName, long targetId, DiscordConsequenceType type) {
+    Prepared remove(long actorId, String actorName, String targetId, DiscordConsequenceType type) {
         DiscordPunishmentService.Confirmation confirmation = service.prepareRemoval(
                 actorId,
                 actorName,
-                targetId,
+                parseUnsigned(targetId),
                 type,
                 DiscordPunishmentTermination.END
         );
         return preparedRemoval(confirmation, type);
     }
 
-    Prepared unrestrict(long actorId, String actorName, long targetId, String scopeId) {
+    Prepared unrestrict(long actorId, String actorName, String targetId, String scopeId) {
         DiscordPunishmentService.Confirmation confirmation = service.prepareRestrictionRemoval(
                 actorId,
                 actorName,
-                targetId,
+                parseUnsigned(targetId),
                 scopeId,
                 DiscordPunishmentTermination.END
         );
@@ -346,8 +346,11 @@ final class DiscordPunishmentCommandController {
     }
 
     private static long parseUnsigned(String value) {
+        if (value == null || value.isBlank()) {
+            throw new IllegalArgumentException("Discord user id is required");
+        }
         try {
-            long parsed = Long.parseUnsignedLong(value);
+            long parsed = Long.parseUnsignedLong(value.trim());
             requirePositive(parsed);
             return parsed;
         } catch (NumberFormatException exception) {
