@@ -6,27 +6,28 @@ target = Path(sys.argv[2])
 lines = source.read_text(encoding="utf-8").splitlines(keepends=True)
 
 
-def drop_replace_call(marker: str) -> None:
-    matches = [index for index, line in enumerate(lines) if marker in line]
-    if not matches:
-        raise SystemExit(f"no transformation line contains marker {marker!r}")
-    marker_index = matches[0]
-    start = marker_index
-    while start >= 0 and "replace_once(" not in lines[start]:
-        start -= 1
-    if start < 0:
-        raise SystemExit(f"unable to find replace_once start for {marker!r}")
-    end = marker_index
-    while end < len(lines) and not lines[end].rstrip().endswith(")"):
-        end += 1
-    if end >= len(lines):
-        raise SystemExit(f"unable to find replace_once end for {marker!r}")
+def drop_replace_call(call_start: str, marker: str) -> None:
+    candidates = []
+    for start, line in enumerate(lines):
+        if not line.strip().startswith(call_start):
+            continue
+        end = start
+        while end < len(lines) and not lines[end].rstrip().endswith(")"):
+            end += 1
+        if end >= len(lines):
+            continue
+        block = "".join(lines[start:end + 1])
+        if marker in block:
+            candidates.append((start, end))
+    if len(candidates) != 1:
+        raise SystemExit(f"expected one {call_start!r} block containing {marker!r}, found {len(candidates)}")
+    start, end = candidates[0]
     del lines[start:end + 1]
 
 
-drop_replace_call('UUID caseId,\\n            ModerationSubjectId subjectId')
-drop_replace_call('m.captured_at, e.investigation_case_id, e.last_observed_at')
-drop_replace_call('observation.issuerId()')
+drop_replace_call("replace_once(evidence_store,", 'UUID caseId,\\n            ModerationSubjectId subjectId')
+drop_replace_call("replace_once(evidence_store,", 'm.captured_at, e.investigation_case_id, e.last_observed_at')
+drop_replace_call("replace_once(worker,", 'observation.issuerId()')
 text = "".join(lines)
 
 post_lines = []
