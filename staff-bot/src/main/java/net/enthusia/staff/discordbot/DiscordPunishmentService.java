@@ -56,10 +56,15 @@ final class DiscordPunishmentService {
             DiscordGuildId guildId,
             Clock clock
     ) {
-        if (reads == null || actors == null || authorization == null || confirmations == null || punishments == null
-                || subjects == null || gateway == null || guildId == null || clock == null) {
-            throw new IllegalArgumentException("Discord punishment service dependencies must be present");
-        }
+        requireDependency(reads);
+        requireDependency(actors);
+        requireDependency(authorization);
+        requireDependency(confirmations);
+        requireDependency(punishments);
+        requireDependency(subjects);
+        requireDependency(gateway);
+        requireDependency(guildId);
+        requireDependency(clock);
         this.reads = reads;
         this.actors = actors;
         this.authorization = authorization;
@@ -69,6 +74,12 @@ final class DiscordPunishmentService {
         this.gateway = gateway;
         this.guildId = guildId;
         this.clock = clock;
+    }
+
+    private static void requireDependency(Object value) {
+        if (value == null) {
+            throw new IllegalArgumentException("Discord punishment service dependencies must be present");
+        }
     }
 
     Confirmation prepareIssue(long actorDiscordId, String actorName, long targetDiscordId, DiscordPunishmentIntent intent) {

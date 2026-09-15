@@ -51,16 +51,38 @@ final class DiscordPunishmentWorker {
             String workerId,
             Duration reconciliationInterval
     ) {
-        if (repository == null || gateway == null || clock == null || workerId == null || workerId.isBlank()
-                || workerId.length() > 96 || reconciliationInterval == null
-                || reconciliationInterval.isZero() || reconciliationInterval.isNegative()) {
-            throw new IllegalArgumentException("Discord punishment worker configuration is invalid");
-        }
+        requireDependency(repository);
+        requireDependency(gateway);
+        requireDependency(clock);
+        requireWorkerId(workerId);
+        requireInterval(reconciliationInterval);
         this.repository = repository;
         this.gateway = gateway;
         this.clock = clock;
         this.workerId = workerId;
         this.reconciliationInterval = reconciliationInterval;
+    }
+
+    private static void requireDependency(Object value) {
+        if (value == null) {
+            throw invalidConfiguration();
+        }
+    }
+
+    private static void requireWorkerId(String workerId) {
+        if (workerId == null || workerId.isBlank() || workerId.length() > 96) {
+            throw invalidConfiguration();
+        }
+    }
+
+    private static void requireInterval(Duration interval) {
+        if (interval == null || interval.isZero() || interval.isNegative()) {
+            throw invalidConfiguration();
+        }
+    }
+
+    private static IllegalArgumentException invalidConfiguration() {
+        return new IllegalArgumentException("Discord punishment worker configuration is invalid");
     }
 
     int runCycle() {

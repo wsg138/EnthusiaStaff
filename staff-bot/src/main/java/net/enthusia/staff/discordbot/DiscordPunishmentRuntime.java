@@ -40,52 +40,100 @@ final class DiscordPunishmentRuntime implements AutoCloseable {
             int interactionCapacity,
             Duration interactionTtl
     ) {
-        if (database == null || configuration == null || reads == null || actors == null
-                || guildId <= 0 || interactionCapacity < 1 || interactionTtl == null
-                || interactionTtl.isZero() || interactionTtl.isNegative()) {
-            throw new IllegalArgumentException("Discord punishment runtime configuration is invalid");
-        }
+        validateOpen(database, configuration, reads, actors, guildId, interactionCapacity, interactionTtl);
         Clock clock = Clock.systemUTC();
         DiscordPunishmentPersistenceRuntime persistence = DiscordPunishmentPersistenceRuntime.open(database);
         try {
-            JdaDiscordPunishmentGateway gateway = new JdaDiscordPunishmentGateway(configuration);
-            Duration confirmationTtl = interactionTtl.compareTo(MAX_CONFIRMATION_TTL) > 0
-                    ? MAX_CONFIRMATION_TTL
-                    : interactionTtl;
-            DiscordPunishmentConfirmationStore confirmations = new DiscordPunishmentConfirmationStore(
-                    clock, confirmationTtl, interactionCapacity
+            return assemble(
+                    persistence, configuration, reads, actors, guildId, interactionCapacity, interactionTtl, clock
             );
-            DiscordPunishmentAuthorization authorization = new DiscordPunishmentAuthorization(
-                    configuration.authorizationLimits()
-            );
-            DiscordGuildId discordGuildId = new DiscordGuildId(Long.toUnsignedString(guildId));
-            DiscordPunishmentService service = new DiscordPunishmentService(
-                    reads,
-                    actors,
-                    authorization,
-                    confirmations,
-                    persistence.punishments(),
-                    persistence::ensureDiscordSubject,
-                    gateway,
-                    discordGuildId,
-                    clock
-            );
-            DiscordPunishmentWorker worker = new DiscordPunishmentWorker(
-                    persistence.punishments(),
-                    gateway,
-                    clock,
-                    "d07-" + UUID.randomUUID(),
-                    configuration.reconciliationInterval()
-            );
-            DiscordPunishmentCoordinator coordinator = new DiscordPunishmentCoordinator(
-                    worker, configuration.workerInterval()
-            );
-            coordinator.start();
-            return new DiscordPunishmentRuntime(persistence, gateway, coordinator, service);
         } catch (RuntimeException exception) {
             persistence.close();
             throw exception;
         }
+    }
+
+    private static DiscordPunishmentRuntime assemble(
+            DiscordPunishmentPersistenceRuntime persistence,
+            DiscordPunishmentConfiguration configuration,
+            StaffModerationReadService reads,
+            LinkedStaffActorResolver actors,
+            long guildId,
+            int interactionCapacity,
+            Duration interactionTtl,
+            Clock clock
+    ) {
+        JdaDiscordPunishmentGateway gateway = new JdaDiscordPunishmentGateway(configuration);
+        Duration confirmationTtl = interactionTtl.compareTo(MAX_CONFIRMATION_TTL) > 0
+                ? MAX_CONFIRMATION_TTL : interactionTtl;
+        DiscordPunishmentConfirmationStore confirmations = new DiscordPunishmentConfirmationStore(
+                clock, confirmationTtl, interactionCapacity
+        );
+        DiscordPunishmentAuthorization authorization = new DiscordPunishmentAuthorization(
+                configuration.authorizationLimits()
+        );
+        DiscordGuildId discordGuildId = new DiscordGuildId(Long.toUnsignedString(guildId));
+        DiscordPunishmentService service = createService(
+                persistence, reads, actors, authorization, confirmations, gateway, discordGuildId, clock
+        );
+        DiscordPunishmentWorker worker = new DiscordPunishmentWorker(
+                persistence.punishments(), gateway, clock, "d07-" + UUID.randomUUID(),
+                configuration.reconciliationInterval()
+        );
+        DiscordPunishmentCoordinator coordinator = new DiscordPunishmentCoordinator(worker, configuration.workerInterval());
+        coordinator.start();
+        return new DiscordPunishmentRuntime(persistence, gateway, coordinator, service);
+    }
+
+    private static DiscordPunishmentService createService(
+            DiscordPunishmentPersistenceRuntime persistence,
+            StaffModerationReadService reads,
+            LinkedStaffActorResolver actors,
+            DiscordPunishmentAuthorization authorization,
+            DiscordPunishmentConfirmationStore confirmations,
+            JdaDiscordPunishmentGateway gateway,
+            DiscordGuildId guildId,
+            Clock clock
+    ) {
+        return new DiscordPunishmentService(
+                reads, actors, authorization, confirmations, persistence.punishments(),
+                persistence::ensureDiscordSubject, gateway, guildId, clock
+        );
+    }
+
+    private static void validateOpen(
+            DatabaseConfig database,
+            DiscordPunishmentConfiguration configuration,
+            StaffModerationReadService reads,
+            LinkedStaffActorResolver actors,
+            long guildId,
+            int interactionCapacity,
+            Duration interactionTtl
+    ) {
+        requirePresent(database);
+        requirePresent(configuration);
+        requirePresent(reads);
+        requirePresent(actors);
+        if (guildId <= 0 || interactionCapacity < 1) {
+            throw invalidConfiguration();
+        }
+        requirePositive(interactionTtl);
+    }
+
+    private static void requirePresent(Object value) {
+        if (value == null) {
+            throw invalidConfiguration();
+        }
+    }
+
+    private static void requirePositive(Duration value) {
+        if (value == null || value.isZero() || value.isNegative()) {
+            throw invalidConfiguration();
+        }
+    }
+
+    private static IllegalArgumentException invalidConfiguration() {
+        return new IllegalArgumentException("Discord punishment runtime configuration is invalid");
     }
 
     DiscordPunishmentService service() {

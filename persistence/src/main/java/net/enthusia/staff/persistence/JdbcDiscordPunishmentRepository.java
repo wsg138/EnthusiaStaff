@@ -426,15 +426,18 @@ public final class JdbcDiscordPunishmentRepository implements DiscordPunishmentR
     }
 
     private static void requireImmutable(DiscordPunishment current, DiscordPunishment replacement) throws SQLException {
-        boolean equal = current.punishmentId().equals(replacement.punishmentId())
-                && current.subjectId().equals(replacement.subjectId())
-                && current.targetUserId().equals(replacement.targetUserId())
-                && current.guildId().equals(replacement.guildId())
-                && current.issuer().equals(replacement.issuer())
-                && current.intent().equals(replacement.intent())
-                && current.issuedAt().equals(replacement.issuedAt())
-                && current.expiresAt().equals(replacement.expiresAt());
-        if (!equal) {
+        requireSame(current.punishmentId(), replacement.punishmentId());
+        requireSame(current.subjectId(), replacement.subjectId());
+        requireSame(current.targetUserId(), replacement.targetUserId());
+        requireSame(current.guildId(), replacement.guildId());
+        requireSame(current.issuer(), replacement.issuer());
+        requireSame(current.intent(), replacement.intent());
+        requireSame(current.issuedAt(), replacement.issuedAt());
+        requireSame(current.expiresAt(), replacement.expiresAt());
+    }
+
+    private static void requireSame(Object current, Object replacement) throws SQLException {
+        if (!current.equals(replacement)) {
             throw new SQLException("immutable Discord punishment fields changed");
         }
     }

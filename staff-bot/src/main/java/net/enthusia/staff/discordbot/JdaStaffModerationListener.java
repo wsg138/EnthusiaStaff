@@ -3,6 +3,7 @@ package net.enthusia.staff.discordbot;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.function.Supplier;
 import net.dv8tion.jda.api.JDA;
 import net.dv8tion.jda.api.components.actionrow.ActionRow;
@@ -64,6 +65,9 @@ final class JdaStaffModerationListener extends ListenerAdapter {
     private static final String MODERATE_USER = "Moderate User";
     private static final String MODERATE_MESSAGE = "Moderate Message";
     private static final String MODAL_REASON = "reason";
+    private static final Set<String> PUNISHMENT_COMMANDS = Set.of(
+            WARN, MUTE, UNMUTE, KICK, BAN, UNBAN, RESTRICT, UNRESTRICT
+    );
 
     @FunctionalInterface
     private interface DiscordTargetRead {
@@ -133,6 +137,14 @@ final class JdaStaffModerationListener extends ListenerAdapter {
         }
         long actorId = event.getUser().getIdLong();
         String actorName = event.getUser().getName();
+        if (PUNISHMENT_COMMANDS.contains(event.getName())) {
+            dispatchQuickPunishment(event, actorId, actorName);
+            return;
+        }
+        dispatchReadCommand(event, actorId, actorName);
+    }
+
+    private void dispatchReadCommand(SlashCommandInteractionEvent event, long actorId, String actorName) {
         switch (event.getName()) {
             case MODERATE -> dispatchModerate(event, actorId, actorName);
             case LINKED -> dispatchDiscordTarget(event, actorId, actorName, controller::linkedDiscord);
@@ -140,8 +152,6 @@ final class JdaStaffModerationListener extends ListenerAdapter {
             case NOTES -> dispatchDiscordTarget(event, actorId, actorName, controller::notesDiscord);
             case MODERATE_MINECRAFT -> dispatchMinecraft(event, actorId, actorName);
             case CASE -> dispatchCase(event, actorId, actorName);
-            case WARN, MUTE, UNMUTE, KICK, BAN, UNBAN, RESTRICT, UNRESTRICT ->
-                    dispatchQuickPunishment(event, actorId, actorName);
             default -> unavailable(event);
         }
     }

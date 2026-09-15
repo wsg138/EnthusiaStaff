@@ -273,12 +273,24 @@ final class JdbcDiscordPunishmentWorkQueue {
     }
 
     private static void validateClaim(Instant now, int limit, String owner, Instant leaseUntil) {
+        requireLeaseInterval(now, leaseUntil);
+        requireClaimLimit(limit);
+        requireLeaseOwner(owner);
+    }
+
+    private static void requireLeaseInterval(Instant now, Instant leaseUntil) {
         if (now == null || leaseUntil == null || !leaseUntil.isAfter(now)) {
             throw new IllegalArgumentException("D07 lease interval is invalid");
         }
+    }
+
+    private static void requireClaimLimit(int limit) {
         if (limit < 1 || limit > MAX_BATCH) {
             throw new IllegalArgumentException("D07 work claim limit must be between 1 and 100");
         }
+    }
+
+    private static void requireLeaseOwner(String owner) {
         if (owner == null || owner.isBlank() || owner.length() > 96) {
             throw new IllegalArgumentException("D07 lease owner is invalid");
         }

@@ -76,14 +76,17 @@ class DiscordPunishmentPersistenceIntegrationTest {
     @Test
     void intentLeaseRecoveryRevisionConflictAndRestartAreDurable() {
         DiscordUserId userId = new DiscordUserId("18446744073709551001");
-        DiscordPunishment punishment;
-        String operationKey;
+        RecoveryFixture fixture = createAndLeaseInitialPunishment(userId);
+        recoverSettleAndRejectStaleRevision(fixture);
+        verifyRestartAndScheduledReconciliation(fixture);
+    }
 
+    private static RecoveryFixture createAndLeaseInitialPunishment(DiscordUserId userId) {
         try (HikariDataSource dataSource = open()) {
             JdbcDiscordModerationPersistenceStore identities = new JdbcDiscordModerationPersistenceStore(dataSource);
-            var subject = identities.ensureDiscordSubject(userId, NOW);
-            punishment = punishment(subject.subject().subjectId(), userId, muteIntent());
-            operationKey = CREATE_OPERATION_PREFIX + punishment.punishmentId();
+            ModerationSubjectId subjectId = identities.ensureDiscordSubject(userId, NOW).subject().subjectId();
+            DiscordPunishment punishment = punishment(subjectId, userId, muteIntent());
+            String operationKey = CREATE_OPERATION_PREFIX + punishment.punishmentId();
             JdbcDiscordPunishmentRepository repository = new JdbcDiscordPunishmentRepository(dataSource);
 
             var created = repository.create(punishment, operationKey, NOW);
@@ -96,57 +99,48 @@ class DiscordPunishmentPersistenceIntegrationTest {
             assertEquals(1, firstLease.size());
             assertEquals(1, firstLease.getFirst().attemptCount());
             assertTrue(repository.claimDue(NOW.plusSeconds(10), 1, "worker-b", NOW.plusSeconds(40)).isEmpty());
+            return new RecoveryFixture(userId, punishment);
         }
+    }
 
+    private static void recoverSettleAndRejectStaleRevision(RecoveryFixture fixture) {
         try (HikariDataSource dataSource = open()) {
             JdbcDiscordPunishmentRepository repository = new JdbcDiscordPunishmentRepository(dataSource);
-            var persisted = repository.find(punishment.punishmentId()).orElseThrow();
+            var persisted = repository.find(fixture.punishment().punishmentId()).orElseThrow();
             assertEquals(DiscordPunishmentState.PENDING_APPLY, persisted.punishment().state());
 
             Instant recoveredAt = NOW.plusSeconds(31);
-            var recovered = repository.claimDue(
-                    recoveredAt, 1, "worker-b", recoveredAt.plusSeconds(30)
-            );
+            var recovered = repository.claimDue(recoveredAt, 1, "worker-b", recoveredAt.plusSeconds(30));
             assertEquals(1, recovered.size());
             assertEquals(2, recovered.getFirst().attemptCount());
 
             DiscordPunishment applied = persisted.punishment().withProcessingResult(
-                    DiscordPunishmentState.APPLIED,
-                    DiscordDeliveryOutcome.DELIVERED,
-                    true,
-                    Optional.empty(),
-                    Optional.empty(),
-                    "d07:work:recovered"
+                    DiscordPunishmentState.APPLIED, DiscordDeliveryOutcome.DELIVERED, true,
+                    Optional.empty(), Optional.empty(), "d07:work:recovered"
             );
             Instant reconcileAt = recoveredAt.plusSeconds(60);
             var settled = repository.settle(
-                    recovered.getFirst(),
-                    persisted,
-                    applied,
-                    List.of(new WorkSchedule(WorkType.RECONCILE, reconcileAt)),
-                    recoveredAt
+                    recovered.getFirst(), persisted, applied,
+                    List.of(new WorkSchedule(WorkType.RECONCILE, reconcileAt)), recoveredAt
             );
             assertEquals(1, settled.revision());
-            assertEquals(1, repository.activeForTarget(GUILD_ID, userId, DiscordConsequenceType.MUTE, 10).size());
-
+            assertEquals(1, repository.activeForTarget(
+                    GUILD_ID, fixture.userId(), DiscordConsequenceType.MUTE, 10
+            ).size());
             assertThrows(ModerationPersistenceException.class, () -> repository.transition(
-                    persisted,
-                    applied,
-                    "d07-stale-" + UUID.randomUUID(),
-                    List.of(),
-                    recoveredAt.plusSeconds(1)
+                    persisted, applied, "d07-stale-" + UUID.randomUUID(), List.of(), recoveredAt.plusSeconds(1)
             ));
         }
+    }
 
+    private static void verifyRestartAndScheduledReconciliation(RecoveryFixture fixture) {
         try (HikariDataSource dataSource = open()) {
             JdbcDiscordPunishmentRepository repository = new JdbcDiscordPunishmentRepository(dataSource);
-            var restarted = repository.find(punishment.punishmentId()).orElseThrow();
+            var restarted = repository.find(fixture.punishment().punishmentId()).orElseThrow();
             assertEquals(DiscordPunishmentState.APPLIED, restarted.punishment().state());
             assertTrue(restarted.punishment().externalApplied());
             assertTrue(repository.claimDue(NOW.plusSeconds(60), 10, "worker-c", NOW.plusSeconds(90)).isEmpty());
-            var reconcile = repository.claimDue(
-                    NOW.plusSeconds(91), 10, "worker-c", NOW.plusSeconds(121)
-            );
+            var reconcile = repository.claimDue(NOW.plusSeconds(91), 10, "worker-c", NOW.plusSeconds(121));
             assertEquals(1, reconcile.size());
             assertEquals(WorkType.RECONCILE, reconcile.getFirst().type());
         }
@@ -287,6 +281,9 @@ class DiscordPunishmentPersistenceIntegrationTest {
                 0,
                 true
         );
+    }
+
+    private record RecoveryFixture(DiscordUserId userId, DiscordPunishment punishment) {
     }
 
     private record CreateAttempt(boolean success, Throwable failure) {

@@ -83,22 +83,39 @@ final class JdaDiscordPunishmentGateway implements DiscordPunishmentGateway {
         try {
             Guild guild = guild(guildId);
             Member member = memberOrNull(guild, target);
-            if (intent.type() != DiscordConsequenceType.BAN && member == null) {
-                throw failure(TARGET_NOT_IN_GUILD, false);
-            }
-            if (member != null) {
-                requireHierarchy(guild, member);
-            }
-            switch (intent.type()) {
-                case MUTE -> requireMuteAvailable(guild, member);
-                case BAN -> nativeBans.preflight(guild, target);
-                case CHANNEL_RESTRICTION -> restrictionContainer(guild, intent.restriction().orElseThrow());
-                case KICK -> kicks.preflight(guild);
-                case WARNING -> { }
-                default -> throw failure(UNSUPPORTED_CONSEQUENCE, false);
-            }
+            requirePreflightMember(intent.type(), member);
+            requireHierarchyIfPresent(guild, member);
+            preflightEffect(guild, member, target, intent);
         } catch (RuntimeException failure) {
             throw classify("PREFLIGHT", failure);
+        }
+    }
+
+    private void preflightEffect(
+            Guild guild,
+            Member member,
+            DiscordUserId target,
+            DiscordPunishmentIntent intent
+    ) {
+        switch (intent.type()) {
+            case MUTE -> requireMuteAvailable(guild, member);
+            case BAN -> nativeBans.preflight(guild, target);
+            case CHANNEL_RESTRICTION -> restrictionContainer(guild, intent.restriction().orElseThrow());
+            case KICK -> kicks.preflight(guild);
+            case WARNING -> { }
+            default -> throw failure(UNSUPPORTED_CONSEQUENCE, false);
+        }
+    }
+
+    private static void requirePreflightMember(DiscordConsequenceType type, Member member) {
+        if (type != DiscordConsequenceType.BAN && member == null) {
+            throw failure(TARGET_NOT_IN_GUILD, false);
+        }
+    }
+
+    private void requireHierarchyIfPresent(Guild guild, Member member) {
+        if (member != null) {
+            requireHierarchy(guild, member);
         }
     }
 
