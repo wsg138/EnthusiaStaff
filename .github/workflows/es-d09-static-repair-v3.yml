@@ -1,0 +1,80 @@
+name: ES-D09 Static Analysis Repair V3
+
+on:
+  push:
+    branches:
+      - diagnostic/es-d09-static-repair-v3-20260915
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out exact D09 package head
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: package/es-d09-discord-investigations
+          fetch-depth: 0
+      - name: Apply corrected analyzer repairs
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          test "$(git rev-parse HEAD)" = "4b278e9b65988d817ce365d39521fd7844011879"
+          git fetch origin diagnostic/es-d09-static-repair-20260915
+          git show origin/diagnostic/es-d09-static-repair-20260915:.github/workflows/es-d09-static-repair.yml \
+            | awk '/^[[:space:]]*python3 <<'\''PY'\''$/ {capture=1; next} capture && /^[[:space:]]*PY$/ {exit} capture {sub(/^          /, ""); print}' \
+            > /tmp/es-d09-repair.py
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('/tmp/es-d09-repair.py')
+          text = path.read_text()
+          old = "replace_all(evidence_test, '\"MESSAGE_CONTEXT\"', 'MESSAGE_CONTEXT', 5)"
+          new = "replace_all(evidence_test, '\"MESSAGE_CONTEXT\"', 'MESSAGE_CONTEXT', 6)"
+          if text.count(old) != 1:
+              raise SystemExit('could not patch MESSAGE_CONTEXT replacement count')
+          path.write_text(text.replace(old, new))
+          PY
+          python3 /tmp/es-d09-repair.py
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('domain/src/test/java/net/enthusia/staff/domain/investigation/InvestigationEvidenceTest.java')
+          text = path.read_text()
+          old = 'private static final String MESSAGE_CONTEXT = MESSAGE_CONTEXT;'
+          if text.count(old) != 1:
+              raise SystemExit('MESSAGE_CONTEXT declaration repair target missing')
+          path.write_text(text.replace(old, 'private static final String MESSAGE_CONTEXT = "MESSAGE_CONTEXT";'))
+          PY
+          git diff --check
+      - name: Compile and run focused tests
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          chmod +x ./gradlew
+          ./gradlew \
+            :domain:test \
+            :persistence:compileJava \
+            :staff-bot:test \
+            :integration-tests:test \
+            --tests net.enthusia.staff.integration.DiscordInvestigationPersistenceIntegrationTest \
+            --no-daemon --no-build-cache --no-configuration-cache --console=plain
+      - name: Commit one repair checkpoint
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          test "$(git rev-parse HEAD)" = "4b278e9b65988d817ce365d39521fd7844011879"
+          git config user.name "P2wn"
+          git config user.email "racecarboy77@gmail.com"
+          git add \
+            domain/src/test/java/net/enthusia/staff/domain/investigation/InvestigationEvidenceTest.java \
+            integration-tests/src/test/java/net/enthusia/staff/integration/DiscordInvestigationPersistenceIntegrationTest.java \
+            persistence/src/main/java/net/enthusia/staff/persistence/JdbcDiscordInvestigationCaseStore.java \
+            persistence/src/main/java/net/enthusia/staff/persistence/JdbcDiscordInvestigationEvidenceStore.java \
+            persistence/src/main/java/net/enthusia/staff/persistence/JdbcDiscordInvestigationContextStore.java \
+            staff-bot/src/main/java/net/enthusia/staff/discordbot/DiscordInvestigationCommandController.java \
+            staff-bot/src/main/java/net/enthusia/staff/discordbot/DiscordInvestigationService.java \
+            staff-bot/src/main/java/net/enthusia/staff/discordbot/DiscordInvestigationWorker.java \
+            staff-bot/src/test/java/net/enthusia/staff/discordbot/DiscordInvestigationWorkerTest.java
+          git commit -m "[ES-D09] Resolve static analysis findings"
+          git push origin HEAD:package/es-d09-discord-investigations
