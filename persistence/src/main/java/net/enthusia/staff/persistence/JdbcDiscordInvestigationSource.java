@@ -27,10 +27,13 @@ final class JdbcDiscordInvestigationSource {
         return JdbcTransactionSupport.execute(dataSource, "Unable to read Discord punishment observations", connection -> {
             List<PunishmentObservation> observations = new ArrayList<>();
             try (PreparedStatement statement = connection.prepareStatement("""
-                    SELECT desired_state_json, revision, updated_at
-                    FROM discord_reconciliation_state
-                    WHERE resource_type = ?
-                    ORDER BY updated_at, reconciliation_key
+                    SELECT r.desired_state_json, r.revision, r.updated_at
+                    FROM discord_reconciliation_state r
+                    LEFT JOIN discord_investigation_cases investigation
+                      ON investigation.punishment_id = UNHEX(REPLACE(r.resource_id, '-', ''))
+                    WHERE r.resource_type = ?
+                      AND (investigation.case_id IS NULL OR investigation.source_revision < r.revision)
+                    ORDER BY r.updated_at, r.reconciliation_key
                     LIMIT ?
                     """)) {
                 statement.setString(1, D07_RESOURCE_TYPE);
@@ -48,76 +51,62 @@ final class JdbcDiscordInvestigationSource {
 
     List<EvasionCandidate> evasionCandidates(int limit) {
         validateLimit(limit);
-        return JdbcTransactionSupport.execute(dataSource, "Unable to read linked-alt candidates", connection -> {
-            List<EvasionCandidate> candidates = new ArrayList<>();
-            for (DiscordPunishment punishment : activeBanPunishments(connection, limit)) {
-                addOnlineLinks(connection, punishment, candidates, limit);
-                if (candidates.size() >= limit) {
-                    break;
-                }
-            }
-            return List.copyOf(candidates);
-        });
+        return JdbcTransactionSupport.execute(dataSource, "Unable to read linked-alt candidates", connection ->
+                readEvasionCandidates(connection, limit));
     }
 
-    private List<DiscordPunishment> activeBanPunishments(Connection connection, int limit) throws SQLException {
-        List<DiscordPunishment> punishments = new ArrayList<>();
+    private List<EvasionCandidate> readEvasionCandidates(Connection connection, int limit) throws SQLException {
+        List<EvasionCandidate> candidates = new ArrayList<>();
         try (PreparedStatement statement = connection.prepareStatement("""
-                SELECT desired_state_json
-                FROM discord_reconciliation_state
-                WHERE resource_type = ?
-                  AND state IN ('APPLIED', 'PENDING_REMOVE', 'RETRY_REMOVE', 'FAILED_REMOVE')
-                ORDER BY updated_at, reconciliation_key
+                SELECT r.desired_state_json, membership.player_id, player.current_server, player.revision
+                FROM discord_reconciliation_state r
+                JOIN moderation_enforcement_targets target
+                  ON target.target_id = UNHEX(REPLACE(r.resource_id, '-', ''))
+                JOIN moderation_subject_minecraft_identities membership
+                  ON membership.subject_id = target.subject_id
+                JOIN players player ON player.player_id = membership.player_id
+                LEFT JOIN discord_evasion_alerts alert
+                  ON alert.punishment_id = target.target_id
+                 AND alert.triggering_minecraft_player_id = membership.player_id
+                 AND alert.player_revision = player.revision
+                WHERE r.resource_type = ?
+                  AND r.state IN ('APPLIED', 'PENDING_REMOVE', 'RETRY_REMOVE', 'FAILED_REMOVE')
+                  AND JSON_UNQUOTE(JSON_EXTRACT(r.desired_state_json, '$.type')) = 'BAN'
+                  AND JSON_UNQUOTE(JSON_EXTRACT(r.desired_state_json, '$.externalApplied')) = 'true'
+                  AND player.current_server IS NOT NULL
+                  AND alert.alert_id IS NULL
+                ORDER BY r.updated_at, r.reconciliation_key, membership.player_id
                 LIMIT ?
                 """)) {
             statement.setString(1, D07_RESOURCE_TYPE);
             statement.setInt(2, limit);
             try (ResultSet rows = statement.executeQuery()) {
                 while (rows.next()) {
-                    DiscordPunishment punishment = punishmentCodec.decode(rows.getString("desired_state_json"));
-                    if (isBanEvasionSignal(punishment)) {
-                        punishments.add(punishment);
-                    }
+                    addCandidate(rows, candidates);
                 }
             }
         }
-        return punishments;
+        return List.copyOf(candidates);
+    }
+
+    private void addCandidate(ResultSet rows, List<EvasionCandidate> candidates) throws SQLException {
+        DiscordPunishment punishment = punishmentCodec.decode(rows.getString("desired_state_json"));
+        if (!isBanEvasionSignal(punishment)) {
+            return;
+        }
+        candidates.add(new EvasionCandidate(
+                punishment.subjectId(),
+                punishment.punishmentId(),
+                UuidBytes.fromBytes(rows.getBytes("player_id")),
+                rows.getString("current_server"),
+                rows.getLong("revision")
+        ));
     }
 
     private static boolean isBanEvasionSignal(DiscordPunishment punishment) {
         return punishment.externalApplied()
                 && !punishment.state().terminal()
                 && punishment.intent().type() == DiscordConsequenceType.BAN;
-    }
-
-    private static void addOnlineLinks(
-            Connection connection,
-            DiscordPunishment punishment,
-            List<EvasionCandidate> candidates,
-            int limit
-    ) throws SQLException {
-        try (PreparedStatement statement = connection.prepareStatement("""
-                SELECT membership.player_id, player.current_server, player.revision
-                FROM moderation_subject_minecraft_identities membership
-                JOIN players player ON player.player_id = membership.player_id
-                WHERE membership.subject_id = ? AND player.current_server IS NOT NULL
-                ORDER BY membership.player_id
-                LIMIT ?
-                """)) {
-            statement.setBytes(1, UuidBytes.toBytes(punishment.subjectId().value()));
-            statement.setInt(2, Math.max(1, limit - candidates.size()));
-            try (ResultSet rows = statement.executeQuery()) {
-                while (rows.next() && candidates.size() < limit) {
-                    candidates.add(new EvasionCandidate(
-                            punishment.subjectId(),
-                            punishment.punishmentId(),
-                            UuidBytes.fromBytes(rows.getBytes("player_id")),
-                            rows.getString("current_server"),
-                            rows.getLong("revision")
-                    ));
-                }
-            }
-        }
     }
 
     private static PunishmentObservation observation(DiscordPunishment punishment, ResultSet rows) throws SQLException {

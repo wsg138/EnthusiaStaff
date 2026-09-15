@@ -12,14 +12,22 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import net.enthusia.staff.domain.auth.Actor;
+import net.enthusia.staff.domain.auth.DiscordConsequenceType;
+import net.enthusia.staff.domain.auth.StaffRank;
+import net.enthusia.staff.domain.discord.DiscordPunishment;
+import net.enthusia.staff.domain.discord.DiscordPunishmentIntent;
 import net.enthusia.staff.domain.investigation.EvasionAlert;
 import net.enthusia.staff.domain.investigation.InvestigationEvidence;
 import net.enthusia.staff.domain.investigation.InvestigationNote;
+import net.enthusia.staff.domain.moderation.DiscordGuildId;
 import net.enthusia.staff.domain.moderation.DiscordUserId;
 import net.enthusia.staff.domain.moderation.ModerationSubjectId;
 import net.enthusia.staff.domain.ports.DiscordInvestigationStore;
+import net.enthusia.staff.domain.sanction.SanctionLength;
 import net.enthusia.staff.persistence.JdbcDiscordInvestigationStore;
 import net.enthusia.staff.persistence.JdbcDiscordModerationPersistenceStore;
+import net.enthusia.staff.persistence.JdbcDiscordPunishmentRepository;
 import net.enthusia.staff.persistence.MariaDb;
 import net.enthusia.staff.persistence.ModerationPersistenceException;
 import org.junit.jupiter.api.BeforeAll;
@@ -33,6 +41,7 @@ class DiscordInvestigationPersistenceIntegrationTest {
     private static final Instant NOW = Instant.parse("2026-09-15T12:00:00Z");
     private static final UUID ACTOR = UUID.fromString("10000000-0000-0000-0000-000000000001");
     private static final DiscordUserId TARGET = new DiscordUserId("223456789012345678");
+    private static final DiscordGuildId GUILD = new DiscordGuildId("1410303324745371709");
 
     @Container
     private static final MariaDBContainer<?> DATABASE = new MariaDBContainer<>("mariadb:11.4.8")
@@ -85,6 +94,27 @@ class DiscordInvestigationPersistenceIntegrationTest {
             ));
             assertEquals(List.of(1L, 0L), store.noteHistory(noteId, 10).stream()
                     .map(InvestigationNote.Version::revision).toList());
+        }
+    }
+
+    @Test
+    void boundedPunishmentObservationQueryAdvancesAfterReconciliation() {
+        try (HikariDataSource dataSource = open()) {
+            JdbcDiscordPunishmentRepository punishments = new JdbcDiscordPunishmentRepository(dataSource);
+            JdbcDiscordInvestigationStore investigations = new JdbcDiscordInvestigationStore(dataSource);
+            for (int index = 0; index < 101; index++) {
+                DiscordUserId userId = new DiscordUserId(Long.toString(223456789012346000L + index));
+                ModerationSubjectId subjectId = ensureSubject(dataSource, userId);
+                DiscordPunishment punishment = warning(subjectId, userId, index);
+                punishments.create(punishment, "d09-batch-warning-" + index, NOW.plusMillis(index));
+            }
+
+            List<DiscordInvestigationStore.PunishmentObservation> first = investigations.punishmentObservations(100);
+            assertEquals(100, first.size());
+            first.forEach(observation -> investigations.ensurePunishmentCase(punishmentCase(observation)));
+
+            List<DiscordInvestigationStore.PunishmentObservation> second = investigations.punishmentObservations(100);
+            assertEquals(1, second.size());
         }
     }
 
@@ -153,6 +183,44 @@ class DiscordInvestigationPersistenceIntegrationTest {
             assertEquals(EvasionAlert.State.RESOLVED, resolved.state());
             assertTrue(store.resolveEvasionAlert(alertId, resolved.revision(), retryAt.plusSeconds(2)).replayed());
         }
+    }
+
+    private static DiscordPunishment warning(
+            ModerationSubjectId subjectId,
+            DiscordUserId userId,
+            int index
+    ) {
+        DiscordPunishmentIntent intent = new DiscordPunishmentIntent(
+                DiscordConsequenceType.WARNING,
+                SanctionLength.instant(),
+                false,
+                false,
+                Optional.empty(),
+                "Batch warning " + index,
+                "D09 bounded observation test",
+                0,
+                false
+        );
+        return DiscordPunishment.pending(
+                UUID.randomUUID(), subjectId, userId, GUILD,
+                new Actor(ACTOR, "D09Staff", StaffRank.ADMIN), intent, NOW.plusMillis(index), "pending"
+        );
+    }
+
+    private static DiscordInvestigationStore.PunishmentCaseDraft punishmentCase(
+            DiscordInvestigationStore.PunishmentObservation observation
+    ) {
+        return new DiscordInvestigationStore.PunishmentCaseDraft(
+                "d09:punishment:" + observation.punishmentId(),
+                observation.punishmentId(),
+                observation.subjectId(),
+                observation.issuerId(),
+                observation.summary(),
+                observation.state(),
+                observation.expiresAt(),
+                observation.revision(),
+                observation.observedAt()
+        );
     }
 
     private static void assertEvidenceMetadata(HikariDataSource dataSource, UUID evidenceId) throws SQLException {
