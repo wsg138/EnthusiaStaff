@@ -60,12 +60,16 @@ jobs:
           unzip -q /tmp/pmd.zip -d /tmp
           mapfile -t files < <(git diff --name-only origin/main...HEAD -- '*.java')
           input="$(IFS=,; echo "${files[*]}")"
+          set +e
           /tmp/pmd-bin-6.55.0/bin/run.sh pmd \
             -d "${input}" \
             -R ruleset.xml \
             -f text \
             -r /tmp/pmd-findings.txt
+          status=$?
+          set -e
           cat /tmp/pmd-findings.txt
+          exit "${status}"
 
       - name: Commit validated D07 repairs and remove temporary runners
         shell: bash
