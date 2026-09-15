@@ -87,7 +87,8 @@ final class JdbcDiscordInvestigationEvidenceStore {
             throw new IllegalArgumentException("evidence message lookup identifiers must be present");
         }
         return JdbcTransactionSupport.execute(dataSource, "Unable to read Discord evidence", connection ->
-                Optional.ofNullable(byMessage(connection, guildId, channelId, messageId)).map(value -> value.toStored(false)));
+                Optional.ofNullable(byMessage(connection, guildId, channelId, messageId))
+                        .map(value -> value.toStored(false)));
     }
 
     int purgeEligible(Instant now, int limit) {
@@ -342,16 +343,55 @@ final class JdbcDiscordInvestigationEvidenceStore {
     }
 
     private EvidenceCurrent byId(Connection connection, UUID evidenceId, boolean lock) throws SQLException {
-        return queryEvidence(
-                connection,
-                "m.evidence_id = ?",
-                statement -> statement.setBytes(1, UuidBytes.toBytes(evidenceId)),
-                lock
-        );
+        if (lock) {
+            try (PreparedStatement statement = connection.prepareStatement("""
+                    SELECT m.evidence_id, m.subject_id, m.guild_id, m.channel_id, m.message_id,
+                           m.captured_at, e.investigation_case_id, e.last_observed_at, e.revision
+                    FROM discord_evidence_metadata m
+                    JOIN discord_investigation_evidence e ON e.evidence_id = m.evidence_id
+                    WHERE m.evidence_id = ?
+                    FOR UPDATE
+                    """)) {
+                statement.setBytes(1, UuidBytes.toBytes(evidenceId));
+                return readEvidenceOne(statement);
+            }
+        }
+        try (PreparedStatement statement = connection.prepareStatement("""
+                SELECT m.evidence_id, m.subject_id, m.guild_id, m.channel_id, m.message_id,
+                       m.captured_at, e.investigation_case_id, e.last_observed_at, e.revision
+                FROM discord_evidence_metadata m
+                JOIN discord_investigation_evidence e ON e.evidence_id = m.evidence_id
+                WHERE m.evidence_id = ?
+                """)) {
+            statement.setBytes(1, UuidBytes.toBytes(evidenceId));
+            return readEvidenceOne(statement);
+        }
     }
 
     private EvidenceCurrent byOperation(Connection connection, String operationKey, boolean lock) throws SQLException {
-        return queryEvidence(connection, "m.operation_key = ?", statement -> statement.setString(1, operationKey), lock);
+        if (lock) {
+            try (PreparedStatement statement = connection.prepareStatement("""
+                    SELECT m.evidence_id, m.subject_id, m.guild_id, m.channel_id, m.message_id,
+                           m.captured_at, e.investigation_case_id, e.last_observed_at, e.revision
+                    FROM discord_evidence_metadata m
+                    JOIN discord_investigation_evidence e ON e.evidence_id = m.evidence_id
+                    WHERE m.operation_key = ?
+                    FOR UPDATE
+                    """)) {
+                statement.setString(1, operationKey);
+                return readEvidenceOne(statement);
+            }
+        }
+        try (PreparedStatement statement = connection.prepareStatement("""
+                SELECT m.evidence_id, m.subject_id, m.guild_id, m.channel_id, m.message_id,
+                       m.captured_at, e.investigation_case_id, e.last_observed_at, e.revision
+                FROM discord_evidence_metadata m
+                JOIN discord_investigation_evidence e ON e.evidence_id = m.evidence_id
+                WHERE m.operation_key = ?
+                """)) {
+            statement.setString(1, operationKey);
+            return readEvidenceOne(statement);
+        }
     }
 
     private EvidenceCurrent byMessage(
@@ -360,34 +400,23 @@ final class JdbcDiscordInvestigationEvidenceStore {
             String channelId,
             String messageId
     ) throws SQLException {
-        return queryEvidence(connection,
-                "m.guild_id = ? AND m.channel_id = ? AND m.message_id = ? AND m.purge_state = 'ACTIVE'",
-                statement -> {
-                    statement.setBigDecimal(1, snowflake(guildId));
-                    statement.setBigDecimal(2, snowflake(channelId));
-                    statement.setBigDecimal(3, snowflake(messageId));
-                },
-                false
-        );
+        try (PreparedStatement statement = connection.prepareStatement("""
+                SELECT m.evidence_id, m.subject_id, m.guild_id, m.channel_id, m.message_id,
+                       m.captured_at, e.investigation_case_id, e.last_observed_at, e.revision
+                FROM discord_evidence_metadata m
+                JOIN discord_investigation_evidence e ON e.evidence_id = m.evidence_id
+                WHERE m.guild_id = ? AND m.channel_id = ? AND m.message_id = ? AND m.purge_state = 'ACTIVE'
+                """)) {
+            statement.setBigDecimal(1, snowflake(guildId));
+            statement.setBigDecimal(2, snowflake(channelId));
+            statement.setBigDecimal(3, snowflake(messageId));
+            return readEvidenceOne(statement);
+        }
     }
 
-    private EvidenceCurrent queryEvidence(
-            Connection connection,
-            String predicate,
-            Binder binder,
-            boolean lock
-    ) throws SQLException {
-        String suffix = lock ? " FOR UPDATE" : "";
-        String sql = "SELECT m.evidence_id, m.subject_id, m.guild_id, m.channel_id, m.message_id, "
-                + "m.captured_at, e.investigation_case_id, e.last_observed_at, e.revision "
-                + "FROM discord_evidence_metadata m "
-                + "JOIN discord_investigation_evidence e ON e.evidence_id = m.evidence_id "
-                + "WHERE " + predicate + suffix;
-        try (PreparedStatement statement = connection.prepareStatement(sql)) {
-            binder.bind(statement);
-            try (ResultSet rows = statement.executeQuery()) {
-                return rows.next() ? readEvidence(rows) : null;
-            }
+    private static EvidenceCurrent readEvidenceOne(PreparedStatement statement) throws SQLException {
+        try (ResultSet rows = statement.executeQuery()) {
+            return rows.next() ? readEvidence(rows) : null;
         }
     }
 
@@ -406,27 +435,30 @@ final class JdbcDiscordInvestigationEvidenceStore {
     }
 
     private static UUID versionEvidenceForOperation(Connection connection, String operationKey) throws SQLException {
-        return evidenceForOperation(
-                connection,
-                "SELECT evidence_id FROM discord_investigation_evidence_versions WHERE operation_key = ?",
-                operationKey
-        );
+        try (PreparedStatement statement = connection.prepareStatement("""
+                SELECT evidence_id
+                FROM discord_investigation_evidence_versions
+                WHERE operation_key = ?
+                """)) {
+            statement.setString(1, operationKey);
+            return readEvidenceId(statement);
+        }
     }
 
     private static UUID contextOperationEvidence(Connection connection, String operationKey) throws SQLException {
-        return evidenceForOperation(
-                connection,
-                "SELECT evidence_id FROM discord_investigation_context_operations WHERE operation_key = ?",
-                operationKey
-        );
+        try (PreparedStatement statement = connection.prepareStatement("""
+                SELECT evidence_id
+                FROM discord_investigation_context_operations
+                WHERE operation_key = ?
+                """)) {
+            statement.setString(1, operationKey);
+            return readEvidenceId(statement);
+        }
     }
 
-    private static UUID evidenceForOperation(Connection connection, String sql, String operationKey) throws SQLException {
-        try (PreparedStatement statement = connection.prepareStatement(sql)) {
-            statement.setString(1, operationKey);
-            try (ResultSet rows = statement.executeQuery()) {
-                return rows.next() ? UuidBytes.fromBytes(rows.getBytes("evidence_id")) : null;
-            }
+    private static UUID readEvidenceId(PreparedStatement statement) throws SQLException {
+        try (ResultSet rows = statement.executeQuery()) {
+            return rows.next() ? UuidBytes.fromBytes(rows.getBytes("evidence_id")) : null;
         }
     }
 
@@ -459,10 +491,10 @@ final class JdbcDiscordInvestigationEvidenceStore {
     }
 
     private static void purgeOne(Connection connection, UUID evidenceId, Instant now) throws SQLException {
-        deleteByEvidence(connection, "DELETE FROM discord_investigation_context_operations WHERE evidence_id = ?", evidenceId);
-        deleteByEvidence(connection, "DELETE FROM discord_investigation_context WHERE evidence_id = ?", evidenceId);
-        deleteByEvidence(connection, "DELETE FROM discord_investigation_evidence_versions WHERE evidence_id = ?", evidenceId);
-        deleteByEvidence(connection, "DELETE FROM discord_investigation_evidence WHERE evidence_id = ?", evidenceId);
+        deleteContextOperations(connection, evidenceId);
+        deleteContext(connection, evidenceId);
+        deleteVersions(connection, evidenceId);
+        deleteEvidence(connection, evidenceId);
         try (PreparedStatement statement = connection.prepareStatement("""
                 UPDATE discord_evidence_metadata
                 SET metadata_json = ?, purge_state = 'PURGED', retain_until = ?, revision = revision + 1
@@ -475,8 +507,37 @@ final class JdbcDiscordInvestigationEvidenceStore {
         }
     }
 
-    private static void deleteByEvidence(Connection connection, String sql, UUID evidenceId) throws SQLException {
-        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+    private static void deleteContextOperations(Connection connection, UUID evidenceId) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement("""
+                DELETE FROM discord_investigation_context_operations WHERE evidence_id = ?
+                """)) {
+            statement.setBytes(1, UuidBytes.toBytes(evidenceId));
+            statement.executeUpdate();
+        }
+    }
+
+    private static void deleteContext(Connection connection, UUID evidenceId) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement("""
+                DELETE FROM discord_investigation_context WHERE evidence_id = ?
+                """)) {
+            statement.setBytes(1, UuidBytes.toBytes(evidenceId));
+            statement.executeUpdate();
+        }
+    }
+
+    private static void deleteVersions(Connection connection, UUID evidenceId) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement("""
+                DELETE FROM discord_investigation_evidence_versions WHERE evidence_id = ?
+                """)) {
+            statement.setBytes(1, UuidBytes.toBytes(evidenceId));
+            statement.executeUpdate();
+        }
+    }
+
+    private static void deleteEvidence(Connection connection, UUID evidenceId) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement("""
+                DELETE FROM discord_investigation_evidence WHERE evidence_id = ?
+                """)) {
             statement.setBytes(1, UuidBytes.toBytes(evidenceId));
             statement.executeUpdate();
         }
@@ -539,11 +600,6 @@ final class JdbcDiscordInvestigationEvidenceStore {
 
     private static boolean blank(String value) {
         return value == null || value.isBlank();
-    }
-
-    @FunctionalInterface
-    private interface Binder {
-        void bind(PreparedStatement statement) throws SQLException;
     }
 
     private record EvidenceCurrent(

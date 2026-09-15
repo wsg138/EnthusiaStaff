@@ -198,23 +198,56 @@ final class JdbcDiscordInvestigationNoteStore {
     }
 
     private Current byId(Connection connection, UUID noteId, boolean lock) throws SQLException {
-        return queryOne(connection, "note_id = ?", statement -> statement.setBytes(1, UuidBytes.toBytes(noteId)), lock);
+        if (lock) {
+            try (PreparedStatement statement = connection.prepareStatement("""
+                    SELECT note_id, subject_id, scope_type, scope_value, visibility, current_text,
+                           created_by, created_at, updated_by, updated_at, revision
+                    FROM discord_private_notes
+                    WHERE note_id = ?
+                    FOR UPDATE
+                    """)) {
+                statement.setBytes(1, UuidBytes.toBytes(noteId));
+                return readOne(statement);
+            }
+        }
+        try (PreparedStatement statement = connection.prepareStatement("""
+                SELECT note_id, subject_id, scope_type, scope_value, visibility, current_text,
+                       created_by, created_at, updated_by, updated_at, revision
+                FROM discord_private_notes
+                WHERE note_id = ?
+                """)) {
+            statement.setBytes(1, UuidBytes.toBytes(noteId));
+            return readOne(statement);
+        }
     }
 
     private Current byOperation(Connection connection, String operationKey, boolean lock) throws SQLException {
-        return queryOne(connection, "operation_key = ?", statement -> statement.setString(1, operationKey), lock);
+        if (lock) {
+            try (PreparedStatement statement = connection.prepareStatement("""
+                    SELECT note_id, subject_id, scope_type, scope_value, visibility, current_text,
+                           created_by, created_at, updated_by, updated_at, revision
+                    FROM discord_private_notes
+                    WHERE operation_key = ?
+                    FOR UPDATE
+                    """)) {
+                statement.setString(1, operationKey);
+                return readOne(statement);
+            }
+        }
+        try (PreparedStatement statement = connection.prepareStatement("""
+                SELECT note_id, subject_id, scope_type, scope_value, visibility, current_text,
+                       created_by, created_at, updated_by, updated_at, revision
+                FROM discord_private_notes
+                WHERE operation_key = ?
+                """)) {
+            statement.setString(1, operationKey);
+            return readOne(statement);
+        }
     }
 
-    private Current queryOne(Connection connection, String predicate, Binder binder, boolean lock) throws SQLException {
-        String suffix = lock ? " FOR UPDATE" : "";
-        String sql = "SELECT note_id, subject_id, scope_type, scope_value, visibility, current_text, "
-                + "created_by, created_at, updated_by, updated_at, revision "
-                + "FROM discord_private_notes WHERE " + predicate + suffix;
-        try (PreparedStatement statement = connection.prepareStatement(sql)) {
-            binder.bind(statement);
-            try (ResultSet rows = statement.executeQuery()) {
-                return rows.next() ? read(rows) : null;
-            }
+    private static Current readOne(PreparedStatement statement) throws SQLException {
+        try (ResultSet rows = statement.executeQuery()) {
+            return rows.next() ? read(rows) : null;
         }
     }
 
@@ -272,11 +305,6 @@ final class JdbcDiscordInvestigationNoteStore {
                 || !replay.actorId().equals(edit.actorId())) {
             throw new SQLException("Discord private note edit operation key was reused for a different request");
         }
-    }
-
-    @FunctionalInterface
-    private interface Binder {
-        void bind(PreparedStatement statement) throws SQLException;
     }
 
     private record VersionReplay(UUID noteId, String text, UUID actorId) {

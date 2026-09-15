@@ -195,33 +195,86 @@ final class JdbcDiscordInvestigationCaseStore {
     }
 
     private Current byId(Connection connection, UUID caseId, boolean lock) throws SQLException {
-        return queryOne(connection, "case_id = ?", statement -> statement.setBytes(1, UuidBytes.toBytes(caseId)), lock);
+        if (lock) {
+            try (PreparedStatement statement = connection.prepareStatement("""
+                    SELECT case_id, operation_key, subject_id, source, punishment_id, legacy_case_id,
+                           summary, state, opened_by, opened_at, last_activity_at, closed_at,
+                           punishment_ended_at, source_revision, revision
+                    FROM discord_investigation_cases
+                    WHERE case_id = ?
+                    FOR UPDATE
+                    """)) {
+                statement.setBytes(1, UuidBytes.toBytes(caseId));
+                return readOne(statement);
+            }
+        }
+        try (PreparedStatement statement = connection.prepareStatement("""
+                SELECT case_id, operation_key, subject_id, source, punishment_id, legacy_case_id,
+                       summary, state, opened_by, opened_at, last_activity_at, closed_at,
+                       punishment_ended_at, source_revision, revision
+                FROM discord_investigation_cases
+                WHERE case_id = ?
+                """)) {
+            statement.setBytes(1, UuidBytes.toBytes(caseId));
+            return readOne(statement);
+        }
     }
 
     private Current byPunishment(Connection connection, UUID punishmentId, boolean lock) throws SQLException {
-        return queryOne(
-                connection,
-                "punishment_id = ?",
-                statement -> statement.setBytes(1, UuidBytes.toBytes(punishmentId)),
-                lock
-        );
+        if (lock) {
+            try (PreparedStatement statement = connection.prepareStatement("""
+                    SELECT case_id, operation_key, subject_id, source, punishment_id, legacy_case_id,
+                           summary, state, opened_by, opened_at, last_activity_at, closed_at,
+                           punishment_ended_at, source_revision, revision
+                    FROM discord_investigation_cases
+                    WHERE punishment_id = ?
+                    FOR UPDATE
+                    """)) {
+                statement.setBytes(1, UuidBytes.toBytes(punishmentId));
+                return readOne(statement);
+            }
+        }
+        try (PreparedStatement statement = connection.prepareStatement("""
+                SELECT case_id, operation_key, subject_id, source, punishment_id, legacy_case_id,
+                       summary, state, opened_by, opened_at, last_activity_at, closed_at,
+                       punishment_ended_at, source_revision, revision
+                FROM discord_investigation_cases
+                WHERE punishment_id = ?
+                """)) {
+            statement.setBytes(1, UuidBytes.toBytes(punishmentId));
+            return readOne(statement);
+        }
     }
 
     private Current byOperation(Connection connection, String operationKey, boolean lock) throws SQLException {
-        return queryOne(connection, "operation_key = ?", statement -> statement.setString(1, operationKey), lock);
+        if (lock) {
+            try (PreparedStatement statement = connection.prepareStatement("""
+                    SELECT case_id, operation_key, subject_id, source, punishment_id, legacy_case_id,
+                           summary, state, opened_by, opened_at, last_activity_at, closed_at,
+                           punishment_ended_at, source_revision, revision
+                    FROM discord_investigation_cases
+                    WHERE operation_key = ?
+                    FOR UPDATE
+                    """)) {
+                statement.setString(1, operationKey);
+                return readOne(statement);
+            }
+        }
+        try (PreparedStatement statement = connection.prepareStatement("""
+                SELECT case_id, operation_key, subject_id, source, punishment_id, legacy_case_id,
+                       summary, state, opened_by, opened_at, last_activity_at, closed_at,
+                       punishment_ended_at, source_revision, revision
+                FROM discord_investigation_cases
+                WHERE operation_key = ?
+                """)) {
+            statement.setString(1, operationKey);
+            return readOne(statement);
+        }
     }
 
-    private Current queryOne(Connection connection, String predicate, Binder binder, boolean lock) throws SQLException {
-        String suffix = lock ? " FOR UPDATE" : "";
-        String sql = "SELECT case_id, operation_key, subject_id, source, punishment_id, legacy_case_id, "
-                + "summary, state, opened_by, opened_at, last_activity_at, closed_at, "
-                + "punishment_ended_at, source_revision, revision "
-                + "FROM discord_investigation_cases WHERE " + predicate + suffix;
-        try (PreparedStatement statement = connection.prepareStatement(sql)) {
-            binder.bind(statement);
-            try (ResultSet rows = statement.executeQuery()) {
-                return rows.next() ? read(rows) : null;
-            }
+    private static Current readOne(PreparedStatement statement) throws SQLException {
+        try (ResultSet rows = statement.executeQuery()) {
+            return rows.next() ? read(rows) : null;
         }
     }
 
@@ -284,11 +337,6 @@ final class JdbcDiscordInvestigationCaseStore {
 
     private static String truncate(String value, int limit) {
         return value.length() <= limit ? value : value.substring(0, limit);
-    }
-
-    @FunctionalInterface
-    private interface Binder {
-        void bind(PreparedStatement statement) throws SQLException;
     }
 
     private record Current(

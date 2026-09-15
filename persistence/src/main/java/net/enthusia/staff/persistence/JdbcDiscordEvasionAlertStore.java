@@ -146,22 +146,58 @@ final class JdbcDiscordEvasionAlertStore {
             Current current,
             EvasionDeliveryUpdate update
     ) throws SQLException {
-        String prefix = update.channel() == EvasionDeliveryChannel.DISCORD ? "discord" : "minecraft";
-        String sql = "UPDATE discord_evasion_alerts SET " + prefix + "_delivery = ?, "
-                + prefix + "_attempts = " + prefix + "_attempts + 1, "
-                + prefix + "_error_code = ?, " + prefix + "_next_attempt_at = ?, "
-                + "updated_at = ?, revision = revision + 1 "
-                + "WHERE alert_id = ? AND revision = ? AND state = 'OPEN'";
-        try (PreparedStatement statement = connection.prepareStatement(sql)) {
-            statement.setString(1, update.delivered() ? EvasionAlert.DeliveryState.DELIVERED.name()
-                    : EvasionAlert.DeliveryState.RETRY.name());
-            setError(statement, 2, update.errorCode());
-            setInstant(statement, 3, update.nextAttemptAt());
-            statement.setTimestamp(4, Timestamp.from(update.now()));
-            statement.setBytes(5, UuidBytes.toBytes(update.alertId()));
-            statement.setLong(6, current.revision());
-            JdbcTransactionSupport.requireSingleUpdate(statement.executeUpdate(), "linked-alt delivery revision changed");
+        if (update.channel() == EvasionDeliveryChannel.DISCORD) {
+            updateDiscordDelivery(connection, current, update);
+        } else {
+            updateMinecraftDelivery(connection, current, update);
         }
+    }
+
+    private static void updateDiscordDelivery(
+            Connection connection,
+            Current current,
+            EvasionDeliveryUpdate update
+    ) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement("""
+                UPDATE discord_evasion_alerts
+                SET discord_delivery = ?, discord_attempts = discord_attempts + 1,
+                    discord_error_code = ?, discord_next_attempt_at = ?,
+                    updated_at = ?, revision = revision + 1
+                WHERE alert_id = ? AND revision = ? AND state = 'OPEN'
+                """)) {
+            bindDeliveryUpdate(statement, current, update);
+        }
+    }
+
+    private static void updateMinecraftDelivery(
+            Connection connection,
+            Current current,
+            EvasionDeliveryUpdate update
+    ) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement("""
+                UPDATE discord_evasion_alerts
+                SET minecraft_delivery = ?, minecraft_attempts = minecraft_attempts + 1,
+                    minecraft_error_code = ?, minecraft_next_attempt_at = ?,
+                    updated_at = ?, revision = revision + 1
+                WHERE alert_id = ? AND revision = ? AND state = 'OPEN'
+                """)) {
+            bindDeliveryUpdate(statement, current, update);
+        }
+    }
+
+    private static void bindDeliveryUpdate(
+            PreparedStatement statement,
+            Current current,
+            EvasionDeliveryUpdate update
+    ) throws SQLException {
+        statement.setString(1, update.delivered() ? EvasionAlert.DeliveryState.DELIVERED.name()
+                : EvasionAlert.DeliveryState.RETRY.name());
+        setError(statement, 2, update.errorCode());
+        setInstant(statement, 3, update.nextAttemptAt());
+        statement.setTimestamp(4, Timestamp.from(update.now()));
+        statement.setBytes(5, UuidBytes.toBytes(update.alertId()));
+        statement.setLong(6, current.revision());
+        JdbcTransactionSupport.requireSingleUpdate(statement.executeUpdate(), "linked-alt delivery revision changed");
     }
 
     private Current requireById(Connection connection, UUID alertId, boolean lock) throws SQLException {
@@ -173,21 +209,42 @@ final class JdbcDiscordEvasionAlertStore {
     }
 
     private Current byId(Connection connection, UUID alertId, boolean lock) throws SQLException {
-        return queryOne(connection, "alert_id = ?", statement -> statement.setBytes(1, UuidBytes.toBytes(alertId)), lock);
+        if (lock) {
+            try (PreparedStatement statement = connection.prepareStatement("""
+                    SELECT * FROM discord_evasion_alerts WHERE alert_id = ? FOR UPDATE
+                    """)) {
+                statement.setBytes(1, UuidBytes.toBytes(alertId));
+                return readOne(statement);
+            }
+        }
+        try (PreparedStatement statement = connection.prepareStatement("""
+                SELECT * FROM discord_evasion_alerts WHERE alert_id = ?
+                """)) {
+            statement.setBytes(1, UuidBytes.toBytes(alertId));
+            return readOne(statement);
+        }
     }
 
     private Current byOperation(Connection connection, String operationKey, boolean lock) throws SQLException {
-        return queryOne(connection, "operation_key = ?", statement -> statement.setString(1, operationKey), lock);
+        if (lock) {
+            try (PreparedStatement statement = connection.prepareStatement("""
+                    SELECT * FROM discord_evasion_alerts WHERE operation_key = ? FOR UPDATE
+                    """)) {
+                statement.setString(1, operationKey);
+                return readOne(statement);
+            }
+        }
+        try (PreparedStatement statement = connection.prepareStatement("""
+                SELECT * FROM discord_evasion_alerts WHERE operation_key = ?
+                """)) {
+            statement.setString(1, operationKey);
+            return readOne(statement);
+        }
     }
 
-    private Current queryOne(Connection connection, String predicate, Binder binder, boolean lock) throws SQLException {
-        String suffix = lock ? " FOR UPDATE" : "";
-        String sql = "SELECT * FROM discord_evasion_alerts WHERE " + predicate + suffix;
-        try (PreparedStatement statement = connection.prepareStatement(sql)) {
-            binder.bind(statement);
-            try (ResultSet rows = statement.executeQuery()) {
-                return rows.next() ? read(rows) : null;
-            }
+    private static Current readOne(PreparedStatement statement) throws SQLException {
+        try (ResultSet rows = statement.executeQuery()) {
+            return rows.next() ? read(rows) : null;
         }
     }
 
@@ -242,11 +299,6 @@ final class JdbcDiscordEvasionAlertStore {
         } else {
             statement.setNull(index, Types.TIMESTAMP);
         }
-    }
-
-    @FunctionalInterface
-    private interface Binder {
-        void bind(PreparedStatement statement) throws SQLException;
     }
 
     private record Current(
