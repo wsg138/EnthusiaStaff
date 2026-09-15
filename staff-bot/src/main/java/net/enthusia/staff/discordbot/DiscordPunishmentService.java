@@ -122,7 +122,7 @@ final class DiscordPunishmentService {
     ) {
         requireGenericRemovable(type, termination);
         DiscordUserId targetUserId = discordUser(targetDiscordId);
-        StoredPunishment active = newestActive(targetUserId, type);
+        StoredPunishment active = newestInteractiveRemoval(targetUserId, type);
         return prepareRemovalConfirmation(
                 actorDiscordId, actorName, targetUserId, active, type, termination
         );
@@ -188,6 +188,7 @@ final class DiscordPunishmentService {
         if (current.punishment().state().terminal()) {
             return project(current);
         }
+        requireInteractiveRemovalCandidate(current);
         Instant now = clock.instant();
         String operationKey = "d07:remove:" + punishmentId + ":" + UUID.randomUUID();
         DiscordPunishment replacement = current.punishment().requestRemoval(draft.termination(), operationKey);
@@ -239,21 +240,37 @@ final class DiscordPunishmentService {
         }
         String normalizedScope = normalizeSnowflake(scopeId);
         List<StoredPunishment> matches = active.stream()
+                .filter(DiscordPunishmentService::interactiveRemovalCandidate)
                 .filter(stored -> stored.punishment().intent().type() == DiscordConsequenceType.CHANNEL_RESTRICTION)
                 .filter(stored -> stored.punishment().intent().restriction()
                         .map(restriction -> restriction.snowflake().equals(normalizedScope))
                         .orElse(false))
                 .toList();
         if (matches.size() != EXACT_RESTRICTION_MATCH_COUNT) {
-            throw new IllegalStateException("restriction scope does not resolve to exactly one active punishment");
+            throw new IllegalStateException("restriction scope does not resolve to exactly one removable punishment");
         }
         return matches.getFirst();
     }
 
-    private StoredPunishment newestActive(DiscordUserId targetUserId, DiscordConsequenceType type) {
+    private StoredPunishment newestInteractiveRemoval(DiscordUserId targetUserId, DiscordConsequenceType type) {
         return punishments.activeForTarget(guildId, targetUserId, type, ACTIVE_LOOKUP_LIMIT).stream()
+                .filter(DiscordPunishmentService::interactiveRemovalCandidate)
                 .findFirst()
-                .orElseThrow(() -> new IllegalStateException("no active Discord punishment matches the target and type"));
+                .orElseThrow(() -> new IllegalStateException("no removable Discord punishment matches the target and type"));
+    }
+
+    static boolean interactiveRemovalCandidate(StoredPunishment stored) {
+        if (stored == null) {
+            return false;
+        }
+        DiscordPunishmentState state = stored.punishment().state();
+        return state == DiscordPunishmentState.APPLIED || state == DiscordPunishmentState.FAILED_REMOVE;
+    }
+
+    private static void requireInteractiveRemovalCandidate(StoredPunishment stored) {
+        if (!interactiveRemovalCandidate(stored)) {
+            throw new IllegalStateException("punishment state changed before removal confirmation");
+        }
     }
 
     private Actor actor(long discordId, String name) {
