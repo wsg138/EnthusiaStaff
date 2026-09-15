@@ -8,21 +8,15 @@ import java.util.Set;
 
 final class DiscordOperationPolicy {
     private static final Map<StaffRank, Set<DiscordModerationOperation>> ALLOWED = Map.of(
-            StaffRank.HELPER, withReads(DiscordModerationOperation.ISSUE_SANCTION),
-            StaffRank.MOD, withReads(
+            StaffRank.HELPER, withReads(
                     DiscordModerationOperation.ISSUE_SANCTION,
-                    DiscordModerationOperation.END_SANCTION,
-                    DiscordModerationOperation.REVOKE_SANCTION,
-                    DiscordModerationOperation.APPROVE_SANCTION_REQUEST,
-                    DiscordModerationOperation.REQUEST_OVERTURN
+                    DiscordModerationOperation.CREATE_INVESTIGATION_CASE,
+                    DiscordModerationOperation.ADD_NOTE,
+                    DiscordModerationOperation.EDIT_NOTE,
+                    DiscordModerationOperation.CAPTURE_EVIDENCE
             ),
-            StaffRank.DEVELOPER, withReads(
-                    DiscordModerationOperation.ISSUE_SANCTION,
-                    DiscordModerationOperation.END_SANCTION,
-                    DiscordModerationOperation.REVOKE_SANCTION,
-                    DiscordModerationOperation.APPROVE_SANCTION_REQUEST,
-                    DiscordModerationOperation.REQUEST_OVERTURN
-            ),
+            StaffRank.MOD, moderatorOperations(),
+            StaffRank.DEVELOPER, moderatorOperations(),
             StaffRank.ADMIN, Set.copyOf(EnumSet.allOf(DiscordModerationOperation.class)),
             StaffRank.FOUNDER, Set.copyOf(EnumSet.allOf(DiscordModerationOperation.class)),
             StaffRank.SYSTEM, Set.of()
@@ -57,6 +51,21 @@ final class DiscordOperationPolicy {
         return isProtected(actor.rank(), target.rank())
                 ? DiscordAuthorizationDecision.deny(DiscordAuthorizationDenial.TARGET_STAFF_PROTECTED)
                 : DiscordAuthorizationDecision.allow(Set.of());
+    }
+
+    private static Set<DiscordModerationOperation> moderatorOperations() {
+        return withReads(
+                DiscordModerationOperation.ISSUE_SANCTION,
+                DiscordModerationOperation.END_SANCTION,
+                DiscordModerationOperation.REVOKE_SANCTION,
+                DiscordModerationOperation.APPROVE_SANCTION_REQUEST,
+                DiscordModerationOperation.REQUEST_OVERTURN,
+                DiscordModerationOperation.CREATE_INVESTIGATION_CASE,
+                DiscordModerationOperation.ADD_NOTE,
+                DiscordModerationOperation.EDIT_NOTE,
+                DiscordModerationOperation.CAPTURE_EVIDENCE,
+                DiscordModerationOperation.RESOLVE_EVASION_ALERT
+        );
     }
 
     private static boolean isProtected(StaffRank actor, StaffRank target) {

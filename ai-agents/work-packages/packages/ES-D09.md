@@ -1,6 +1,10 @@
 # ES-D09 — Discord evidence, cases, notes and linked-alt alerts
 
-Status: `PLANNED`. Priority: 138. Depends on `ES-D06`, `ES-D07`. Internal package.
+Status: `ACTIVE`. Priority: 138. Depends on `ES-D06`, `ES-D07`. Internal package.
+
+Starting `main`: `741c77bb4e82413715e7fdd5eb9c0be0beeea407`.
+Branch: `package/es-d09-discord-investigations`.
+Reserved migration: `V22__discord_investigation_state.sql`; live `main` ends at V20 and concurrent ES-X03 PR #139 already owns branch-local V21, so D09 must not claim V21.
 
 ## Objective
 Complete Discord investigation state on the same authoritative case/audit system.
@@ -13,3 +17,11 @@ Linked accounts/evidence are private staff data. Copy/validate evidence into Ent
 
 ## Validation
 Retention/expiry/edit-history/case inactivity/evasion alert tests, privacy/redaction, restart/idempotency, bounded context capture and full CI/review.
+
+## Activation checkpoint — 2026-09-15
+
+Live reconciliation confirmed D06 and D07 are complete and D09 is the only dependency-complete READY package in the dedicated Discord lane. D08 remains ineligible because its separate Minecraft integration-readiness proof is absent. D13 remains `BLOCKED` / `PARKED_BLOCKED` on PR #178 and is not touched.
+
+Concurrent collision preflight preserved PR #199 Paper staff-menu work and PR #139 / ES-X03 Market work. PR #199 reports no persistence/schema changes; D09 avoids its staff-tools implementation paths. Live X03 has already serialized its Market migration as V21, so D09 reserves V22 and does not modify or absorb X03. The disposable D07 tooling branch remains unrelated and unmerged.
+
+Issue #43 remains open/deferred. This package does not authorize production Discord mutation, production data access, LiteBans authority change, deployment, or cutover.
