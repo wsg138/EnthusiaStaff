@@ -212,12 +212,10 @@ final class JdbcDiscordInvestigationCaseStore {
 
     private Current queryOne(Connection connection, String predicate, Binder binder, boolean lock) throws SQLException {
         String suffix = lock ? " FOR UPDATE" : "";
-        String sql = """
-                SELECT case_id, operation_key, subject_id, source, punishment_id, legacy_case_id,
-                       summary, state, opened_by, opened_at, last_activity_at, closed_at,
-                       punishment_ended_at, source_revision, revision
-                FROM discord_investigation_cases
-                WHERE """ + predicate + suffix;
+        String sql = "SELECT case_id, operation_key, subject_id, source, punishment_id, legacy_case_id, "
+                + "summary, state, opened_by, opened_at, last_activity_at, closed_at, "
+                + "punishment_ended_at, source_revision, revision "
+                + "FROM discord_investigation_cases WHERE " + predicate + suffix;
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
             binder.bind(statement);
             try (ResultSet rows = statement.executeQuery()) {

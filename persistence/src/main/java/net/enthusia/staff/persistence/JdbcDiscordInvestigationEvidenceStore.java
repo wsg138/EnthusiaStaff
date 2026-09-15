@@ -378,12 +378,11 @@ final class JdbcDiscordInvestigationEvidenceStore {
             boolean lock
     ) throws SQLException {
         String suffix = lock ? " FOR UPDATE" : "";
-        String sql = """
-                SELECT m.evidence_id, m.subject_id, m.guild_id, m.channel_id, m.message_id,
-                       m.captured_at, e.investigation_case_id, e.last_observed_at, e.revision
-                FROM discord_evidence_metadata m
-                JOIN discord_investigation_evidence e ON e.evidence_id = m.evidence_id
-                WHERE """ + predicate + suffix;
+        String sql = "SELECT m.evidence_id, m.subject_id, m.guild_id, m.channel_id, m.message_id, "
+                + "m.captured_at, e.investigation_case_id, e.last_observed_at, e.revision "
+                + "FROM discord_evidence_metadata m "
+                + "JOIN discord_investigation_evidence e ON e.evidence_id = m.evidence_id "
+                + "WHERE " + predicate + suffix;
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
             binder.bind(statement);
             try (ResultSet rows = statement.executeQuery()) {

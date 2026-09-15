@@ -194,11 +194,9 @@ final class JdbcDiscordInvestigationNoteStore {
 
     private Current queryOne(Connection connection, String predicate, Binder binder, boolean lock) throws SQLException {
         String suffix = lock ? " FOR UPDATE" : "";
-        String sql = """
-                SELECT note_id, subject_id, scope_type, scope_value, visibility, current_text,
-                       created_by, created_at, updated_by, updated_at, revision
-                FROM discord_private_notes
-                WHERE """ + predicate + suffix;
+        String sql = "SELECT note_id, subject_id, scope_type, scope_value, visibility, current_text, "
+                + "created_by, created_at, updated_by, updated_at, revision "
+                + "FROM discord_private_notes WHERE " + predicate + suffix;
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
             binder.bind(statement);
             try (ResultSet rows = statement.executeQuery()) {
