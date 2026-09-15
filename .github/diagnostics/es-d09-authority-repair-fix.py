@@ -17,7 +17,7 @@ def drop_replace_call(marker: str) -> None:
     if start < 0:
         raise SystemExit(f"unable to find replace_once start for {marker!r}")
     end = marker_index
-    while end < len(lines) and lines[end].strip() != ")":
+    while end < len(lines) and not lines[end].rstrip().endswith(")"):
         end += 1
     if end >= len(lines):
         raise SystemExit(f"unable to find replace_once end for {marker!r}")
