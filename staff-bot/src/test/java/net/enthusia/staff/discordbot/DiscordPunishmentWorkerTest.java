@@ -34,6 +34,8 @@ import org.junit.jupiter.api.Test;
 
 class DiscordPunishmentWorkerTest {
     private static final Instant NOW = Instant.parse("2026-09-14T20:00:00Z");
+    private static final String REMOVE_OPERATION = "remove";
+    private static final String TARGET_NOT_IN_GUILD_ERROR = "TARGET_NOT_IN_GUILD";
 
     @Test
     void successfulWarningBecomesCompletedWithoutFollowUpWork() {
@@ -148,7 +150,7 @@ class DiscordPunishmentWorkerTest {
 
     @Test
     void nonRetryableRemovalFailureIsDurablyVisible() {
-        DiscordPunishment initial = appliedMute().requestRemoval(DiscordPunishmentTermination.END, "remove");
+        DiscordPunishment initial = appliedMute().requestRemoval(DiscordPunishmentTermination.END, REMOVE_OPERATION);
         FakeRepository repository = new FakeRepository(initial);
         FakeGateway gateway = new FakeGateway();
         gateway.removeFailure = new DiscordPunishmentGateway.EffectException("HIERARCHY", false);
@@ -163,7 +165,7 @@ class DiscordPunishmentWorkerTest {
 
     @Test
     void removalSuccessRemainsTerminalWhenNotificationFails() {
-        DiscordPunishment initial = appliedMute().requestRemoval(DiscordPunishmentTermination.END, "remove");
+        DiscordPunishment initial = appliedMute().requestRemoval(DiscordPunishmentTermination.END, REMOVE_OPERATION);
         FakeRepository repository = new FakeRepository(initial);
         FakeGateway gateway = new FakeGateway();
         gateway.removalDelivery = DiscordDeliveryOutcome.FAILED_TERMINAL;
@@ -208,7 +210,7 @@ class DiscordPunishmentWorkerTest {
     @Test
     void removalNotificationRetryExhaustionDoesNotUndoSuccessfulReversal() {
         DiscordPunishment initial = appliedMute()
-                .requestRemoval(DiscordPunishmentTermination.END, "remove")
+                .requestRemoval(DiscordPunishmentTermination.END, REMOVE_OPERATION)
                 .markRemoved("removed")
                 .withRemovalDeliveryOutcome(
                         DiscordDeliveryOutcome.FAILED_RETRYABLE,
@@ -275,6 +277,62 @@ class DiscordPunishmentWorkerTest {
     }
 
     @Test
+    void retryableApplyFailureRemainsRecoverablePastAttemptLimit() {
+        FakeRepository repository = new FakeRepository(punishment(mute(Duration.ofHours(1)), NOW));
+        FakeGateway gateway = new FakeGateway();
+        gateway.applyFailure = new DiscordPunishmentGateway.EffectException(
+                "MUTE_ROLE_OWNERSHIP_UNVERIFIED", true
+        );
+        repository.enqueue(WorkType.APPLY, NOW, 5);
+
+        newWorker(repository, gateway).runCycle();
+
+        assertEquals(DiscordPunishmentState.RETRY_APPLY, repository.current.punishment().state());
+        assertEquals(Optional.of("MUTE_ROLE_OWNERSHIP_UNVERIFIED"),
+                repository.current.punishment().lastErrorCode());
+        assertEquals(1, repository.work.size());
+        assertEquals(WorkType.APPLY, repository.work.peek().type());
+        assertTrue(repository.work.peek().dueAt().isAfter(NOW));
+    }
+
+    @Test
+    void absentRestrictionRemovalRemainsRecoverablePastAttemptLimit() {
+        DiscordPunishment initial = appliedRestriction()
+                .requestRemoval(DiscordPunishmentTermination.END, REMOVE_OPERATION);
+        FakeRepository repository = new FakeRepository(initial);
+        FakeGateway gateway = new FakeGateway();
+        gateway.removeFailure = new DiscordPunishmentGateway.EffectException(TARGET_NOT_IN_GUILD_ERROR, true);
+        repository.enqueue(WorkType.REMOVE, NOW, 5);
+
+        newWorker(repository, gateway).runCycle();
+
+        assertEquals(DiscordPunishmentState.RETRY_REMOVE, repository.current.punishment().state());
+        assertTrue(repository.current.punishment().externalApplied());
+        assertEquals(Optional.of(TARGET_NOT_IN_GUILD_ERROR), repository.current.punishment().lastErrorCode());
+        assertEquals(1, repository.work.size());
+        assertEquals(WorkType.REMOVE, repository.work.peek().type());
+        assertTrue(repository.work.peek().dueAt().isAfter(NOW));
+    }
+
+    @Test
+    void restrictionDriftRemainsObservableAndScheduled() {
+        FakeRepository repository = new FakeRepository(appliedRestriction());
+        FakeGateway gateway = new FakeGateway();
+        gateway.reconcileFailure = new DiscordPunishmentGateway.EffectException(
+                "RESTRICTION_STATE_CHANGED", false
+        );
+        repository.enqueue(WorkType.RECONCILE, NOW, 1);
+
+        newWorker(repository, gateway).runCycle();
+
+        assertEquals(DiscordPunishmentState.APPLIED, repository.current.punishment().state());
+        assertEquals(Optional.of("RESTRICTION_STATE_CHANGED"), repository.current.punishment().lastErrorCode());
+        assertEquals(1, repository.work.size());
+        assertEquals(WorkType.RECONCILE, repository.work.peek().type());
+        assertEquals(NOW.plus(Duration.ofMinutes(1)), repository.work.peek().dueAt());
+    }
+
+    @Test
     void nativeBanReconciliationConflictRemainsObservableWithoutMutationLoop() {
         DiscordPunishment initial = punishment(ban(Duration.ofHours(1)), NOW).withProcessingResult(
                 DiscordPunishmentState.APPLIED,
@@ -305,14 +363,14 @@ class DiscordPunishmentWorkerTest {
     void absentMemberReconciliationRemainsScheduledForRejoinRecovery() {
         FakeRepository repository = new FakeRepository(appliedMute());
         FakeGateway gateway = new FakeGateway();
-        gateway.reconcileFailure = new DiscordPunishmentGateway.EffectException("TARGET_NOT_IN_GUILD", false);
+        gateway.reconcileFailure = new DiscordPunishmentGateway.EffectException(TARGET_NOT_IN_GUILD_ERROR, false);
         repository.enqueue(WorkType.RECONCILE, NOW, 1);
 
         newWorker(repository, gateway).runCycle();
 
         assertEquals(DiscordPunishmentState.APPLIED, repository.current.punishment().state());
         assertTrue(repository.current.punishment().externalApplied());
-        assertEquals(Optional.of("TARGET_NOT_IN_GUILD"), repository.current.punishment().lastErrorCode());
+        assertEquals(Optional.of(TARGET_NOT_IN_GUILD_ERROR), repository.current.punishment().lastErrorCode());
         assertEquals(1, gateway.reconcileCalls);
         assertEquals(1, repository.work.size());
         assertEquals(WorkType.RECONCILE, repository.work.peek().type());
@@ -335,6 +393,17 @@ class DiscordPunishmentWorkerTest {
                 DiscordDeliveryOutcome.DELIVERED,
                 true,
                 Optional.empty(),
+                Optional.empty(),
+                "applied"
+        );
+    }
+
+    private static DiscordPunishment appliedRestriction() {
+        return punishment(restriction(), NOW).withProcessingResult(
+                DiscordPunishmentState.APPLIED,
+                DiscordDeliveryOutcome.DELIVERED,
+                true,
+                Optional.of(DiscordPermissionSnapshot.absent()),
                 Optional.empty(),
                 "applied"
         );

@@ -34,7 +34,8 @@ final class DiscordPunishmentWorker {
             "DISCORD_HIERARCHY_DENIED",
             "MUTE_ROLE_UNAVAILABLE",
             "MUTE_ROLE_HIERARCHY_DENIED",
-            "RECONCILE_PERMISSION_DENIED"
+            "RECONCILE_PERMISSION_DENIED",
+            "RESTRICTION_STATE_CHANGED"
     );
 
     private final DiscordPunishmentRepository repository;
@@ -286,7 +287,7 @@ final class DiscordPunishmentWorker {
             StoredPunishment stored,
             DiscordPunishmentGateway.EffectException failure
     ) {
-        boolean retry = failure.retryable() && work.attemptCount() < MAX_ATTEMPTS;
+        boolean retry = failure.retryable();
         DiscordPunishmentState state = retry
                 ? DiscordPunishmentState.RETRY_APPLY
                 : DiscordPunishmentState.FAILED_APPLY;
@@ -306,7 +307,7 @@ final class DiscordPunishmentWorker {
             StoredPunishment stored,
             DiscordPunishmentGateway.EffectException failure
     ) {
-        boolean retry = failure.retryable() && work.attemptCount() < MAX_ATTEMPTS;
+        boolean retry = failure.retryable();
         DiscordPunishmentState state = retry
                 ? DiscordPunishmentState.RETRY_REMOVE
                 : DiscordPunishmentState.FAILED_REMOVE;

@@ -43,6 +43,7 @@ final class JdaDiscordPunishmentGateway implements DiscordPunishmentGateway {
     private static final long NO_ACCESS_MASK = Permission.getRaw(Permission.VIEW_CHANNEL);
     private static final String UNKNOWN_MEMBER = "UNKNOWN_MEMBER";
     private static final String UNKNOWN_USER = "UNKNOWN_USER";
+    private static final String TARGET_NOT_IN_GUILD = "TARGET_NOT_IN_GUILD";
     private static final String UNSUPPORTED_CONSEQUENCE = "UNSUPPORTED_CONSEQUENCE";
 
     private final DiscordPunishmentConfiguration configuration;
@@ -83,7 +84,7 @@ final class JdaDiscordPunishmentGateway implements DiscordPunishmentGateway {
             Guild guild = guild(guildId);
             Member member = memberOrNull(guild, target);
             if (intent.type() != DiscordConsequenceType.BAN && member == null) {
-                throw failure("TARGET_NOT_IN_GUILD", false);
+                throw failure(TARGET_NOT_IN_GUILD, false);
             }
             if (member != null) {
                 requireHierarchy(guild, member);
@@ -252,7 +253,7 @@ final class JdaDiscordPunishmentGateway implements DiscordPunishmentGateway {
 
     private void requireMuteAvailable(Guild guild, Member member) {
         if (member == null) {
-            throw failure("TARGET_NOT_IN_GUILD", false);
+            throw failure(TARGET_NOT_IN_GUILD, false);
         }
         Role role = requireMuteRole(guild);
         muteOwnership.requirePermissions(guild);
@@ -306,7 +307,7 @@ final class JdaDiscordPunishmentGateway implements DiscordPunishmentGateway {
     private void removeRestriction(Guild guild, DiscordPunishment punishment) {
         Member member = memberOrNull(guild, punishment.targetUserId());
         if (member == null) {
-            return;
+            throw failure(TARGET_NOT_IN_GUILD, true);
         }
         DiscordRestrictionTarget target = punishment.intent().restriction().orElseThrow();
         IPermissionContainer container = restrictionContainer(guild, target);
@@ -398,7 +399,7 @@ final class JdaDiscordPunishmentGateway implements DiscordPunishmentGateway {
     private Member memberRequired(Guild guild, DiscordUserId target) {
         Member member = memberOrNull(guild, target);
         if (member == null) {
-            throw failure("TARGET_NOT_IN_GUILD", false);
+            throw failure(TARGET_NOT_IN_GUILD, false);
         }
         return member;
     }

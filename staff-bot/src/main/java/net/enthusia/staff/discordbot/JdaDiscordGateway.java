@@ -20,6 +20,7 @@ import net.dv8tion.jda.api.events.session.ShutdownEvent;
 import net.dv8tion.jda.api.hooks.ListenerAdapter;
 import net.dv8tion.jda.api.utils.ChunkingFilter;
 import net.dv8tion.jda.api.utils.MemberCachePolicy;
+import net.dv8tion.jda.api.utils.cache.CacheFlag;
 
 /** JDA 6.5 adapter. JDA owns Discord REST bucket/global rate limits and Gateway reconnect scheduling. */
 final class JdaDiscordGateway implements DiscordGateway {
@@ -76,6 +77,7 @@ final class JdaDiscordGateway implements DiscordGateway {
 
     private JDABuilder baseBuilder(SessionListener listener) {
         return JDABuilder.createLight(configuration.discordToken(), Set.of())
+                .enableCache(requiredCacheFlags())
                 .setMemberCachePolicy(MemberCachePolicy.NONE)
                 .setChunkingFilter(ChunkingFilter.NONE)
                 .setAutoReconnect(true)
@@ -170,6 +172,10 @@ final class JdaDiscordGateway implements DiscordGateway {
             current = jda;
         }
         return current == null || current.awaitShutdown(timeout.toMillis(), TimeUnit.MILLISECONDS);
+    }
+
+    static Set<CacheFlag> requiredCacheFlags() {
+        return Set.of(CacheFlag.MEMBER_OVERRIDES);
     }
 
     static final class CallbackFence {
