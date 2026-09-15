@@ -181,6 +181,24 @@ final class DiscordPunishmentCommandController {
                 type,
                 DiscordPunishmentTermination.END
         );
+        return preparedRemoval(confirmation, type);
+    }
+
+    Prepared unrestrict(long actorId, String actorName, long targetId, String scopeId) {
+        DiscordPunishmentService.Confirmation confirmation = service.prepareRestrictionRemoval(
+                actorId,
+                actorName,
+                targetId,
+                scopeId,
+                DiscordPunishmentTermination.END
+        );
+        return preparedRemoval(confirmation, DiscordConsequenceType.CHANNEL_RESTRICTION);
+    }
+
+    private static Prepared preparedRemoval(
+            DiscordPunishmentService.Confirmation confirmation,
+            DiscordConsequenceType type
+    ) {
         return new Prepared(
                 "Confirm ending the active Discord " + display(type) + " for <@" + confirmation.targetUserId() + ">.",
                 CONFIRM_REMOVE_PREFIX + confirmation.token()

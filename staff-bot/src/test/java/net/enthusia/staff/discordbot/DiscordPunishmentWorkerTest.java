@@ -231,6 +231,36 @@ class DiscordPunishmentWorkerTest {
     }
 
     @Test
+    void cycleClaimsOnlyOneBlockingDiscordWorkItem() {
+        FakeRepository repository = new FakeRepository(punishment(warning(), NOW));
+        FakeGateway gateway = new FakeGateway();
+        repository.enqueue(WorkType.APPLY, NOW, 1);
+        repository.enqueue(WorkType.APPLY, NOW, 1);
+
+        int claimed = newWorker(repository, gateway).runCycle();
+
+        assertEquals(1, claimed);
+        assertEquals(1, repository.work.size());
+        assertEquals(1, gateway.notifyAppliedCalls);
+    }
+
+    @Test
+    void recoverablePermissionConfigurationUsesPeriodicReconciliation() {
+        FakeRepository repository = new FakeRepository(appliedMute());
+        FakeGateway gateway = new FakeGateway();
+        gateway.reconcileFailure = new DiscordPunishmentGateway.EffectException(
+                "RECONCILE_PERMISSION_DENIED", false
+        );
+        repository.enqueue(WorkType.RECONCILE, NOW, 1);
+
+        newWorker(repository, gateway).runCycle();
+
+        assertEquals(1, repository.work.size());
+        assertEquals(WorkType.RECONCILE, repository.work.peek().type());
+        assertEquals(NOW.plus(Duration.ofMinutes(1)), repository.work.peek().dueAt());
+    }
+
+    @Test
     void nativeBanReconciliationConflictRemainsObservableWithoutMutationLoop() {
         DiscordPunishment initial = punishment(ban(Duration.ofHours(1)), NOW).withProcessingResult(
                 DiscordPunishmentState.APPLIED,

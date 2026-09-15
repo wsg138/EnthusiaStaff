@@ -222,8 +222,8 @@ final class JdaStaffModerationListener extends ListenerAdapter {
                     option(event, SCOPE_ID_OPTION, ""),
                     option(event, MODE_OPTION, "")
             );
-            case UNRESTRICT -> () -> punishment.remove(
-                    actorId, actorName, targetId, DiscordConsequenceType.CHANNEL_RESTRICTION);
+            case UNRESTRICT -> () -> punishment.unrestrict(
+                    actorId, actorName, targetId, option(event, SCOPE_ID_OPTION, ""));
             default -> throw new IllegalArgumentException("not a Discord punishment command");
         };
     }
@@ -581,7 +581,7 @@ final class JdaStaffModerationListener extends ListenerAdapter {
                 banSlash(discovery),
                 removalSlash(UNBAN, "End the active Discord ban", discovery),
                 restrictSlash(discovery),
-                removalSlash(UNRESTRICT, "End the active Discord restriction", discovery)
+                restrictionRemovalSlash(discovery)
         );
     }
 
@@ -623,6 +623,15 @@ final class JdaStaffModerationListener extends ListenerAdapter {
                         stringOption(MODE_OPTION, "read-only or no-access", true),
                         stringOption(REASON_OPTION, "Public punishment reason", true),
                         stringOption(EXPLANATION_OPTION, "Private staff explanation", false)
+                )
+                .setDefaultPermissions(discovery);
+    }
+
+    private static CommandData restrictionRemovalSlash(DefaultMemberPermissions discovery) {
+        return Commands.slash(UNRESTRICT, "End a Discord restriction on one exact scope")
+                .addOptions(
+                        userOption(),
+                        stringOption(SCOPE_ID_OPTION, "Exact Discord channel/category ID", true)
                 )
                 .setDefaultPermissions(discovery);
     }

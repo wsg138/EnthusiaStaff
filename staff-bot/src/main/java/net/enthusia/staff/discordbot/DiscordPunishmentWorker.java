@@ -6,6 +6,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import net.enthusia.staff.domain.auth.DiscordConsequenceType;
 import net.enthusia.staff.domain.discord.DiscordDeliveryOutcome;
 import net.enthusia.staff.domain.discord.DiscordPermissionSnapshot;
@@ -20,13 +21,21 @@ import net.enthusia.staff.domain.ports.DiscordPunishmentRepository.WorkType;
 
 /** Leased D07 worker; every external effect is driven by durable intent and settled transactionally. */
 final class DiscordPunishmentWorker {
-    private static final int CLAIM_LIMIT = 20;
+    private static final int CLAIM_LIMIT = 1;
     private static final int MAX_ATTEMPTS = 5;
     private static final Duration LEASE = Duration.ofSeconds(45);
     private static final Duration BASE_RETRY = Duration.ofSeconds(5);
     private static final Duration MAX_RETRY = Duration.ofMinutes(5);
     private static final String NATIVE_BAN_OWNERSHIP_CONFLICT = "NATIVE_BAN_OWNERSHIP_CONFLICT";
     private static final String TARGET_NOT_IN_GUILD = "TARGET_NOT_IN_GUILD";
+    private static final Set<String> PERIODIC_RECONCILIATION_ERRORS = Set.of(
+            NATIVE_BAN_OWNERSHIP_CONFLICT,
+            TARGET_NOT_IN_GUILD,
+            "DISCORD_HIERARCHY_DENIED",
+            "MUTE_ROLE_UNAVAILABLE",
+            "MUTE_ROLE_HIERARCHY_DENIED",
+            "RECONCILE_PERMISSION_DENIED"
+    );
 
     private final DiscordPunishmentRepository repository;
     private final DiscordPunishmentGateway gateway;
@@ -254,7 +263,7 @@ final class DiscordPunishmentWorker {
     }
 
     private static boolean keepsPeriodicReconciliation(String errorCode) {
-        return NATIVE_BAN_OWNERSHIP_CONFLICT.equals(errorCode) || TARGET_NOT_IN_GUILD.equals(errorCode);
+        return PERIODIC_RECONCILIATION_ERRORS.contains(errorCode);
     }
 
     private DiscordPunishment reconciled(

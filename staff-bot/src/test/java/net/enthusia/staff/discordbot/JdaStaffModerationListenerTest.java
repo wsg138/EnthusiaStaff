@@ -8,6 +8,7 @@ import java.util.stream.Collectors;
 import net.dv8tion.jda.api.interactions.commands.Command;
 import net.dv8tion.jda.api.interactions.commands.DefaultMemberPermissions;
 import net.dv8tion.jda.api.interactions.commands.build.CommandData;
+import net.dv8tion.jda.api.interactions.commands.build.SlashCommandData;
 import org.junit.jupiter.api.Test;
 
 class JdaStaffModerationListenerTest {
@@ -44,6 +45,19 @@ class JdaStaffModerationListenerTest {
         )));
         assertTrue(commands.stream().allMatch(command ->
                 DefaultMemberPermissions.DISABLED.equals(command.getDefaultPermissions())));
+    }
+
+    @Test
+    void unrestrictRequiresExactScopeId() {
+        SlashCommandData unrestrict = (SlashCommandData) command(
+                JdaStaffModerationListener.commands(true), "unrestrict"
+        );
+
+        assertEquals(
+                java.util.List.of("user", "scope-id"),
+                unrestrict.getOptions().stream().map(option -> option.getName()).toList()
+        );
+        assertTrue(unrestrict.getOptions().stream().allMatch(option -> option.isRequired()));
     }
 
     private static Set<String> names(java.util.List<CommandData> commands) {

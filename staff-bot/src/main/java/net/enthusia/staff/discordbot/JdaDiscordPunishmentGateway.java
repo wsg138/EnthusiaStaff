@@ -48,6 +48,7 @@ final class JdaDiscordPunishmentGateway implements DiscordPunishmentGateway {
 
     private final DiscordPunishmentConfiguration configuration;
     private final JdaNativeBanEnforcer nativeBans = new JdaNativeBanEnforcer();
+    private final JdaMuteRoleOwnership muteOwnership = new JdaMuteRoleOwnership();
     private final JdaPunishmentNotifier notifier;
     private final AtomicReference<JDA> jda = new AtomicReference<>();
 
@@ -212,11 +213,17 @@ final class JdaDiscordPunishmentGateway implements DiscordPunishmentGateway {
         Member member = memberRequired(guild, target);
         requireHierarchy(guild, member);
         Role role = requireMuteRole(guild);
-        requireMuteRoleUnowned(member.getRoles().contains(role));
+        muteOwnership.requirePermissions(guild);
+        boolean rolePresent = member.getRoles().contains(role);
+        if (rolePresent) {
+            muteOwnership.requireOwnedApplyRetry(guild, punishment);
+        }
         ensureMutePolicy(guild);
-        guild.addRoleToMember(UserSnowflake.fromId(target.value()), role)
-                .reason(auditReason(punishment))
-                .complete();
+        if (!rolePresent) {
+            guild.addRoleToMember(UserSnowflake.fromId(target.value()), role)
+                    .reason(muteOwnership.auditReason(punishment))
+                    .complete();
+        }
     }
 
     private void reconcileMute(Guild guild, DiscordUserId target) {
@@ -249,13 +256,8 @@ final class JdaDiscordPunishmentGateway implements DiscordPunishmentGateway {
             throw failure("TARGET_NOT_IN_GUILD", false);
         }
         Role role = requireMuteRole(guild);
-        requireMuteRoleUnowned(member.getRoles().contains(role));
-    }
-
-    static void requireMuteRoleUnowned(boolean rolePresent) {
-        if (rolePresent) {
-            throw failure("MUTE_ROLE_ALREADY_PRESENT", false);
-        }
+        muteOwnership.requirePermissions(guild);
+        JdaMuteRoleOwnership.requireFreshRoleAbsent(member.getRoles().contains(role));
     }
 
     private void ensureMutePolicy(Guild guild) {

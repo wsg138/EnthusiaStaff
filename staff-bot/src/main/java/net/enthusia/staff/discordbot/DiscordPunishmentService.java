@@ -25,7 +25,9 @@ import net.enthusia.staff.domain.ports.DiscordPunishmentRepository.WorkType;
 
 /** D07 orchestration: validation/authorization first, durable intent second, Discord effects only in the worker. */
 final class DiscordPunishmentService {
-    private static final int ACTIVE_LOOKUP_LIMIT = 20;
+    private static final int ACTIVE_LOOKUP_LIMIT = 500;
+    private static final int EXACT_RESTRICTION_MATCH_COUNT = 1;
+    private static final long INVALID_SNOWFLAKE = 0L;
 
     record Confirmation(UUID token, DiscordConsequenceType type, String targetUserId, String duration) {
     }
@@ -118,9 +120,42 @@ final class DiscordPunishmentService {
             DiscordConsequenceType type,
             DiscordPunishmentTermination termination
     ) {
-        requireRemovable(type, termination);
+        requireGenericRemovable(type, termination);
         DiscordUserId targetUserId = discordUser(targetDiscordId);
         StoredPunishment active = newestActive(targetUserId, type);
+        return prepareRemovalConfirmation(
+                actorDiscordId, actorName, targetUserId, active, type, termination
+        );
+    }
+
+    Confirmation prepareRestrictionRemoval(
+            long actorDiscordId,
+            String actorName,
+            long targetDiscordId,
+            String scopeId,
+            DiscordPunishmentTermination termination
+    ) {
+        requireInteractiveTermination(termination);
+        DiscordUserId targetUserId = discordUser(targetDiscordId);
+        StoredPunishment active = exactActiveRestriction(targetUserId, scopeId);
+        return prepareRemovalConfirmation(
+                actorDiscordId,
+                actorName,
+                targetUserId,
+                active,
+                DiscordConsequenceType.CHANNEL_RESTRICTION,
+                termination
+        );
+    }
+
+    private Confirmation prepareRemovalConfirmation(
+            long actorDiscordId,
+            String actorName,
+            DiscordUserId targetUserId,
+            StoredPunishment active,
+            DiscordConsequenceType type,
+            DiscordPunishmentTermination termination
+    ) {
         StaffModerationReadService.Target target = reads.discordTarget(targetUserId);
         Actor actor = actor(actorDiscordId, actorName);
         DiscordAuthorizationSnapshot snapshot = authorization.captureMutation(
@@ -188,6 +223,33 @@ final class DiscordPunishmentService {
         );
     }
 
+    private StoredPunishment exactActiveRestriction(DiscordUserId targetUserId, String scopeId) {
+        List<StoredPunishment> active = punishments.activeForTarget(
+                guildId,
+                targetUserId,
+                DiscordConsequenceType.CHANNEL_RESTRICTION,
+                ACTIVE_LOOKUP_LIMIT
+        );
+        return selectExactRestriction(active, scopeId);
+    }
+
+    static StoredPunishment selectExactRestriction(List<StoredPunishment> active, String scopeId) {
+        if (active == null) {
+            throw new IllegalArgumentException("active restrictions must be present");
+        }
+        String normalizedScope = normalizeSnowflake(scopeId);
+        List<StoredPunishment> matches = active.stream()
+                .filter(stored -> stored.punishment().intent().type() == DiscordConsequenceType.CHANNEL_RESTRICTION)
+                .filter(stored -> stored.punishment().intent().restriction()
+                        .map(restriction -> restriction.snowflake().equals(normalizedScope))
+                        .orElse(false))
+                .toList();
+        if (matches.size() != EXACT_RESTRICTION_MATCH_COUNT) {
+            throw new IllegalStateException("restriction scope does not resolve to exactly one active punishment");
+        }
+        return matches.getFirst();
+    }
+
     private StoredPunishment newestActive(DiscordUserId targetUserId, DiscordConsequenceType type) {
         return punishments.activeForTarget(guildId, targetUserId, type, ACTIVE_LOOKUP_LIMIT).stream()
                 .findFirst()
@@ -202,16 +264,35 @@ final class DiscordPunishmentService {
         return new DiscordUserId(Long.toUnsignedString(id));
     }
 
-    private static void requireRemovable(
+    private static void requireGenericRemovable(
             DiscordConsequenceType type,
             DiscordPunishmentTermination termination
     ) {
-        if (type == null || termination == null || termination == DiscordPunishmentTermination.NONE
-                || termination == DiscordPunishmentTermination.EXPIRE
-                || (type != DiscordConsequenceType.MUTE
-                    && type != DiscordConsequenceType.BAN
-                    && type != DiscordConsequenceType.CHANNEL_RESTRICTION)) {
+        requireInteractiveTermination(termination);
+        if (type != DiscordConsequenceType.MUTE && type != DiscordConsequenceType.BAN) {
+            throw new IllegalArgumentException("generic removal only supports mute or ban");
+        }
+    }
+
+    private static void requireInteractiveTermination(DiscordPunishmentTermination termination) {
+        if (termination == null || termination == DiscordPunishmentTermination.NONE
+                || termination == DiscordPunishmentTermination.EXPIRE) {
             throw new IllegalArgumentException("interactive removal request is invalid");
+        }
+    }
+
+    private static String normalizeSnowflake(String value) {
+        if (value == null || value.isBlank()) {
+            throw new IllegalArgumentException("restriction scope id is required");
+        }
+        try {
+            long parsed = Long.parseUnsignedLong(value.trim());
+            if (parsed == INVALID_SNOWFLAKE) {
+                throw new IllegalArgumentException("restriction scope id must be positive");
+            }
+            return Long.toUnsignedString(parsed);
+        } catch (NumberFormatException failure) {
+            throw new IllegalArgumentException("restriction scope id must be an unsigned Discord snowflake", failure);
         }
     }
 
