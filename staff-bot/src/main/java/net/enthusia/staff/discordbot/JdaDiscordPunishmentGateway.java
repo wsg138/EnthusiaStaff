@@ -41,13 +41,13 @@ final class JdaDiscordPunishmentGateway implements DiscordPunishmentGateway {
             Permission.MESSAGE_ATTACH_FILES
     );
     private static final long NO_ACCESS_MASK = Permission.getRaw(Permission.VIEW_CHANNEL);
-    private static final int MAX_AUDIT_REASON = 500;
     private static final String UNKNOWN_MEMBER = "UNKNOWN_MEMBER";
     private static final String UNKNOWN_USER = "UNKNOWN_USER";
     private static final String UNSUPPORTED_CONSEQUENCE = "UNSUPPORTED_CONSEQUENCE";
 
     private final DiscordPunishmentConfiguration configuration;
     private final JdaNativeBanEnforcer nativeBans = new JdaNativeBanEnforcer();
+    private final JdaKickEnforcer kicks = new JdaKickEnforcer();
     private final JdaMuteRoleOwnership muteOwnership = new JdaMuteRoleOwnership();
     private final JdaPunishmentNotifier notifier;
     private final AtomicReference<JDA> jda = new AtomicReference<>();
@@ -92,7 +92,8 @@ final class JdaDiscordPunishmentGateway implements DiscordPunishmentGateway {
                 case MUTE -> requireMuteAvailable(guild, member);
                 case BAN -> nativeBans.preflight(guild, target);
                 case CHANNEL_RESTRICTION -> restrictionContainer(guild, intent.restriction().orElseThrow());
-                case WARNING, KICK -> { }
+                case KICK -> kicks.preflight(guild);
+                case WARNING -> { }
                 default -> throw failure(UNSUPPORTED_CONSEQUENCE, false);
             }
         } catch (RuntimeException failure) {
@@ -116,9 +117,9 @@ final class JdaDiscordPunishmentGateway implements DiscordPunishmentGateway {
     }
 
     @Override
-    public void apply(DiscordPunishment punishment) {
+    public void apply(DiscordPunishment punishment, int attemptCount) {
         try {
-            applyEffect(guild(punishment.guildId()), punishment);
+            applyEffect(guild(punishment.guildId()), punishment, attemptCount);
         } catch (RuntimeException failure) {
             throw classify("APPLY", failure);
         }
@@ -179,11 +180,10 @@ final class JdaDiscordPunishmentGateway implements DiscordPunishmentGateway {
         }
     }
 
-    private void applyEffect(Guild guild, DiscordPunishment punishment) {
-        DiscordUserId target = punishment.targetUserId();
+    private void applyEffect(Guild guild, DiscordPunishment punishment, int attemptCount) {
         switch (punishment.intent().type()) {
             case MUTE -> applyMute(guild, punishment);
-            case KICK -> kick(guild, target, punishment);
+            case KICK -> applyKick(guild, punishment, attemptCount);
             case BAN -> applyBan(guild, punishment);
             case CHANNEL_RESTRICTION -> applyRestriction(guild, punishment);
             case WARNING -> { }
@@ -191,13 +191,12 @@ final class JdaDiscordPunishmentGateway implements DiscordPunishmentGateway {
         }
     }
 
-    private void kick(Guild guild, DiscordUserId target, DiscordPunishment punishment) {
-        Member member = memberOrNull(guild, target);
-        if (member == null) {
-            return;
+    private void applyKick(Guild guild, DiscordPunishment punishment, int attemptCount) {
+        Member member = memberOrNull(guild, punishment.targetUserId());
+        if (member != null) {
+            requireHierarchy(guild, member);
         }
-        requireHierarchy(guild, member);
-        guild.kick(UserSnowflake.fromId(target.value())).reason(auditReason(punishment)).complete();
+        kicks.apply(guild, member, punishment, attemptCount);
     }
 
     private void applyBan(Guild guild, DiscordPunishment punishment) {
@@ -471,9 +470,4 @@ final class JdaDiscordPunishmentGateway implements DiscordPunishmentGateway {
         return new EffectException(code, retryable);
     }
 
-    private static String auditReason(DiscordPunishment punishment) {
-        String reason = "Enthusia D07 " + punishment.punishmentId() + " "
-                + punishment.intent().type() + ": " + punishment.intent().publicReason();
-        return reason.length() <= MAX_AUDIT_REASON ? reason : reason.substring(0, MAX_AUDIT_REASON);
-    }
 }

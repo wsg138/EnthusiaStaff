@@ -231,6 +231,20 @@ class DiscordPunishmentWorkerTest {
     }
 
     @Test
+    void applyForwardsDurableClaimAttemptToGateway() {
+        FakeRepository repository = new FakeRepository(punishment(
+                intent(DiscordConsequenceType.KICK, SanctionLength.instant(), Optional.empty()),
+                NOW
+        ));
+        FakeGateway gateway = new FakeGateway();
+        repository.enqueue(WorkType.APPLY, NOW, 3);
+
+        newWorker(repository, gateway).runCycle();
+
+        assertEquals(3, gateway.lastApplyAttemptCount);
+    }
+
+    @Test
     void cycleClaimsOnlyOneBlockingDiscordWorkItem() {
         FakeRepository repository = new FakeRepository(punishment(warning(), NOW));
         FakeGateway gateway = new FakeGateway();
@@ -390,6 +404,7 @@ class DiscordPunishmentWorkerTest {
         private int reconcileCalls;
         private DiscordPermissionSnapshot snapshot = DiscordPermissionSnapshot.absent();
         private DiscordPunishment lastApplied;
+        private int lastApplyAttemptCount;
         private DiscordDeliveryOutcome applyDelivery = DiscordDeliveryOutcome.DELIVERED;
         private DiscordDeliveryOutcome removalDelivery = DiscordDeliveryOutcome.DELIVERED;
         private EffectException applyFailure;
@@ -407,9 +422,10 @@ class DiscordPunishmentWorkerTest {
         }
 
         @Override
-        public void apply(DiscordPunishment punishment) {
+        public void apply(DiscordPunishment punishment, int attemptCount) {
             applyCalls++;
             lastApplied = punishment;
+            lastApplyAttemptCount = attemptCount;
             if (applyFailure != null) {
                 throw applyFailure;
             }

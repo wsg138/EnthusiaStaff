@@ -142,7 +142,7 @@ final class DiscordPunishmentWorker {
 
     private void applyExternalEffect(WorkLease work, StoredPunishment stored) {
         try {
-            gateway.apply(stored.punishment());
+            gateway.apply(stored.punishment(), work.attemptCount());
             DiscordDeliveryOutcome delivery = gateway.notifyApplied(stored.punishment());
             boolean retry = retryDelivery(delivery, work);
             DiscordDeliveryOutcome recorded = recordedDelivery(delivery, retry);

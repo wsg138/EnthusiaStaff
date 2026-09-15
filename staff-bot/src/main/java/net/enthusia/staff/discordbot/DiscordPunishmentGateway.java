@@ -13,7 +13,7 @@ interface DiscordPunishmentGateway {
 
     DiscordPermissionSnapshot captureRestrictionSnapshot(DiscordPunishment punishment);
 
-    void apply(DiscordPunishment punishment);
+    void apply(DiscordPunishment punishment, int attemptCount);
 
     DiscordDeliveryOutcome notifyApplied(DiscordPunishment punishment);
 
