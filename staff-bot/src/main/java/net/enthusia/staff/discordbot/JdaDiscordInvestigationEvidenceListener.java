@@ -1,15 +1,13 @@
 package net.enthusia.staff.discordbot;
 
 import java.util.concurrent.atomic.AtomicBoolean;
-import net.dv8tion.jda.api.events.interaction.command.MessageContextInteractionEvent;
 import net.dv8tion.jda.api.events.message.MessageUpdateEvent;
 import net.dv8tion.jda.api.hooks.ListenerAdapter;
 
-/** Passive D09 evidence listener; it never competes with the primary interaction acknowledgement. */
+/** Passive D09 edit-history listener; interaction acknowledgements remain owned by the primary listener. */
 final class JdaDiscordInvestigationEvidenceListener extends ListenerAdapter {
     private static final System.Logger LOGGER =
             System.getLogger(JdaDiscordInvestigationEvidenceListener.class.getName());
-    private static final String MODERATE_MESSAGE = "Moderate Message";
 
     private final long guildId;
     private final StaffBotWorkerPool workers;
@@ -38,18 +36,6 @@ final class JdaDiscordInvestigationEvidenceListener extends ListenerAdapter {
     }
 
     @Override
-    public void onMessageContextInteraction(MessageContextInteractionEvent event) {
-        if (!enabled.get() || !MODERATE_MESSAGE.equals(event.getName())
-                || event.getGuild() == null || event.getGuild().getIdLong() != guildId) {
-            return;
-        }
-        boolean scheduled = workers.tryExecute(() -> capture(event));
-        if (!scheduled) {
-            log("discord_evidence_capture_queue_saturated", null);
-        }
-    }
-
-    @Override
     public void onMessageUpdate(MessageUpdateEvent event) {
         if (!enabled.get() || event.getGuild().getIdLong() != guildId) {
             return;
@@ -57,20 +43,6 @@ final class JdaDiscordInvestigationEvidenceListener extends ListenerAdapter {
         boolean scheduled = workers.tryExecute(() -> recordEdit(event));
         if (!scheduled) {
             log("discord_evidence_edit_queue_saturated", null);
-        }
-    }
-
-    private void capture(MessageContextInteractionEvent event) {
-        try {
-            controller.captureMessage(
-                    event.getUser().getIdLong(),
-                    event.getUser().getName(),
-                    event.getTarget().getAuthor().getIdLong(),
-                    event.getTarget(),
-                    event.getId()
-            );
-        } catch (RuntimeException exception) {
-            log("discord_evidence_capture_failed", exception);
         }
     }
 
