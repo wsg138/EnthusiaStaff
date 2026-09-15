@@ -21,7 +21,7 @@ public interface DiscordInvestigationStore {
 
     InvestigationCase touchCase(CaseActivity activity);
 
-    int closeInactiveCases(Instant inactivityCutoff, int limit);
+    int closeInactiveCases(Instant inactivityCutoff, Instant now, int limit);
 
     InvestigationNote createNote(NoteDraft draft);
 
@@ -34,6 +34,8 @@ public interface DiscordInvestigationStore {
     InvestigationEvidence.Stored recordEvidenceEdit(InvestigationEvidence.Edit edit);
 
     int captureMoreContext(InvestigationEvidence.ContextBatch batch);
+
+    Optional<InvestigationEvidence.Stored> findEvidenceByMessage(String guildId, String channelId, String messageId);
 
     int purgeEligibleEvidence(Instant now, int limit);
 
@@ -61,9 +63,9 @@ public interface DiscordInvestigationStore {
             Instant observedAt
     ) {
         public PunishmentCaseDraft {
-            if (blank(operationKey) || punishmentId == null || subjectId == null || issuerId == null
-                    || blank(summary) || state == null || expiresAt == null || punishmentRevision < 0
-                    || observedAt == null) {
+            if (blank(operationKey) || operationKey.length() > 128 || punishmentId == null || subjectId == null
+                    || issuerId == null || blank(summary) || state == null || expiresAt == null
+                    || punishmentRevision < 0 || observedAt == null) {
                 throw new IllegalArgumentException("punishment case draft fields are invalid");
             }
         }
@@ -79,8 +81,8 @@ public interface DiscordInvestigationStore {
             Instant openedAt
     ) {
         public InvestigationCaseDraft {
-            if (caseId == null || blank(operationKey) || subjectId == null || legacyCaseId == null
-                    || blank(summary) || openedBy == null || openedAt == null) {
+            if (caseId == null || blank(operationKey) || operationKey.length() > 128 || subjectId == null
+                    || legacyCaseId == null || blank(summary) || openedBy == null || openedAt == null) {
                 throw new IllegalArgumentException("investigation case draft fields are invalid");
             }
         }
@@ -105,8 +107,8 @@ public interface DiscordInvestigationStore {
             Instant now
     ) {
         public NoteDraft {
-            if (noteId == null || blank(operationKey) || subjectId == null || scope == null
-                    || visibility == null || actorId == null || now == null) {
+            if (noteId == null || blank(operationKey) || operationKey.length() > 128 || subjectId == null
+                    || scope == null || visibility == null || actorId == null || now == null) {
                 throw new IllegalArgumentException("note draft fields are invalid");
             }
             InvestigationNote.validateText(text);
@@ -122,7 +124,8 @@ public interface DiscordInvestigationStore {
             Instant now
     ) {
         public NoteEdit {
-            if (noteId == null || blank(operationKey) || expectedRevision < 0 || actorId == null || now == null) {
+            if (noteId == null || blank(operationKey) || operationKey.length() > 128 || expectedRevision < 0
+                    || actorId == null || now == null) {
                 throw new IllegalArgumentException("note edit fields are invalid");
             }
             InvestigationNote.validateText(text);
@@ -140,8 +143,9 @@ public interface DiscordInvestigationStore {
             Instant now
     ) {
         public EvasionAlertDraft {
-            if (alertId == null || blank(operationKey) || subjectId == null || punishmentId == null
-                    || triggeringMinecraftPlayerId == null || blank(currentServer) || playerRevision < 0 || now == null) {
+            if (alertId == null || blank(operationKey) || operationKey.length() > 160 || subjectId == null
+                    || punishmentId == null || triggeringMinecraftPlayerId == null || blank(currentServer)
+                    || currentServer.length() > 64 || playerRevision < 0 || now == null) {
                 throw new IllegalArgumentException("evasion alert draft fields are invalid");
             }
         }
