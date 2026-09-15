@@ -116,7 +116,8 @@ final class JdbcDiscordInvestigationCaseStore {
         statement.setBytes(6, UuidBytes.toBytes(draft.issuerId()));
         statement.setTimestamp(7, Timestamp.from(draft.observedAt()));
         statement.setTimestamp(8, Timestamp.from(draft.observedAt()));
-        setInstant(statement, 9, draft.state().terminal() ? draft.observedAt() : null);
+        setInstant(statement, 9, draft.state().terminal()
+                ? Optional.of(draft.observedAt()) : Optional.empty());
         statement.setLong(10, draft.punishmentRevision());
     }
 
@@ -150,9 +151,9 @@ final class JdbcDiscordInvestigationCaseStore {
             PunishmentCaseDraft draft
     ) throws SQLException {
         Instant lastActivity = later(current.lastActivityAt(), draft.observedAt());
-        Instant punishmentEnded = draft.state().terminal()
-                ? draft.observedAt()
-                : current.punishmentEndedAt().orElse(null);
+        Optional<Instant> punishmentEnded = draft.state().terminal()
+                ? Optional.of(draft.observedAt())
+                : current.punishmentEndedAt();
         try (PreparedStatement statement = connection.prepareStatement("""
                 UPDATE discord_investigation_cases
                 SET last_activity_at = ?, punishment_ended_at = ?, source_revision = ?, revision = revision + 1
@@ -327,11 +328,15 @@ final class JdbcDiscordInvestigationCaseStore {
         return first.isAfter(second) ? first : second;
     }
 
-    private static void setInstant(PreparedStatement statement, int index, Instant value) throws SQLException {
-        if (value == null) {
-            statement.setNull(index, Types.TIMESTAMP);
+    private static void setInstant(
+            PreparedStatement statement,
+            int index,
+            Optional<Instant> value
+    ) throws SQLException {
+        if (value.isPresent()) {
+            statement.setTimestamp(index, Timestamp.from(value.orElseThrow()));
         } else {
-            statement.setTimestamp(index, Timestamp.from(value));
+            statement.setNull(index, Types.TIMESTAMP);
         }
     }
 

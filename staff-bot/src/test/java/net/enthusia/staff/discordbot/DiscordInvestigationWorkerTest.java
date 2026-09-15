@@ -128,10 +128,7 @@ class DiscordInvestigationWorkerTest {
         public EvasionAlert createEvasionAlert(EvasionAlertDraft draft) {
             EvasionAlert existing = alerts.get(draft.operationKey());
             if (existing != null) {
-                return copy(existing, existing.discordDelivery(), existing.minecraftDelivery(),
-                        existing.discordAttempts(), existing.minecraftAttempts(), existing.discordErrorCode(),
-                        existing.minecraftErrorCode(), existing.discordNextAttemptAt(), existing.minecraftNextAttemptAt(),
-                        existing.revision(), true);
+                return replay(existing);
             }
             EvasionAlert created = new EvasionAlert(
                     draft.alertId(), draft.operationKey(), draft.subjectId(), draft.punishmentId(),
@@ -165,42 +162,47 @@ class DiscordInvestigationWorkerTest {
         }
 
         private static EvasionAlert updated(EvasionAlert current, EvasionDeliveryUpdate update) {
-            boolean discord = update.channel() == EvasionDeliveryChannel.DISCORD;
-            EvasionAlert.DeliveryState state = update.delivered()
-                    ? EvasionAlert.DeliveryState.DELIVERED : EvasionAlert.DeliveryState.RETRY;
-            return copy(
-                    current,
-                    discord ? state : current.discordDelivery(),
-                    discord ? current.minecraftDelivery() : state,
-                    current.discordAttempts() + (discord ? 1 : 0),
-                    current.minecraftAttempts() + (discord ? 0 : 1),
-                    discord ? update.errorCode() : current.discordErrorCode(),
-                    discord ? current.minecraftErrorCode() : update.errorCode(),
-                    discord ? update.nextAttemptAt() : current.discordNextAttemptAt(),
-                    discord ? current.minecraftNextAttemptAt() : update.nextAttemptAt(),
-                    current.revision() + 1,
-                    false
+            return switch (update.channel()) {
+                case DISCORD -> updateDiscord(current, update);
+                case MINECRAFT -> updateMinecraft(current, update);
+            };
+        }
+
+        private static EvasionAlert updateDiscord(EvasionAlert current, EvasionDeliveryUpdate update) {
+            return new EvasionAlert(
+                    current.alertId(), current.operationKey(), current.subjectId(), current.punishmentId(),
+                    current.triggeringMinecraftPlayerId(), current.currentServer(), current.playerRevision(), current.state(),
+                    deliveryState(update), current.minecraftDelivery(), current.discordAttempts() + 1,
+                    current.minecraftAttempts(), update.errorCode(), current.minecraftErrorCode(), update.nextAttemptAt(),
+                    current.minecraftNextAttemptAt(), current.createdAt(), current.updatedAt().plusMillis(1),
+                    current.revision() + 1, false
             );
         }
 
-        private static EvasionAlert copy(
-                EvasionAlert source,
-                EvasionAlert.DeliveryState discordState,
-                EvasionAlert.DeliveryState minecraftState,
-                int discordAttempts,
-                int minecraftAttempts,
-                Optional<String> discordError,
-                Optional<String> minecraftError,
-                Optional<Instant> discordNext,
-                Optional<Instant> minecraftNext,
-                long revision,
-                boolean replayed
-        ) {
+        private static EvasionAlert updateMinecraft(EvasionAlert current, EvasionDeliveryUpdate update) {
+            return new EvasionAlert(
+                    current.alertId(), current.operationKey(), current.subjectId(), current.punishmentId(),
+                    current.triggeringMinecraftPlayerId(), current.currentServer(), current.playerRevision(), current.state(),
+                    current.discordDelivery(), deliveryState(update), current.discordAttempts(),
+                    current.minecraftAttempts() + 1, current.discordErrorCode(), update.errorCode(),
+                    current.discordNextAttemptAt(), update.nextAttemptAt(), current.createdAt(),
+                    current.updatedAt().plusMillis(1), current.revision() + 1, false
+            );
+        }
+
+        private static EvasionAlert.DeliveryState deliveryState(EvasionDeliveryUpdate update) {
+            return update.delivered() ? EvasionAlert.DeliveryState.DELIVERED : EvasionAlert.DeliveryState.RETRY;
+        }
+
+        private static EvasionAlert replay(EvasionAlert source) {
             return new EvasionAlert(
                     source.alertId(), source.operationKey(), source.subjectId(), source.punishmentId(),
                     source.triggeringMinecraftPlayerId(), source.currentServer(), source.playerRevision(), source.state(),
-                    discordState, minecraftState, discordAttempts, minecraftAttempts, discordError, minecraftError,
-                    discordNext, minecraftNext, source.createdAt(), source.updatedAt().plusMillis(1), revision, replayed);
+                    source.discordDelivery(), source.minecraftDelivery(), source.discordAttempts(),
+                    source.minecraftAttempts(), source.discordErrorCode(), source.minecraftErrorCode(),
+                    source.discordNextAttemptAt(), source.minecraftNextAttemptAt(), source.createdAt(), source.updatedAt(),
+                    source.revision(), true
+            );
         }
 
         private static boolean due(

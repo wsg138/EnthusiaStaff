@@ -21,6 +21,7 @@ import net.enthusia.staff.domain.ports.DiscordInvestigationStore;
 final class DiscordInvestigationService {
     private static final int MAX_CASE_SUMMARY = 512;
     private static final int MAX_OPERATION_TOKEN = 64;
+    private static final long INVALID_DISCORD_USER_ID = 0L;
 
     record CaseResult(UUID caseId, long revision, boolean replayed) {
     }
@@ -296,7 +297,7 @@ final class DiscordInvestigationService {
     }
 
     private static DiscordUserId discordUser(long id) {
-        if (id == 0L) {
+        if (id == INVALID_DISCORD_USER_ID) {
             throw new IllegalArgumentException("Discord user id must be positive");
         }
         return new DiscordUserId(Long.toUnsignedString(id));

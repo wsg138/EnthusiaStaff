@@ -24,6 +24,8 @@ final class JdbcDiscordInvestigationEvidenceStore {
 
     private final DataSource dataSource;
     private final DiscordInvestigationJsonCodec codec = new DiscordInvestigationJsonCodec();
+    private final JdbcDiscordInvestigationContextStore contextStore =
+            new JdbcDiscordInvestigationContextStore(codec);
 
     JdbcDiscordInvestigationEvidenceStore(DataSource dataSource) {
         this.dataSource = dataSource;
@@ -40,8 +42,8 @@ final class JdbcDiscordInvestigationEvidenceStore {
             insertParent(connection, capture);
             insertEvidence(connection, capture);
             insertVersion(connection, capture.evidenceId(), 0, capture.operationKey(), capture.focus(), capture.capturedAt());
-            insertContext(connection, capture.evidenceId(), capture.before(), capture.capturedAt());
-            insertContext(connection, capture.evidenceId(), capture.after(), capture.capturedAt());
+            contextStore.insert(connection, capture.evidenceId(), capture.before(), capture.capturedAt());
+            contextStore.insert(connection, capture.evidenceId(), capture.after(), capture.capturedAt());
             touchCase(connection, capture.caseId(), capture.capturedAt());
             return requireById(connection, capture.evidenceId(), false).toStored(false);
         });
@@ -67,15 +69,15 @@ final class JdbcDiscordInvestigationEvidenceStore {
 
     int captureMoreContext(InvestigationEvidence.ContextBatch batch) {
         return JdbcTransactionSupport.execute(dataSource, "Unable to capture additional Discord context", connection -> {
-            UUID replayEvidence = contextOperationEvidence(connection, batch.operationKey());
+            UUID replayEvidence = contextStore.operationEvidence(connection, batch.operationKey());
             if (replayEvidence != null) {
                 requireSameEvidence(replayEvidence, batch.evidenceId());
                 return 0;
             }
             EvidenceCurrent current = requireById(connection, batch.evidenceId(), true);
             requireContextLocation(current, batch.messages());
-            insertContextOperation(connection, batch);
-            upsertContext(connection, batch.evidenceId(), batch.messages(), batch.capturedAt());
+            contextStore.recordOperation(connection, batch);
+            contextStore.upsert(connection, batch.evidenceId(), batch.messages(), batch.capturedAt());
             updateParentRevision(connection, current.evidenceId(), batch.capturedAt());
             touchCase(connection, current.caseId(), batch.capturedAt());
             return batch.messages().size();
@@ -194,95 +196,6 @@ final class JdbcDiscordInvestigationEvidenceStore {
             setInstant(statement, 6, message.editedAt().orElse(null));
             statement.setTimestamp(7, Timestamp.from(recordedAt));
             JdbcTransactionSupport.requireSingleUpdate(statement.executeUpdate(), "evidence version was not inserted");
-        }
-    }
-
-    private void insertContext(
-            Connection connection,
-            UUID evidenceId,
-            List<InvestigationEvidence.Message> messages,
-            Instant capturedAt
-    ) throws SQLException {
-        for (InvestigationEvidence.Message message : messages) {
-            insertContextMessage(connection, evidenceId, message, capturedAt);
-        }
-    }
-
-    private void insertContextMessage(
-            Connection connection,
-            UUID evidenceId,
-            InvestigationEvidence.Message message,
-            Instant capturedAt
-    ) throws SQLException {
-        try (PreparedStatement statement = connection.prepareStatement("""
-                INSERT INTO discord_investigation_context(
-                    evidence_id, message_id, guild_id, channel_id, author_user_id,
-                    message_created_at, edited_at, message_link, message_content,
-                    attachment_metadata_json, captured_at, last_observed_at, revision
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
-                """)) {
-            bindContext(statement, evidenceId, message, capturedAt);
-            JdbcTransactionSupport.requireSingleUpdate(statement.executeUpdate(), "evidence context was not inserted");
-        }
-    }
-
-    private void upsertContext(
-            Connection connection,
-            UUID evidenceId,
-            List<InvestigationEvidence.Message> messages,
-            Instant capturedAt
-    ) throws SQLException {
-        for (InvestigationEvidence.Message message : messages) {
-            try (PreparedStatement statement = connection.prepareStatement("""
-                    INSERT INTO discord_investigation_context(
-                        evidence_id, message_id, guild_id, channel_id, author_user_id,
-                        message_created_at, edited_at, message_link, message_content,
-                        attachment_metadata_json, captured_at, last_observed_at, revision
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
-                    ON DUPLICATE KEY UPDATE
-                        author_user_id = VALUES(author_user_id), edited_at = VALUES(edited_at),
-                        message_link = VALUES(message_link), message_content = VALUES(message_content),
-                        attachment_metadata_json = VALUES(attachment_metadata_json),
-                        last_observed_at = VALUES(last_observed_at), revision = revision + 1
-                    """)) {
-                bindContext(statement, evidenceId, message, capturedAt);
-                statement.executeUpdate();
-            }
-        }
-    }
-
-    private void bindContext(
-            PreparedStatement statement,
-            UUID evidenceId,
-            InvestigationEvidence.Message message,
-            Instant capturedAt
-    ) throws SQLException {
-        statement.setBytes(1, UuidBytes.toBytes(evidenceId));
-        statement.setBigDecimal(2, snowflake(message.messageId()));
-        statement.setBigDecimal(3, snowflake(message.guildId()));
-        statement.setBigDecimal(4, snowflake(message.channelId()));
-        statement.setBigDecimal(5, snowflake(message.authorUserId().value()));
-        statement.setTimestamp(6, Timestamp.from(message.createdAt()));
-        setInstant(statement, 7, message.editedAt().orElse(null));
-        statement.setString(8, message.jumpUrl());
-        statement.setString(9, message.content());
-        statement.setString(10, codec.attachments(message.attachments()));
-        statement.setTimestamp(11, Timestamp.from(capturedAt));
-        statement.setTimestamp(12, Timestamp.from(capturedAt));
-    }
-
-    private static void insertContextOperation(
-            Connection connection,
-            InvestigationEvidence.ContextBatch batch
-    ) throws SQLException {
-        try (PreparedStatement statement = connection.prepareStatement("""
-                INSERT INTO discord_investigation_context_operations(operation_key, evidence_id, captured_at)
-                VALUES (?, ?, ?)
-                """)) {
-            statement.setString(1, batch.operationKey());
-            statement.setBytes(2, UuidBytes.toBytes(batch.evidenceId()));
-            statement.setTimestamp(3, Timestamp.from(batch.capturedAt()));
-            JdbcTransactionSupport.requireSingleUpdate(statement.executeUpdate(), "context operation was not inserted");
         }
     }
 
@@ -438,17 +351,6 @@ final class JdbcDiscordInvestigationEvidenceStore {
         try (PreparedStatement statement = connection.prepareStatement("""
                 SELECT evidence_id
                 FROM discord_investigation_evidence_versions
-                WHERE operation_key = ?
-                """)) {
-            statement.setString(1, operationKey);
-            return readEvidenceId(statement);
-        }
-    }
-
-    private static UUID contextOperationEvidence(Connection connection, String operationKey) throws SQLException {
-        try (PreparedStatement statement = connection.prepareStatement("""
-                SELECT evidence_id
-                FROM discord_investigation_context_operations
                 WHERE operation_key = ?
                 """)) {
             statement.setString(1, operationKey);

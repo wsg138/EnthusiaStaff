@@ -29,6 +29,9 @@ final class DiscordInvestigationCommandController {
     private static final String ALERT_ID = "alert-id";
     private static final String REVISION = "revision";
     private static final String CONTEXT_PREFIX = "d09ctx:";
+    private static final int CONTEXT_TARGET_PARTS = 3;
+    private static final int MAX_COMPONENT_ID_LENGTH = 100;
+    private static final long INVALID_SNOWFLAKE = 0L;
 
     record Mutation(String content) {
     }
@@ -121,7 +124,7 @@ final class DiscordInvestigationCommandController {
             throw new IllegalArgumentException("not a capture-more control");
         }
         String[] parts = customId.substring(CONTEXT_PREFIX.length()).split(":", -1);
-        if (parts.length != 3) {
+        if (parts.length != CONTEXT_TARGET_PARTS) {
             throw new IllegalArgumentException("capture-more control is malformed");
         }
         return new ContextTarget(parseUnsigned(parts[0]), snowflake(parts[1]), snowflake(parts[2]));
@@ -289,7 +292,7 @@ final class DiscordInvestigationCommandController {
 
     private static String contextId(long targetId, String channelId, String messageId) {
         String id = CONTEXT_PREFIX + Long.toUnsignedString(targetId) + ':' + snowflake(channelId) + ':' + snowflake(messageId);
-        if (id.length() > 100) {
+        if (id.length() > MAX_COMPONENT_ID_LENGTH) {
             throw new IllegalArgumentException("capture-more control exceeds Discord component limit");
         }
         return id;
@@ -298,7 +301,7 @@ final class DiscordInvestigationCommandController {
     private static long parseUnsigned(String value) {
         try {
             long parsed = Long.parseUnsignedLong(value);
-            if (parsed == 0L) {
+            if (parsed == INVALID_SNOWFLAKE) {
                 throw new IllegalArgumentException("Discord user id must be positive");
             }
             return parsed;
@@ -310,7 +313,7 @@ final class DiscordInvestigationCommandController {
     private static String snowflake(String value) {
         try {
             long parsed = Long.parseUnsignedLong(value);
-            if (parsed == 0L) {
+            if (parsed == INVALID_SNOWFLAKE) {
                 throw new IllegalArgumentException("Discord snowflake must be positive");
             }
             return Long.toUnsignedString(parsed);

@@ -103,10 +103,7 @@ class DiscordInvestigationPersistenceIntegrationTest {
             JdbcDiscordPunishmentRepository punishments = new JdbcDiscordPunishmentRepository(dataSource);
             JdbcDiscordInvestigationStore investigations = new JdbcDiscordInvestigationStore(dataSource);
             for (int index = 0; index < 101; index++) {
-                DiscordUserId userId = new DiscordUserId(Long.toString(223456789012346000L + index));
-                ModerationSubjectId subjectId = ensureSubject(dataSource, userId);
-                DiscordPunishment punishment = warning(subjectId, userId, index);
-                punishments.create(punishment, "d09-batch-warning-" + index, NOW.plusMillis(index));
+                persistBatchWarning(dataSource, punishments, index);
             }
 
             List<DiscordInvestigationStore.PunishmentObservation> first = investigations.punishmentObservations(100);
@@ -183,6 +180,17 @@ class DiscordInvestigationPersistenceIntegrationTest {
             assertEquals(EvasionAlert.State.RESOLVED, resolved.state());
             assertTrue(store.resolveEvasionAlert(alertId, resolved.revision(), retryAt.plusSeconds(2)).replayed());
         }
+    }
+
+    private static void persistBatchWarning(
+            HikariDataSource dataSource,
+            JdbcDiscordPunishmentRepository punishments,
+            int index
+    ) {
+        DiscordUserId userId = new DiscordUserId(Long.toString(223456789012346000L + index));
+        ModerationSubjectId subjectId = ensureSubject(dataSource, userId);
+        DiscordPunishment punishment = warning(subjectId, userId, index);
+        punishments.create(punishment, "d09-batch-warning-" + index, NOW.plusMillis(index));
     }
 
     private static DiscordPunishment warning(

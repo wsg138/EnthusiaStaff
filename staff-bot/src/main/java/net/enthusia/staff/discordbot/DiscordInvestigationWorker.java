@@ -36,17 +36,34 @@ final class DiscordInvestigationWorker {
             Duration retryBase,
             Duration retryMaximum
     ) {
-        if (store == null || discordAlerts == null || minecraftAlerts == null || clock == null
-                || retryBase == null || retryBase.isZero() || retryBase.isNegative()
-                || retryMaximum == null || retryMaximum.compareTo(retryBase) < 0) {
-            throw new IllegalArgumentException("investigation worker configuration is invalid");
-        }
+        requireDependencies(store, discordAlerts, minecraftAlerts, clock);
+        requireRetryPolicy(retryBase, retryMaximum);
         this.store = store;
         this.discordAlerts = discordAlerts;
         this.minecraftAlerts = minecraftAlerts;
         this.clock = clock;
         this.retryBase = retryBase;
         this.retryMaximum = retryMaximum;
+    }
+
+    private static void requireDependencies(
+            DiscordInvestigationStore store,
+            DiscordInvestigationAlertSink discordAlerts,
+            DiscordInvestigationAlertSink minecraftAlerts,
+            Clock clock
+    ) {
+        if (store == null || discordAlerts == null || minecraftAlerts == null || clock == null) {
+            throw new IllegalArgumentException("investigation worker dependencies are invalid");
+        }
+    }
+
+    private static void requireRetryPolicy(Duration retryBase, Duration retryMaximum) {
+        if (retryBase == null || retryBase.isZero() || retryBase.isNegative()) {
+            throw new IllegalArgumentException("investigation worker retry base is invalid");
+        }
+        if (retryMaximum == null || retryMaximum.compareTo(retryBase) < 0) {
+            throw new IllegalArgumentException("investigation worker retry maximum is invalid");
+        }
     }
 
     void runCycle() {
@@ -60,34 +77,42 @@ final class DiscordInvestigationWorker {
 
     private void reconcilePunishmentCases() {
         for (PunishmentObservation observation : store.punishmentObservations(BATCH_LIMIT)) {
-            store.ensurePunishmentCase(new PunishmentCaseDraft(
-                    punishmentOperation(observation.punishmentId()),
-                    observation.punishmentId(),
-                    observation.subjectId(),
-                    observation.issuerId(),
-                    observation.summary(),
-                    observation.state(),
-                    observation.expiresAt(),
-                    observation.revision(),
-                    observation.observedAt()
-            ));
+            reconcilePunishmentCase(observation);
         }
+    }
+
+    private void reconcilePunishmentCase(PunishmentObservation observation) {
+        store.ensurePunishmentCase(new PunishmentCaseDraft(
+                punishmentOperation(observation.punishmentId()),
+                observation.punishmentId(),
+                observation.subjectId(),
+                observation.issuerId(),
+                observation.summary(),
+                observation.state(),
+                observation.expiresAt(),
+                observation.revision(),
+                observation.observedAt()
+        ));
     }
 
     private void discoverEvasionAlerts(Instant now) {
         for (EvasionCandidate candidate : store.evasionCandidates(BATCH_LIMIT)) {
-            String operationKey = evasionOperation(candidate);
-            store.createEvasionAlert(new EvasionAlertDraft(
-                    deterministicId(operationKey),
-                    operationKey,
-                    candidate.subjectId(),
-                    candidate.punishmentId(),
-                    candidate.minecraftPlayerId(),
-                    candidate.currentServer(),
-                    candidate.playerRevision(),
-                    now
-            ));
+            discoverEvasionAlert(candidate, now);
         }
+    }
+
+    private void discoverEvasionAlert(EvasionCandidate candidate, Instant now) {
+        String operationKey = evasionOperation(candidate);
+        store.createEvasionAlert(new EvasionAlertDraft(
+                deterministicId(operationKey),
+                operationKey,
+                candidate.subjectId(),
+                candidate.punishmentId(),
+                candidate.minecraftPlayerId(),
+                candidate.currentServer(),
+                candidate.playerRevision(),
+                now
+        ));
     }
 
     private void deliverAlerts(Instant now) {

@@ -17,16 +17,18 @@ class InvestigationEvidenceTest {
             UUID.fromString("11111111-2222-3333-4444-555555555555"));
     private static final UUID CASE_ID = UUID.fromString("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee");
     private static final UUID ACTOR_ID = UUID.fromString("99999999-8888-7777-6666-555555555555");
+    private static final String FOCUS_MESSAGE_ID = "100";
+    private static final String MESSAGE_CONTEXT = "MESSAGE_CONTEXT";
 
     @Test
     void messageCaptureKeepsActorActionAndFiveByFiveBounds() {
         InvestigationEvidence.Capture capture = new InvestigationEvidence.Capture(
-                UUID.randomUUID(), "d09:evidence:123", SUBJECT, CASE_ID, message("100"),
-                messages("90", 5), messages("110", 5), ACTOR_ID, "MESSAGE_CONTEXT", NOW
+                UUID.randomUUID(), "d09:evidence:123", SUBJECT, CASE_ID, message(FOCUS_MESSAGE_ID),
+                messages("90", 5), messages("110", 5), ACTOR_ID, MESSAGE_CONTEXT, NOW
         );
 
         assertEquals(ACTOR_ID, capture.capturedBy());
-        assertEquals("MESSAGE_CONTEXT", capture.action());
+        assertEquals(MESSAGE_CONTEXT, capture.action());
         assertEquals(5, capture.before().size());
         assertEquals(5, capture.after().size());
     }
@@ -34,16 +36,16 @@ class InvestigationEvidenceTest {
     @Test
     void captureRejectsUnboundedOrDuplicateContextAndMissingActor() {
         assertThrows(IllegalArgumentException.class, () -> new InvestigationEvidence.Capture(
-                UUID.randomUUID(), "d09:evidence:too-many", SUBJECT, CASE_ID, message("100"),
-                messages("80", 6), List.of(), ACTOR_ID, "MESSAGE_CONTEXT", NOW
+                UUID.randomUUID(), "d09:evidence:too-many", SUBJECT, CASE_ID, message(FOCUS_MESSAGE_ID),
+                messages("80", 6), List.of(), ACTOR_ID, MESSAGE_CONTEXT, NOW
         ));
         assertThrows(IllegalArgumentException.class, () -> new InvestigationEvidence.Capture(
-                UUID.randomUUID(), "d09:evidence:duplicate", SUBJECT, CASE_ID, message("100"),
-                List.of(message("100")), List.of(), ACTOR_ID, "MESSAGE_CONTEXT", NOW
+                UUID.randomUUID(), "d09:evidence:duplicate", SUBJECT, CASE_ID, message(FOCUS_MESSAGE_ID),
+                List.of(message(FOCUS_MESSAGE_ID)), List.of(), ACTOR_ID, MESSAGE_CONTEXT, NOW
         ));
         assertThrows(IllegalArgumentException.class, () -> new InvestigationEvidence.Capture(
-                UUID.randomUUID(), "d09:evidence:no-actor", SUBJECT, CASE_ID, message("100"),
-                List.of(), List.of(), null, "MESSAGE_CONTEXT", NOW
+                UUID.randomUUID(), "d09:evidence:no-actor", SUBJECT, CASE_ID, message(FOCUS_MESSAGE_ID),
+                List.of(), List.of(), null, MESSAGE_CONTEXT, NOW
         ));
     }
 
