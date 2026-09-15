@@ -1,0 +1,156 @@
+name: D07 complexity repair
+
+on:
+  push:
+    branches:
+      - "package/es-d07-discord-punishment-enforcement"
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    if: github.event.head_commit.message == '[ES-D07] Stage complexity repair'
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Refactor measured complexity hotspots
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def read(path):
+              return Path(path).read_text(encoding="utf-8")
+
+          def write(path, text):
+              Path(path).write_text(text, encoding="utf-8")
+
+          def replace_once(text, old, new, label):
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"{label}: expected 1 match, found {count}")
+              return text.replace(old, new, 1)
+
+          # Persistence immutable-field invariant: one low-complexity assertion per field.
+          path = "persistence/src/main/java/net/enthusia/staff/persistence/JdbcDiscordPunishmentRepository.java"
+          text = read(path)
+          old = '''    private static void requireImmutable(DiscordPunishment current, DiscordPunishment replacement) throws SQLException {\n        boolean equal = current.punishmentId().equals(replacement.punishmentId())\n                && current.subjectId().equals(replacement.subjectId())\n                && current.targetUserId().equals(replacement.targetUserId())\n                && current.guildId().equals(replacement.guildId())\n                && current.issuer().equals(replacement.issuer())\n                && current.intent().equals(replacement.intent())\n                && current.issuedAt().equals(replacement.issuedAt())\n                && current.expiresAt().equals(replacement.expiresAt());\n        if (!equal) {\n            throw new SQLException("immutable Discord punishment fields changed");\n        }\n    }\n'''
+          new = '''    private static void requireImmutable(DiscordPunishment current, DiscordPunishment replacement) throws SQLException {\n        requireSame(current.punishmentId(), replacement.punishmentId());\n        requireSame(current.subjectId(), replacement.subjectId());\n        requireSame(current.targetUserId(), replacement.targetUserId());\n        requireSame(current.guildId(), replacement.guildId());\n        requireSame(current.issuer(), replacement.issuer());\n        requireSame(current.intent(), replacement.intent());\n        requireSame(current.issuedAt(), replacement.issuedAt());\n        requireSame(current.expiresAt(), replacement.expiresAt());\n    }\n\n    private static void requireSame(Object current, Object replacement) throws SQLException {\n        if (!current.equals(replacement)) {\n            throw new SQLException("immutable Discord punishment fields changed");\n        }\n    }\n'''
+          text = replace_once(text, old, new, "repository immutable split")
+          write(path, text)
+
+          # Work-claim validation: separate interval, batch, and owner validation.
+          path = "persistence/src/main/java/net/enthusia/staff/persistence/JdbcDiscordPunishmentWorkQueue.java"
+          text = read(path)
+          old = '''    private static void validateClaim(Instant now, int limit, String owner, Instant leaseUntil) {\n        if (now == null || leaseUntil == null || !leaseUntil.isAfter(now)) {\n            throw new IllegalArgumentException("D07 lease interval is invalid");\n        }\n        if (limit < 1 || limit > MAX_BATCH) {\n            throw new IllegalArgumentException("D07 work claim limit must be between 1 and 100");\n        }\n        if (owner == null || owner.isBlank() || owner.length() > 96) {\n            throw new IllegalArgumentException("D07 lease owner is invalid");\n        }\n    }\n'''
+          new = '''    private static void validateClaim(Instant now, int limit, String owner, Instant leaseUntil) {\n        requireLeaseInterval(now, leaseUntil);\n        requireClaimLimit(limit);\n        requireLeaseOwner(owner);\n    }\n\n    private static void requireLeaseInterval(Instant now, Instant leaseUntil) {\n        if (now == null || leaseUntil == null || !leaseUntil.isAfter(now)) {\n            throw new IllegalArgumentException("D07 lease interval is invalid");\n        }\n    }\n\n    private static void requireClaimLimit(int limit) {\n        if (limit < 1 || limit > MAX_BATCH) {\n            throw new IllegalArgumentException("D07 work claim limit must be between 1 and 100");\n        }\n    }\n\n    private static void requireLeaseOwner(String owner) {\n        if (owner == null || owner.isBlank() || owner.length() > 96) {\n            throw new IllegalArgumentException("D07 lease owner is invalid");\n        }\n    }\n'''
+          text = replace_once(text, old, new, "work queue validation split")
+          write(path, text)
+
+          # Runtime creation: validate separately from resource orchestration/assembly.
+          path = "staff-bot/src/main/java/net/enthusia/staff/discordbot/DiscordPunishmentRuntime.java"
+          text = read(path)
+          start = text.index('    static DiscordPunishmentRuntime open(\n')
+          end = text.index('    DiscordPunishmentService service() {\n', start)
+          replacement = '''    static DiscordPunishmentRuntime open(\n            DatabaseConfig database,\n            DiscordPunishmentConfiguration configuration,\n            StaffModerationReadService reads,\n            LinkedStaffActorResolver actors,\n            long guildId,\n            int interactionCapacity,\n            Duration interactionTtl\n    ) {\n        validateOpen(database, configuration, reads, actors, guildId, interactionCapacity, interactionTtl);\n        Clock clock = Clock.systemUTC();\n        DiscordPunishmentPersistenceRuntime persistence = DiscordPunishmentPersistenceRuntime.open(database);\n        try {\n            return assemble(\n                    persistence, configuration, reads, actors, guildId, interactionCapacity, interactionTtl, clock\n            );\n        } catch (RuntimeException exception) {\n            persistence.close();\n            throw exception;\n        }\n    }\n\n    private static DiscordPunishmentRuntime assemble(\n            DiscordPunishmentPersistenceRuntime persistence,\n            DiscordPunishmentConfiguration configuration,\n            StaffModerationReadService reads,\n            LinkedStaffActorResolver actors,\n            long guildId,\n            int interactionCapacity,\n            Duration interactionTtl,\n            Clock clock\n    ) {\n        JdaDiscordPunishmentGateway gateway = new JdaDiscordPunishmentGateway(configuration);\n        Duration confirmationTtl = interactionTtl.compareTo(MAX_CONFIRMATION_TTL) > 0\n                ? MAX_CONFIRMATION_TTL : interactionTtl;\n        DiscordPunishmentConfirmationStore confirmations = new DiscordPunishmentConfirmationStore(\n                clock, confirmationTtl, interactionCapacity\n        );\n        DiscordPunishmentAuthorization authorization = new DiscordPunishmentAuthorization(\n                configuration.authorizationLimits()\n        );\n        DiscordGuildId discordGuildId = new DiscordGuildId(Long.toUnsignedString(guildId));\n        DiscordPunishmentService service = createService(\n                persistence, reads, actors, authorization, confirmations, gateway, discordGuildId, clock\n        );\n        DiscordPunishmentWorker worker = new DiscordPunishmentWorker(\n                persistence.punishments(), gateway, clock, "d07-" + UUID.randomUUID(),\n                configuration.reconciliationInterval()\n        );\n        DiscordPunishmentCoordinator coordinator = new DiscordPunishmentCoordinator(worker, configuration.workerInterval());\n        coordinator.start();\n        return new DiscordPunishmentRuntime(persistence, gateway, coordinator, service);\n    }\n\n    private static DiscordPunishmentService createService(\n            DiscordPunishmentPersistenceRuntime persistence,\n            StaffModerationReadService reads,\n            LinkedStaffActorResolver actors,\n            DiscordPunishmentAuthorization authorization,\n            DiscordPunishmentConfirmationStore confirmations,\n            JdaDiscordPunishmentGateway gateway,\n            DiscordGuildId guildId,\n            Clock clock\n    ) {\n        return new DiscordPunishmentService(\n                reads, actors, authorization, confirmations, persistence.punishments(),\n                persistence::ensureDiscordSubject, gateway, guildId, clock\n        );\n    }\n\n    private static void validateOpen(\n            DatabaseConfig database,\n            DiscordPunishmentConfiguration configuration,\n            StaffModerationReadService reads,\n            LinkedStaffActorResolver actors,\n            long guildId,\n            int interactionCapacity,\n            Duration interactionTtl\n    ) {\n        requirePresent(database);\n        requirePresent(configuration);\n        requirePresent(reads);\n        requirePresent(actors);\n        if (guildId <= 0 || interactionCapacity < 1) {\n            throw invalidConfiguration();\n        }\n        requirePositive(interactionTtl);\n    }\n\n    private static void requirePresent(Object value) {\n        if (value == null) {\n            throw invalidConfiguration();\n        }\n    }\n\n    private static void requirePositive(Duration value) {\n        if (value == null || value.isZero() || value.isNegative()) {\n            throw invalidConfiguration();\n        }\n    }\n\n    private static IllegalArgumentException invalidConfiguration() {\n        return new IllegalArgumentException("Discord punishment runtime configuration is invalid");\n    }\n\n'''
+          text = text[:start] + replacement + text[end:]
+          write(path, text)
+
+          # Service dependency validation: keep orchestration constructor branch-free.
+          path = "staff-bot/src/main/java/net/enthusia/staff/discordbot/DiscordPunishmentService.java"
+          text = read(path)
+          old = '''    ) {\n        if (reads == null || actors == null || authorization == null || confirmations == null || punishments == null\n                || subjects == null || gateway == null || guildId == null || clock == null) {\n            throw new IllegalArgumentException("Discord punishment service dependencies must be present");\n        }\n        this.reads = reads;\n'''
+          new = '''    ) {\n        requireDependency(reads);\n        requireDependency(actors);\n        requireDependency(authorization);\n        requireDependency(confirmations);\n        requireDependency(punishments);\n        requireDependency(subjects);\n        requireDependency(gateway);\n        requireDependency(guildId);\n        requireDependency(clock);\n        this.reads = reads;\n'''
+          text = replace_once(text, old, new, "service constructor validation")
+          marker = '''    Confirmation prepareIssue(long actorDiscordId, String actorName, long targetDiscordId, DiscordPunishmentIntent intent) {\n'''
+          helper = '''    private static void requireDependency(Object value) {\n        if (value == null) {\n            throw new IllegalArgumentException("Discord punishment service dependencies must be present");\n        }\n    }\n\n'''
+          text = replace_once(text, marker, helper + marker, "service dependency helper")
+          write(path, text)
+
+          # Worker constructor: validation remains separate from state assignment.
+          path = "staff-bot/src/main/java/net/enthusia/staff/discordbot/DiscordPunishmentWorker.java"
+          text = read(path)
+          old = '''    ) {\n        if (repository == null || gateway == null || clock == null || workerId == null || workerId.isBlank()\n                || workerId.length() > 96 || reconciliationInterval == null\n                || reconciliationInterval.isZero() || reconciliationInterval.isNegative()) {\n            throw new IllegalArgumentException("Discord punishment worker configuration is invalid");\n        }\n        this.repository = repository;\n'''
+          new = '''    ) {\n        requireDependency(repository);\n        requireDependency(gateway);\n        requireDependency(clock);\n        requireWorkerId(workerId);\n        requireInterval(reconciliationInterval);\n        this.repository = repository;\n'''
+          text = replace_once(text, old, new, "worker constructor validation")
+          marker = '''    int runCycle() {\n'''
+          helper = '''    private static void requireDependency(Object value) {\n        if (value == null) {\n            throw invalidConfiguration();\n        }\n    }\n\n    private static void requireWorkerId(String workerId) {\n        if (workerId == null || workerId.isBlank() || workerId.length() > 96) {\n            throw invalidConfiguration();\n        }\n    }\n\n    private static void requireInterval(Duration interval) {\n        if (interval == null || interval.isZero() || interval.isNegative()) {\n            throw invalidConfiguration();\n        }\n    }\n\n    private static IllegalArgumentException invalidConfiguration() {\n        return new IllegalArgumentException("Discord punishment worker configuration is invalid");\n    }\n\n'''
+          text = replace_once(text, marker, helper + marker, "worker validation helpers")
+          write(path, text)
+
+          # JDA preflight: separate member/hierarchy policy from consequence-specific checks.
+          path = "staff-bot/src/main/java/net/enthusia/staff/discordbot/JdaDiscordPunishmentGateway.java"
+          text = read(path)
+          old = '''    @Override\n    public void preflight(DiscordGuildId guildId, DiscordUserId target, DiscordPunishmentIntent intent) {\n        try {\n            Guild guild = guild(guildId);\n            Member member = memberOrNull(guild, target);\n            if (intent.type() != DiscordConsequenceType.BAN && member == null) {\n                throw failure(TARGET_NOT_IN_GUILD, false);\n            }\n            if (member != null) {\n                requireHierarchy(guild, member);\n            }\n            switch (intent.type()) {\n                case MUTE -> requireMuteAvailable(guild, member);\n                case BAN -> nativeBans.preflight(guild, target);\n                case CHANNEL_RESTRICTION -> restrictionContainer(guild, intent.restriction().orElseThrow());\n                case KICK -> kicks.preflight(guild);\n                case WARNING -> { }\n                default -> throw failure(UNSUPPORTED_CONSEQUENCE, false);\n            }\n        } catch (RuntimeException failure) {\n            throw classify("PREFLIGHT", failure);\n        }\n    }\n'''
+          new = '''    @Override\n    public void preflight(DiscordGuildId guildId, DiscordUserId target, DiscordPunishmentIntent intent) {\n        try {\n            Guild guild = guild(guildId);\n            Member member = memberOrNull(guild, target);\n            requirePreflightMember(intent.type(), member);\n            requireHierarchyIfPresent(guild, member);\n            preflightEffect(guild, member, target, intent);\n        } catch (RuntimeException failure) {\n            throw classify("PREFLIGHT", failure);\n        }\n    }\n\n    private void preflightEffect(\n            Guild guild,\n            Member member,\n            DiscordUserId target,\n            DiscordPunishmentIntent intent\n    ) {\n        switch (intent.type()) {\n            case MUTE -> requireMuteAvailable(guild, member);\n            case BAN -> nativeBans.preflight(guild, target);\n            case CHANNEL_RESTRICTION -> restrictionContainer(guild, intent.restriction().orElseThrow());\n            case KICK -> kicks.preflight(guild);\n            case WARNING -> { }\n            default -> throw failure(UNSUPPORTED_CONSEQUENCE, false);\n        }\n    }\n\n    private static void requirePreflightMember(DiscordConsequenceType type, Member member) {\n        if (type != DiscordConsequenceType.BAN && member == null) {\n            throw failure(TARGET_NOT_IN_GUILD, false);\n        }\n    }\n\n    private void requireHierarchyIfPresent(Guild guild, Member member) {\n        if (member != null) {\n            requireHierarchy(guild, member);\n        }\n    }\n'''
+          text = replace_once(text, old, new, "gateway preflight split")
+          write(path, text)
+
+          # Slash routing: split quick-punishment commands from read commands.
+          path = "staff-bot/src/main/java/net/enthusia/staff/discordbot/JdaStaffModerationListener.java"
+          text = read(path)
+          text = replace_once(text, 'import java.util.Optional;\n', 'import java.util.Optional;\nimport java.util.Set;\n', "listener set import")
+          marker = '    private static final String MODAL_REASON = "reason";\n'
+          addition = '''    private static final String MODAL_REASON = "reason";\n    private static final Set<String> PUNISHMENT_COMMANDS = Set.of(\n            WARN, MUTE, UNMUTE, KICK, BAN, UNBAN, RESTRICT, UNRESTRICT\n    );\n'''
+          text = replace_once(text, marker, addition, "listener punishment command set")
+          old = '''    @Override\n    public void onSlashCommandInteraction(SlashCommandInteractionEvent event) {\n        if (!accepted(guildId(event.getGuild()))) {\n            unavailable(event);\n            return;\n        }\n        long actorId = event.getUser().getIdLong();\n        String actorName = event.getUser().getName();\n        switch (event.getName()) {\n            case MODERATE -> dispatchModerate(event, actorId, actorName);\n            case LINKED -> dispatchDiscordTarget(event, actorId, actorName, controller::linkedDiscord);\n            case HISTORY -> dispatchDiscordTarget(event, actorId, actorName, controller::historyDiscord);\n            case NOTES -> dispatchDiscordTarget(event, actorId, actorName, controller::notesDiscord);\n            case MODERATE_MINECRAFT -> dispatchMinecraft(event, actorId, actorName);\n            case CASE -> dispatchCase(event, actorId, actorName);\n            case WARN, MUTE, UNMUTE, KICK, BAN, UNBAN, RESTRICT, UNRESTRICT ->\n                    dispatchQuickPunishment(event, actorId, actorName);\n            default -> unavailable(event);\n        }\n    }\n'''
+          new = '''    @Override\n    public void onSlashCommandInteraction(SlashCommandInteractionEvent event) {\n        if (!accepted(guildId(event.getGuild()))) {\n            unavailable(event);\n            return;\n        }\n        long actorId = event.getUser().getIdLong();\n        String actorName = event.getUser().getName();\n        if (PUNISHMENT_COMMANDS.contains(event.getName())) {\n            dispatchQuickPunishment(event, actorId, actorName);\n            return;\n        }\n        dispatchReadCommand(event, actorId, actorName);\n    }\n\n    private void dispatchReadCommand(SlashCommandInteractionEvent event, long actorId, String actorName) {\n        switch (event.getName()) {\n            case MODERATE -> dispatchModerate(event, actorId, actorName);\n            case LINKED -> dispatchDiscordTarget(event, actorId, actorName, controller::linkedDiscord);\n            case HISTORY -> dispatchDiscordTarget(event, actorId, actorName, controller::historyDiscord);\n            case NOTES -> dispatchDiscordTarget(event, actorId, actorName, controller::notesDiscord);\n            case MODERATE_MINECRAFT -> dispatchMinecraft(event, actorId, actorName);\n            case CASE -> dispatchCase(event, actorId, actorName);\n            default -> unavailable(event);\n        }\n    }\n'''
+          text = replace_once(text, old, new, "listener slash routing split")
+          write(path, text)
+
+          # Integration recovery test: preserve assertions while separating lifecycle phases.
+          path = "integration-tests/src/test/java/net/enthusia/staff/integration/DiscordPunishmentPersistenceIntegrationTest.java"
+          text = read(path)
+          start = text.index('    @Test\n    void intentLeaseRecoveryRevisionConflictAndRestartAreDurable() {\n')
+          end = text.index('    @Test\n    void concurrentDuplicateMuteCreationAllowsExactlyOneActivePunishment()', start)
+          replacement = '''    @Test\n    void intentLeaseRecoveryRevisionConflictAndRestartAreDurable() {\n        DiscordUserId userId = new DiscordUserId("18446744073709551001");\n        RecoveryFixture fixture = createAndLeaseInitialPunishment(userId);\n        recoverSettleAndRejectStaleRevision(fixture);\n        verifyRestartAndScheduledReconciliation(fixture);\n    }\n\n    private static RecoveryFixture createAndLeaseInitialPunishment(DiscordUserId userId) {\n        try (HikariDataSource dataSource = open()) {\n            JdbcDiscordModerationPersistenceStore identities = new JdbcDiscordModerationPersistenceStore(dataSource);\n            ModerationSubjectId subjectId = identities.ensureDiscordSubject(userId, NOW).subject().subjectId();\n            DiscordPunishment punishment = punishment(subjectId, userId, muteIntent());\n            String operationKey = CREATE_OPERATION_PREFIX + punishment.punishmentId();\n            JdbcDiscordPunishmentRepository repository = new JdbcDiscordPunishmentRepository(dataSource);\n\n            var created = repository.create(punishment, operationKey, NOW);\n            var replay = repository.create(punishment, operationKey, NOW);\n            assertFalse(created.replayed());\n            assertTrue(replay.replayed());\n            assertEquals(created.punishment().punishmentId(), replay.punishment().punishmentId());\n\n            var firstLease = repository.claimDue(NOW, 1, "worker-a", NOW.plusSeconds(30));\n            assertEquals(1, firstLease.size());\n            assertEquals(1, firstLease.getFirst().attemptCount());\n            assertTrue(repository.claimDue(NOW.plusSeconds(10), 1, "worker-b", NOW.plusSeconds(40)).isEmpty());\n            return new RecoveryFixture(userId, punishment);\n        }\n    }\n\n    private static void recoverSettleAndRejectStaleRevision(RecoveryFixture fixture) {\n        try (HikariDataSource dataSource = open()) {\n            JdbcDiscordPunishmentRepository repository = new JdbcDiscordPunishmentRepository(dataSource);\n            var persisted = repository.find(fixture.punishment().punishmentId()).orElseThrow();\n            assertEquals(DiscordPunishmentState.PENDING_APPLY, persisted.punishment().state());\n\n            Instant recoveredAt = NOW.plusSeconds(31);\n            var recovered = repository.claimDue(recoveredAt, 1, "worker-b", recoveredAt.plusSeconds(30));\n            assertEquals(1, recovered.size());\n            assertEquals(2, recovered.getFirst().attemptCount());\n\n            DiscordPunishment applied = persisted.punishment().withProcessingResult(\n                    DiscordPunishmentState.APPLIED, DiscordDeliveryOutcome.DELIVERED, true,\n                    Optional.empty(), Optional.empty(), "d07:work:recovered"\n            );\n            Instant reconcileAt = recoveredAt.plusSeconds(60);\n            var settled = repository.settle(\n                    recovered.getFirst(), persisted, applied,\n                    List.of(new WorkSchedule(WorkType.RECONCILE, reconcileAt)), recoveredAt\n            );\n            assertEquals(1, settled.revision());\n            assertEquals(1, repository.activeForTarget(\n                    GUILD_ID, fixture.userId(), DiscordConsequenceType.MUTE, 10\n            ).size());\n            assertThrows(ModerationPersistenceException.class, () -> repository.transition(\n                    persisted, applied, "d07-stale-" + UUID.randomUUID(), List.of(), recoveredAt.plusSeconds(1)\n            ));\n        }\n    }\n\n    private static void verifyRestartAndScheduledReconciliation(RecoveryFixture fixture) {\n        try (HikariDataSource dataSource = open()) {\n            JdbcDiscordPunishmentRepository repository = new JdbcDiscordPunishmentRepository(dataSource);\n            var restarted = repository.find(fixture.punishment().punishmentId()).orElseThrow();\n            assertEquals(DiscordPunishmentState.APPLIED, restarted.punishment().state());\n            assertTrue(restarted.punishment().externalApplied());\n            assertTrue(repository.claimDue(NOW.plusSeconds(60), 10, "worker-c", NOW.plusSeconds(90)).isEmpty());\n            var reconcile = repository.claimDue(NOW.plusSeconds(91), 10, "worker-c", NOW.plusSeconds(121));\n            assertEquals(1, reconcile.size());\n            assertEquals(WorkType.RECONCILE, reconcile.getFirst().type());\n        }\n    }\n\n'''
+          text = text[:start] + replacement + text[end:]
+          marker = '''    private record CreateAttempt(boolean success, Throwable failure) {\n    }\n'''
+          records = '''    private record RecoveryFixture(DiscordUserId userId, DiscordPunishment punishment) {\n    }\n\n    private record CreateAttempt(boolean success, Throwable failure) {\n    }\n'''
+          text = replace_once(text, marker, records, "integration recovery fixture")
+          write(path, text)
+          PY
+
+      - name: Run D07 module and MariaDB integration tests
+        run: ./gradlew --no-daemon :persistence:test :staff-bot:test :integration-tests:test
+
+      - name: Require repository PMD on changed Java
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --location --silent --show-error \
+            'https://github.com/pmd/pmd/releases/download/pmd_releases%2F6.55.0/pmd-bin-6.55.0.zip' \
+            --output /tmp/pmd.zip
+          unzip -q /tmp/pmd.zip -d /tmp
+          mapfile -t files < <(git diff --name-only origin/main...HEAD -- '*.java')
+          input="$(IFS=,; echo "${files[*]}")"
+          /tmp/pmd-bin-6.55.0/bin/run.sh pmd -d "$input" -R ruleset.xml -f text -r /tmp/pmd.txt
+          cat /tmp/pmd.txt
+
+      - name: Require changed Java under package complexity limits
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m pip install --disable-pip-version-check --quiet lizard
+          mapfile -t files < <(git diff --name-only origin/main...HEAD -- '*.java')
+          lizard -l java -C 8 -L 50 -w "${files[@]}"
+
+      - name: Commit validated complexity repair and remove runner
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm .github/workflows/d07-complexity-repair.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'refactor(es-d07): reduce punishment enforcement complexity'
+          git push origin HEAD:package/es-d07-discord-punishment-enforcement
