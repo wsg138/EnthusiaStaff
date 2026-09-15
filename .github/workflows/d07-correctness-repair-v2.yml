@@ -28,7 +28,23 @@ jobs:
 
       - name: Apply exact D07 repairs
         shell: bash
-        run: python3 .github/scripts/d07_correctness_repair.py
+        run: |
+          python3 .github/scripts/d07_correctness_repair.py
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path("staff-bot/src/test/java/net/enthusia/staff/discordbot/JdaStaffModerationListenerTest.java")
+          text = path.read_text(encoding="utf-8")
+          old_import = "import net.dv8tion.jda.api.interactions.commands.build.CommandData;\n"
+          new_import = old_import + "import net.dv8tion.jda.api.interactions.commands.build.SlashCommandData;\n"
+          if text.count(old_import) != 1:
+              raise SystemExit("listener test import patch did not match exactly once")
+          text = text.replace(old_import, new_import, 1)
+          old_decl = '        CommandData unrestrict = command(JdaStaffModerationListener.commands(true), "unrestrict");\n'
+          new_decl = '        SlashCommandData unrestrict = (SlashCommandData) command(\n                JdaStaffModerationListener.commands(true), "unrestrict"\n        );\n'
+          if text.count(old_decl) != 1:
+              raise SystemExit("listener test declaration patch did not match exactly once")
+          path.write_text(text.replace(old_decl, new_decl, 1), encoding="utf-8")
+          PY
 
       - name: Run focused D07 staff-bot tests
         shell: bash
