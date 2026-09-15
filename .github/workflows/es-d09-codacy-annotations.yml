@@ -1,0 +1,26 @@
+name: ES-D09 Codacy Annotation Diagnostic
+
+on:
+  push:
+    branches:
+      - diagnostic/es-d09-codacy-findings-20260915
+
+permissions:
+  contents: read
+  checks: read
+
+jobs:
+  annotations:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Print Codacy annotations
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -Eeuo pipefail
+          curl --fail-with-body --silent --show-error \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/check-runs/104459736919/annotations?per_page=100" \
+            | jq -r '.[] | [.path, (.start_line|tostring), .annotation_level, .title, .message] | @tsv'
