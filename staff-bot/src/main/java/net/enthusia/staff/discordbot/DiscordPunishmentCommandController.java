@@ -17,6 +17,7 @@ final class DiscordPunishmentCommandController {
     private static final String PANEL_ROOT_PREFIX = "d07p:r:";
     private static final String PANEL_ACTION_PREFIX = "d07p:";
     private static final String PANEL_MODAL_PREFIX = "d07m:";
+    private static final long INVALID_USER_ID = 0L;
 
     enum PanelAction {
         WARNING("w", "Warn"),
@@ -337,7 +338,7 @@ final class DiscordPunishmentCommandController {
     }
 
     private static void requirePositive(long value) {
-        if (value == 0L) {
+        if (value == INVALID_USER_ID) {
             throw new IllegalArgumentException("Discord user id must be positive");
         }
     }

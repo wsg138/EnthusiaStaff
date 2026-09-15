@@ -26,6 +26,7 @@ final class DiscordPunishmentWorker {
     private static final Duration BASE_RETRY = Duration.ofSeconds(5);
     private static final Duration MAX_RETRY = Duration.ofMinutes(5);
     private static final String NATIVE_BAN_OWNERSHIP_CONFLICT = "NATIVE_BAN_OWNERSHIP_CONFLICT";
+    private static final String TARGET_NOT_IN_GUILD = "TARGET_NOT_IN_GUILD";
 
     private final DiscordPunishmentRepository repository;
     private final DiscordPunishmentGateway gateway;
@@ -68,6 +69,7 @@ final class DiscordPunishmentWorker {
             case APPLY -> apply(work, stored);
             case REMOVE -> remove(work, stored);
             case RECONCILE -> reconcile(work, stored);
+            default -> throw new IllegalStateException("unsupported D07 work type");
         }
     }
 
@@ -245,10 +247,14 @@ final class DiscordPunishmentWorker {
         if (failure.retryable()) {
             return List.of(retry(work, WorkType.RECONCILE));
         }
-        if (NATIVE_BAN_OWNERSHIP_CONFLICT.equals(failure.errorCode())) {
+        if (keepsPeriodicReconciliation(failure.errorCode())) {
             return List.of(reconcileLater());
         }
         return List.of();
+    }
+
+    private static boolean keepsPeriodicReconciliation(String errorCode) {
+        return NATIVE_BAN_OWNERSHIP_CONFLICT.equals(errorCode) || TARGET_NOT_IN_GUILD.equals(errorCode);
     }
 
     private DiscordPunishment reconciled(

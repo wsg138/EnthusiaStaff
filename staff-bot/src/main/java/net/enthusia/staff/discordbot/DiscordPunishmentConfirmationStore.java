@@ -49,6 +49,9 @@ final class DiscordPunishmentConfirmationStore {
     private final Clock clock;
     private final Duration ttl;
     private final int capacity;
+    private final Object lock = new Object();
+    // Linked insertion order provides deterministic eviction; lock guards every access.
+    @SuppressWarnings("PMD.DocumentMutableMapFieldConcurrency")
     private final LinkedHashMap<UUID, Draft> drafts = new LinkedHashMap<>();
 
     DiscordPunishmentConfirmationStore(Clock clock, Duration ttl, int capacity) {
@@ -60,28 +63,53 @@ final class DiscordPunishmentConfirmationStore {
         this.capacity = capacity;
     }
 
-    synchronized UUID put(DraftFactory factory) {
+    UUID put(DraftFactory factory) {
         if (factory == null) {
             throw new IllegalArgumentException("draft factory must be present");
         }
-        purgeExpired();
-        if (drafts.size() >= capacity) {
-            Iterator<Map.Entry<UUID, Draft>> iterator = drafts.entrySet().iterator();
-            if (iterator.hasNext()) {
-                iterator.next();
-                iterator.remove();
-            }
+        synchronized (lock) {
+            purgeExpiredLocked();
+            evictOldestIfFull();
+            UUID token = UUID.randomUUID();
+            drafts.put(token, factory.create(clock.instant().plus(ttl)));
+            return token;
         }
-        UUID token = UUID.randomUUID();
-        drafts.put(token, factory.create(clock.instant().plus(ttl)));
-        return token;
     }
 
-    synchronized Draft claimForActor(UUID token, UUID actorId) {
+    Draft claimForActor(UUID token, UUID actorId) {
         if (token == null || actorId == null) {
             throw new IllegalArgumentException("confirmation token and actor must be present");
         }
-        Draft draft = drafts.get(token);
+        synchronized (lock) {
+            Draft draft = drafts.get(token);
+            requireAvailable(token, draft);
+            if (!draft.authorization().actorId().equals(actorId)) {
+                throw new SecurityException("confirmation belongs to another staff actor");
+            }
+            drafts.remove(token);
+            return draft;
+        }
+    }
+
+    int size() {
+        synchronized (lock) {
+            purgeExpiredLocked();
+            return drafts.size();
+        }
+    }
+
+    private void evictOldestIfFull() {
+        if (drafts.size() < capacity) {
+            return;
+        }
+        Iterator<Map.Entry<UUID, Draft>> iterator = drafts.entrySet().iterator();
+        if (iterator.hasNext()) {
+            iterator.next();
+            iterator.remove();
+        }
+    }
+
+    private void requireAvailable(UUID token, Draft draft) {
         if (draft == null) {
             throw unavailable();
         }
@@ -89,19 +117,9 @@ final class DiscordPunishmentConfirmationStore {
             drafts.remove(token);
             throw unavailable();
         }
-        if (!draft.authorization().actorId().equals(actorId)) {
-            throw new SecurityException("confirmation belongs to another staff actor");
-        }
-        drafts.remove(token);
-        return draft;
     }
 
-    synchronized int size() {
-        purgeExpired();
-        return drafts.size();
-    }
-
-    private void purgeExpired() {
+    private void purgeExpiredLocked() {
         Instant now = clock.instant();
         drafts.entrySet().removeIf(entry -> !now.isBefore(entry.getValue().expiresAt()));
     }

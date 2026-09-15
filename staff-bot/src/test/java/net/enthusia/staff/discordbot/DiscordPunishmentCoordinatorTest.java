@@ -15,6 +15,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
 
 class DiscordPunishmentCoordinatorTest {
+    private static final int FIRST_CYCLE = 1;
     @Test
     void pauseWaitsForInflightCycleAndRuntimeCanResume() throws Exception {
         CountDownLatch firstEntered = new CountDownLatch(1);
@@ -22,27 +23,28 @@ class DiscordPunishmentCoordinatorTest {
         CountDownLatch secondEntered = new CountDownLatch(1);
         AtomicInteger cycles = new AtomicInteger();
         Runnable cycle = blockingFirstCycle(cycles, firstEntered, releaseFirst, secondEntered);
-        ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
-        ExecutorService control = Executors.newSingleThreadExecutor();
-        DiscordPunishmentCoordinator coordinator = new DiscordPunishmentCoordinator(
-                cycle, Duration.ofMillis(5), scheduler
-        );
-        try {
-            coordinator.start();
-            coordinator.resume();
-            assertTrue(firstEntered.await(2, TimeUnit.SECONDS));
+        try (ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
+             ExecutorService control = Executors.newSingleThreadExecutor()) {
+            DiscordPunishmentCoordinator coordinator = new DiscordPunishmentCoordinator(
+                    cycle, Duration.ofMillis(5), scheduler
+            );
+            try {
+                coordinator.start();
+                coordinator.resume();
+                assertTrue(firstEntered.await(2, TimeUnit.SECONDS));
 
-            Future<?> paused = control.submit(coordinator::pause);
-            assertThrows(TimeoutException.class, () -> paused.get(100, TimeUnit.MILLISECONDS));
-            releaseFirst.countDown();
-            paused.get(2, TimeUnit.SECONDS);
+                Future<?> paused = control.submit(coordinator::pause);
+                assertThrows(TimeoutException.class, () -> paused.get(100, TimeUnit.MILLISECONDS));
+                releaseFirst.countDown();
+                paused.get(2, TimeUnit.SECONDS);
 
-            coordinator.resume();
-            assertTrue(secondEntered.await(2, TimeUnit.SECONDS));
-        } finally {
-            releaseFirst.countDown();
-            coordinator.close();
-            control.shutdownNow();
+                coordinator.resume();
+                assertTrue(secondEntered.await(2, TimeUnit.SECONDS));
+            } finally {
+                releaseFirst.countDown();
+                coordinator.close();
+                control.shutdownNow();
+            }
         }
     }
 
@@ -50,31 +52,32 @@ class DiscordPunishmentCoordinatorTest {
     void closeWaitsForInflightCycleAndPermanentlyStopsCoordinator() throws Exception {
         CountDownLatch entered = new CountDownLatch(1);
         CountDownLatch release = new CountDownLatch(1);
-        ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
-        ExecutorService control = Executors.newSingleThreadExecutor();
-        DiscordPunishmentCoordinator coordinator = new DiscordPunishmentCoordinator(
-                () -> {
-                    entered.countDown();
-                    await(release);
-                },
-                Duration.ofMillis(5),
-                scheduler
-        );
-        try {
-            coordinator.start();
-            coordinator.resume();
-            assertTrue(entered.await(2, TimeUnit.SECONDS));
+        try (ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
+             ExecutorService control = Executors.newSingleThreadExecutor()) {
+            DiscordPunishmentCoordinator coordinator = new DiscordPunishmentCoordinator(
+                    () -> {
+                        entered.countDown();
+                        await(release);
+                    },
+                    Duration.ofMillis(5),
+                    scheduler
+            );
+            try {
+                coordinator.start();
+                coordinator.resume();
+                assertTrue(entered.await(2, TimeUnit.SECONDS));
 
-            Future<?> closed = control.submit(coordinator::close);
-            assertThrows(TimeoutException.class, () -> closed.get(100, TimeUnit.MILLISECONDS));
-            release.countDown();
-            closed.get(2, TimeUnit.SECONDS);
+                Future<?> closed = control.submit(coordinator::close);
+                assertThrows(TimeoutException.class, () -> closed.get(100, TimeUnit.MILLISECONDS));
+                release.countDown();
+                closed.get(2, TimeUnit.SECONDS);
 
-            assertThrows(IllegalStateException.class, coordinator::resume);
-        } finally {
-            release.countDown();
-            coordinator.close();
-            control.shutdownNow();
+                assertThrows(IllegalStateException.class, coordinator::resume);
+            } finally {
+                release.countDown();
+                coordinator.close();
+                control.shutdownNow();
+            }
         }
     }
 
@@ -86,7 +89,7 @@ class DiscordPunishmentCoordinatorTest {
     ) {
         return () -> {
             int call = cycles.incrementAndGet();
-            if (call == 1) {
+            if (call == FIRST_CYCLE) {
                 firstEntered.countDown();
                 await(releaseFirst);
                 return;

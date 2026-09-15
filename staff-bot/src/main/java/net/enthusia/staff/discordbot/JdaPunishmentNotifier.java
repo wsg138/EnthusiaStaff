@@ -1,5 +1,6 @@
 package net.enthusia.staff.discordbot;
 
+import java.util.Locale;
 import net.dv8tion.jda.api.JDA;
 import net.dv8tion.jda.api.entities.User;
 import net.dv8tion.jda.api.exceptions.ErrorResponseException;
@@ -47,7 +48,7 @@ final class JdaPunishmentNotifier {
 
     private String removalMessage(DiscordPunishment punishment) {
         return "Enthusia moderation update: " + punishment.intent().type()
-                + " " + punishment.termination().name().toLowerCase()
+                + " " + punishment.termination().name().toLowerCase(Locale.ROOT)
                 + "\nOriginal reason: " + punishment.intent().publicReason()
                 + "\n" + configuration.supportMessage();
     }

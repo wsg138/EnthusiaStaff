@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import java.time.Duration;
+import java.util.Locale;
 import java.util.Optional;
 import java.util.UUID;
 import net.enthusia.staff.domain.auth.Actor;
@@ -68,7 +69,7 @@ class DiscordPunishmentAuthorizationTest {
     }
 
     private static Actor actor(StaffRank rank) {
-        return new Actor(UUID.randomUUID(), rank.name().toLowerCase(), rank);
+        return new Actor(UUID.randomUUID(), rank.name().toLowerCase(Locale.ROOT), rank);
     }
 
     private static DiscordPunishmentIntent ban(SanctionLength length, boolean customDuration) {

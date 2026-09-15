@@ -42,6 +42,9 @@ final class JdaDiscordPunishmentGateway implements DiscordPunishmentGateway {
     );
     private static final long NO_ACCESS_MASK = Permission.getRaw(Permission.VIEW_CHANNEL);
     private static final int MAX_AUDIT_REASON = 500;
+    private static final String UNKNOWN_MEMBER = "UNKNOWN_MEMBER";
+    private static final String UNKNOWN_USER = "UNKNOWN_USER";
+    private static final String UNSUPPORTED_CONSEQUENCE = "UNSUPPORTED_CONSEQUENCE";
 
     private final DiscordPunishmentConfiguration configuration;
     private final JdaNativeBanEnforcer nativeBans = new JdaNativeBanEnforcer();
@@ -89,6 +92,7 @@ final class JdaDiscordPunishmentGateway implements DiscordPunishmentGateway {
                 case BAN -> nativeBans.preflight(guild, target);
                 case CHANNEL_RESTRICTION -> restrictionContainer(guild, intent.restriction().orElseThrow());
                 case WARNING, KICK -> { }
+                default -> throw failure(UNSUPPORTED_CONSEQUENCE, false);
             }
         } catch (RuntimeException failure) {
             throw classify("PREFLIGHT", failure);
@@ -133,6 +137,7 @@ final class JdaDiscordPunishmentGateway implements DiscordPunishmentGateway {
                 case BAN -> nativeBans.remove(guild, punishment);
                 case CHANNEL_RESTRICTION -> removeRestriction(guild, punishment);
                 case WARNING, KICK -> { }
+                default -> throw failure(UNSUPPORTED_CONSEQUENCE, false);
             }
         } catch (RuntimeException failure) {
             throw classify("REMOVE", failure);
@@ -153,6 +158,7 @@ final class JdaDiscordPunishmentGateway implements DiscordPunishmentGateway {
                 case BAN -> nativeBans.reconcile(guild, punishment);
                 case CHANNEL_RESTRICTION -> applyRestriction(guild, punishment);
                 case WARNING, KICK -> { }
+                default -> throw failure(UNSUPPORTED_CONSEQUENCE, false);
             }
         } catch (RuntimeException failure) {
             throw classify("RECONCILE", failure);
@@ -180,6 +186,7 @@ final class JdaDiscordPunishmentGateway implements DiscordPunishmentGateway {
             case BAN -> applyBan(guild, punishment);
             case CHANNEL_RESTRICTION -> applyRestriction(guild, punishment);
             case WARNING -> { }
+            default -> throw failure(UNSUPPORTED_CONSEQUENCE, false);
         }
     }
 
@@ -400,7 +407,7 @@ final class JdaDiscordPunishmentGateway implements DiscordPunishmentGateway {
             return guild.retrieveMemberById(target.value()).complete();
         } catch (ErrorResponseException exception) {
             String code = exception.getErrorResponse().name();
-            if ("UNKNOWN_MEMBER".equals(code) || "UNKNOWN_USER".equals(code)) {
+            if (UNKNOWN_MEMBER.equals(code) || UNKNOWN_USER.equals(code)) {
                 return null;
             }
             throw exception;

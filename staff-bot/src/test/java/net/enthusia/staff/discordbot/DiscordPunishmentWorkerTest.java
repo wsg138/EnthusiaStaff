@@ -257,6 +257,24 @@ class DiscordPunishmentWorkerTest {
         assertTrue(repository.work.peek().dueAt().isAfter(NOW));
     }
 
+    @Test
+    void absentMemberReconciliationRemainsScheduledForRejoinRecovery() {
+        FakeRepository repository = new FakeRepository(appliedMute());
+        FakeGateway gateway = new FakeGateway();
+        gateway.reconcileFailure = new DiscordPunishmentGateway.EffectException("TARGET_NOT_IN_GUILD", false);
+        repository.enqueue(WorkType.RECONCILE, NOW, 1);
+
+        newWorker(repository, gateway).runCycle();
+
+        assertEquals(DiscordPunishmentState.APPLIED, repository.current.punishment().state());
+        assertTrue(repository.current.punishment().externalApplied());
+        assertEquals(Optional.of("TARGET_NOT_IN_GUILD"), repository.current.punishment().lastErrorCode());
+        assertEquals(1, gateway.reconcileCalls);
+        assertEquals(1, repository.work.size());
+        assertEquals(WorkType.RECONCILE, repository.work.peek().type());
+        assertTrue(repository.work.peek().dueAt().isAfter(NOW));
+    }
+
     private static DiscordPunishmentWorker newWorker(FakeRepository repository, FakeGateway gateway) {
         return new DiscordPunishmentWorker(
                 repository,

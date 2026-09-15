@@ -47,6 +47,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 class DiscordPunishmentPersistenceIntegrationTest {
     private static final Instant NOW = Instant.parse("2026-09-14T20:00:00Z");
     private static final DiscordGuildId GUILD_ID = new DiscordGuildId("1410303324745371709");
+    private static final String CREATE_OPERATION_PREFIX = "d07-create-";
 
     @Container
     private static final MariaDBContainer<?> DATABASE = new MariaDBContainer<>("mariadb:11.4.8")
@@ -82,7 +83,7 @@ class DiscordPunishmentPersistenceIntegrationTest {
             JdbcDiscordModerationPersistenceStore identities = new JdbcDiscordModerationPersistenceStore(dataSource);
             var subject = identities.ensureDiscordSubject(userId, NOW);
             punishment = punishment(subject.subject().subjectId(), userId, muteIntent());
-            operationKey = "d07-create-" + punishment.punishmentId();
+            operationKey = CREATE_OPERATION_PREFIX + punishment.punishmentId();
             JdbcDiscordPunishmentRepository repository = new JdbcDiscordPunishmentRepository(dataSource);
 
             var created = repository.create(punishment, operationKey, NOW);
@@ -161,29 +162,30 @@ class DiscordPunishmentPersistenceIntegrationTest {
             DiscordPunishment second = punishment(subjectId, userId, muteIntent());
             CountDownLatch ready = new CountDownLatch(2);
             CountDownLatch start = new CountDownLatch(1);
-            ExecutorService executor = Executors.newFixedThreadPool(2);
-            try {
-                Future<CreateAttempt> firstAttempt = executor.submit(
-                        () -> createWhenReleased(repository, first, ready, start)
-                );
-                Future<CreateAttempt> secondAttempt = executor.submit(
-                        () -> createWhenReleased(repository, second, ready, start)
-                );
-                assertTrue(ready.await(2, TimeUnit.SECONDS));
-                start.countDown();
+            try (ExecutorService executor = Executors.newFixedThreadPool(2)) {
+                try {
+                    Future<CreateAttempt> firstAttempt = executor.submit(
+                            () -> createWhenReleased(repository, first, ready, start)
+                    );
+                    Future<CreateAttempt> secondAttempt = executor.submit(
+                            () -> createWhenReleased(repository, second, ready, start)
+                    );
+                    assertTrue(ready.await(2, TimeUnit.SECONDS));
+                    start.countDown();
 
-                CreateAttempt firstResult = firstAttempt.get(10, TimeUnit.SECONDS);
-                CreateAttempt secondResult = secondAttempt.get(10, TimeUnit.SECONDS);
-                long successes = List.of(firstResult, secondResult).stream().filter(CreateAttempt::success).count();
-                assertEquals(1L, successes);
-                CreateAttempt rejected = firstResult.success() ? secondResult : firstResult;
-                assertInstanceOf(ModerationPersistenceException.class, rejected.failure());
-                assertEquals(1, repository.activeForTarget(
-                        GUILD_ID, userId, DiscordConsequenceType.MUTE, 10
-                ).size());
-            } finally {
-                start.countDown();
-                executor.shutdownNow();
+                    CreateAttempt firstResult = firstAttempt.get(10, TimeUnit.SECONDS);
+                    CreateAttempt secondResult = secondAttempt.get(10, TimeUnit.SECONDS);
+                    long successes = List.of(firstResult, secondResult).stream().filter(CreateAttempt::success).count();
+                    assertEquals(1L, successes);
+                    CreateAttempt rejected = firstResult.success() ? secondResult : firstResult;
+                    assertInstanceOf(ModerationPersistenceException.class, rejected.failure());
+                    assertEquals(1, repository.activeForTarget(
+                            GUILD_ID, userId, DiscordConsequenceType.MUTE, 10
+                    ).size());
+                } finally {
+                    start.countDown();
+                    executor.shutdownNow();
+                }
             }
         }
     }
@@ -198,11 +200,11 @@ class DiscordPunishmentPersistenceIntegrationTest {
             DiscordPunishment differentChannel = punishment(subjectId, userId, restrictionIntent("5002"));
             DiscordPunishment sameChannel = punishment(subjectId, userId, restrictionIntent("5001"));
 
-            repository.create(first, "d07-create-" + first.punishmentId(), NOW);
-            repository.create(differentChannel, "d07-create-" + differentChannel.punishmentId(), NOW);
+            repository.create(first, CREATE_OPERATION_PREFIX + first.punishmentId(), NOW);
+            repository.create(differentChannel, CREATE_OPERATION_PREFIX + differentChannel.punishmentId(), NOW);
             assertThrows(ModerationPersistenceException.class, () -> repository.create(
                     sameChannel,
-                    "d07-create-" + sameChannel.punishmentId(),
+                    CREATE_OPERATION_PREFIX + sameChannel.punishmentId(),
                     NOW
             ));
             assertEquals(2, repository.activeForTarget(
@@ -220,7 +222,7 @@ class DiscordPunishmentPersistenceIntegrationTest {
         ready.countDown();
         start.await();
         try {
-            repository.create(punishment, "d07-create-" + punishment.punishmentId(), NOW);
+            repository.create(punishment, CREATE_OPERATION_PREFIX + punishment.punishmentId(), NOW);
             return new CreateAttempt(true, null);
         } catch (RuntimeException failure) {
             return new CreateAttempt(false, failure);
