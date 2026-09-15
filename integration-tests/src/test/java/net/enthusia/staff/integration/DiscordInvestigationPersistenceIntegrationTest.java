@@ -47,7 +47,7 @@ class DiscordInvestigationPersistenceIntegrationTest {
     private static final MariaDBContainer<?> DATABASE = new MariaDBContainer<>("mariadb:11.4.8")
             .withDatabaseName("enthusia_staff_d09")
             .withUsername("enthusia")
-            .withPassword("enthusia-test-password");
+            .withPassword(UUID.randomUUID().toString());
 
     @BeforeAll
     static void migrateAndSeedActor() throws SQLException {
