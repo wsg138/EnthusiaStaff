@@ -95,10 +95,15 @@ final class DiscordPunishmentRuntime implements AutoCloseable {
             DiscordGuildId guildId,
             Clock clock
     ) {
-        return new DiscordPunishmentService(
-                reads, actors, authorization, confirmations, persistence.punishments(),
-                persistence::ensureDiscordSubject, gateway, guildId, clock
+        DiscordPunishmentService.Dependencies dependencies = new DiscordPunishmentService.Dependencies(
+                reads,
+                actors,
+                authorization,
+                confirmations,
+                persistence.punishments(),
+                persistence::ensureDiscordSubject
         );
+        return new DiscordPunishmentService(dependencies, gateway, guildId, clock);
     }
 
     private static void validateOpen(

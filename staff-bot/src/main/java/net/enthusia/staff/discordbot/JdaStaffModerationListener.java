@@ -245,10 +245,19 @@ final class JdaStaffModerationListener extends ListenerAdapter {
                     reason, explanation, integerOption(event, DELETE_SECONDS_OPTION, 0));
             case RESTRICT -> () -> punishment.restrict(
                     actorId, actorName, targetId, option(event, DURATION_OPTION, ""), reason, explanation,
-                    option(event, SCOPE_KIND_OPTION, ""), option(event, SCOPE_ID_OPTION, ""),
-                    option(event, MODE_OPTION, ""));
+                    restrictionInput(event));
             default -> throw new IllegalArgumentException("not a Discord punishment issue command");
         };
+    }
+
+    private static DiscordPunishmentCommandController.RestrictionInput restrictionInput(
+            SlashCommandInteractionEvent event
+    ) {
+        return new DiscordPunishmentCommandController.RestrictionInput(
+                option(event, SCOPE_KIND_OPTION, ""),
+                option(event, SCOPE_ID_OPTION, ""),
+                option(event, MODE_OPTION, "")
+        );
     }
 
     @Override

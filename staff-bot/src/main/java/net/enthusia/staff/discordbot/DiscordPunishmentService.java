@@ -35,6 +35,24 @@ final class DiscordPunishmentService {
     record MutationResult(UUID punishmentId, DiscordPunishmentState state, boolean replayed) {
     }
 
+    record Dependencies(
+            StaffModerationReadService reads,
+            LinkedStaffActorResolver actors,
+            DiscordPunishmentAuthorization authorization,
+            DiscordPunishmentConfirmationStore confirmations,
+            DiscordPunishmentRepository punishments,
+            BiFunction<DiscordUserId, Instant, ModerationSubjectId> subjects
+    ) {
+        Dependencies {
+            requireDependency(reads);
+            requireDependency(actors);
+            requireDependency(authorization);
+            requireDependency(confirmations);
+            requireDependency(punishments);
+            requireDependency(subjects);
+        }
+    }
+
     private final StaffModerationReadService reads;
     private final LinkedStaffActorResolver actors;
     private final DiscordPunishmentAuthorization authorization;
@@ -46,31 +64,21 @@ final class DiscordPunishmentService {
     private final Clock clock;
 
     DiscordPunishmentService(
-            StaffModerationReadService reads,
-            LinkedStaffActorResolver actors,
-            DiscordPunishmentAuthorization authorization,
-            DiscordPunishmentConfirmationStore confirmations,
-            DiscordPunishmentRepository punishments,
-            BiFunction<DiscordUserId, Instant, ModerationSubjectId> subjects,
+            Dependencies dependencies,
             DiscordPunishmentGateway gateway,
             DiscordGuildId guildId,
             Clock clock
     ) {
-        requireDependency(reads);
-        requireDependency(actors);
-        requireDependency(authorization);
-        requireDependency(confirmations);
-        requireDependency(punishments);
-        requireDependency(subjects);
+        requireDependency(dependencies);
         requireDependency(gateway);
         requireDependency(guildId);
         requireDependency(clock);
-        this.reads = reads;
-        this.actors = actors;
-        this.authorization = authorization;
-        this.confirmations = confirmations;
-        this.punishments = punishments;
-        this.subjects = subjects;
+        this.reads = dependencies.reads();
+        this.actors = dependencies.actors();
+        this.authorization = dependencies.authorization();
+        this.confirmations = dependencies.confirmations();
+        this.punishments = dependencies.punishments();
+        this.subjects = dependencies.subjects();
         this.gateway = gateway;
         this.guildId = guildId;
         this.clock = clock;

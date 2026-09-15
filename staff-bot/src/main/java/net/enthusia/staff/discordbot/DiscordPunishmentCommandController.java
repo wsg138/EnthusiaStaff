@@ -59,6 +59,14 @@ final class DiscordPunishmentCommandController {
     record Committed(String content) {
     }
 
+    record RestrictionInput(String scopeKind, String scopeId, String mode) {
+        RestrictionInput {
+            if (scopeKind == null || scopeId == null || mode == null) {
+                throw new IllegalArgumentException("restriction input fields must be present");
+            }
+        }
+    }
+
     private final DiscordPunishmentService service;
     private final DiscordDurationParser durations;
 
@@ -150,15 +158,16 @@ final class DiscordPunishmentCommandController {
             String duration,
             String reason,
             String explanation,
-            String scopeKind,
-            String scopeId,
-            String mode
+            RestrictionInput input
     ) {
+        if (input == null) {
+            throw new IllegalArgumentException("restriction input must be present");
+        }
         DiscordDurationParser.Parsed parsed = durations.parse(duration, true);
         DiscordRestrictionTarget restriction = new DiscordRestrictionTarget(
-                restrictionKind(scopeKind),
-                scopeId,
-                restrictionMode(mode)
+                restrictionKind(input.scopeKind()),
+                input.scopeId(),
+                restrictionMode(input.mode())
         );
         return prepareIssue(actorId, actorName, targetId, new DiscordPunishmentIntent(
                 DiscordConsequenceType.CHANNEL_RESTRICTION,

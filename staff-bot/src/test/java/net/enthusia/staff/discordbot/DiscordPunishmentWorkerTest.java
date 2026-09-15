@@ -39,8 +39,8 @@ class DiscordPunishmentWorkerTest {
 
     @Test
     void successfulWarningBecomesCompletedWithoutFollowUpWork() {
-        FakeRepository repository = new FakeRepository(punishment(warning(), NOW));
-        FakeGateway gateway = new FakeGateway();
+        DiscordPunishmentWorkerFakeRepository repository = new DiscordPunishmentWorkerFakeRepository(punishment(warning(), NOW));
+        DiscordPunishmentWorkerFakeGateway gateway = new DiscordPunishmentWorkerFakeGateway();
         repository.enqueue(WorkType.APPLY, NOW, 1);
 
         newWorker(repository, gateway).runCycle();
@@ -55,8 +55,8 @@ class DiscordPunishmentWorkerTest {
 
     @Test
     void terminalWarningDeliveryFailureIsARealApplyFailure() {
-        FakeRepository repository = new FakeRepository(punishment(warning(), NOW));
-        FakeGateway gateway = new FakeGateway();
+        DiscordPunishmentWorkerFakeRepository repository = new DiscordPunishmentWorkerFakeRepository(punishment(warning(), NOW));
+        DiscordPunishmentWorkerFakeGateway gateway = new DiscordPunishmentWorkerFakeGateway();
         gateway.applyDelivery = DiscordDeliveryOutcome.FAILED_TERMINAL;
         repository.enqueue(WorkType.APPLY, NOW, 1);
 
@@ -70,8 +70,8 @@ class DiscordPunishmentWorkerTest {
 
     @Test
     void retryableApplyFailureSchedulesRetryAndPreservesTruthfulState() {
-        FakeRepository repository = new FakeRepository(punishment(mute(Duration.ofHours(1)), NOW));
-        FakeGateway gateway = new FakeGateway();
+        DiscordPunishmentWorkerFakeRepository repository = new DiscordPunishmentWorkerFakeRepository(punishment(mute(Duration.ofHours(1)), NOW));
+        DiscordPunishmentWorkerFakeGateway gateway = new DiscordPunishmentWorkerFakeGateway();
         gateway.applyFailure = new DiscordPunishmentGateway.EffectException("RATE_LIMIT", true);
         repository.enqueue(WorkType.APPLY, NOW, 1);
 
@@ -86,8 +86,8 @@ class DiscordPunishmentWorkerTest {
 
     @Test
     void targetLeavingBeforeMuteApplyRemainsRecoverable() {
-        FakeRepository repository = new FakeRepository(punishment(mute(Duration.ofHours(1)), NOW));
-        FakeGateway gateway = new FakeGateway();
+        DiscordPunishmentWorkerFakeRepository repository = new DiscordPunishmentWorkerFakeRepository(punishment(mute(Duration.ofHours(1)), NOW));
+        DiscordPunishmentWorkerFakeGateway gateway = new DiscordPunishmentWorkerFakeGateway();
         gateway.applyFailure = new DiscordPunishmentGateway.EffectException(TARGET_NOT_IN_GUILD_ERROR, true);
         repository.enqueue(WorkType.APPLY, NOW, 1);
 
@@ -102,8 +102,8 @@ class DiscordPunishmentWorkerTest {
 
     @Test
     void applyNotificationRetryDoesNotRepeatExternalEffect() {
-        FakeRepository repository = new FakeRepository(punishment(mute(Duration.ofHours(1)), NOW));
-        FakeGateway gateway = new FakeGateway();
+        DiscordPunishmentWorkerFakeRepository repository = new DiscordPunishmentWorkerFakeRepository(punishment(mute(Duration.ofHours(1)), NOW));
+        DiscordPunishmentWorkerFakeGateway gateway = new DiscordPunishmentWorkerFakeGateway();
         gateway.applyDelivery = DiscordDeliveryOutcome.FAILED_RETRYABLE;
         repository.enqueue(WorkType.APPLY, NOW, 1);
         DiscordPunishmentWorker worker = newWorker(repository, gateway);
@@ -128,10 +128,10 @@ class DiscordPunishmentWorkerTest {
 
     @Test
     void expiredTemporaryPunishmentNeverTouchesDiscord() {
-        FakeRepository repository = new FakeRepository(
+        DiscordPunishmentWorkerFakeRepository repository = new DiscordPunishmentWorkerFakeRepository(
                 punishment(mute(Duration.ofMinutes(1)), NOW.minus(Duration.ofHours(1)))
         );
-        FakeGateway gateway = new FakeGateway();
+        DiscordPunishmentWorkerFakeGateway gateway = new DiscordPunishmentWorkerFakeGateway();
         repository.enqueue(WorkType.APPLY, NOW, 1);
 
         newWorker(repository, gateway).runCycle();
@@ -144,8 +144,8 @@ class DiscordPunishmentWorkerTest {
 
     @Test
     void restrictionSnapshotIsPersistedBeforeExternalApply() {
-        FakeRepository repository = new FakeRepository(punishment(restriction(), NOW));
-        FakeGateway gateway = new FakeGateway();
+        DiscordPunishmentWorkerFakeRepository repository = new DiscordPunishmentWorkerFakeRepository(punishment(restriction(), NOW));
+        DiscordPunishmentWorkerFakeGateway gateway = new DiscordPunishmentWorkerFakeGateway();
         gateway.snapshot = new DiscordPermissionSnapshot(true, 8L, 16L);
         repository.enqueue(WorkType.APPLY, NOW, 1);
         DiscordPunishmentWorker worker = newWorker(repository, gateway);
@@ -167,8 +167,8 @@ class DiscordPunishmentWorkerTest {
     @Test
     void nonRetryableRemovalFailureIsDurablyVisible() {
         DiscordPunishment initial = appliedMute().requestRemoval(DiscordPunishmentTermination.END, REMOVE_OPERATION);
-        FakeRepository repository = new FakeRepository(initial);
-        FakeGateway gateway = new FakeGateway();
+        DiscordPunishmentWorkerFakeRepository repository = new DiscordPunishmentWorkerFakeRepository(initial);
+        DiscordPunishmentWorkerFakeGateway gateway = new DiscordPunishmentWorkerFakeGateway();
         gateway.removeFailure = new DiscordPunishmentGateway.EffectException("HIERARCHY", false);
         repository.enqueue(WorkType.REMOVE, NOW, 1);
 
@@ -182,8 +182,8 @@ class DiscordPunishmentWorkerTest {
     @Test
     void removalSuccessRemainsTerminalWhenNotificationFails() {
         DiscordPunishment initial = appliedMute().requestRemoval(DiscordPunishmentTermination.END, REMOVE_OPERATION);
-        FakeRepository repository = new FakeRepository(initial);
-        FakeGateway gateway = new FakeGateway();
+        DiscordPunishmentWorkerFakeRepository repository = new DiscordPunishmentWorkerFakeRepository(initial);
+        DiscordPunishmentWorkerFakeGateway gateway = new DiscordPunishmentWorkerFakeGateway();
         gateway.removalDelivery = DiscordDeliveryOutcome.FAILED_TERMINAL;
         repository.enqueue(WorkType.REMOVE, NOW, 1);
 
@@ -218,8 +218,8 @@ class DiscordPunishmentWorkerTest {
     @Test
     void removalNotificationRetryDoesNotRepeatReversal() {
         DiscordPunishment initial = appliedMute().requestRemoval(DiscordPunishmentTermination.EXPIRE, "expire");
-        FakeRepository repository = new FakeRepository(initial);
-        FakeGateway gateway = new FakeGateway();
+        DiscordPunishmentWorkerFakeRepository repository = new DiscordPunishmentWorkerFakeRepository(initial);
+        DiscordPunishmentWorkerFakeGateway gateway = new DiscordPunishmentWorkerFakeGateway();
         gateway.removalDelivery = DiscordDeliveryOutcome.FAILED_RETRYABLE;
         repository.enqueue(WorkType.REMOVE, NOW, 1);
         DiscordPunishmentWorker worker = newWorker(repository, gateway);
@@ -251,8 +251,8 @@ class DiscordPunishmentWorkerTest {
                         Optional.of("REMOVE_DM_RETRYABLE"),
                         "notify"
                 );
-        FakeRepository repository = new FakeRepository(initial);
-        FakeGateway gateway = new FakeGateway();
+        DiscordPunishmentWorkerFakeRepository repository = new DiscordPunishmentWorkerFakeRepository(initial);
+        DiscordPunishmentWorkerFakeGateway gateway = new DiscordPunishmentWorkerFakeGateway();
         gateway.removalDelivery = DiscordDeliveryOutcome.FAILED_RETRYABLE;
         repository.enqueue(WorkType.REMOVE, NOW, 5);
 
@@ -268,11 +268,11 @@ class DiscordPunishmentWorkerTest {
 
     @Test
     void applyForwardsDurableClaimAttemptToGateway() {
-        FakeRepository repository = new FakeRepository(punishment(
+        DiscordPunishmentWorkerFakeRepository repository = new DiscordPunishmentWorkerFakeRepository(punishment(
                 intent(DiscordConsequenceType.KICK, SanctionLength.instant(), Optional.empty()),
                 NOW
         ));
-        FakeGateway gateway = new FakeGateway();
+        DiscordPunishmentWorkerFakeGateway gateway = new DiscordPunishmentWorkerFakeGateway();
         repository.enqueue(WorkType.APPLY, NOW, 3);
 
         newWorker(repository, gateway).runCycle();
@@ -282,8 +282,8 @@ class DiscordPunishmentWorkerTest {
 
     @Test
     void cycleClaimsOnlyOneBlockingDiscordWorkItem() {
-        FakeRepository repository = new FakeRepository(punishment(warning(), NOW));
-        FakeGateway gateway = new FakeGateway();
+        DiscordPunishmentWorkerFakeRepository repository = new DiscordPunishmentWorkerFakeRepository(punishment(warning(), NOW));
+        DiscordPunishmentWorkerFakeGateway gateway = new DiscordPunishmentWorkerFakeGateway();
         repository.enqueue(WorkType.APPLY, NOW, 1);
         repository.enqueue(WorkType.APPLY, NOW, 1);
 
@@ -296,8 +296,8 @@ class DiscordPunishmentWorkerTest {
 
     @Test
     void recoverablePermissionConfigurationUsesPeriodicReconciliation() {
-        FakeRepository repository = new FakeRepository(appliedMute());
-        FakeGateway gateway = new FakeGateway();
+        DiscordPunishmentWorkerFakeRepository repository = new DiscordPunishmentWorkerFakeRepository(appliedMute());
+        DiscordPunishmentWorkerFakeGateway gateway = new DiscordPunishmentWorkerFakeGateway();
         gateway.reconcileFailure = new DiscordPunishmentGateway.EffectException(
                 "RECONCILE_PERMISSION_DENIED", false
         );
@@ -312,8 +312,8 @@ class DiscordPunishmentWorkerTest {
 
     @Test
     void retryableApplyFailureRemainsRecoverablePastAttemptLimit() {
-        FakeRepository repository = new FakeRepository(punishment(mute(Duration.ofHours(1)), NOW));
-        FakeGateway gateway = new FakeGateway();
+        DiscordPunishmentWorkerFakeRepository repository = new DiscordPunishmentWorkerFakeRepository(punishment(mute(Duration.ofHours(1)), NOW));
+        DiscordPunishmentWorkerFakeGateway gateway = new DiscordPunishmentWorkerFakeGateway();
         gateway.applyFailure = new DiscordPunishmentGateway.EffectException(
                 "MUTE_ROLE_OWNERSHIP_UNVERIFIED", true
         );
@@ -333,8 +333,8 @@ class DiscordPunishmentWorkerTest {
     void absentRestrictionRemovalRemainsRecoverablePastAttemptLimit() {
         DiscordPunishment initial = appliedRestriction()
                 .requestRemoval(DiscordPunishmentTermination.END, REMOVE_OPERATION);
-        FakeRepository repository = new FakeRepository(initial);
-        FakeGateway gateway = new FakeGateway();
+        DiscordPunishmentWorkerFakeRepository repository = new DiscordPunishmentWorkerFakeRepository(initial);
+        DiscordPunishmentWorkerFakeGateway gateway = new DiscordPunishmentWorkerFakeGateway();
         gateway.removeFailure = new DiscordPunishmentGateway.EffectException(TARGET_NOT_IN_GUILD_ERROR, true);
         repository.enqueue(WorkType.REMOVE, NOW, 5);
 
@@ -350,8 +350,8 @@ class DiscordPunishmentWorkerTest {
 
     @Test
     void restrictionDriftRemainsObservableAndScheduled() {
-        FakeRepository repository = new FakeRepository(appliedRestriction());
-        FakeGateway gateway = new FakeGateway();
+        DiscordPunishmentWorkerFakeRepository repository = new DiscordPunishmentWorkerFakeRepository(appliedRestriction());
+        DiscordPunishmentWorkerFakeGateway gateway = new DiscordPunishmentWorkerFakeGateway();
         gateway.reconcileFailure = new DiscordPunishmentGateway.EffectException(
                 "RESTRICTION_STATE_CHANGED", false
         );
@@ -376,8 +376,8 @@ class DiscordPunishmentWorkerTest {
                 Optional.empty(),
                 "applied"
         );
-        FakeRepository repository = new FakeRepository(initial);
-        FakeGateway gateway = new FakeGateway();
+        DiscordPunishmentWorkerFakeRepository repository = new DiscordPunishmentWorkerFakeRepository(initial);
+        DiscordPunishmentWorkerFakeGateway gateway = new DiscordPunishmentWorkerFakeGateway();
         gateway.reconcileFailure = new DiscordPunishmentGateway.EffectException(
                 "NATIVE_BAN_OWNERSHIP_CONFLICT", false
         );
@@ -395,8 +395,8 @@ class DiscordPunishmentWorkerTest {
 
     @Test
     void absentMemberReconciliationRemainsScheduledForRejoinRecovery() {
-        FakeRepository repository = new FakeRepository(appliedMute());
-        FakeGateway gateway = new FakeGateway();
+        DiscordPunishmentWorkerFakeRepository repository = new DiscordPunishmentWorkerFakeRepository(appliedMute());
+        DiscordPunishmentWorkerFakeGateway gateway = new DiscordPunishmentWorkerFakeGateway();
         gateway.reconcileFailure = new DiscordPunishmentGateway.EffectException(TARGET_NOT_IN_GUILD_ERROR, false);
         repository.enqueue(WorkType.RECONCILE, NOW, 1);
 
@@ -413,8 +413,8 @@ class DiscordPunishmentWorkerTest {
 
     private static RemovalResult successfulRemoval(DiscordPunishmentTermination termination) {
         DiscordPunishment initial = appliedMute().requestRemoval(termination, REMOVE_OPERATION);
-        FakeRepository repository = new FakeRepository(initial);
-        FakeGateway gateway = new FakeGateway();
+        DiscordPunishmentWorkerFakeRepository repository = new DiscordPunishmentWorkerFakeRepository(initial);
+        DiscordPunishmentWorkerFakeGateway gateway = new DiscordPunishmentWorkerFakeGateway();
         repository.enqueue(WorkType.REMOVE, NOW, 1);
 
         newWorker(repository, gateway).runCycle();
@@ -424,7 +424,7 @@ class DiscordPunishmentWorkerTest {
     private record RemovalResult(DiscordPunishment punishment, int removeCalls) {
     }
 
-    private static DiscordPunishmentWorker newWorker(FakeRepository repository, FakeGateway gateway) {
+    private static DiscordPunishmentWorker newWorker(DiscordPunishmentWorkerFakeRepository repository, DiscordPunishmentWorkerFakeGateway gateway) {
         return new DiscordPunishmentWorker(
                 repository,
                 gateway,
@@ -511,156 +511,4 @@ class DiscordPunishmentWorkerTest {
         );
     }
 
-    private static final class FakeGateway implements DiscordPunishmentGateway {
-        private int snapshotCalls;
-        private int applyCalls;
-        private int notifyAppliedCalls;
-        private int removeCalls;
-        private int notifyRemovedCalls;
-        private int reconcileCalls;
-        private DiscordPermissionSnapshot snapshot = DiscordPermissionSnapshot.absent();
-        private DiscordPunishment lastApplied;
-        private int lastApplyAttemptCount;
-        private DiscordDeliveryOutcome applyDelivery = DiscordDeliveryOutcome.DELIVERED;
-        private DiscordDeliveryOutcome removalDelivery = DiscordDeliveryOutcome.DELIVERED;
-        private EffectException applyFailure;
-        private EffectException removeFailure;
-        private EffectException reconcileFailure;
-
-        @Override
-        public void preflight(DiscordGuildId guildId, DiscordUserId target, DiscordPunishmentIntent intent) {
-        }
-
-        @Override
-        public DiscordPermissionSnapshot captureRestrictionSnapshot(DiscordPunishment punishment) {
-            snapshotCalls++;
-            return snapshot;
-        }
-
-        @Override
-        public void apply(DiscordPunishment punishment, int attemptCount) {
-            applyCalls++;
-            lastApplied = punishment;
-            lastApplyAttemptCount = attemptCount;
-            if (applyFailure != null) {
-                throw applyFailure;
-            }
-        }
-
-        @Override
-        public DiscordDeliveryOutcome notifyApplied(DiscordPunishment punishment) {
-            notifyAppliedCalls++;
-            return applyDelivery;
-        }
-
-        @Override
-        public void remove(DiscordPunishment punishment) {
-            removeCalls++;
-            if (removeFailure != null) {
-                throw removeFailure;
-            }
-        }
-
-        @Override
-        public DiscordDeliveryOutcome notifyRemoved(DiscordPunishment punishment) {
-            notifyRemovedCalls++;
-            return removalDelivery;
-        }
-
-        @Override
-        public void reconcile(DiscordPunishment punishment) {
-            reconcileCalls++;
-            if (reconcileFailure != null) {
-                throw reconcileFailure;
-            }
-        }
-    }
-
-    private static final class FakeRepository implements DiscordPunishmentRepository {
-        private StoredPunishment current;
-        private final Queue<LeaseSeed> work = new PriorityQueue<>(Comparator.comparing(LeaseSeed::dueAt));
-
-        private FakeRepository(DiscordPunishment punishment) {
-            current = new StoredPunishment(punishment, 0, false);
-        }
-
-        void enqueue(WorkType type, Instant dueAt, int attempt) {
-            work.add(new LeaseSeed(UUID.randomUUID(), type, dueAt, attempt));
-        }
-
-        void makeNextDue() {
-            LeaseSeed next = work.remove();
-            work.add(new LeaseSeed(next.id(), next.type(), NOW, next.attempt()));
-        }
-
-        @Override
-        public StoredPunishment create(DiscordPunishment punishment, String operationKey, Instant now) {
-            throw new UnsupportedOperationException();
-        }
-
-        @Override
-        public Optional<StoredPunishment> find(UUID punishmentId) {
-            return current.punishment().punishmentId().equals(punishmentId)
-                    ? Optional.of(current)
-                    : Optional.empty();
-        }
-
-        @Override
-        public List<StoredPunishment> activeForTarget(
-                DiscordGuildId guildId,
-                DiscordUserId userId,
-                DiscordConsequenceType type,
-                int limit
-        ) {
-            throw new UnsupportedOperationException();
-        }
-
-        @Override
-        public StoredPunishment transition(
-                StoredPunishment expected,
-                DiscordPunishment replacement,
-                String operationKey,
-                List<WorkSchedule> schedules,
-                Instant now
-        ) {
-            throw new UnsupportedOperationException();
-        }
-
-        @Override
-        public List<WorkLease> claimDue(Instant now, int limit, String leaseOwner, Instant leaseUntil) {
-            java.util.ArrayList<WorkLease> leases = new java.util.ArrayList<>();
-            while (!work.isEmpty() && leases.size() < limit && !work.peek().dueAt().isAfter(now)) {
-                LeaseSeed seed = work.remove();
-                leases.add(new WorkLease(
-                        seed.id(), seed.type(), current.punishment().punishmentId(), seed.dueAt(),
-                        leaseOwner, leaseUntil, seed.attempt(), seed.attempt()
-                ));
-            }
-            return List.copyOf(leases);
-        }
-
-        @Override
-        public StoredPunishment settle(
-                WorkLease lease,
-                StoredPunishment expected,
-                DiscordPunishment replacement,
-                List<WorkSchedule> nextWork,
-                Instant now
-        ) {
-            if (expected.revision() != current.revision()) {
-                throw new IllegalStateException("stale test revision");
-            }
-            current = new StoredPunishment(replacement, current.revision() + 1, false);
-            nextWork.forEach(schedule -> enqueue(schedule.type(), schedule.dueAt(), 1));
-            return current;
-        }
-
-        @Override
-        public List<StoredPunishment> activeNativeBans(DiscordGuildId guildId, int limit) {
-            return List.of();
-        }
-
-        private record LeaseSeed(UUID id, WorkType type, Instant dueAt, int attempt) {
-        }
-    }
 }
