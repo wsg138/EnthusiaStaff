@@ -4,19 +4,17 @@ import sys
 source = Path(sys.argv[1])
 target = Path(sys.argv[2])
 text = source.read_text(encoding="utf-8")
+
 blocks = [
-    '''replace_once(evidence_store,
-             "            UUID caseId,\\n            ModerationSubjectId subjectId",
-             "            CaseId caseId,\\n            ModerationSubjectId subjectId")
-''',
-    '''replace_once(evidence_store,
-             "                       m.captured_at, e.investigation_case_id, e.last_observed_at, e.revision",
-             "                       m.captured_at, e.case_id, e.last_observed_at, e.revision")
-''',
-    '''replace_once(worker,
-             "                    observation.issuerId(),\\n                    observation.summary(),",
-             "                    observation.issuer(),\\n                    observation.consequenceType(),\\n                    observation.summary(),")
-''',
+    "replace_once(evidence_store,\n"
+    "             \"            UUID caseId,\\\\n            ModerationSubjectId subjectId\",\n"
+    "             \"            CaseId caseId,\\\\n            ModerationSubjectId subjectId\")\n",
+    "replace_once(evidence_store,\n"
+    "             \"                       m.captured_at, e.investigation_case_id, e.last_observed_at, e.revision\",\n"
+    "             \"                       m.captured_at, e.case_id, e.last_observed_at, e.revision\")\n",
+    "replace_once(worker,\n"
+    "             \"                    observation.issuerId(),\\\\n                    observation.summary(),\",\n"
+    "             \"                    observation.issuer(),\\\\n                    observation.consequenceType(),\\\\n                    observation.summary(),\")\n",
 ]
 for block in blocks:
     count = text.count(block)
@@ -24,77 +22,80 @@ for block in blocks:
         raise SystemExit(f"expected one diagnostic replacement block, found {count}: {block[:80]!r}")
     text = text.replace(block, "", 1)
 
-post = r"""
-# Source indentation differs from the draft transform; apply the worker mapping explicitly.
-worker = "staff-bot/src/main/java/net/enthusia/staff/discordbot/DiscordInvestigationWorker.java"
-content = read(worker)
-old = "                observation.issuerId(),\n                observation.summary(),"
-new = "                observation.issuer(),\n                observation.consequenceType(),\n                observation.summary(),"
-if content.count(old) != 1:
-    raise RuntimeError(f"worker provenance mapping expected once, found {content.count(old)}")
-write(worker, content.replace(old, new, 1))
+post_lines = []
 
-# Complete the canonical CaseId conversion in evidence reads/guards.
-evidence_store = "persistence/src/main/java/net/enthusia/staff/persistence/JdbcDiscordInvestigationEvidenceStore.java"
-content = read(evidence_store)
-old = "            UUID caseId,\n            ModerationSubjectId subjectId\n    ) throws SQLException {"
-new = "            CaseId caseId,\n            ModerationSubjectId subjectId\n    ) throws SQLException {"
-if content.count(old) != 1:
-    raise RuntimeError(f"evidence open-case signature expected once, found {content.count(old)}")
-content = content.replace(old, new, 1)
-old = 'UuidBytes.fromBytes(rows.getBytes("investigation_case_id"))'
-new = 'new CaseId(rows.getString("case_id"))'
-if content.count(old) != 1:
-    raise RuntimeError(f"evidence legacy case read expected once, found {content.count(old)}")
-content = content.replace(old, new, 1)
-write(evidence_store, content)
+def emit(line=""):
+    post_lines.append(line)
 
-# Case-scoped notes now target canonical CaseId and gate against canonical case state.
-note_store = "persistence/src/main/java/net/enthusia/staff/persistence/JdbcDiscordInvestigationNoteStore.java"
-content = read(note_store)
-old = "import javax.sql.DataSource;\nimport net.enthusia.staff.domain.investigation.InvestigationNote;"
-new = "import javax.sql.DataSource;\nimport net.enthusia.staff.common.CaseId;\nimport net.enthusia.staff.domain.investigation.InvestigationNote;"
-if content.count(old) != 1:
-    raise RuntimeError("note CaseId import anchor changed")
-content = content.replace(old, new, 1)
-old = '''        UUID caseId;
-        try {
-            caseId = UUID.fromString(scope.value());
-        } catch (IllegalArgumentException exception) {
-            throw new SQLException("case-scoped note has an invalid case identifier", exception);
-        }
-        try (PreparedStatement statement = connection.prepareStatement("""
-                UPDATE discord_investigation_cases
-                SET last_activity_at = GREATEST(last_activity_at, ?), revision = revision + 1
-                WHERE case_id = ? AND state = 'OPEN'
-                """)) {
-            statement.setTimestamp(1, Timestamp.from(now));
-            statement.setBytes(2, UuidBytes.toBytes(caseId));
-            JdbcTransactionSupport.requireSingleUpdate(statement.executeUpdate(), "case-scoped note case is not open");
-        }
-'''
-new = '''        CaseId caseId;
-        try {
-            caseId = new CaseId(scope.value());
-        } catch (IllegalArgumentException exception) {
-            throw new SQLException("case-scoped note has an invalid case identifier", exception);
-        }
-        try (PreparedStatement statement = connection.prepareStatement("""
-                UPDATE discord_investigation_cases i
-                JOIN cases c ON c.case_id = i.case_id
-                SET i.last_activity_at = GREATEST(i.last_activity_at, ?), i.revision = i.revision + 1
-                WHERE i.case_id = ? AND i.closed_at IS NULL AND c.state = 'OPEN'
-                """)) {
-            statement.setTimestamp(1, Timestamp.from(now));
-            statement.setString(2, caseId.value());
-            JdbcTransactionSupport.requireSingleUpdate(statement.executeUpdate(), "case-scoped note case is not open");
-        }
-'''
-if content.count(old) != 1:
-    raise RuntimeError("case-scoped note lifecycle block changed")
-content = content.replace(old, new, 1)
-write(note_store, content)
-"""
 
-text += post
+def emit_replace(path_expr, old, new, label):
+    emit(f"content = read({path_expr})")
+    emit(f"old = {old!r}")
+    emit(f"new = {new!r}")
+    emit(f"if content.count(old) != 1: raise RuntimeError({label!r} + f': found {{content.count(old)}}')")
+    emit(f"write({path_expr}, content.replace(old, new, 1))")
+    emit()
+
+emit("# Complete exact source-shape repairs after the base transformation.")
+emit("worker = 'staff-bot/src/main/java/net/enthusia/staff/discordbot/DiscordInvestigationWorker.java'")
+emit_replace(
+    "worker",
+    "                observation.issuerId(),\n                observation.summary(),",
+    "                observation.issuer(),\n                observation.consequenceType(),\n                observation.summary(),",
+    "worker provenance mapping expected once",
+)
+
+emit("evidence_store = 'persistence/src/main/java/net/enthusia/staff/persistence/JdbcDiscordInvestigationEvidenceStore.java'")
+emit_replace(
+    "evidence_store",
+    "            UUID caseId,\n            ModerationSubjectId subjectId\n    ) throws SQLException {",
+    "            CaseId caseId,\n            ModerationSubjectId subjectId\n    ) throws SQLException {",
+    "evidence open-case signature expected once",
+)
+emit_replace(
+    "evidence_store",
+    'UuidBytes.fromBytes(rows.getBytes("investigation_case_id"))',
+    'new CaseId(rows.getString("case_id"))',
+    "evidence legacy case read expected once",
+)
+
+emit("note_store = 'persistence/src/main/java/net/enthusia/staff/persistence/JdbcDiscordInvestigationNoteStore.java'")
+emit_replace(
+    "note_store",
+    "import javax.sql.DataSource;\nimport net.enthusia.staff.domain.investigation.InvestigationNote;",
+    "import javax.sql.DataSource;\nimport net.enthusia.staff.common.CaseId;\nimport net.enthusia.staff.domain.investigation.InvestigationNote;",
+    "note CaseId import expected once",
+)
+emit_replace(
+    "note_store",
+    "        UUID caseId;\n",
+    "        CaseId caseId;\n",
+    "case-scoped note identifier declaration expected once",
+)
+emit_replace(
+    "note_store",
+    "            caseId = UUID.fromString(scope.value());",
+    "            caseId = new CaseId(scope.value());",
+    "case-scoped note parser expected once",
+)
+emit_replace(
+    "note_store",
+    "                UPDATE discord_investigation_cases\n",
+    "                UPDATE discord_investigation_cases i\n                JOIN cases c ON c.case_id = i.case_id\n",
+    "case-scoped note update expected once",
+)
+emit_replace(
+    "note_store",
+    "                SET last_activity_at = GREATEST(last_activity_at, ?), revision = revision + 1\n                WHERE case_id = ? AND state = 'OPEN'",
+    "                SET i.last_activity_at = GREATEST(i.last_activity_at, ?), i.revision = i.revision + 1\n                WHERE i.case_id = ? AND i.closed_at IS NULL AND c.state = 'OPEN'",
+    "case-scoped note state predicate expected once",
+)
+emit_replace(
+    "note_store",
+    "            statement.setBytes(2, UuidBytes.toBytes(caseId));",
+    "            statement.setString(2, caseId.value());",
+    "case-scoped note binding expected once",
+)
+
+text += "\n" + "\n".join(post_lines) + "\n"
 target.write_text(text, encoding="utf-8")
