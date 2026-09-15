@@ -48,9 +48,10 @@ final class JdaNativeBanEnforcer {
 
     void remove(Guild guild, DiscordPunishment punishment) {
         Guild.Ban existing = findBan(guild, punishment.targetUserId());
-        if (existing == null || !ownedBy(existing, punishment.punishmentId())) {
+        if (existing == null) {
             return;
         }
+        requireOwnedRemoval(true, ownedBy(existing, punishment.punishmentId()));
         try {
             guild.unban(target(punishment.targetUserId()))
                     .reason("Enthusia D07 ban removal " + punishment.punishmentId())
@@ -59,6 +60,12 @@ final class JdaNativeBanEnforcer {
             if (!isUnknownBan(exception)) {
                 throw exception;
             }
+        }
+    }
+
+    static void requireOwnedRemoval(boolean banPresent, boolean owned) {
+        if (banPresent && !owned) {
+            throw failure("NATIVE_BAN_OWNERSHIP_CONFLICT", false);
         }
     }
 

@@ -1,6 +1,9 @@
 package net.enthusia.staff.discordbot;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.UUID;
@@ -19,5 +22,22 @@ class JdaNativeBanEnforcerTest {
         ));
         assertFalse(JdaNativeBanEnforcer.ownsReason("manual Discord ban", punishmentId));
         assertFalse(JdaNativeBanEnforcer.ownsReason(null, punishmentId));
+    }
+
+    @Test
+    void removalRejectsForeignNativeBan() {
+        DiscordPunishmentGateway.EffectException failure = assertThrows(
+                DiscordPunishmentGateway.EffectException.class,
+                () -> JdaNativeBanEnforcer.requireOwnedRemoval(true, false)
+        );
+
+        assertEquals("NATIVE_BAN_OWNERSHIP_CONFLICT", failure.errorCode());
+        assertFalse(failure.retryable());
+    }
+
+    @Test
+    void removalAcceptsMissingOrOwnedNativeBan() {
+        assertDoesNotThrow(() -> JdaNativeBanEnforcer.requireOwnedRemoval(false, false));
+        assertDoesNotThrow(() -> JdaNativeBanEnforcer.requireOwnedRemoval(true, true));
     }
 }
