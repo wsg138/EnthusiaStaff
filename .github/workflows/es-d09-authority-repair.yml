@@ -81,11 +81,14 @@ jobs:
             domain/src/main/java/net/enthusia/staff/domain/ports/DiscordInvestigationStore.java \
             persistence/src/main/java/net/enthusia/staff/persistence/JdbcDiscordInvestigationCaseStore.java \
             persistence/src/main/java/net/enthusia/staff/persistence/JdbcDiscordInvestigationEvidenceStore.java \
+            persistence/src/main/java/net/enthusia/staff/persistence/JdbcDiscordInvestigationNoteStore.java \
             persistence/src/main/java/net/enthusia/staff/persistence/JdbcDiscordInvestigationSource.java \
             persistence/src/main/java/net/enthusia/staff/persistence/JdbcDiscordInvestigationStore.java \
             persistence/src/main/resources/db/migration/V22__discord_investigation_state.sql \
             staff-bot/src/main/java/net/enthusia/staff/discordbot/DiscordInvestigationService.java \
             staff-bot/src/main/java/net/enthusia/staff/discordbot/DiscordInvestigationWorker.java \
             staff-bot/src/main/java/net/enthusia/staff/discordbot/DiscordInvestigationCommandController.java
+          git diff --quiet
+          git diff --cached --check
           git commit -m "[ES-D09] Attach investigation state to authoritative cases"
           git push origin HEAD:candidate/es-d09-authority-repair-20260915
