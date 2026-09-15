@@ -3,26 +3,34 @@ import sys
 
 source = Path(sys.argv[1])
 target = Path(sys.argv[2])
-text = source.read_text(encoding="utf-8")
+lines = source.read_text(encoding="utf-8").splitlines(keepends=True)
 
-blocks = [
-    "replace_once(evidence_store,\n"
-    "             \"            UUID caseId,\\\\n            ModerationSubjectId subjectId\",\n"
-    "             \"            CaseId caseId,\\\\n            ModerationSubjectId subjectId\")\n",
-    "replace_once(evidence_store,\n"
-    "             \"                       m.captured_at, e.investigation_case_id, e.last_observed_at, e.revision\",\n"
-    "             \"                       m.captured_at, e.case_id, e.last_observed_at, e.revision\")\n",
-    "replace_once(worker,\n"
-    "             \"                    observation.issuerId(),\\\\n                    observation.summary(),\",\n"
-    "             \"                    observation.issuer(),\\\\n                    observation.consequenceType(),\\\\n                    observation.summary(),\")\n",
-]
-for block in blocks:
-    count = text.count(block)
-    if count != 1:
-        raise SystemExit(f"expected one diagnostic replacement block, found {count}: {block[:80]!r}")
-    text = text.replace(block, "", 1)
+
+def drop_replace_call(marker: str) -> None:
+    matches = [index for index, line in enumerate(lines) if marker in line]
+    if not matches:
+        raise SystemExit(f"no transformation line contains marker {marker!r}")
+    marker_index = matches[0]
+    start = marker_index
+    while start >= 0 and "replace_once(" not in lines[start]:
+        start -= 1
+    if start < 0:
+        raise SystemExit(f"unable to find replace_once start for {marker!r}")
+    end = marker_index
+    while end < len(lines) and lines[end].strip() != ")":
+        end += 1
+    if end >= len(lines):
+        raise SystemExit(f"unable to find replace_once end for {marker!r}")
+    del lines[start:end + 1]
+
+
+drop_replace_call('UUID caseId,\\n            ModerationSubjectId subjectId')
+drop_replace_call('m.captured_at, e.investigation_case_id, e.last_observed_at')
+drop_replace_call('observation.issuerId()')
+text = "".join(lines)
 
 post_lines = []
+
 
 def emit(line=""):
     post_lines.append(line)
