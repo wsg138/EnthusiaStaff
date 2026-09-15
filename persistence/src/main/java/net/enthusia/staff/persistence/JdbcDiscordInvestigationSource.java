@@ -7,6 +7,7 @@ import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
 import javax.sql.DataSource;
+import net.enthusia.staff.domain.auth.DiscordConsequenceType;
 import net.enthusia.staff.domain.discord.DiscordPunishment;
 import net.enthusia.staff.domain.ports.DiscordInvestigationStore.EvasionCandidate;
 import net.enthusia.staff.domain.ports.DiscordInvestigationStore.PunishmentObservation;
@@ -49,8 +50,8 @@ final class JdbcDiscordInvestigationSource {
         validateLimit(limit);
         return JdbcTransactionSupport.execute(dataSource, "Unable to read linked-alt candidates", connection -> {
             List<EvasionCandidate> candidates = new ArrayList<>();
-            for (DiscordPunishment punishment : activePunishments(connection, limit)) {
-                addOnlineAlts(connection, punishment, candidates, limit);
+            for (DiscordPunishment punishment : activeBanPunishments(connection, limit)) {
+                addOnlineLinks(connection, punishment, candidates, limit);
                 if (candidates.size() >= limit) {
                     break;
                 }
@@ -59,7 +60,7 @@ final class JdbcDiscordInvestigationSource {
         });
     }
 
-    private List<DiscordPunishment> activePunishments(Connection connection, int limit) throws SQLException {
+    private List<DiscordPunishment> activeBanPunishments(Connection connection, int limit) throws SQLException {
         List<DiscordPunishment> punishments = new ArrayList<>();
         try (PreparedStatement statement = connection.prepareStatement("""
                 SELECT desired_state_json
@@ -74,7 +75,7 @@ final class JdbcDiscordInvestigationSource {
             try (ResultSet rows = statement.executeQuery()) {
                 while (rows.next()) {
                     DiscordPunishment punishment = punishmentCodec.decode(rows.getString("desired_state_json"));
-                    if (punishment.externalApplied() && !punishment.state().terminal()) {
+                    if (isBanEvasionSignal(punishment)) {
                         punishments.add(punishment);
                     }
                 }
@@ -83,7 +84,13 @@ final class JdbcDiscordInvestigationSource {
         return punishments;
     }
 
-    private static void addOnlineAlts(
+    private static boolean isBanEvasionSignal(DiscordPunishment punishment) {
+        return punishment.externalApplied()
+                && !punishment.state().terminal()
+                && punishment.intent().type() == DiscordConsequenceType.BAN;
+    }
+
+    private static void addOnlineLinks(
             Connection connection,
             DiscordPunishment punishment,
             List<EvasionCandidate> candidates,
@@ -93,11 +100,7 @@ final class JdbcDiscordInvestigationSource {
                 SELECT membership.player_id, player.current_server, player.revision
                 FROM moderation_subject_minecraft_identities membership
                 JOIN players player ON player.player_id = membership.player_id
-                LEFT JOIN moderation_subject_main_accounts main_account
-                    ON main_account.subject_id = membership.subject_id
-                WHERE membership.subject_id = ?
-                  AND player.current_server IS NOT NULL
-                  AND (main_account.player_id IS NULL OR membership.player_id <> main_account.player_id)
+                WHERE membership.subject_id = ? AND player.current_server IS NOT NULL
                 ORDER BY membership.player_id
                 LIMIT ?
                 """)) {

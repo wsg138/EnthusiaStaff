@@ -41,7 +41,7 @@ public interface DiscordInvestigationStore {
 
     EvasionAlert createEvasionAlert(EvasionAlertDraft draft);
 
-    List<EvasionAlert> pendingEvasionAlerts(int limit);
+    List<EvasionAlert> pendingEvasionAlerts(Instant now, int limit);
 
     EvasionAlert updateEvasionDelivery(EvasionDeliveryUpdate update);
 
@@ -156,15 +156,21 @@ public interface DiscordInvestigationStore {
             EvasionDeliveryChannel channel,
             boolean delivered,
             Optional<String> errorCode,
+            Optional<Instant> nextAttemptAt,
             long expectedRevision,
             Instant now
     ) {
         public EvasionDeliveryUpdate {
-            if (alertId == null || channel == null || errorCode == null || expectedRevision < 0 || now == null) {
+            if (alertId == null || channel == null || errorCode == null || nextAttemptAt == null
+                    || expectedRevision < 0 || now == null) {
                 throw new IllegalArgumentException("evasion delivery update fields are invalid");
             }
-            if (delivered && errorCode.isPresent()) {
-                throw new IllegalArgumentException("delivered alert cannot retain an error code");
+            if (delivered && (errorCode.isPresent() || nextAttemptAt.isPresent())) {
+                throw new IllegalArgumentException("delivered alert cannot retain retry state");
+            }
+            if (!delivered && (errorCode.isEmpty() || nextAttemptAt.isEmpty()
+                    || nextAttemptAt.orElseThrow().isBefore(now))) {
+                throw new IllegalArgumentException("failed delivery requires error and future retry time");
             }
         }
     }

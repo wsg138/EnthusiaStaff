@@ -37,9 +37,9 @@ final class JdbcDiscordEvasionAlertStore {
         });
     }
 
-    List<EvasionAlert> pending(int limit) {
-        if (limit < 1 || limit > 250) {
-            throw new IllegalArgumentException("linked-alt alert limit is invalid");
+    List<EvasionAlert> pending(Instant now, int limit) {
+        if (now == null || limit < 1 || limit > 250) {
+            throw new IllegalArgumentException("linked-alt alert query is invalid");
         }
         return JdbcTransactionSupport.execute(dataSource, "Unable to read pending linked-alt alerts", connection -> {
             List<EvasionAlert> alerts = new ArrayList<>();
@@ -47,11 +47,14 @@ final class JdbcDiscordEvasionAlertStore {
                     SELECT *
                     FROM discord_evasion_alerts
                     WHERE state = 'OPEN'
-                      AND (discord_delivery <> 'DELIVERED' OR minecraft_delivery <> 'DELIVERED')
-                    ORDER BY created_at, alert_id
+                      AND ((discord_delivery <> 'DELIVERED' AND discord_next_attempt_at <= ?)
+                        OR (minecraft_delivery <> 'DELIVERED' AND minecraft_next_attempt_at <= ?))
+                    ORDER BY updated_at, alert_id
                     LIMIT ?
                     """)) {
-                statement.setInt(1, limit);
+                statement.setTimestamp(1, Timestamp.from(now));
+                statement.setTimestamp(2, Timestamp.from(now));
+                statement.setInt(3, limit);
                 try (ResultSet rows = statement.executeQuery()) {
                     while (rows.next()) {
                         alerts.add(read(rows).toDomain(false));
@@ -85,19 +88,23 @@ final class JdbcDiscordEvasionAlertStore {
             if (current.revision() != expectedRevision) {
                 throw new SQLException("linked-alt alert revision changed");
             }
-            try (PreparedStatement statement = connection.prepareStatement("""
-                    UPDATE discord_evasion_alerts
-                    SET state = 'RESOLVED', resolved_at = ?, updated_at = ?, revision = revision + 1
-                    WHERE alert_id = ? AND revision = ? AND state = 'OPEN'
-                    """)) {
-                statement.setTimestamp(1, Timestamp.from(now));
-                statement.setTimestamp(2, Timestamp.from(now));
-                statement.setBytes(3, UuidBytes.toBytes(alertId));
-                statement.setLong(4, expectedRevision);
-                JdbcTransactionSupport.requireSingleUpdate(statement.executeUpdate(), "linked-alt alert resolution changed");
-            }
+            resolve(connection, alertId, expectedRevision, now);
             return requireById(connection, alertId, false).toDomain(false);
         });
+    }
+
+    private static void resolve(Connection connection, UUID alertId, long revision, Instant now) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement("""
+                UPDATE discord_evasion_alerts
+                SET state = 'RESOLVED', resolved_at = ?, updated_at = ?, revision = revision + 1
+                WHERE alert_id = ? AND revision = ? AND state = 'OPEN'
+                """)) {
+            statement.setTimestamp(1, Timestamp.from(now));
+            statement.setTimestamp(2, Timestamp.from(now));
+            statement.setBytes(3, UuidBytes.toBytes(alertId));
+            statement.setLong(4, revision);
+            JdbcTransactionSupport.requireSingleUpdate(statement.executeUpdate(), "linked-alt alert resolution changed");
+        }
     }
 
     private static void insert(Connection connection, EvasionAlertDraft draft) throws SQLException {
@@ -106,8 +113,10 @@ final class JdbcDiscordEvasionAlertStore {
                     alert_id, operation_key, subject_id, punishment_id, triggering_minecraft_player_id,
                     current_server, player_revision, state, discord_delivery, minecraft_delivery,
                     discord_attempts, minecraft_attempts, discord_error_code, minecraft_error_code,
+                    discord_next_attempt_at, minecraft_next_attempt_at,
                     created_at, updated_at, resolved_at, revision
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, 'OPEN', 'PENDING', 'PENDING', 0, 0, NULL, NULL, ?, ?, NULL, 0)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, 'OPEN', 'PENDING', 'PENDING', 0, 0, NULL, NULL,
+                    ?, ?, ?, ?, NULL, 0)
                 """)) {
             statement.setBytes(1, UuidBytes.toBytes(draft.alertId()));
             statement.setString(2, draft.operationKey());
@@ -118,6 +127,8 @@ final class JdbcDiscordEvasionAlertStore {
             statement.setLong(7, draft.playerRevision());
             statement.setTimestamp(8, Timestamp.from(draft.now()));
             statement.setTimestamp(9, Timestamp.from(draft.now()));
+            statement.setTimestamp(10, Timestamp.from(draft.now()));
+            statement.setTimestamp(11, Timestamp.from(draft.now()));
             JdbcTransactionSupport.requireSingleUpdate(statement.executeUpdate(), "linked-alt alert was not inserted");
         }
     }
@@ -130,15 +141,17 @@ final class JdbcDiscordEvasionAlertStore {
         String prefix = update.channel() == EvasionDeliveryChannel.DISCORD ? "discord" : "minecraft";
         String sql = "UPDATE discord_evasion_alerts SET " + prefix + "_delivery = ?, "
                 + prefix + "_attempts = " + prefix + "_attempts + 1, "
-                + prefix + "_error_code = ?, updated_at = ?, revision = revision + 1 "
+                + prefix + "_error_code = ?, " + prefix + "_next_attempt_at = ?, "
+                + "updated_at = ?, revision = revision + 1 "
                 + "WHERE alert_id = ? AND revision = ? AND state = 'OPEN'";
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
             statement.setString(1, update.delivered() ? EvasionAlert.DeliveryState.DELIVERED.name()
                     : EvasionAlert.DeliveryState.RETRY.name());
             setError(statement, 2, update.errorCode());
-            statement.setTimestamp(3, Timestamp.from(update.now()));
-            statement.setBytes(4, UuidBytes.toBytes(update.alertId()));
-            statement.setLong(5, current.revision());
+            setInstant(statement, 3, update.nextAttemptAt());
+            statement.setTimestamp(4, Timestamp.from(update.now()));
+            statement.setBytes(5, UuidBytes.toBytes(update.alertId()));
+            statement.setLong(6, current.revision());
             JdbcTransactionSupport.requireSingleUpdate(statement.executeUpdate(), "linked-alt delivery revision changed");
         }
     }
@@ -186,10 +199,16 @@ final class JdbcDiscordEvasionAlertStore {
                 rows.getInt("minecraft_attempts"),
                 Optional.ofNullable(rows.getString("discord_error_code")),
                 Optional.ofNullable(rows.getString("minecraft_error_code")),
+                optionalInstant(rows.getTimestamp("discord_next_attempt_at")),
+                optionalInstant(rows.getTimestamp("minecraft_next_attempt_at")),
                 rows.getTimestamp("created_at").toInstant(),
                 rows.getTimestamp("updated_at").toInstant(),
                 rows.getLong("revision")
         );
+    }
+
+    private static Optional<Instant> optionalInstant(Timestamp timestamp) {
+        return timestamp == null ? Optional.empty() : Optional.of(timestamp.toInstant());
     }
 
     private static void requireReplay(Current current, EvasionAlertDraft draft) throws SQLException {
@@ -207,6 +226,14 @@ final class JdbcDiscordEvasionAlertStore {
             statement.setString(index, value.length() <= 96 ? value : value.substring(0, 96));
         } else {
             statement.setNull(index, Types.VARCHAR);
+        }
+    }
+
+    private static void setInstant(PreparedStatement statement, int index, Optional<Instant> value) throws SQLException {
+        if (value.isPresent()) {
+            statement.setTimestamp(index, Timestamp.from(value.orElseThrow()));
+        } else {
+            statement.setNull(index, Types.TIMESTAMP);
         }
     }
 
@@ -230,6 +257,8 @@ final class JdbcDiscordEvasionAlertStore {
             int minecraftAttempts,
             Optional<String> discordErrorCode,
             Optional<String> minecraftErrorCode,
+            Optional<Instant> discordNextAttemptAt,
+            Optional<Instant> minecraftNextAttemptAt,
             Instant createdAt,
             Instant updatedAt,
             long revision
@@ -238,8 +267,8 @@ final class JdbcDiscordEvasionAlertStore {
             return new EvasionAlert(
                     alertId, operationKey, subjectId, punishmentId, triggeringPlayer, currentServer,
                     playerRevision, state, discordDelivery, minecraftDelivery, discordAttempts,
-                    minecraftAttempts, discordErrorCode, minecraftErrorCode, createdAt, updatedAt,
-                    revision, replayed
+                    minecraftAttempts, discordErrorCode, minecraftErrorCode, discordNextAttemptAt,
+                    minecraftNextAttemptAt, createdAt, updatedAt, revision, replayed
             );
         }
     }

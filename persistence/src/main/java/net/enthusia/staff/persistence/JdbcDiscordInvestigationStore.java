@@ -114,8 +114,8 @@ public final class JdbcDiscordInvestigationStore implements DiscordInvestigation
     }
 
     @Override
-    public List<EvasionAlert> pendingEvasionAlerts(int limit) {
-        return alerts.pending(limit);
+    public List<EvasionAlert> pendingEvasionAlerts(Instant now, int limit) {
+        return alerts.pending(now, limit);
     }
 
     @Override

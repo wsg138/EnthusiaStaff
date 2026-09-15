@@ -19,7 +19,7 @@ import net.enthusia.staff.domain.moderation.ModerationSubjectId;
 
 final class JdbcDiscordInvestigationEvidenceStore {
     private static final Duration INVESTIGATION_RETENTION_WINDOW = Duration.ofDays(60);
-    private static final Duration POST_CLOSE_RETENTION = Duration.ofDays(30);
+    private static final Duration POST_END_RETENTION = Duration.ofDays(30);
     private static final String PURGED_METADATA = "{\"kind\":\"D09_MESSAGE\",\"purged\":true}";
 
     private final DataSource dataSource;
@@ -95,7 +95,7 @@ final class JdbcDiscordInvestigationEvidenceStore {
             throw new IllegalArgumentException("evidence purge request is invalid");
         }
         return JdbcTransactionSupport.execute(dataSource, "Unable to purge expired Discord evidence", connection -> {
-            List<UUID> eligible = eligibleForPurge(connection, now.minus(POST_CLOSE_RETENTION), limit);
+            List<UUID> eligible = eligibleForPurge(connection, now.minus(POST_END_RETENTION), limit);
             for (UUID evidenceId : eligible) {
                 purgeOne(connection, evidenceId, now);
             }
@@ -438,10 +438,11 @@ final class JdbcDiscordInvestigationEvidenceStore {
                 JOIN discord_evidence_metadata m ON m.evidence_id = e.evidence_id
                 JOIN discord_investigation_cases c ON c.case_id = e.investigation_case_id
                 WHERE m.purge_state = 'ACTIVE'
-                  AND c.state = 'CLOSED' AND c.closed_at <= ?
-                  AND (c.punishment_id IS NULL
-                       OR (c.punishment_ended_at IS NOT NULL AND c.punishment_ended_at <= ?))
-                ORDER BY c.closed_at, e.evidence_id
+                  AND ((c.source = 'DISCORD_PUNISHMENT' AND c.punishment_ended_at IS NOT NULL
+                        AND c.punishment_ended_at <= ?)
+                    OR (c.source = 'INVESTIGATION' AND c.state = 'CLOSED'
+                        AND c.closed_at IS NOT NULL AND c.closed_at <= ?))
+                ORDER BY COALESCE(c.punishment_ended_at, c.closed_at), e.evidence_id
                 LIMIT ?
                 FOR UPDATE
                 """)) {

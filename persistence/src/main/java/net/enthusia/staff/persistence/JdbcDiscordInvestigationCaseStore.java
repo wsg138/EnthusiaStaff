@@ -76,6 +76,7 @@ final class JdbcDiscordInvestigationCaseStore {
                     UPDATE discord_investigation_cases
                     SET state = 'CLOSED', closed_at = ?, revision = revision + 1
                     WHERE state = 'OPEN' AND last_activity_at <= ?
+                      AND (source = 'INVESTIGATION' OR punishment_ended_at IS NOT NULL)
                     ORDER BY last_activity_at, case_id
                     LIMIT ?
                     """)) {

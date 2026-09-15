@@ -166,13 +166,16 @@ CREATE TABLE discord_evasion_alerts (
     minecraft_attempts INT UNSIGNED NOT NULL DEFAULT 0,
     discord_error_code VARCHAR(96) NULL,
     minecraft_error_code VARCHAR(96) NULL,
+    discord_next_attempt_at TIMESTAMP(6) NULL,
+    minecraft_next_attempt_at TIMESTAMP(6) NULL,
     created_at TIMESTAMP(6) NOT NULL,
     updated_at TIMESTAMP(6) NOT NULL,
     resolved_at TIMESTAMP(6) NULL,
     revision BIGINT UNSIGNED NOT NULL DEFAULT 0,
     PRIMARY KEY (alert_id),
     UNIQUE KEY uq_discord_evasion_alert_operation (operation_key),
-    INDEX idx_discord_evasion_alert_pending (state, discord_delivery, minecraft_delivery, updated_at),
+    INDEX idx_discord_evasion_alert_discord_due (state, discord_delivery, discord_next_attempt_at, updated_at),
+    INDEX idx_discord_evasion_alert_minecraft_due (state, minecraft_delivery, minecraft_next_attempt_at, updated_at),
     INDEX idx_discord_evasion_alert_subject (subject_id, created_at),
     CONSTRAINT fk_discord_evasion_alert_subject
         FOREIGN KEY (subject_id) REFERENCES moderation_subjects(subject_id),
@@ -181,5 +184,15 @@ CREATE TABLE discord_evasion_alerts (
     CONSTRAINT ck_discord_evasion_alert_resolution CHECK (
         (state = 'OPEN' AND resolved_at IS NULL)
         OR (state = 'RESOLVED' AND resolved_at IS NOT NULL AND resolved_at >= created_at)
+    ),
+    CONSTRAINT ck_discord_evasion_alert_discord_delivery CHECK (
+        (discord_delivery = 'DELIVERED' AND discord_error_code IS NULL AND discord_next_attempt_at IS NULL)
+        OR (discord_delivery = 'PENDING' AND discord_error_code IS NULL AND discord_next_attempt_at IS NOT NULL)
+        OR (discord_delivery = 'RETRY' AND discord_error_code IS NOT NULL AND discord_next_attempt_at IS NOT NULL)
+    ),
+    CONSTRAINT ck_discord_evasion_alert_minecraft_delivery CHECK (
+        (minecraft_delivery = 'DELIVERED' AND minecraft_error_code IS NULL AND minecraft_next_attempt_at IS NULL)
+        OR (minecraft_delivery = 'PENDING' AND minecraft_error_code IS NULL AND minecraft_next_attempt_at IS NOT NULL)
+        OR (minecraft_delivery = 'RETRY' AND minecraft_error_code IS NOT NULL AND minecraft_next_attempt_at IS NOT NULL)
     )
 ) ENGINE=InnoDB;
