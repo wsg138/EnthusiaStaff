@@ -1,0 +1,22 @@
+name: D07 Codacy inspection
+
+on:
+  push:
+    branches:
+      - "tmp/es-d07-codacy-inspect-20260914"
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Fetch public Codacy PR issues
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --location \
+            'https://api.codacy.com/api/v3/analysis/organizations/gh/wsg138/repositories/EnthusiaStaff/pull-requests/201/issues?status=new' \
+            | python3 -m json.tool
