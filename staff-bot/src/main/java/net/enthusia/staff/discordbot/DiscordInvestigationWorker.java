@@ -163,7 +163,8 @@ final class DiscordInvestigationWorker {
     }
 
     private static String evasionOperation(EvasionCandidate candidate) {
-        return "d09:evasion:" + candidate.punishmentId() + ":" + candidate.minecraftPlayerId();
+        return "d09:evasion:" + candidate.punishmentId() + ':' + candidate.minecraftPlayerId()
+                + ':' + candidate.playerRevision();
     }
 
     private static UUID deterministicId(String operationKey) {
