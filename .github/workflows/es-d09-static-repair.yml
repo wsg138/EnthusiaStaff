@@ -1,0 +1,165 @@
+name: ES-D09 Static Analysis Repair
+
+on:
+  push:
+    branches:
+      - diagnostic/es-d09-static-repair-20260915
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out exact D09 package head
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: package/es-d09-discord-investigations
+          fetch-depth: 0
+      - name: Apply analyzer repairs
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          test "$(git rev-parse HEAD)" = "6166ad5f5670128baca7d8f57064e20e4b3f9dcf"
+          python3 <<'PY'
+          from pathlib import Path
+
+          def replace(path, old, new, count=1):
+              p = Path(path)
+              text = p.read_text()
+              actual = text.count(old)
+              if actual != count:
+                  raise SystemExit(f"{path}: expected {count} occurrences, found {actual}: {old[:80]!r}")
+              p.write_text(text.replace(old, new, count))
+
+          def replace_all(path, old, new, expected):
+              replace(path, old, new, expected)
+
+          def remove_between(path, start, end):
+              p = Path(path)
+              text = p.read_text()
+              first = text.index(start)
+              last = text.index(end, first)
+              p.write_text(text[:first] + text[last:])
+
+          evidence_test = "domain/src/test/java/net/enthusia/staff/domain/investigation/InvestigationEvidenceTest.java"
+          replace(evidence_test,
+                  '    private static final UUID ACTOR_ID = UUID.fromString("99999999-8888-7777-6666-555555555555");\n',
+                  '    private static final UUID ACTOR_ID = UUID.fromString("99999999-8888-7777-6666-555555555555");\n'
+                  '    private static final String FOCUS_MESSAGE_ID = "100";\n'
+                  '    private static final String MESSAGE_CONTEXT = "MESSAGE_CONTEXT";\n')
+          replace_all(evidence_test, 'message("100")', 'message(FOCUS_MESSAGE_ID)', 5)
+          replace_all(evidence_test, '"MESSAGE_CONTEXT"', 'MESSAGE_CONTEXT', 5)
+
+          integration = "integration-tests/src/test/java/net/enthusia/staff/integration/DiscordInvestigationPersistenceIntegrationTest.java"
+          old_loop = '''            for (int index = 0; index < 101; index++) {\n                DiscordUserId userId = new DiscordUserId(Long.toString(223456789012346000L + index));\n                ModerationSubjectId subjectId = ensureSubject(dataSource, userId);\n                DiscordPunishment punishment = warning(subjectId, userId, index);\n                punishments.create(punishment, "d09-batch-warning-" + index, NOW.plusMillis(index));\n            }\n'''
+          new_loop = '''            for (int index = 0; index < 101; index++) {\n                persistBatchWarning(dataSource, punishments, index);\n            }\n'''
+          replace(integration, old_loop, new_loop)
+          marker = '''    private static DiscordPunishment warning(\n'''
+          helper = '''    private static void persistBatchWarning(\n            HikariDataSource dataSource,\n            JdbcDiscordPunishmentRepository punishments,\n            int index\n    ) {\n        DiscordUserId userId = new DiscordUserId(Long.toString(223456789012346000L + index));\n        ModerationSubjectId subjectId = ensureSubject(dataSource, userId);\n        DiscordPunishment punishment = warning(subjectId, userId, index);\n        punishments.create(punishment, "d09-batch-warning-" + index, NOW.plusMillis(index));\n    }\n\n'''
+          replace(integration, marker, helper + marker)
+
+          case_store = "persistence/src/main/java/net/enthusia/staff/persistence/JdbcDiscordInvestigationCaseStore.java"
+          replace(case_store,
+                  '        setInstant(statement, 9, draft.state().terminal() ? draft.observedAt() : null);',
+                  '        setInstant(statement, 9, draft.state().terminal()\n                ? Optional.of(draft.observedAt()) : Optional.empty());')
+          replace(case_store,
+                  '''        Instant punishmentEnded = draft.state().terminal()\n                ? draft.observedAt()\n                : current.punishmentEndedAt().orElse(null);''',
+                  '''        Optional<Instant> punishmentEnded = draft.state().terminal()\n                ? Optional.of(draft.observedAt())\n                : current.punishmentEndedAt();''')
+          replace(case_store,
+                  '''    private static void setInstant(PreparedStatement statement, int index, Instant value) throws SQLException {\n        if (value == null) {\n            statement.setNull(index, Types.TIMESTAMP);\n        } else {\n            statement.setTimestamp(index, Timestamp.from(value));\n        }\n    }''',
+                  '''    private static void setInstant(\n            PreparedStatement statement,\n            int index,\n            Optional<Instant> value\n    ) throws SQLException {\n        if (value.isPresent()) {\n            statement.setTimestamp(index, Timestamp.from(value.orElseThrow()));\n        } else {\n            statement.setNull(index, Types.TIMESTAMP);\n        }\n    }''')
+
+          controller = "staff-bot/src/main/java/net/enthusia/staff/discordbot/DiscordInvestigationCommandController.java"
+          replace(controller,
+                  '    private static final String CONTEXT_PREFIX = "d09ctx:";\n',
+                  '    private static final String CONTEXT_PREFIX = "d09ctx:";\n'
+                  '    private static final int CONTEXT_TARGET_PARTS = 3;\n'
+                  '    private static final int MAX_COMPONENT_ID_LENGTH = 100;\n'
+                  '    private static final long INVALID_SNOWFLAKE = 0L;\n')
+          replace(controller, 'if (parts.length != 3)', 'if (parts.length != CONTEXT_TARGET_PARTS)')
+          replace(controller, 'if (id.length() > 100)', 'if (id.length() > MAX_COMPONENT_ID_LENGTH)')
+          replace_all(controller, 'if (parsed == 0L)', 'if (parsed == INVALID_SNOWFLAKE)', 2)
+
+          service = "staff-bot/src/main/java/net/enthusia/staff/discordbot/DiscordInvestigationService.java"
+          replace(service,
+                  '    private static final int MAX_OPERATION_TOKEN = 64;\n',
+                  '    private static final int MAX_OPERATION_TOKEN = 64;\n'
+                  '    private static final long INVALID_DISCORD_USER_ID = 0L;\n')
+          replace(service, 'if (id == 0L)', 'if (id == INVALID_DISCORD_USER_ID)')
+
+          worker = "staff-bot/src/main/java/net/enthusia/staff/discordbot/DiscordInvestigationWorker.java"
+          replace(worker,
+                  '''        if (store == null || discordAlerts == null || minecraftAlerts == null || clock == null\n                || retryBase == null || retryBase.isZero() || retryBase.isNegative()\n                || retryMaximum == null || retryMaximum.compareTo(retryBase) < 0) {\n            throw new IllegalArgumentException("investigation worker configuration is invalid");\n        }''',
+                  '''        requireDependencies(store, discordAlerts, minecraftAlerts, clock);\n        requireRetryPolicy(retryBase, retryMaximum);''')
+          insert_before = '''    void runCycle() {\n'''
+          validation_methods = '''    private static void requireDependencies(\n            DiscordInvestigationStore store,\n            DiscordInvestigationAlertSink discordAlerts,\n            DiscordInvestigationAlertSink minecraftAlerts,\n            Clock clock\n    ) {\n        if (store == null || discordAlerts == null || minecraftAlerts == null || clock == null) {\n            throw new IllegalArgumentException("investigation worker dependencies are invalid");\n        }\n    }\n\n    private static void requireRetryPolicy(Duration retryBase, Duration retryMaximum) {\n        if (retryBase == null || retryBase.isZero() || retryBase.isNegative()) {\n            throw new IllegalArgumentException("investigation worker retry base is invalid");\n        }\n        if (retryMaximum == null || retryMaximum.compareTo(retryBase) < 0) {\n            throw new IllegalArgumentException("investigation worker retry maximum is invalid");\n        }\n    }\n\n'''
+          replace(worker, insert_before, validation_methods + insert_before)
+          replace(worker,
+                  '''        for (PunishmentObservation observation : store.punishmentObservations(BATCH_LIMIT)) {\n            store.ensurePunishmentCase(new PunishmentCaseDraft(\n                    punishmentOperation(observation.punishmentId()),\n                    observation.punishmentId(),\n                    observation.subjectId(),\n                    observation.issuerId(),\n                    observation.summary(),\n                    observation.state(),\n                    observation.expiresAt(),\n                    observation.revision(),\n                    observation.observedAt()\n            ));\n        }''',
+                  '''        for (PunishmentObservation observation : store.punishmentObservations(BATCH_LIMIT)) {\n            reconcilePunishmentCase(observation);\n        }''')
+          replace(worker,
+                  '''    private void discoverEvasionAlerts(Instant now) {\n        for (EvasionCandidate candidate : store.evasionCandidates(BATCH_LIMIT)) {\n            String operationKey = evasionOperation(candidate);\n            store.createEvasionAlert(new EvasionAlertDraft(\n                    deterministicId(operationKey),\n                    operationKey,\n                    candidate.subjectId(),\n                    candidate.punishmentId(),\n                    candidate.minecraftPlayerId(),\n                    candidate.currentServer(),\n                    candidate.playerRevision(),\n                    now\n            ));\n        }\n    }''',
+                  '''    private void reconcilePunishmentCase(PunishmentObservation observation) {\n        store.ensurePunishmentCase(new PunishmentCaseDraft(\n                punishmentOperation(observation.punishmentId()),\n                observation.punishmentId(),\n                observation.subjectId(),\n                observation.issuerId(),\n                observation.summary(),\n                observation.state(),\n                observation.expiresAt(),\n                observation.revision(),\n                observation.observedAt()\n        ));\n    }\n\n    private void discoverEvasionAlerts(Instant now) {\n        for (EvasionCandidate candidate : store.evasionCandidates(BATCH_LIMIT)) {\n            discoverEvasionAlert(candidate, now);\n        }\n    }\n\n    private void discoverEvasionAlert(EvasionCandidate candidate, Instant now) {\n        String operationKey = evasionOperation(candidate);\n        store.createEvasionAlert(new EvasionAlertDraft(\n                deterministicId(operationKey),\n                operationKey,\n                candidate.subjectId(),\n                candidate.punishmentId(),\n                candidate.minecraftPlayerId(),\n                candidate.currentServer(),\n                candidate.playerRevision(),\n                now\n        ));\n    }''')
+
+          worker_test = "staff-bot/src/test/java/net/enthusia/staff/discordbot/DiscordInvestigationWorkerTest.java"
+          replace(worker_test,
+                  '''                return copy(existing, existing.discordDelivery(), existing.minecraftDelivery(),\n                        existing.discordAttempts(), existing.minecraftAttempts(), existing.discordErrorCode(),\n                        existing.minecraftErrorCode(), existing.discordNextAttemptAt(), existing.minecraftNextAttemptAt(),\n                        existing.revision(), true);''',
+                  '''                return replay(existing);''')
+          old_update = '''        private static EvasionAlert updated(EvasionAlert current, EvasionDeliveryUpdate update) {\n            boolean discord = update.channel() == EvasionDeliveryChannel.DISCORD;\n            EvasionAlert.DeliveryState state = update.delivered()\n                    ? EvasionAlert.DeliveryState.DELIVERED : EvasionAlert.DeliveryState.RETRY;\n            return copy(\n                    current,\n                    discord ? state : current.discordDelivery(),\n                    discord ? current.minecraftDelivery() : state,\n                    current.discordAttempts() + (discord ? 1 : 0),\n                    current.minecraftAttempts() + (discord ? 0 : 1),\n                    discord ? update.errorCode() : current.discordErrorCode(),\n                    discord ? current.minecraftErrorCode() : update.errorCode(),\n                    discord ? update.nextAttemptAt() : current.discordNextAttemptAt(),\n                    discord ? current.minecraftNextAttemptAt() : update.nextAttemptAt(),\n                    current.revision() + 1,\n                    false\n            );\n        }\n\n        private static EvasionAlert copy(\n                EvasionAlert source,\n                EvasionAlert.DeliveryState discordState,\n                EvasionAlert.DeliveryState minecraftState,\n                int discordAttempts,\n                int minecraftAttempts,\n                Optional<String> discordError,\n                Optional<String> minecraftError,\n                Optional<Instant> discordNext,\n                Optional<Instant> minecraftNext,\n                long revision,\n                boolean replayed\n        ) {\n            return new EvasionAlert(\n                    source.alertId(), source.operationKey(), source.subjectId(), source.punishmentId(),\n                    source.triggeringMinecraftPlayerId(), source.currentServer(), source.playerRevision(), source.state(),\n                    discordState, minecraftState, discordAttempts, minecraftAttempts, discordError, minecraftError,\n                    discordNext, minecraftNext, source.createdAt(), source.updatedAt().plusMillis(1), revision, replayed);\n        }'''
+          new_update = '''        private static EvasionAlert updated(EvasionAlert current, EvasionDeliveryUpdate update) {\n            return switch (update.channel()) {\n                case DISCORD -> updateDiscord(current, update);\n                case MINECRAFT -> updateMinecraft(current, update);\n            };\n        }\n\n        private static EvasionAlert updateDiscord(EvasionAlert current, EvasionDeliveryUpdate update) {\n            return new EvasionAlert(\n                    current.alertId(), current.operationKey(), current.subjectId(), current.punishmentId(),\n                    current.triggeringMinecraftPlayerId(), current.currentServer(), current.playerRevision(), current.state(),\n                    deliveryState(update), current.minecraftDelivery(), current.discordAttempts() + 1,\n                    current.minecraftAttempts(), update.errorCode(), current.minecraftErrorCode(), update.nextAttemptAt(),\n                    current.minecraftNextAttemptAt(), current.createdAt(), current.updatedAt().plusMillis(1),\n                    current.revision() + 1, false\n            );\n        }\n\n        private static EvasionAlert updateMinecraft(EvasionAlert current, EvasionDeliveryUpdate update) {\n            return new EvasionAlert(\n                    current.alertId(), current.operationKey(), current.subjectId(), current.punishmentId(),\n                    current.triggeringMinecraftPlayerId(), current.currentServer(), current.playerRevision(), current.state(),\n                    current.discordDelivery(), deliveryState(update), current.discordAttempts(),\n                    current.minecraftAttempts() + 1, current.discordErrorCode(), update.errorCode(),\n                    current.discordNextAttemptAt(), update.nextAttemptAt(), current.createdAt(),\n                    current.updatedAt().plusMillis(1), current.revision() + 1, false\n            );\n        }\n\n        private static EvasionAlert.DeliveryState deliveryState(EvasionDeliveryUpdate update) {\n            return update.delivered() ? EvasionAlert.DeliveryState.DELIVERED : EvasionAlert.DeliveryState.RETRY;\n        }\n\n        private static EvasionAlert replay(EvasionAlert source) {\n            return new EvasionAlert(\n                    source.alertId(), source.operationKey(), source.subjectId(), source.punishmentId(),\n                    source.triggeringMinecraftPlayerId(), source.currentServer(), source.playerRevision(), source.state(),\n                    source.discordDelivery(), source.minecraftDelivery(), source.discordAttempts(),\n                    source.minecraftAttempts(), source.discordErrorCode(), source.minecraftErrorCode(),\n                    source.discordNextAttemptAt(), source.minecraftNextAttemptAt(), source.createdAt(), source.updatedAt(),\n                    source.revision(), true\n            );\n        }'''
+          replace(worker_test, old_update, new_update)
+
+          evidence_store = "persistence/src/main/java/net/enthusia/staff/persistence/JdbcDiscordInvestigationEvidenceStore.java"
+          replace(evidence_store,
+                  '    private final DiscordInvestigationJsonCodec codec = new DiscordInvestigationJsonCodec();\n',
+                  '    private final DiscordInvestigationJsonCodec codec = new DiscordInvestigationJsonCodec();\n'
+                  '    private final JdbcDiscordInvestigationContextStore contextStore =\n'
+                  '            new JdbcDiscordInvestigationContextStore(codec);\n')
+          replace_all(evidence_store, 'insertContext(connection, capture.evidenceId(), capture.before(), capture.capturedAt());',
+                      'contextStore.insert(connection, capture.evidenceId(), capture.before(), capture.capturedAt());', 1)
+          replace_all(evidence_store, 'insertContext(connection, capture.evidenceId(), capture.after(), capture.capturedAt());',
+                      'contextStore.insert(connection, capture.evidenceId(), capture.after(), capture.capturedAt());', 1)
+          replace(evidence_store, 'UUID replayEvidence = contextOperationEvidence(connection, batch.operationKey());',
+                  'UUID replayEvidence = contextStore.operationEvidence(connection, batch.operationKey());')
+          replace(evidence_store, '            insertContextOperation(connection, batch);',
+                  '            contextStore.recordOperation(connection, batch);')
+          replace(evidence_store, '            upsertContext(connection, batch.evidenceId(), batch.messages(), batch.capturedAt());',
+                  '            contextStore.upsert(connection, batch.evidenceId(), batch.messages(), batch.capturedAt());')
+          remove_between(evidence_store, '    private void insertContext(\n', '    private static void updateParentRevision(')
+          remove_between(evidence_store, '    private static UUID contextOperationEvidence(', '    private static UUID readEvidenceId(')
+
+          context_store = Path("persistence/src/main/java/net/enthusia/staff/persistence/JdbcDiscordInvestigationContextStore.java")
+          context_store.write_text('''package net.enthusia.staff.persistence;\n\nimport java.math.BigDecimal;\nimport java.sql.Connection;\nimport java.sql.PreparedStatement;\nimport java.sql.ResultSet;\nimport java.sql.SQLException;\nimport java.sql.Timestamp;\nimport java.sql.Types;\nimport java.time.Instant;\nimport java.util.List;\nimport java.util.UUID;\nimport net.enthusia.staff.domain.investigation.InvestigationEvidence;\n\n/** Persists bounded message context independently from primary evidence lifecycle orchestration. */\nfinal class JdbcDiscordInvestigationContextStore {\n    private final DiscordInvestigationJsonCodec codec;\n\n    JdbcDiscordInvestigationContextStore(DiscordInvestigationJsonCodec codec) {\n        if (codec == null) {\n            throw new IllegalArgumentException("investigation context codec must be present");\n        }\n        this.codec = codec;\n    }\n\n    void insert(\n            Connection connection,\n            UUID evidenceId,\n            List<InvestigationEvidence.Message> messages,\n            Instant capturedAt\n    ) throws SQLException {\n        for (InvestigationEvidence.Message message : messages) {\n            insertOne(connection, evidenceId, message, capturedAt);\n        }\n    }\n\n    void upsert(\n            Connection connection,\n            UUID evidenceId,\n            List<InvestigationEvidence.Message> messages,\n            Instant capturedAt\n    ) throws SQLException {\n        for (InvestigationEvidence.Message message : messages) {\n            upsertOne(connection, evidenceId, message, capturedAt);\n        }\n    }\n\n    void recordOperation(Connection connection, InvestigationEvidence.ContextBatch batch) throws SQLException {\n        try (PreparedStatement statement = connection.prepareStatement("""\n                INSERT INTO discord_investigation_context_operations(operation_key, evidence_id, captured_at)\n                VALUES (?, ?, ?)\n                """)) {\n            statement.setString(1, batch.operationKey());\n            statement.setBytes(2, UuidBytes.toBytes(batch.evidenceId()));\n            statement.setTimestamp(3, Timestamp.from(batch.capturedAt()));\n            JdbcTransactionSupport.requireSingleUpdate(statement.executeUpdate(), "context operation was not inserted");\n        }\n    }\n\n    UUID operationEvidence(Connection connection, String operationKey) throws SQLException {\n        try (PreparedStatement statement = connection.prepareStatement("""\n                SELECT evidence_id\n                FROM discord_investigation_context_operations\n                WHERE operation_key = ?\n                """)) {\n            statement.setString(1, operationKey);\n            try (ResultSet rows = statement.executeQuery()) {\n                return rows.next() ? UuidBytes.fromBytes(rows.getBytes("evidence_id")) : null;\n            }\n        }\n    }\n\n    private void insertOne(\n            Connection connection,\n            UUID evidenceId,\n            InvestigationEvidence.Message message,\n            Instant capturedAt\n    ) throws SQLException {\n        try (PreparedStatement statement = connection.prepareStatement("""\n                INSERT INTO discord_investigation_context(\n                    evidence_id, message_id, guild_id, channel_id, author_user_id,\n                    message_created_at, edited_at, message_link, message_content,\n                    attachment_metadata_json, captured_at, last_observed_at, revision\n                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)\n                """)) {\n            bind(statement, evidenceId, message, capturedAt);\n            JdbcTransactionSupport.requireSingleUpdate(statement.executeUpdate(), "evidence context was not inserted");\n        }\n    }\n\n    private void upsertOne(\n            Connection connection,\n            UUID evidenceId,\n            InvestigationEvidence.Message message,\n            Instant capturedAt\n    ) throws SQLException {\n        try (PreparedStatement statement = connection.prepareStatement("""\n                INSERT INTO discord_investigation_context(\n                    evidence_id, message_id, guild_id, channel_id, author_user_id,\n                    message_created_at, edited_at, message_link, message_content,\n                    attachment_metadata_json, captured_at, last_observed_at, revision\n                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)\n                ON DUPLICATE KEY UPDATE\n                    author_user_id = VALUES(author_user_id), edited_at = VALUES(edited_at),\n                    message_link = VALUES(message_link), message_content = VALUES(message_content),\n                    attachment_metadata_json = VALUES(attachment_metadata_json),\n                    last_observed_at = VALUES(last_observed_at), revision = revision + 1\n                """)) {\n            bind(statement, evidenceId, message, capturedAt);\n            statement.executeUpdate();\n        }\n    }\n\n    private void bind(\n            PreparedStatement statement,\n            UUID evidenceId,\n            InvestigationEvidence.Message message,\n            Instant capturedAt\n    ) throws SQLException {\n        statement.setBytes(1, UuidBytes.toBytes(evidenceId));\n        statement.setBigDecimal(2, snowflake(message.messageId()));\n        statement.setBigDecimal(3, snowflake(message.guildId()));\n        statement.setBigDecimal(4, snowflake(message.channelId()));\n        statement.setBigDecimal(5, snowflake(message.authorUserId().value()));\n        statement.setTimestamp(6, Timestamp.from(message.createdAt()));\n        setInstant(statement, 7, message.editedAt().orElse(null));\n        statement.setString(8, message.jumpUrl());\n        statement.setString(9, message.content());\n        statement.setString(10, codec.attachments(message.attachments()));\n        statement.setTimestamp(11, Timestamp.from(capturedAt));\n        statement.setTimestamp(12, Timestamp.from(capturedAt));\n    }\n\n    private static BigDecimal snowflake(String value) throws SQLException {\n        try {\n            return new BigDecimal(value);\n        } catch (NumberFormatException exception) {\n            throw new SQLException("Discord snowflake is invalid", exception);\n        }\n    }\n\n    private static void setInstant(PreparedStatement statement, int index, Instant value) throws SQLException {\n        if (value == null) {\n            statement.setNull(index, Types.TIMESTAMP);\n        } else {\n            statement.setTimestamp(index, Timestamp.from(value));\n        }\n    }\n}\n''')
+          PY
+          git diff --check
+      - name: Compile and run focused tests
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          chmod +x ./gradlew
+          ./gradlew \
+            :domain:test \
+            :persistence:compileJava \
+            :staff-bot:test \
+            :integration-tests:compileTestJava \
+            --no-daemon --no-build-cache --no-configuration-cache --console=plain
+      - name: Commit one repair checkpoint
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          git config user.name "P2wn"
+          git config user.email "racecarboy77@gmail.com"
+          git add \
+            domain/src/test/java/net/enthusia/staff/domain/investigation/InvestigationEvidenceTest.java \
+            integration-tests/src/test/java/net/enthusia/staff/integration/DiscordInvestigationPersistenceIntegrationTest.java \
+            persistence/src/main/java/net/enthusia/staff/persistence/JdbcDiscordInvestigationCaseStore.java \
+            persistence/src/main/java/net/enthusia/staff/persistence/JdbcDiscordInvestigationEvidenceStore.java \
+            persistence/src/main/java/net/enthusia/staff/persistence/JdbcDiscordInvestigationContextStore.java \
+            staff-bot/src/main/java/net/enthusia/staff/discordbot/DiscordInvestigationCommandController.java \
+            staff-bot/src/main/java/net/enthusia/staff/discordbot/DiscordInvestigationService.java \
+            staff-bot/src/main/java/net/enthusia/staff/discordbot/DiscordInvestigationWorker.java \
+            staff-bot/src/test/java/net/enthusia/staff/discordbot/DiscordInvestigationWorkerTest.java
+          git commit -m "[ES-D09] Resolve static analysis findings"
+          git push origin HEAD:package/es-d09-discord-investigations
