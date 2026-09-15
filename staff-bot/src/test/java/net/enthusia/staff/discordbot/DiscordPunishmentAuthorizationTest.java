@@ -26,16 +26,29 @@ class DiscordPunishmentAuthorizationTest {
     );
 
     @Test
-    void moderatorAndDeveloperCannotApproveAdminOnlyPermanentBan() {
+    void moderatorAndDeveloperApprovalCannotBypassPermanentSanctionAuthority() {
         Actor requester = actor(StaffRank.ADMIN);
         DiscordPunishmentIntent permanentBan = ban(SanctionLength.permanent(), false);
 
         assertThrows(DiscordPunishmentAuthorization.DeniedException.class, () ->
                 authorization.requireApprovalOfConcreteSanction(
-                        requester, actor(StaffRank.MOD), Optional.empty(), StaffRank.ADMIN, permanentBan));
+                        requester, actor(StaffRank.MOD), Optional.empty(), StaffRank.MOD, permanentBan));
         assertThrows(DiscordPunishmentAuthorization.DeniedException.class, () ->
                 authorization.requireApprovalOfConcreteSanction(
-                        requester, actor(StaffRank.DEVELOPER), Optional.empty(), StaffRank.ADMIN, permanentBan));
+                        requester, actor(StaffRank.DEVELOPER), Optional.empty(), StaffRank.MOD, permanentBan));
+    }
+
+    @Test
+    void moderatorAndDeveloperApprovalCannotBypassCustomConsequenceAuthority() {
+        Actor requester = actor(StaffRank.ADMIN);
+        DiscordPunishmentIntent customBan = customBan(SanctionLength.temporary(Duration.ofDays(1)));
+
+        assertThrows(DiscordPunishmentAuthorization.DeniedException.class, () ->
+                authorization.requireApprovalOfConcreteSanction(
+                        requester, actor(StaffRank.MOD), Optional.empty(), StaffRank.MOD, customBan));
+        assertThrows(DiscordPunishmentAuthorization.DeniedException.class, () ->
+                authorization.requireApprovalOfConcreteSanction(
+                        requester, actor(StaffRank.DEVELOPER), Optional.empty(), StaffRank.MOD, customBan));
     }
 
     @Test
@@ -73,11 +86,23 @@ class DiscordPunishmentAuthorizationTest {
     }
 
     private static DiscordPunishmentIntent ban(SanctionLength length, boolean customDuration) {
+        return ban(length, customDuration, false);
+    }
+
+    private static DiscordPunishmentIntent customBan(SanctionLength length) {
+        return ban(length, false, true);
+    }
+
+    private static DiscordPunishmentIntent ban(
+            SanctionLength length,
+            boolean customDuration,
+            boolean customConsequence
+    ) {
         return new DiscordPunishmentIntent(
                 DiscordConsequenceType.BAN,
                 length,
                 customDuration,
-                false,
+                customConsequence,
                 Optional.empty(),
                 "Rule violation",
                 "",

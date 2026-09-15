@@ -85,6 +85,22 @@ class DiscordPunishmentWorkerTest {
     }
 
     @Test
+    void targetLeavingBeforeMuteApplyRemainsRecoverable() {
+        FakeRepository repository = new FakeRepository(punishment(mute(Duration.ofHours(1)), NOW));
+        FakeGateway gateway = new FakeGateway();
+        gateway.applyFailure = new DiscordPunishmentGateway.EffectException(TARGET_NOT_IN_GUILD_ERROR, true);
+        repository.enqueue(WorkType.APPLY, NOW, 1);
+
+        newWorker(repository, gateway).runCycle();
+
+        assertEquals(DiscordPunishmentState.RETRY_APPLY, repository.current.punishment().state());
+        assertFalse(repository.current.punishment().externalApplied());
+        assertEquals(Optional.of(TARGET_NOT_IN_GUILD_ERROR), repository.current.punishment().lastErrorCode());
+        assertEquals(WorkType.APPLY, repository.work.peek().type());
+        assertTrue(repository.work.peek().dueAt().isAfter(NOW));
+    }
+
+    @Test
     void applyNotificationRetryDoesNotRepeatExternalEffect() {
         FakeRepository repository = new FakeRepository(punishment(mute(Duration.ofHours(1)), NOW));
         FakeGateway gateway = new FakeGateway();
@@ -179,6 +195,24 @@ class DiscordPunishmentWorkerTest {
         assertEquals(1, gateway.removeCalls);
         assertEquals(1, gateway.notifyRemovedCalls);
         assertTrue(repository.work.isEmpty());
+    }
+
+    @Test
+    void successfulRevokeUsesRevokedTerminalState() {
+        RemovalResult result = successfulRemoval(DiscordPunishmentTermination.REVOKE);
+
+        assertEquals(DiscordPunishmentState.REVOKED, result.punishment().state());
+        assertFalse(result.punishment().externalApplied());
+        assertEquals(1, result.removeCalls());
+    }
+
+    @Test
+    void successfulOverturnUsesOverturnedTerminalState() {
+        RemovalResult result = successfulRemoval(DiscordPunishmentTermination.OVERTURN);
+
+        assertEquals(DiscordPunishmentState.OVERTURNED, result.punishment().state());
+        assertFalse(result.punishment().externalApplied());
+        assertEquals(1, result.removeCalls());
     }
 
     @Test
@@ -375,6 +409,19 @@ class DiscordPunishmentWorkerTest {
         assertEquals(1, repository.work.size());
         assertEquals(WorkType.RECONCILE, repository.work.peek().type());
         assertTrue(repository.work.peek().dueAt().isAfter(NOW));
+    }
+
+    private static RemovalResult successfulRemoval(DiscordPunishmentTermination termination) {
+        DiscordPunishment initial = appliedMute().requestRemoval(termination, REMOVE_OPERATION);
+        FakeRepository repository = new FakeRepository(initial);
+        FakeGateway gateway = new FakeGateway();
+        repository.enqueue(WorkType.REMOVE, NOW, 1);
+
+        newWorker(repository, gateway).runCycle();
+        return new RemovalResult(repository.current.punishment(), gateway.removeCalls);
+    }
+
+    private record RemovalResult(DiscordPunishment punishment, int removeCalls) {
     }
 
     private static DiscordPunishmentWorker newWorker(FakeRepository repository, FakeGateway gateway) {

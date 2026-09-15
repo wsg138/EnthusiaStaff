@@ -44,6 +44,7 @@ final class JdaDiscordPunishmentGateway implements DiscordPunishmentGateway {
     private static final String UNKNOWN_MEMBER = "UNKNOWN_MEMBER";
     private static final String UNKNOWN_USER = "UNKNOWN_USER";
     private static final String TARGET_NOT_IN_GUILD = "TARGET_NOT_IN_GUILD";
+    private static final String CHANNEL_PERMISSION_MANAGE_DENIED = "CHANNEL_PERMISSION_MANAGE_DENIED";
     private static final String UNSUPPORTED_CONSEQUENCE = "UNSUPPORTED_CONSEQUENCE";
 
     private final DiscordPunishmentConfiguration configuration;
@@ -100,7 +101,8 @@ final class JdaDiscordPunishmentGateway implements DiscordPunishmentGateway {
         switch (intent.type()) {
             case MUTE -> requireMuteAvailable(guild, member);
             case BAN -> nativeBans.preflight(guild, target);
-            case CHANNEL_RESTRICTION -> restrictionContainer(guild, intent.restriction().orElseThrow());
+            case CHANNEL_RESTRICTION -> requireRestrictionAvailable(
+                    guild, intent.restriction().orElseThrow());
             case KICK -> kicks.preflight(guild);
             case WARNING -> { }
             default -> throw failure(UNSUPPORTED_CONSEQUENCE, false);
@@ -128,6 +130,7 @@ final class JdaDiscordPunishmentGateway implements DiscordPunishmentGateway {
             IPermissionContainer container = restrictionContainer(
                     guild, punishment.intent().restriction().orElseThrow()
             );
+            requireManagePermissions(guild, container);
             return snapshot(container.getPermissionOverride(member));
         } catch (RuntimeException failure) {
             throw classify("SNAPSHOT", failure);
@@ -274,14 +277,24 @@ final class JdaDiscordPunishmentGateway implements DiscordPunishmentGateway {
         }
         Role role = requireMuteRole(guild);
         muteOwnership.requirePermissions(guild);
+        requireMutePolicyPermissions(guild);
         JdaMuteRoleOwnership.requireFreshRoleAbsent(member.getRoles().contains(role));
     }
 
     private void ensureMutePolicy(Guild guild) {
         Role role = requireMuteRole(guild);
+        requireMutePolicyPermissions(guild);
         for (GuildChannel channel : guild.getChannels()) {
             if (channel instanceof IPermissionContainer container) {
                 enforceMuteOverride(channel, container, role);
+            }
+        }
+    }
+
+    private static void requireMutePolicyPermissions(Guild guild) {
+        for (GuildChannel channel : guild.getChannels()) {
+            if (channel instanceof IPermissionContainer) {
+                requireManagePermissions(guild, channel);
             }
         }
     }
@@ -307,6 +320,7 @@ final class JdaDiscordPunishmentGateway implements DiscordPunishmentGateway {
         requireHierarchy(guild, member);
         DiscordRestrictionTarget target = punishment.intent().restriction().orElseThrow();
         IPermissionContainer container = restrictionContainer(guild, target);
+        requireManagePermissions(guild, container);
         DiscordPermissionSnapshot original = punishment.previousRestriction().orElseThrow(
                 () -> failure("RESTRICTION_SNAPSHOT_MISSING", false)
         );
@@ -328,6 +342,7 @@ final class JdaDiscordPunishmentGateway implements DiscordPunishmentGateway {
         }
         DiscordRestrictionTarget target = punishment.intent().restriction().orElseThrow();
         IPermissionContainer container = restrictionContainer(guild, target);
+        requireManagePermissions(guild, container);
         DiscordPermissionSnapshot original = punishment.previousRestriction().orElseThrow(
                 () -> failure("RESTRICTION_SNAPSHOT_MISSING", false)
         );
@@ -385,6 +400,21 @@ final class JdaDiscordPunishmentGateway implements DiscordPunishmentGateway {
                 .complete();
     }
 
+    private void requireRestrictionAvailable(Guild guild, DiscordRestrictionTarget target) {
+        IPermissionContainer container = restrictionContainer(guild, target);
+        requireManagePermissions(guild, container);
+    }
+
+    private static void requireManagePermissions(Guild guild, GuildChannel channel) {
+        requirePermissionManagement(guild.getSelfMember().hasPermission(channel, Permission.MANAGE_PERMISSIONS));
+    }
+
+    static void requirePermissionManagement(boolean permitted) {
+        if (!permitted) {
+            throw failure(CHANNEL_PERMISSION_MANAGE_DENIED, false);
+        }
+    }
+
     private IPermissionContainer restrictionContainer(Guild guild, DiscordRestrictionTarget target) {
         GuildChannel channel = guild.getGuildChannelById(target.snowflake());
         if (!(channel instanceof IPermissionContainer container)) {
@@ -416,7 +446,7 @@ final class JdaDiscordPunishmentGateway implements DiscordPunishmentGateway {
     private Member memberRequired(Guild guild, DiscordUserId target) {
         Member member = memberOrNull(guild, target);
         if (member == null) {
-            throw failure(TARGET_NOT_IN_GUILD, false);
+            throw failure(TARGET_NOT_IN_GUILD, true);
         }
         return member;
     }

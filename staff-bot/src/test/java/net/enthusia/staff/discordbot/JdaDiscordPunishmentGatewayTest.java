@@ -34,6 +34,18 @@ class JdaDiscordPunishmentGatewayTest {
     }
 
     @Test
+    void channelPermissionManagementFailsClosedBeforeMutation() {
+        DiscordPunishmentGateway.EffectException failure = assertThrows(
+                DiscordPunishmentGateway.EffectException.class,
+                () -> JdaDiscordPunishmentGateway.requirePermissionManagement(false)
+        );
+
+        assertEquals("CHANNEL_PERMISSION_MANAGE_DENIED", failure.errorCode());
+        assertFalse(failure.retryable());
+        assertDoesNotThrow(() -> JdaDiscordPunishmentGateway.requirePermissionManagement(true));
+    }
+
+    @Test
     void applyRetryRequiresExactBotTargetAndPunishmentMarker() {
         String ownedReason = JdaMuteRoleOwnership.marker(PUNISHMENT_ID) + " reason";
         JdaMuteRoleOwnership.Observation owned = observation(
