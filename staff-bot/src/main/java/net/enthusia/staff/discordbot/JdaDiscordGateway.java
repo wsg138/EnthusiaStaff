@@ -20,6 +20,7 @@ import net.dv8tion.jda.api.events.session.ShutdownEvent;
 import net.dv8tion.jda.api.hooks.ListenerAdapter;
 import net.dv8tion.jda.api.utils.ChunkingFilter;
 import net.dv8tion.jda.api.utils.MemberCachePolicy;
+import net.dv8tion.jda.api.utils.cache.CacheFlag;
 
 /** JDA 6.5 adapter. JDA owns Discord REST bucket/global rate limits and Gateway reconnect scheduling. */
 final class JdaDiscordGateway implements DiscordGateway {
@@ -75,8 +76,8 @@ final class JdaDiscordGateway implements DiscordGateway {
     }
 
     private JDABuilder baseBuilder(SessionListener listener) {
-        // D16 uses bounded on-demand Discord REST reads. No message Gateway event subscription is required.
         return JDABuilder.createLight(configuration.discordToken(), Set.of())
+                .enableCache(requiredCacheFlags())
                 .setMemberCachePolicy(MemberCachePolicy.NONE)
                 .setChunkingFilter(ChunkingFilter.NONE)
                 .setAutoReconnect(true)
@@ -113,6 +114,7 @@ final class JdaDiscordGateway implements DiscordGateway {
             if (jda == null) {
                 return;
             }
+            moderation.ifPresent(runtime -> runtime.resumePunishments(jda));
             if (previewListener != null) {
                 previewListener.enable(jda);
             } else if (moderationListener != null) {
@@ -123,6 +125,7 @@ final class JdaDiscordGateway implements DiscordGateway {
 
     private void disableInteractions() {
         synchronized (lifecycleLock) {
+            moderation.ifPresent(StaffModerationRuntime::pausePunishments);
             if (previewListener != null) {
                 previewListener.disable();
             }
@@ -153,6 +156,7 @@ final class JdaDiscordGateway implements DiscordGateway {
     }
 
     private void closeListeners() {
+        moderation.ifPresent(StaffModerationRuntime::pausePunishments);
         if (previewListener != null) {
             previewListener.close();
         }
@@ -168,6 +172,10 @@ final class JdaDiscordGateway implements DiscordGateway {
             current = jda;
         }
         return current == null || current.awaitShutdown(timeout.toMillis(), TimeUnit.MILLISECONDS);
+    }
+
+    static Set<CacheFlag> requiredCacheFlags() {
+        return Set.of(CacheFlag.MEMBER_OVERRIDES);
     }
 
     static final class CallbackFence {
