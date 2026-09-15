@@ -56,7 +56,7 @@ jobs:
           text = replace_once(
               text,
               '''        return JDABuilder.createLight(configuration.discordToken(), Set.of())\n                .setMemberCachePolicy(MemberCachePolicy.NONE)\n''',
-              '''        return JDABuilder.createLight(configuration.discordToken(), Set.of())\n                .enableCache(requiredCacheFlags().toArray(CacheFlag[]::new))\n                .setMemberCachePolicy(MemberCachePolicy.NONE)\n''',
+              '''        return JDABuilder.createLight(configuration.discordToken(), Set.of())\n                .enableCache(requiredCacheFlags())\n                .setMemberCachePolicy(MemberCachePolicy.NONE)\n''',
               "gateway cache enablement",
           )
           marker = '''    static final class CallbackFence {\n'''
