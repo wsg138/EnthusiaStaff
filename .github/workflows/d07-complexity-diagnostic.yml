@@ -1,0 +1,27 @@
+name: D07 complexity diagnostic
+
+on:
+  push:
+    branches:
+      - "package/es-d07-discord-punishment-enforcement"
+
+permissions:
+  contents: read
+
+jobs:
+  complexity:
+    if: github.event.head_commit.message == '[ES-D07] Stage complexity diagnostic'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - name: Analyze changed Java complexity
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m pip install --disable-pip-version-check --quiet lizard
+          mapfile -t files < <(git diff --name-only origin/main...HEAD -- '*.java')
+          printf 'Changed Java files: %s\n' "${#files[@]}"
+          lizard -l java -C 8 -L 50 -w "${files[@]}" || true
