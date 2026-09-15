@@ -83,14 +83,15 @@ final class DiscordInvestigationService {
             long actorDiscordId,
             String actorName,
             long targetDiscordId,
-            InvestigationNote.Scope scope,
+            InvestigationNote.ScopeType scopeType,
+            String scopeValue,
             InvestigationNote.Visibility visibility,
             String text,
             String operationToken
     ) {
         TargetContext context = authorize(actorDiscordId, actorName, targetDiscordId, DiscordModerationOperation.ADD_NOTE);
         authorization.requireVisibility(context.actor(), visibility);
-        validateScope(context, targetDiscordId, scope);
+        InvestigationNote.Scope scope = noteScope(context, targetDiscordId, scopeType, scopeValue);
         String operationKey = operation("note", operationToken);
         InvestigationNote note = store.createNote(new DiscordInvestigationStore.NoteDraft(
                 deterministicId(operationKey), operationKey, context.subjectId(), scope, visibility,
@@ -231,49 +232,48 @@ final class DiscordInvestigationService {
         return new TargetContext(actor, target, subjectId);
     }
 
-    private void validateScope(TargetContext context, long targetDiscordId, InvestigationNote.Scope scope) {
-        if (scope == null) {
-            throw new IllegalArgumentException("note scope must be present");
+    private InvestigationNote.Scope noteScope(
+            TargetContext context,
+            long targetDiscordId,
+            InvestigationNote.ScopeType scopeType,
+            String scopeValue
+    ) {
+        if (scopeType == null) {
+            throw new IllegalArgumentException("note scope type must be present");
         }
-        switch (scope.type()) {
-            case SUBJECT -> requireScopeValue(scope, context.subjectId().value().toString());
-            case DISCORD_USER -> requireScopeValue(scope, Long.toUnsignedString(targetDiscordId));
-            case MINECRAFT_PLAYER -> requireMinecraftScope(context, scope);
-            case CASE -> requireCaseScope(context.subjectId(), scope);
-        }
+        return switch (scopeType) {
+            case SUBJECT -> new InvestigationNote.Scope(scopeType, context.subjectId().value().toString());
+            case DISCORD_USER -> new InvestigationNote.Scope(scopeType, Long.toUnsignedString(targetDiscordId));
+            case MINECRAFT_PLAYER -> minecraftScope(context, scopeValue);
+            case CASE -> caseScope(context.subjectId(), scopeValue);
+        };
     }
 
-    private static void requireScopeValue(InvestigationNote.Scope scope, String expected) {
-        if (!scope.value().equals(expected)) {
-            throw new IllegalArgumentException("private note scope does not match the target");
-        }
-    }
-
-    private static void requireMinecraftScope(TargetContext context, InvestigationNote.Scope scope) {
-        UUID playerId;
-        try {
-            playerId = UUID.fromString(scope.value());
-        } catch (IllegalArgumentException exception) {
-            throw new IllegalArgumentException("Minecraft note scope is invalid", exception);
-        }
+    private static InvestigationNote.Scope minecraftScope(TargetContext context, String scopeValue) {
+        UUID playerId = uuid(scopeValue, "Minecraft note scope is invalid");
         boolean linked = context.target().subject().stream()
                 .flatMap(value -> value.subject().minecraftAccountIds().stream())
                 .anyMatch(playerId::equals);
         if (!linked) {
             throw new IllegalArgumentException("Minecraft note scope is not linked to the target");
         }
+        return new InvestigationNote.Scope(InvestigationNote.ScopeType.MINECRAFT_PLAYER, playerId.toString());
     }
 
-    private void requireCaseScope(ModerationSubjectId subjectId, InvestigationNote.Scope scope) {
-        UUID caseId;
-        try {
-            caseId = UUID.fromString(scope.value());
-        } catch (IllegalArgumentException exception) {
-            throw new IllegalArgumentException("case note scope is invalid", exception);
-        }
+    private InvestigationNote.Scope caseScope(ModerationSubjectId subjectId, String scopeValue) {
+        UUID caseId = uuid(scopeValue, "case note scope is invalid");
         InvestigationCase investigationCase = store.findCase(caseId)
                 .orElseThrow(() -> new IllegalStateException("investigation case does not exist"));
         requireSubject(investigationCase.subjectId(), subjectId, "investigation case");
+        return new InvestigationNote.Scope(InvestigationNote.ScopeType.CASE, caseId.toString());
+    }
+
+    private static UUID uuid(String value, String message) {
+        try {
+            return UUID.fromString(value);
+        } catch (RuntimeException exception) {
+            throw new IllegalArgumentException(message, exception);
+        }
     }
 
     private static void requireSubject(ModerationSubjectId actual, ModerationSubjectId expected, String resource) {
