@@ -6,6 +6,7 @@ on:
       - diagnostic/es-d09-authority-repair-20260915
     paths:
       - .github/diagnostics/es-d09-authority-repair.py
+      - .github/diagnostics/es-d09-authority-repair-fix.py
       - .github/workflows/es-d09-authority-repair.yml
 
 permissions:
@@ -34,7 +35,10 @@ jobs:
         run: test "$(git rev-parse HEAD)" = "d2705f281b78fd87bbb1e7934edfca875e342bc0"
 
       - name: Apply authority repair
-        run: python tooling/.github/diagnostics/es-d09-authority-repair.py product
+        run: |
+          python tooling/.github/diagnostics/es-d09-authority-repair-fix.py \
+            tooling/.github/diagnostics/es-d09-authority-repair.py /tmp/es-d09-authority-repair.py
+          python /tmp/es-d09-authority-repair.py product
 
       - name: Set up Java 21
         uses: actions/setup-java@v5
@@ -68,8 +72,6 @@ jobs:
 
       - name: Commit validated candidate
         working-directory: product
-        env:
-          GH_TOKEN: ${{ github.token }}
         run: |
           test -n "$(git status --porcelain)"
           git config user.name "github-actions[bot]"
