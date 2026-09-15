@@ -15,9 +15,9 @@ Dedicated Discord-program workers must reconcile the global `PACKAGE-REGISTRY.md
 | `ES-D05` | Staff bot runtime foundation | `COMPLETE` | 134 | `ES-D01`–`ES-D03` |
 | `ES-D06` | Read-only staff moderation UX | `COMPLETE` | 135 | `ES-D04`, `ES-D05` |
 | `ES-D16` | Moderation console real-data read bridge | `COMPLETE` | 135.5 | `ES-D03`, `ES-D05`, `ES-D06`, merged PR #186 |
-| `ES-D07` | Discord punishment enforcement | `READY` | 136 | `ES-D03`, `ES-D05`, `ES-D06` |
-| `ES-D08` | Cross-platform moderation integration | `PLANNED` | 137 | `ES-D07` |
-| `ES-D09` | Discord evidence, cases, notes and linked-alt alerts | `PLANNED` | 138 | `ES-D06`, `ES-D07` |
+| `ES-D07` | Discord punishment enforcement | `COMPLETE` | 136 | `ES-D03`, `ES-D05`, `ES-D06` |
+| `ES-D08` | Cross-platform moderation integration | `PLANNED` | 137 | `ES-D07` plus live proof current Minecraft moderation services can accept integration without changing production authority |
+| `ES-D09` | Discord evidence, cases, notes and linked-alt alerts | `READY` | 138 | `ES-D06`, `ES-D07` |
 | `ES-D10` | AutoMod shadow engine | `PLANNED` | 139 | `ES-D05`, `ES-D09` |
 | `ES-D11` | AutoMod enforcement and security locks | `PLANNED` | 140 | accepted `ES-D10` shadow evidence |
 | `ES-D12` | Staff website Discord expansion | `PLANNED` | 141 | `ES-D02`, `ES-D07`, `ES-D09` |
@@ -27,7 +27,7 @@ Dedicated Discord-program workers must reconcile the global `PACKAGE-REGISTRY.md
 
 ## Active packages
 
-No Discord package is activated after this D13 blocker publication. ES-D16 remains `COMPLETE`. ES-D13 is `BLOCKED` / `PARKED_BLOCKED` with implementation PR #178 preserved open/unmerged at exact frozen head `92b207d67a1098acc2dcfbddd35ac56e01711f95`; required legacy DiscordSRV staging parity is `NOT RUN` because authorized non-production legacy managed-role state and staging D13 runtime/parity configuration are unavailable. ES-D07 remains dependency-complete `READY`. This D13 worker stops and does not begin D07 or another package.
+No Discord implementation package is active in this D07 terminal-publication worker. ES-D07 is `COMPLETE`. ES-D09 is dependency-complete `READY` for a future Discord worker because D06 and D07 are complete, but it is not activated or started here. ES-D08 remains `PLANNED`: D07 is complete, but the separate package-required live proof that current Minecraft moderation services can accept the integration without changing production authority has not been established. ES-D12 remains `PLANNED` because D09 is not complete. ES-D13 remains `BLOCKED` / `PARKED_BLOCKED` with implementation PR #178 preserved open/unmerged at exact frozen head `92b207d67a1098acc2dcfbddd35ac56e01711f95`; required legacy DiscordSRV staging parity is `NOT RUN` because authorized non-production legacy managed-role state and staging D13 runtime/parity configuration are unavailable. This worker stops after D07 publication and does not begin another package.
 
 ## ES-D04 terminal record
 
@@ -133,6 +133,22 @@ The implementation branch is absent. The temporary diagnostic-only workflow was 
 
 No production deployment/configuration/data access, moderation mutation, secret access, LiteBans authority change, issue #43 acceptance, or cutover occurred.
 
+## ES-D07 terminal record
+
+Status: `COMPLETE`.
+
+Implementation PR #201 merged normally as `ca949a8531ea39efdf1becccc052b9c59cf30d24`. Package start/base `main` was `074c0ae0bee7222bcd5c9096f8db0071f5b84cdf`; frozen executable product head was `aea6696cb97df4463b90abfcbbd8bfa4bb80b913`; exact final pre-merge head was `e9d8a904c4192c9a4ab5fdfe34df8d2590567a95`. The merge parents are exactly the pre-merge main and final feature head. Canonical terminal handoff: `ai-agents/reports/package-handoffs/2026-09-14-es-d07-active.md`.
+
+Review-repair workflow `34925882460` / job `104243730808` passed Temurin Java 21.0.12+1 clean build/tests, `:staff-bot:verifyStaffBotRuntime`, repository PMD with zero findings, changed-Java `CCN <= 8`, practical method length `<= 50`, argument count `<= 8`, bounded worker-test size 431, and `git diff --check`. Codacy static on executable head `aea6696c...`, check `104245761385`, passed with zero annotations/up-to-standards. All four substantive CodeRabbit correctness/data-integrity findings were repaired with regression coverage and their four threads are resolved; the generic docstring warning is advisory only.
+
+Exact compare `aea6696c...` → `e9d8a904...` changes only three `ai-agents` Markdown tracking files, so executable evidence remains attributed to the frozen product. Exact final-head Coverage `34926790460`, Staff Bot PR Artifact `34926790540`, Staff Bot Configuration Cache `34926790404`, Sentinel Restart Artifact `34926790424`, and state-only Codacy Static `104247092167` all succeeded. No executable input changed in the state-only delta.
+
+Isolated destructive Discord staging is `NOT RUN / unavailable`, not a pass: no authorized non-production D07 destructive target/fixture/harness was found, and production Discord was not used as a substitute.
+
+Post-merge compare from `e9d8a904...` to `ca949a85...` is one merge commit with zero file differences, proving exact containment. `package/es-d07-discord-punishment-enforcement` is absent. `tmp/es-d07-codacy-inspect-20260914` contains only disposable D07 inspection/repair tooling and has no unique product work; it is safe to delete when a branch-delete mutation is available.
+
+D07 adds no Flyway migration and changed no production Discord configuration/data, deployment/cutover, LiteBans authority, AutoMod enforcement, cross-platform `Both` behavior, or issue #43 acceptance.
+
 ## ES-D16 terminal record
 
 Status: `COMPLETE`.
@@ -165,7 +181,7 @@ Canonical blocker handoff: `ai-agents/reports/package-handoffs/2026-09-14-es-d13
 
 ## Latest completion / parked state
 
-`ES-D16 — Moderation console real-data read bridge` remains the latest completed Discord package. `ES-D13 — Discord role-sync replacement` is `BLOCKED` / `PARKED_BLOCKED`. `ES-D07 — Discord punishment enforcement` remains dependency-complete `READY`. This D13 worker stops without beginning another package.
+`ES-D07 — Discord punishment enforcement` is the latest completed Discord implementation package. `ES-D13 — Discord role-sync replacement` remains `BLOCKED` / `PARKED_BLOCKED`. `ES-D09` is dependency-complete `READY` for a future worker but is not active. `ES-D08` remains `PLANNED` pending its separate live Minecraft integration-readiness proof. `ES-D12` remains `PLANNED` because D09 is not complete. This D07 worker stops without beginning another package.
 
 ## Selection
 
