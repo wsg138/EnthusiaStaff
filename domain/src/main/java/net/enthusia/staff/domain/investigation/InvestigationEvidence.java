@@ -16,6 +16,7 @@ public final class InvestigationEvidence {
     public static final int MAX_CONTEXT_BATCH = 10;
     public static final int MAX_CONTENT_LENGTH = 16_000;
     public static final int MAX_ATTACHMENTS = 10;
+    public static final int MAX_ACTION_LENGTH = 96;
 
     private InvestigationEvidence() {
     }
@@ -70,12 +71,15 @@ public final class InvestigationEvidence {
             Message focus,
             List<Message> before,
             List<Message> after,
+            UUID capturedBy,
+            String action,
             Instant capturedAt
     ) {
         public Capture {
             if (evidenceId == null || blank(operationKey) || operationKey.length() > 128
                     || subjectId == null || caseId == null || focus == null || before == null
-                    || after == null || capturedAt == null || before.size() > MAX_INITIAL_BEFORE
+                    || after == null || capturedBy == null || blank(action) || action.length() > MAX_ACTION_LENGTH
+                    || capturedAt == null || before.size() > MAX_INITIAL_BEFORE
                     || after.size() > MAX_INITIAL_AFTER) {
                 throw new IllegalArgumentException("evidence capture fields are invalid or unbounded");
             }

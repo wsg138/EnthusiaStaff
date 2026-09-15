@@ -3,38 +3,56 @@ package net.enthusia.staff.discordbot;
 import java.time.Clock;
 import java.util.concurrent.atomic.AtomicBoolean;
 import net.dv8tion.jda.api.JDA;
+import net.enthusia.staff.domain.auth.DiscordAuthorizationLimits;
 import net.enthusia.staff.persistence.DatabaseConfig;
 import net.enthusia.staff.persistence.DiscordInvestigationPersistenceRuntime;
 
-/** Owns D09 durable maintenance and independent Discord/Minecraft alert delivery resources. */
+/** Owns D09 durable maintenance, application service, and independent alert delivery resources. */
 final class DiscordInvestigationRuntime implements AutoCloseable {
+    record Dependencies(
+            DatabaseConfig database,
+            StaffModerationConfiguration moderation,
+            DiscordAuthorizationLimits authorizationLimits,
+            StaffModerationReadService reads,
+            LinkedStaffActorResolver actors
+    ) {
+        Dependencies {
+            if (database == null || moderation == null || authorizationLimits == null || reads == null || actors == null) {
+                throw new IllegalArgumentException("Discord investigation runtime dependencies are invalid");
+            }
+        }
+    }
+
     private final DiscordInvestigationPersistenceRuntime persistence;
     private final JdaDiscordInvestigationAlertSink discordAlerts;
     private final DiscordInvestigationCoordinator coordinator;
+    private final DiscordInvestigationService service;
     private final AtomicBoolean closed = new AtomicBoolean();
 
     private DiscordInvestigationRuntime(
             DiscordInvestigationPersistenceRuntime persistence,
             JdaDiscordInvestigationAlertSink discordAlerts,
-            DiscordInvestigationCoordinator coordinator
+            DiscordInvestigationCoordinator coordinator,
+            DiscordInvestigationService service
     ) {
         this.persistence = persistence;
         this.discordAlerts = discordAlerts;
         this.coordinator = coordinator;
+        this.service = service;
     }
 
     static DiscordInvestigationRuntime open(
-            DatabaseConfig database,
-            StaffModerationConfiguration moderation,
+            Dependencies dependencies,
             DiscordInvestigationConfiguration configuration,
             long guildId
     ) {
-        if (database == null || moderation == null || configuration == null || guildId <= 0) {
+        if (dependencies == null || configuration == null || guildId <= 0) {
             throw new IllegalArgumentException("Discord investigation runtime configuration is invalid");
         }
-        DiscordInvestigationPersistenceRuntime persistence = DiscordInvestigationPersistenceRuntime.open(database);
+        DiscordInvestigationPersistenceRuntime persistence =
+                DiscordInvestigationPersistenceRuntime.open(dependencies.database());
         try {
-            return assemble(persistence, moderation, configuration, guildId);
+            return assemble(persistence, dependencies, configuration, guildId);
         } catch (RuntimeException exception) {
             persistence.close();
             throw exception;
@@ -43,26 +61,37 @@ final class DiscordInvestigationRuntime implements AutoCloseable {
 
     private static DiscordInvestigationRuntime assemble(
             DiscordInvestigationPersistenceRuntime persistence,
-            StaffModerationConfiguration moderation,
+            Dependencies dependencies,
             DiscordInvestigationConfiguration configuration,
             long guildId
     ) {
+        Clock clock = Clock.systemUTC();
         JdaDiscordInvestigationAlertSink discordAlerts = new JdaDiscordInvestigationAlertSink(
                 guildId, configuration.alertChannelId(), configuration.staffRoleId());
         HttpMinecraftInvestigationAlertSink minecraftAlerts = new HttpMinecraftInvestigationAlertSink(
-                moderation.authorityUri(), moderation.authoritySecret(), moderation.authorityTransport());
+                dependencies.moderation().authorityUri(),
+                dependencies.moderation().authoritySecret(),
+                dependencies.moderation().authorityTransport());
         DiscordInvestigationWorker worker = new DiscordInvestigationWorker(
-                persistence.investigations(),
-                discordAlerts,
-                minecraftAlerts,
-                Clock.systemUTC(),
-                configuration.retryBase(),
-                configuration.retryMaximum()
+                persistence.investigations(), discordAlerts, minecraftAlerts, clock,
+                configuration.retryBase(), configuration.retryMaximum()
         );
         DiscordInvestigationCoordinator coordinator = new DiscordInvestigationCoordinator(
                 worker, configuration.workerInterval());
+        DiscordInvestigationService service = new DiscordInvestigationService(
+                persistence.investigations(),
+                dependencies.reads(),
+                dependencies.actors(),
+                new DiscordInvestigationAuthorization(dependencies.authorizationLimits()),
+                persistence::ensureDiscordSubject,
+                clock
+        );
         coordinator.start();
-        return new DiscordInvestigationRuntime(persistence, discordAlerts, coordinator);
+        return new DiscordInvestigationRuntime(persistence, discordAlerts, coordinator, service);
+    }
+
+    DiscordInvestigationService service() {
+        return service;
     }
 
     void resume(JDA jda) {

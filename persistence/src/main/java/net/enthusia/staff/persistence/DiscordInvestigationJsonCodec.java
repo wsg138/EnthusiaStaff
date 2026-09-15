@@ -23,7 +23,9 @@ final class DiscordInvestigationJsonCodec {
                     "kind", "D09_MESSAGE",
                     "contentStored", true,
                     "contextBefore", capture.before().size(),
-                    "contextAfter", capture.after().size()
+                    "contextAfter", capture.after().size(),
+                    "capturedBy", capture.capturedBy().toString(),
+                    "action", capture.action()
             ));
         } catch (JsonProcessingException exception) {
             throw new ModerationPersistenceException("Unable to encode private evidence metadata", exception);

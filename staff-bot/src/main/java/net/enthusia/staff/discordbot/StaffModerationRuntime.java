@@ -109,16 +109,9 @@ final class StaffModerationRuntime implements AutoCloseable {
             StaffReadAuthorization authorization = new StaffReadAuthorization();
             profiles = MinecraftProfileLookup.mojang();
             punishments = punishmentConfiguration.map(value -> DiscordPunishmentRuntime.open(
-                    configuration.database(),
-                    value,
-                    reads,
-                    actors,
-                    guildId,
-                    interactionCapacity,
-                    interactionTtl
-            ));
+                    configuration.database(), value, reads, actors, guildId, interactionCapacity, interactionTtl));
             investigations = investigationConfiguration.map(value -> DiscordInvestigationRuntime.open(
-                    configuration.database(), configuration, value, guildId));
+                    investigationDependencies(configuration, punishmentConfiguration, reads, actors), value, guildId));
             return new StaffModerationRuntime(
                     data, reads, actors, authorization, components, profiles, punishments, investigations
             );
@@ -131,6 +124,18 @@ final class StaffModerationRuntime implements AutoCloseable {
             data.close();
             throw exception;
         }
+    }
+
+    private static DiscordInvestigationRuntime.Dependencies investigationDependencies(
+            StaffModerationConfiguration configuration,
+            Optional<DiscordPunishmentConfiguration> punishmentConfiguration,
+            StaffModerationReadService reads,
+            LinkedStaffActorResolver actors
+    ) {
+        DiscordPunishmentConfiguration punishment = punishmentConfiguration.orElseThrow();
+        return new DiscordInvestigationRuntime.Dependencies(
+                configuration.database(), configuration, punishment.authorizationLimits(), reads, actors
+        );
     }
 
     StaffModerationReadService reads() {
@@ -155,6 +160,10 @@ final class StaffModerationRuntime implements AutoCloseable {
 
     Optional<DiscordPunishmentService> punishmentService() {
         return punishments.map(DiscordPunishmentRuntime::service);
+    }
+
+    Optional<DiscordInvestigationService> investigationService() {
+        return investigations.map(DiscordInvestigationRuntime::service);
     }
 
     boolean investigationsEnabled() {
