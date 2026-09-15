@@ -113,6 +113,13 @@ record DiscordPunishmentConfiguration(
     }
 
     private static boolean snowflake(String value) {
-        return value != null && SNOWFLAKE.matcher(value).matches();
+        if (value == null || !SNOWFLAKE.matcher(value).matches()) {
+            return false;
+        }
+        try {
+            return Long.parseLong(value) > 0;
+        } catch (NumberFormatException exception) {
+            return false;
+        }
     }
 }

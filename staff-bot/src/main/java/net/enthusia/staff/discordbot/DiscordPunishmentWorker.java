@@ -456,10 +456,7 @@ final class DiscordPunishmentWorker {
     }
 
     private static DiscordPunishment terminalWithoutEffect(DiscordPunishment punishment, WorkLease work) {
-        DiscordPunishment pendingRemoval = punishment.requestRemoval(
-                DiscordPunishmentTermination.EXPIRE, operationKey(work)
-        );
-        return pendingRemoval.markRemoved(operationKey(work));
+        return punishment.expireWithoutEffect(operationKey(work));
     }
 
     private static String operationKey(WorkLease work) {

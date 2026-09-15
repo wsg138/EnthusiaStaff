@@ -9,7 +9,7 @@ import net.enthusia.staff.domain.sanction.SanctionLength;
 
 /** Strict, bounded parser for Discord punishment duration presets and custom durations. */
 final class DiscordDurationParser {
-    private static final Pattern TEMPORARY = Pattern.compile("([1-9][0-9]{0,5})([smhdw])");
+    private static final Pattern TEMPORARY = Pattern.compile("([1-9][0-9]{0,8})([smhdw])");
     private static final Duration MAXIMUM = Duration.ofDays(3650);
     private static final Map<String, Duration> PRESETS = Map.of(
             "10m", Duration.ofMinutes(10),

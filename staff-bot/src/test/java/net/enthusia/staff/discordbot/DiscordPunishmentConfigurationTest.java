@@ -41,6 +41,16 @@ class DiscordPunishmentConfigurationTest {
         assertThrows(IllegalArgumentException.class,
                 () -> DiscordPunishmentConfiguration.fromEnvironment(invalidRole));
 
+        Map<String, String> overflowingRole = validValues();
+        overflowingRole.put(DiscordPunishmentConfiguration.MUTE_ROLE_ENV, "9223372036854775808");
+        assertThrows(IllegalArgumentException.class,
+                () -> DiscordPunishmentConfiguration.fromEnvironment(overflowingRole));
+
+        Map<String, String> overflowingScope = validValues();
+        overflowingScope.put(DiscordPunishmentConfiguration.SUPPORT_SCOPES_ENV, "456,9223372036854775808");
+        assertThrows(IllegalArgumentException.class,
+                () -> DiscordPunishmentConfiguration.fromEnvironment(overflowingScope));
+
         Map<String, String> inverted = validValues();
         inverted.put(DiscordPunishmentConfiguration.HELPER_MAX_MUTE_ENV, "7200");
         inverted.put(DiscordPunishmentConfiguration.MOD_MAX_MUTE_ENV, "3600");

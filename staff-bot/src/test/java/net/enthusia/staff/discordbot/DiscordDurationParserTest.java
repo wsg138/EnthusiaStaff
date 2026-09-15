@@ -26,6 +26,17 @@ class DiscordDurationParserTest {
     }
 
     @Test
+    void acceptsLargeCustomSecondsThroughSafetyMaximum() {
+        var millionSeconds = parser.parse("1000000s", true);
+        var maximumSeconds = parser.parse("315360000s", true);
+
+        assertEquals(Duration.ofSeconds(1_000_000), millionSeconds.length().temporary().orElseThrow());
+        assertTrue(millionSeconds.custom());
+        assertEquals(Duration.ofDays(3650), maximumSeconds.length().temporary().orElseThrow());
+        assertThrows(IllegalArgumentException.class, () -> parser.parse("315360001s", true));
+    }
+
+    @Test
     void rejectsMalformedDisallowedAndExcessiveDurations() {
         assertThrows(IllegalArgumentException.class, () -> parser.parse("permanent", false));
         assertThrows(IllegalArgumentException.class, () -> parser.parse("0m", true));

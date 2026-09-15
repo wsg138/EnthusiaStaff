@@ -103,10 +103,25 @@ public record DiscordPunishment(
         if (!intent.reversible()) {
             return markTerminal(requested, operationKey);
         }
+        requireRemovalSource();
         return new DiscordPunishment(
                 punishmentId, subjectId, targetUserId, guildId, issuer, intent, issuedAt, expiresAt,
                 DiscordPunishmentState.PENDING_REMOVE, requested, dmOutcome, DiscordDeliveryOutcome.NOT_ATTEMPTED,
                 externalApplied, previousRestriction, Optional.empty(), Optional.of(operationKey)
+        );
+    }
+
+    public DiscordPunishment expireWithoutEffect(String operationKey) {
+        boolean pendingApply = state == DiscordPunishmentState.PENDING_APPLY
+                || state == DiscordPunishmentState.RETRY_APPLY;
+        if (!intent.reversible() || externalApplied || !pendingApply) {
+            throw new IllegalStateException("only unapplied pending punishments may expire without removal");
+        }
+        return new DiscordPunishment(
+                punishmentId, subjectId, targetUserId, guildId, issuer, intent, issuedAt, expiresAt,
+                DiscordPunishmentState.EXPIRED, DiscordPunishmentTermination.EXPIRE,
+                dmOutcome, DiscordDeliveryOutcome.NOT_ATTEMPTED, false,
+                previousRestriction, Optional.empty(), Optional.of(operationKey)
         );
     }
 
@@ -120,6 +135,12 @@ public record DiscordPunishment(
 
     public boolean nativeBan() {
         return intent.type() == DiscordConsequenceType.BAN;
+    }
+
+    private void requireRemovalSource() {
+        if (state != DiscordPunishmentState.APPLIED && state != DiscordPunishmentState.FAILED_REMOVE) {
+            throw new IllegalStateException("reversible punishment is not in a removable state");
+        }
     }
 
     private DiscordPunishment withDeliveryOutcomes(
