@@ -24,7 +24,7 @@ for block in blocks:
         raise SystemExit(f"expected one diagnostic replacement block, found {count}: {block[:80]!r}")
     text = text.replace(block, "", 1)
 
-post = r'''
+post = r"""
 # Source indentation differs from the draft transform; apply the worker mapping explicitly.
 worker = "staff-bot/src/main/java/net/enthusia/staff/discordbot/DiscordInvestigationWorker.java"
 content = read(worker)
@@ -94,7 +94,7 @@ if content.count(old) != 1:
     raise RuntimeError("case-scoped note lifecycle block changed")
 content = content.replace(old, new, 1)
 write(note_store, content)
-'''
+"""
 
 text += post
 target.write_text(text, encoding="utf-8")
