@@ -196,9 +196,9 @@ final class DiscordInvestigationCommandController {
                 .addOptions(
                         userOption(),
                         stringOption(SCOPE, "subject, discord, minecraft, or case", true),
-                        stringOption(SCOPE_ID, "Minecraft UUID or investigation case UUID when required", false),
                         stringOption(VISIBILITY, "staff or management", true),
-                        stringOption(TEXT, "Private note text", true)
+                        stringOption(TEXT, "Private note text", true),
+                        stringOption(SCOPE_ID, "Minecraft UUID or investigation case UUID when required", false)
                 )
                 .setDefaultPermissions(discovery);
     }
