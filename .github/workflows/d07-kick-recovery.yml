@@ -30,20 +30,7 @@ jobs:
         shell: bash
         run: |
           python3 .github/scripts/d07_kick_recovery.py
-          python3 - <<'PY'
-          from pathlib import Path
-          path = Path("staff-bot/src/test/java/net/enthusia/staff/discordbot/DiscordPunishmentWorkerTest.java")
-          text = path.read_text(encoding="utf-8")
-          old = "        FakeRepository repository = new FakeRepository(punishment(kick(), NOW));\n"
-          new = """        FakeRepository repository = new FakeRepository(punishment(
-                intent(DiscordConsequenceType.KICK, SanctionLength.instant(), Optional.empty()),
-                NOW
-        ));
-"""
-          if text.count(old) != 1:
-              raise SystemExit("kick fixture patch did not match exactly once")
-          path.write_text(text.replace(old, new, 1), encoding="utf-8")
-          PY
+          python3 .github/scripts/d07_kick_fixture_fix.py
 
       - name: Run focused staff-bot tests
         shell: bash
@@ -76,6 +63,7 @@ jobs:
           set -euo pipefail
           rm .github/workflows/d07-kick-recovery.yml
           rm .github/scripts/d07_kick_recovery.py
+          rm .github/scripts/d07_kick_fixture_fix.py
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add -A
