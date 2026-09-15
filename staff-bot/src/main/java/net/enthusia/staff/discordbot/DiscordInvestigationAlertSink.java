@@ -8,7 +8,7 @@ interface DiscordInvestigationAlertSink {
     Delivery deliver(EvasionAlert alert);
 
     record Delivery(boolean delivered, String errorCode) {
-        Delivery {
+        public Delivery {
             if (delivered && errorCode != null) {
                 throw new IllegalArgumentException("successful alert delivery cannot include an error code");
             }
