@@ -44,7 +44,7 @@ jobs:
                   raise SystemExit(f"{label}: expected 1 match, found {count}")
               return text.replace(old, new, 1)
 
-          # JDA restriction snapshots require the member-override cache, but no gateway intents.
+          # Restriction snapshots require only member-override cache state; gateway intents remain empty.
           path = "staff-bot/src/main/java/net/enthusia/staff/discordbot/JdaDiscordGateway.java"
           text = read(path)
           text = replace_once(
@@ -86,18 +86,26 @@ jobs:
           )
           write(path, text)
 
-          # Never claim a member-specific restriction was removed while the member is absent.
+          # A member-specific restriction cannot be truthfully restored while the member is absent.
           path = "staff-bot/src/main/java/net/enthusia/staff/discordbot/JdaDiscordPunishmentGateway.java"
           text = read(path)
+          text = text.replace('"TARGET_NOT_IN_GUILD"', 'TARGET_NOT_IN_GUILD')
+          text = replace_once(
+              text,
+              '    private static final String UNKNOWN_USER = "UNKNOWN_USER";\n',
+              '    private static final String UNKNOWN_USER = "UNKNOWN_USER";\n'
+              '    private static final String TARGET_NOT_IN_GUILD = "TARGET_NOT_IN_GUILD";\n',
+              "target-not-in-guild constant",
+          )
           text = replace_once(
               text,
               '''        Member member = memberOrNull(guild, punishment.targetUserId());\n        if (member == null) {\n            return;\n        }\n        DiscordRestrictionTarget target = punishment.intent().restriction().orElseThrow();\n''',
-              '''        Member member = memberOrNull(guild, punishment.targetUserId());\n        if (member == null) {\n            throw failure("TARGET_NOT_IN_GUILD", true);\n        }\n        DiscordRestrictionTarget target = punishment.intent().restriction().orElseThrow();\n''',
+              '''        Member member = memberOrNull(guild, punishment.targetUserId());\n        if (member == null) {\n            throw failure(TARGET_NOT_IN_GUILD, true);\n        }\n        DiscordRestrictionTarget target = punishment.intent().restriction().orElseThrow();\n''',
               "restriction absent-member removal",
           )
           write(path, text)
 
-          # External side-effect failures that are explicitly retryable remain recoverable at saturated backoff.
+          # Explicitly retryable external side effects remain recoverable at saturated backoff.
           path = "staff-bot/src/main/java/net/enthusia/staff/discordbot/DiscordPunishmentWorker.java"
           text = read(path)
           text = replace_once(
@@ -114,8 +122,18 @@ jobs:
 
           path = "staff-bot/src/test/java/net/enthusia/staff/discordbot/DiscordPunishmentWorkerTest.java"
           text = read(path)
+          text = replace_once(
+              text,
+              '    private static final Instant NOW = Instant.parse("2026-09-14T20:00:00Z");\n',
+              '    private static final Instant NOW = Instant.parse("2026-09-14T20:00:00Z");\n'
+              '    private static final String REMOVE_OPERATION = "remove";\n'
+              '    private static final String TARGET_NOT_IN_GUILD_ERROR = "TARGET_NOT_IN_GUILD";\n',
+              "worker test constants",
+          )
+          text = text.replace('"remove"', 'REMOVE_OPERATION')
+          text = text.replace('"TARGET_NOT_IN_GUILD"', 'TARGET_NOT_IN_GUILD_ERROR')
           insert_before = '''    @Test\n    void nativeBanReconciliationConflictRemainsObservableWithoutMutationLoop() {\n'''
-          tests = '''    @Test\n    void retryableApplyFailureRemainsRecoverablePastAttemptLimit() {\n        FakeRepository repository = new FakeRepository(punishment(mute(Duration.ofHours(1)), NOW));\n        FakeGateway gateway = new FakeGateway();\n        gateway.applyFailure = new DiscordPunishmentGateway.EffectException(\n                "MUTE_ROLE_OWNERSHIP_UNVERIFIED", true\n        );\n        repository.enqueue(WorkType.APPLY, NOW, 5);\n\n        newWorker(repository, gateway).runCycle();\n\n        assertEquals(DiscordPunishmentState.RETRY_APPLY, repository.current.punishment().state());\n        assertEquals(Optional.of("MUTE_ROLE_OWNERSHIP_UNVERIFIED"),\n                repository.current.punishment().lastErrorCode());\n        assertEquals(1, repository.work.size());\n        assertEquals(WorkType.APPLY, repository.work.peek().type());\n        assertTrue(repository.work.peek().dueAt().isAfter(NOW));\n    }\n\n    @Test\n    void absentRestrictionRemovalRemainsRecoverablePastAttemptLimit() {\n        DiscordPunishment initial = appliedRestriction()\n                .requestRemoval(DiscordPunishmentTermination.END, "remove");\n        FakeRepository repository = new FakeRepository(initial);\n        FakeGateway gateway = new FakeGateway();\n        gateway.removeFailure = new DiscordPunishmentGateway.EffectException("TARGET_NOT_IN_GUILD", true);\n        repository.enqueue(WorkType.REMOVE, NOW, 5);\n\n        newWorker(repository, gateway).runCycle();\n\n        assertEquals(DiscordPunishmentState.RETRY_REMOVE, repository.current.punishment().state());\n        assertTrue(repository.current.punishment().externalApplied());\n        assertEquals(Optional.of("TARGET_NOT_IN_GUILD"), repository.current.punishment().lastErrorCode());\n        assertEquals(1, repository.work.size());\n        assertEquals(WorkType.REMOVE, repository.work.peek().type());\n        assertTrue(repository.work.peek().dueAt().isAfter(NOW));\n    }\n\n    @Test\n    void restrictionDriftRemainsObservableAndScheduled() {\n        FakeRepository repository = new FakeRepository(appliedRestriction());\n        FakeGateway gateway = new FakeGateway();\n        gateway.reconcileFailure = new DiscordPunishmentGateway.EffectException(\n                "RESTRICTION_STATE_CHANGED", false\n        );\n        repository.enqueue(WorkType.RECONCILE, NOW, 1);\n\n        newWorker(repository, gateway).runCycle();\n\n        assertEquals(DiscordPunishmentState.APPLIED, repository.current.punishment().state());\n        assertEquals(Optional.of("RESTRICTION_STATE_CHANGED"), repository.current.punishment().lastErrorCode());\n        assertEquals(1, repository.work.size());\n        assertEquals(WorkType.RECONCILE, repository.work.peek().type());\n        assertEquals(NOW.plus(Duration.ofMinutes(1)), repository.work.peek().dueAt());\n    }\n\n'''
+          tests = '''    @Test\n    void retryableApplyFailureRemainsRecoverablePastAttemptLimit() {\n        FakeRepository repository = new FakeRepository(punishment(mute(Duration.ofHours(1)), NOW));\n        FakeGateway gateway = new FakeGateway();\n        gateway.applyFailure = new DiscordPunishmentGateway.EffectException(\n                "MUTE_ROLE_OWNERSHIP_UNVERIFIED", true\n        );\n        repository.enqueue(WorkType.APPLY, NOW, 5);\n\n        newWorker(repository, gateway).runCycle();\n\n        assertEquals(DiscordPunishmentState.RETRY_APPLY, repository.current.punishment().state());\n        assertEquals(Optional.of("MUTE_ROLE_OWNERSHIP_UNVERIFIED"),\n                repository.current.punishment().lastErrorCode());\n        assertEquals(1, repository.work.size());\n        assertEquals(WorkType.APPLY, repository.work.peek().type());\n        assertTrue(repository.work.peek().dueAt().isAfter(NOW));\n    }\n\n    @Test\n    void absentRestrictionRemovalRemainsRecoverablePastAttemptLimit() {\n        DiscordPunishment initial = appliedRestriction()\n                .requestRemoval(DiscordPunishmentTermination.END, REMOVE_OPERATION);\n        FakeRepository repository = new FakeRepository(initial);\n        FakeGateway gateway = new FakeGateway();\n        gateway.removeFailure = new DiscordPunishmentGateway.EffectException(TARGET_NOT_IN_GUILD_ERROR, true);\n        repository.enqueue(WorkType.REMOVE, NOW, 5);\n\n        newWorker(repository, gateway).runCycle();\n\n        assertEquals(DiscordPunishmentState.RETRY_REMOVE, repository.current.punishment().state());\n        assertTrue(repository.current.punishment().externalApplied());\n        assertEquals(Optional.of(TARGET_NOT_IN_GUILD_ERROR), repository.current.punishment().lastErrorCode());\n        assertEquals(1, repository.work.size());\n        assertEquals(WorkType.REMOVE, repository.work.peek().type());\n        assertTrue(repository.work.peek().dueAt().isAfter(NOW));\n    }\n\n    @Test\n    void restrictionDriftRemainsObservableAndScheduled() {\n        FakeRepository repository = new FakeRepository(appliedRestriction());\n        FakeGateway gateway = new FakeGateway();\n        gateway.reconcileFailure = new DiscordPunishmentGateway.EffectException(\n                "RESTRICTION_STATE_CHANGED", false\n        );\n        repository.enqueue(WorkType.RECONCILE, NOW, 1);\n\n        newWorker(repository, gateway).runCycle();\n\n        assertEquals(DiscordPunishmentState.APPLIED, repository.current.punishment().state());\n        assertEquals(Optional.of("RESTRICTION_STATE_CHANGED"), repository.current.punishment().lastErrorCode());\n        assertEquals(1, repository.work.size());\n        assertEquals(WorkType.RECONCILE, repository.work.peek().type());\n        assertEquals(NOW.plus(Duration.ofMinutes(1)), repository.work.peek().dueAt());\n    }\n\n'''
           text = replace_once(text, insert_before, tests + insert_before, "worker recovery tests")
           text = replace_once(
               text,
@@ -150,11 +168,12 @@ jobs:
           cat /tmp/pmd-findings.txt
           exit "$status"
 
-      - name: Commit validated recovery/cache repairs and remove runner
+      - name: Commit validated recovery/cache repairs and remove temporary runners
         shell: bash
         run: |
           set -euo pipefail
           rm .github/workflows/d07-recovery-cache-repair.yml
+          rm .github/workflows/d07-recovery-cache-repair-v2.yml
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add -A
