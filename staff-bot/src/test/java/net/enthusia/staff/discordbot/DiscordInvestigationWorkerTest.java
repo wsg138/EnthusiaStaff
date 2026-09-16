@@ -16,10 +16,13 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 import net.enthusia.staff.common.CaseId;
+import net.enthusia.staff.domain.auth.DiscordConsequenceType;
+import net.enthusia.staff.domain.discord.DiscordPunishmentState;
 import net.enthusia.staff.domain.investigation.EvasionAlert;
 import net.enthusia.staff.domain.investigation.InvestigationCase;
 import net.enthusia.staff.domain.investigation.InvestigationEvidence;
 import net.enthusia.staff.domain.investigation.InvestigationNote;
+import net.enthusia.staff.domain.moderation.DiscordUserId;
 import net.enthusia.staff.domain.moderation.ModerationSubjectId;
 import net.enthusia.staff.domain.ports.DiscordInvestigationStore;
 import org.junit.jupiter.api.Test;
@@ -51,6 +54,7 @@ class DiscordInvestigationWorkerTest {
         EvasionAlert first = store.onlyAlert();
         assertEquals(EvasionAlert.DeliveryState.RETRY, first.discordDelivery());
         assertEquals(EvasionAlert.DeliveryState.DELIVERED, first.minecraftDelivery());
+        assertEquals(context(7), first.context());
         assertEquals(1, discordCalls.get());
         assertEquals(1, minecraftCalls.get());
 
@@ -79,7 +83,15 @@ class DiscordInvestigationWorkerTest {
     }
 
     private static DiscordInvestigationStore.EvasionCandidate candidate(long revision) {
-        return new DiscordInvestigationStore.EvasionCandidate(SUBJECT, PUNISHMENT, PLAYER, "survival", revision);
+        return new DiscordInvestigationStore.EvasionCandidate(context(revision));
+    }
+
+    private static EvasionAlert.Context context(long revision) {
+        return new EvasionAlert.Context(
+                SUBJECT, PUNISHMENT, new DiscordUserId("223456789012345680"), DiscordConsequenceType.BAN,
+                "Active ban", DiscordPunishmentState.APPLIED, Optional.empty(), PLAYER, Optional.of("LinkedAlt"),
+                "survival", revision, EvasionAlert.TriggerType.LINKED_MINECRAFT_ONLINE, NOW.minusSeconds(5)
+        );
     }
 
     private static final class MutableClock extends Clock {
@@ -132,8 +144,7 @@ class DiscordInvestigationWorkerTest {
                 return replay(existing);
             }
             EvasionAlert created = new EvasionAlert(
-                    draft.alertId(), draft.operationKey(), draft.subjectId(), draft.punishmentId(),
-                    draft.triggeringMinecraftPlayerId(), draft.currentServer(), draft.playerRevision(),
+                    draft.alertId(), draft.operationKey(), draft.context(),
                     EvasionAlert.State.OPEN, EvasionAlert.DeliveryState.PENDING, EvasionAlert.DeliveryState.PENDING,
                     0, 0, Optional.empty(), Optional.empty(), Optional.of(draft.now()), Optional.of(draft.now()),
                     draft.now(), draft.now(), 0, false);
@@ -171,8 +182,7 @@ class DiscordInvestigationWorkerTest {
 
         private static EvasionAlert updateDiscord(EvasionAlert current, EvasionDeliveryUpdate update) {
             return new EvasionAlert(
-                    current.alertId(), current.operationKey(), current.subjectId(), current.punishmentId(),
-                    current.triggeringMinecraftPlayerId(), current.currentServer(), current.playerRevision(), current.state(),
+                    current.alertId(), current.operationKey(), current.context(), current.state(),
                     deliveryState(update), current.minecraftDelivery(), current.discordAttempts() + 1,
                     current.minecraftAttempts(), update.errorCode(), current.minecraftErrorCode(), update.nextAttemptAt(),
                     current.minecraftNextAttemptAt(), current.createdAt(), current.updatedAt().plusMillis(1),
@@ -182,8 +192,7 @@ class DiscordInvestigationWorkerTest {
 
         private static EvasionAlert updateMinecraft(EvasionAlert current, EvasionDeliveryUpdate update) {
             return new EvasionAlert(
-                    current.alertId(), current.operationKey(), current.subjectId(), current.punishmentId(),
-                    current.triggeringMinecraftPlayerId(), current.currentServer(), current.playerRevision(), current.state(),
+                    current.alertId(), current.operationKey(), current.context(), current.state(),
                     current.discordDelivery(), deliveryState(update), current.discordAttempts(),
                     current.minecraftAttempts() + 1, current.discordErrorCode(), update.errorCode(),
                     current.discordNextAttemptAt(), update.nextAttemptAt(), current.createdAt(),
@@ -197,8 +206,7 @@ class DiscordInvestigationWorkerTest {
 
         private static EvasionAlert replay(EvasionAlert source) {
             return new EvasionAlert(
-                    source.alertId(), source.operationKey(), source.subjectId(), source.punishmentId(),
-                    source.triggeringMinecraftPlayerId(), source.currentServer(), source.playerRevision(), source.state(),
+                    source.alertId(), source.operationKey(), source.context(), source.state(),
                     source.discordDelivery(), source.minecraftDelivery(), source.discordAttempts(),
                     source.minecraftAttempts(), source.discordErrorCode(), source.minecraftErrorCode(),
                     source.discordNextAttemptAt(), source.minecraftNextAttemptAt(), source.createdAt(), source.updatedAt(),

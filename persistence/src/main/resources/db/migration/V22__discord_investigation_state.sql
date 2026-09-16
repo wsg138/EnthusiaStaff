@@ -163,9 +163,17 @@ CREATE TABLE discord_evasion_alerts (
     operation_key VARCHAR(160) NOT NULL,
     subject_id BINARY(16) NOT NULL,
     punishment_id BINARY(16) NOT NULL,
+    target_discord_user_id DECIMAL(20, 0) UNSIGNED NOT NULL,
+    punishment_type VARCHAR(32) NOT NULL,
+    punishment_summary VARCHAR(512) NOT NULL,
+    punishment_state VARCHAR(32) NOT NULL,
+    punishment_expires_at TIMESTAMP(6) NULL,
     triggering_minecraft_player_id BINARY(16) NOT NULL,
+    triggering_minecraft_username VARCHAR(32) NULL,
     current_server VARCHAR(64) NOT NULL,
     player_revision BIGINT UNSIGNED NOT NULL,
+    trigger_type VARCHAR(48) NOT NULL,
+    triggered_at TIMESTAMP(6) NOT NULL,
     state ENUM('OPEN', 'RESOLVED') NOT NULL DEFAULT 'OPEN',
     discord_delivery ENUM('PENDING', 'DELIVERED', 'RETRY') NOT NULL DEFAULT 'PENDING',
     minecraft_delivery ENUM('PENDING', 'DELIVERED', 'RETRY') NOT NULL DEFAULT 'PENDING',
@@ -188,6 +196,10 @@ CREATE TABLE discord_evasion_alerts (
         FOREIGN KEY (subject_id) REFERENCES moderation_subjects(subject_id),
     CONSTRAINT fk_discord_evasion_alert_player
         FOREIGN KEY (triggering_minecraft_player_id) REFERENCES players(player_id),
+    CONSTRAINT ck_discord_evasion_alert_discord_snowflake CHECK (
+        target_discord_user_id BETWEEN 1 AND 18446744073709551615
+    ),
+    CONSTRAINT ck_discord_evasion_alert_trigger_time CHECK (triggered_at <= created_at),
     CONSTRAINT ck_discord_evasion_alert_resolution CHECK (
         (state = 'OPEN' AND resolved_at IS NULL)
         OR (state = 'RESOLVED' AND resolved_at IS NOT NULL AND resolved_at >= created_at)

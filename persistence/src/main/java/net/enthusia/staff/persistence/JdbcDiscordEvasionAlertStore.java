@@ -1,5 +1,6 @@
 package net.enthusia.staff.persistence;
 
+import java.math.BigDecimal;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -12,7 +13,10 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import javax.sql.DataSource;
+import net.enthusia.staff.domain.auth.DiscordConsequenceType;
+import net.enthusia.staff.domain.discord.DiscordPunishmentState;
 import net.enthusia.staff.domain.investigation.EvasionAlert;
+import net.enthusia.staff.domain.moderation.DiscordUserId;
 import net.enthusia.staff.domain.moderation.ModerationSubjectId;
 import net.enthusia.staff.domain.ports.DiscordInvestigationStore.EvasionAlertDraft;
 import net.enthusia.staff.domain.ports.DiscordInvestigationStore.EvasionDeliveryChannel;
@@ -118,27 +122,45 @@ final class JdbcDiscordEvasionAlertStore {
     private static void insert(Connection connection, EvasionAlertDraft draft) throws SQLException {
         try (PreparedStatement statement = connection.prepareStatement("""
                 INSERT INTO discord_evasion_alerts(
-                    alert_id, operation_key, subject_id, punishment_id, triggering_minecraft_player_id,
-                    current_server, player_revision, state, discord_delivery, minecraft_delivery,
+                    alert_id, operation_key, subject_id, punishment_id, target_discord_user_id,
+                    punishment_type, punishment_summary, punishment_state, punishment_expires_at,
+                    triggering_minecraft_player_id, triggering_minecraft_username, current_server,
+                    player_revision, trigger_type, triggered_at, state, discord_delivery, minecraft_delivery,
                     discord_attempts, minecraft_attempts, discord_error_code, minecraft_error_code,
-                    discord_next_attempt_at, minecraft_next_attempt_at,
-                    created_at, updated_at, resolved_at, revision
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, 'OPEN', 'PENDING', 'PENDING', 0, 0, NULL, NULL,
-                    ?, ?, ?, ?, NULL, 0)
+                    discord_next_attempt_at, minecraft_next_attempt_at, created_at, updated_at, resolved_at, revision
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                    'OPEN', 'PENDING', 'PENDING', 0, 0, NULL, NULL, ?, ?, ?, ?, NULL, 0)
                 """)) {
+            EvasionAlert.Context context = draft.context();
             statement.setBytes(1, UuidBytes.toBytes(draft.alertId()));
             statement.setString(2, draft.operationKey());
-            statement.setBytes(3, UuidBytes.toBytes(draft.subjectId().value()));
-            statement.setBytes(4, UuidBytes.toBytes(draft.punishmentId()));
-            statement.setBytes(5, UuidBytes.toBytes(draft.triggeringMinecraftPlayerId()));
-            statement.setString(6, draft.currentServer());
-            statement.setLong(7, draft.playerRevision());
-            statement.setTimestamp(8, Timestamp.from(draft.now()));
-            statement.setTimestamp(9, Timestamp.from(draft.now()));
-            statement.setTimestamp(10, Timestamp.from(draft.now()));
-            statement.setTimestamp(11, Timestamp.from(draft.now()));
+            bindContext(statement, context);
+            statement.setTimestamp(16, Timestamp.from(draft.now()));
+            statement.setTimestamp(17, Timestamp.from(draft.now()));
+            statement.setTimestamp(18, Timestamp.from(draft.now()));
+            statement.setTimestamp(19, Timestamp.from(draft.now()));
             JdbcTransactionSupport.requireSingleUpdate(statement.executeUpdate(), "linked-alt alert was not inserted");
         }
+    }
+
+    private static void bindContext(PreparedStatement statement, EvasionAlert.Context context) throws SQLException {
+        statement.setBytes(3, UuidBytes.toBytes(context.subjectId().value()));
+        statement.setBytes(4, UuidBytes.toBytes(context.punishmentId()));
+        statement.setBigDecimal(5, new BigDecimal(context.targetDiscordUserId().value()));
+        statement.setString(6, context.punishmentType().name());
+        statement.setString(7, context.punishmentSummary());
+        statement.setString(8, context.punishmentState().name());
+        setInstant(statement, 9, context.punishmentExpiresAt());
+        statement.setBytes(10, UuidBytes.toBytes(context.triggeringMinecraftPlayerId()));
+        if (context.triggeringMinecraftUsername().isPresent()) {
+            statement.setString(11, context.triggeringMinecraftUsername().orElseThrow());
+        } else {
+            statement.setNull(11, Types.VARCHAR);
+        }
+        statement.setString(12, context.currentServer());
+        statement.setLong(13, context.playerRevision());
+        statement.setString(14, context.triggerType().name());
+        statement.setTimestamp(15, Timestamp.from(context.triggeredAt()));
     }
 
     private static void updateDelivery(
@@ -252,11 +274,7 @@ final class JdbcDiscordEvasionAlertStore {
         return new Current(
                 UuidBytes.fromBytes(rows.getBytes("alert_id")),
                 rows.getString("operation_key"),
-                new ModerationSubjectId(UuidBytes.fromBytes(rows.getBytes("subject_id"))),
-                UuidBytes.fromBytes(rows.getBytes("punishment_id")),
-                UuidBytes.fromBytes(rows.getBytes("triggering_minecraft_player_id")),
-                rows.getString("current_server"),
-                rows.getLong("player_revision"),
+                readContext(rows),
                 EvasionAlert.State.valueOf(rows.getString("state")),
                 EvasionAlert.DeliveryState.valueOf(rows.getString("discord_delivery")),
                 EvasionAlert.DeliveryState.valueOf(rows.getString("minecraft_delivery")),
@@ -272,14 +290,30 @@ final class JdbcDiscordEvasionAlertStore {
         );
     }
 
+    private static EvasionAlert.Context readContext(ResultSet rows) throws SQLException {
+        return new EvasionAlert.Context(
+                new ModerationSubjectId(UuidBytes.fromBytes(rows.getBytes("subject_id"))),
+                UuidBytes.fromBytes(rows.getBytes("punishment_id")),
+                new DiscordUserId(rows.getString("target_discord_user_id")),
+                DiscordConsequenceType.valueOf(rows.getString("punishment_type")),
+                rows.getString("punishment_summary"),
+                DiscordPunishmentState.valueOf(rows.getString("punishment_state")),
+                optionalInstant(rows.getTimestamp("punishment_expires_at")),
+                UuidBytes.fromBytes(rows.getBytes("triggering_minecraft_player_id")),
+                Optional.ofNullable(rows.getString("triggering_minecraft_username")),
+                rows.getString("current_server"),
+                rows.getLong("player_revision"),
+                EvasionAlert.TriggerType.valueOf(rows.getString("trigger_type")),
+                rows.getTimestamp("triggered_at").toInstant()
+        );
+    }
+
     private static Optional<Instant> optionalInstant(Timestamp timestamp) {
         return timestamp == null ? Optional.empty() : Optional.of(timestamp.toInstant());
     }
 
     private static void requireReplay(Current current, EvasionAlertDraft draft) throws SQLException {
-        if (!current.alertId().equals(draft.alertId()) || !current.subjectId().equals(draft.subjectId())
-                || !current.punishmentId().equals(draft.punishmentId())
-                || !current.triggeringPlayer().equals(draft.triggeringMinecraftPlayerId())) {
+        if (!current.alertId().equals(draft.alertId()) || !current.context().equals(draft.context())) {
             throw new SQLException("linked-alt alert operation key was reused for a different request");
         }
     }
@@ -304,11 +338,7 @@ final class JdbcDiscordEvasionAlertStore {
     private record Current(
             UUID alertId,
             String operationKey,
-            ModerationSubjectId subjectId,
-            UUID punishmentId,
-            UUID triggeringPlayer,
-            String currentServer,
-            long playerRevision,
+            EvasionAlert.Context context,
             EvasionAlert.State state,
             EvasionAlert.DeliveryState discordDelivery,
             EvasionAlert.DeliveryState minecraftDelivery,
@@ -324,8 +354,7 @@ final class JdbcDiscordEvasionAlertStore {
     ) {
         EvasionAlert toDomain(boolean replayed) {
             return new EvasionAlert(
-                    alertId, operationKey, subjectId, punishmentId, triggeringPlayer, currentServer,
-                    playerRevision, state, discordDelivery, minecraftDelivery, discordAttempts,
+                    alertId, operationKey, context, state, discordDelivery, minecraftDelivery, discordAttempts,
                     minecraftAttempts, discordErrorCode, minecraftErrorCode, discordNextAttemptAt,
                     minecraftNextAttemptAt, createdAt, updatedAt, revision, replayed
             );

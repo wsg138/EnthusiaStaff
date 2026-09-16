@@ -18,6 +18,7 @@ import net.enthusia.staff.domain.auth.DiscordConsequenceType;
 import net.enthusia.staff.domain.auth.StaffRank;
 import net.enthusia.staff.domain.discord.DiscordPunishment;
 import net.enthusia.staff.domain.discord.DiscordPunishmentIntent;
+import net.enthusia.staff.domain.discord.DiscordPunishmentState;
 import net.enthusia.staff.domain.investigation.EvasionAlert;
 import net.enthusia.staff.domain.investigation.InvestigationEvidence;
 import net.enthusia.staff.domain.investigation.InvestigationNote;
@@ -154,9 +155,17 @@ class DiscordInvestigationPersistenceIntegrationTest {
             ModerationSubjectId subjectId = ensureSubject(dataSource, new DiscordUserId("223456789012345680"));
             JdbcDiscordInvestigationStore store = new JdbcDiscordInvestigationStore(dataSource);
             UUID alertId = UUID.fromString("60000000-0000-0000-0000-000000000001");
+            EvasionAlert.Context context = new EvasionAlert.Context(
+                    subjectId, UUID.randomUUID(), new DiscordUserId("223456789012345680"),
+                    DiscordConsequenceType.BAN, "Active ban", DiscordPunishmentState.APPLIED, Optional.empty(),
+                    trigger, Optional.of("LinkedAlt"), "survival", 7,
+                    EvasionAlert.TriggerType.LINKED_MINECRAFT_ONLINE, NOW.minusSeconds(30)
+            );
             EvasionAlert created = store.createEvasionAlert(new DiscordInvestigationStore.EvasionAlertDraft(
-                    alertId, "d09:test:alert:1", subjectId, UUID.randomUUID(), trigger, "survival", 7, NOW
+                    alertId, "d09:test:alert:1", context, NOW
             ));
+            assertEquals(context, created.context());
+            assertEquals(context, store.findEvasionAlert(alertId).orElseThrow().context());
             assertEquals(1, store.pendingEvasionAlerts(NOW, 10).size());
 
             Instant retryAt = NOW.plusSeconds(30);

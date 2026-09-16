@@ -185,6 +185,14 @@ final class DiscordInvestigationCommandController {
         DiscordInvestigationService.AlertResult result = service.resolveAlert(
                 actorId, actorName, targetId, uuid(string(event, ALERT_ID)), integer(event, REVISION)
         );
+        return resolved(result);
+    }
+
+    Mutation resolveAlert(long actorId, String actorName, long targetId, UUID alertId) {
+        return resolved(service.resolveAlert(actorId, actorName, targetId, alertId));
+    }
+
+    private static Mutation resolved(DiscordInvestigationService.AlertResult result) {
         return new Mutation("Linked-alt investigation alert `" + result.alertId() + "` resolved.");
     }
 

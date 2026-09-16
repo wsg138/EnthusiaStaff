@@ -105,14 +105,7 @@ final class DiscordInvestigationWorker {
     private void discoverEvasionAlert(EvasionCandidate candidate, Instant now) {
         String operationKey = evasionOperation(candidate);
         store.createEvasionAlert(new EvasionAlertDraft(
-                deterministicId(operationKey),
-                operationKey,
-                candidate.subjectId(),
-                candidate.punishmentId(),
-                candidate.minecraftPlayerId(),
-                candidate.currentServer(),
-                candidate.playerRevision(),
-                now
+                deterministicId(operationKey), operationKey, candidate.context(), now
         ));
     }
 

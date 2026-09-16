@@ -142,17 +142,11 @@ public interface DiscordInvestigationStore {
     record EvasionAlertDraft(
             UUID alertId,
             String operationKey,
-            ModerationSubjectId subjectId,
-            UUID punishmentId,
-            UUID triggeringMinecraftPlayerId,
-            String currentServer,
-            long playerRevision,
+            EvasionAlert.Context context,
             Instant now
     ) {
         public EvasionAlertDraft {
-            if (alertId == null || blank(operationKey) || operationKey.length() > 160 || subjectId == null
-                    || punishmentId == null || triggeringMinecraftPlayerId == null || blank(currentServer)
-                    || currentServer.length() > 64 || playerRevision < 0 || now == null) {
+            if (alertId == null || blank(operationKey) || operationKey.length() > 160 || context == null || now == null) {
                 throw new IllegalArgumentException("evasion alert draft fields are invalid");
             }
         }
@@ -206,18 +200,23 @@ public interface DiscordInvestigationStore {
         }
     }
 
-    record EvasionCandidate(
-            ModerationSubjectId subjectId,
-            UUID punishmentId,
-            UUID minecraftPlayerId,
-            String currentServer,
-            long playerRevision
-    ) {
+    record EvasionCandidate(EvasionAlert.Context context) {
         public EvasionCandidate {
-            if (subjectId == null || punishmentId == null || minecraftPlayerId == null
-                    || blank(currentServer) || playerRevision < 0) {
-                throw new IllegalArgumentException("evasion candidate fields are invalid");
+            if (context == null) {
+                throw new IllegalArgumentException("evasion candidate context is required");
             }
+        }
+
+        public UUID punishmentId() {
+            return context.punishmentId();
+        }
+
+        public UUID minecraftPlayerId() {
+            return context.triggeringMinecraftPlayerId();
+        }
+
+        public long playerRevision() {
+            return context.playerRevision();
         }
     }
 

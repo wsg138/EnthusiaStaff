@@ -333,13 +333,39 @@ final class JdaStaffModerationListener extends ListenerAdapter {
 
     private boolean handleInvestigationButton(ButtonInteractionEvent event) {
         DiscordInvestigationCommandController investigation = investigations.orElse(null);
-        if (investigation == null || !DiscordInvestigationCommandController.isCaptureMore(event.getComponentId())) {
+        if (investigation == null) {
             return false;
         }
-        DiscordInvestigationCommandController.ContextTarget target =
-                DiscordInvestigationCommandController.contextTarget(event.getComponentId());
-        dispatchInvestigation(event, () -> captureMore(event, investigation, target));
+        String customId = event.getComponentId();
+        if (DiscordInvestigationCommandController.isCaptureMore(customId)) {
+            DiscordInvestigationCommandController.ContextTarget target =
+                    DiscordInvestigationCommandController.contextTarget(customId);
+            dispatchInvestigation(event, () -> captureMore(event, investigation, target));
+            return true;
+        }
+        if (!DiscordInvestigationAlertControls.handles(customId)) {
+            return false;
+        }
+        dispatchAlertAction(event, investigation, DiscordInvestigationAlertControls.parse(customId));
         return true;
+    }
+
+    private void dispatchAlertAction(
+            ButtonInteractionEvent event,
+            DiscordInvestigationCommandController investigation,
+            DiscordInvestigationAlertControls.Action action
+    ) {
+        long actorId = event.getUser().getIdLong();
+        String actorName = event.getUser().getName();
+        long targetId = action.targetDiscordId();
+        switch (action.type()) {
+            case LINKED -> dispatch(event, () -> controller.linkedDiscord(actorId, actorName, targetId));
+            case HISTORY -> dispatch(event, () -> controller.historyDiscord(actorId, actorName, targetId));
+            case MODERATE -> dispatch(event, () -> withPunish(
+                    controller.moderateDiscord(actorId, actorName, targetId), targetId));
+            case RESOLVE -> dispatchInvestigation(event, () -> investigation.resolveAlert(
+                    actorId, actorName, targetId, action.alertId().orElseThrow()));
+        }
     }
 
     private static DiscordInvestigationCommandController.Mutation captureMore(

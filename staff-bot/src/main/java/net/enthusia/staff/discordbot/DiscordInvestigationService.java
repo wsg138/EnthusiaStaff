@@ -196,16 +196,45 @@ final class DiscordInvestigationService {
             UUID alertId,
             long expectedRevision
     ) {
+        TargetContext context = authorizeAlert(actorDiscordId, actorName, targetDiscordId, alertId);
+        return resolve(context, alertId, expectedRevision);
+    }
+
+    AlertResult resolveAlert(
+            long actorDiscordId,
+            String actorName,
+            long targetDiscordId,
+            UUID alertId
+    ) {
+        TargetContext context = authorizeAlert(actorDiscordId, actorName, targetDiscordId, alertId);
+        EvasionAlert current = requireAlert(context, alertId);
+        return resolve(context, alertId, current.revision());
+    }
+
+    private TargetContext authorizeAlert(
+            long actorDiscordId,
+            String actorName,
+            long targetDiscordId,
+            UUID alertId
+    ) {
         if (alertId == null) {
             throw new IllegalArgumentException("alertId must be present");
         }
-        TargetContext context = authorize(actorDiscordId, actorName, targetDiscordId,
+        return authorize(actorDiscordId, actorName, targetDiscordId,
                 DiscordModerationOperation.RESOLVE_EVASION_ALERT);
+    }
+
+    private AlertResult resolve(TargetContext context, UUID alertId, long expectedRevision) {
+        EvasionAlert alert = requireAlert(context, alertId);
+        EvasionAlert resolved = store.resolveEvasionAlert(alertId, expectedRevision, clock.instant());
+        return new AlertResult(resolved.alertId(), resolved.revision(), resolved.replayed());
+    }
+
+    private EvasionAlert requireAlert(TargetContext context, UUID alertId) {
         EvasionAlert alert = store.findEvasionAlert(alertId)
                 .orElseThrow(() -> new IllegalStateException("linked-alt alert does not exist"));
         requireSubject(alert.subjectId(), context.subjectId(), "linked-alt alert");
-        EvasionAlert resolved = store.resolveEvasionAlert(alertId, expectedRevision, clock.instant());
-        return new AlertResult(resolved.alertId(), resolved.revision(), resolved.replayed());
+        return alert;
     }
 
     private InvestigationCase ensureMessageCase(TargetContext context, String operationToken, Instant now) {

@@ -6,9 +6,11 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import javax.sql.DataSource;
 import net.enthusia.staff.domain.auth.DiscordConsequenceType;
 import net.enthusia.staff.domain.discord.DiscordPunishment;
+import net.enthusia.staff.domain.investigation.EvasionAlert;
 import net.enthusia.staff.domain.ports.DiscordInvestigationStore.EvasionCandidate;
 import net.enthusia.staff.domain.ports.DiscordInvestigationStore.PunishmentObservation;
 
@@ -58,7 +60,8 @@ final class JdbcDiscordInvestigationSource {
     private List<EvasionCandidate> readEvasionCandidates(Connection connection, int limit) throws SQLException {
         List<EvasionCandidate> candidates = new ArrayList<>();
         try (PreparedStatement statement = connection.prepareStatement("""
-                SELECT r.desired_state_json, membership.player_id, player.current_server, player.revision
+                SELECT r.desired_state_json, membership.player_id, player.current_username,
+                       player.current_server, player.last_seen_at, player.revision
                 FROM discord_reconciliation_state r
                 JOIN moderation_enforcement_targets target
                   ON target.target_id = UNHEX(REPLACE(r.resource_id, '-', ''))
@@ -94,13 +97,21 @@ final class JdbcDiscordInvestigationSource {
         if (!isBanEvasionSignal(punishment)) {
             return;
         }
-        candidates.add(new EvasionCandidate(
+        candidates.add(new EvasionCandidate(new EvasionAlert.Context(
                 punishment.subjectId(),
                 punishment.punishmentId(),
+                punishment.targetUserId(),
+                punishment.intent().type(),
+                punishment.intent().publicReason(),
+                punishment.state(),
+                punishment.expiresAt(),
                 UuidBytes.fromBytes(rows.getBytes("player_id")),
+                Optional.ofNullable(rows.getString("current_username")),
                 rows.getString("current_server"),
-                rows.getLong("revision")
-        ));
+                rows.getLong("revision"),
+                EvasionAlert.TriggerType.LINKED_MINECRAFT_ONLINE,
+                rows.getTimestamp("last_seen_at").toInstant()
+        )));
     }
 
     private static boolean isBanEvasionSignal(DiscordPunishment punishment) {
