@@ -4,6 +4,9 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import net.enthusia.staff.common.CaseId;
+import net.enthusia.staff.domain.auth.Actor;
+import net.enthusia.staff.domain.auth.DiscordConsequenceType;
 import net.enthusia.staff.domain.discord.DiscordPunishmentState;
 import net.enthusia.staff.domain.investigation.EvasionAlert;
 import net.enthusia.staff.domain.investigation.InvestigationCase;
@@ -17,7 +20,7 @@ public interface DiscordInvestigationStore {
 
     InvestigationCase createInvestigationCase(InvestigationCaseDraft draft);
 
-    Optional<InvestigationCase> findCase(UUID caseId);
+    Optional<InvestigationCase> findCase(CaseId caseId);
 
     InvestigationCase touchCase(CaseActivity activity);
 
@@ -59,7 +62,8 @@ public interface DiscordInvestigationStore {
             String operationKey,
             UUID punishmentId,
             ModerationSubjectId subjectId,
-            UUID issuerId,
+            Actor issuer,
+            DiscordConsequenceType consequenceType,
             String summary,
             DiscordPunishmentState state,
             Optional<Instant> expiresAt,
@@ -68,7 +72,7 @@ public interface DiscordInvestigationStore {
     ) {
         public PunishmentCaseDraft {
             if (blank(operationKey) || operationKey.length() > 128 || punishmentId == null || subjectId == null
-                    || issuerId == null || blank(summary) || state == null || expiresAt == null
+                    || issuer == null || consequenceType == null || blank(summary) || state == null || expiresAt == null
                     || punishmentRevision < 0 || observedAt == null) {
                 throw new IllegalArgumentException("punishment case draft fields are invalid");
             }
@@ -76,23 +80,21 @@ public interface DiscordInvestigationStore {
     }
 
     record InvestigationCaseDraft(
-            UUID caseId,
             String operationKey,
             ModerationSubjectId subjectId,
-            Optional<String> legacyCaseId,
             String summary,
-            UUID openedBy,
+            Actor openedBy,
             Instant openedAt
     ) {
         public InvestigationCaseDraft {
-            if (caseId == null || blank(operationKey) || operationKey.length() > 128 || subjectId == null
-                    || legacyCaseId == null || blank(summary) || openedBy == null || openedAt == null) {
+            if (blank(operationKey) || operationKey.length() > 128 || subjectId == null
+                    || blank(summary) || openedBy == null || openedAt == null) {
                 throw new IllegalArgumentException("investigation case draft fields are invalid");
             }
         }
     }
 
-    record CaseActivity(UUID caseId, long expectedRevision, Instant occurredAt) {
+    record CaseActivity(CaseId caseId, long expectedRevision, Instant occurredAt) {
         public CaseActivity {
             if (caseId == null || expectedRevision < 0 || occurredAt == null) {
                 throw new IllegalArgumentException("case activity fields are invalid");
@@ -188,7 +190,8 @@ public interface DiscordInvestigationStore {
     record PunishmentObservation(
             UUID punishmentId,
             ModerationSubjectId subjectId,
-            UUID issuerId,
+            Actor issuer,
+            DiscordConsequenceType consequenceType,
             String summary,
             DiscordPunishmentState state,
             Optional<Instant> expiresAt,
@@ -196,8 +199,8 @@ public interface DiscordInvestigationStore {
             Instant observedAt
     ) {
         public PunishmentObservation {
-            if (punishmentId == null || subjectId == null || issuerId == null || blank(summary) || state == null
-                    || expiresAt == null || revision < 0 || observedAt == null) {
+            if (punishmentId == null || subjectId == null || issuer == null || consequenceType == null
+                    || blank(summary) || state == null || expiresAt == null || revision < 0 || observedAt == null) {
                 throw new IllegalArgumentException("punishment observation fields are invalid");
             }
         }

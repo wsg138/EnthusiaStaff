@@ -7,6 +7,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import net.enthusia.staff.common.CaseId;
 import net.enthusia.staff.domain.moderation.DiscordUserId;
 import net.enthusia.staff.domain.moderation.ModerationSubjectId;
 import org.junit.jupiter.api.Test;
@@ -15,7 +16,7 @@ class InvestigationEvidenceTest {
     private static final Instant NOW = Instant.parse("2026-09-15T12:00:00Z");
     private static final ModerationSubjectId SUBJECT = new ModerationSubjectId(
             UUID.fromString("11111111-2222-3333-4444-555555555555"));
-    private static final UUID CASE_ID = UUID.fromString("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee");
+    private static final CaseId CASE_ID = new CaseId("0123456789ABCDEF");
     private static final UUID ACTOR_ID = UUID.fromString("99999999-8888-7777-6666-555555555555");
     private static final String FOCUS_MESSAGE_ID = "100";
     private static final String MESSAGE_CONTEXT = "MESSAGE_CONTEXT";

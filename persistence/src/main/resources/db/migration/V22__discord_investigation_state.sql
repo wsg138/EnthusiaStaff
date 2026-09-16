@@ -1,14 +1,24 @@
+ALTER TABLE cases
+    MODIFY target_id BINARY(16) NULL,
+    ADD COLUMN subject_id BINARY(16) NULL AFTER target_id,
+    ADD INDEX idx_cases_subject_time (subject_id, issued_at),
+    ADD CONSTRAINT fk_cases_subject
+        FOREIGN KEY (subject_id) REFERENCES moderation_subjects(subject_id),
+    ADD CONSTRAINT ck_cases_target_or_subject
+        CHECK (target_id IS NOT NULL OR subject_id IS NOT NULL);
+
+UPDATE cases c
+JOIN moderation_subject_minecraft_identities membership
+  ON membership.player_id = c.target_id
+SET c.subject_id = membership.subject_id
+WHERE c.subject_id IS NULL;
+
 CREATE TABLE discord_investigation_cases (
-    case_id BINARY(16) NOT NULL,
+    case_id CHAR(16) NOT NULL,
     operation_key VARCHAR(128) NOT NULL,
     subject_id BINARY(16) NOT NULL,
     source ENUM('DISCORD_PUNISHMENT', 'INVESTIGATION') NOT NULL,
     punishment_id BINARY(16) NULL,
-    legacy_case_id CHAR(16) NULL,
-    summary VARCHAR(512) NOT NULL,
-    state ENUM('OPEN', 'CLOSED') NOT NULL DEFAULT 'OPEN',
-    opened_by BINARY(16) NOT NULL,
-    opened_at TIMESTAMP(6) NOT NULL,
     last_activity_at TIMESTAMP(6) NOT NULL,
     closed_at TIMESTAMP(6) NULL,
     punishment_ended_at TIMESTAMP(6) NULL,
@@ -17,21 +27,18 @@ CREATE TABLE discord_investigation_cases (
     PRIMARY KEY (case_id),
     UNIQUE KEY uq_discord_investigation_case_operation (operation_key),
     UNIQUE KEY uq_discord_investigation_case_punishment (punishment_id),
-    INDEX idx_discord_investigation_case_subject (subject_id, state, last_activity_at),
-    INDEX idx_discord_investigation_case_inactivity (state, last_activity_at),
+    INDEX idx_discord_investigation_case_subject (subject_id, last_activity_at),
+    INDEX idx_discord_investigation_case_inactivity (last_activity_at),
+    CONSTRAINT fk_discord_investigation_case_authority
+        FOREIGN KEY (case_id) REFERENCES cases(case_id),
     CONSTRAINT fk_discord_investigation_case_subject
         FOREIGN KEY (subject_id) REFERENCES moderation_subjects(subject_id),
-    CONSTRAINT fk_discord_investigation_case_actor
-        FOREIGN KEY (opened_by) REFERENCES players(player_id),
-    CONSTRAINT fk_discord_investigation_case_legacy
-        FOREIGN KEY (legacy_case_id) REFERENCES cases(case_id),
     CONSTRAINT ck_discord_investigation_case_source CHECK (
         (source = 'DISCORD_PUNISHMENT' AND punishment_id IS NOT NULL)
         OR (source = 'INVESTIGATION' AND punishment_id IS NULL)
     ),
     CONSTRAINT ck_discord_investigation_case_close CHECK (
-        (state = 'OPEN' AND closed_at IS NULL)
-        OR (state = 'CLOSED' AND closed_at IS NOT NULL AND closed_at >= last_activity_at)
+        closed_at IS NULL OR closed_at >= last_activity_at
     )
 ) ENGINE=InnoDB;
 
@@ -77,7 +84,7 @@ CREATE TABLE discord_private_note_versions (
 
 CREATE TABLE discord_investigation_evidence (
     evidence_id BINARY(16) NOT NULL,
-    investigation_case_id BINARY(16) NOT NULL,
+    case_id CHAR(16) NOT NULL,
     message_link VARCHAR(512) NOT NULL,
     message_created_at TIMESTAMP(6) NOT NULL,
     last_observed_at TIMESTAMP(6) NOT NULL,
@@ -86,11 +93,11 @@ CREATE TABLE discord_investigation_evidence (
     attachment_metadata_json JSON NOT NULL,
     revision BIGINT UNSIGNED NOT NULL DEFAULT 0,
     PRIMARY KEY (evidence_id),
-    INDEX idx_discord_investigation_evidence_case (investigation_case_id, last_observed_at),
+    INDEX idx_discord_investigation_evidence_case (case_id, last_observed_at),
     CONSTRAINT fk_discord_investigation_evidence_parent
         FOREIGN KEY (evidence_id) REFERENCES discord_evidence_metadata(evidence_id),
     CONSTRAINT fk_discord_investigation_evidence_case
-        FOREIGN KEY (investigation_case_id) REFERENCES discord_investigation_cases(case_id),
+        FOREIGN KEY (case_id) REFERENCES discord_investigation_cases(case_id),
     CONSTRAINT ck_discord_investigation_evidence_times CHECK (
         last_observed_at >= message_created_at
         AND (edited_at IS NULL OR edited_at >= message_created_at)

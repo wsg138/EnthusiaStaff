@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import net.enthusia.staff.common.CaseId;
 import net.enthusia.staff.domain.moderation.DiscordUserId;
 import net.enthusia.staff.domain.moderation.ModerationSubjectId;
 
@@ -67,7 +68,7 @@ public final class InvestigationEvidence {
             UUID evidenceId,
             String operationKey,
             ModerationSubjectId subjectId,
-            UUID caseId,
+            CaseId caseId,
             Message focus,
             List<Message> before,
             List<Message> after,
@@ -124,7 +125,7 @@ public final class InvestigationEvidence {
 
     public record Stored(
             UUID evidenceId,
-            UUID caseId,
+            CaseId caseId,
             ModerationSubjectId subjectId,
             String messageId,
             Instant capturedAt,

@@ -113,7 +113,8 @@ final class JdbcDiscordInvestigationSource {
         return new PunishmentObservation(
                 punishment.punishmentId(),
                 punishment.subjectId(),
-                punishment.issuer().id(),
+                punishment.issuer(),
+                punishment.intent().type(),
                 punishment.intent().publicReason(),
                 punishment.state(),
                 punishment.expiresAt(),

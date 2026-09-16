@@ -12,6 +12,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import net.enthusia.staff.common.CaseId;
 import net.enthusia.staff.domain.auth.Actor;
 import net.enthusia.staff.domain.auth.DiscordConsequenceType;
 import net.enthusia.staff.domain.auth.StaffRank;
@@ -62,17 +63,19 @@ class DiscordInvestigationPersistenceIntegrationTest {
         try (HikariDataSource dataSource = open()) {
             ModerationSubjectId subjectId = ensureSubject(dataSource, TARGET);
             JdbcDiscordInvestigationStore store = new JdbcDiscordInvestigationStore(dataSource);
-            UUID caseId = UUID.fromString("20000000-0000-0000-0000-000000000001");
+            Actor actor = new Actor(ACTOR, "D09Staff", StaffRank.ADMIN);
             DiscordInvestigationStore.InvestigationCaseDraft caseDraft = new DiscordInvestigationStore.InvestigationCaseDraft(
-                    caseId, "d09:test:case:1", subjectId, Optional.empty(), "Investigation only", ACTOR, NOW
+                    "d09:test:case:1", subjectId, "Investigation only", actor, NOW
             );
 
-            assertFalse(store.createInvestigationCase(caseDraft).replayed());
+            var createdCase = store.createInvestigationCase(caseDraft);
+            assertFalse(createdCase.replayed());
             assertTrue(store.createInvestigationCase(caseDraft).replayed());
+            CaseId caseId = createdCase.caseId();
 
             UUID noteId = UUID.fromString("30000000-0000-0000-0000-000000000001");
             InvestigationNote.Scope scope = new InvestigationNote.Scope(
-                    InvestigationNote.ScopeType.CASE, caseId.toString());
+                    InvestigationNote.ScopeType.CASE, caseId.value());
             var created = store.createNote(new DiscordInvestigationStore.NoteDraft(
                     noteId, "d09:test:note:1", subjectId, scope,
                     InvestigationNote.Visibility.STAFF, "first private version", ACTOR, NOW.plusSeconds(1)
@@ -120,10 +123,10 @@ class DiscordInvestigationPersistenceIntegrationTest {
         try (HikariDataSource dataSource = open()) {
             ModerationSubjectId subjectId = ensureSubject(dataSource, new DiscordUserId("223456789012345679"));
             JdbcDiscordInvestigationStore store = new JdbcDiscordInvestigationStore(dataSource);
-            UUID caseId = UUID.fromString("20000000-0000-0000-0000-000000000002");
-            store.createInvestigationCase(new DiscordInvestigationStore.InvestigationCaseDraft(
-                    caseId, "d09:test:case:2", subjectId, Optional.empty(), "Evidence retention", ACTOR, NOW
-            ));
+            CaseId caseId = store.createInvestigationCase(new DiscordInvestigationStore.InvestigationCaseDraft(
+                    "d09:test:case:2", subjectId, "Evidence retention",
+                    new Actor(ACTOR, "D09Staff", StaffRank.ADMIN), NOW
+            )).caseId();
 
             UUID evidenceId = UUID.fromString("40000000-0000-0000-0000-000000000001");
             InvestigationEvidence.Message focus = message("1541286004298752191", "223456789012345679", "private body");
@@ -131,7 +134,7 @@ class DiscordInvestigationPersistenceIntegrationTest {
                     evidenceId, "d09:test:evidence:1", subjectId, caseId, focus,
                     List.of(), List.of(), ACTOR, "MESSAGE_CONTEXT", NOW.plusSeconds(1)
             ));
-            assertEvidenceMetadata(dataSource, evidenceId);
+            assertEvidenceMetadata(dataSource, evidenceId, caseId, subjectId);
 
             Instant closedAt = NOW.plus(Duration.ofDays(31));
             assertTrue(store.closeInactiveCases(NOW.plusSeconds(2), closedAt, 10) >= 1);
@@ -222,7 +225,8 @@ class DiscordInvestigationPersistenceIntegrationTest {
                 "d09:punishment:" + observation.punishmentId(),
                 observation.punishmentId(),
                 observation.subjectId(),
-                observation.issuerId(),
+                observation.issuer(),
+                observation.consequenceType(),
                 observation.summary(),
                 observation.state(),
                 observation.expiresAt(),
@@ -231,16 +235,28 @@ class DiscordInvestigationPersistenceIntegrationTest {
         );
     }
 
-    private static void assertEvidenceMetadata(HikariDataSource dataSource, UUID evidenceId) throws SQLException {
+    private static void assertEvidenceMetadata(
+            HikariDataSource dataSource,
+            UUID evidenceId,
+            CaseId caseId,
+            ModerationSubjectId subjectId
+    ) throws SQLException {
         try (var connection = dataSource.getConnection();
              var statement = connection.prepareStatement("""
-                     SELECT JSON_UNQUOTE(JSON_EXTRACT(metadata_json, '$.action')) action,
-                            JSON_UNQUOTE(JSON_EXTRACT(metadata_json, '$.capturedBy')) captured_by
-                     FROM discord_evidence_metadata WHERE evidence_id = ?
+                     SELECT m.case_id, LOWER(HEX(c.subject_id)) subject_hex, c.visibility, c.state,
+                            JSON_UNQUOTE(JSON_EXTRACT(m.metadata_json, '$.action')) action,
+                            JSON_UNQUOTE(JSON_EXTRACT(m.metadata_json, '$.capturedBy')) captured_by
+                     FROM discord_evidence_metadata m
+                     JOIN cases c ON c.case_id = m.case_id
+                     WHERE m.evidence_id = ?
                      """)) {
             statement.setBytes(1, MariaDbIntegrationSupport.uuidBytes(evidenceId));
             try (var rows = statement.executeQuery()) {
                 assertTrue(rows.next());
+                assertEquals(caseId.value(), rows.getString("case_id"));
+                assertEquals(subjectId.value().toString().replace("-", ""), rows.getString("subject_hex"));
+                assertEquals("PRIVATE", rows.getString("visibility"));
+                assertEquals("OPEN", rows.getString("state"));
                 assertEquals("MESSAGE_CONTEXT", rows.getString("action"));
                 assertEquals(ACTOR.toString(), rows.getString("captured_by"));
             }

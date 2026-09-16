@@ -7,6 +7,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.function.BiFunction;
+import net.enthusia.staff.common.CaseId;
 import net.enthusia.staff.domain.auth.Actor;
 import net.enthusia.staff.domain.auth.DiscordModerationOperation;
 import net.enthusia.staff.domain.investigation.EvasionAlert;
@@ -23,13 +24,13 @@ final class DiscordInvestigationService {
     private static final int MAX_OPERATION_TOKEN = 64;
     private static final long INVALID_DISCORD_USER_ID = 0L;
 
-    record CaseResult(UUID caseId, long revision, boolean replayed) {
+    record CaseResult(CaseId caseId, long revision, boolean replayed) {
     }
 
     record NoteResult(UUID noteId, long revision, InvestigationNote.Visibility visibility, boolean replayed) {
     }
 
-    record EvidenceResult(UUID evidenceId, UUID caseId, long revision, boolean replayed) {
+    record EvidenceResult(UUID evidenceId, CaseId caseId, long revision, boolean replayed) {
     }
 
     record AlertResult(UUID alertId, long revision, boolean replayed) {
@@ -72,10 +73,8 @@ final class DiscordInvestigationService {
         TargetContext context = authorize(actorDiscordId, actorName, targetDiscordId,
                 DiscordModerationOperation.CREATE_INVESTIGATION_CASE);
         String operationKey = operation("case", operationToken);
-        UUID caseId = deterministicId(operationKey);
         InvestigationCase stored = store.createInvestigationCase(new DiscordInvestigationStore.InvestigationCaseDraft(
-                caseId, operationKey, context.subjectId(), Optional.empty(), summary,
-                context.actor().id(), clock.instant()
+                operationKey, context.subjectId(), summary, context.actor(), clock.instant()
         ));
         return project(stored);
     }
@@ -212,8 +211,8 @@ final class DiscordInvestigationService {
     private InvestigationCase ensureMessageCase(TargetContext context, String operationToken, Instant now) {
         String operationKey = operation("message-case", operationToken);
         return store.createInvestigationCase(new DiscordInvestigationStore.InvestigationCaseDraft(
-                deterministicId(operationKey), operationKey, context.subjectId(), Optional.empty(),
-                "Discord message-context moderation evidence", context.actor().id(), now
+                operationKey, context.subjectId(),
+                "Discord message-context moderation evidence", context.actor(), now
         ));
     }
 
@@ -262,11 +261,11 @@ final class DiscordInvestigationService {
     }
 
     private InvestigationNote.Scope caseScope(ModerationSubjectId subjectId, String scopeValue) {
-        UUID caseId = uuid(scopeValue, "case note scope is invalid");
+        CaseId caseId = caseId(scopeValue);
         InvestigationCase investigationCase = store.findCase(caseId)
                 .orElseThrow(() -> new IllegalStateException("investigation case does not exist"));
         requireSubject(investigationCase.subjectId(), subjectId, "investigation case");
-        return new InvestigationNote.Scope(InvestigationNote.ScopeType.CASE, caseId.toString());
+        return new InvestigationNote.Scope(InvestigationNote.ScopeType.CASE, caseId.value());
     }
 
     private static UUID uuid(String value, String message) {
@@ -274,6 +273,14 @@ final class DiscordInvestigationService {
             return UUID.fromString(value);
         } catch (RuntimeException exception) {
             throw new IllegalArgumentException(message, exception);
+        }
+    }
+
+    private static CaseId caseId(String value) {
+        try {
+            return new CaseId(value);
+        } catch (RuntimeException exception) {
+            throw new IllegalArgumentException("case note scope is invalid", exception);
         }
     }
 

@@ -14,6 +14,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import javax.sql.DataSource;
+import net.enthusia.staff.common.CaseId;
 import net.enthusia.staff.domain.investigation.InvestigationEvidence;
 import net.enthusia.staff.domain.moderation.ModerationSubjectId;
 
@@ -113,18 +114,19 @@ final class JdbcDiscordInvestigationEvidenceStore {
                     evidence_id, operation_key, subject_id, case_id, guild_id, channel_id,
                     message_id, author_user_id, captured_at, retain_until, metadata_json,
                     purge_state, revision
-                ) VALUES (?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, 'ACTIVE', 0)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'ACTIVE', 0)
                 """)) {
             statement.setBytes(1, UuidBytes.toBytes(capture.evidenceId()));
             statement.setString(2, capture.operationKey());
             statement.setBytes(3, UuidBytes.toBytes(capture.subjectId().value()));
-            statement.setBigDecimal(4, snowflake(focus.guildId()));
-            statement.setBigDecimal(5, snowflake(focus.channelId()));
-            statement.setBigDecimal(6, snowflake(focus.messageId()));
-            statement.setBigDecimal(7, snowflake(focus.authorUserId().value()));
-            statement.setTimestamp(8, Timestamp.from(capture.capturedAt()));
-            statement.setTimestamp(9, Timestamp.from(capture.capturedAt().plus(INVESTIGATION_RETENTION_WINDOW)));
-            statement.setString(10, codec.evidenceMetadata(capture));
+            statement.setString(4, capture.caseId().value());
+            statement.setBigDecimal(5, snowflake(focus.guildId()));
+            statement.setBigDecimal(6, snowflake(focus.channelId()));
+            statement.setBigDecimal(7, snowflake(focus.messageId()));
+            statement.setBigDecimal(8, snowflake(focus.authorUserId().value()));
+            statement.setTimestamp(9, Timestamp.from(capture.capturedAt()));
+            statement.setTimestamp(10, Timestamp.from(capture.capturedAt().plus(INVESTIGATION_RETENTION_WINDOW)));
+            statement.setString(11, codec.evidenceMetadata(capture));
             JdbcTransactionSupport.requireSingleUpdate(statement.executeUpdate(), "evidence metadata was not inserted");
         }
     }
@@ -133,12 +135,12 @@ final class JdbcDiscordInvestigationEvidenceStore {
         InvestigationEvidence.Message focus = capture.focus();
         try (PreparedStatement statement = connection.prepareStatement("""
                 INSERT INTO discord_investigation_evidence(
-                    evidence_id, investigation_case_id, message_link, message_created_at,
+                    evidence_id, case_id, message_link, message_created_at,
                     last_observed_at, edited_at, message_content, attachment_metadata_json, revision
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0)
                 """)) {
             statement.setBytes(1, UuidBytes.toBytes(capture.evidenceId()));
-            statement.setBytes(2, UuidBytes.toBytes(capture.caseId()));
+            statement.setString(2, capture.caseId().value());
             statement.setString(3, focus.jumpUrl());
             statement.setTimestamp(4, Timestamp.from(focus.createdAt()));
             statement.setTimestamp(5, Timestamp.from(capture.capturedAt()));
@@ -211,30 +213,31 @@ final class JdbcDiscordInvestigationEvidenceStore {
         }
     }
 
-    private static void touchCase(Connection connection, UUID caseId, Instant now) throws SQLException {
+    private static void touchCase(Connection connection, CaseId caseId, Instant now) throws SQLException {
         try (PreparedStatement statement = connection.prepareStatement("""
                 UPDATE discord_investigation_cases
                 SET last_activity_at = GREATEST(last_activity_at, ?), revision = revision + 1
-                WHERE case_id = ? AND state = 'OPEN'
+                WHERE case_id = ? AND closed_at IS NULL
                 """)) {
             statement.setTimestamp(1, Timestamp.from(now));
-            statement.setBytes(2, UuidBytes.toBytes(caseId));
+            statement.setString(2, caseId.value());
             JdbcTransactionSupport.requireSingleUpdate(statement.executeUpdate(), "evidence case is not open");
         }
     }
 
     private static void requireOpenCaseSubject(
             Connection connection,
-            UUID caseId,
+            CaseId caseId,
             ModerationSubjectId subjectId
     ) throws SQLException {
         try (PreparedStatement statement = connection.prepareStatement("""
-                SELECT subject_id, state
-                FROM discord_investigation_cases
-                WHERE case_id = ?
+                SELECT i.subject_id, c.state
+                FROM discord_investigation_cases i
+                JOIN cases c ON c.case_id = i.case_id
+                WHERE i.case_id = ?
                 FOR UPDATE
                 """)) {
-            statement.setBytes(1, UuidBytes.toBytes(caseId));
+            statement.setString(1, caseId.value());
             try (ResultSet rows = statement.executeQuery()) {
                 if (!rows.next() || !"OPEN".equals(rows.getString("state"))) {
                     throw new SQLException("evidence case does not exist or is closed");
@@ -259,7 +262,7 @@ final class JdbcDiscordInvestigationEvidenceStore {
         if (lock) {
             try (PreparedStatement statement = connection.prepareStatement("""
                     SELECT m.evidence_id, m.subject_id, m.guild_id, m.channel_id, m.message_id,
-                           m.captured_at, e.investigation_case_id, e.last_observed_at, e.revision
+                           m.captured_at, e.case_id, e.last_observed_at, e.revision
                     FROM discord_evidence_metadata m
                     JOIN discord_investigation_evidence e ON e.evidence_id = m.evidence_id
                     WHERE m.evidence_id = ?
@@ -271,7 +274,7 @@ final class JdbcDiscordInvestigationEvidenceStore {
         }
         try (PreparedStatement statement = connection.prepareStatement("""
                 SELECT m.evidence_id, m.subject_id, m.guild_id, m.channel_id, m.message_id,
-                       m.captured_at, e.investigation_case_id, e.last_observed_at, e.revision
+                       m.captured_at, e.case_id, e.last_observed_at, e.revision
                 FROM discord_evidence_metadata m
                 JOIN discord_investigation_evidence e ON e.evidence_id = m.evidence_id
                 WHERE m.evidence_id = ?
@@ -285,7 +288,7 @@ final class JdbcDiscordInvestigationEvidenceStore {
         if (lock) {
             try (PreparedStatement statement = connection.prepareStatement("""
                     SELECT m.evidence_id, m.subject_id, m.guild_id, m.channel_id, m.message_id,
-                           m.captured_at, e.investigation_case_id, e.last_observed_at, e.revision
+                           m.captured_at, e.case_id, e.last_observed_at, e.revision
                     FROM discord_evidence_metadata m
                     JOIN discord_investigation_evidence e ON e.evidence_id = m.evidence_id
                     WHERE m.operation_key = ?
@@ -297,7 +300,7 @@ final class JdbcDiscordInvestigationEvidenceStore {
         }
         try (PreparedStatement statement = connection.prepareStatement("""
                 SELECT m.evidence_id, m.subject_id, m.guild_id, m.channel_id, m.message_id,
-                       m.captured_at, e.investigation_case_id, e.last_observed_at, e.revision
+                       m.captured_at, e.case_id, e.last_observed_at, e.revision
                 FROM discord_evidence_metadata m
                 JOIN discord_investigation_evidence e ON e.evidence_id = m.evidence_id
                 WHERE m.operation_key = ?
@@ -315,7 +318,7 @@ final class JdbcDiscordInvestigationEvidenceStore {
     ) throws SQLException {
         try (PreparedStatement statement = connection.prepareStatement("""
                 SELECT m.evidence_id, m.subject_id, m.guild_id, m.channel_id, m.message_id,
-                       m.captured_at, e.investigation_case_id, e.last_observed_at, e.revision
+                       m.captured_at, e.case_id, e.last_observed_at, e.revision
                 FROM discord_evidence_metadata m
                 JOIN discord_investigation_evidence e ON e.evidence_id = m.evidence_id
                 WHERE m.guild_id = ? AND m.channel_id = ? AND m.message_id = ? AND m.purge_state = 'ACTIVE'
@@ -336,7 +339,7 @@ final class JdbcDiscordInvestigationEvidenceStore {
     private static EvidenceCurrent readEvidence(ResultSet rows) throws SQLException {
         return new EvidenceCurrent(
                 UuidBytes.fromBytes(rows.getBytes("evidence_id")),
-                UuidBytes.fromBytes(rows.getBytes("investigation_case_id")),
+                new CaseId(rows.getString("case_id")),
                 new ModerationSubjectId(UuidBytes.fromBytes(rows.getBytes("subject_id"))),
                 rows.getBigDecimal("guild_id").toPlainString(),
                 rows.getBigDecimal("channel_id").toPlainString(),
@@ -370,13 +373,14 @@ final class JdbcDiscordInvestigationEvidenceStore {
                 SELECT e.evidence_id
                 FROM discord_investigation_evidence e
                 JOIN discord_evidence_metadata m ON m.evidence_id = e.evidence_id
-                JOIN discord_investigation_cases c ON c.case_id = e.investigation_case_id
+                JOIN discord_investigation_cases i ON i.case_id = e.case_id
+                JOIN cases c ON c.case_id = i.case_id
                 WHERE m.purge_state = 'ACTIVE'
-                  AND ((c.source = 'DISCORD_PUNISHMENT' AND c.punishment_ended_at IS NOT NULL
-                        AND c.punishment_ended_at <= ?)
-                    OR (c.source = 'INVESTIGATION' AND c.state = 'CLOSED'
-                        AND c.closed_at IS NOT NULL AND c.closed_at <= ?))
-                ORDER BY COALESCE(c.punishment_ended_at, c.closed_at), e.evidence_id
+                  AND ((i.source = 'DISCORD_PUNISHMENT' AND i.punishment_ended_at IS NOT NULL
+                        AND i.punishment_ended_at <= ?)
+                    OR (i.source = 'INVESTIGATION' AND c.state = 'CLOSED'
+                        AND i.closed_at IS NOT NULL AND i.closed_at <= ?))
+                ORDER BY COALESCE(i.punishment_ended_at, i.closed_at), e.evidence_id
                 LIMIT ?
                 FOR UPDATE
                 """)) {
@@ -506,7 +510,7 @@ final class JdbcDiscordInvestigationEvidenceStore {
 
     private record EvidenceCurrent(
             UUID evidenceId,
-            UUID caseId,
+            CaseId caseId,
             ModerationSubjectId subjectId,
             String guildId,
             String channelId,

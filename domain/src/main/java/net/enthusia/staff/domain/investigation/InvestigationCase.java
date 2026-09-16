@@ -3,15 +3,15 @@ package net.enthusia.staff.domain.investigation;
 import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
+import net.enthusia.staff.common.CaseId;
 import net.enthusia.staff.domain.moderation.ModerationSubjectId;
 
-/** Private subject-centric investigation case used by Discord moderation workflows. */
+/** Private D09 lifecycle metadata attached to an authoritative moderation case. */
 public record InvestigationCase(
-        UUID caseId,
+        CaseId caseId,
         ModerationSubjectId subjectId,
         Source source,
         Optional<UUID> punishmentId,
-        Optional<String> legacyCaseId,
         String summary,
         State state,
         UUID openedBy,
@@ -35,9 +35,9 @@ public record InvestigationCase(
 
     public InvestigationCase {
         if (caseId == null || subjectId == null || source == null || punishmentId == null
-                || legacyCaseId == null || blank(summary) || state == null || openedBy == null
-                || openedAt == null || lastActivityAt == null || closedAt == null
-                || punishmentEndedAt == null || sourceRevision < 0 || revision < 0) {
+                || blank(summary) || state == null || openedBy == null || openedAt == null
+                || lastActivityAt == null || closedAt == null || punishmentEndedAt == null
+                || sourceRevision < 0 || revision < 0) {
             throw new IllegalArgumentException("investigation case fields must be present and valid");
         }
         if (lastActivityAt.isBefore(openedAt)) {
@@ -50,16 +50,10 @@ public record InvestigationCase(
                 throw new IllegalArgumentException("punishment end cannot predate case opening");
             }
         });
-        legacyCaseId.ifPresent(value -> {
-            if (value.isBlank() || value.length() > 16) {
-                throw new IllegalArgumentException("legacy case id must be nonblank and at most 16 characters");
-            }
-        });
     }
 
     private static void validateSource(Source source, Optional<UUID> punishmentId) {
-        boolean hasPunishment = punishmentId.isPresent();
-        if ((source == Source.DISCORD_PUNISHMENT) != hasPunishment) {
+        if ((source == Source.DISCORD_PUNISHMENT) != punishmentId.isPresent()) {
             throw new IllegalArgumentException("punishment cases require exactly one punishment id");
         }
     }

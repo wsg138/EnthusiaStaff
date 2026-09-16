@@ -11,6 +11,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import javax.sql.DataSource;
+import net.enthusia.staff.common.CaseId;
 import net.enthusia.staff.domain.investigation.InvestigationNote;
 import net.enthusia.staff.domain.moderation.ModerationSubjectId;
 import net.enthusia.staff.domain.ports.DiscordInvestigationStore.NoteDraft;
@@ -172,19 +173,20 @@ final class JdbcDiscordInvestigationNoteStore {
         if (scope.type() != InvestigationNote.ScopeType.CASE) {
             return;
         }
-        UUID caseId;
+        CaseId caseId;
         try {
-            caseId = UUID.fromString(scope.value());
+            caseId = new CaseId(scope.value());
         } catch (IllegalArgumentException exception) {
             throw new SQLException("case-scoped note has an invalid case identifier", exception);
         }
         try (PreparedStatement statement = connection.prepareStatement("""
-                UPDATE discord_investigation_cases
-                SET last_activity_at = GREATEST(last_activity_at, ?), revision = revision + 1
-                WHERE case_id = ? AND state = 'OPEN'
+                UPDATE discord_investigation_cases i
+                JOIN cases c ON c.case_id = i.case_id
+                SET i.last_activity_at = GREATEST(i.last_activity_at, ?), i.revision = i.revision + 1
+                WHERE i.case_id = ? AND i.closed_at IS NULL AND c.state = 'OPEN'
                 """)) {
             statement.setTimestamp(1, Timestamp.from(now));
-            statement.setBytes(2, UuidBytes.toBytes(caseId));
+            statement.setString(2, caseId.value());
             JdbcTransactionSupport.requireSingleUpdate(statement.executeUpdate(), "case-scoped note case is not open");
         }
     }

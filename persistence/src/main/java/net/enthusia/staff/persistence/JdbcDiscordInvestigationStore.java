@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import javax.sql.DataSource;
+import net.enthusia.staff.common.CaseId;
 import net.enthusia.staff.domain.investigation.EvasionAlert;
 import net.enthusia.staff.domain.investigation.InvestigationCase;
 import net.enthusia.staff.domain.investigation.InvestigationEvidence;
@@ -43,7 +44,7 @@ public final class JdbcDiscordInvestigationStore implements DiscordInvestigation
     }
 
     @Override
-    public Optional<InvestigationCase> findCase(UUID caseId) {
+    public Optional<InvestigationCase> findCase(CaseId caseId) {
         return cases.findCase(caseId);
     }
 

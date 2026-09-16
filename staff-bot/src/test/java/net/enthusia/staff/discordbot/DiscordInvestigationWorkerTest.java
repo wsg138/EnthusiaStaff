@@ -15,6 +15,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
+import net.enthusia.staff.common.CaseId;
 import net.enthusia.staff.domain.investigation.EvasionAlert;
 import net.enthusia.staff.domain.investigation.InvestigationCase;
 import net.enthusia.staff.domain.investigation.InvestigationEvidence;
@@ -255,7 +256,7 @@ class DiscordInvestigationWorkerTest {
         }
 
         @Override
-        public Optional<InvestigationCase> findCase(UUID caseId) {
+        public Optional<InvestigationCase> findCase(CaseId caseId) {
             throw unsupported();
         }
 
