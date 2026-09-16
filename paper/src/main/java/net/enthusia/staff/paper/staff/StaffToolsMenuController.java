@@ -57,19 +57,34 @@ final class StaffToolsMenuController implements Listener {
             return;
         }
         event.setCancelled(true);
-        StaffToolsMenuView view = holder.view();
+        handleMenuClick(viewer, event, holder.view());
+    }
+
+    private void handleMenuClick(Player viewer, InventoryClickEvent event, StaffToolsMenuView view) {
         if (!view.viewerId().equals(viewer.getUniqueId())) {
             return;
         }
         int slot = event.getRawSlot();
-        if (slot < 0 || slot >= event.getView().getTopInventory().getSize()) {
+        if (!isTopSlot(event, slot)) {
             return;
         }
         if (!dispatcher.menuAuthorized(viewer)) {
-            cancelTargetLoad(viewer.getUniqueId());
-            viewer.closeInventory();
+            closeUnauthorizedMenu(viewer);
             return;
         }
+        dispatchMenuClick(viewer, view, slot);
+    }
+
+    private static boolean isTopSlot(InventoryClickEvent event, int slot) {
+        return slot >= 0 && slot < event.getView().getTopInventory().getSize();
+    }
+
+    private void closeUnauthorizedMenu(Player viewer) {
+        cancelTargetLoad(viewer.getUniqueId());
+        viewer.closeInventory();
+    }
+
+    private void dispatchMenuClick(Player viewer, StaffToolsMenuView view, int slot) {
         if (view instanceof StaffToolsMenuView.Root root) {
             rootClick(viewer, root, slot);
         } else if (view instanceof StaffToolsMenuView.Loading) {
@@ -134,13 +149,20 @@ final class StaffToolsMenuController implements Listener {
     }
 
     private void targetPickerClick(Player viewer, StaffToolsMenuView.TargetPicker picker, int slot) {
+        if (handleTargetPickerNavigation(viewer, picker, slot)) {
+            return;
+        }
+        selectTarget(viewer, picker, slot);
+    }
+
+    private boolean handleTargetPickerNavigation(Player viewer, StaffToolsMenuView.TargetPicker picker, int slot) {
         if (slot == StaffToolsMenuRenderer.BACK_SLOT) {
             openRoot(viewer);
-            return;
+            return true;
         }
         if (slot == StaffToolsMenuRenderer.REFRESH_SLOT) {
             requestTargetPicker(viewer, picker.tool());
-            return;
+            return true;
         }
         if (slot == StaffToolsMenuRenderer.PREVIOUS_SLOT && picker.hasPreviousPage()) {
             openPicker(viewer, new StaffToolsMenuView.TargetPicker(
@@ -150,7 +172,7 @@ final class StaffToolsMenuController implements Listener {
                     picker.page() - 1,
                     picker.truncated()
             ));
-            return;
+            return true;
         }
         if (slot == StaffToolsMenuRenderer.NEXT_SLOT && picker.hasNextPage()) {
             openPicker(viewer, new StaffToolsMenuView.TargetPicker(
@@ -160,12 +182,16 @@ final class StaffToolsMenuController implements Listener {
                     picker.page() + 1,
                     picker.truncated()
             ));
-            return;
+            return true;
         }
         if (slot == StaffToolsMenuRenderer.CLOSE_SLOT) {
             viewer.closeInventory();
-            return;
+            return true;
         }
+        return false;
+    }
+
+    private void selectTarget(Player viewer, StaffToolsMenuView.TargetPicker picker, int slot) {
         StaffToolsMenuView.TargetEntry target = picker.targetAtPageIndex(
                 StaffToolsMenuRenderer.targetContentIndex(slot)
         );
