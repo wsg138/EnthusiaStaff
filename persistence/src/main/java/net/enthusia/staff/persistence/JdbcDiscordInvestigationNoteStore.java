@@ -67,6 +67,32 @@ final class JdbcDiscordInvestigationNoteStore {
                 Optional.ofNullable(byId(connection, noteId, false)).map(current -> current.toDomain(false)));
     }
 
+    List<InvestigationNote> recent(ModerationSubjectId subjectId, int limit) {
+        if (subjectId == null || limit < 1 || limit > 100) {
+            throw new IllegalArgumentException("private note subject query is invalid");
+        }
+        return JdbcTransactionSupport.execute(dataSource, "Unable to read recent Discord private notes", connection -> {
+            List<InvestigationNote> notes = new ArrayList<>();
+            try (PreparedStatement statement = connection.prepareStatement("""
+                    SELECT note_id, subject_id, scope_type, scope_value, visibility, current_text,
+                           created_by, created_at, updated_by, updated_at, revision
+                    FROM discord_private_notes
+                    WHERE subject_id = ?
+                    ORDER BY updated_at DESC, note_id
+                    LIMIT ?
+                    """)) {
+                statement.setBytes(1, UuidBytes.toBytes(subjectId.value()));
+                statement.setInt(2, limit);
+                try (ResultSet rows = statement.executeQuery()) {
+                    while (rows.next()) {
+                        notes.add(read(rows).toDomain(false));
+                    }
+                }
+            }
+            return List.copyOf(notes);
+        });
+    }
+
     List<InvestigationNote.Version> history(UUID noteId, int limit) {
         if (noteId == null || limit < 1 || limit > 100) {
             throw new IllegalArgumentException("note history query is invalid");

@@ -3,6 +3,7 @@ package net.enthusia.staff.discordbot;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -10,11 +11,14 @@ import java.util.Set;
 import java.util.TreeMap;
 import java.util.UUID;
 import net.enthusia.staff.common.CaseId;
+import net.enthusia.staff.domain.auth.StaffRank;
 import net.enthusia.staff.domain.casefile.CaseReview;
 import net.enthusia.staff.domain.history.HistoryQueryOptions;
 import net.enthusia.staff.domain.history.ModerationHistoryEntry;
 import net.enthusia.staff.domain.history.ModerationHistoryPage;
+import net.enthusia.staff.domain.investigation.InvestigationNote;
 import net.enthusia.staff.domain.moderation.DiscordUserId;
+import net.enthusia.staff.domain.moderation.ModerationSubjectId;
 import net.enthusia.staff.domain.moderation.ModerationSubject;
 import net.enthusia.staff.domain.player.PlayerIdentity;
 import net.enthusia.staff.domain.player.PlayerPlatform;
@@ -35,6 +39,10 @@ final class StaffModerationReadService {
 
         Optional<VersionedSubject> subjectForMinecraft(UUID playerId);
 
+        default Optional<VersionedSubject> subject(ModerationSubjectId subjectId) {
+            return Optional.empty();
+        }
+
         PlayerResolution resolvePlayer(String uuidOrUsername);
 
         Optional<PlayerIdentity> player(UUID playerId);
@@ -54,11 +62,19 @@ final class StaffModerationReadService {
 
         List<CaseReview> recentCases(UUID targetId, int limit);
 
+        default List<CaseReview> recentCases(ModerationSubjectId subjectId, int limit) {
+            return List.of();
+        }
+
         Optional<CaseReview> caseReview(CaseId caseId);
 
         List<ActiveSanction> activeSanctions(UUID targetId, Instant now);
 
         List<StaffNote> recentNotes(UUID targetId, int limit);
+
+        default List<InvestigationNote> recentInvestigationNotes(ModerationSubjectId subjectId, int limit) {
+            return List.of();
+        }
     }
 
     enum TargetKind {
@@ -196,6 +212,35 @@ final class StaffModerationReadService {
         return data.caseReview(caseId);
     }
 
+    Target caseTarget(CaseReview review) {
+        if (review == null) {
+            throw new IllegalArgumentException("case review must be present");
+        }
+        if (review.minecraftTargetId().isPresent()) {
+            return minecraftTarget(review.minecraftTargetId().orElseThrow());
+        }
+        ModerationSubjectId subjectId = review.subjectId()
+                .orElseThrow(() -> new IllegalStateException("case has no moderation subject"));
+        VersionedSubject subject = data.subject(subjectId)
+                .orElseThrow(() -> new IllegalStateException("case moderation subject is unavailable"));
+        DiscordUserId discord = subject.subject().discordUserIds().stream().findFirst()
+                .orElseThrow(() -> new IllegalStateException("Discord-only case has no Discord identity"));
+        return checked(new Target(TargetKind.DISCORD, Optional.of(discord), Optional.empty(), Optional.of(subject)));
+    }
+
+    List<InvestigationNote> investigationNotes(Target target, StaffRank viewerRank) {
+        Target checkedTarget = checked(target);
+        if (viewerRank == null || checkedTarget.subject().isEmpty()) {
+            return List.of();
+        }
+        ModerationSubjectId subjectId = checkedTarget.subject().orElseThrow().subject().subjectId();
+        boolean management = viewerRank == StaffRank.ADMIN || viewerRank == StaffRank.FOUNDER;
+        return data.recentInvestigationNotes(subjectId, PANEL_LIMIT).stream()
+                .filter(note -> note.visibility() == InvestigationNote.Visibility.STAFF || management)
+                .limit(PANEL_LIMIT)
+                .toList();
+    }
+
     Snapshot snapshot(Target target) {
         Target checkedTarget = checked(target);
         if (checkedTarget.subject().isEmpty()) {
@@ -213,7 +258,7 @@ final class StaffModerationReadService {
                 history.totalEntries(),
                 relevantHistoryCounts(accountIds),
                 recentNotes(accountIds),
-                recentCases(accountIds),
+                recentCases(subject, accountIds),
                 historicalLinkCount(checkedTarget)
         );
     }
@@ -268,9 +313,13 @@ final class StaffModerationReadService {
                 .toList();
     }
 
-    private List<CaseReview> recentCases(Set<UUID> accountIds) {
-        return accountIds.stream()
+    private List<CaseReview> recentCases(ModerationSubject subject, Set<UUID> accountIds) {
+        LinkedHashMap<CaseId, CaseReview> unique = new LinkedHashMap<>();
+        data.recentCases(subject.subjectId(), PANEL_LIMIT).forEach(review -> unique.put(review.caseId(), review));
+        accountIds.stream()
                 .flatMap(id -> data.recentCases(id, PER_ACCOUNT_LIMIT).stream())
+                .forEach(review -> unique.putIfAbsent(review.caseId(), review));
+        return unique.values().stream()
                 .sorted(Comparator.comparing(CaseReview::issuedAt).reversed())
                 .limit(PANEL_LIMIT)
                 .toList();
@@ -342,6 +391,11 @@ final class StaffModerationReadService {
         }
 
         @Override
+        public Optional<VersionedSubject> subject(ModerationSubjectId subjectId) {
+            return runtime.subject(subjectId);
+        }
+
+        @Override
         public PlayerResolution resolvePlayer(String uuidOrUsername) {
             return runtime.resolvePlayer(uuidOrUsername);
         }
@@ -377,6 +431,11 @@ final class StaffModerationReadService {
         }
 
         @Override
+        public List<CaseReview> recentCases(ModerationSubjectId subjectId, int limit) {
+            return runtime.recentCases(subjectId, limit);
+        }
+
+        @Override
         public Optional<CaseReview> caseReview(CaseId caseId) {
             return runtime.caseReview(caseId);
         }
@@ -389,6 +448,11 @@ final class StaffModerationReadService {
         @Override
         public List<StaffNote> recentNotes(UUID targetId, int limit) {
             return runtime.recentNotes(targetId, limit);
+        }
+
+        @Override
+        public List<InvestigationNote> recentInvestigationNotes(ModerationSubjectId subjectId, int limit) {
+            return runtime.recentInvestigationNotes(subjectId, limit);
         }
     }
 }

@@ -7,7 +7,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.zaxxer.hikari.HikariDataSource;
 import java.sql.SQLException;
+import java.time.Clock;
 import java.time.Duration;
+import java.time.ZoneOffset;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
@@ -22,6 +24,7 @@ import net.enthusia.staff.domain.discord.DiscordPunishmentState;
 import net.enthusia.staff.domain.investigation.EvasionAlert;
 import net.enthusia.staff.domain.investigation.InvestigationEvidence;
 import net.enthusia.staff.domain.investigation.InvestigationNote;
+import net.enthusia.staff.domain.casefile.CaseReview;
 import net.enthusia.staff.domain.moderation.DiscordGuildId;
 import net.enthusia.staff.domain.moderation.DiscordUserId;
 import net.enthusia.staff.domain.moderation.ModerationSubjectId;
@@ -30,6 +33,7 @@ import net.enthusia.staff.domain.sanction.SanctionLength;
 import net.enthusia.staff.persistence.JdbcDiscordInvestigationStore;
 import net.enthusia.staff.persistence.JdbcDiscordModerationPersistenceStore;
 import net.enthusia.staff.persistence.JdbcDiscordPunishmentRepository;
+import net.enthusia.staff.persistence.DiscordStaffReadRuntime;
 import net.enthusia.staff.persistence.MariaDb;
 import net.enthusia.staff.persistence.ModerationPersistenceException;
 import org.junit.jupiter.api.BeforeAll;
@@ -98,6 +102,15 @@ class DiscordInvestigationPersistenceIntegrationTest {
             ));
             assertEquals(List.of(1L, 0L), store.noteHistory(noteId, 10).stream()
                     .map(InvestigationNote.Version::revision).toList());
+            try (DiscordStaffReadRuntime reads = DiscordStaffReadRuntime.open(
+                    MariaDbIntegrationSupport.databaseConfig(DATABASE), Clock.fixed(NOW, ZoneOffset.UTC))) {
+                assertEquals(List.of("second private version"), reads.recentInvestigationNotes(subjectId, 10).stream()
+                        .map(InvestigationNote::text).toList());
+                CaseReview caseReview = reads.caseReview(caseId).orElseThrow();
+                assertTrue(caseReview.minecraftTargetId().isEmpty());
+                assertEquals(Optional.of(subjectId), caseReview.subjectId());
+                assertEquals(caseId, reads.recentCases(subjectId, 10).getFirst().caseId());
+            }
         }
     }
 

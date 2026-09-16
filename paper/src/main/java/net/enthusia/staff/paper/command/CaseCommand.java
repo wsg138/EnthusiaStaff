@@ -166,7 +166,8 @@ public final class CaseCommand implements CommandExecutor {
         DateTimeFormatter formatter = ModerationTimestampFormatter.inZone(settings.historyTimezone());
         List<Component> lines = new ArrayList<>();
         lines.add(Component.text(
-                "Case " + review.caseId().value() + " | subject " + review.targetId()
+                "Case " + review.caseId().value() + " | subject "
+                        + review.minecraftTargetId().map(UUID::toString).orElse("Discord-only moderation subject")
                         + ENTRY_SEPARATOR + human(review.sanctionFamily())
                         + ENTRY_SEPARATOR + human(review.state().name())
         ));

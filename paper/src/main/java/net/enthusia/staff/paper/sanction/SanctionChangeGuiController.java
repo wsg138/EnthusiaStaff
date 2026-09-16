@@ -164,8 +164,13 @@ public final class SanctionChangeGuiController implements Listener {
         if (direct != null) {
             CaseReview review = reviewStore.find(direct).orElse(null);
             if (review != null && matchesCommandCase(commandName, direct, caseLookup)) {
+                UUID targetId = review.minecraftTargetId().orElse(null);
+                if (targetId == null) {
+                    message(viewer, "That case is Discord-only and cannot be changed from the Minecraft sanction GUI.");
+                    return;
+                }
                 openState(viewer, new SanctionChangeGuiState.Actions(
-                        viewer.getUniqueId(), commandName, review.targetId().toString(), review, Optional.empty()
+                        viewer.getUniqueId(), commandName, targetId.toString(), review, Optional.empty()
                 ));
                 return;
             }

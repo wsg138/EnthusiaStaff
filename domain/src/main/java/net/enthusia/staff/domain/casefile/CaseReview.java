@@ -7,11 +7,13 @@ import java.util.Optional;
 import java.util.UUID;
 import net.enthusia.staff.common.CaseId;
 import net.enthusia.staff.common.Checks;
+import net.enthusia.staff.domain.moderation.ModerationSubjectId;
 import net.enthusia.staff.domain.sanction.SanctionChangeExpectation;
 
 public record CaseReview(
         CaseId caseId,
         UUID targetId,
+        Optional<ModerationSubjectId> subjectId,
         UUID actorId,
         String actorName,
         String actorRank,
@@ -29,9 +31,9 @@ public record CaseReview(
         Optional<OverturnRequestReview> openOverturnRequest
 ) {
     public CaseReview {
-        if (caseId == null || targetId == null || actorId == null || visibility == null
-                || state == null || issuedAt == null || revision < 0 || punishmentStep == null
-                || sanctions == null || openOverturnRequest == null) {
+        if (caseId == null || subjectId == null || (targetId == null && subjectId.isEmpty())
+                || actorId == null || visibility == null || state == null || issuedAt == null || revision < 0
+                || punishmentStep == null || sanctions == null || openOverturnRequest == null) {
             throw new IllegalArgumentException("case review fields must be present");
         }
         actorName = Checks.nonBlank(actorName, "actorName", 64);
@@ -45,6 +47,34 @@ public record CaseReview(
         internalExplanation = internalExplanation.trim();
         configurationVersion = Checks.nonBlank(configurationVersion, "configurationVersion", 128);
         sanctions = List.copyOf(sanctions);
+    }
+
+    public CaseReview(
+            CaseId caseId,
+            UUID targetId,
+            UUID actorId,
+            String actorName,
+            String actorRank,
+            String publicReason,
+            String exactReasonId,
+            String sanctionFamily,
+            String internalExplanation,
+            String configurationVersion,
+            CaseVisibility visibility,
+            CaseState state,
+            Instant issuedAt,
+            long revision,
+            Optional<PunishmentStepReview> punishmentStep,
+            List<SanctionReview> sanctions,
+            Optional<OverturnRequestReview> openOverturnRequest
+    ) {
+        this(caseId, targetId, Optional.empty(), actorId, actorName, actorRank, publicReason, exactReasonId,
+                sanctionFamily, internalExplanation, configurationVersion, visibility, state, issuedAt, revision,
+                punishmentStep, sanctions, openOverturnRequest);
+    }
+
+    public Optional<UUID> minecraftTargetId() {
+        return Optional.ofNullable(targetId);
     }
 
     public boolean hasActiveSanctions() {

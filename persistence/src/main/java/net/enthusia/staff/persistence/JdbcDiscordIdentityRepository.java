@@ -79,6 +79,17 @@ final class JdbcDiscordIdentityRepository {
         );
     }
 
+    Optional<VersionedSubject> subject(ModerationSubjectId subjectId) {
+        requirePresent(subjectId, "subjectId");
+        return JdbcTransactionSupport.execute(
+                dataSource,
+                "Unable to read moderation subject",
+                connection -> subjectExists(connection, subjectId)
+                        ? Optional.of(loadSubject(connection, subjectId))
+                        : Optional.empty()
+        );
+    }
+
     Optional<VersionedLink> currentLink(UUID playerId) {
         requirePresent(playerId, "playerId");
         return JdbcTransactionSupport.execute(

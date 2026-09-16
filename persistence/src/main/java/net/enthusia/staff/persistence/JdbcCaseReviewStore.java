@@ -20,6 +20,7 @@ import net.enthusia.staff.domain.casefile.CaseVisibility;
 import net.enthusia.staff.domain.casefile.OverturnRequestReview;
 import net.enthusia.staff.domain.casefile.PunishmentStepReview;
 import net.enthusia.staff.domain.casefile.SanctionReview;
+import net.enthusia.staff.domain.moderation.ModerationSubjectId;
 import net.enthusia.staff.domain.ports.CaseReviewStore;
 import net.enthusia.staff.domain.sanction.SanctionSpec;
 import net.enthusia.staff.domain.sanction.SanctionStatus;
@@ -63,28 +64,49 @@ public final class JdbcCaseReviewStore implements CaseReviewStore {
                      """)) {
             statement.setBytes(1, UuidBytes.toBytes(targetId));
             statement.setInt(2, limit);
-            List<CaseId> identifiers = new ArrayList<>();
-            try (ResultSet result = statement.executeQuery()) {
-                while (result.next()) {
-                    identifiers.add(new CaseId(result.getString("case_id")));
-                }
-            }
-            List<CaseReview> cases = new ArrayList<>();
-            for (CaseId identifier : identifiers) {
-                CaseReview review = read(connection, identifier);
-                if (review != null) {
-                    cases.add(review);
-                }
-            }
-            return List.copyOf(cases);
+            return readCases(connection, statement);
         } catch (SQLException exception) {
             throw new ModerationPersistenceException("Unable to read recent case reviews", exception);
         }
     }
 
+    public List<CaseReview> recentBySubject(ModerationSubjectId subjectId, int limit) {
+        if (subjectId == null || limit < 1 || limit > 100) {
+            throw new IllegalArgumentException("subject and a limit from 1 to 100 are required");
+        }
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement("""
+                     SELECT case_id FROM cases WHERE subject_id = ?
+                     ORDER BY issued_at DESC LIMIT ?
+                     """)) {
+            statement.setBytes(1, UuidBytes.toBytes(subjectId.value()));
+            statement.setInt(2, limit);
+            return readCases(connection, statement);
+        } catch (SQLException exception) {
+            throw new ModerationPersistenceException("Unable to read subject case reviews", exception);
+        }
+    }
+
+    private List<CaseReview> readCases(Connection connection, PreparedStatement statement) throws SQLException {
+        List<CaseId> identifiers = new ArrayList<>();
+        try (ResultSet result = statement.executeQuery()) {
+            while (result.next()) {
+                identifiers.add(new CaseId(result.getString("case_id")));
+            }
+        }
+        List<CaseReview> reviews = new ArrayList<>();
+        for (CaseId identifier : identifiers) {
+            CaseReview review = read(connection, identifier);
+            if (review != null) {
+                reviews.add(review);
+            }
+        }
+        return List.copyOf(reviews);
+    }
+
     private CaseReview read(Connection connection, CaseId caseId) throws SQLException {
         try (PreparedStatement statement = connection.prepareStatement("""
-                SELECT c.case_id, c.target_id, c.actor_id, c.actor_name, c.actor_rank,
+                SELECT c.case_id, c.target_id, c.subject_id, c.actor_id, c.actor_name, c.actor_rank,
                     c.public_reason, c.exact_reason_id, c.sanction_family,
                     c.internal_explanation, c.configuration_version, c.visibility,
                     c.state, c.issued_at, c.revision, p.raw_ordinal, p.effective_ordinal,
@@ -99,9 +121,14 @@ public final class JdbcCaseReviewStore implements CaseReviewStore {
                 if (!result.next()) {
                     return null;
                 }
+                byte[] targetBytes = result.getBytes("target_id");
+                byte[] subjectBytes = result.getBytes("subject_id");
                 return new CaseReview(
                         caseId,
-                        UuidBytes.fromBytes(result.getBytes("target_id")),
+                        targetBytes == null ? null : UuidBytes.fromBytes(targetBytes),
+                        subjectBytes == null
+                                ? Optional.empty()
+                                : Optional.of(new ModerationSubjectId(UuidBytes.fromBytes(subjectBytes))),
                         UuidBytes.fromBytes(result.getBytes("actor_id")),
                         result.getString("actor_name"),
                         result.getString("actor_rank"),

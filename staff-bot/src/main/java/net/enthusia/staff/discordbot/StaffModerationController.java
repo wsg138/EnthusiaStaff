@@ -363,9 +363,12 @@ final class StaffModerationController {
             StaffModerationReadService.Target target,
             SignedComponentCodec.TargetRef targetRef
     ) {
-        authorize(invokerId, invokerName, target, DiscordModerationOperation.VIEW_NOTES);
+        Actor actor = authorize(invokerId, invokerName, target, DiscordModerationOperation.VIEW_NOTES);
         StaffModerationReadService.Snapshot snapshot = reads.snapshot(target);
-        return Response.text(StaffModerationTextRenderer.notes(snapshot), historyNavigation(invokerId, targetRef));
+        return Response.text(
+                StaffModerationTextRenderer.notes(snapshot, reads.investigationNotes(target, actor.rank())),
+                historyNavigation(invokerId, targetRef)
+        );
     }
 
     private Response cases(
@@ -380,17 +383,13 @@ final class StaffModerationController {
     }
 
     private Response caseView(long invokerId, String invokerName, CaseId caseId) {
-        Actor actor = requireInvoker(
-                invokerId,
-                invokerName,
-                DiscordModerationOperation.VIEW_HISTORY,
-                ModerationPlatform.MINECRAFT
-        );
+        Actor actor = actors.invoker(discord(invokerId), invokerName);
         CaseReview review = reads.caseReview(caseId).orElse(null);
         if (review == null) {
+            authorization.require(actor, Optional.empty(), DiscordModerationOperation.VIEW_HISTORY, ModerationPlatform.MINECRAFT);
             return Response.text("No case exists with that ID.", List.of());
         }
-        StaffModerationReadService.Target target = reads.minecraftTarget(review.targetId());
+        StaffModerationReadService.Target target = reads.caseTarget(review);
         require(actor, actors.targetStaff(target), DiscordModerationOperation.VIEW_HISTORY, target);
         return Response.text(StaffModerationTextRenderer.caseView(caseId, review), List.of());
     }
