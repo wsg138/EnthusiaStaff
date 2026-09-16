@@ -1,0 +1,98 @@
+name: ES-D09 private read surface diagnostic
+
+on:
+  push:
+    branches:
+      - diagnostic/es-d09-authority-repair-20260915
+    paths:
+      - .github/diagnostics/es-d09-read-surface-repair.py
+      - .github/workflows/es-d09-read-surface-repair.yml
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - name: Check out diagnostic tooling
+        uses: actions/checkout@v6
+        with:
+          ref: diagnostic/es-d09-authority-repair-20260915
+          path: tooling
+
+      - name: Check out validated D09 candidate
+        uses: actions/checkout@v6
+        with:
+          ref: candidate/es-d09-authority-repair-20260915
+          fetch-depth: 0
+          path: product
+
+      - name: Require exact alert-enriched candidate
+        working-directory: product
+        run: test "$(git rev-parse HEAD)" = "4bc323fd74da1aabdba2c0305496e4d952b395e2"
+
+      - name: Apply private read surface repair
+        run: python tooling/.github/diagnostics/es-d09-read-surface-repair.py product
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Compile affected runtime and tests
+        working-directory: product
+        run: |
+          chmod +x gradlew
+          ./gradlew --no-daemon --no-build-cache --no-configuration-cache \
+            :domain:compileJava \
+            :domain:compileTestJava \
+            :persistence:compileJava \
+            :staff-bot:compileJava \
+            :staff-bot:compileTestJava \
+            :paper:compileJava \
+            :paper:compileTestJava \
+            :integration-tests:compileTestJava \
+            --console=plain
+
+      - name: Run focused read-surface tests
+        working-directory: product
+        run: |
+          ./gradlew --no-daemon --no-build-cache --no-configuration-cache \
+            :domain:test --tests net.enthusia.staff.domain.casefile.CaseReviewTest \
+            :staff-bot:test \
+            --tests net.enthusia.staff.discordbot.StaffModerationReadServiceTest \
+            --tests net.enthusia.staff.discordbot.StaffModerationInvestigationNoteRendererTest \
+            :integration-tests:test --tests net.enthusia.staff.integration.DiscordInvestigationPersistenceIntegrationTest \
+            --console=plain
+
+      - name: Require clean patch formatting
+        working-directory: product
+        run: git diff --check
+
+      - name: Commit validated candidate
+        working-directory: product
+        run: |
+          test -n "$(git status --porcelain)"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add \
+            domain/src/main/java/net/enthusia/staff/domain/casefile/CaseReview.java \
+            integration-tests/src/test/java/net/enthusia/staff/integration/DiscordInvestigationPersistenceIntegrationTest.java \
+            paper/src/main/java/net/enthusia/staff/paper/command/CaseCommand.java \
+            paper/src/main/java/net/enthusia/staff/paper/sanction/SanctionChangeGuiController.java \
+            persistence/src/main/java/net/enthusia/staff/persistence/DiscordStaffReadRuntime.java \
+            persistence/src/main/java/net/enthusia/staff/persistence/JdbcCaseReviewStore.java \
+            persistence/src/main/java/net/enthusia/staff/persistence/JdbcDiscordIdentityRepository.java \
+            persistence/src/main/java/net/enthusia/staff/persistence/JdbcDiscordInvestigationNoteStore.java \
+            staff-bot/src/main/java/net/enthusia/staff/discordbot/StaffModerationController.java \
+            staff-bot/src/main/java/net/enthusia/staff/discordbot/StaffModerationReadService.java \
+            staff-bot/src/main/java/net/enthusia/staff/discordbot/StaffModerationTextRenderer.java \
+            staff-bot/src/test/java/net/enthusia/staff/discordbot/StaffModerationInvestigationNoteRendererTest.java \
+            staff-bot/src/test/java/net/enthusia/staff/discordbot/StaffModerationReadServiceTest.java
+          git diff --quiet
+          git diff --cached --check
+          git commit -m "[ES-D09] Expose private investigation reads safely"
+          git push origin HEAD:candidate/es-d09-authority-repair-20260915
