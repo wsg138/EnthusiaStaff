@@ -6,6 +6,7 @@ on:
       - diagnostic/es-d09-authority-repair-20260915
     paths:
       - .github/diagnostics/es-d09-alert-context-repair.py
+      - .github/diagnostics/es-d09-alert-context-fix.py
       - .github/workflows/es-d09-alert-context-repair.yml
 
 permissions:
@@ -34,7 +35,9 @@ jobs:
         run: test "$(git rev-parse HEAD)" = "944601da771651ac2132949a9a5be19e9e9d3ff8"
 
       - name: Apply evasion alert context repair
-        run: python tooling/.github/diagnostics/es-d09-alert-context-repair.py product
+        run: |
+          python tooling/.github/diagnostics/es-d09-alert-context-repair.py product
+          python tooling/.github/diagnostics/es-d09-alert-context-fix.py product
 
       - name: Set up Java 21
         uses: actions/setup-java@v5
