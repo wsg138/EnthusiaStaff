@@ -1,22 +1,17 @@
 # Latest agent handoff
 
-Current handoff: `ES-D16 — Moderation console real-data read bridge` — `COMPLETE`.
+Current handoff: `ES-D07 — Discord punishment enforcement` — `COMPLETE`.
 
-Canonical package handoff: `ai-agents/reports/package-handoffs/2026-09-13-es-d16-complete.md`.
+Canonical package handoff: `ai-agents/reports/package-handoffs/2026-09-14-es-d07-active.md` (same canonical handoff path, converted in place to terminal state).
 
-Terminal implementation state:
-- PR #187 merged normally as `848aba7ac6a115dc3723c034b281917d63f1f1bd`;
-- final reviewed/validated pre-merge head was `aa32355a0d378ca4c6b03041b80d005df73f6fcd`;
-- frozen reconciled executable head was `8811294c17532825aeae1d271fe2a3163042ba9c`;
-- owner-accepted UI candidate was `3a79000eaa139ec107118d3fdb05b29e5e52097c`;
-- Coverage `34766165648`, web validation `34766165643`, StaffBot artifact `34766165650`, configuration-cache `34766165642`, Sentinel `34766165664`, Pi supersession `34766164245`, protected staging `34766163166`, Codacy static `103747616510`, diff coverage `103748653603`, and coverage variation `103748653922` all passed on the exact final head;
-- Codacy static reported zero annotations / zero new valid findings;
-- all three visible CodeRabbit correctness threads are resolved; the final automatic CodeRabbit skip is preserved as non-pass evidence rather than relabeled;
-- owner UI acceptance passed and no secrets/private evidence are recorded;
-- merge commit parents are pre-merge `main` `06519c0c5acdcf6276278204201f3c8b20767805` and exact feature head `aa32355a0d378ca4c6b03041b80d005df73f6fcd`;
-- merge and feature trees are identical at `c5c02a86d4db3861b4d9b7abfc2636323e9d9c12`;
-- post-merge containment is exact (`ahead 0 / behind 1 / files []` when comparing merge to feature);
-- temporary branch `package/es-d16-moderation-read-bridge` is absent after merge;
-- LiteBans remains authoritative; no destructive moderation, production Discord configuration/data change, issue #43 acceptance, or cutover was performed.
+Implementation PR #201 merged normally as `ca949a8531ea39efdf1becccc052b9c59cf30d24`. Frozen executable product head is `aea6696cb97df4463b90abfcbbd8bfa4bb80b913`; final pre-merge head is `e9d8a904c4192c9a4ab5fdfe34df8d2590567a95`. The merge parents are exactly pre-merge `main` `074c0ae0bee7222bcd5c9096f8db0071f5b84cdf` and the final implementation head. Post-merge comparison has zero file differences, so the validated D07 state is exactly contained. The implementation branch is absent.
 
-`ES-D07` and `ES-D13` remain dependency-complete `READY`. This worker does not start either package.
+Frozen-head executable validation is complete: review-repair workflow `34925882460` / job `104243730808` passed Java 21 clean build/tests, `:staff-bot:verifyStaffBotRuntime`, PMD with zero findings, changed-Java CCN/method-length/argument limits, the bounded 431-line worker-test check, and `git diff --check`. Codacy check `104245761385` succeeded with zero annotations. All four substantive CodeRabbit findings were repaired with regression coverage and all four threads are resolved.
+
+The exact `aea6696c...` → `e9d8a904...` delta is only three `ai-agents` Markdown tracking files. Exact final-head Coverage `34926790460`, Staff Bot PR Artifact `34926790540`, Staff Bot Configuration Cache `34926790404`, and Sentinel Restart Artifact `34926790424` all succeeded; final state-only Codacy check `104247092167` also succeeded with zero annotations.
+
+Isolated destructive Discord staging is `NOT RUN / unavailable`, not passed, because no authorized non-production D07 destructive target/fixture/harness exists in the reconciled staging state. Production Discord was not used as a substitute.
+
+Concurrent ownership remains fenced: D13 stays `BLOCKED` / `PARKED_BLOCKED` on PR #178; PR #199 Paper staff-menu work and PR #139 / X03 Market work remain separate. No production Discord configuration/data mutation, deployment/cutover, LiteBans authority change, AutoMod enforcement, cross-platform `Both` orchestration, or issue #43 acceptance occurred.
+
+No active D07 worker remains. Downstream routing only: D09 is dependency-complete `READY` for a future worker but is not activated; D08 remains `PLANNED` pending its separate live Minecraft integration-readiness proof; D12 remains `PLANNED` because D09 is not complete; D13 remains parked. This worker stops after D07 terminal publication and does not begin another package.

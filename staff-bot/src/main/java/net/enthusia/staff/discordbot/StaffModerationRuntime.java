@@ -4,10 +4,12 @@ import java.nio.file.Path;
 import java.security.SecureRandom;
 import java.time.Clock;
 import java.time.Duration;
+import java.util.Map;
 import java.util.Optional;
+import net.dv8tion.jda.api.JDA;
 import net.enthusia.staff.persistence.DiscordStaffReadRuntime;
 
-/** Owns every D06 database/authority/component resource. */
+/** Owns every D06/D07/D16 database, authority, component, and enforcement resource. */
 final class StaffModerationRuntime implements AutoCloseable {
     private final DiscordStaffReadRuntime data;
     private final StaffModerationReadService readService;
@@ -15,6 +17,7 @@ final class StaffModerationRuntime implements AutoCloseable {
     private final StaffReadAuthorization readAuthorization;
     private final SignedComponentCodec componentCodec;
     private final MinecraftProfileLookup minecraftProfiles;
+    private final Optional<DiscordPunishmentRuntime> punishments;
 
     private StaffModerationRuntime(
             DiscordStaffReadRuntime data,
@@ -22,7 +25,8 @@ final class StaffModerationRuntime implements AutoCloseable {
             LinkedStaffActorResolver actors,
             StaffReadAuthorization authorization,
             SignedComponentCodec components,
-            MinecraftProfileLookup profiles
+            MinecraftProfileLookup profiles,
+            Optional<DiscordPunishmentRuntime> punishments
     ) {
         this.data = data;
         this.readService = reads;
@@ -30,26 +34,44 @@ final class StaffModerationRuntime implements AutoCloseable {
         this.readAuthorization = authorization;
         this.componentCodec = components;
         this.minecraftProfiles = profiles;
+        this.punishments = punishments;
     }
 
     static Optional<StaffModerationRuntime> open(
             Optional<Path> configFile,
+            long guildId,
             int interactionCapacity,
             Duration interactionTtl
     ) {
-        Optional<StaffModerationConfiguration> configuration = configFile.isPresent()
-                ? Optional.of(StaffModerationConfiguration.fromFile(configFile.orElseThrow()))
-                : StaffModerationConfiguration.fromSystemEnvironment();
-        return configuration.map(value -> open(value, interactionCapacity, interactionTtl));
+        Map<String, String> values = configFile.isPresent()
+                ? StaffModerationConfigFile.read(configFile.orElseThrow())
+                : System.getenv();
+        Optional<StaffModerationConfiguration> configuration = StaffModerationConfiguration.fromEnvironment(values);
+        Optional<DiscordPunishmentConfiguration> punishmentConfiguration =
+                DiscordPunishmentConfiguration.fromEnvironment(values);
+        if (configuration.isEmpty() && punishmentConfiguration.isPresent()) {
+            throw new IllegalArgumentException("Discord enforcement requires the staff moderation runtime");
+        }
+        return configuration.map(value -> open(
+                value,
+                punishmentConfiguration,
+                guildId,
+                interactionCapacity,
+                interactionTtl
+        ));
     }
 
     private static StaffModerationRuntime open(
             StaffModerationConfiguration configuration,
+            Optional<DiscordPunishmentConfiguration> punishmentConfiguration,
+            long guildId,
             int interactionCapacity,
             Duration interactionTtl
     ) {
         Clock clock = Clock.systemUTC();
         DiscordStaffReadRuntime data = DiscordStaffReadRuntime.open(configuration.database(), clock);
+        MinecraftProfileLookup profiles = null;
+        Optional<DiscordPunishmentRuntime> punishments = Optional.empty();
         try {
             StaffModerationReadService reads = new StaffModerationReadService(data, clock);
             StaffAuthorityClient authority = new HttpStaffAuthorityClient(
@@ -66,9 +88,24 @@ final class StaffModerationRuntime implements AutoCloseable {
             );
             LinkedStaffActorResolver actors = new LinkedStaffActorResolver(reads, authority);
             StaffReadAuthorization authorization = new StaffReadAuthorization();
-            MinecraftProfileLookup profiles = MinecraftProfileLookup.mojang();
-            return new StaffModerationRuntime(data, reads, actors, authorization, components, profiles);
+            profiles = MinecraftProfileLookup.mojang();
+            punishments = punishmentConfiguration.map(value -> DiscordPunishmentRuntime.open(
+                    configuration.database(),
+                    value,
+                    reads,
+                    actors,
+                    guildId,
+                    interactionCapacity,
+                    interactionTtl
+            ));
+            return new StaffModerationRuntime(
+                    data, reads, actors, authorization, components, profiles, punishments
+            );
         } catch (RuntimeException exception) {
+            punishments.ifPresent(DiscordPunishmentRuntime::close);
+            if (profiles != null) {
+                profiles.close();
+            }
             data.close();
             throw exception;
         }
@@ -94,12 +131,28 @@ final class StaffModerationRuntime implements AutoCloseable {
         return minecraftProfiles;
     }
 
+    Optional<DiscordPunishmentService> punishmentService() {
+        return punishments.map(DiscordPunishmentRuntime::service);
+    }
+
+    void resumePunishments(JDA jda) {
+        punishments.ifPresent(runtime -> runtime.resume(jda));
+    }
+
+    void pausePunishments() {
+        punishments.ifPresent(DiscordPunishmentRuntime::pause);
+    }
+
     @Override
     public void close() {
         try {
-            minecraftProfiles.close();
+            punishments.ifPresent(DiscordPunishmentRuntime::close);
         } finally {
-            data.close();
+            try {
+                minecraftProfiles.close();
+            } finally {
+                data.close();
+            }
         }
     }
 }
