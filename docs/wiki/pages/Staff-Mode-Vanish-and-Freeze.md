@@ -71,6 +71,14 @@ Every tool interaction rechecks the active session, owner UUID/session token, cu
 
 Copied, transferred, stale-session, wrong-slot, wrong-material or wrong-owner staff items are rejected. Staff items are not intentionally merged back into normal inventory when the session ends.
 
+### Staff Tools Menu
+
+The Staff Tools item opens an inventory menu with the actions available to your current staff session. It only shows actions you can use now; every click is checked again before anything runs.
+
+Inspector, Freeze and Follow / Spectate open a player picker. The picker has pages, refresh, back and close controls. It does not list you or vanished players, and it checks the selected player again before running the normal command path. If the player is not listed, is offline, or the menu is not convenient, use the command shown in the hotbar table instead.
+
+Closing the picker while it is loading keeps it closed. Losing the relevant staff session, rank or permission closes the menu instead of letting a stale view run an action.
+
 ## Random teleport
 
 Random teleport is an investigation tool, not free travel. Candidates are filtered for unsafe/inappropriate targets such as the actor, staff-mode players, vanished/frozen/exempt players, unsafe player state, and configured disabled worlds/backends.

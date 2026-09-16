@@ -269,6 +269,7 @@ record PaperRuntimeComponents(
                 cheatTester
         );
         registerListener(plugin, dispatcher);
+        registerListener(plugin, dispatcher.menuListener());
         var command = java.util.Objects.requireNonNull(
                 plugin.getCommand("stafftools"),
                 "stafftools command is missing from plugin.yml"

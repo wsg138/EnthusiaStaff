@@ -83,7 +83,7 @@ Freeze state is designed to survive ordinary runtime transitions rather than bei
 
 `/staff` enters/exits durable staff mode.
 
-`/stafftools` exposes staff operational utilities, including controlled teleport and spectate paths. The command also has text fallbacks (`random`, `spectate <player>`) for operational use.
+`/stafftools` opens an inventory menu for staff operational utilities, including controlled teleport and spectate paths. It only shows the actions available to the active staff session. Inspector, freeze and spectate use a refreshed online-player picker that excludes the staff member and vanished players, then routes the selected target through the same command/service checks as the hotbar. The command also has text fallbacks (`random`, `spectate <player>`) for operational use.
 
 Staff tools have explicit exemptions/permissions so ordinary moderation helpers do not automatically receive every invasive capability.
 
