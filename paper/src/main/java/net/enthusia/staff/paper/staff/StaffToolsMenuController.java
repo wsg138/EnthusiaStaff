@@ -4,6 +4,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 import net.enthusia.staff.paper.visibility.VanishManager;
 import net.kyori.adventure.text.Component;
@@ -69,8 +72,8 @@ final class StaffToolsMenuController implements Listener {
         }
         if (view instanceof StaffToolsMenuView.Root root) {
             rootClick(viewer, root, slot);
-        } else if (view instanceof StaffToolsMenuView.Loading loading) {
-            loadingClick(viewer, loading, slot);
+        } else if (view instanceof StaffToolsMenuView.Loading) {
+            loadingClick(viewer, slot);
         } else if (view instanceof StaffToolsMenuView.TargetPicker picker) {
             targetPickerClick(viewer, picker, slot);
         }
@@ -123,7 +126,7 @@ final class StaffToolsMenuController implements Listener {
         dispatcher.dispatchFromMenu(viewer, tool, null);
     }
 
-    private void loadingClick(Player viewer, StaffToolsMenuView.Loading loading, int slot) {
+    private void loadingClick(Player viewer, int slot) {
         if (slot == StaffToolsMenuRenderer.CLOSE_SLOT) {
             cancelTargetLoad(viewer.getUniqueId());
             viewer.closeInventory();
@@ -219,11 +222,23 @@ final class StaffToolsMenuController implements Listener {
     }
 
     private void loadTargetPicker(UUID viewerId, StaffToolDefinition tool, UUID loadId) {
-        List<StaffToolsMenuView.TargetEntry> candidates = plugin.getServer().getOnlinePlayers().stream()
-                .filter(player -> !viewerId.equals(player.getUniqueId()))
-                .filter(player -> !vanish.isVanished(player.getUniqueId()))
-                .map(player -> new StaffToolsMenuView.TargetEntry(player.getUniqueId(), player.getName()))
-                .toList();
+        List<Player> onlinePlayers = List.copyOf(plugin.getServer().getOnlinePlayers());
+        if (onlinePlayers.isEmpty()) {
+            presentTargetPicker(viewerId, tool, loadId, List.of());
+            return;
+        }
+        TargetSnapshotLoad snapshots = new TargetSnapshotLoad(viewerId, tool, loadId, onlinePlayers.size());
+        for (Player player : onlinePlayers) {
+            snapshots.schedule(player);
+        }
+    }
+
+    private void presentTargetPicker(
+            UUID viewerId,
+            StaffToolDefinition tool,
+            UUID loadId,
+            List<StaffToolsMenuView.TargetEntry> candidates
+    ) {
         StaffToolsMenuView.TargetPicker picker = StaffToolsMenuView.TargetPicker.fromCandidates(
                 viewerId,
                 tool,
@@ -235,6 +250,59 @@ final class StaffToolsMenuController implements Listener {
                 viewer -> openLoadedTargetPicker(viewer, picker, loadId),
                 () -> cancelTargetLoad(viewerId)
         );
+    }
+
+    /**
+     * Captures each target's mutable Paper state on its own entity scheduler. The global scheduler only
+     * enumerates the current player references; it never reads their UUID or name.
+     */
+    private final class TargetSnapshotLoad {
+        private final UUID viewerId;
+        private final StaffToolDefinition tool;
+        private final UUID loadId;
+        private final AtomicInteger remaining;
+        private final ConcurrentLinkedQueue<StaffToolsMenuView.TargetEntry> candidates = new ConcurrentLinkedQueue<>();
+
+        private TargetSnapshotLoad(UUID viewerId, StaffToolDefinition tool, UUID loadId, int playerCount) {
+            this.viewerId = viewerId;
+            this.tool = tool;
+            this.loadId = loadId;
+            this.remaining = new AtomicInteger(playerCount);
+        }
+
+        private void schedule(Player player) {
+            AtomicBoolean completed = new AtomicBoolean();
+            Runnable retired = () -> complete(completed);
+            boolean scheduled = player.getScheduler().execute(
+                    plugin,
+                    () -> {
+                        try {
+                            snapshot(player);
+                        } finally {
+                            retired.run();
+                        }
+                    },
+                    retired,
+                    1L
+            );
+            if (!scheduled) {
+                retired.run();
+            }
+        }
+
+        private void snapshot(Player player) {
+            UUID playerId = player.getUniqueId();
+            if (!viewerId.equals(playerId) && !vanish.isVanished(playerId)) {
+                candidates.add(new StaffToolsMenuView.TargetEntry(playerId, player.getName()));
+            }
+        }
+
+        private void complete(AtomicBoolean completed) {
+            if (!completed.compareAndSet(false, true) || remaining.decrementAndGet() != 0) {
+                return;
+            }
+            presentTargetPicker(viewerId, tool, loadId, List.copyOf(candidates));
+        }
     }
 
     private void openLoadedTargetPicker(
