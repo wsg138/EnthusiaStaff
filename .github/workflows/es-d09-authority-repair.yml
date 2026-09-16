@@ -7,6 +7,7 @@ on:
     paths:
       - .github/diagnostics/es-d09-authority-repair.py
       - .github/diagnostics/es-d09-authority-repair-fix.py
+      - .github/diagnostics/es-d09-authority-postfix.py
       - .github/workflows/es-d09-authority-repair.yml
 
 permissions:
@@ -38,7 +39,9 @@ jobs:
         run: |
           python tooling/.github/diagnostics/es-d09-authority-repair-fix.py \
             tooling/.github/diagnostics/es-d09-authority-repair.py /tmp/es-d09-authority-repair.py
-          python /tmp/es-d09-authority-repair.py product
+          python tooling/.github/diagnostics/es-d09-authority-postfix.py \
+            /tmp/es-d09-authority-repair.py /tmp/es-d09-authority-repair-final.py
+          python /tmp/es-d09-authority-repair-final.py product
 
       - name: Set up Java 21
         uses: actions/setup-java@v5
@@ -52,18 +55,21 @@ jobs:
           chmod +x gradlew
           ./gradlew --no-daemon --no-build-cache --no-configuration-cache \
             :domain:compileJava \
+            :domain:compileTestJava \
             :persistence:compileJava \
             :staff-bot:compileJava \
+            :staff-bot:compileTestJava \
             :paper:compileJava \
             :integration-tests:compileTestJava \
             --console=plain
 
-      - name: Run D09 persistence integration tests
+      - name: Run focused authority tests
         working-directory: product
         run: |
           ./gradlew --no-daemon --no-build-cache --no-configuration-cache \
-            :integration-tests:test \
-            --tests net.enthusia.staff.integration.DiscordInvestigationPersistenceIntegrationTest \
+            :domain:test --tests net.enthusia.staff.domain.investigation.InvestigationEvidenceTest \
+            :staff-bot:test --tests net.enthusia.staff.discordbot.DiscordInvestigationWorkerTest \
+            :integration-tests:test --tests net.enthusia.staff.integration.DiscordInvestigationPersistenceIntegrationTest \
             --console=plain
 
       - name: Require clean patch formatting
@@ -79,6 +85,8 @@ jobs:
           git add \
             domain/src/main/java/net/enthusia/staff/domain/investigation \
             domain/src/main/java/net/enthusia/staff/domain/ports/DiscordInvestigationStore.java \
+            domain/src/test/java/net/enthusia/staff/domain/investigation/InvestigationEvidenceTest.java \
+            integration-tests/src/test/java/net/enthusia/staff/integration/DiscordInvestigationPersistenceIntegrationTest.java \
             persistence/src/main/java/net/enthusia/staff/persistence/JdbcDiscordInvestigationCaseStore.java \
             persistence/src/main/java/net/enthusia/staff/persistence/JdbcDiscordInvestigationEvidenceStore.java \
             persistence/src/main/java/net/enthusia/staff/persistence/JdbcDiscordInvestigationNoteStore.java \
@@ -87,7 +95,8 @@ jobs:
             persistence/src/main/resources/db/migration/V22__discord_investigation_state.sql \
             staff-bot/src/main/java/net/enthusia/staff/discordbot/DiscordInvestigationService.java \
             staff-bot/src/main/java/net/enthusia/staff/discordbot/DiscordInvestigationWorker.java \
-            staff-bot/src/main/java/net/enthusia/staff/discordbot/DiscordInvestigationCommandController.java
+            staff-bot/src/main/java/net/enthusia/staff/discordbot/DiscordInvestigationCommandController.java \
+            staff-bot/src/test/java/net/enthusia/staff/discordbot/DiscordInvestigationWorkerTest.java
           git diff --quiet
           git diff --cached --check
           git commit -m "[ES-D09] Attach investigation state to authoritative cases"
