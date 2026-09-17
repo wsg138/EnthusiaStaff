@@ -8,9 +8,17 @@ const source = resolve(project, '../staff-bot/src/main/resources/moderation-prev
 const output = resolve(project, 'dist');
 const assets = resolve(output, 'assets');
 
+const webAssets = [
+  'app.css', 'live.css', 'model.js', 'app.js', 'workflow.js', 'review.js', 'real-data.js',
+  'direct-read.js', 'live-context-page-policy.js', 'live-context-pagination.js', 'live-loading.js',
+  'real-policy.js', 'live-enhancements.js', 'live-review-hardening.js', 'live-shell-usability.js',
+  'live-message-usability.js', 'live-record-usability.js', 'live-browse-workspace.js',
+  'live-filter-focus.js'
+];
+
 await rm(output, { recursive: true, force: true });
 await mkdir(assets, { recursive: true });
 await cp(resolve(source, 'index.html'), resolve(output, 'index.html'));
-for (const name of ['app.css', 'model.js', 'app.js', 'workflow.js', 'review.js']) {
+for (const name of webAssets) {
   await cp(resolve(source, name), resolve(assets, name));
 }

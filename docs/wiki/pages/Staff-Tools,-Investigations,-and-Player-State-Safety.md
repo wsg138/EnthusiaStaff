@@ -31,11 +31,13 @@ Primary paths:
 - `paper/.../staff/StaffModeManager.java`
 - `paper/.../staff/StaffModeActivationCoordinator.java`
 - `paper/.../staff/StaffToolDispatcher.java`
+- `paper/.../staff/StaffToolsMenuController.java`
+- `paper/.../staff/StaffToolsMenuView.java`
 - `paper/.../staff/StaffModeWorldInteractionListener.java`
 - `domain/.../staff/`
 - `persistence/.../JdbcStaffSessionStore.java`
 
-The hotbar routes random teleport, inspect, freeze, reports, Cheat Tester, follow/spectate, vanish, staff chat and the tools menu. The item itself grants no authority: dispatcher and downstream command/service boundaries recheck session, owner/token, rank, permission, provider health and operational state.
+The hotbar routes random teleport, inspect, freeze, reports, Cheat Tester, follow/spectate, vanish, staff chat and the tools menu. The tools item opens a bounded inventory menu that shows only currently available actions. Targeted actions use a refreshed online-player picker that excludes the viewer and vanished players; the selected UUID remains in typed server-side menu state, not item metadata. The item itself grants no authority: dispatcher and downstream command/service boundaries recheck session, owner/token, rank, permission, provider health and operational state.
 
 Staff instructions: [[Staff Mode, Vanish, and Freeze|Staff-Mode-Vanish-and-Freeze]].
 
@@ -140,7 +142,9 @@ Remaining work includes richer operational acceptance, key rotation and producti
 
 ## Inspector and client evidence
 
-Inspector/client surfaces assemble authorized context such as identity, location/server, platform/client information, moderation history, reports and related investigation state. Provider evidence is context, not automatic proof of cheating.
+The inspector shows identity, server, platform, active reports, provider and freeze information. It also offers shortcuts to report details, punishment history, client evidence, inventory, Ender chest and the punishment workflow when the viewer has permission for those commands. Provider evidence is context, not automatic proof of cheating.
+
+The inspector shows the player's current durable freeze state and reason. Staff with freeze permission also receive direct Freeze or Unfreeze command suggestions; viewing the inspector never changes freeze state.
 
 Primary paths:
 

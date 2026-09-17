@@ -3,6 +3,7 @@ package net.enthusia.staff.domain.ports;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
+import net.enthusia.staff.domain.moderation.CurrentLinkedMinecraftAccount;
 import net.enthusia.staff.domain.moderation.DiscordUserId;
 import net.enthusia.staff.domain.ports.DiscordModerationPersistenceStore.VersionedLink;
 
@@ -49,4 +50,11 @@ public interface AccountLinkingStore {
     List<VersionedLink> historyForMinecraft(UUID minecraftPlayerId);
 
     List<VersionedLink> historyForDiscord(DiscordUserId discordUserId);
+
+    /**
+     * Returns only the other Minecraft accounts with a current verified link to the same Discord
+     * identity. Historical/unlinked accounts and the Discord identity itself are deliberately
+     * excluded from this staff-facing projection.
+     */
+    List<CurrentLinkedMinecraftAccount> currentLinkedMinecraftAccounts(UUID minecraftPlayerId, int limit);
 }

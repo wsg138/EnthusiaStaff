@@ -11,7 +11,6 @@ import net.enthusia.staff.paper.freeze.FreezeManager;
 import net.enthusia.staff.paper.tester.CheatTesterManager;
 import net.enthusia.staff.paper.visibility.VanishManager;
 import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.event.ClickEvent;
 import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.GameMode;
 import org.bukkit.Location;
@@ -51,6 +50,7 @@ public final class StaffToolDispatcher implements Listener, CommandExecutor, Tab
     private final StaffToolSettings settings;
     private final StaffToolCooldowns cooldowns;
     private final StaffToolRandomTeleportService randomTeleport;
+    private final StaffToolsMenuController menu;
     private final Map<StaffToolDefinition, ToolAction> actions;
 
     public StaffToolDispatcher(
@@ -76,6 +76,7 @@ public final class StaffToolDispatcher implements Listener, CommandExecutor, Tab
                 java.util.Objects.requireNonNull(freeze, "freeze"),
                 settings
         );
+        this.menu = new StaffToolsMenuController(plugin, this, vanish);
         this.actions = createActions();
     }
 
@@ -95,7 +96,7 @@ public final class StaffToolDispatcher implements Listener, CommandExecutor, Tab
         configured.put(StaffToolDefinition.SPECTATE, this::beginFollowOrSpectate);
         configured.put(StaffToolDefinition.VANISH, (player, ignored) -> runCommand(player, "vanish"));
         configured.put(StaffToolDefinition.STAFF_CHAT, (player, ignored) -> runCommand(player, "staffchat"));
-        configured.put(StaffToolDefinition.STAFF_TOOLS, (player, ignored) -> openTextMenu(player));
+        configured.put(StaffToolDefinition.STAFF_TOOLS, (player, ignored) -> menu.open(player));
         return Map.copyOf(configured);
     }
 
@@ -206,6 +207,39 @@ public final class StaffToolDispatcher implements Listener, CommandExecutor, Tab
             return;
         }
         action.execute(player, targetId);
+    }
+
+    void dispatchFromMenu(Player player, StaffToolDefinition tool, UUID targetId) {
+        dispatch(player, tool, targetId);
+    }
+
+    boolean menuAuthorized(Player player) {
+        return menuToolAvailable(player, StaffToolDefinition.STAFF_TOOLS);
+    }
+
+    boolean menuToolAvailable(Player player, StaffToolDefinition tool) {
+        return player != null
+                && tool != null
+                && staffMode.authorizedForTool(player, tool)
+                && player.hasPermission(tool.permission());
+    }
+
+    List<StaffToolDefinition> availableMenuTools(Player player) {
+        if (!menuAuthorized(player)) {
+            return List.of();
+        }
+        return java.util.Arrays.stream(StaffToolDefinition.values())
+                .filter(tool -> tool != StaffToolDefinition.STAFF_TOOLS)
+                .filter(tool -> menuToolAvailable(player, tool))
+                .toList();
+    }
+
+    public Listener menuListener() {
+        return menu;
+    }
+
+    void exitStaffMode(Player player) {
+        runCommand(player, "staff");
     }
 
     private void dispatchCheatConfiguration(Player player, StaffToolDefinition tool) {
@@ -415,30 +449,7 @@ public final class StaffToolDispatcher implements Listener, CommandExecutor, Tab
     }
 
     public void openTextMenu(Player player) {
-        player.sendMessage(Component.text("EnthusiaStaff tools", NamedTextColor.GOLD));
-        sendMenuLine(player, "/stafftools random", "Random teleport", "/stafftools random");
-        sendMenuLine(player, "/inspect <player>", "Player inspector", "/inspect ");
-        sendMenuLine(player, "/freeze <player> <reason>", "Freeze", "/freeze ");
-        sendMenuLine(player, "/reports", "Reports", "/reports");
-        sendMenuLine(player, "/cheattester config", "Cheat Tester", "/cheattester config");
-        sendMenuLine(player, "/stafftools spectate <player>", "Follow/Spectate", "/stafftools spectate ");
-        sendMenuLine(player, "/vanish", "Vanish", "/vanish");
-        sendMenuLine(player, "/staffchat", "Staff chat", "/staffchat");
-        sendMenuLine(player, "/staff", "Exit staff mode", "/staff");
-        player.sendMessage(Component.text(
-                "Cheat Tester tool: right-click chooses a tester, left-click a player runs it, shift-right-click shows configuration.",
-                NamedTextColor.GRAY
-        ));
-        player.sendMessage(Component.text(
-                "Bedrock fallback: type the shown commands directly if clickable text is unavailable.",
-                NamedTextColor.GRAY
-        ));
-    }
-
-    private static void sendMenuLine(Player player, String commandText, String description, String suggestedCommand) {
-        player.sendMessage(Component.text("• " + description + ": ", NamedTextColor.GRAY)
-                .append(Component.text(commandText, NamedTextColor.AQUA)
-                        .clickEvent(ClickEvent.suggestCommand(suggestedCommand))));
+        menu.open(player);
     }
 
     @Override

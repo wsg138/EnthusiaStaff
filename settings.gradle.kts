@@ -22,6 +22,7 @@ include(
     "persistence",
     "protocol",
     "paper",
+    "paper-authority-bridge",
     "velocity",
     "staff-bot",
     "integration-tests",

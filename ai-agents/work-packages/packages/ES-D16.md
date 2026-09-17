@@ -1,60 +1,82 @@
 # ES-D16 — Moderation console real-data read bridge
 
-Status: `BLOCKED` / `PARKED_BLOCKED`. Priority: 135.5. Depends on `ES-D03`, `ES-D05`, `ES-D06`, and merged web-first moderation foundation PR #186. Internal package.
+Status: `COMPLETE`
+Priority: 135.5
+Implementation PR: #187
+Implementation branch: `package/es-d16-moderation-read-bridge` — deleted/absent after merge
+Owner-accepted D16 UI candidate: `3a79000eaa139ec107118d3fdb05b29e5e52097c`
+Frozen reconciled executable head: `8811294c17532825aeae1d271fe2a3163042ba9c`
+Final reviewed/validated pre-merge head: `aa32355a0d378ca4c6b03041b80d005df73f6fcd`
+Normal merge: `848aba7ac6a115dc3723c034b281917d63f1f1bd`
+Canonical terminal handoff: `ai-agents/reports/package-handoffs/2026-09-13-es-d16-complete.md`
 
-Run ref: `ES-D16-20260831-real-data-read-bridge`.
+## Terminal state
 
-## Objective
-Connect the owner-approved Cloudflare moderation console to real, read-only Enthusia Discord/Minecraft/moderation data while preserving simulation-only punishment/deletion behavior and the existing D03 authority model.
+ES-D16 is complete. The owner accepted the moderation UI, current `main` was reconciled through a normal two-parent merge, every required exact-head repository/static/protected-staging gate passed, all valid review findings were repaired, PR #187 merged normally, exact feature-head containment was proven, and the temporary implementation branch is absent. No D07/D13 or unrelated package work was started.
 
-## Delivered implementation
-Frozen reviewed executable head `066b97f4344ab83d3e226b3f4ff3ab614dee6430` on `package/es-d16-moderation-read-bridge` / PR #187 implements the full read bridge plus panel-only Bloom staging transport:
+## Delivered scope
 
-- real selected-target identity, linked-account, sanction/history, case/note, channel/category, and bounded Discord-message reads through existing D06/domain authority;
-- loopback-only moderation read API `127.0.0.1:8766` with explicit DTO allowlists, D03 authorization, actor/guild/target binding, HMAC authentication, expiry/replay resistance, and bounded body/page/rate controls;
-- target-bound hosted Discord launch tickets and Worker session ingress/proxying without browser access to internal credentials;
-- bounded JDA REST reads with staff view/history permission fences, filters/pagination, replies/references, attachments, edited timestamps, and exact message context;
-- file-backed Bloom Staff Bot/Paper configuration preserving one authoritative MariaDB and no Staff Bot Flyway/mutation path;
-- staging-only `bloom-private-split` Paper authority transport with private/loopback source fencing, signed replay-resistant requests/responses, and private-host resolution pinning;
-- Staff Bot supervision of panel-uploaded `cloudflared` using a tunnel-token file while the read origin remains loopback-only;
-- simulation-only punishment, deletion, and permission-override controls.
+D16 completes the read-only/simulation-only real-data moderation bridge between the browser, Cloudflare Worker, and StaffBot. The merged product includes:
 
-## Explicit exclusions
-D16 performs no warn/mute/kick/ban/restrict/unmute/unban/unrestrict mutation, Discord message deletion, LiteBans authority change, moderation-database mutation, permission-override application, production Discord/Minecraft configuration or data access, issue #43 acceptance, or cutover.
+- signed, session-bound read requests pinned to the fixed private moderation-read origin;
+- explicit actor/guild/target authorization, replay protection, rate limiting, bounded request/response shapes, private/no-store responses, and public response allowlists;
+- `/moderate-preview` with optional player context, channel/player navigation, bounded Discord message reads, same-channel surrounding context, reply previews, filters, paging, linked accounts, sanctions/history, cases, notes, and profile identity data;
+- channel browse with no player selected until staff intentionally selects one;
+- message evidence selection and non-destructive final review with arbitrary validated custom durations;
+- Message Content entitlement fencing and no unnecessary Gateway intents;
+- fixed private Cloudflare tunnel/origin staging transport and fail-closed signed-read behavior;
+- transition support required to exercise the read bridge safely after D04 account-linking serialization.
 
-## Frozen exact-head validation — PASS
-Exact executable head `066b97f4344ab83d3e226b3f4ff3ab614dee6430` is frozen:
+D16 does **not** send punishments or DMs, mutate Discord permissions, delete messages, mutate punishment/case/note storage, enforce on Minecraft, change LiteBans authority, alter production Discord configuration, perform issue #43 acceptance, or cut over production moderation authority.
 
-- Coverage/full Java 21 `33683792916` / job `100426714267`: PASS; full clean build/integration tests, 27 provider API source types / zero runtime leaks, JaCoCo 52.08% lines / 42.18% branches / 54.38% instructions; validation artifact `9867619687`, digest `sha256:c52610d6913e85d80f8397fc898344f0b530e979adb42f7439346168687e34fb`.
-- Moderation Web Validation `33683792884`: PASS.
-- Staff Bot Configuration Cache `33683792893`: PASS.
-- Staff Bot PR Artifact `33683792982` / job `100426291034`: PASS; artifact `9867301625`; JAR SHA-256 `f546bbb418e4d38b3f1a1eea3f4621739bd6d1e75351c9cd73f0ce39e1056b60`.
-- Sentinel Restart Artifact `33683792967` / job `100426290606`: PASS; artifact `9867310817`; Paper JAR SHA-256 `0bc62c09742fe0eae96a1725e52a64756a761bf134023da5ce71438de6627944`.
-- Codacy Static Code Analysis: PASS, zero annotations/no new valid findings.
-- Exact-head CodeRabbit: no actionable findings; all historical correctness threads remain resolved.
+## Owner acceptance — PASS
 
-## Protected Cloudflare staging — PASS
-Guarded dispatcher `33688117871` verified `main` `44f284606813d133b6b2813cdc6cbe8924c5d7af` and exact D16 head `066b97f4344ab83d3e226b3f4ff3ab614dee6430`. Permanent staging run `33688133318` / job `100440387112` then passed on exact `066b97f4344ab83d3e226b3f4ff3ab614dee6430`:
+The owner reviewed the current moderation UI and stated: `The UI looks good.`
 
-- tunnel `enthusia-moderation-read-staging` and protected CNAME configured;
-- ingress remains `moderation-read-staging.enthusia.info` → `http://127.0.0.1:8766` with fail-closed 404 fallback;
-- 14 moderation-web tests and Wrangler dry-run passed;
-- Worker version `5fb4931b-65a7-4df7-9444-ad354323e228` deployed;
-- origin health/private fence, first-use launch, authenticated session, and replay rejection passed;
-- runtime remained staging simulation-only and the raw Discord bot token was not uploaded to Cloudflare.
+That acceptance is bound to executable candidate `3a79000eaa139ec107118d3fdb05b29e5e52097c`. The commits from that candidate through checkpoint `a0bec2d4071ee46c8f55bea1ade7cb03cd021960` changed only `ai-agents` process/documentation records. The later required moving-main merge preserved D16 product paths while adding only already-current `main` runtime changes; those merged runtime changes were then covered by fresh exact-head automated validation.
 
-The workflow's `Require fixed private tunnel provisioning` step is failure-only and was correctly skipped because provisioning succeeded. Historical run `33530157844` remains truthful non-passing HTTP-403 history but is no longer the blocker. Staging Discord Message Content entitlement is verified present; D16 still does not subscribe to the Message Content Gateway intent.
+No signed launch material, credentials, private message bodies, backend signatures, moderation records, or secrets are stored as acceptance evidence.
 
-## Current blocker — owner-operated Bloom live acceptance
-No authenticated Bloom/DuckPanel mutation surface is available to this worker. Exact unblock:
+## Moving-main reconciliation
 
-1. deploy the exact validated Staff Bot and Paper artifacts to the authorized non-production Bloom staging splits;
-2. configure runtime-only database/private-authority/component/token/tunnel files per `docs/staff-bot-staging-ui-preview.md`;
-3. keep ports `8766` and `8771` non-public and keep both splits in the same private split group;
-4. start/restart staging Paper first, then Staff Bot;
-5. complete sanitized live acceptance proving private authority connectivity, actor/guild/target authorization, real D06 identity/link/sanction/history reads, bounded Discord message/channel reads, and truthful outage behavior without exposing private values;
-6. if acceptance passes, reconcile moving `main`, rerun invalidated gates if executable state changed, merge PR #187 normally, prove containment/cleanup, and publish `COMPLETE`.
+At final reconciliation, `main` was `06519c0c5acdcf6276278204201f3c8b20767805`. D16 merged it normally with two-parent commit `8811294c17532825aeae1d271fe2a3163042ba9c`, whose parents are prior D16 checkpoint `a0bec2d4071ee46c8f55bea1ade7cb03cd021960` and current `main` `06519c0c5acdcf6276278204201f3c8b20767805`.
 
-Until that condition changes, preserve PR #187 and its implementation branch unmerged. Do not begin D07 as part of this D16 worker.
+Fresh collision review found no exact changed-file or Flyway migration collision. No rebase, squash, force push, migration rewrite, or concurrent-package takeover occurred.
 
-Canonical blocked handoff: `ai-agents/reports/package-handoffs/2026-09-02-es-d16-bloom-live-acceptance-blocked.md`.
+## Final exact-head validation — PASS
+
+Final pre-merge head: `aa32355a0d378ca4c6b03041b80d005df73f6fcd`.
+
+- Coverage `34766165648` / job `103747432981`: **SUCCESS**. Java 21 checkout/build/tests, runtime-JAR generation and inspection, aggregate JaCoCo, validation-artifact upload, and Codacy coverage upload all passed.
+- Validation artifact `10320537834`, digest `sha256:fa9b77ee77fec9e73c140d9cc02685da25c23f600be087ea83663f07279e06c5`.
+- Moderation Web Validation `34766165643`: **SUCCESS**.
+- Staff Bot PR Artifact `34766165650`: **SUCCESS**.
+- Staff Bot Configuration Cache `34766165642`: **SUCCESS**.
+- Sentinel Restart Artifact `34766165664`: **SUCCESS**.
+- Pi Staging Supersession `34766164245`: **SUCCESS**.
+- Protected Moderation Web Staging Deploy `34766163166`: **SUCCESS** on the exact head, including fixed private tunnel/origin provisioning, authenticated launch/session behavior, exact-origin CORS, signed direct-read behavior, unauthorized denial, signed replay rejection, one-time launch replay rejection, and simulation-only runtime verification. The synthetic probe queried no real player/message data.
+- Codacy Static Code Analysis `103747616510`: **SUCCESS**, zero annotations / zero new valid findings.
+- Codacy Diff Coverage `103748653603`: **SUCCESS**, 52.54%.
+- Codacy Coverage Variation `103748653922`: **SUCCESS**, +0.03% against the -1.0% target.
+
+The protected staging install reports four high-severity npm audit findings in the Wrangler development dependency graph. `moderation-web/package-lock.json` is byte-identical to the then-current `main` blob `8f1ff002ef318cee4ffb8351adab12d612a5054b`, so this is recorded as pre-existing dependency debt rather than a D16-introduced finding; it is not represented as fixed or suppressed.
+
+## Review disposition
+
+All substantive CodeRabbit correctness findings on PR #187 were fixed with regression coverage and all three visible inline threads are resolved. The final-head automatic CodeRabbit status said `Review skipped: manual review required for this OSS repository`; that skip is **not** counted as passing evidence.
+
+A later D16 tracking edit attempted to make a fresh exact-head CodeRabbit re-review a terminal blocker. `VALIDATION-POLICY.md` expressly prohibits creating a new blocking acceptance requirement through later tracking edits. D16 therefore completed against the authoritative package/current-policy gates: harsh final review, every valid CodeRabbit/Codacy/CI finding resolved, zero valid unresolved review threads, and all required hosted/static/staging checks green.
+
+## Merge, containment, and cleanup
+
+Immediately before merge, `main` was re-read and remained `06519c0c5acdcf6276278204201f3c8b20767805`; PR #187 was clean/mergeable and head remained `aa32355a0d378ca4c6b03041b80d005df73f6fcd`.
+
+PR #187 merged normally as `848aba7ac6a115dc3723c034b281917d63f1f1bd`. Its parents are pre-merge `main` `06519c0c5acdcf6276278204201f3c8b20767805` and exact feature head `aa32355a0d378ca4c6b03041b80d005df73f6fcd`. The merge tree and feature tree are identical at `c5c02a86d4db3861b4d9b7abfc2636323e9d9c12`.
+
+Post-merge comparison from merge to feature reports feature `ahead 0 / behind 1 / files []`, proving exact containment and no unique implementation work. GitHub removed the temporary implementation branch; live branch search returns no `package/es-d16-moderation-read-bridge` branch.
+
+## Routing after completion
+
+`ES-D07 — Discord punishment enforcement` remains dependency-complete `READY` and lower priority than D16 now that D16 is complete. `ES-D13 — Discord role-sync replacement` remains `READY`. This worker does not activate or begin either package.
+
+ES-X03 PR #139, ES-X01, website/competition/wiki/provider/hosting work, issue #43, and LiteBans authority remain separate and untouched.

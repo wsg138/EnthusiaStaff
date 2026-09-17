@@ -35,6 +35,7 @@ class CommandPermissionConfigurationTest {
             Map.entry("freeze", FREEZE_PERMISSION),
             Map.entry("unfreeze", FREEZE_PERMISSION),
             Map.entry("staff", "enthusiastaff.staffmode"),
+            Map.entry("fakebase", "enthusiastaff.cheattester.fake-base"),
             Map.entry("vanish", "enthusiastaff.vanish"),
             Map.entry("staffchat", "enthusiastaff.staffchat"),
             Map.entry("client", "enthusiastaff.client"),

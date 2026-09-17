@@ -91,6 +91,26 @@ final class JdbcReportQueryStore {
         }
     }
 
+    List<ReportSummary> listActiveForTarget(UUID targetId, int limit) {
+        validateTargetListRequest(targetId, limit);
+        int effectiveLimit = Math.min(limit, currentPolicy().queryLimit());
+        String sql = """
+                SELECT r.report_id, r.reporter_id, r.target_id, r.reason_id, r.state,
+                       r.assigned_to, r.server_id, r.created_at, r.updated_at, r.revision
+                FROM reports r
+                WHERE r.target_id = ? AND r.state IN ('OPEN', 'CLAIMED', 'AWAITING_REVIEW')
+                ORDER BY r.created_at DESC LIMIT ?
+                """;
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setBytes(1, UuidBytes.toBytes(targetId));
+            statement.setInt(2, effectiveLimit);
+            return readSummaries(statement);
+        } catch (SQLException | IllegalArgumentException exception) {
+            throw new ModerationPersistenceException("Unable to list active reports for target", exception);
+        }
+    }
+
     Optional<ReportDetails> details(UUID reportId) {
         if (reportId == null) {
             throw new IllegalArgumentException("reportId must be present");
@@ -121,6 +141,14 @@ final class JdbcReportQueryStore {
         if (queue == null || actorId == null || limit < 1 || limit > ABSOLUTE_QUERY_LIMIT) {
             throw new IllegalArgumentException(
                     "valid report queue, actor, and limit from 1 to " + ABSOLUTE_QUERY_LIMIT + " are required"
+            );
+        }
+    }
+
+    private static void validateTargetListRequest(UUID targetId, int limit) {
+        if (targetId == null || limit < 1 || limit > ABSOLUTE_QUERY_LIMIT) {
+            throw new IllegalArgumentException(
+                    "valid report target and limit from 1 to " + ABSOLUTE_QUERY_LIMIT + " are required"
             );
         }
     }
