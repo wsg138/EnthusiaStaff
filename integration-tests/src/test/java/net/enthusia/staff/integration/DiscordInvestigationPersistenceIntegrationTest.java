@@ -45,6 +45,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 @Testcontainers
 class DiscordInvestigationPersistenceIntegrationTest {
     private static final Instant NOW = Instant.parse("2026-09-15T12:00:00Z");
+    private static final String ACTOR_NAME = "D09Staff";
     private static final UUID ACTOR = UUID.fromString("10000000-0000-0000-0000-000000000001");
     private static final DiscordUserId TARGET = new DiscordUserId("223456789012345678");
     private static final DiscordGuildId GUILD = new DiscordGuildId("1410303324745371709");
@@ -60,7 +61,7 @@ class DiscordInvestigationPersistenceIntegrationTest {
         try (HikariDataSource dataSource = open()) {
             MariaDb.migrate(dataSource);
         }
-        MariaDbIntegrationSupport.insertPlayer(DATABASE, ACTOR, "D09Staff", NOW.minusSeconds(60));
+        MariaDbIntegrationSupport.insertPlayer(DATABASE, ACTOR, ACTOR_NAME, NOW.minusSeconds(60));
     }
 
     @Test
@@ -68,7 +69,7 @@ class DiscordInvestigationPersistenceIntegrationTest {
         try (HikariDataSource dataSource = open()) {
             ModerationSubjectId subjectId = ensureSubject(dataSource, TARGET);
             JdbcDiscordInvestigationStore store = new JdbcDiscordInvestigationStore(dataSource);
-            Actor actor = new Actor(ACTOR, "D09Staff", StaffRank.ADMIN);
+            Actor actor = new Actor(ACTOR, ACTOR_NAME, StaffRank.ADMIN);
             DiscordInvestigationStore.InvestigationCaseDraft caseDraft = new DiscordInvestigationStore.InvestigationCaseDraft(
                     "d09:test:case:1", subjectId, "Investigation only", actor, NOW
             );
@@ -81,27 +82,7 @@ class DiscordInvestigationPersistenceIntegrationTest {
             UUID noteId = UUID.fromString("30000000-0000-0000-0000-000000000001");
             InvestigationNote.Scope scope = new InvestigationNote.Scope(
                     InvestigationNote.ScopeType.CASE, caseId.value());
-            var created = store.createNote(new DiscordInvestigationStore.NoteDraft(
-                    noteId, "d09:test:note:1", subjectId, scope,
-                    InvestigationNote.Visibility.STAFF, "first private version", ACTOR, NOW.plusSeconds(1)
-            ));
-            assertEquals(0L, created.revision());
-
-            DiscordInvestigationStore.NoteEdit edit = new DiscordInvestigationStore.NoteEdit(
-                    noteId, "d09:test:note-edit:1", subjectId, 0,
-                    "second private version", ACTOR, NOW.plusSeconds(2)
-            );
-            var updated = store.editNote(edit);
-            assertEquals(1L, updated.revision());
-            assertTrue(store.editNote(edit).replayed());
-            assertThrows(ModerationPersistenceException.class, () -> store.editNote(
-                    new DiscordInvestigationStore.NoteEdit(
-                            noteId, "d09:test:note-edit:stale", subjectId, 0,
-                            "stale version", ACTOR, NOW.plusSeconds(3)
-                    )
-            ));
-            assertEquals(List.of(1L, 0L), store.noteHistory(noteId, 10).stream()
-                    .map(InvestigationNote.Version::revision).toList());
+            exerciseVersionedNote(store, noteId, subjectId, scope);
             try (DiscordStaffReadRuntime reads = DiscordStaffReadRuntime.open(
                     MariaDbIntegrationSupport.databaseConfig(DATABASE), Clock.fixed(NOW, ZoneOffset.UTC))) {
                 assertEquals(List.of("second private version"), reads.recentInvestigationNotes(subjectId, 10).stream()
@@ -112,6 +93,40 @@ class DiscordInvestigationPersistenceIntegrationTest {
                 assertEquals(caseId, reads.recentCases(subjectId, 10).getFirst().caseId());
             }
         }
+    }
+
+    private static void exerciseVersionedNote(
+            JdbcDiscordInvestigationStore store,
+            UUID noteId,
+            ModerationSubjectId subjectId,
+            InvestigationNote.Scope scope
+    ) {
+        DiscordInvestigationStore.NoteDraft noteDraft = new DiscordInvestigationStore.NoteDraft(
+                noteId, "d09:test:note:1", subjectId, scope,
+                InvestigationNote.Visibility.STAFF, "first private version", ACTOR, NOW.plusSeconds(1)
+        );
+        assertEquals(0L, store.createNote(noteDraft).revision());
+        DiscordInvestigationStore.NoteEdit edit = new DiscordInvestigationStore.NoteEdit(
+                noteId, "d09:test:note-edit:1", subjectId, 0,
+                "second private version", ACTOR, NOW.plusSeconds(2)
+        );
+        assertEquals(1L, store.editNote(edit).revision());
+        assertTrue(store.editNote(edit).replayed());
+        assertTrue(store.createNote(noteDraft).replayed());
+        assertThrows(ModerationPersistenceException.class, () -> store.editNote(
+                new DiscordInvestigationStore.NoteEdit(
+                        noteId, edit.operationKey(), subjectId, 1,
+                        edit.text(), ACTOR, NOW.plusSeconds(3)
+                )
+        ));
+        assertThrows(ModerationPersistenceException.class, () -> store.editNote(
+                new DiscordInvestigationStore.NoteEdit(
+                        noteId, "d09:test:note-edit:stale", subjectId, 0,
+                        "stale version", ACTOR, NOW.plusSeconds(4)
+                )
+        ));
+        assertEquals(List.of(1L, 0L), store.noteHistory(noteId, 10).stream()
+                .map(InvestigationNote.Version::revision).toList());
     }
 
     @Test
@@ -139,7 +154,7 @@ class DiscordInvestigationPersistenceIntegrationTest {
             JdbcDiscordInvestigationStore store = new JdbcDiscordInvestigationStore(dataSource);
             CaseId caseId = store.createInvestigationCase(new DiscordInvestigationStore.InvestigationCaseDraft(
                     "d09:test:case:2", subjectId, "Evidence retention",
-                    new Actor(ACTOR, "D09Staff", StaffRank.ADMIN), NOW
+                    new Actor(ACTOR, ACTOR_NAME, StaffRank.ADMIN), NOW
             )).caseId();
 
             UUID evidenceId = UUID.fromString("40000000-0000-0000-0000-000000000001");
@@ -236,7 +251,7 @@ class DiscordInvestigationPersistenceIntegrationTest {
         );
         return DiscordPunishment.pending(
                 UUID.randomUUID(), subjectId, userId, GUILD,
-                new Actor(ACTOR, "D09Staff", StaffRank.ADMIN), intent, NOW.plusMillis(index), "pending"
+                new Actor(ACTOR, ACTOR_NAME, StaffRank.ADMIN), intent, NOW.plusMillis(index), "pending"
         );
     }
 

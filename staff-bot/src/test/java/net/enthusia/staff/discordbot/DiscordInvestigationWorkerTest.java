@@ -9,7 +9,7 @@ import java.time.Instant;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -122,7 +122,7 @@ class DiscordInvestigationWorkerTest {
     }
 
     private static final class FakeStore implements DiscordInvestigationStore {
-        private final Map<String, EvasionAlert> alerts = new LinkedHashMap<>();
+        private final Map<String, EvasionAlert> alerts = new ConcurrentHashMap<>();
         private EvasionCandidate candidate;
 
         private FakeStore(EvasionCandidate candidate) {

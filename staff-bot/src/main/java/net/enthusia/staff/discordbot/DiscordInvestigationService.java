@@ -225,7 +225,7 @@ final class DiscordInvestigationService {
     }
 
     private AlertResult resolve(TargetContext context, UUID alertId, long expectedRevision) {
-        EvasionAlert alert = requireAlert(context, alertId);
+        requireAlert(context, alertId);
         EvasionAlert resolved = store.resolveEvasionAlert(alertId, expectedRevision, clock.instant());
         return new AlertResult(resolved.alertId(), resolved.revision(), resolved.replayed());
     }

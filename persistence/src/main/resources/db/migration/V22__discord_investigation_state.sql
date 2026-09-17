@@ -7,7 +7,7 @@ ALTER TABLE cases
     ADD CONSTRAINT ck_cases_target_or_subject
         CHECK (target_id IS NOT NULL OR subject_id IS NOT NULL);
 
-UPDATE cases c
+UPDATE cases c -- nosemgrep -- EnthusiaStaff schema; generic RAC_* table policy is inapplicable.
 JOIN moderation_subject_minecraft_identities membership
   ON membership.player_id = c.target_id
 SET c.subject_id = membership.subject_id

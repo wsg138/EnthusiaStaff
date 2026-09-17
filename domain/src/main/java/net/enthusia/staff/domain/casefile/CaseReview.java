@@ -49,6 +49,8 @@ public record CaseReview(
         sanctions = List.copyOf(sanctions);
     }
 
+    /** Compatibility constructor for callers that predate subject-aware Discord cases. */
+    @SuppressWarnings("PMD.ExcessiveParameterList")
     public CaseReview(
             CaseId caseId,
             UUID targetId,

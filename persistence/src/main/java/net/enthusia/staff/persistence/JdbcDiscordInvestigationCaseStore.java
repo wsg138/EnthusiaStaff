@@ -31,6 +31,18 @@ final class JdbcDiscordInvestigationCaseStore {
         this.dataSource = dataSource;
     }
 
+    private record CanonicalCaseDraft(
+            String operationKey,
+            ModerationSubjectId subjectId,
+            Actor actor,
+            String publicReason,
+            String exactReason,
+            String family,
+            String explanation,
+            Instant issuedAt
+    ) {
+    }
+
     InvestigationCase ensurePunishmentCase(PunishmentCaseDraft draft) {
         return JdbcTransactionSupport.execute(dataSource, "Unable to reconcile Discord punishment case", connection -> {
             Current current = byPunishment(connection, draft.punishmentId(), true);
@@ -105,11 +117,10 @@ final class JdbcDiscordInvestigationCaseStore {
             CaseId caseId,
             PunishmentCaseDraft draft
     ) throws SQLException {
-        insertCanonicalCase(
-                connection, caseId, draft.operationKey(), draft.subjectId(), draft.issuer(),
-                truncate(draft.summary(), 160), "DISCORD_" + draft.consequenceType().name(),
-                "DISCORD", draft.summary(), draft.observedAt()
-        );
+        insertCanonicalCase(connection, caseId, new CanonicalCaseDraft(
+                draft.operationKey(), draft.subjectId(), draft.issuer(), truncate(draft.summary(), 160),
+                "DISCORD_" + draft.consequenceType().name(), "DISCORD", draft.summary(), draft.observedAt()
+        ));
     }
 
     private static void insertCanonicalInvestigationCase(
@@ -117,26 +128,18 @@ final class JdbcDiscordInvestigationCaseStore {
             CaseId caseId,
             InvestigationCaseDraft draft
     ) throws SQLException {
-        insertCanonicalCase(
-                connection, caseId, draft.operationKey(), draft.subjectId(), draft.openedBy(),
-                "Private Discord investigation", "DISCORD_INVESTIGATION", "DISCORD_INVESTIGATION",
-                draft.summary(), draft.openedAt()
-        );
+        insertCanonicalCase(connection, caseId, new CanonicalCaseDraft(
+                draft.operationKey(), draft.subjectId(), draft.openedBy(), "Private Discord investigation",
+                "DISCORD_INVESTIGATION", "DISCORD_INVESTIGATION", draft.summary(), draft.openedAt()
+        ));
     }
 
     private static void insertCanonicalCase(
             Connection connection,
             CaseId caseId,
-            String operationKey,
-            ModerationSubjectId subjectId,
-            Actor actor,
-            String publicReason,
-            String exactReason,
-            String family,
-            String explanation,
-            Instant issuedAt
+            CanonicalCaseDraft draft
     ) throws SQLException {
-        UUID targetId = mainMinecraftTarget(connection, subjectId);
+        UUID targetId = mainMinecraftTarget(connection, draft.subjectId());
         try (PreparedStatement statement = connection.prepareStatement("""
                 INSERT INTO cases(
                     case_id, idempotency_key, target_id, subject_id, actor_id, actor_name, actor_rank,
@@ -145,18 +148,18 @@ final class JdbcDiscordInvestigationCaseStore {
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PRIVATE', 'OPEN', ?)
                 """)) {
             statement.setString(1, caseId.value());
-            statement.setString(2, operationKey);
+            statement.setString(2, draft.operationKey());
             setUuid(statement, 3, targetId);
-            statement.setBytes(4, UuidBytes.toBytes(subjectId.value()));
-            statement.setBytes(5, UuidBytes.toBytes(actor.id()));
-            statement.setString(6, actor.displayName());
-            statement.setString(7, actor.rank().name());
-            statement.setString(8, publicReason);
-            statement.setString(9, truncate(exactReason, 96));
-            statement.setString(10, truncate(family, 64));
-            statement.setString(11, explanation);
+            statement.setBytes(4, UuidBytes.toBytes(draft.subjectId().value()));
+            statement.setBytes(5, UuidBytes.toBytes(draft.actor().id()));
+            statement.setString(6, draft.actor().displayName());
+            statement.setString(7, draft.actor().rank().name());
+            statement.setString(8, draft.publicReason());
+            statement.setString(9, truncate(draft.exactReason(), 96));
+            statement.setString(10, truncate(draft.family(), 64));
+            statement.setString(11, draft.explanation());
             statement.setString(12, CONFIGURATION_VERSION);
-            statement.setTimestamp(13, Timestamp.from(issuedAt));
+            statement.setTimestamp(13, Timestamp.from(draft.issuedAt()));
             JdbcTransactionSupport.requireSingleUpdate(statement.executeUpdate(), "authoritative case was not inserted");
         }
     }
@@ -298,36 +301,95 @@ final class JdbcDiscordInvestigationCaseStore {
     }
 
     private Current byId(Connection connection, CaseId caseId, boolean lock) throws SQLException {
-        return queryOne(connection, "i.case_id = ?", caseId.value(), lock);
-    }
-
-    private Current byPunishment(Connection connection, UUID punishmentId, boolean lock) throws SQLException {
-        return queryOne(connection, "i.punishment_id = ?", UuidBytes.toBytes(punishmentId), lock);
-    }
-
-    private Current byOperation(Connection connection, String operationKey, boolean lock) throws SQLException {
-        return queryOne(connection, "i.operation_key = ?", operationKey, lock);
-    }
-
-    private Current queryOne(Connection connection, String predicate, Object value, boolean lock) throws SQLException {
-        String sql = """
+        if (lock) {
+            try (PreparedStatement statement = connection.prepareStatement("""
+                    SELECT i.case_id, i.operation_key, i.subject_id, i.source, i.punishment_id,
+                           c.internal_explanation AS summary, c.state, c.actor_id, c.issued_at,
+                           i.last_activity_at, i.closed_at, i.punishment_ended_at,
+                           i.source_revision, i.revision
+                    FROM discord_investigation_cases i
+                    JOIN cases c ON c.case_id = i.case_id
+                    WHERE i.case_id = ? FOR UPDATE
+                    """)) {
+                return queryOne(statement, caseId.value());
+            }
+        }
+        try (PreparedStatement statement = connection.prepareStatement("""
                 SELECT i.case_id, i.operation_key, i.subject_id, i.source, i.punishment_id,
                        c.internal_explanation AS summary, c.state, c.actor_id, c.issued_at,
                        i.last_activity_at, i.closed_at, i.punishment_ended_at,
                        i.source_revision, i.revision
                 FROM discord_investigation_cases i
                 JOIN cases c ON c.case_id = i.case_id
-                WHERE %s%s
-                """.formatted(predicate, lock ? " FOR UPDATE" : "");
-        try (PreparedStatement statement = connection.prepareStatement(sql)) {
-            if (value instanceof byte[] bytes) {
-                statement.setBytes(1, bytes);
-            } else {
-                statement.setString(1, value.toString());
+                WHERE i.case_id = ?
+                """)) {
+            return queryOne(statement, caseId.value());
+        }
+    }
+
+    private Current byPunishment(Connection connection, UUID punishmentId, boolean lock) throws SQLException {
+        byte[] value = UuidBytes.toBytes(punishmentId);
+        if (lock) {
+            try (PreparedStatement statement = connection.prepareStatement("""
+                    SELECT i.case_id, i.operation_key, i.subject_id, i.source, i.punishment_id,
+                           c.internal_explanation AS summary, c.state, c.actor_id, c.issued_at,
+                           i.last_activity_at, i.closed_at, i.punishment_ended_at,
+                           i.source_revision, i.revision
+                    FROM discord_investigation_cases i
+                    JOIN cases c ON c.case_id = i.case_id
+                    WHERE i.punishment_id = ? FOR UPDATE
+                    """)) {
+                return queryOne(statement, value);
             }
-            try (ResultSet rows = statement.executeQuery()) {
-                return rows.next() ? read(rows) : null;
+        }
+        try (PreparedStatement statement = connection.prepareStatement("""
+                SELECT i.case_id, i.operation_key, i.subject_id, i.source, i.punishment_id,
+                       c.internal_explanation AS summary, c.state, c.actor_id, c.issued_at,
+                       i.last_activity_at, i.closed_at, i.punishment_ended_at,
+                       i.source_revision, i.revision
+                FROM discord_investigation_cases i
+                JOIN cases c ON c.case_id = i.case_id
+                WHERE i.punishment_id = ?
+                """)) {
+            return queryOne(statement, value);
+        }
+    }
+
+    private Current byOperation(Connection connection, String operationKey, boolean lock) throws SQLException {
+        if (lock) {
+            try (PreparedStatement statement = connection.prepareStatement("""
+                    SELECT i.case_id, i.operation_key, i.subject_id, i.source, i.punishment_id,
+                           c.internal_explanation AS summary, c.state, c.actor_id, c.issued_at,
+                           i.last_activity_at, i.closed_at, i.punishment_ended_at,
+                           i.source_revision, i.revision
+                    FROM discord_investigation_cases i
+                    JOIN cases c ON c.case_id = i.case_id
+                    WHERE i.operation_key = ? FOR UPDATE
+                    """)) {
+                return queryOne(statement, operationKey);
             }
+        }
+        try (PreparedStatement statement = connection.prepareStatement("""
+                SELECT i.case_id, i.operation_key, i.subject_id, i.source, i.punishment_id,
+                       c.internal_explanation AS summary, c.state, c.actor_id, c.issued_at,
+                       i.last_activity_at, i.closed_at, i.punishment_ended_at,
+                       i.source_revision, i.revision
+                FROM discord_investigation_cases i
+                JOIN cases c ON c.case_id = i.case_id
+                WHERE i.operation_key = ?
+                """)) {
+            return queryOne(statement, operationKey);
+        }
+    }
+
+    private static Current queryOne(PreparedStatement statement, Object value) throws SQLException {
+        if (value instanceof byte[] bytes) {
+            statement.setBytes(1, bytes);
+        } else {
+            statement.setString(1, value.toString());
+        }
+        try (ResultSet rows = statement.executeQuery()) {
+            return rows.next() ? read(rows) : null;
         }
     }
 

@@ -144,13 +144,28 @@ public record EvasionAlert(
             Optional<String> errorCode,
             Optional<Instant> nextAttemptAt
     ) {
-        if (delivery == DeliveryState.DELIVERED && (errorCode.isPresent() || nextAttemptAt.isPresent())) {
+        switch (delivery) {
+            case DELIVERED -> requireDeliveredState(errorCode, nextAttemptAt);
+            case PENDING -> requirePendingState(errorCode, nextAttemptAt);
+            case RETRY -> requireRetryState(errorCode, nextAttemptAt);
+            default -> throw new IllegalStateException("unsupported alert delivery state");
+        }
+    }
+
+    private static void requireDeliveredState(Optional<String> errorCode, Optional<Instant> nextAttemptAt) {
+        if (errorCode.isPresent() || nextAttemptAt.isPresent()) {
             throw new IllegalArgumentException("delivered alert channel cannot retain retry state");
         }
-        if (delivery == DeliveryState.PENDING && (errorCode.isPresent() || nextAttemptAt.isEmpty())) {
+    }
+
+    private static void requirePendingState(Optional<String> errorCode, Optional<Instant> nextAttemptAt) {
+        if (errorCode.isPresent() || nextAttemptAt.isEmpty()) {
             throw new IllegalArgumentException("pending alert channel requires a due time and no error");
         }
-        if (delivery == DeliveryState.RETRY && (errorCode.isEmpty() || nextAttemptAt.isEmpty())) {
+    }
+
+    private static void requireRetryState(Optional<String> errorCode, Optional<Instant> nextAttemptAt) {
+        if (errorCode.isEmpty() || nextAttemptAt.isEmpty()) {
             throw new IllegalArgumentException("retry alert channel requires error and due time");
         }
     }

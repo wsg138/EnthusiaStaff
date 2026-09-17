@@ -182,8 +182,11 @@ final class PaperCommandRegistrar {
         Supplier<PlayerDirectory> players = storage(PaperStorageBindings::playerDirectory);
         Supplier<CaseLookup> cases = storage(PaperStorageBindings::caseLookup);
         SanctionChangeGuiController changeGui = new SanctionChangeGuiController(
-                plugin(), clock(), writeMode(), changes, players, cases,
-                storage(PaperStorageBindings::caseReviewStore), authorization(), workers()
+                plugin(), clock(), writeMode(), changes,
+                new SanctionChangeGuiController.Stores(
+                        players, cases, storage(PaperStorageBindings::caseReviewStore)
+                ),
+                authorization(), workers()
         );
         plugin().getServer().getPluginManager().registerEvents(changeGui, plugin());
         SanctionChangeCommand command = new SanctionChangeCommand(

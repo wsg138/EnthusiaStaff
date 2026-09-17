@@ -365,6 +365,7 @@ final class JdaStaffModerationListener extends ListenerAdapter {
                     controller.moderateDiscord(actorId, actorName, targetId), targetId));
             case RESOLVE -> dispatchInvestigation(event, () -> investigation.resolveAlert(
                     actorId, actorName, targetId, action.alertId().orElseThrow()));
+            default -> throw new IllegalStateException("unsupported linked-alt alert action");
         }
     }
 

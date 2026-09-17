@@ -56,21 +56,19 @@ public final class DiscordStaffAuthorityEndpoint implements AutoCloseable {
         this.luckPerms = luckPerms;
         this.authenticator = new DiscordStaffAuthorityAuthenticator(
                 configuration.secret(), configuration.privateSplit());
-        HttpServer createdServer = HttpServer.create(
+        this.server = HttpServer.create(
                 bindAddress(configuration.bindHost(), configuration.port()), BACKLOG);
-        ThreadPoolExecutor createdExecutor = executor();
+        this.executor = executor();
         try {
-            createdServer.setExecutor(createdExecutor);
-            createdServer.createContext(RANK_PATH, this::handleRank);
-            createdServer.createContext(ALERT_PATH, this::handleAlert);
-            createdServer.start();
+            server.setExecutor(executor);
+            server.createContext(RANK_PATH, this::handleRank);
+            server.createContext(ALERT_PATH, this::handleAlert);
+            server.start();
         } catch (RuntimeException exception) {
-            createdServer.stop(0);
-            createdExecutor.shutdownNow();
+            server.stop(0);
+            executor.shutdownNow();
             throw exception;
         }
-        this.server = createdServer;
-        this.executor = createdExecutor;
     }
 
     public static Optional<DiscordStaffAuthorityEndpoint> startIfConfigured(JavaPlugin plugin) {

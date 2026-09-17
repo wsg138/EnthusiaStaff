@@ -28,7 +28,7 @@ final class JdbcDiscordInvestigationNoteStore {
         return JdbcTransactionSupport.execute(dataSource, "Unable to create Discord private note", connection -> {
             Current replay = byOperation(connection, draft.operationKey(), true);
             if (replay != null) {
-                requireCreateReplay(replay, draft);
+                requireCreateReplay(connection, replay, draft);
                 return replay.toDomain(true);
             }
             insertNote(connection, draft);
@@ -299,7 +299,7 @@ final class JdbcDiscordInvestigationNoteStore {
 
     private static VersionReplay versionReplay(Connection connection, String operationKey) throws SQLException {
         try (PreparedStatement statement = connection.prepareStatement("""
-                SELECT note_id, note_text, changed_by
+                SELECT note_id, revision, note_text, changed_by
                 FROM discord_private_note_versions
                 WHERE operation_key = ?
                 """)) {
@@ -307,6 +307,7 @@ final class JdbcDiscordInvestigationNoteStore {
             try (ResultSet rows = statement.executeQuery()) {
                 return rows.next() ? new VersionReplay(
                         UuidBytes.fromBytes(rows.getBytes("note_id")),
+                        rows.getLong("revision"),
                         rows.getString("note_text"),
                         UuidBytes.fromBytes(rows.getBytes("changed_by"))
                 ) : null;
@@ -320,22 +321,42 @@ final class JdbcDiscordInvestigationNoteStore {
         }
     }
 
-    private static void requireCreateReplay(Current current, NoteDraft draft) throws SQLException {
-        if (!current.noteId().equals(draft.noteId()) || !current.subjectId().equals(draft.subjectId())
-                || !current.scope().equals(draft.scope()) || current.visibility() != draft.visibility()
-                || !current.text().equals(draft.text()) || !current.createdBy().equals(draft.actorId())) {
+    private static void requireCreateReplay(
+            Connection connection,
+            Current current,
+            NoteDraft draft
+    ) throws SQLException {
+        VersionReplay original = versionReplay(connection, draft.operationKey());
+        if (!sameCreateIdentity(current, draft) || !sameCreateVersion(original, draft)) {
             throw new SQLException("Discord private note operation key was reused for a different request");
         }
     }
 
+    private static boolean sameCreateIdentity(Current current, NoteDraft draft) {
+        return current.noteId().equals(draft.noteId())
+                && current.subjectId().equals(draft.subjectId())
+                && current.scope().equals(draft.scope())
+                && current.visibility() == draft.visibility()
+                && current.createdBy().equals(draft.actorId());
+    }
+
+    private static boolean sameCreateVersion(VersionReplay original, NoteDraft draft) {
+        return original != null
+                && original.revision() == 0
+                && original.noteId().equals(draft.noteId())
+                && original.text().equals(draft.text())
+                && original.actorId().equals(draft.actorId());
+    }
+
     private static void requireEditReplay(VersionReplay replay, NoteEdit edit) throws SQLException {
-        if (!replay.noteId().equals(edit.noteId()) || !replay.text().equals(edit.text())
+        if (replay.revision() <= 0 || replay.revision() - 1 != edit.expectedRevision()
+                || !replay.noteId().equals(edit.noteId()) || !replay.text().equals(edit.text())
                 || !replay.actorId().equals(edit.actorId())) {
             throw new SQLException("Discord private note edit operation key was reused for a different request");
         }
     }
 
-    private record VersionReplay(UUID noteId, String text, UUID actorId) {
+    private record VersionReplay(UUID noteId, long revision, String text, UUID actorId) {
     }
 
     private record Current(

@@ -7,7 +7,12 @@ import net.enthusia.staff.domain.investigation.EvasionAlert;
 /** Compact private component identifiers; every action is reauthorized when clicked. */
 final class DiscordInvestigationAlertControls {
     private static final String PREFIX = "d09alert:";
+    private static final int BASE_PARTS = 2;
+    private static final int RESOLVE_PARTS = 3;
+    private static final int TARGET_PART = 1;
+    private static final int ALERT_PART = 2;
     private static final int MAX_COMPONENT_ID = 100;
+    private static final long INVALID_DISCORD_ID = 0L;
 
     enum Type {
         LINKED,
@@ -18,7 +23,7 @@ final class DiscordInvestigationAlertControls {
 
     record Action(Type type, long targetDiscordId, Optional<UUID> alertId) {
         Action {
-            if (type == null || targetDiscordId == 0L || alertId == null
+            if (type == null || targetDiscordId == INVALID_DISCORD_ID || alertId == null
                     || (type == Type.RESOLVE) != alertId.isPresent()) {
                 throw new IllegalArgumentException("linked-alt alert action is invalid");
             }
@@ -54,17 +59,18 @@ final class DiscordInvestigationAlertControls {
         }
         String[] parts = customId.substring(PREFIX.length()).split(":", -1);
         Type type = type(parts);
-        int expected = type == Type.RESOLVE ? 3 : 2;
+        int expected = type == Type.RESOLVE ? RESOLVE_PARTS : BASE_PARTS;
         if (parts.length != expected) {
             throw new IllegalArgumentException("linked-alt alert action is malformed");
         }
-        long targetId = parseUnsigned(parts[1]);
-        Optional<UUID> alertId = type == Type.RESOLVE ? Optional.of(uuid(parts[2])) : Optional.empty();
+        long targetId = parseUnsigned(parts[TARGET_PART]);
+        Optional<UUID> alertId = type == Type.RESOLVE
+                ? Optional.of(uuid(parts[ALERT_PART])) : Optional.empty();
         return new Action(type, targetId, alertId);
     }
 
     private static Type type(String[] parts) {
-        if (parts.length < 2) {
+        if (parts.length < BASE_PARTS) {
             throw new IllegalArgumentException("linked-alt alert action is malformed");
         }
         return switch (parts[0]) {
@@ -92,7 +98,7 @@ final class DiscordInvestigationAlertControls {
     private static long parseUnsigned(String value) {
         try {
             long parsed = Long.parseUnsignedLong(value);
-            if (parsed == 0L) {
+            if (parsed == INVALID_DISCORD_ID) {
                 throw new IllegalArgumentException("Discord target id must be positive");
             }
             return parsed;

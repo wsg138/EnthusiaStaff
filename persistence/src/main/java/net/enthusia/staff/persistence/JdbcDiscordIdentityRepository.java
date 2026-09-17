@@ -363,7 +363,7 @@ final class JdbcDiscordIdentityRepository {
 
     private static ModerationSubjectId insertFreshSubject(Connection connection, Instant now) throws SQLException {
         for (int attempt = 0; attempt < SUBJECT_ALLOCATION_ATTEMPTS; attempt++) {
-            ModerationSubjectId subjectId = new ModerationSubjectId(UUID.randomUUID());
+            ModerationSubjectId subjectId = randomSubjectId();
             try {
                 insertSubject(connection, subjectId, now);
                 return subjectId;
@@ -374,6 +374,10 @@ final class JdbcDiscordIdentityRepository {
             }
         }
         throw new SQLException("unable to allocate unique moderation subject id");
+    }
+
+    private static ModerationSubjectId randomSubjectId() {
+        return new ModerationSubjectId(UUID.randomUUID());
     }
 
     private static void insertSubject(Connection connection, ModerationSubjectId subjectId, Instant now)

@@ -38,6 +38,8 @@ import org.bukkit.plugin.java.JavaPlugin;
 public final class CaseCommand implements CommandExecutor {
     private static final String RESTORE_PERMISSION = "enthusiastaff.case.restoreitems";
     private static final String ENTRY_SEPARATOR = " | ";
+    private static final int CASE_SUBCOMMAND_ARGUMENT_COUNT = 2;
+    private static final int DIRECT_CASE_ARGUMENT_COUNT = 1;
 
     private final JavaPlugin plugin;
     private final Supplier<CaseLookup> cases;
@@ -99,9 +101,9 @@ public final class CaseCommand implements CommandExecutor {
             return true;
         }
         String rawCaseId;
-        if (arguments.length == 1) {
+        if (arguments.length == DIRECT_CASE_ARGUMENT_COUNT) {
             rawCaseId = arguments[0];
-        } else if (arguments.length == 2 && arguments[0].equalsIgnoreCase("view")) {
+        } else if (arguments.length == CASE_SUBCOMMAND_ARGUMENT_COUNT && arguments[0].equalsIgnoreCase("view")) {
             rawCaseId = arguments[1];
         } else {
             sender.sendMessage(Component.text("Usage: /" + label + " [view] <case-id>"));
@@ -165,6 +167,19 @@ public final class CaseCommand implements CommandExecutor {
         CaseReview review = detail.caseReview();
         DateTimeFormatter formatter = ModerationTimestampFormatter.inZone(settings.historyTimezone());
         List<Component> lines = new ArrayList<>();
+        appendHeader(lines, review, formatter);
+        appendPolicy(lines, review);
+        appendSensitive(lines, review, sensitive);
+        appendSanctions(lines, detail, review, formatter);
+        appendTimeline(lines, detail.timeline(), formatter, sensitive);
+        return List.copyOf(lines);
+    }
+
+    private static void appendHeader(
+            List<Component> lines,
+            CaseReview review,
+            DateTimeFormatter formatter
+    ) {
         lines.add(Component.text(
                 "Case " + review.caseId().value() + " | subject "
                         + review.minecraftTargetId().map(UUID::toString).orElse("Discord-only moderation subject")
@@ -174,50 +189,66 @@ public final class CaseCommand implements CommandExecutor {
         lines.add(Component.text(
                 "Created " + formatter.format(review.issuedAt()) + " | public reason: " + review.publicReason()
         ));
+    }
+
+    private static void appendPolicy(List<Component> lines, CaseReview review) {
         review.punishmentStep().ifPresent(step -> lines.add(Component.text(
                 "Policy snapshot: version " + review.configurationVersion()
                         + " | raw/effective ordinal " + step.rawOrdinal() + "/" + step.effectiveOrdinal()
-                        + " | selected ordinal " + step.selectedOrdinal()
-                                .map(Object::toString)
-                                .orElse("unavailable")
+                        + " | selected ordinal " + step.selectedOrdinal().map(Object::toString).orElse("unavailable")
                         + " | step " + step.label()
                         + " | recommendation " + step.recommendedSanctions()
                                 .map(CaseCommand::recommendation)
                                 .orElse("unavailable for this legacy case")
         )));
-        if (sensitive) {
-            lines.add(Component.text(
-                    "Actor: " + review.actorName() + " (" + review.actorRank() + ", " + review.actorId() + ")"
-            ));
-            if (!review.internalExplanation().isBlank()) {
-                lines.add(Component.text("Internal explanation: " + review.internalExplanation()));
-            }
+    }
+
+    private static void appendSensitive(List<Component> lines, CaseReview review, boolean sensitive) {
+        if (!sensitive) {
+            return;
         }
+        lines.add(Component.text(
+                "Actor: " + review.actorName() + " (" + review.actorRank() + ", " + review.actorId() + ")"
+        ));
+        if (!review.internalExplanation().isBlank()) {
+            lines.add(Component.text("Internal explanation: " + review.internalExplanation()));
+        }
+    }
+
+    private static void appendSanctions(
+            List<Component> lines,
+            CaseHistoryDetail detail,
+            CaseReview review,
+            DateTimeFormatter formatter
+    ) {
         if (review.sanctions().isEmpty()) {
             lines.add(Component.text("No sanctions are attached to this case."));
-        } else {
-            lines.add(Component.text("Sanctions:"));
-            for (SanctionReview sanction : review.sanctions()) {
-                lines.add(Component.text(
-                        "- " + sanction.sanctionId() + ENTRY_SEPARATOR + human(sanction.type().name())
-                                + ENTRY_SEPARATOR + human(effectiveStatus(sanction).name())
-                                + " | issued " + formatter.format(sanction.issuedAt())
-                                + " | original expiration " + expiration(
-                                        originalExpiration(detail.timeline(), sanction),
-                                        formatter
-                                )
-                                + " | current expiration " + expiration(sanction.expirationAt(), formatter)
-                                + sanction.endedAt()
-                                        .map(value -> " | ended " + formatter.format(value))
-                                        .orElse("")
-                ));
-            }
+            return;
         }
+        lines.add(Component.text("Sanctions:"));
+        for (SanctionReview sanction : review.sanctions()) {
+            lines.add(Component.text(
+                    "- " + sanction.sanctionId() + ENTRY_SEPARATOR + human(sanction.type().name())
+                            + ENTRY_SEPARATOR + human(effectiveStatus(sanction).name())
+                            + " | issued " + formatter.format(sanction.issuedAt())
+                            + " | original expiration "
+                            + expiration(originalExpiration(detail.timeline(), sanction), formatter)
+                            + " | current expiration " + expiration(sanction.expirationAt(), formatter)
+                            + sanction.endedAt().map(value -> " | ended " + formatter.format(value)).orElse("")
+            ));
+        }
+    }
+
+    private static void appendTimeline(
+            List<Component> lines,
+            List<ModerationHistoryEntry> timeline,
+            DateTimeFormatter formatter,
+            boolean sensitive
+    ) {
         lines.add(Component.text("Timeline:"));
-        for (ModerationHistoryEntry entry : detail.timeline()) {
+        for (ModerationHistoryEntry entry : timeline) {
             lines.add(Component.text(formatTimelineEntry(entry, formatter, sensitive)));
         }
-        return List.copyOf(lines);
     }
 
     private static String formatTimelineEntry(
@@ -334,7 +365,7 @@ public final class CaseCommand implements CommandExecutor {
             viewer.sendMessage(Component.text("Only the Founder may restore confiscated assets."));
             return true;
         }
-        if (arguments.length != 2) {
+        if (arguments.length != CASE_SUBCOMMAND_ARGUMENT_COUNT) {
             viewer.sendMessage(Component.text("Usage: /" + label + " restoreitems <case-id>"));
             return true;
         }

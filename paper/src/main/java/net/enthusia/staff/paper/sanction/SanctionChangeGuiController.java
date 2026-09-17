@@ -42,6 +42,20 @@ import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.plugin.java.JavaPlugin;
 
 public final class SanctionChangeGuiController implements Listener {
+    public record Stores(
+            Supplier<PlayerDirectory> players,
+            Supplier<CaseLookup> cases,
+            Supplier<CaseReviewStore> reviews
+    ) {
+        public Stores {
+            requireDependency(players);
+            requireDependency(cases);
+            requireDependency(reviews);
+        }
+    }
+
+    private static final String REMOVE_PUNISHMENT_COMMAND = "removepunishment";
+    private static final int RECENT_CASE_LIMIT = 100;
     private final JavaPlugin plugin;
     private final Clock clock;
     private final Supplier<OperationalMode> mode;
@@ -61,27 +75,29 @@ public final class SanctionChangeGuiController implements Listener {
             Clock clock,
             Supplier<OperationalMode> mode,
             Supplier<SanctionChangeService> services,
-            Supplier<PlayerDirectory> players,
-            Supplier<CaseLookup> cases,
-            Supplier<CaseReviewStore> reviews,
+            Stores stores,
             AuthorizationPolicy authorization,
             ExecutorService workers
     ) {
-        if (plugin == null || clock == null || mode == null || services == null || players == null
-                || cases == null || reviews == null || authorization == null || workers == null) {
-            throw new IllegalArgumentException("sanction change GUI dependencies must be present");
-        }
-        this.plugin = plugin;
-        this.clock = clock;
-        this.mode = mode;
-        this.services = services;
-        this.players = players;
-        this.cases = cases;
-        this.reviews = reviews;
-        this.authorization = authorization;
-        this.workers = workers;
+        this.plugin = requireDependency(plugin);
+        this.clock = requireDependency(clock);
+        this.mode = requireDependency(mode);
+        this.services = requireDependency(services);
+        Stores requiredStores = requireDependency(stores);
+        this.players = requiredStores.players();
+        this.cases = requiredStores.cases();
+        this.reviews = requiredStores.reviews();
+        this.authorization = requireDependency(authorization);
+        this.workers = requireDependency(workers);
         this.catalog = new SanctionChangeGuiCatalog(authorization);
         this.renderer = new SanctionChangeGuiRenderer(catalog);
+    }
+
+    private static <T> T requireDependency(T value) {
+        if (value == null) {
+            throw new IllegalArgumentException("sanction change GUI dependencies must be present");
+        }
+        return value;
     }
 
     public void open(Player viewer, String targetQuery, String commandName) {
@@ -95,8 +111,9 @@ public final class SanctionChangeGuiController implements Listener {
 
     @EventHandler(priority = EventPriority.HIGHEST)
     public void onClick(InventoryClickEvent event) {
-        if (!(event.getWhoClicked() instanceof Player viewer)
-                || !(event.getView().getTopInventory().getHolder(false) instanceof SanctionChangeGuiHolder holder)) {
+        Player viewer = clickedPlayer(event);
+        SanctionChangeGuiHolder holder = clickedHolder(event);
+        if (viewer == null || holder == null) {
             return;
         }
         event.setCancelled(true);
@@ -104,8 +121,8 @@ public final class SanctionChangeGuiController implements Listener {
         if (!state.viewerId().equals(viewer.getUniqueId())) {
             return;
         }
-        int slot = event.getRawSlot();
-        if (slot < 0 || slot >= event.getView().getTopInventory().getSize()) {
+        int slot = validSlot(event);
+        if (slot < 0) {
             return;
         }
         Actor actor = authorizedActor(viewer);
@@ -113,6 +130,24 @@ public final class SanctionChangeGuiController implements Listener {
             close(viewer);
             return;
         }
+        dispatchClick(viewer, actor, state, slot);
+    }
+
+    private static Player clickedPlayer(InventoryClickEvent event) {
+        return event.getWhoClicked() instanceof Player player ? player : null;
+    }
+
+    private static SanctionChangeGuiHolder clickedHolder(InventoryClickEvent event) {
+        Object holder = event.getView().getTopInventory().getHolder(false);
+        return holder instanceof SanctionChangeGuiHolder guiHolder ? guiHolder : null;
+    }
+
+    private static int validSlot(InventoryClickEvent event) {
+        int slot = event.getRawSlot();
+        return slot >= 0 && slot < event.getView().getTopInventory().getSize() ? slot : -1;
+    }
+
+    private void dispatchClick(Player viewer, Actor actor, SanctionChangeGuiState state, int slot) {
         if (state instanceof SanctionChangeGuiState.Cases casesState) {
             caseClick(viewer, casesState, slot);
         } else if (state instanceof SanctionChangeGuiState.Actions actions) {
@@ -161,41 +196,72 @@ public final class SanctionChangeGuiController implements Listener {
             return;
         }
         CaseId direct = parseCaseId(targetQuery);
-        if (direct != null) {
-            CaseReview review = reviewStore.find(direct).orElse(null);
-            if (review != null && matchesCommandCase(commandName, direct, caseLookup)) {
-                UUID targetId = review.minecraftTargetId().orElse(null);
-                if (targetId == null) {
-                    message(viewer, "That case is Discord-only and cannot be changed from the Minecraft sanction GUI.");
-                    return;
-                }
-                openState(viewer, new SanctionChangeGuiState.Actions(
-                        viewer.getUniqueId(), commandName, targetId.toString(), review, Optional.empty()
-                ));
-                return;
-            }
+        if (direct != null && tryOpenDirectCase(viewer, commandName, direct, reviewStore, caseLookup)) {
+            return;
         }
         PlayerIdentity target = directory.find(targetQuery).orElse(null);
         if (target == null) {
             message(viewer, "No matching player or case was found.");
             return;
         }
+        openPlayerTarget(viewer, commandName, target, reviewStore, caseLookup);
+    }
+
+    private boolean tryOpenDirectCase(
+            Player viewer,
+            String commandName,
+            CaseId caseId,
+            CaseReviewStore reviewStore,
+            CaseLookup caseLookup
+    ) {
+        CaseReview review = reviewStore.find(caseId).orElse(null);
+        if (review == null || !matchesCommandCase(commandName, caseId, caseLookup)) {
+            return false;
+        }
+        UUID targetId = review.minecraftTargetId().orElse(null);
+        if (targetId == null) {
+            message(viewer, "That case is Discord-only and cannot be changed from the Minecraft sanction GUI.");
+            return true;
+        }
+        openState(viewer, new SanctionChangeGuiState.Actions(
+                viewer.getUniqueId(), commandName, targetId.toString(), review, Optional.empty()
+        ));
+        return true;
+    }
+
+    private void openPlayerTarget(
+            Player viewer,
+            String commandName,
+            PlayerIdentity target,
+            CaseReviewStore reviewStore,
+            CaseLookup caseLookup
+    ) {
         String targetLabel = target.currentUsername().orElse(target.playerId().toString());
-        if (!"removepunishment".equals(commandName)) {
-            CaseId latest = caseLookup.latestCase(
-                    target.playerId(), SanctionChangeAccess.aliasTypes(commandName), true
-            ).orElse(null);
-            CaseReview review = latest == null ? null : reviewStore.find(latest).orElse(null);
-            if (review == null) {
-                message(viewer, "No matching active punishment was found for " + targetLabel + '.');
-                return;
-            }
-            openState(viewer, new SanctionChangeGuiState.Actions(
-                    viewer.getUniqueId(), commandName, targetLabel, review, Optional.empty()
-            ));
+        if (REMOVE_PUNISHMENT_COMMAND.equals(commandName)) {
+            openRemovalCases(viewer, commandName, target, targetLabel, reviewStore);
             return;
         }
-        List<CaseReview> recent = reviewStore.recent(target.playerId(), 100);
+        CaseId latest = caseLookup.latestCase(
+                target.playerId(), SanctionChangeAccess.aliasTypes(commandName), true
+        ).orElse(null);
+        CaseReview review = latest == null ? null : reviewStore.find(latest).orElse(null);
+        if (review == null) {
+            message(viewer, "No matching active punishment was found for " + targetLabel + '.');
+            return;
+        }
+        openState(viewer, new SanctionChangeGuiState.Actions(
+                viewer.getUniqueId(), commandName, targetLabel, review, Optional.empty()
+        ));
+    }
+
+    private void openRemovalCases(
+            Player viewer,
+            String commandName,
+            PlayerIdentity target,
+            String targetLabel,
+            CaseReviewStore reviewStore
+    ) {
+        List<CaseReview> recent = reviewStore.recent(target.playerId(), RECENT_CASE_LIMIT);
         if (recent.isEmpty()) {
             message(viewer, "No punishment history was found for " + targetLabel + '.');
             return;
