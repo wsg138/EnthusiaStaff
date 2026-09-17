@@ -31,11 +31,13 @@ Primary paths:
 - `paper/.../staff/StaffModeManager.java`
 - `paper/.../staff/StaffModeActivationCoordinator.java`
 - `paper/.../staff/StaffToolDispatcher.java`
+- `paper/.../staff/StaffToolsMenuController.java`
+- `paper/.../staff/StaffToolsMenuView.java`
 - `paper/.../staff/StaffModeWorldInteractionListener.java`
 - `domain/.../staff/`
 - `persistence/.../JdbcStaffSessionStore.java`
 
-The hotbar routes random teleport, inspect, freeze, reports, Cheat Tester, follow/spectate, vanish, staff chat and the tools menu. The item itself grants no authority: dispatcher and downstream command/service boundaries recheck session, owner/token, rank, permission, provider health and operational state.
+The hotbar routes random teleport, inspect, freeze, reports, Cheat Tester, follow/spectate, vanish, staff chat and the tools menu. The tools item opens a bounded inventory menu that shows only currently available actions. Targeted actions use a refreshed online-player picker that excludes the viewer and vanished players; the selected UUID remains in typed server-side menu state, not item metadata. The item itself grants no authority: dispatcher and downstream command/service boundaries recheck session, owner/token, rank, permission, provider health and operational state.
 
 Staff instructions: [[Staff Mode, Vanish, and Freeze|Staff-Mode-Vanish-and-Freeze]].
 
