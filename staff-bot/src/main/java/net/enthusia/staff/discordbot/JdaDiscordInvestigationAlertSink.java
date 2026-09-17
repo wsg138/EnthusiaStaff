@@ -2,17 +2,24 @@ package net.enthusia.staff.discordbot;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 import java.util.concurrent.atomic.AtomicReference;
 import net.dv8tion.jda.api.JDA;
+import net.dv8tion.jda.api.Permission;
 import net.dv8tion.jda.api.components.actionrow.ActionRow;
 import net.dv8tion.jda.api.components.buttons.Button;
 import net.dv8tion.jda.api.entities.Message;
+import net.dv8tion.jda.api.entities.Role;
 import net.dv8tion.jda.api.entities.channel.concrete.TextChannel;
 import net.enthusia.staff.domain.investigation.EvasionAlert;
 
 /** Sends the private D09 investigation snapshot and reauthorized quick actions to staff. */
 final class JdaDiscordInvestigationAlertSink implements DiscordInvestigationAlertSink {
     private static final int MAX_INLINE_TEXT = 180;
+    private static final String ROLE_UNAVAILABLE = "DISCORD_ALERT_STAFF_ROLE_UNAVAILABLE";
+    private static final String CHANNEL_NOT_PRIVATE = "DISCORD_ALERT_CHANNEL_NOT_PRIVATE";
+    private static final String STAFF_CANNOT_VIEW = "DISCORD_ALERT_STAFF_ROLE_CANNOT_VIEW";
+    private static final String PRIVACY_UNAVAILABLE = "DISCORD_ALERT_CHANNEL_PRIVACY_UNAVAILABLE";
 
     private final long guildId;
     private final String channelId;
@@ -52,6 +59,10 @@ final class JdaDiscordInvestigationAlertSink implements DiscordInvestigationAler
         if (channel == null || channel.getGuild().getIdLong() != guildId) {
             return Delivery.retry("DISCORD_ALERT_CHANNEL_UNAVAILABLE");
         }
+        Optional<String> privacyError = privacyError(channel);
+        if (privacyError.isPresent()) {
+            return Delivery.retry(privacyError.orElseThrow());
+        }
         try {
             channel.sendMessage("<@&" + staffRoleId + "> " + content(alert))
                     .setAllowedMentions(List.of(Message.MentionType.ROLE))
@@ -62,6 +73,39 @@ final class JdaDiscordInvestigationAlertSink implements DiscordInvestigationAler
         } catch (RuntimeException exception) {
             return Delivery.retry("DISCORD_ALERT_SEND_FAILED");
         }
+    }
+
+    private Optional<String> privacyError(TextChannel channel) {
+        try {
+            Role staffRole = channel.getGuild().getRoleById(staffRoleId);
+            if (staffRole == null) {
+                return channelPolicyError(false, false, false);
+            }
+            return channelPolicyError(
+                    true,
+                    channel.getGuild().getPublicRole().hasPermission(channel, Permission.VIEW_CHANNEL),
+                    staffRole.hasPermission(channel, Permission.VIEW_CHANNEL)
+            );
+        } catch (RuntimeException exception) {
+            return Optional.of(PRIVACY_UNAVAILABLE);
+        }
+    }
+
+    static Optional<String> channelPolicyError(
+            boolean staffRolePresent,
+            boolean everyoneCanView,
+            boolean staffCanView
+    ) {
+        if (!staffRolePresent) {
+            return Optional.of(ROLE_UNAVAILABLE);
+        }
+        if (everyoneCanView) {
+            return Optional.of(CHANNEL_NOT_PRIVATE);
+        }
+        if (!staffCanView) {
+            return Optional.of(STAFF_CANNOT_VIEW);
+        }
+        return Optional.empty();
     }
 
     static String content(EvasionAlert alert) {
