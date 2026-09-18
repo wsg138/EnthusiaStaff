@@ -134,7 +134,7 @@ final class JdbcDiscordIdentityRepository {
         }
     }
 
-    private static VersionedSubject ensureMinecraftSubject(Connection connection, UUID playerId, Instant now)
+    static VersionedSubject ensureMinecraftSubject(Connection connection, UUID playerId, Instant now)
             throws SQLException {
         ModerationSubjectId existing = subjectIdForMinecraft(connection, playerId, true);
         if (existing != null) {

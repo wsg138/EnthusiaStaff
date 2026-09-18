@@ -126,10 +126,23 @@ final class JdaDiscordInvestigationAlertSink implements DiscordInvestigationAler
         Role publicRole = channel.getGuild().getPublicRole();
         long selfUserId = channel.getJDA().getSelfUser().getIdLong();
         return channel.getGuild().getRoles().stream()
-                .filter(role -> !role.equals(publicRole) && !role.equals(staffRole))
-                .filter(role -> !role.hasPermission(Permission.ADMINISTRATOR))
-                .filter(role -> !isSelfBotRole(role, selfUserId))
-                .anyMatch(role -> role.hasPermission(channel, Permission.VIEW_CHANNEL));
+                .anyMatch(role -> unexpectedRoleCanView(
+                        role.equals(publicRole),
+                        role.equals(staffRole),
+                        isSelfBotRole(role, selfUserId),
+                        role.hasPermission(Permission.ADMINISTRATOR),
+                        role.hasPermission(channel, Permission.VIEW_CHANNEL)
+                ));
+    }
+
+    static boolean unexpectedRoleCanView(
+            boolean publicRole,
+            boolean staffRole,
+            boolean selfBotRole,
+            boolean administrator,
+            boolean channelView
+    ) {
+        return !publicRole && !staffRole && !selfBotRole && (administrator || channelView);
     }
 
     private static boolean hasUnexpectedMemberViewer(TextChannel channel) {

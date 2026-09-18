@@ -230,8 +230,12 @@ final class StaffModerationReadService {
         if (review == null) {
             throw new IllegalArgumentException("case review must be present");
         }
-        ModerationSubjectId subjectId = review.subjectId()
-                .orElseThrow(() -> new IllegalStateException("case has no moderation subject"));
+        if (review.subjectId().isEmpty()) {
+            return review.minecraftTargetId()
+                    .map(this::minecraftTarget)
+                    .orElseThrow(() -> new IllegalStateException("case has no moderation subject"));
+        }
+        ModerationSubjectId subjectId = review.subjectId().orElseThrow();
         VersionedSubject subject = data.subject(subjectId)
                 .orElseThrow(() -> new IllegalStateException("case moderation subject is unavailable"));
         Optional<DiscordUserId> discord = subject.subject().discordUserIds().stream().findFirst();

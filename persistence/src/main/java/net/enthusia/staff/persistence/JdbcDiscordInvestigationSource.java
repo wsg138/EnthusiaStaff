@@ -4,6 +4,7 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -94,7 +95,8 @@ final class JdbcDiscordInvestigationSource {
 
     private void addCandidate(ResultSet rows, List<EvasionCandidate> candidates) throws SQLException {
         DiscordPunishment punishment = punishmentCodec.decode(rows.getString("desired_state_json"));
-        if (!isBanEvasionSignal(punishment)) {
+        Instant triggeredAt = rows.getTimestamp("last_seen_at").toInstant();
+        if (!isBanEvasionSignal(punishment, triggeredAt)) {
             return;
         }
         candidates.add(new EvasionCandidate(new EvasionAlert.Context(
@@ -110,14 +112,15 @@ final class JdbcDiscordInvestigationSource {
                 rows.getString("current_server"),
                 rows.getLong("revision"),
                 EvasionAlert.TriggerType.LINKED_MINECRAFT_ONLINE,
-                rows.getTimestamp("last_seen_at").toInstant()
+                triggeredAt
         )));
     }
 
-    private static boolean isBanEvasionSignal(DiscordPunishment punishment) {
+    static boolean isBanEvasionSignal(DiscordPunishment punishment, Instant triggeredAt) {
         return punishment.externalApplied()
                 && !punishment.state().terminal()
-                && punishment.intent().type() == DiscordConsequenceType.BAN;
+                && punishment.intent().type() == DiscordConsequenceType.BAN
+                && punishment.expiresAt().map(expiry -> expiry.isAfter(triggeredAt)).orElse(true);
     }
 
     private static PunishmentObservation observation(DiscordPunishment punishment, ResultSet rows) throws SQLException {

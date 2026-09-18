@@ -28,8 +28,10 @@ import net.enthusia.staff.domain.migration.LegacySanctionType;
 import net.enthusia.staff.domain.migration.MigrationChecksum;
 import net.enthusia.staff.domain.sanction.SanctionStatus;
 import net.enthusia.staff.domain.sanction.SanctionType;
+import net.enthusia.staff.persistence.JdbcDiscordModerationPersistenceStore;
 import net.enthusia.staff.persistence.ModerationPersistenceException;
 import net.enthusia.staff.persistence.UuidBytes;
+import net.enthusia.staff.domain.moderation.ModerationSubjectId;
 
 final class LiteBansTargetImporter {
     private static final UUID SYSTEM_ACTOR = new UUID(0L, 1L);
@@ -104,6 +106,8 @@ final class LiteBansTargetImporter {
             boolean mappingCheckedAndAbsent = false;
             try {
                 ensurePlayer(connection, targetId, legacy.username(), legacy.issuedAt());
+                ModerationSubjectId subjectId = JdbcDiscordModerationPersistenceStore.ensureMinecraftSubjectId(
+                        connection, targetId, legacy.issuedAt());
                 if (legacy.networkAddress().isPresent()) {
                     upsertProtectedIdentity(
                             connection,
@@ -127,7 +131,7 @@ final class LiteBansTargetImporter {
                 mappingCheckedAndAbsent = true;
                 CaseId caseId = identifiers.newCaseId();
                 LegacyProjection projection = project(legacy, now);
-                insertCase(connection, caseId, targetId, legacy, projection);
+                insertCase(connection, caseId, targetId, subjectId, legacy, projection);
                 insertStep(connection, caseId);
                 UUID sanctionId = insertSanction(connection, caseId, targetId, legacy, projection);
                 insertEvent(connection, sanctionId, legacy.issuedAt());
@@ -581,25 +585,27 @@ final class LiteBansTargetImporter {
             Connection connection,
             CaseId caseId,
             UUID targetId,
+            ModerationSubjectId subjectId,
             LegacySanction legacy,
             LegacyProjection projection
     ) throws SQLException {
         try (PreparedStatement statement = connection.prepareStatement("""
-                INSERT INTO cases(case_id, idempotency_key, target_id, actor_id, actor_name, actor_rank,
+                INSERT INTO cases(case_id, idempotency_key, target_id, subject_id, actor_id, actor_name, actor_rank,
                     public_reason, exact_reason_id, sanction_family, internal_explanation,
                     configuration_version, visibility, state, issued_at)
-                VALUES (?, ?, ?, ?, ?, 'SYSTEM', ?, ?, 'legacy', ?, 'litebans-import-v1', 'PUBLIC', ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, 'SYSTEM', ?, ?, 'legacy', ?, 'litebans-import-v1', 'PUBLIC', ?, ?)
                 """)) {
             statement.setString(1, caseId.value());
             statement.setString(2, "litebans:" + legacy.sourceTable() + ':' + legacy.externalId());
             statement.setBytes(3, UuidBytes.toBytes(targetId));
-            statement.setBytes(4, UuidBytes.toBytes(SYSTEM_ACTOR));
-            statement.setString(5, truncate(legacy.originalStaffName(), 64));
-            statement.setString(6, truncate(legacy.originalReason(), 160));
-            statement.setString(7, "legacy.litebans." + legacy.type().name().toLowerCase(java.util.Locale.ROOT));
-            statement.setString(8, "Imported from LiteBans without changing the original reason or expiration");
-            statement.setString(9, projection.caseOpen() ? "OPEN" : "CLOSED");
-            statement.setTimestamp(10, Timestamp.from(legacy.issuedAt()));
+            statement.setBytes(4, UuidBytes.toBytes(subjectId.value()));
+            statement.setBytes(5, UuidBytes.toBytes(SYSTEM_ACTOR));
+            statement.setString(6, truncate(legacy.originalStaffName(), 64));
+            statement.setString(7, truncate(legacy.originalReason(), 160));
+            statement.setString(8, "legacy.litebans." + legacy.type().name().toLowerCase(java.util.Locale.ROOT));
+            statement.setString(9, "Imported from LiteBans without changing the original reason or expiration");
+            statement.setString(10, projection.caseOpen() ? "OPEN" : "CLOSED");
+            statement.setTimestamp(11, Timestamp.from(legacy.issuedAt()));
             statement.executeUpdate();
         }
     }

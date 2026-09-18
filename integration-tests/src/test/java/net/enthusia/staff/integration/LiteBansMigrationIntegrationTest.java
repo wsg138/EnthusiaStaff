@@ -136,6 +136,7 @@ class LiteBansMigrationIntegrationTest {
         assertEquals(1, report.protectedIdentityRecords());
         assertCleanShadowSummary(report);
         assertEquals(3, importedCaseCount());
+        assertEquals(0, importedTargetOnlyCaseCount());
         assertEquals(1, uuidBackedBanMappingCount());
     }
 
@@ -164,6 +165,20 @@ class LiteBansMigrationIntegrationTest {
         assertComparisonDimensionsMatch(summary);
         assertEquals(1, summary.mismatchCount());
         assertEquals(3, importedCaseCount());
+    }
+
+    private static long importedTargetOnlyCaseCount() throws SQLException {
+        try (Connection connection = sourceConnection();
+             PreparedStatement statement = connection.prepareStatement("""
+                     SELECT COUNT(*)
+                     FROM cases c
+                     JOIN migration_mappings m ON m.case_id = c.case_id
+                     WHERE m.source_system = 'LITEBANS' AND c.target_id IS NOT NULL AND c.subject_id IS NULL
+                     """
+             ); ResultSet result = statement.executeQuery()) {
+            result.next();
+            return result.getLong(1);
+        }
     }
 
     private static void endLegacyBan() throws SQLException {

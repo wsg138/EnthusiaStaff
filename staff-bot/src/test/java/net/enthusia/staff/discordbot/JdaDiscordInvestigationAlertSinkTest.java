@@ -35,6 +35,16 @@ class JdaDiscordInvestigationAlertSinkTest {
     }
 
     @Test
+    void administratorRoleWithoutConfiguredStaffRoleFailsPrivateChannelFence() {
+        assertTrue(JdaDiscordInvestigationAlertSink.unexpectedRoleCanView(
+                false, false, false, true, false));
+        assertFalse(JdaDiscordInvestigationAlertSink.unexpectedRoleCanView(
+                false, true, false, true, true));
+        assertFalse(JdaDiscordInvestigationAlertSink.unexpectedRoleCanView(
+                false, false, true, true, true));
+    }
+
+    @Test
     void timedOutSendCancelsPendingDiscordRequest() {
         CompletableFuture<Object> request = new CompletableFuture<>();
 

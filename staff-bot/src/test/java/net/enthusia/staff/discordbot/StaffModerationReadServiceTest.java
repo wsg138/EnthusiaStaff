@@ -190,6 +190,30 @@ class StaffModerationReadServiceTest {
     }
 
     @Test
+    void targetOnlyLegacyCaseFallsBackToCurrentMinecraftSubject() {
+        UUID player = UUID.fromString("aaaaaaaa-0000-0000-0000-000000000002");
+        DiscordUserId discord = new DiscordUserId("413456789012345680");
+        VersionedSubject current = subject(
+                Set.of(new DiscordIdentityRef(discord), new MinecraftIdentityRef(player)), Optional.empty());
+        FakeReadData data = new FakeReadData();
+        data.minecraftSubjects.put(player, current);
+        StaffModerationReadService service = new StaffModerationReadService(data, CLOCK);
+        CaseReview review = new CaseReview(
+                new CaseId("2123456789ABCDEF"), player, Optional.empty(), UUID.randomUUID(),
+                "Staff", "MOD", "Legacy target-only case", "MANUAL", "WARN", "summary",
+                "legacy-v1", CaseVisibility.PUBLIC, CaseState.OPEN, NOW, 0,
+                Optional.empty(), List.of(), Optional.empty()
+        );
+
+        StaffModerationReadService.Target target = service.caseTarget(review);
+
+        assertEquals(StaffModerationReadService.TargetKind.MINECRAFT, target.kind());
+        assertEquals(Optional.of(discord), target.discordId());
+        assertEquals(Optional.of(player), target.minecraftId());
+        assertEquals(current.subject().subjectId(), target.subject().orElseThrow().subject().subjectId());
+    }
+
+    @Test
     void discordOnlyCaseRoutesThroughAuthoritativeModerationSubject() {
         DiscordUserId discord = new DiscordUserId("423456789012345678");
         VersionedSubject subject = subject(Set.of(new DiscordIdentityRef(discord)), Optional.empty());

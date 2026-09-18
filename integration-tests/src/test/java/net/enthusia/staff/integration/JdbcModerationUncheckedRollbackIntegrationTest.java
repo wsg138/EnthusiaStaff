@@ -151,6 +151,33 @@ class JdbcModerationUncheckedRollbackIntegrationTest extends PunishmentRequestMa
         assertEquals(1, countCases(caseId));
     }
 
+    @Test
+    void newPunishmentCasePersistsMinecraftModerationSubject() throws Exception {
+        CaseId caseId = new CaseId("A000000000000295");
+        PunishmentPlan plan = plan(
+                caseId, identifier("subject-backed-case-target"), "subject.backed", sevenDayBan(), NOW);
+        try (MariaDbRuntime runtime = MariaDb.initialize(databaseConfig())) {
+            runtime.moderationStore().createPunishment(plan);
+        }
+        assertCaseSubjectMatchesTarget(caseId);
+    }
+
+    private static void assertCaseSubjectMatchesTarget(CaseId caseId) throws SQLException {
+        try (Connection connection = connection();
+             var statement = connection.prepareStatement("""
+                     SELECT c.subject_id = membership.subject_id AS subject_matches
+                     FROM cases c
+                     JOIN moderation_subject_minecraft_identities membership ON membership.player_id = c.target_id
+                     WHERE c.case_id = ?
+                     """)) {
+            statement.setString(1, caseId.value());
+            try (var rows = statement.executeQuery()) {
+                assertTrue(rows.next());
+                assertTrue(rows.getBoolean("subject_matches"));
+            }
+        }
+    }
+
     private static void initializeSchema() {
         try (MariaDbRuntime runtime = MariaDb.initialize(databaseConfig())) {
             assertNotNull(runtime.moderationStore());

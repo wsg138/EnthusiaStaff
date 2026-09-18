@@ -1,5 +1,7 @@
 package net.enthusia.staff.persistence;
 
+import java.sql.Connection;
+import java.sql.SQLException;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
@@ -34,6 +36,16 @@ public final class JdbcDiscordModerationPersistenceStore implements DiscordModer
     @Override
     public VersionedSubject ensureMinecraftSubject(UUID playerId, Instant now) {
         return identities.ensureMinecraftSubject(playerId, now);
+    }
+
+    public static ModerationSubjectId ensureMinecraftSubjectId(
+            Connection connection, UUID playerId, Instant now
+    ) throws SQLException {
+        if (connection == null || playerId == null || now == null) {
+            throw new IllegalArgumentException("connection, playerId, and now must be present");
+        }
+        return JdbcDiscordIdentityRepository.ensureMinecraftSubject(connection, playerId, now)
+                .subject().subjectId();
     }
 
     @Override
