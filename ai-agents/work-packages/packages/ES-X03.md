@@ -46,7 +46,7 @@ Focused manual review on `879eae12df35253cce6cd12179d5cef1afe95dd9` covered the 
 | PR review | No live inline threads | CodeRabbit's successful status is skipped/manual review status, not an automated full-review approval. |
 | Codacy static analysis | NOT PASS | Check `105036637444` is `action_required` with 2,085 new issues. |
 | Canonical Pi supersession | NOT PASS | Run `35168772060` failed before private dispatch because the public workflow-history lookup returned HTTP 401 `Bad credentials`. No private Pi/Paper/MariaDB runtime ran. |
-| Durable Sentinel restart | NOT RUN | A status request at [PR #139 comment 5730170958](https://github.com/wsg138/EnthusiaStaff/pull/139#issuecomment-5730170958) had no observed response at publication; no restart was requested. |
+| Durable Sentinel restart | NOT RUN | [Status command 5730170958](https://github.com/wsg138/EnthusiaStaff/pull/139#issuecomment-5730170958) completed [ACTIONED / STATUS_NO_JOB](https://github.com/wsg138/EnthusiaStaff/pull/139#issuecomment-5730177011) for the exact SHA; no restart was requested. |
 
 ## 11. Static-analysis boundary
 The static result is not dismissed wholesale. Of 2,085 reports, 1,989 are under the aggregate Market component and 96 are Staff/agent Markdown. Some high findings are demonstrable analyzer mismatches: a Staff-specific RAC-table pattern applied to Market table names, SQLint applied to component SQLite migrations, and Gradle dependency coordinates mistaken for keys. The same report also contains component-owned complexity, Markdown, and dependency debt, including a Trivy medium finding.
