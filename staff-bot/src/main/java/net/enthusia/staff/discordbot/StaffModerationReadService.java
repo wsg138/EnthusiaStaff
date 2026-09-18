@@ -75,6 +75,20 @@ final class StaffModerationReadService {
         default List<InvestigationNote> recentInvestigationNotes(ModerationSubjectId subjectId, int limit) {
             return List.of();
         }
+
+        default List<InvestigationNote> recentInvestigationNotes(
+                ModerationSubjectId subjectId,
+                Optional<InvestigationNote.Visibility> visibility,
+                int limit
+        ) {
+            if (visibility == null) {
+                throw new IllegalArgumentException("investigation note visibility must be present");
+            }
+            return recentInvestigationNotes(subjectId, limit).stream()
+                    .filter(note -> visibility.isEmpty() || note.visibility() == visibility.orElseThrow())
+                    .limit(limit)
+                    .toList();
+        }
     }
 
     enum TargetKind {
@@ -235,8 +249,10 @@ final class StaffModerationReadService {
         }
         ModerationSubjectId subjectId = checkedTarget.subject().orElseThrow().subject().subjectId();
         boolean management = viewerRank == StaffRank.ADMIN || viewerRank == StaffRank.FOUNDER;
-        return data.recentInvestigationNotes(subjectId, PANEL_LIMIT).stream()
-                .filter(note -> note.visibility() == InvestigationNote.Visibility.STAFF || management)
+        Optional<InvestigationNote.Visibility> visibility = management
+                ? Optional.empty() : Optional.of(InvestigationNote.Visibility.STAFF);
+        return data.recentInvestigationNotes(subjectId, visibility, PANEL_LIMIT).stream()
+                .filter(note -> management || note.visibility() == InvestigationNote.Visibility.STAFF)
                 .limit(PANEL_LIMIT)
                 .toList();
     }
@@ -453,6 +469,15 @@ final class StaffModerationReadService {
         @Override
         public List<InvestigationNote> recentInvestigationNotes(ModerationSubjectId subjectId, int limit) {
             return runtime.recentInvestigationNotes(subjectId, limit);
+        }
+
+        @Override
+        public List<InvestigationNote> recentInvestigationNotes(
+                ModerationSubjectId subjectId,
+                Optional<InvestigationNote.Visibility> visibility,
+                int limit
+        ) {
+            return runtime.recentInvestigationNotes(subjectId, visibility, limit);
         }
     }
 }

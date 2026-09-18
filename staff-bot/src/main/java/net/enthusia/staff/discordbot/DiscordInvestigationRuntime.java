@@ -114,11 +114,18 @@ final class DiscordInvestigationRuntime implements AutoCloseable {
         if (!closed.compareAndSet(false, true)) {
             return;
         }
+        RuntimeException shutdownFailure = null;
         try {
             coordinator.close();
-        } finally {
-            discordAlerts.unbind();
-            persistence.close();
+        } catch (RuntimeException exception) {
+            shutdownFailure = exception;
         }
+        discordAlerts.unbind();
+        if (shutdownFailure == null) {
+            persistence.close();
+            return;
+        }
+        coordinator.runAfterTermination(persistence::close);
+        throw shutdownFailure;
     }
 }

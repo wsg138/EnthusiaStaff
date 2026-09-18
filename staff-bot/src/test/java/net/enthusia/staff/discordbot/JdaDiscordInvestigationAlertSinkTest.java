@@ -22,19 +22,28 @@ class JdaDiscordInvestigationAlertSinkTest {
     }
 
     @Test
-    void privateAlertsFailClosedUnlessStaffCanViewAndEveryoneCannot() {
+    void privateAlertsFailClosedUnlessOnlyStaffCanView() {
+        assertPolicy("DISCORD_ALERT_STAFF_ROLE_UNAVAILABLE", false, false, false, false, false);
+        assertPolicy("DISCORD_ALERT_CHANNEL_NOT_PRIVATE", true, true, true, false, false);
+        assertPolicy("DISCORD_ALERT_STAFF_ROLE_CANNOT_VIEW", true, false, false, false, false);
+        assertPolicy("DISCORD_ALERT_CHANNEL_OTHER_ROLE_CAN_VIEW", true, false, true, true, false);
+        assertPolicy("DISCORD_ALERT_CHANNEL_MEMBER_OVERRIDE_CAN_VIEW", true, false, true, false, true);
+        assertTrue(JdaDiscordInvestigationAlertSink.channelPolicyError(
+                true, false, true, false, false).isEmpty());
+    }
+
+    private static void assertPolicy(
+            String expected,
+            boolean staffRolePresent,
+            boolean everyoneCanView,
+            boolean staffCanView,
+            boolean otherRoleCanView,
+            boolean memberOverrideCanView
+    ) {
         assertEquals(
-                Optional.of("DISCORD_ALERT_STAFF_ROLE_UNAVAILABLE"),
-                JdaDiscordInvestigationAlertSink.channelPolicyError(false, false, false)
+                Optional.of(expected),
+                JdaDiscordInvestigationAlertSink.channelPolicyError(
+                        staffRolePresent, everyoneCanView, staffCanView, otherRoleCanView, memberOverrideCanView)
         );
-        assertEquals(
-                Optional.of("DISCORD_ALERT_CHANNEL_NOT_PRIVATE"),
-                JdaDiscordInvestigationAlertSink.channelPolicyError(true, true, true)
-        );
-        assertEquals(
-                Optional.of("DISCORD_ALERT_STAFF_ROLE_CANNOT_VIEW"),
-                JdaDiscordInvestigationAlertSink.channelPolicyError(true, false, false)
-        );
-        assertTrue(JdaDiscordInvestigationAlertSink.channelPolicyError(true, false, true).isEmpty());
     }
 }

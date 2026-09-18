@@ -126,6 +126,14 @@ public final class DiscordStaffReadRuntime implements AutoCloseable {
         return investigationNotes.recent(subjectId, limit);
     }
 
+    public List<InvestigationNote> recentInvestigationNotes(
+            ModerationSubjectId subjectId,
+            Optional<InvestigationNote.Visibility> visibility,
+            int limit
+    ) {
+        return investigationNotes.recent(subjectId, visibility, limit);
+    }
+
     @Override
     public void close() {
         dataSource.close();

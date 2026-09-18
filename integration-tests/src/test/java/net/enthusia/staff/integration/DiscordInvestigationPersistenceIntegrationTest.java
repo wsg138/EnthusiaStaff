@@ -95,6 +95,28 @@ class DiscordInvestigationPersistenceIntegrationTest {
         }
     }
 
+    @Test
+    void caseScopedNoteCannotCrossModerationSubjects() {
+        try (HikariDataSource dataSource = open()) {
+            ModerationSubjectId caseSubject = ensureSubject(dataSource, new DiscordUserId("223456789012345680"));
+            ModerationSubjectId otherSubject = ensureSubject(dataSource, new DiscordUserId("223456789012345681"));
+            JdbcDiscordInvestigationStore store = new JdbcDiscordInvestigationStore(dataSource);
+            CaseId caseId = store.createInvestigationCase(new DiscordInvestigationStore.InvestigationCaseDraft(
+                    "d09:test:case:subject-fence", caseSubject, "Subject fence",
+                    new Actor(ACTOR, ACTOR_NAME, StaffRank.ADMIN), NOW
+            )).caseId();
+            UUID noteId = UUID.fromString("30000000-0000-0000-0000-000000000099");
+            DiscordInvestigationStore.NoteDraft wrongSubject = new DiscordInvestigationStore.NoteDraft(
+                    noteId, "d09:test:note:subject-fence", otherSubject,
+                    new InvestigationNote.Scope(InvestigationNote.ScopeType.CASE, caseId.value()),
+                    InvestigationNote.Visibility.STAFF, "must reject", ACTOR, NOW.plusSeconds(1)
+            );
+
+            assertThrows(ModerationPersistenceException.class, () -> store.createNote(wrongSubject));
+            assertTrue(store.findNote(noteId).isEmpty());
+        }
+    }
+
     private static void exerciseVersionedNote(
             JdbcDiscordInvestigationStore store,
             UUID noteId,

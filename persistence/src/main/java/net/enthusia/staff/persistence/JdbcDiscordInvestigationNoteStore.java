@@ -31,9 +31,9 @@ final class JdbcDiscordInvestigationNoteStore {
                 requireCreateReplay(connection, replay, draft);
                 return replay.toDomain(true);
             }
+            touchCaseScope(connection, draft.scope(), draft.subjectId(), draft.now());
             insertNote(connection, draft);
             insertVersion(connection, draft.noteId(), 0, draft.operationKey(), draft.text(), draft.actorId(), draft.now());
-            touchCaseScope(connection, draft.scope(), draft.now());
             return requireById(connection, draft.noteId(), false).toDomain(false);
         });
     }
@@ -54,7 +54,7 @@ final class JdbcDiscordInvestigationNoteStore {
             updateNote(connection, current, edit, nextRevision);
             insertVersion(
                     connection, edit.noteId(), nextRevision, edit.operationKey(), edit.text(), edit.actorId(), edit.now());
-            touchCaseScope(connection, current.scope(), edit.now());
+            touchCaseScope(connection, current.scope(), current.subjectId(), edit.now());
             return requireById(connection, edit.noteId(), false).toDomain(false);
         });
     }
@@ -68,29 +68,71 @@ final class JdbcDiscordInvestigationNoteStore {
     }
 
     List<InvestigationNote> recent(ModerationSubjectId subjectId, int limit) {
-        if (subjectId == null || limit < 1 || limit > 100) {
+        return recent(subjectId, Optional.empty(), limit);
+    }
+
+    List<InvestigationNote> recent(
+            ModerationSubjectId subjectId,
+            Optional<InvestigationNote.Visibility> visibility,
+            int limit
+    ) {
+        if (subjectId == null || visibility == null || limit < 1 || limit > 100) {
             throw new IllegalArgumentException("private note subject query is invalid");
         }
-        return JdbcTransactionSupport.execute(dataSource, "Unable to read recent Discord private notes", connection -> {
-            List<InvestigationNote> notes = new ArrayList<>();
-            try (PreparedStatement statement = connection.prepareStatement("""
-                    SELECT note_id, subject_id, scope_type, scope_value, visibility, current_text,
-                           created_by, created_at, updated_by, updated_at, revision
-                    FROM discord_private_notes
-                    WHERE subject_id = ?
-                    ORDER BY updated_at DESC, note_id
-                    LIMIT ?
-                    """)) {
-                statement.setBytes(1, UuidBytes.toBytes(subjectId.value()));
-                statement.setInt(2, limit);
-                try (ResultSet rows = statement.executeQuery()) {
-                    while (rows.next()) {
-                        notes.add(read(rows).toDomain(false));
-                    }
-                }
+        return JdbcTransactionSupport.execute(dataSource, "Unable to read recent Discord private notes", connection ->
+                visibility.isPresent()
+                        ? recentVisible(connection, subjectId, visibility.orElseThrow(), limit)
+                        : recentAll(connection, subjectId, limit));
+    }
+
+    private static List<InvestigationNote> recentAll(
+            Connection connection,
+            ModerationSubjectId subjectId,
+            int limit
+    ) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement("""
+                SELECT note_id, subject_id, scope_type, scope_value, visibility, current_text,
+                       created_by, created_at, updated_by, updated_at, revision
+                FROM discord_private_notes
+                WHERE subject_id = ?
+                ORDER BY updated_at DESC, note_id
+                LIMIT ?
+                """)) {
+            statement.setBytes(1, UuidBytes.toBytes(subjectId.value()));
+            statement.setInt(2, limit);
+            return readRecent(statement);
+        }
+    }
+
+    private static List<InvestigationNote> recentVisible(
+            Connection connection,
+            ModerationSubjectId subjectId,
+            InvestigationNote.Visibility visibility,
+            int limit
+    ) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement("""
+                SELECT note_id, subject_id, scope_type, scope_value, visibility, current_text,
+                       created_by, created_at, updated_by, updated_at, revision
+                FROM discord_private_notes
+                WHERE subject_id = ? AND visibility = ?
+                ORDER BY updated_at DESC, note_id
+                LIMIT ?
+                """)) {
+            statement.setBytes(1, UuidBytes.toBytes(subjectId.value()));
+            statement.setString(2, visibility.name());
+            statement.setInt(3, limit);
+            return readRecent(statement);
+        }
+    }
+
+    private static List<InvestigationNote> readRecent(PreparedStatement statement) throws SQLException {
+        List<InvestigationNote> notes = new ArrayList<>();
+        try (ResultSet rows = statement.executeQuery()) {
+            while (rows.next()) {
+                notes.add(read(rows).toDomain(false));
             }
-            return List.copyOf(notes);
-        });
+        }
+        return List.copyOf(notes);
     }
 
     List<InvestigationNote.Version> history(UUID noteId, int limit) {
@@ -194,6 +236,7 @@ final class JdbcDiscordInvestigationNoteStore {
     private static void touchCaseScope(
             Connection connection,
             InvestigationNote.Scope scope,
+            ModerationSubjectId subjectId,
             Instant now
     ) throws SQLException {
         if (scope.type() != InvestigationNote.ScopeType.CASE) {
@@ -209,11 +252,15 @@ final class JdbcDiscordInvestigationNoteStore {
                 UPDATE discord_investigation_cases i
                 JOIN cases c ON c.case_id = i.case_id
                 SET i.last_activity_at = GREATEST(i.last_activity_at, ?), i.revision = i.revision + 1
-                WHERE i.case_id = ? AND i.closed_at IS NULL AND c.state = 'OPEN'
+                WHERE i.case_id = ? AND i.subject_id = ? AND c.subject_id = ?
+                  AND i.closed_at IS NULL AND c.state = 'OPEN'
                 """)) {
             statement.setTimestamp(1, Timestamp.from(now));
             statement.setString(2, caseId.value());
-            JdbcTransactionSupport.requireSingleUpdate(statement.executeUpdate(), "case-scoped note case is not open");
+            statement.setBytes(3, UuidBytes.toBytes(subjectId.value()));
+            statement.setBytes(4, UuidBytes.toBytes(subjectId.value()));
+            JdbcTransactionSupport.requireSingleUpdate(
+                    statement.executeUpdate(), "case-scoped note case is not open or subject does not match");
         }
     }
 

@@ -11,6 +11,7 @@ import net.dv8tion.jda.api.components.buttons.Button;
 import net.dv8tion.jda.api.entities.Message;
 import net.dv8tion.jda.api.entities.Role;
 import net.dv8tion.jda.api.entities.channel.concrete.TextChannel;
+import net.dv8tion.jda.api.utils.cache.CacheFlag;
 import net.enthusia.staff.domain.investigation.EvasionAlert;
 
 /** Sends the private D09 investigation snapshot and reauthorized quick actions to staff. */
@@ -19,6 +20,8 @@ final class JdaDiscordInvestigationAlertSink implements DiscordInvestigationAler
     private static final String ROLE_UNAVAILABLE = "DISCORD_ALERT_STAFF_ROLE_UNAVAILABLE";
     private static final String CHANNEL_NOT_PRIVATE = "DISCORD_ALERT_CHANNEL_NOT_PRIVATE";
     private static final String STAFF_CANNOT_VIEW = "DISCORD_ALERT_STAFF_ROLE_CANNOT_VIEW";
+    private static final String OTHER_ROLE_CAN_VIEW = "DISCORD_ALERT_CHANNEL_OTHER_ROLE_CAN_VIEW";
+    private static final String MEMBER_OVERRIDE_CAN_VIEW = "DISCORD_ALERT_CHANNEL_MEMBER_OVERRIDE_CAN_VIEW";
     private static final String PRIVACY_UNAVAILABLE = "DISCORD_ALERT_CHANNEL_PRIVACY_UNAVAILABLE";
 
     private final long guildId;
@@ -77,24 +80,50 @@ final class JdaDiscordInvestigationAlertSink implements DiscordInvestigationAler
 
     private Optional<String> privacyError(TextChannel channel) {
         try {
-            Role staffRole = channel.getGuild().getRoleById(staffRoleId);
-            if (staffRole == null) {
-                return channelPolicyError(false, false, false);
+            if (!channel.getJDA().getCacheFlags().contains(CacheFlag.MEMBER_OVERRIDES)) {
+                return Optional.of(PRIVACY_UNAVAILABLE);
             }
-            return channelPolicyError(
-                    true,
+            Role staffRole = channel.getGuild().getRoleById(staffRoleId);
+            Optional<String> policyError = channelPolicyError(
+                    staffRole != null,
                     channel.getGuild().getPublicRole().hasPermission(channel, Permission.VIEW_CHANNEL),
-                    staffRole.hasPermission(channel, Permission.VIEW_CHANNEL)
+                    staffRole != null && staffRole.hasPermission(channel, Permission.VIEW_CHANNEL),
+                    staffRole != null && hasUnexpectedRoleViewer(channel, staffRole),
+                    hasUnexpectedMemberViewer(channel)
             );
+            return policyError;
         } catch (RuntimeException exception) {
             return Optional.of(PRIVACY_UNAVAILABLE);
         }
     }
 
+    private static boolean hasUnexpectedRoleViewer(TextChannel channel, Role staffRole) {
+        Role publicRole = channel.getGuild().getPublicRole();
+        long selfUserId = channel.getJDA().getSelfUser().getIdLong();
+        return channel.getGuild().getRoles().stream()
+                .filter(role -> !role.equals(publicRole) && !role.equals(staffRole))
+                .filter(role -> !role.hasPermission(Permission.ADMINISTRATOR))
+                .filter(role -> !isSelfBotRole(role, selfUserId))
+                .anyMatch(role -> role.hasPermission(channel, Permission.VIEW_CHANNEL));
+    }
+
+    private static boolean hasUnexpectedMemberViewer(TextChannel channel) {
+        long selfUserId = channel.getJDA().getSelfUser().getIdLong();
+        return channel.getMemberPermissionOverrides().stream()
+                .filter(override -> override.getIdLong() != selfUserId)
+                .anyMatch(override -> override.getAllowed().contains(Permission.VIEW_CHANNEL));
+    }
+
+    private static boolean isSelfBotRole(Role role, long selfUserId) {
+        return role.getTags().isBot() && role.getTags().getBotIdLong() == selfUserId;
+    }
+
     static Optional<String> channelPolicyError(
             boolean staffRolePresent,
             boolean everyoneCanView,
-            boolean staffCanView
+            boolean staffCanView,
+            boolean otherRoleCanView,
+            boolean memberOverrideCanView
     ) {
         if (!staffRolePresent) {
             return Optional.of(ROLE_UNAVAILABLE);
@@ -104,6 +133,12 @@ final class JdaDiscordInvestigationAlertSink implements DiscordInvestigationAler
         }
         if (!staffCanView) {
             return Optional.of(STAFF_CANNOT_VIEW);
+        }
+        if (otherRoleCanView) {
+            return Optional.of(OTHER_ROLE_CAN_VIEW);
+        }
+        if (memberOverrideCanView) {
+            return Optional.of(MEMBER_OVERRIDE_CAN_VIEW);
         }
         return Optional.empty();
     }

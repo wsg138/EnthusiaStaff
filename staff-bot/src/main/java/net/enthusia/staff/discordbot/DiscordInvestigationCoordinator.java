@@ -13,26 +13,38 @@ import java.util.concurrent.atomic.AtomicBoolean;
 /** Single-thread D09 scheduler with explicit pause and quiescence across gateway reconnects. */
 final class DiscordInvestigationCoordinator implements AutoCloseable {
     private static final System.Logger LOGGER = System.getLogger(DiscordInvestigationCoordinator.class.getName());
-    private static final Duration QUIESCE_TIMEOUT = Duration.ofSeconds(30);
+    private static final Duration DEFAULT_QUIESCE_TIMEOUT = Duration.ofSeconds(30);
 
     private final Runnable cycle;
     private final Duration interval;
     private final ScheduledExecutorService executor;
+    private final Duration quiesceTimeout;
     private final AtomicBoolean started = new AtomicBoolean();
     private final AtomicBoolean active = new AtomicBoolean();
     private final AtomicBoolean closed = new AtomicBoolean();
 
     DiscordInvestigationCoordinator(DiscordInvestigationWorker worker, Duration interval) {
-        this(worker == null ? null : worker::runCycle, interval, newExecutor());
+        this(worker == null ? null : worker::runCycle, interval, newExecutor(), DEFAULT_QUIESCE_TIMEOUT);
     }
 
     DiscordInvestigationCoordinator(Runnable cycle, Duration interval, ScheduledExecutorService executor) {
-        if (cycle == null || interval == null || interval.toMillis() < 1 || executor == null) {
+        this(cycle, interval, executor, DEFAULT_QUIESCE_TIMEOUT);
+    }
+
+    DiscordInvestigationCoordinator(
+            Runnable cycle,
+            Duration interval,
+            ScheduledExecutorService executor,
+            Duration quiesceTimeout
+    ) {
+        if (cycle == null || interval == null || interval.toMillis() < 1 || executor == null
+                || quiesceTimeout == null || quiesceTimeout.isZero() || quiesceTimeout.isNegative()) {
             throw new IllegalArgumentException("investigation coordinator configuration is invalid");
         }
         this.cycle = cycle;
         this.interval = interval;
         this.executor = executor;
+        this.quiesceTimeout = quiesceTimeout;
     }
 
     void start() {
@@ -69,12 +81,12 @@ final class DiscordInvestigationCoordinator implements AutoCloseable {
             }
             throw new IllegalStateException("investigation worker rejected quiescence barrier", exception);
         }
-        await(barrier);
+        await(barrier, quiesceTimeout);
     }
 
-    private static void await(Future<?> barrier) {
+    private static void await(Future<?> barrier, Duration timeout) {
         try {
-            barrier.get(QUIESCE_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS);
+            barrier.get(timeout.toMillis(), TimeUnit.MILLISECONDS);
         } catch (InterruptedException exception) {
             Thread.currentThread().interrupt();
             throw new IllegalStateException("interrupted while pausing investigation worker", exception);
@@ -106,14 +118,68 @@ final class DiscordInvestigationCoordinator implements AutoCloseable {
         }
         active.set(false);
         executor.shutdown();
+        if (awaitTermination()) {
+            return;
+        }
+        executor.shutdownNow();
+        if (!awaitTermination()) {
+            throw new IllegalStateException("investigation worker did not terminate after cancellation");
+        }
+    }
+
+    void runAfterTermination(Runnable action) {
+        if (action == null) {
+            throw new IllegalArgumentException("termination action must be present");
+        }
+        if (executor.isTerminated()) {
+            action.run();
+            return;
+        }
+        Thread.ofPlatform().daemon(true).name("enthusia-discord-investigation-cleanup").start(() -> {
+            awaitTerminationUnbounded();
+            action.run();
+        });
+    }
+
+    private boolean awaitTermination() {
+        long deadline = System.nanoTime() + quiesceTimeout.toNanos();
+        boolean interrupted = false;
         try {
-            if (!executor.awaitTermination(QUIESCE_TIMEOUT.toSeconds(), TimeUnit.SECONDS)) {
-                executor.shutdownNow();
+            while (!executor.isTerminated()) {
+                long remaining = deadline - System.nanoTime();
+                if (remaining <= 0) {
+                    return false;
+                }
+                try {
+                    if (executor.awaitTermination(remaining, TimeUnit.NANOSECONDS)) {
+                        return true;
+                    }
+                } catch (InterruptedException exception) {
+                    interrupted = true;
+                }
             }
-        } catch (InterruptedException exception) {
-            executor.shutdownNow();
-            Thread.currentThread().interrupt();
-            throw new IllegalStateException("interrupted while stopping investigation worker", exception);
+            return true;
+        } finally {
+            if (interrupted) {
+                Thread.currentThread().interrupt();
+            }
+        }
+    }
+
+    private void awaitTerminationUnbounded() {
+        boolean interrupted = false;
+        try {
+            while (!executor.isTerminated()) {
+                try {
+                    executor.awaitTermination(1, TimeUnit.DAYS);
+                } catch (InterruptedException exception) {
+                    interrupted = true;
+                }
+            }
+        } finally {
+            if (interrupted) {
+                Thread.currentThread().interrupt();
+            }
         }
     }
 

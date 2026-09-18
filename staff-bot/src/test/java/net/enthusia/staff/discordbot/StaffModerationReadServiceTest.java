@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.ArrayList;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.List;
 import java.util.Map;
@@ -138,6 +139,28 @@ class StaffModerationReadServiceTest {
     }
 
     @Test
+    void nonManagementVisibilityIsFilteredBeforePanelLimit() {
+        DiscordUserId discord = new DiscordUserId("333456789012345678");
+        VersionedSubject subject = subject(Set.of(new DiscordIdentityRef(discord)), Optional.empty());
+        ModerationSubjectId subjectId = subject.subject().subjectId();
+        FakeReadData data = new FakeReadData();
+        data.discordSubjects.put(discord, subject);
+        List<InvestigationNote> notes = new ArrayList<>();
+        for (int index = 0; index < 9; index++) {
+            notes.add(note(subjectId, InvestigationNote.Visibility.MANAGEMENT, "hidden-" + index, 20 - index));
+        }
+        for (int index = 0; index < 8; index++) {
+            notes.add(note(subjectId, InvestigationNote.Visibility.STAFF, "visible-" + index, 10 - index));
+        }
+        data.investigationNotes = List.copyOf(notes);
+        StaffModerationReadService service = new StaffModerationReadService(data, CLOCK);
+
+        List<InvestigationNote> visible = service.investigationNotes(service.discordTarget(discord), StaffRank.MOD);
+        assertEquals(8, visible.size());
+        assertTrue(visible.stream().allMatch(note -> note.visibility() == InvestigationNote.Visibility.STAFF));
+    }
+
+    @Test
     void discordOnlyCaseRoutesThroughAuthoritativeModerationSubject() {
         DiscordUserId discord = new DiscordUserId("423456789012345678");
         VersionedSubject subject = subject(Set.of(new DiscordIdentityRef(discord)), Optional.empty());
@@ -258,6 +281,19 @@ class StaffModerationReadServiceTest {
         @Override
         public List<InvestigationNote> recentInvestigationNotes(ModerationSubjectId subjectId, int limit) {
             return investigationNotes.stream().filter(note -> note.subjectId().equals(subjectId)).limit(limit).toList();
+        }
+
+        @Override
+        public List<InvestigationNote> recentInvestigationNotes(
+                ModerationSubjectId subjectId,
+                Optional<InvestigationNote.Visibility> visibility,
+                int limit
+        ) {
+            return investigationNotes.stream()
+                    .filter(note -> note.subjectId().equals(subjectId))
+                    .filter(note -> visibility.isEmpty() || note.visibility() == visibility.orElseThrow())
+                    .limit(limit)
+                    .toList();
         }
     }
 }
