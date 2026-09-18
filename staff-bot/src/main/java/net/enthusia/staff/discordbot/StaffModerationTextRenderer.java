@@ -9,6 +9,7 @@ import java.util.Optional;
 import net.enthusia.staff.common.CaseId;
 import net.enthusia.staff.domain.casefile.CaseReview;
 import net.enthusia.staff.domain.history.ModerationHistoryEntry;
+import net.enthusia.staff.domain.investigation.InvestigationNote;
 import net.enthusia.staff.domain.ports.StaffNoteStore.StaffNote;
 
 /** Builds bounded, escaped user-visible text for the D06 read-only Discord surfaces. */
@@ -75,8 +76,16 @@ final class StaffModerationTextRenderer {
     }
 
     static String notes(StaffModerationReadService.Snapshot snapshot) {
+        return notes(snapshot, java.util.List.of());
+    }
+
+    static String notes(
+            StaffModerationReadService.Snapshot snapshot,
+            java.util.List<InvestigationNote> investigationNotes
+    ) {
         StringBuilder content = new StringBuilder(MAX_CONTENT).append("**Recent staff notes**\n");
-        appendNotes(content, snapshot);
+        appendInvestigationNotes(content, investigationNotes);
+        appendNotes(content, snapshot, investigationNotes.isEmpty());
         return limit(content);
     }
 
@@ -143,13 +152,31 @@ final class StaffModerationTextRenderer {
         }
     }
 
-    private static void appendNotes(StringBuilder content, StaffModerationReadService.Snapshot snapshot) {
+    private static void appendInvestigationNotes(
+            StringBuilder content,
+            java.util.List<InvestigationNote> notes
+    ) {
+        for (InvestigationNote note : notes) {
+            content.append("• ").append(TIME.format(note.updatedAt())).append(ITEM_SEPARATOR)
+                    .append(note.visibility()).append(" / ").append(note.scope().type()).append(ITEM_SEPARATOR)
+                    .append(shorten(escape(note.text()), ITEM_TEXT)).append('\n');
+        }
+    }
+
+    private static void appendNotes(
+            StringBuilder content,
+            StaffModerationReadService.Snapshot snapshot,
+            boolean investigationEmpty
+    ) {
         if (snapshot.recentNotes().isEmpty()) {
-            content.append("No staff notes are available for the current linked Minecraft identities.");
+            if (investigationEmpty) {
+                content.append("No staff notes are available for this moderation subject.");
+            }
             return;
         }
         for (StaffNote note : snapshot.recentNotes()) {
             content.append("• ").append(TIME.format(note.createdAt())).append(ITEM_SEPARATOR)
+                    .append("LEGACY_MINECRAFT").append(ITEM_SEPARATOR)
                     .append(shorten(escape(note.noteText()), ITEM_TEXT)).append('\n');
         }
     }

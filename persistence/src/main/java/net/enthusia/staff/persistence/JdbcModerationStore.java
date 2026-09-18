@@ -20,6 +20,7 @@ import net.enthusia.staff.domain.application.PunishmentPlan;
 import net.enthusia.staff.domain.application.PunishmentResult;
 import net.enthusia.staff.domain.escalation.DecayEligibility;
 import net.enthusia.staff.domain.escalation.PriorOffense;
+import net.enthusia.staff.domain.moderation.ModerationSubjectId;
 import net.enthusia.staff.domain.ports.ModerationStore;
 import net.enthusia.staff.domain.sanction.SanctionSpec;
 
@@ -142,7 +143,9 @@ public final class JdbcModerationStore implements ModerationStore {
             return new PunishmentResult.Accepted(replay, true);
         }
         ensureTargetAndLock(connection, plan.targetId(), plan.issuedAt());
-        insertCase(connection, plan);
+        ModerationSubjectId subjectId = JdbcDiscordModerationPersistenceStore.ensureMinecraftSubjectId(
+                connection, plan.targetId(), plan.issuedAt());
+        insertCase(connection, plan, subjectId);
         try {
             insertStep(connection, plan);
             List<UUID> sanctionIds = insertSanctions(connection, plan);
@@ -175,27 +178,30 @@ public final class JdbcModerationStore implements ModerationStore {
         }
     }
 
-    private static void insertCase(Connection connection, PunishmentPlan plan) throws SQLException {
+    private static void insertCase(
+            Connection connection, PunishmentPlan plan, ModerationSubjectId subjectId
+    ) throws SQLException {
         String sql = """
-                INSERT INTO cases(case_id, idempotency_key, target_id, actor_id, actor_name, actor_rank,
+                INSERT INTO cases(case_id, idempotency_key, target_id, subject_id, actor_id, actor_name, actor_rank,
                     public_reason, exact_reason_id, sanction_family, internal_explanation,
                     configuration_version, visibility, issued_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """;
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
             statement.setString(1, plan.caseId().value());
             statement.setString(2, plan.idempotencyKey().value());
             statement.setBytes(3, UuidBytes.toBytes(plan.targetId()));
-            statement.setBytes(4, UuidBytes.toBytes(plan.actor().id()));
-            statement.setString(5, plan.actor().displayName());
-            statement.setString(6, plan.actor().rank().name());
-            statement.setString(7, plan.publicReason());
-            statement.setString(8, plan.reasonId());
-            statement.setString(9, plan.family());
-            statement.setString(10, plan.internalExplanation());
-            statement.setString(11, plan.configurationVersion());
-            statement.setString(12, plan.visibility().name());
-            statement.setTimestamp(13, Timestamp.from(plan.issuedAt()));
+            statement.setBytes(4, UuidBytes.toBytes(subjectId.value()));
+            statement.setBytes(5, UuidBytes.toBytes(plan.actor().id()));
+            statement.setString(6, plan.actor().displayName());
+            statement.setString(7, plan.actor().rank().name());
+            statement.setString(8, plan.publicReason());
+            statement.setString(9, plan.reasonId());
+            statement.setString(10, plan.family());
+            statement.setString(11, plan.internalExplanation());
+            statement.setString(12, plan.configurationVersion());
+            statement.setString(13, plan.visibility().name());
+            statement.setTimestamp(14, Timestamp.from(plan.issuedAt()));
             statement.executeUpdate();
         }
     }

@@ -15,7 +15,9 @@ import net.enthusia.staff.common.CaseId;
 import net.enthusia.staff.domain.casefile.CaseReview;
 import net.enthusia.staff.domain.history.HistoryQueryOptions;
 import net.enthusia.staff.domain.history.ModerationHistoryPage;
+import net.enthusia.staff.domain.investigation.InvestigationNote;
 import net.enthusia.staff.domain.moderation.DiscordUserId;
+import net.enthusia.staff.domain.moderation.ModerationSubjectId;
 import net.enthusia.staff.domain.player.PlayerIdentity;
 import net.enthusia.staff.domain.player.PlayerResolution;
 import net.enthusia.staff.domain.ports.DiscordModerationPersistenceStore.VersionedSubject;
@@ -33,24 +35,26 @@ import net.enthusia.staff.domain.sanction.SanctionType;
  */
 public final class DiscordStaffReadRuntime implements AutoCloseable {
     private final HikariDataSource dataSource;
-    private final JdbcDiscordModerationPersistenceStore identities;
+    private final JdbcDiscordIdentityRepository identities;
     private final JdbcPlayerDirectory players;
     private final JdbcModerationHistoryStore history;
     private final JdbcCaseReviewStore cases;
     private final JdbcSanctionLookup sanctions;
     private final JdbcStaffNoteStore notes;
+    private final JdbcDiscordInvestigationNoteStore investigationNotes;
 
     private DiscordStaffReadRuntime(HikariDataSource dataSource, Clock clock) {
         this.dataSource = dataSource;
         ObjectMapper json = new ObjectMapper()
                 .registerModule(new JavaTimeModule())
                 .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
-        this.identities = new JdbcDiscordModerationPersistenceStore(dataSource);
+        this.identities = new JdbcDiscordIdentityRepository(dataSource);
         this.players = new JdbcPlayerDirectory(dataSource);
         this.cases = new JdbcCaseReviewStore(dataSource, clock, json);
         this.history = new JdbcModerationHistoryStore(dataSource, cases);
         this.sanctions = new JdbcSanctionLookup(dataSource);
         this.notes = new JdbcStaffNoteStore(dataSource);
+        this.investigationNotes = new JdbcDiscordInvestigationNoteStore(dataSource);
     }
 
     public static DiscordStaffReadRuntime open(DatabaseConfig database, Clock clock) {
@@ -63,6 +67,10 @@ public final class DiscordStaffReadRuntime implements AutoCloseable {
 
     public Optional<VersionedSubject> subjectForDiscord(DiscordUserId userId) {
         return identities.subjectForDiscord(userId);
+    }
+
+    public Optional<VersionedSubject> subject(ModerationSubjectId subjectId) {
+        return identities.subject(subjectId);
     }
 
     public Optional<VersionedSubject> subjectForMinecraft(UUID playerId) {
@@ -98,6 +106,10 @@ public final class DiscordStaffReadRuntime implements AutoCloseable {
         return cases.recent(targetId, limit);
     }
 
+    public List<CaseReview> recentCases(ModerationSubjectId subjectId, int limit) {
+        return cases.recentBySubject(subjectId, limit);
+    }
+
     public Optional<CaseReview> caseReview(CaseId caseId) {
         return cases.find(caseId);
     }
@@ -108,6 +120,18 @@ public final class DiscordStaffReadRuntime implements AutoCloseable {
 
     public List<StaffNote> recentNotes(UUID targetId, int limit) {
         return notes.recent(targetId, limit);
+    }
+
+    public List<InvestigationNote> recentInvestigationNotes(ModerationSubjectId subjectId, int limit) {
+        return investigationNotes.recent(subjectId, limit);
+    }
+
+    public List<InvestigationNote> recentInvestigationNotes(
+            ModerationSubjectId subjectId,
+            Optional<InvestigationNote.Visibility> visibility,
+            int limit
+    ) {
+        return investigationNotes.recent(subjectId, visibility, limit);
     }
 
     @Override

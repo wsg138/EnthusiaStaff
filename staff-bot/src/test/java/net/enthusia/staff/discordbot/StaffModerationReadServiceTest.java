@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.ArrayList;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.List;
 import java.util.Map;
@@ -14,9 +15,13 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import net.enthusia.staff.common.CaseId;
+import net.enthusia.staff.domain.auth.StaffRank;
 import net.enthusia.staff.domain.casefile.CaseReview;
+import net.enthusia.staff.domain.casefile.CaseState;
+import net.enthusia.staff.domain.casefile.CaseVisibility;
 import net.enthusia.staff.domain.history.HistoryQueryOptions;
 import net.enthusia.staff.domain.history.ModerationHistoryPage;
+import net.enthusia.staff.domain.investigation.InvestigationNote;
 import net.enthusia.staff.domain.moderation.DiscordIdentityRef;
 import net.enthusia.staff.domain.moderation.DiscordUserId;
 import net.enthusia.staff.domain.moderation.MainAccountSelectionSource;
@@ -112,6 +117,137 @@ class StaffModerationReadServiceTest {
         assertTrue(ambiguous.truncated());
     }
 
+    @Test
+    void privateInvestigationNotesRespectManagementVisibility() {
+        DiscordUserId discord = new DiscordUserId("323456789012345678");
+        VersionedSubject subject = subject(Set.of(new DiscordIdentityRef(discord)), Optional.empty());
+        ModerationSubjectId subjectId = subject.subject().subjectId();
+        FakeReadData data = new FakeReadData();
+        data.discordSubjects.put(discord, subject);
+        data.subjects.put(subjectId, subject);
+        data.investigationNotes = List.of(
+                note(subjectId, InvestigationNote.Visibility.MANAGEMENT, "management only", 2),
+                note(subjectId, InvestigationNote.Visibility.STAFF, "staff visible", 1)
+        );
+        StaffModerationReadService service = new StaffModerationReadService(data, CLOCK);
+        StaffModerationReadService.Target target = service.discordTarget(discord);
+
+        assertEquals(List.of("staff visible"), service.investigationNotes(target, StaffRank.MOD).stream()
+                .map(InvestigationNote::text).toList());
+        assertEquals(List.of("management only", "staff visible"), service.investigationNotes(target, StaffRank.ADMIN).stream()
+                .map(InvestigationNote::text).toList());
+    }
+
+    @Test
+    void nonManagementVisibilityIsFilteredBeforePanelLimit() {
+        DiscordUserId discord = new DiscordUserId("333456789012345678");
+        VersionedSubject subject = subject(Set.of(new DiscordIdentityRef(discord)), Optional.empty());
+        ModerationSubjectId subjectId = subject.subject().subjectId();
+        FakeReadData data = new FakeReadData();
+        data.discordSubjects.put(discord, subject);
+        List<InvestigationNote> notes = new ArrayList<>();
+        for (int index = 0; index < 9; index++) {
+            notes.add(note(subjectId, InvestigationNote.Visibility.MANAGEMENT, "hidden-" + index, 20 - index));
+        }
+        for (int index = 0; index < 8; index++) {
+            notes.add(note(subjectId, InvestigationNote.Visibility.STAFF, "visible-" + index, 10 - index));
+        }
+        data.investigationNotes = List.copyOf(notes);
+        StaffModerationReadService service = new StaffModerationReadService(data, CLOCK);
+
+        List<InvestigationNote> visible = service.investigationNotes(service.discordTarget(discord), StaffRank.MOD);
+        assertEquals(8, visible.size());
+        assertTrue(visible.stream().allMatch(note -> note.visibility() == InvestigationNote.Visibility.STAFF));
+    }
+
+    @Test
+    void historicalMinecraftCaseUsesStoredSubjectForAuthorization() {
+        UUID player = UUID.fromString("aaaaaaaa-0000-0000-0000-000000000001");
+        DiscordUserId historicalDiscord = new DiscordUserId("413456789012345678");
+        DiscordUserId currentDiscord = new DiscordUserId("413456789012345679");
+        VersionedSubject historical = subject(
+                Set.of(new DiscordIdentityRef(historicalDiscord)), Optional.empty());
+        VersionedSubject current = subject(
+                Set.of(new DiscordIdentityRef(currentDiscord), new MinecraftIdentityRef(player)), Optional.empty());
+        ModerationSubjectId historicalId = historical.subject().subjectId();
+        FakeReadData data = new FakeReadData();
+        data.subjects.put(historicalId, historical);
+        data.minecraftSubjects.put(player, current);
+        StaffModerationReadService service = new StaffModerationReadService(data, CLOCK);
+        CaseReview review = new CaseReview(
+                new CaseId("1123456789ABCDEF"), player, Optional.of(historicalId), UUID.randomUUID(),
+                "Staff", "MOD", "Historical Minecraft case", "MANUAL", "WARN", "summary",
+                "discord-d09-v1", CaseVisibility.PRIVATE, CaseState.OPEN, NOW, 0,
+                Optional.empty(), List.of(), Optional.empty()
+        );
+
+        StaffModerationReadService.Target target = service.caseTarget(review);
+
+        assertEquals(StaffModerationReadService.TargetKind.MINECRAFT, target.kind());
+        assertEquals(Optional.of(historicalDiscord), target.discordId());
+        assertEquals(Optional.of(player), target.minecraftId());
+        assertEquals(historicalId, target.subject().orElseThrow().subject().subjectId());
+    }
+
+    @Test
+    void targetOnlyLegacyCaseFallsBackToCurrentMinecraftSubject() {
+        UUID player = UUID.fromString("aaaaaaaa-0000-0000-0000-000000000002");
+        DiscordUserId discord = new DiscordUserId("413456789012345680");
+        VersionedSubject current = subject(
+                Set.of(new DiscordIdentityRef(discord), new MinecraftIdentityRef(player)), Optional.empty());
+        FakeReadData data = new FakeReadData();
+        data.minecraftSubjects.put(player, current);
+        StaffModerationReadService service = new StaffModerationReadService(data, CLOCK);
+        CaseReview review = new CaseReview(
+                new CaseId("2123456789ABCDEF"), player, Optional.empty(), UUID.randomUUID(),
+                "Staff", "MOD", "Legacy target-only case", "MANUAL", "WARN", "summary",
+                "legacy-v1", CaseVisibility.PUBLIC, CaseState.OPEN, NOW, 0,
+                Optional.empty(), List.of(), Optional.empty()
+        );
+
+        StaffModerationReadService.Target target = service.caseTarget(review);
+
+        assertEquals(StaffModerationReadService.TargetKind.MINECRAFT, target.kind());
+        assertEquals(Optional.of(discord), target.discordId());
+        assertEquals(Optional.of(player), target.minecraftId());
+        assertEquals(current.subject().subjectId(), target.subject().orElseThrow().subject().subjectId());
+    }
+
+    @Test
+    void discordOnlyCaseRoutesThroughAuthoritativeModerationSubject() {
+        DiscordUserId discord = new DiscordUserId("423456789012345678");
+        VersionedSubject subject = subject(Set.of(new DiscordIdentityRef(discord)), Optional.empty());
+        ModerationSubjectId subjectId = subject.subject().subjectId();
+        FakeReadData data = new FakeReadData();
+        data.subjects.put(subjectId, subject);
+        StaffModerationReadService service = new StaffModerationReadService(data, CLOCK);
+        CaseReview review = new CaseReview(
+                new CaseId("0123456789ABCDEF"), null, Optional.of(subjectId), UUID.randomUUID(), "Staff", "MOD",
+                "Private Discord investigation", "DISCORD_INVESTIGATION", "DISCORD_INVESTIGATION", "summary",
+                "discord-d09-v1", CaseVisibility.PRIVATE, CaseState.OPEN, NOW, 0,
+                Optional.empty(), List.of(), Optional.empty()
+        );
+
+        StaffModerationReadService.Target target = service.caseTarget(review);
+        assertEquals(StaffModerationReadService.TargetKind.DISCORD, target.kind());
+        assertEquals(Optional.of(discord), target.discordId());
+        assertTrue(target.minecraftId().isEmpty());
+    }
+
+    private static InvestigationNote note(
+            ModerationSubjectId subjectId,
+            InvestigationNote.Visibility visibility,
+            String text,
+            long revision
+    ) {
+        UUID actor = UUID.fromString("50000000-0000-0000-0000-000000000001");
+        return new InvestigationNote(
+                UUID.randomUUID(), subjectId,
+                new InvestigationNote.Scope(InvestigationNote.ScopeType.SUBJECT, subjectId.value().toString()),
+                visibility, text, actor, NOW.minusSeconds(revision), actor, NOW, revision, false
+        );
+    }
+
     private static VersionedSubject subject(
             Set<ModerationIdentity> identities,
             Optional<MainMinecraftAccount> main
@@ -130,7 +266,9 @@ class StaffModerationReadServiceTest {
     private static final class FakeReadData implements StaffModerationReadService.ReadData {
         private final Map<DiscordUserId, VersionedSubject> discordSubjects = new ConcurrentHashMap<>();
         private final Map<UUID, VersionedSubject> minecraftSubjects = new ConcurrentHashMap<>();
+        private final Map<ModerationSubjectId, VersionedSubject> subjects = new ConcurrentHashMap<>();
         private final Map<UUID, PlayerIdentity> players = new ConcurrentHashMap<>();
+        private List<InvestigationNote> investigationNotes = List.of();
         private PlayerResolution resolution = new PlayerResolution.Missing();
 
         @Override
@@ -141,6 +279,11 @@ class StaffModerationReadServiceTest {
         @Override
         public Optional<VersionedSubject> subjectForMinecraft(UUID playerId) {
             return Optional.ofNullable(minecraftSubjects.get(playerId));
+        }
+
+        @Override
+        public Optional<VersionedSubject> subject(ModerationSubjectId subjectId) {
+            return Optional.ofNullable(subjects.get(subjectId));
         }
 
         @Override
@@ -186,6 +329,24 @@ class StaffModerationReadServiceTest {
         @Override
         public List<StaffNote> recentNotes(UUID targetId, int limit) {
             return List.of();
+        }
+
+        @Override
+        public List<InvestigationNote> recentInvestigationNotes(ModerationSubjectId subjectId, int limit) {
+            return investigationNotes.stream().filter(note -> note.subjectId().equals(subjectId)).limit(limit).toList();
+        }
+
+        @Override
+        public List<InvestigationNote> recentInvestigationNotes(
+                ModerationSubjectId subjectId,
+                Optional<InvestigationNote.Visibility> visibility,
+                int limit
+        ) {
+            return investigationNotes.stream()
+                    .filter(note -> note.subjectId().equals(subjectId))
+                    .filter(note -> visibility.isEmpty() || note.visibility() == visibility.orElseThrow())
+                    .limit(limit)
+                    .toList();
         }
     }
 }

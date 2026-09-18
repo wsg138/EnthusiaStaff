@@ -18,6 +18,7 @@ import net.dv8tion.jda.api.events.session.SessionRecreateEvent;
 import net.dv8tion.jda.api.events.session.SessionResumeEvent;
 import net.dv8tion.jda.api.events.session.ShutdownEvent;
 import net.dv8tion.jda.api.hooks.ListenerAdapter;
+import net.dv8tion.jda.api.requests.GatewayIntent;
 import net.dv8tion.jda.api.utils.ChunkingFilter;
 import net.dv8tion.jda.api.utils.MemberCachePolicy;
 import net.dv8tion.jda.api.utils.cache.CacheFlag;
@@ -33,6 +34,7 @@ final class JdaDiscordGateway implements DiscordGateway {
     private final Object lifecycleLock = new Object();
     private JDA jda;
     private JdaStaffModerationListener moderationListener;
+    private JdaDiscordInvestigationEvidenceListener investigationEvidenceListener;
     private JdaModerationUiPreviewListener previewListener;
 
     JdaDiscordGateway(StaffBotConfiguration configuration) {
@@ -76,7 +78,8 @@ final class JdaDiscordGateway implements DiscordGateway {
     }
 
     private JDABuilder baseBuilder(SessionListener listener) {
-        return JDABuilder.createLight(configuration.discordToken(), Set.of())
+        boolean investigationsEnabled = moderation.map(StaffModerationRuntime::investigationsEnabled).orElse(false);
+        return JDABuilder.createLight(configuration.discordToken(), requiredGatewayIntents(investigationsEnabled))
                 .enableCache(requiredCacheFlags())
                 .setMemberCachePolicy(MemberCachePolicy.NONE)
                 .setChunkingFilter(ChunkingFilter.NONE)
@@ -101,10 +104,17 @@ final class JdaDiscordGateway implements DiscordGateway {
             builder.addEventListeners(previewListener);
             return;
         }
-        moderation.ifPresent(runtime -> {
-            moderationListener = new JdaStaffModerationListener(
-                    configuration.environment().guildId(), workers, interactions, runtime);
-            builder.addEventListeners(moderationListener);
+        moderation.ifPresent(runtime -> addModerationListeners(builder, runtime));
+    }
+
+    private void addModerationListeners(JDABuilder builder, StaffModerationRuntime runtime) {
+        moderationListener = new JdaStaffModerationListener(
+                configuration.environment().guildId(), workers, interactions, runtime);
+        builder.addEventListeners(moderationListener);
+        runtime.investigationService().ifPresent(service -> {
+            investigationEvidenceListener = new JdaDiscordInvestigationEvidenceListener(
+                    configuration.environment().guildId(), workers, service);
+            builder.addEventListeners(investigationEvidenceListener);
         });
     }
 
@@ -120,6 +130,9 @@ final class JdaDiscordGateway implements DiscordGateway {
             } else if (moderationListener != null) {
                 moderationListener.enable(jda);
             }
+            if (investigationEvidenceListener != null) {
+                investigationEvidenceListener.enable();
+            }
         }
     }
 
@@ -131,6 +144,9 @@ final class JdaDiscordGateway implements DiscordGateway {
             }
             if (moderationListener != null) {
                 moderationListener.disable();
+            }
+            if (investigationEvidenceListener != null) {
+                investigationEvidenceListener.disable();
             }
         }
     }
@@ -163,6 +179,9 @@ final class JdaDiscordGateway implements DiscordGateway {
         if (moderationListener != null) {
             moderationListener.disable();
         }
+        if (investigationEvidenceListener != null) {
+            investigationEvidenceListener.disable();
+        }
     }
 
     @Override
@@ -172,6 +191,12 @@ final class JdaDiscordGateway implements DiscordGateway {
             current = jda;
         }
         return current == null || current.awaitShutdown(timeout.toMillis(), TimeUnit.MILLISECONDS);
+    }
+
+    static Set<GatewayIntent> requiredGatewayIntents(boolean investigationsEnabled) {
+        return investigationsEnabled
+                ? Set.of(GatewayIntent.GUILD_MESSAGES, GatewayIntent.MESSAGE_CONTENT)
+                : Set.of();
     }
 
     static Set<CacheFlag> requiredCacheFlags() {

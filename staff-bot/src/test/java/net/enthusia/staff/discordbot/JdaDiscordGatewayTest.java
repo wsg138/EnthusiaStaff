@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
+import net.dv8tion.jda.api.requests.GatewayIntent;
 import net.dv8tion.jda.api.utils.cache.CacheFlag;
 import org.junit.jupiter.api.Test;
 
@@ -13,6 +14,15 @@ class JdaDiscordGatewayTest {
     @Test
     void restrictionRuntimeEnablesOnlyMemberOverrideCache() {
         assertEquals(Set.of(CacheFlag.MEMBER_OVERRIDES), JdaDiscordGateway.requiredCacheFlags());
+    }
+
+    @Test
+    void messageContentIntentIsOptInOnlyForD09EvidenceTracking() {
+        assertEquals(Set.of(), JdaDiscordGateway.requiredGatewayIntents(false));
+        assertEquals(
+                Set.of(GatewayIntent.GUILD_MESSAGES, GatewayIntent.MESSAGE_CONTENT),
+                JdaDiscordGateway.requiredGatewayIntents(true)
+        );
     }
 
     @Test

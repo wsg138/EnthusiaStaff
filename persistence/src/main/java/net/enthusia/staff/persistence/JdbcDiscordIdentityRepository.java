@@ -79,6 +79,17 @@ final class JdbcDiscordIdentityRepository {
         );
     }
 
+    Optional<VersionedSubject> subject(ModerationSubjectId subjectId) {
+        requirePresent(subjectId, "subjectId");
+        return JdbcTransactionSupport.execute(
+                dataSource,
+                "Unable to read moderation subject",
+                connection -> subjectExists(connection, subjectId)
+                        ? Optional.of(loadSubject(connection, subjectId))
+                        : Optional.empty()
+        );
+    }
+
     Optional<VersionedLink> currentLink(UUID playerId) {
         requirePresent(playerId, "playerId");
         return JdbcTransactionSupport.execute(
@@ -123,7 +134,7 @@ final class JdbcDiscordIdentityRepository {
         }
     }
 
-    private static VersionedSubject ensureMinecraftSubject(Connection connection, UUID playerId, Instant now)
+    static VersionedSubject ensureMinecraftSubject(Connection connection, UUID playerId, Instant now)
             throws SQLException {
         ModerationSubjectId existing = subjectIdForMinecraft(connection, playerId, true);
         if (existing != null) {
@@ -352,7 +363,7 @@ final class JdbcDiscordIdentityRepository {
 
     private static ModerationSubjectId insertFreshSubject(Connection connection, Instant now) throws SQLException {
         for (int attempt = 0; attempt < SUBJECT_ALLOCATION_ATTEMPTS; attempt++) {
-            ModerationSubjectId subjectId = new ModerationSubjectId(UUID.randomUUID());
+            ModerationSubjectId subjectId = randomSubjectId();
             try {
                 insertSubject(connection, subjectId, now);
                 return subjectId;
@@ -363,6 +374,10 @@ final class JdbcDiscordIdentityRepository {
             }
         }
         throw new SQLException("unable to allocate unique moderation subject id");
+    }
+
+    private static ModerationSubjectId randomSubjectId() {
+        return new ModerationSubjectId(UUID.randomUUID());
     }
 
     private static void insertSubject(Connection connection, ModerationSubjectId subjectId, Instant now)
