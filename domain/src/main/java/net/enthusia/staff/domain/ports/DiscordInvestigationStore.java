@@ -170,7 +170,7 @@ public interface DiscordInvestigationStore {
                 throw new IllegalArgumentException("delivered alert cannot retain retry state");
             }
             if (!delivered && (errorCode.isEmpty() || nextAttemptAt.isEmpty()
-                    || nextAttemptAt.orElseThrow().isBefore(now))) {
+                    || !nextAttemptAt.orElseThrow().isAfter(now))) {
                 throw new IllegalArgumentException("failed delivery requires error and future retry time");
             }
         }

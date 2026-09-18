@@ -1,8 +1,13 @@
 package net.enthusia.staff.discordbot;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicReference;
 import net.dv8tion.jda.api.JDA;
 import net.dv8tion.jda.api.Permission;
@@ -17,6 +22,7 @@ import net.enthusia.staff.domain.investigation.EvasionAlert;
 /** Sends the private D09 investigation snapshot and reauthorized quick actions to staff. */
 final class JdaDiscordInvestigationAlertSink implements DiscordInvestigationAlertSink {
     private static final int MAX_INLINE_TEXT = 180;
+    private static final Duration SEND_TIMEOUT = Duration.ofSeconds(20);
     private static final String ROLE_UNAVAILABLE = "DISCORD_ALERT_STAFF_ROLE_UNAVAILABLE";
     private static final String CHANNEL_NOT_PRIVATE = "DISCORD_ALERT_CHANNEL_NOT_PRIVATE";
     private static final String STAFF_CANNOT_VIEW = "DISCORD_ALERT_STAFF_ROLE_CANNOT_VIEW";
@@ -67,14 +73,33 @@ final class JdaDiscordInvestigationAlertSink implements DiscordInvestigationAler
             return Delivery.retry(privacyError.orElseThrow());
         }
         try {
-            channel.sendMessage("<@&" + staffRoleId + "> " + content(alert))
+            CompletableFuture<Message> request = channel.sendMessage("<@&" + staffRoleId + "> " + content(alert))
                     .setAllowedMentions(List.of(Message.MentionType.ROLE))
                     .mentionRoles(List.of(staffRoleId))
                     .addComponents(ActionRow.of(buttons(alert)))
-                    .complete();
-            return Delivery.success();
+                    .submit();
+            return awaitSend(request, SEND_TIMEOUT);
         } catch (RuntimeException exception) {
             return Delivery.retry("DISCORD_ALERT_SEND_FAILED");
+        }
+    }
+
+    static Delivery awaitSend(CompletableFuture<?> request, Duration timeout) {
+        if (request == null || timeout == null || timeout.isZero() || timeout.isNegative()) {
+            throw new IllegalArgumentException("Discord alert send wait is invalid");
+        }
+        try {
+            request.get(timeout.toMillis(), TimeUnit.MILLISECONDS);
+            return Delivery.success();
+        } catch (TimeoutException exception) {
+            request.cancel(true);
+            return Delivery.retry("DISCORD_ALERT_SEND_TIMEOUT");
+        } catch (ExecutionException exception) {
+            return Delivery.retry("DISCORD_ALERT_SEND_FAILED");
+        } catch (InterruptedException exception) {
+            request.cancel(true);
+            Thread.currentThread().interrupt();
+            return Delivery.retry("DISCORD_ALERT_SEND_INTERRUPTED");
         }
     }
 

@@ -230,16 +230,19 @@ final class StaffModerationReadService {
         if (review == null) {
             throw new IllegalArgumentException("case review must be present");
         }
-        if (review.minecraftTargetId().isPresent()) {
-            return minecraftTarget(review.minecraftTargetId().orElseThrow());
-        }
         ModerationSubjectId subjectId = review.subjectId()
                 .orElseThrow(() -> new IllegalStateException("case has no moderation subject"));
         VersionedSubject subject = data.subject(subjectId)
                 .orElseThrow(() -> new IllegalStateException("case moderation subject is unavailable"));
-        DiscordUserId discord = subject.subject().discordUserIds().stream().findFirst()
+        Optional<DiscordUserId> discord = subject.subject().discordUserIds().stream().findFirst();
+        if (review.minecraftTargetId().isPresent()) {
+            return checked(new Target(
+                    TargetKind.MINECRAFT, discord, review.minecraftTargetId(), Optional.of(subject)));
+        }
+        DiscordUserId discordOnly = discord
                 .orElseThrow(() -> new IllegalStateException("Discord-only case has no Discord identity"));
-        return checked(new Target(TargetKind.DISCORD, Optional.of(discord), Optional.empty(), Optional.of(subject)));
+        return checked(new Target(
+                TargetKind.DISCORD, Optional.of(discordOnly), Optional.empty(), Optional.of(subject)));
     }
 
     List<InvestigationNote> investigationNotes(Target target, StaffRank viewerRank) {

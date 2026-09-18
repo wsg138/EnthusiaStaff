@@ -198,6 +198,47 @@ class DiscordInvestigationPersistenceIntegrationTest {
     }
 
     @Test
+    void evidenceRetainUntilCanOutlivePostClosureWindow() throws SQLException {
+        try (HikariDataSource dataSource = open()) {
+            DiscordUserId userId = new DiscordUserId("223456789012345682");
+            ModerationSubjectId subjectId = ensureSubject(dataSource, userId);
+            JdbcDiscordInvestigationStore store = new JdbcDiscordInvestigationStore(dataSource);
+            CaseId caseId = store.createInvestigationCase(new DiscordInvestigationStore.InvestigationCaseDraft(
+                    "d09:test:case:retain-until", subjectId, "Extended evidence retention",
+                    new Actor(ACTOR, ACTOR_NAME, StaffRank.ADMIN), NOW
+            )).caseId();
+            UUID evidenceId = UUID.fromString("40000000-0000-0000-0000-000000000099");
+            InvestigationEvidence.Message focus = message(
+                    "1541286004298752299", userId.value(), "retained body");
+            store.captureEvidence(new InvestigationEvidence.Capture(
+                    evidenceId, "d09:test:evidence:retain-until", subjectId, caseId, focus,
+                    List.of(), List.of(), ACTOR, "MESSAGE_CONTEXT", NOW.plusSeconds(1)
+            ));
+
+            Instant extendedAt = NOW.plus(Duration.ofDays(40));
+            InvestigationEvidence.Message edited = new InvestigationEvidence.Message(
+                    focus.guildId(), focus.channelId(), focus.messageId(), focus.authorUserId(), focus.createdAt(),
+                    Optional.of(extendedAt), focus.jumpUrl(), "retained body updated", focus.attachments()
+            );
+            store.recordEvidenceEdit(new InvestigationEvidence.Edit(
+                    evidenceId, "d09:test:evidence-edit:retain-until", edited, extendedAt));
+            Instant closedAt = NOW.plus(Duration.ofDays(41));
+            assertTrue(store.closeInactiveCases(extendedAt.plusSeconds(1), closedAt, 100) >= 1);
+
+            Instant afterPostCloseWindow = closedAt.plus(Duration.ofDays(31));
+            store.purgeEligibleEvidence(afterPostCloseWindow, 500);
+            assertTrue(store.findEvidenceByMessage(
+                    focus.guildId(), focus.channelId(), focus.messageId()).isPresent());
+
+            Instant afterRetainUntil = extendedAt.plus(Duration.ofDays(61));
+            store.purgeEligibleEvidence(afterRetainUntil, 500);
+            assertTrue(store.findEvidenceByMessage(
+                    focus.guildId(), focus.channelId(), focus.messageId()).isEmpty());
+            assertPurgedMetadata(dataSource, evidenceId);
+        }
+    }
+
+    @Test
     void evasionAlertDeliveryRetriesIndependentlyAndResolutionIsRevisionChecked() throws SQLException {
         UUID trigger = UUID.fromString("50000000-0000-0000-0000-000000000001");
         MariaDbIntegrationSupport.insertPlayer(DATABASE, trigger, "LinkedAlt", NOW.minusSeconds(30));

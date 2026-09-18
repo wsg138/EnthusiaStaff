@@ -4,7 +4,9 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.time.Duration;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
 import org.junit.jupiter.api.Test;
 
 class JdaDiscordInvestigationAlertSinkTest {
@@ -30,6 +32,18 @@ class JdaDiscordInvestigationAlertSinkTest {
         assertPolicy("DISCORD_ALERT_CHANNEL_MEMBER_OVERRIDE_CAN_VIEW", true, false, true, false, true);
         assertTrue(JdaDiscordInvestigationAlertSink.channelPolicyError(
                 true, false, true, false, false).isEmpty());
+    }
+
+    @Test
+    void timedOutSendCancelsPendingDiscordRequest() {
+        CompletableFuture<Object> request = new CompletableFuture<>();
+
+        DiscordInvestigationAlertSink.Delivery delivery =
+                JdaDiscordInvestigationAlertSink.awaitSend(request, Duration.ofMillis(1));
+
+        assertFalse(delivery.delivered());
+        assertEquals("DISCORD_ALERT_SEND_TIMEOUT", delivery.errorCode());
+        assertTrue(request.isCancelled());
     }
 
     private static void assertPolicy(

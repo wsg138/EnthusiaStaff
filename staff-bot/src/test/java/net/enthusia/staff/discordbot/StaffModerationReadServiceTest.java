@@ -161,6 +161,35 @@ class StaffModerationReadServiceTest {
     }
 
     @Test
+    void historicalMinecraftCaseUsesStoredSubjectForAuthorization() {
+        UUID player = UUID.fromString("aaaaaaaa-0000-0000-0000-000000000001");
+        DiscordUserId historicalDiscord = new DiscordUserId("413456789012345678");
+        DiscordUserId currentDiscord = new DiscordUserId("413456789012345679");
+        VersionedSubject historical = subject(
+                Set.of(new DiscordIdentityRef(historicalDiscord)), Optional.empty());
+        VersionedSubject current = subject(
+                Set.of(new DiscordIdentityRef(currentDiscord), new MinecraftIdentityRef(player)), Optional.empty());
+        ModerationSubjectId historicalId = historical.subject().subjectId();
+        FakeReadData data = new FakeReadData();
+        data.subjects.put(historicalId, historical);
+        data.minecraftSubjects.put(player, current);
+        StaffModerationReadService service = new StaffModerationReadService(data, CLOCK);
+        CaseReview review = new CaseReview(
+                new CaseId("1123456789ABCDEF"), player, Optional.of(historicalId), UUID.randomUUID(),
+                "Staff", "MOD", "Historical Minecraft case", "MANUAL", "WARN", "summary",
+                "discord-d09-v1", CaseVisibility.PRIVATE, CaseState.OPEN, NOW, 0,
+                Optional.empty(), List.of(), Optional.empty()
+        );
+
+        StaffModerationReadService.Target target = service.caseTarget(review);
+
+        assertEquals(StaffModerationReadService.TargetKind.MINECRAFT, target.kind());
+        assertEquals(Optional.of(historicalDiscord), target.discordId());
+        assertEquals(Optional.of(player), target.minecraftId());
+        assertEquals(historicalId, target.subject().orElseThrow().subject().subjectId());
+    }
+
+    @Test
     void discordOnlyCaseRoutesThroughAuthoritativeModerationSubject() {
         DiscordUserId discord = new DiscordUserId("423456789012345678");
         VersionedSubject subject = subject(Set.of(new DiscordIdentityRef(discord)), Optional.empty());

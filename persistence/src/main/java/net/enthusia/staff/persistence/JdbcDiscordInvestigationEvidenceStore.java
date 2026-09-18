@@ -99,7 +99,8 @@ final class JdbcDiscordInvestigationEvidenceStore {
             throw new IllegalArgumentException("evidence purge request is invalid");
         }
         return JdbcTransactionSupport.execute(dataSource, "Unable to purge expired Discord evidence", connection -> {
-            List<UUID> eligible = eligibleForPurge(connection, now.minus(POST_END_RETENTION), limit);
+            List<UUID> eligible = eligibleForPurge(
+                    connection, now, now.minus(POST_END_RETENTION), limit);
             for (UUID evidenceId : eligible) {
                 purgeOne(connection, evidenceId, now);
             }
@@ -367,7 +368,12 @@ final class JdbcDiscordInvestigationEvidenceStore {
         }
     }
 
-    private static List<UUID> eligibleForPurge(Connection connection, Instant cutoff, int limit) throws SQLException {
+    private static List<UUID> eligibleForPurge(
+            Connection connection,
+            Instant now,
+            Instant cutoff,
+            int limit
+    ) throws SQLException {
         List<UUID> evidence = new ArrayList<>();
         try (PreparedStatement statement = connection.prepareStatement("""
                 SELECT e.evidence_id
@@ -376,6 +382,7 @@ final class JdbcDiscordInvestigationEvidenceStore {
                 JOIN discord_investigation_cases i ON i.case_id = e.case_id
                 JOIN cases c ON c.case_id = i.case_id
                 WHERE m.purge_state = 'ACTIVE'
+                  AND m.retain_until <= ?
                   AND ((i.source = 'DISCORD_PUNISHMENT' AND i.punishment_ended_at IS NOT NULL
                         AND i.punishment_ended_at <= ?)
                     OR (i.source = 'INVESTIGATION' AND c.state = 'CLOSED'
@@ -384,9 +391,10 @@ final class JdbcDiscordInvestigationEvidenceStore {
                 LIMIT ?
                 FOR UPDATE
                 """)) {
-            statement.setTimestamp(1, Timestamp.from(cutoff));
+            statement.setTimestamp(1, Timestamp.from(now));
             statement.setTimestamp(2, Timestamp.from(cutoff));
-            statement.setInt(3, limit);
+            statement.setTimestamp(3, Timestamp.from(cutoff));
+            statement.setInt(4, limit);
             try (ResultSet rows = statement.executeQuery()) {
                 while (rows.next()) {
                     evidence.add(UuidBytes.fromBytes(rows.getBytes("evidence_id")));

@@ -67,6 +67,11 @@ public record EvasionAlert(
                     || playerRevision < 0 || triggerType == null || triggeredAt == null) {
                 throw new IllegalArgumentException("evasion alert context must describe an active punishment and trigger");
             }
+            if (punishmentExpiresAt.isPresent()
+                    && !punishmentExpiresAt.orElseThrow().isAfter(triggeredAt)) {
+                throw new IllegalArgumentException(
+                        "evasion alert punishment must be active at the trigger time");
+            }
             triggeringMinecraftUsername.ifPresent(username -> {
                 if (blank(username) || username.length() > 32) {
                     throw new IllegalArgumentException("triggering Minecraft username is invalid");

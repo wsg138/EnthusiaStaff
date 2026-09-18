@@ -18,24 +18,26 @@ class DiscordInvestigationCoordinatorTest {
         CountDownLatch release = new CountDownLatch(1);
         CountDownLatch cleanup = new CountDownLatch(1);
         try (ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor()) {
-            DiscordInvestigationCoordinator coordinator = new DiscordInvestigationCoordinator(
-                    () -> {
-                        entered.countDown();
-                        awaitIgnoringInterrupts(release);
-                    },
-                    Duration.ofMillis(5), scheduler, Duration.ofMillis(25)
-            );
-            coordinator.start();
-            coordinator.resume();
-            assertTrue(entered.await(2, TimeUnit.SECONDS));
+            try {
+                DiscordInvestigationCoordinator coordinator = new DiscordInvestigationCoordinator(
+                        () -> {
+                            entered.countDown();
+                            awaitIgnoringInterrupts(release);
+                        },
+                        Duration.ofMillis(5), scheduler, Duration.ofMillis(25)
+                );
+                coordinator.start();
+                coordinator.resume();
+                assertTrue(entered.await(2, TimeUnit.SECONDS));
 
-            assertThrows(IllegalStateException.class, coordinator::close);
-            coordinator.runAfterTermination(cleanup::countDown);
-            assertFalse(cleanup.await(50, TimeUnit.MILLISECONDS));
-            release.countDown();
-            assertTrue(cleanup.await(2, TimeUnit.SECONDS));
-        } finally {
-            release.countDown();
+                assertThrows(IllegalStateException.class, coordinator::close);
+                coordinator.runAfterTermination(cleanup::countDown);
+                assertFalse(cleanup.await(50, TimeUnit.MILLISECONDS));
+                release.countDown();
+                assertTrue(cleanup.await(2, TimeUnit.SECONDS));
+            } finally {
+                release.countDown();
+            }
         }
     }
 
