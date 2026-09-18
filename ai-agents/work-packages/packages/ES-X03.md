@@ -25,7 +25,7 @@ Use the existing Staff [PR #139](https://github.com/wsg138/EnthusiaStaff/pull/13
 
 - EnthusiaStaff `main` reconciliation head: `6201765f0e07b08f9b22ed7ce96838c01fa94007`.
 - Staff PR #139 exact head: `879eae12df35253cce6cd12179d5cef1afe95dd9`; open, non-draft, and mergeable.
-- EnthusiaMarket `main`: `cc19fa966dcb155fa1743f5076fb5152e74bdf8f`; the aggregate Market component matches this standalone tree before Staff merge. Its metadata remains `SYNC_PENDING` until post-merge parity.
+- EnthusiaMarket `main`: `cc19fa966dcb155fa1743f5076fb5152e74bdf8f`; the aggregate Market component on PR #139 matches this standalone tree before Staff merge. PR #139's metadata is `SYNC_PENDING`; canonical `main` correctly remains `NOT_IMPORTED` until Staff merge.
 - Staff `main` owns V20; X03 owns `V21__market_compliance_journal.sql`; active D09 reserves V22. X03 and D09 both touch `PaperCommandRegistrar.java`, but their hunks are disjoint.
 - No X03 exact-path overlap exists with the user-owned dirty root worktree. No force-push, rebase, squash, or destructive reset is authorized or used.
 
@@ -54,7 +54,7 @@ The static result is not dismissed wholesale. Of 2,085 reports, 1,989 are under 
 Do not broaden root `.codacy.yml` to hide `components/enthusia-market/**`. This frozen Staff integration package must not silently take ownership of a new paired provider static-remediation package or suppress valid analyzer findings.
 
 ## 12. Current synchronization evidence
-The aggregate Market component and standalone Market `main` are equal before Staff merge. Final canonical standalone↔aggregate parity remains a required post-Staff-merge gate; `COMPONENT-METADATA.md` correctly remains `SYNC_PENDING`. Standalone PR #6 is separate and its inclusion would break this exact parity, so preserve it unchanged.
+The aggregate Market component on PR #139 and standalone Market `main` are equal before Staff merge (511 tracked entries excluding aggregate-only `COMPONENT-METADATA.md`). Final canonical standalone↔aggregate parity remains a required post-Staff-merge gate; PR #139's metadata correctly remains `SYNC_PENDING`, while canonical `main` correctly remains `NOT_IMPORTED` until the implementation merges. Standalone PR #6 is separate and its inclusion would break this exact parity, so preserve it unchanged.
 
 ## 13. Exact unblock condition
 `BLOCKED` / `PARKED_BLOCKED`. Keep PR #139 and its existing branch; do not create a replacement X03 product branch.

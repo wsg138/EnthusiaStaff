@@ -8,7 +8,7 @@ Terminal worker state: `BLOCKED` / `PARKED_BLOCKED`
 
 - Canonical Staff `main` at reconciliation: `6201765f0e07b08f9b22ed7ce96838c01fa94007`.
 - Existing Staff implementation: [PR #139](https://github.com/wsg138/EnthusiaStaff/pull/139), branch `package/es-x03-market-provider`, exact head `879eae12df35253cce6cd12179d5cef1afe95dd9`. The PR is open, non-draft, and mergeable; it is preserved unchanged.
-- Standalone EnthusiaMarket `main`: `cc19fa966dcb155fa1743f5076fb5152e74bdf8f`. The aggregate component matched that standalone product tree at reconciliation, but final post-Staff-merge parity remains required. Standalone [PR #6](https://github.com/wsg138/EnthusiaMarket/pull/6) is a separate, unpaired hardening proposal and is preserved; it is not absorbed, rebased, or merged as part of X03.
+- Standalone EnthusiaMarket `main`: `cc19fa966dcb155fa1743f5076fb5152e74bdf8f`. The aggregate component on preserved Staff PR #139 matched that standalone product tree at reconciliation, but canonical `main` remains `NOT_IMPORTED` until Staff merges and final post-merge parity remains required. Standalone [PR #6](https://github.com/wsg138/EnthusiaMarket/pull/6) is a separate, unpaired hardening proposal and is preserved; it is not absorbed, rebased, or merged as part of X03.
 
 ## Reconciliation and collision result
 
