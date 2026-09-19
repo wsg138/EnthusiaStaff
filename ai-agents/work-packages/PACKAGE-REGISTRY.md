@@ -24,7 +24,16 @@ The later live Sentinel restart attempts remain explicit non-passing diagnostic 
 
 `ES-X02 — EnthusiaCurrency destructive provider` is `COMPLETE`. After historical Staff PRs #133/#135 merged, a targeted review found two valid fail-closed state-ordering defects. Currency PR #14 and Staff PR #137 repaired and synchronized the exact corrected tree. Staff frozen head `88bd314d...` passed required hosted/static/runtime gates and merged normally as `2150ac1d...`; post-merge parity against Currency `2b4c8bf...` is exact at hash `c5820e...`; component metadata is `IN_SYNC`; the implementation branch is deleted.
 
-`ES-X03 — EnthusiaMarket destructive provider` is `BLOCKED` / `PARKED_BLOCKED`. Its existing Staff [PR #139](https://github.com/wsg138/EnthusiaStaff/pull/139) reconciled D04 and now carries branch-local V21 at exact head `879eae12df35253cce6cd12179d5cef1afe95dd9`; Coverage and the Sentinel artifact passed. Codacy `105036637444` remains `action_required` with 2,085 issues concentrated in the aggregate Market component, including both demonstrable analyzer mismatches and component-owned debt, so broad suppression is not authorized. Canonical Pi run `35168772060` failed before private dispatch because its public workflow-history lookup returned HTTP 401 `Bad credentials`. Preserve #139 and standalone Market PR #6; an owner must make a bounded paired-static-remediation or analyzer-boundary decision and restore Pi bridge authentication before fresh exact-head gates.
+`ES-X03 — EnthusiaMarket destructive provider` is `PARTIAL` /
+`ACTIONABLE_CONTINUATION`. A direct owner instruction on 2026-09-18 selected the
+paired provider-and-aggregate static-remediation path. Market
+[PR #7](https://github.com/wsg138/EnthusiaMarket/pull/7) is a draft at
+`0eb1aaf...`, and preserved Staff
+[PR #139](https://github.com/wsg138/EnthusiaStaff/pull/139) is its aggregate
+leg. The private Pi bridge remains non-passing because its
+workflow-history lookup returns HTTP 401 `Bad credentials`; no private runtime
+ran. Preserve standalone Market PR #6 and continue non-suppressive remediation
+before fresh exact-head gates.
 
 `ES-X04 — EnthusiaCommend reputation provider` is `COMPLETE`. Commend exact reviewed head `325c304512187f274463c31f1649efe0ae56ab7d` passed Java 21 Maven `clean verify`, 110 tests, PMD, Codacy, and resolved-review gates, then PR #12 merged normally as `b4a1b57ba918f10ab28d140f9fc0e588a95389c1`. Staff exact reviewed head `7ef4b70ed01ad46b925669a0b1378053d8e26789` passed full Java 21/MariaDB/Testcontainers validation, Codacy zero-issue static analysis, Sentinel restart, and canonical Pi public/private staging, then PR #152 merged normally as `e91fc1150a82cc0df081a82bb3dd69714f8bfc14`. Both merge commits exactly contain their package heads. Post-merge standalone↔aggregate shared product Git objects are identical with only aggregate `COMPONENT-METADATA.md` extra; component metadata is `IN_SYNC`. Staff's temporary branch is gone. The residual standalone package branch is fully contained and safe to delete, but the connected mutation surface exposes no branch-delete action. Canonical handoff: `ai-agents/reports/package-handoffs/2026-08-25-es-x04-commend-provider-complete.md`.
 
@@ -64,7 +73,7 @@ Canonical D13 blocker handoff: `ai-agents/reports/package-handoffs/2026-09-14-es
 | `ES-P11` | Fake-base generation and cleanup | `COMPLETE` | — | 90 | `ES-P10` | merged PR #88 |
 | `ES-X01` | RoseChat provider and communication integration | `BLOCKED` | `PARKED_BLOCKED` | 100 | `ES-P03`, `ES-P04`, `ES-P05` | provider repo resolved to `wsg138/Enthusia-RoseChat:master` at `8fcca542...`; verified license/public-aggregate redistribution boundary blocks canonical import/parity; no implementation branches/PRs created; exact unblock is durable redistribution authorization/license change or explicitly authorized mirror-policy redesign |
 | `ES-X02` | EnthusiaCurrency destructive provider | `COMPLETE` | — | 110 | `ES-P08` | Currency PR #14 and Staff PR #137 merged; post-merge parity exact; branches cleaned |
-| `ES-X03` | EnthusiaMarket destructive provider | `BLOCKED` | `PARKED_BLOCKED` | 120 | `ES-P08`, `ES-X02` | Existing Staff PR #139 is preserved at `879eae...`; V21 reconciles current main. Coverage/Sentinel artifact pass, but static check `105036637444` is `action_required` and Pi `35168772060` fails before private dispatch with public-history HTTP 401. Owner must route paired provider static remediation or reviewed analyzer boundary and restore Pi authentication, then rerun exact-head gates; post-merge Market parity remains required. |
+| ES-X03 | Mkt | PARTIAL | ACTIONABLE_CONTINUATION | 120 | X02 | #139/#7 |
 | `ES-X04` | EnthusiaCommend reputation provider | `COMPLETE` | — | 125 | `ES-P08`, `ES-X02` | Commend PR #12 and Staff PR #152 merged normally after exact-head build/static/review/Sentinel/Pi gates; containment and post-merge provider parity exact; component `IN_SYNC` |
 | `ES-V01` | Private LiteBans representative-data verification | `COMPLETE` | — | 200 | — | merged PR #110; terminal evidence retained |
 | `ES-V02` | Distributed and Java/Bedrock staging | `DEFERRED` | `PARKED_BLOCKED` | 250 | `ES-P06`, `ES-P09`, `ES-P11`, `ES-X01`, `ES-X03`, `ES-X04`, `ES-X05` | ES-X01 and ES-X03 remain incomplete |
@@ -98,16 +107,29 @@ Canonical D13 blocker handoff: `ai-agents/reports/package-handoffs/2026-09-14-es
 - X04 added no Staff migration; subsequent D04 work owns canonical Staff V20. Issue #43 remains open and LiteBans remains authoritative. No production reputation/player data, deployment, website/Discord work, market/currency work, authority change, or cutover occurred.
 - Canonical handoff: `ai-agents/reports/package-handoffs/2026-08-25-es-x04-commend-provider-complete.md`.
 
-## ES-X03 current parked record
+## ES-X03 current continuation record
 
-- Live reconciliation produced exact Staff head `879eae12df35253cce6cd12179d5cef1afe95dd9` on preserved PR #139. Canonical `main` is `6201765f0e07b08f9b22ed7ce96838c01fa94007`; it owns V20 while X03 owns V21. Active D09 reserves V22 and has only disjoint hunks in the one shared file.
-- Exact-head Coverage/full build `35168774609` / job `105035696843` and Sentinel artifact `35168774608` / job `105035696425` passed. `git diff --check` passed. There are zero live PR inline threads; CodeRabbit was skipped/manual, not a full automated review approval.
-- Codacy `105036637444` is `action_required` with 2,085 new issues: 1,989 under the aggregate Market component and 96 Staff/agent Markdown. The report includes demonstrable analyzer mismatches and real provider-owned complexity/Markdown/dependency debt, so it is not safe to suppress or relabel as passing.
-- Canonical Pi `35168772060` failed before private dispatch when the public workflow-history lookup returned HTTP 401 `Bad credentials`; no private Pi/Paper/MariaDB runtime ran. Sentinel status command `5730170958` completed `ACTIONED` / `STATUS_NO_JOB` for the exact X03 SHA, so durable restart is `NOT RUN`, not pass; no restart was requested.
-- The aggregate Market tree on PR #139 equals standalone `main` `cc19fa966dcb155fa1743f5076fb5152e74bdf8f` before Staff merge; PR #139 metadata remains `SYNC_PENDING`, while canonical `main` correctly remains `NOT_IMPORTED` until merge. Preserve separate standalone PR #6 rather than absorbing it and breaking parity.
-- Exact unblock: owner-authorize a paired standalone/aggregate remediation for valid provider static debt or make a reviewed non-suppressive analyzer-boundary decision, then restore Pi bridge workflow-history authentication. Freeze the resulting head and rerun every required gate before normal merge; prove parity after merge.
-- Historical thermal/readiness and pre-reconciliation evidence remains non-passing or historical as recorded. No production listing/balance/item/player/database/deployment/authority/cutover state changed.
-- Canonical current handoff: `ai-agents/reports/package-handoffs/2026-09-18-es-x03-parked-static-and-pi.md`.
+- Current owner direction selected a paired standalone-and-aggregate static
+  remediation path. Existing Staff PR #139 is preserved as the aggregate leg;
+  Market PR #7 is its draft provider leg.
+- The provider checkpoint is `0eb1aaf9c7b744d3810832e11a10068e69f65239`.
+  It passes local tests, Detekt, strict MkDocs, default Markdown lint, and
+  diff hygiene with the repository-pinned LumaGuilds artifact.
+- The aggregate branch was normally merged with Staff `main` at
+  `5edcb0c2abf49a836422d21cd02fec265b27e7e6` and now carries an exact copy of
+  the provider diff. Aggregate SQL dialect and test-complexity exclusions are
+  narrowly scoped; valid production analysis remains enabled.
+- The earlier Codacy result remains non-passing historical evidence. The current
+  patch removes the documented dependency and Markdown debt, but remaining
+  production complexity and narrowly scoped rule decisions require review.
+- Canonical Pi remains non-passing: supersession run `35168772060` and its retry
+  failed before private dispatch on public-history HTTP 401 `Bad credentials`.
+  No private Pi, Paper, or MariaDB runtime ran, and no credential is reused or
+  bypassed.
+- Preserve standalone PR #6. Staff owns V20, X03 owns V21, and D09 reserves
+  V22; the active shared-file hunks remain disjoint.
+- Canonical active handoff:
+  `2026-09-18-es-x03-static-remediation-active.md`.
 
 ## ES-X02 terminal record
 
