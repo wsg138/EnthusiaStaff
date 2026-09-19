@@ -28,7 +28,7 @@ The later live Sentinel restart attempts remain explicit non-passing diagnostic 
 `ACTIONABLE_CONTINUATION`. A direct owner instruction on 2026-09-18 selected the
 paired provider-and-aggregate static-remediation path. Market
 [PR #7](https://github.com/wsg138/EnthusiaMarket/pull/7) is a draft at
-`0eb1aaf...`, and preserved Staff
+`80cf7c3...`, and preserved Staff
 [PR #139](https://github.com/wsg138/EnthusiaStaff/pull/139) is its aggregate
 leg. The private Pi bridge remains non-passing because its
 workflow-history lookup returns HTTP 401 `Bad credentials`; no private runtime
@@ -112,7 +112,7 @@ Canonical D13 blocker handoff: `ai-agents/reports/package-handoffs/2026-09-14-es
 - Current owner direction selected a paired standalone-and-aggregate static
   remediation path. Existing Staff PR #139 is preserved as the aggregate leg;
   Market PR #7 is its draft provider leg.
-- The provider checkpoint is `0eb1aaf9c7b744d3810832e11a10068e69f65239`.
+- The provider checkpoint is `80cf7c32fdb1bda6242b91b3b82977fafb665e45`.
   It passes local tests, Detekt, strict MkDocs, default Markdown lint, and
   diff hygiene with the repository-pinned LumaGuilds artifact.
 - The aggregate branch was normally merged with Staff `main` at

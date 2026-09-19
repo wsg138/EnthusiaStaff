@@ -15,7 +15,7 @@ Live GitHub overrides stale records. Detailed package evidence remains in the re
 | X01 implementation state | No provider or Staff implementation branch/PR was created, no RoseChat source was imported, and no product code/test/migration/runtime configuration changed. The worker stopped at the verified license/import gate rather than creating unmergeable or unauthorized work. |
 | X01 exact unblock | Obtain a durable, verifiable license change or authorization permitting the required public aggregate copy, or an explicitly authorized canonical package/mirror-policy redesign that removes republication while retaining deterministic supported-source verification. Then reconcile live heads again and perform the normal two-PR implementation, exact-head validation, normal merges, and synchronization/parity process. |
 | X03 status | `PARTIAL` / `ACTIONABLE_CONTINUATION`; #139/#7. |
-| X03 standalone | Market #7 draft at `0eb1aaf`; #6 is preserved. |
+| X03 standalone | Market #7 draft at `80cf7c3`; #6 is preserved. |
 | X03 aggregate | Staff #139 is the paired aggregate leg. |
 | X03 hosted | Current checks pending; prior checks are historical. |
 | X03 static/review | Remediation is active; production rules remain enabled. |
@@ -166,7 +166,7 @@ No production import, Discord production change, private-data access, deployment
 ## Independent ES-X03 routing
 
 An owner-directed continuation selected paired static remediation. Market PR #7
-is the draft provider leg at `0eb1aaf9c7b744d3810832e11a10068e69f65239`;
+is the draft provider leg at `80cf7c32fdb1bda6242b91b3b82977fafb665e45`;
 preserved Staff PR #139 is its aggregate leg. The aggregate normally merged
 current `main` and mirrors the provider checkpoint exactly, excluding only
 aggregate metadata.

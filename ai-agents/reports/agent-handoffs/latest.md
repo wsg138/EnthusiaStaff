@@ -8,15 +8,15 @@ Canonical package handoff:
 
 An owner-directed continuation selected a paired Market static-remediation path.
 Market [PR #7](https://github.com/wsg138/EnthusiaMarket/pull/7) is a draft at
-`0eb1aaf9c7b744d3810832e11a10068e69f65239`, and preserved Staff
+`80cf7c32fdb1bda6242b91b3b82977fafb665e45`, and preserved Staff
 [PR #139](https://github.com/wsg138/EnthusiaStaff/pull/139) is its aggregate
 leg. The aggregate worktree contains the exact provider diff and a narrowly
 scoped Codacy boundary for component test complexity and SQLite dialect checks.
 
-Provider-local tests, Detekt, strict MkDocs, default Markdown lint, and diff
-hygiene pass at that provider checkpoint. The next worker must commit and push
-the aggregate mirror, prove exact parity, and inspect fresh exact-head hosted
-checks before treating either PR as ready.
+Provider-local CI-equivalent tests, Detekt, strict MkDocs, default Markdown
+lint, diff hygiene, and exact component parity pass at that provider checkpoint.
+The next worker must inspect fresh exact-head hosted checks before treating
+either PR as ready.
 
 Canonical Pi is still `NOT PASS`: its public supersession bridge fails before
 private dispatch on HTTP 401 `Bad credentials`. No private Pi, Paper, or MariaDB

@@ -59,9 +59,9 @@ this public repository.
   current `main` documentation state before the aggregate mirror changed.
 - Market `main` remains `cc19fa966dcb155fa1743f5076fb5152e74bdf8f`.
 - Market PR #7 currently carries provider head
-  `0eb1aaf9c7b744d3810832e11a10068e69f65239`.
+  `80cf7c32fdb1bda6242b91b3b82977fafb665e45`.
 - The Staff worktree contains the exact Market diff from `cc19fa9` through
-  `0eb1aaf`, excluding only aggregate-only `COMPONENT-METADATA.md`.
+  `80cf7c3`, excluding only aggregate-only `COMPONENT-METADATA.md`.
 - Staff owns V20, X03 owns V21, and D09 reserves V22. X03 and D09 retain
   disjoint hunks in `PaperCommandRegistrar.java`.
 
@@ -81,18 +81,19 @@ sites; no supported provider API changes.
 
 ## 10. Validation record
 
-At provider head `0eb1aaf9c7b744d3810832e11a10068e69f65239`:
+At provider head `80cf7c32fdb1bda6242b91b3b82977fafb665e45`:
 
-- `gradlew.bat test` passed with the repository-pinned LumaGuilds 2.1.24 jar.
+- The CI-equivalent `test shadowJar jacocoTestReport` target passed from a
+  fresh Gradle user home with the repository-pinned LumaGuilds 2.1.24 jar.
 - `gradlew.bat detekt` passed with that same verified jar.
 - `mkdocs build --strict` passed.
 - Default Markdown lint passed for all 79 Market Markdown files.
 - `git diff --check` passed.
 
-Market PR #7's earlier hosted checkpoint at `dda2030` passed build, Detekt,
-security, strict MkDocs, front-matter, and Markdown checks. It is historical
-evidence only; the newer provider and aggregate heads need their own exact-head
-hosted checks.
+The prior exact-head hosted build failed before compilation because JitPack
+timed out fetching a Geyser snapshot it does not publish. The current provider
+head resolves OpenCollab, the publisher repository, before JitPack. Fresh
+exact-head hosted checks remain required.
 
 ## 11. Remaining blockers and non-suppressive boundaries
 
@@ -113,12 +114,11 @@ bridge.
 
 ## 12. Exact next actions
 
-Commit and push the aggregate mirror and state record to preserved Staff PR #139,
-cross-reference Market PR #7, prove exact standalone-to-aggregate parity, and
-review the new exact-head hosted results. Continue the remaining valid
-production-complexity work in small, tested batches. After the staging owner
-repairs the private bridge credential, freeze the resulting exact heads and
-rerun the required hosted, static, review, Sentinel, and canonical Pi gates.
+Review the new exact-head Market hosted result and the Staff static/review
+results. Continue valid production-complexity work in small, tested batches.
+After the staging owner repairs the private bridge credential, freeze the
+resulting heads and rerun the required hosted, static, review, Sentinel, and
+canonical Pi gates.
 
 ## 13. Completion definition
 
