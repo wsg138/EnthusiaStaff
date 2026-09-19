@@ -8,11 +8,10 @@ destructive-state overlap.
 
 ## 2. Status
 
-**BLOCKED / PARKED_BLOCKED** after the paired Market static-remediation
-checkpoint on 2026-09-19. The historical D04 serialization blocker is
-resolved. Bounded, behavior-preserving remediation and exact parity are
-complete, but current required Codacy and canonical Pi gates remain
-non-passing.
+**BLOCKED / PARKED_BLOCKED** after the paired static-remediation and
+owner-authorized Bedrock currency-pricing repair on 2026-09-19. The historical
+D04 serialization blocker is resolved. Exact parity is complete, but current
+required Codacy and canonical Pi gates remain non-passing.
 
 ## 3. Objective
 
@@ -52,16 +51,16 @@ enter Market or this public repository.
 
 ## 8. Frozen paired source checkpoint
 
-- Staff main at reconciliation is
-  5edcb0c2abf49a836422d21cd02fec265b27e7e6.
+- Staff main at current reconciliation is
+  d4b5d44d6b88126f9663974d892e3e8b6aac5b9d.
 - Market main remains cc19fa966dcb155fa1743f5076fb5152e74bdf8f.
 - Market PR #7 frozen product head is
-  9ce978e0782138e97e54576ed4ca009e5b7a0f7c.
+  5b6606c2f71a410ed6f369b0b893a7888638a7f2.
 - Staff PR #139 frozen product head is
-  fb3b5075f47c697d9475376dd617a0147db3b47e.
+  e67a67585179b7a8dd6b6dc8c81c9fe567f04ef1.
 - component_sync.py compare reports no added, missing, or modified shared
   paths. Both product trees have hash
-  801b6a25ce0212834a24dabaeca18c658c7e1506487cfe27b5fdc28b117ed0a9.
+  6ba7be19e647b9093bb9670b79026585eb5306f83e66480894fed3912b1f96f7.
 - Staff owns V20, X03 owns V21, and D09 reserves V22. X03 and D09 retain
   disjoint PaperCommandRegistrar.java hunks.
 
@@ -78,29 +77,36 @@ web synchronization, public snapshots, LumaGuilds helpers, stall eviction,
 break-delete duration parsing, and maintenance-freeze state checks. Focused
 tests cover newly separated projection, eviction, and duration behavior.
 
+The owner-authorized Bedrock repair corrects valid SELL/BUY form submissions
+that supplied a non-null zero cost override. That override violated the existing
+Shop positive-cost invariant before persistence. SELL/BUY now use the factory's
+existing validated-price fallback; TRADE keeps its parsed positive item quantity
+and serialized cost item. Existing shops, balances, migrations, and the Java
+menu are unchanged.
+
 ## 10. Exact-head validation record
 
 - **Market local:** PASS. Test, shadow JAR, JaCoCo, and Detekt passed with
   the repository-pinned LumaGuilds artifact.
-- **Market hosted:** PASS. Run 35453910972 passed build, tests, shadow JAR,
+- **Market hosted:** PASS. Run 35474189763 passed build, tests, shadow JAR,
   MariaDB verification, security, and Detekt.
-- **Market Wiki:** PASS. Run 35453911045 passed Markdown, frontmatter, and
+- **Market Wiki:** PASS. Run 35474189668 passed Markdown, frontmatter, and
   strict MkDocs checks.
-- **Staff coverage/build:** PASS. Run 35453933059 passed at the frozen Staff
+- **Staff local:** PASS. Full component test, shadow JAR, JaCoCo, and Detekt
+  passed with the repository-pinned LumaGuilds artifact.
+- **Staff coverage/build:** PASS. Run 35474547939 passed at the exact Staff
   head.
-- **Sentinel artifact:** PASS. Run 35453933038 published exact Paper and
-  authority-bridge artifacts.
 - **Diff hygiene and component parity:** PASS. Every paired checkpoint passed
   git diff --check; the final paired hash is
-  801b6a25ce0212834a24dabaeca18c658c7e1506487cfe27b5fdc28b117ed0a9.
+  6ba7be19e647b9093bb9670b79026585eb5306f83e66480894fed3912b1f96f7.
 - **PR review:** No live inline threads. CodeRabbit is skipped/manual for
   Staff and draft-skipped for Market, not an automated full-review approval.
 - **Codacy static analysis:** NOT PASS. Staff is ACTION_REQUIRED with 1,129
   findings.
-- **Canonical Pi:** NOT PASS. Staff run 35453931981 failed before private
+- **Canonical Pi:** NOT PASS. Staff run 35474189686 failed before private
   dispatch on HTTP 401 Bad credentials.
-- **Durable Sentinel restart:** NOT RUN. The artifact gate is not a restart
-  result, and no fresh durable restart was requested.
+- **Durable Sentinel restart:** NOT RUN. No fresh exact-head durable restart
+  result exists.
 
 ## 11. Static-analysis disposition
 
@@ -116,7 +122,7 @@ source through a component-wide exclusion.
 
 The aggregate component and standalone Market product tree are exactly equal
 before merge. The final shared hash is
-801b6a25ce0212834a24dabaeca18c658c7e1506487cfe27b5fdc28b117ed0a9.
+6ba7be19e647b9093bb9670b79026585eb5306f83e66480894fed3912b1f96f7.
 Post-merge parity and component metadata updates remain required.
 
 ## 13. Exact unblock condition
