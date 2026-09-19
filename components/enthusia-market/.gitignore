@@ -1,0 +1,18 @@
+.gradle/
+build/
+build-local/
+.jdk/
+.idea/
+*.iml
+out/
+libs/
+
+
+#Ignore vscode AI rules
+.github\instructions\codacy.instructions.md
+
+# Local Claude / SPEAR state
+.claude/
+.kotlin/
+.wiki-venv/
+site/

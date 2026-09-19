@@ -8,20 +8,20 @@ Live GitHub overrides stale records. Detailed package evidence remains in the re
 
 | Field | Value |
 | --- | --- |
-| Universal package active state | `ES-X04 — EnthusiaCommend reputation provider` is `COMPLETE`; `ES-X01` remains `BLOCKED` / `PARKED_BLOCKED`; `ES-X03` completed its continuation but is now independently `BLOCKED` / `PARKED_BLOCKED` on its static-analysis boundary and Pi bridge authentication. |
+| Universal package active state | X01 parked; X03 partial; X04 complete. |
 | X01 current classification | `BLOCKED` / `PARKED_BLOCKED` after a 2026-08-26 `ACTIONABLE_CONTINUATION`. The historical repository-resolution blocker materially changed, but the verified provider license now blocks the canonical public aggregate-copy/parity requirement. |
 | X01 standalone | Verified `wsg138/Enthusia-RoseChat`, default `master`, reconciliation head `8fcca5420b0f54207d6efa332327b9fd18edb8d8`. GitHub identifies it as a public fork of `BadgersMC/Enthusia-RoseChat`, sourced from `Rosewood-Development/RoseChat`. No provider `AGENTS.md` was present in the verified source tree. |
 | X01 license boundary | The checked-in Rosewood Development `LICENSE` permits use/copy/modify/merge while expressly excluding publication and (re)distribution rights. `wsg138/EnthusiaStaff` is public, while `BRANCH-AND-MIRROR-POLICY.md` requires the aggregate component directory to reproduce the standalone source tree for parity excluding only `.git` and aggregate-only `COMPONENT-METADATA.md`. No durable repository evidence currently grants the redistribution right required for that public second copy. |
 | X01 implementation state | No provider or Staff implementation branch/PR was created, no RoseChat source was imported, and no product code/test/migration/runtime configuration changed. The worker stopped at the verified license/import gate rather than creating unmergeable or unauthorized work. |
 | X01 exact unblock | Obtain a durable, verifiable license change or authorization permitting the required public aggregate copy, or an explicitly authorized canonical package/mirror-policy redesign that removes republication while retaining deterministic supported-source verification. Then reconcile live heads again and perform the normal two-PR implementation, exact-head validation, normal merges, and synchronization/parity process. |
-| X03 current classification | `BLOCKED` / `PARKED_BLOCKED`. D04 serialization is resolved; the new blockers are exact-head Codacy static analysis and Pi bridge authentication. |
-| X03 standalone | EnthusiaMarket `main` is `cc19fa966dcb155fa1743f5076fb5152e74bdf8f`; aggregate Market content on PR #139 matches it before Staff merge. Canonical `main` remains `NOT_IMPORTED` until that implementation merges. Separate Market PR #6 remains preserved and unpaired. |
-| X03 aggregate | Staff PR #139 remains open and mergeable on `package/es-x03-market-provider`, exact head `879eae12df35253cce6cd12179d5cef1afe95dd9`; canonical `main` is `6201765f0e07b08f9b22ed7ce96838c01fa94007`. |
-| X03 hosted validation | Exact-head Coverage/full build `35168774609` / job `105035696843` PASS; Sentinel artifact `35168774608` / job `105035696425` PASS. `git diff --check` passed. |
-| X03 static/review | Codacy `105036637444` is `action_required` with 2,085 new issues. 1,989 are aggregate Market and 96 are Staff/agent Markdown; some are analyzer mismatches while component-owned debt remains. There are zero live inline review threads; CodeRabbit is skipped/manual, not an automated full review. |
-| X03 Pi/Sentinel | Pi supersession `35168772060` is NOT PASS: its public workflow-history lookup returned HTTP 401 `Bad credentials` before private dispatch, so no private runtime ran. Sentinel durable restart is NOT RUN: [status command 5730170958](https://github.com/wsg138/EnthusiaStaff/pull/139#issuecomment-5730170958) completed [ACTIONED / STATUS_NO_JOB](https://github.com/wsg138/EnthusiaStaff/pull/139#issuecomment-5730177011) for the exact SHA, and no restart was requested. |
-| X03 migration/collision state | Canonical `main` owns V20; X03 owns V21; active D09 reserves V22. The shared `PaperCommandRegistrar.java` hunks between X03 and D09 are disjoint. |
-| X03 exact unblock | Preserve #139. Owner must authorize paired standalone/aggregate remediation for valid provider static debt or make a reviewed non-suppressive analyzer-boundary decision, and restore Pi bridge workflow-history authentication. Then freeze and rerun all exact-head gates; merge normally only if green and prove post-merge Market parity. |
+| X03 status | `PARTIAL` / `ACTIONABLE_CONTINUATION`; #139/#7. |
+| X03 standalone | Market #7 draft at `80cf7c3`; #6 is preserved. |
+| X03 aggregate | Staff #139 is the paired aggregate leg. |
+| X03 hosted | Current checks pending; prior checks are historical. |
+| X03 static/review | Remediation is active; production rules remain enabled. |
+| X03 Pi/Sentinel | Pi bridge authentication remains non-passing. |
+| X03 migration/collision state | V21 is unchanged; D09 keeps V22. |
+| X03 exact unblock | Finish #7/#139; repair Pi credential; rerun exact gates. |
 | X04 standalone | `wsg138/EnthusiaCommend` PR #12 merged normally as `b4a1b57ba918f10ab28d140f9fc0e588a95389c1` after exact reviewed head `325c304512187f274463c31f1649efe0ae56ab7d`. Its fully contained package branch remains safe to delete when an authorized branch-deletion path is available. |
 | X04 aggregate | Staff PR #152 merged normally as `e91fc1150a82cc0df081a82bb3dd69714f8bfc14` after exact reviewed head `7ef4b70ed01ad46b925669a0b1378053d8e26789`; the temporary Staff package branch is deleted. |
 | X04 product state | Transactional/versioned reputation moderation and the Staff sanction projection are implemented and merged. Post-merge standalone↔aggregate shared Git objects are identical; aggregate-only `COMPONENT-METADATA.md` is the one allowed extra file and records `IN_SYNC`. |
@@ -165,4 +165,14 @@ No production import, Discord production change, private-data access, deployment
 
 ## Independent ES-X03 routing
 
-D04's successful serialization is no longer the X03 blocker. The existing X03 PR #139/branch is preserved at `879eae12df35253cce6cd12179d5cef1afe95dd9`, but its exact static check is non-passing and its Pi bridge cannot authenticate to public workflow history. Follow the current X03 handoff; do not replace the implementation branch, absorb standalone Market PR #6, or treat missing private runtime as a pass.
+An owner-directed continuation selected paired static remediation. Market PR #7
+is the draft provider leg at `80cf7c32fdb1bda6242b91b3b82977fafb665e45`;
+preserved Staff PR #139 is its aggregate leg. The aggregate normally merged
+current `main` and mirrors the provider checkpoint exactly, excluding only
+aggregate metadata.
+
+The remediation keeps production static analysis enabled and scopes only Market
+test complexity and Market SQLite migration dialect checks. It does not bypass
+the private staging bridge. The Pi workflow-history credential remains invalid,
+so no private runtime is claimed. Preserve standalone PR #6 unchanged and use
+the active X03 handoff for exact validation and remaining complexity work.
