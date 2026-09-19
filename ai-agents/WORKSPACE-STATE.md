@@ -8,18 +8,18 @@ Live GitHub overrides stale records. Detailed package evidence remains in the re
 
 | Field | Value |
 | --- | --- |
-| Universal package active state | `ES-X04 — EnthusiaCommend reputation provider` is `COMPLETE`; `ES-X01` remains `BLOCKED` / `PARKED_BLOCKED`; `ES-X03` completed its continuation but is now independently `BLOCKED` / `PARKED_BLOCKED` on its static-analysis boundary and Pi bridge authentication. |
+| Universal package active state | `ES-X04 — EnthusiaCommend reputation provider` is `COMPLETE`; `ES-X01` remains `BLOCKED` / `PARKED_BLOCKED`; `ES-X03` completed its owner-authorized Bedrock repair but remains independently `BLOCKED` / `PARKED_BLOCKED` on Codacy and Pi bridge authentication. |
 | X01 current classification | `BLOCKED` / `PARKED_BLOCKED` after a 2026-08-26 `ACTIONABLE_CONTINUATION`. The historical repository-resolution blocker materially changed, but the verified provider license now blocks the canonical public aggregate-copy/parity requirement. |
 | X01 standalone | Verified `wsg138/Enthusia-RoseChat`, default `master`, reconciliation head `8fcca5420b0f54207d6efa332327b9fd18edb8d8`. GitHub identifies it as a public fork of `BadgersMC/Enthusia-RoseChat`, sourced from `Rosewood-Development/RoseChat`. No provider `AGENTS.md` was present in the verified source tree. |
 | X01 license boundary | The checked-in Rosewood Development `LICENSE` permits use/copy/modify/merge while expressly excluding publication and (re)distribution rights. `wsg138/EnthusiaStaff` is public, while `BRANCH-AND-MIRROR-POLICY.md` requires the aggregate component directory to reproduce the standalone source tree for parity excluding only `.git` and aggregate-only `COMPONENT-METADATA.md`. No durable repository evidence currently grants the redistribution right required for that public second copy. |
 | X01 implementation state | No provider or Staff implementation branch/PR was created, no RoseChat source was imported, and no product code/test/migration/runtime configuration changed. The worker stopped at the verified license/import gate rather than creating unmergeable or unauthorized work. |
 | X01 exact unblock | Obtain a durable, verifiable license change or authorization permitting the required public aggregate copy, or an explicitly authorized canonical package/mirror-policy redesign that removes republication while retaining deterministic supported-source verification. Then reconcile live heads again and perform the normal two-PR implementation, exact-head validation, normal merges, and synchronization/parity process. |
 | X03 state | BLOCKED / PARKED_BLOCKED; see current handoff. |
-| X03 standalone | PR #7 at 9ce978e; unpaired PR #6 preserved. |
-| X03 aggregate | PR #139 at fb3b507; main 5edcb0c. |
-| X03 hosted | Exact-head Market and Staff hosted gates PASS. |
+| X03 standalone | PR #7 at 5b6606c; unpaired PR #6 preserved. |
+| X03 aggregate | PR #139 at e67a675; main d4b5d44. |
+| X03 hosted | Market build 35474189763, Wiki 35474189668, and Staff Coverage 35474547939 PASS. |
 | X03 static/review | Codacy ACTION_REQUIRED, 1,129; review skipped. |
-| X03 Pi/Sentinel | Pi pre-dispatch 401; durable restart NOT RUN. |
+| X03 Pi/Sentinel | Pi 35474189686 pre-dispatch 401; durable restart NOT RUN. |
 | X03 migrations | Main V20; X03 V21; D09 V22; hunks disjoint. |
 | X03 unblock | Scoped Codacy action and Pi authentication repair. |
 | X04 standalone | `wsg138/EnthusiaCommend` PR #12 merged normally as `b4a1b57ba918f10ab28d140f9fc0e588a95389c1` after exact reviewed head `325c304512187f274463c31f1649efe0ae56ab7d`. Its fully contained package branch remains safe to delete when an authorized branch-deletion path is available. |
@@ -94,18 +94,23 @@ Exact unblock is a durable, verifiable license/authorization change that permits
 ## X03 current parked record
 
 The paired continuation preserves Market PR #7 at
-9ce978e0782138e97e54576ed4ca009e5b7a0f7c and Staff PR #139 at
-fb3b5075f47c697d9475376dd617a0147db3b47e. Exact component parity is true
+5b6606c2f71a410ed6f369b0b893a7888638a7f2 and Staff PR #139 at
+e67a67585179b7a8dd6b6dc8c81c9fe567f04ef1. Exact component parity is true
 at shared hash
-801b6a25ce0212834a24dabaeca18c658c7e1506487cfe27b5fdc28b117ed0a9.
-Market hosted build and Wiki checks, Staff Coverage, and Staff Sentinel
-artifact publication all passed. V20, V21, V22, and shared-file ownership
-remain unchanged and disjoint.
+6ba7be19e647b9093bb9670b79026585eb5306f83e66480894fed3912b1f96f7.
+The owner-authorized repair corrects Bedrock SELL/BUY submissions that passed
+a zero cost override and failed the existing positive-cost invariant before
+persistence. It uses the existing price fallback; TRADE behavior, existing
+shops, balances, migrations, and Java menus are unchanged.
+
+Market build 35474189763 and Wiki 35474189668 passed. Staff Coverage
+35474547939 passed at the exact paired head. V20, V21, V22, and shared-file
+ownership remain unchanged and disjoint.
 
 X03 remains parked on two independent non-passing gates. Codacy is
 ACTION_REQUIRED with 1,129 findings that include Markdownlint, Lizard,
 immutable-migration RAC-table, and dependency-coordinate secret-pattern
-reports. Pi run 35453931981 failed before private dispatch on HTTP 401 Bad
+reports. Pi run 35474189686 failed before private dispatch on HTTP 401 Bad
 credentials; no private runtime ran. Durable Sentinel restart is NOT RUN.
 
 Preserve PR #139, Market PR #7, and unpaired Market PR #6. An authorized
@@ -200,7 +205,7 @@ No production import, Discord production change, private-data access, deployment
 ## Independent ES-X03 routing
 
 D04 serialization is no longer the X03 blocker. Preserve Market #7 at
-9ce978e and Staff #139 at fb3b507; their final pre-merge product trees have
+5b6606c and Staff #139 at e67a675; their final pre-merge product trees have
 exact parity. Codacy remains non-passing and the Pi bridge cannot authenticate
 to public workflow history. Follow the current X03 handoff; do not replace
 either implementation branch, absorb standalone Market PR #6, or treat

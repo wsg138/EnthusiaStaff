@@ -25,17 +25,19 @@ The later live Sentinel restart attempts remain explicit non-passing diagnostic 
 `ES-X02 — EnthusiaCurrency destructive provider` is `COMPLETE`. After historical Staff PRs #133/#135 merged, a targeted review found two valid fail-closed state-ordering defects. Currency PR #14 and Staff PR #137 repaired and synchronized the exact corrected tree. Staff frozen head `88bd314d...` passed required hosted/static/runtime gates and merged normally as `2150ac1d...`; post-merge parity against Currency `2b4c8bf...` is exact at hash `c5820e...`; component metadata is `IN_SYNC`; the implementation branch is deleted.
 
 **ES-X03 — EnthusiaMarket destructive provider** is **BLOCKED /
-PARKED_BLOCKED** after paired static remediation. Market
+PARKED_BLOCKED** after its paired static remediation and owner-authorized
+Bedrock currency-pricing repair. Market
 [PR #7](https://github.com/wsg138/EnthusiaMarket/pull/7) is frozen at
-9ce978e0782138e97e54576ed4ca009e5b7a0f7c and Staff
+5b6606c2f71a410ed6f369b0b893a7888638a7f2 and Staff
 [PR #139](https://github.com/wsg138/EnthusiaStaff/pull/139) at
-fb3b5075f47c697d9475376dd617a0147db3b47e; their shared product hash is
-801b6a25ce0212834a24dabaeca18c658c7e1506487cfe27b5fdc28b117ed0a9.
-Exact hosted Market and Staff build gates passed, but Codacy remains
-ACTION_REQUIRED with 1,129 findings and canonical Pi run 35453931981 failed
-before private dispatch on HTTP 401 Bad credentials. Preserve #139, #7, and
-unpaired Market PR #6. An authorized path-scoped Codacy decision and Pi
-credential repair are required before fresh exact-head gates.
+e67a67585179b7a8dd6b6dc8c81c9fe567f04ef1; their shared product hash is
+6ba7be19e647b9093bb9670b79026585eb5306f83e66480894fed3912b1f96f7.
+Market build 35474189763, Wiki 35474189668, and Staff Coverage 35474547939
+passed. Codacy remains ACTION_REQUIRED with 1,129 findings and canonical Pi
+run 35474189686 failed before private dispatch on HTTP 401 Bad credentials.
+Preserve #139, #7, and unpaired Market PR #6. An authorized path-scoped
+Codacy decision and Pi credential repair are required before fresh exact-head
+gates.
 
 `ES-X04 — EnthusiaCommend reputation provider` is `COMPLETE`. Commend exact reviewed head `325c304512187f274463c31f1649efe0ae56ab7d` passed Java 21 Maven `clean verify`, 110 tests, PMD, Codacy, and resolved-review gates, then PR #12 merged normally as `b4a1b57ba918f10ab28d140f9fc0e588a95389c1`. Staff exact reviewed head `7ef4b70ed01ad46b925669a0b1378053d8e26789` passed full Java 21/MariaDB/Testcontainers validation, Codacy zero-issue static analysis, Sentinel restart, and canonical Pi public/private staging, then PR #152 merged normally as `e91fc1150a82cc0df081a82bb3dd69714f8bfc14`. Both merge commits exactly contain their package heads. Post-merge standalone↔aggregate shared product Git objects are identical with only aggregate `COMPONENT-METADATA.md` extra; component metadata is `IN_SYNC`. Staff's temporary branch is gone. The residual standalone package branch is fully contained and safe to delete, but the connected mutation surface exposes no branch-delete action. Canonical handoff: `ai-agents/reports/package-handoffs/2026-08-25-es-x04-commend-provider-complete.md`.
 
@@ -112,20 +114,24 @@ Canonical D09 blocker handoff: `ai-agents/reports/package-handoffs/2026-09-19-es
 
 ## ES-X03 current parked record
 
-- Market PR #7 is frozen at 9ce978e0782138e97e54576ed4ca009e5b7a0f7c
-  and Staff PR #139 at fb3b5075f47c697d9475376dd617a0147db3b47e. Staff
-  main at reconciliation is 5edcb0c2abf49a836422d21cd02fec265b27e7e6.
+- Market PR #7 is frozen at 5b6606c2f71a410ed6f369b0b893a7888638a7f2
+  and Staff PR #139 at e67a67585179b7a8dd6b6dc8c81c9fe567f04ef1. Staff
+  main at current reconciliation is d4b5d44d6b88126f9663974d892e3e8b6aac5b9d.
   Staff owns V20, X03 owns V21, and D09 reserves V22 with disjoint shared
   registrar hunks.
-- Market hosted run 35453910972 and Wiki run 35453911045 passed. Staff
-  Coverage run 35453933059 and Sentinel artifact run 35453933038 passed.
+- The owner-authorized Bedrock repair replaces the invalid zero cost override
+  from valid SELL/BUY form submissions with the existing price fallback.
+  TRADE behavior, existing shops, balances, migrations, and Java menus remain
+  unchanged.
+- Market hosted run 35474189763 and Wiki run 35474189668 passed. Staff
+  Coverage run 35474547939 passed.
   Final component parity is true with shared hash
-  801b6a25ce0212834a24dabaeca18c658c7e1506487cfe27b5fdc28b117ed0a9.
+  6ba7be19e647b9093bb9670b79026585eb5306f83e66480894fed3912b1f96f7.
 - Codacy remains ACTION_REQUIRED with 1,129 findings: 1,076 Markdownlint,
   43 Market production Lizard, eight immutable-migration RAC-table, and two
   dependency-coordinate secret-pattern reports. The result cannot be broadly
   suppressed or called passing.
-- Canonical Pi 35453931981 failed before private dispatch when its
+- Canonical Pi 35474189686 failed before private dispatch when its
   workflow-history lookup returned HTTP 401 Bad credentials. No private Pi,
   Paper, or MariaDB runtime ran. A Sentinel artifact is not durable-restart
   evidence, so durable restart remains NOT RUN.
