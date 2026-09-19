@@ -49,11 +49,12 @@ credential repair are required before fresh exact-head gates.
 
 `ES-D13 — Discord role-sync replacement` remains `BLOCKED` / `PARKED_BLOCKED`. Implementation PR #178 remains open/unmerged at exact frozen head `92b207d67a1098acc2dcfbddd35ac56e01711f95`. Hosted product CI, Codacy, and resolved CodeRabbit findings are green, but canonical Pi `34893930914` failed before private dispatch because staging workflow-history revalidation returned HTTP `401 Bad credentials`; no private Pi runtime ran. Sentinel has no durable `PAPER_RESTART_OK`. Most importantly, the original package-required DiscordSRV staging parity is `NOT RUN` because no authorized non-production legacy managed-role mapping/effective state or staging D13 runtime/parity harness is available.
 
-Discord routing after D07 completion: D09 is dependency-complete `READY` for a future Discord worker but is not active. D08 remains `PLANNED` because its separate live proof that current Minecraft moderation services can accept cross-platform integration without changing production authority has not been established. D12 remains `PLANNED` because D09 is not complete. This D07 worker does not activate any downstream package.
+Discord routing after D07 completion: D09 is now `BLOCKED` / `PARKED_BLOCKED` with implementation PR #203 preserved open/unmerged at frozen executable head `a48390c50c6968e75437abd2dd05c0faeece355d`. Exact executable validation/static/review gates are green; the remaining blocker is migration serialization because live `main` owns through V20, X03 / PR #139 legitimately owns branch-local V21, and D09 owns V22. D08 remains `PLANNED` pending its separate live Minecraft integration-readiness proof. D10 and D12 remain `PLANNED` because D09 is incomplete. D13 remains independently parked.
 
 Canonical D07 terminal handoff: `ai-agents/reports/package-handoffs/2026-09-14-es-d07-active.md`.
 Canonical D16 terminal handoff: `ai-agents/reports/package-handoffs/2026-09-13-es-d16-complete.md`.
 Canonical D13 blocker handoff: `ai-agents/reports/package-handoffs/2026-09-14-es-d13-role-sync-blocked.md`.
+Canonical D09 blocker handoff: `ai-agents/reports/package-handoffs/2026-09-19-es-d09-investigations-blocked.md`.
 
 ## Canonical package index
 
@@ -201,6 +202,16 @@ Canonical D13 blocker handoff: `ai-agents/reports/package-handoffs/2026-09-14-es
 - V18 remains the immutable migration ceiling; ES-P07 added no migration. Issue #43 remains open/deferred; LiteBans remains authoritative. No production data, deployment, shadow window, cutover, punishment-authority change, source rewrite, or unrelated package work occurred.
 - Canonical terminal handoff: `ai-agents/reports/package-handoffs/2026-08-10-es-p07-inventory-runtime-complete.md`.
 
+## ES-D09 current parked record
+
+- Implementation PR #203 remains open/unmerged on `package/es-d09-discord-investigations` at exact frozen executable/product head `a48390c50c6968e75437abd2dd05c0faeece355d`.
+- Exact repair validation `35387277563` / job `105737009460` passed Java 21 clean build/tests, MariaDB/Testcontainers integration tests, StaffBot runtime verification, PMD with zero valid changed-code findings, changed-method complexity bounds, regression bounds, and `git diff --check`.
+- Exact-head Coverage `35388283034` / job `105740323648`, Staff Bot PR Artifact `35388283005`, Staff Bot Configuration Cache `35388283022`, and Sentinel Restart Artifact `35388282989` succeeded. Codacy Static Code Analysis `105740695905` succeeded with zero annotations / zero new valid findings; diff coverage and coverage variation succeeded. CodeRabbit status is successful and every substantive product-code review finding is resolved.
+- Live `main` owns Staff migrations through V20. `ES-X03` / PR #139 remains the legitimate owner of branch-local `V21__market_compliance_journal.sql`; D09 owns `V22__discord_investigation_state.sql`. V21 is absent from `main`, so D09 cannot safely merge V22. Do not renumber V22 or take over X03.
+- Exact unblock: merge the legitimate owner of Staff migration V21 into `main`, then reconcile D09 with the resulting live migration chain, resolve only legitimate conflicts, rerun all exact-head executable gates affected by reconciliation, refresh review/Codacy evidence, and only then reconsider merging PR #203.
+- No production Discord mutation/data access/configuration, deployment, cutover, LiteBans authority change, AutoMod enforcement, or issue #43 acceptance occurred.
+- Canonical handoff: `ai-agents/reports/package-handoffs/2026-09-19-es-d09-investigations-blocked.md`.
+
 ## ES-D13 current parked record
 
 - Implementation PR #178 remains open/unmerged on `package/es-d13-role-sync-replacement` at exact frozen candidate `92b207d67a1098acc2dcfbddd35ac56e01711f95`.
@@ -214,4 +225,4 @@ Canonical D13 blocker handoff: `ai-agents/reports/package-handoffs/2026-09-14-es
 
 ## Next sequential action
 
-X03 is now independently `BLOCKED` / `PARKED_BLOCKED` after the completed continuation and durable status publication. In the dedicated Discord lane, active D09 remains separately owned; D08 remains `PLANNED`, D12 remains `PLANNED`, and D13 remains `BLOCKED` / `PARKED_BLOCKED`. In the universal lane, X01 and X03 are parked; downstream V02/V03/A01/QA01 remain gated as recorded above. Do not activate a replacement X03 implementation while its preserved PR and exact unblock conditions remain in place.
+X03 remains independently `BLOCKED` / `PARKED_BLOCKED` with its preserved implementation work. In the dedicated Discord lane, D09 is now also `BLOCKED` / `PARKED_BLOCKED`: keep PR #203 frozen/open at `a48390c50c6968e75437abd2dd05c0faeece355d` until the legitimate X03 V21 reaches `main`. Then reconcile D09 normally, keep its migration as V22, rerun every exact-head executable/static/review gate invalidated by reconciliation, and only then reconsider merge. D08 remains `PLANNED`; D10 and D12 remain gated by incomplete D09; D13 remains independently parked. Do not activate a replacement D09 implementation while #203 is preserved.
