@@ -31,6 +31,22 @@ public final class MinecraftPunishmentWireCodec {
         return read(json, MinecraftPunishmentPreparationWire.Response.class, "response");
     }
 
+    public static String encodeCatalogRequest(MinecraftPunishmentCatalogWire.Request request) {
+        return write(request, "catalog request");
+    }
+
+    public static MinecraftPunishmentCatalogWire.Request decodeCatalogRequest(String json) {
+        return read(json, MinecraftPunishmentCatalogWire.Request.class, "catalog request");
+    }
+
+    public static String encodeCatalogResponse(MinecraftPunishmentCatalogWire.Response response) {
+        return write(response, "catalog response");
+    }
+
+    public static MinecraftPunishmentCatalogWire.Response decodeCatalogResponse(String json) {
+        return read(json, MinecraftPunishmentCatalogWire.Response.class, "catalog response");
+    }
+
     public static String encodeCommitRequest(MinecraftPunishmentCommitWire.Request request) {
         return write(request, "commit request");
     }

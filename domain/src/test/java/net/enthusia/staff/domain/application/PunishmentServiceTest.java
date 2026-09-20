@@ -37,6 +37,26 @@ class PunishmentServiceTest {
     private static final UUID TARGET = UUID.fromString("10000000-0000-0000-0000-000000000001");
 
     @Test
+    void reasonCatalogUsesMinecraftIssueAuthorityAndReasonRank() {
+        ReasonPolicy modReason = policy(StaffRank.MOD, standardSteps());
+        ReasonPolicy adminReason = policy(
+                "safety.credible-threat", "safety", "Credible threat", StaffRank.ADMIN, standardSteps());
+        PunishmentService service = service(
+                new AtomicReasonPolicyRepository("v1", List.of(modReason, adminReason)),
+                new CapturingStore(List.of())
+        );
+
+        assertEquals(List.of("chat.toxicity"), service.availableReasons(
+                new Actor(UUID.randomUUID(), "Helper", StaffRank.HELPER)).stream()
+                .map(PunishmentReasonOption::id).toList());
+        assertEquals(List.of(), service.availableReasons(
+                new Actor(UUID.randomUUID(), "Developer", StaffRank.DEVELOPER)));
+        assertEquals(List.of("chat.toxicity", "safety.credible-threat"), service.availableReasons(
+                new Actor(UUID.randomUUID(), "Admin", StaffRank.ADMIN)).stream()
+                .map(PunishmentReasonOption::id).toList());
+    }
+
+    @Test
     void developerCannotEvaluateOrPersistConfiguredPunishment() {
         CapturingStore store = new CapturingStore(List.of());
         AtomicReasonPolicyRepository policies = new AtomicReasonPolicyRepository(
@@ -281,10 +301,20 @@ class PunishmentServiceTest {
     }
 
     private static ReasonPolicy policy(StaffRank requiredRank, List<PunishmentStep> steps) {
+        return policy("chat.toxicity", "chat", "Chat toxicity", requiredRank, steps);
+    }
+
+    private static ReasonPolicy policy(
+            String id,
+            String family,
+            String publicReason,
+            StaffRank requiredRank,
+            List<PunishmentStep> steps
+    ) {
         return new ReasonPolicy(
-                "chat.toxicity",
-                "chat",
-                "Chat toxicity",
+                id,
+                family,
+                publicReason,
                 10,
                 true,
                 steps,

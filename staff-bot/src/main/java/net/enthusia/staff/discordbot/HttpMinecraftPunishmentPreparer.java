@@ -10,13 +10,18 @@ import java.security.SecureRandom;
 import java.time.Clock;
 import java.time.Duration;
 import java.util.Base64;
+import java.util.List;
 import net.enthusia.staff.common.CaseId;
 import net.enthusia.staff.domain.application.CreatePunishmentRequest;
 import net.enthusia.staff.domain.application.MinecraftPunishmentGateway;
 import net.enthusia.staff.domain.application.PunishmentExpectation;
+import net.enthusia.staff.domain.application.PunishmentReasonOption;
 import net.enthusia.staff.domain.application.PunishmentResult;
+import net.enthusia.staff.domain.auth.Actor;
 import net.enthusia.staff.domain.application.PunishmentPlan;
 import net.enthusia.staff.domain.application.PunishmentPreparation;
+import net.enthusia.staff.protocol.MinecraftPunishmentCatalogMapper;
+import net.enthusia.staff.protocol.MinecraftPunishmentCatalogWire;
 import net.enthusia.staff.protocol.MinecraftPunishmentCommitMapper;
 import net.enthusia.staff.protocol.MinecraftPunishmentCommitWire;
 import net.enthusia.staff.protocol.MinecraftPunishmentWireCodec;
@@ -32,6 +37,7 @@ final class HttpMinecraftPunishmentPreparer implements MinecraftPunishmentGatewa
 
     private final URI prepareEndpoint;
     private final URI commitEndpoint;
+    private final URI catalogEndpoint;
     private final String credential;
     private final StaffModerationConfiguration.AuthorityTransport transport;
     private final PrivateSplitAuthorityEndpointResolver privateResolver;
@@ -62,12 +68,29 @@ final class HttpMinecraftPunishmentPreparer implements MinecraftPunishmentGatewa
         }
         this.prepareEndpoint = authorityEndpoint.resolve(MinecraftPunishmentPreparationWire.PATH);
         this.commitEndpoint = authorityEndpoint.resolve(MinecraftPunishmentCommitWire.PATH);
+        this.catalogEndpoint = authorityEndpoint.resolve(MinecraftPunishmentCatalogWire.PATH);
         this.credential = credential;
         this.transport = transport;
         this.privateResolver = privateResolver;
         this.clock = clock;
         this.random = random;
         this.client = HttpClient.newBuilder().connectTimeout(CONNECT_TIMEOUT).build();
+    }
+
+    @Override
+    public List<PunishmentReasonOption> availableReasons(Actor actor) {
+        String body = MinecraftPunishmentWireCodec.encodeCatalogRequest(
+                MinecraftPunishmentCatalogMapper.request(actor));
+        RequestCall call = request(body, catalogEndpoint, MinecraftPunishmentCatalogWire.PATH);
+        HttpResponse<String> response = send(call.request());
+        verifySignedResponse(call, response);
+        requireSuccess(response);
+        MinecraftPunishmentCatalogWire.Response decoded =
+                MinecraftPunishmentWireCodec.decodeCatalogResponse(response.body());
+        if (decoded.outcome() == MinecraftPunishmentCatalogWire.Outcome.REJECTED) {
+            return List.of();
+        }
+        return MinecraftPunishmentCatalogMapper.reasons(decoded);
     }
 
     @Override

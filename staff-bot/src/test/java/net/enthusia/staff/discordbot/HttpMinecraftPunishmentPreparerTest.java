@@ -19,6 +19,7 @@ import net.enthusia.staff.common.CaseId;
 import net.enthusia.staff.common.IdempotencyKey;
 import net.enthusia.staff.domain.application.CreatePunishmentRequest;
 import net.enthusia.staff.domain.application.PunishmentExpectation;
+import net.enthusia.staff.domain.application.PunishmentReasonOption;
 import net.enthusia.staff.domain.application.PunishmentPlan;
 import net.enthusia.staff.domain.application.PunishmentResult;
 import net.enthusia.staff.domain.application.PunishmentPreparation;
@@ -31,6 +32,8 @@ import net.enthusia.staff.domain.escalation.PunishmentStep;
 import net.enthusia.staff.domain.sanction.SanctionLength;
 import net.enthusia.staff.domain.sanction.SanctionSpec;
 import net.enthusia.staff.domain.sanction.SanctionType;
+import net.enthusia.staff.protocol.MinecraftPunishmentCatalogMapper;
+import net.enthusia.staff.protocol.MinecraftPunishmentCatalogWire;
 import net.enthusia.staff.protocol.MinecraftPunishmentCommitWire;
 import net.enthusia.staff.protocol.MinecraftPunishmentWireCodec;
 import net.enthusia.staff.protocol.MinecraftPunishmentPreparationMapper;
@@ -100,6 +103,41 @@ class HttpMinecraftPunishmentPreparerTest {
             HttpMinecraftPunishmentPreparer client = client(server, StaffModerationConfiguration.AuthorityTransport.BLOOM_PRIVATE_SPLIT);
             assertThrows(StaffAuthorityClient.UnavailableException.class,
                     () -> client.prepareConfirmed(request(), CASE_ID));
+        } finally {
+            server.stop(0);
+        }
+    }
+
+    @Test
+    void privateSplitCatalogBindsBodyAndReturnsAllowlistedReasons() throws IOException {
+        AtomicReference<StaffAuthorityHttpSigning.Verification> verification = new AtomicReference<>();
+        HttpServer server = server(MinecraftPunishmentCatalogWire.PATH, exchange -> {
+            String body = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
+            String nonce = exchange.getRequestHeaders().getFirst(StaffAuthorityHttpSigning.NONCE_HEADER);
+            verification.set(StaffAuthorityHttpSigning.verifyBodyRequest(
+                    CREDENTIAL, exchange.getRequestMethod(), MinecraftPunishmentCatalogWire.PATH, body,
+                    exchange.getRequestHeaders().getFirst(StaffAuthorityHttpSigning.TIMESTAMP_HEADER), nonce,
+                    exchange.getRequestHeaders().getFirst(StaffAuthorityHttpSigning.SIGNATURE_HEADER), Clock.systemUTC()
+            ));
+            String response = MinecraftPunishmentWireCodec.encodeCatalogResponse(
+                    MinecraftPunishmentCatalogMapper.response(List.of(
+                            new PunishmentReasonOption("chat.toxicity", "chat", "Chat toxicity"))));
+            exchange.getResponseHeaders().set(
+                    StaffAuthorityHttpSigning.RESPONSE_SIGNATURE_HEADER,
+                    StaffAuthorityHttpSigning.signResponse(CREDENTIAL, nonce, 200, response));
+            byte[] encoded = response.getBytes(StandardCharsets.UTF_8);
+            exchange.sendResponseHeaders(200, encoded.length);
+            exchange.getResponseBody().write(encoded);
+        });
+        try {
+            HttpMinecraftPunishmentPreparer client = client(
+                    server, StaffModerationConfiguration.AuthorityTransport.BLOOM_PRIVATE_SPLIT);
+            List<PunishmentReasonOption> reasons = client.availableReasons(
+                    new Actor(ACTOR_ID, "D08Admin", StaffRank.MOD));
+
+            assertEquals(StaffAuthorityHttpSigning.Verification.ACCEPTED, verification.get());
+            assertEquals(List.of(new PunishmentReasonOption(
+                    "chat.toxicity", "chat", "Chat toxicity")), reasons);
         } finally {
             server.stop(0);
         }

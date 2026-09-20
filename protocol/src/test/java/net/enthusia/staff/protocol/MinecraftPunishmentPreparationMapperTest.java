@@ -11,6 +11,7 @@ import net.enthusia.staff.common.IdempotencyKey;
 import net.enthusia.staff.domain.application.CreatePunishmentRequest;
 import net.enthusia.staff.domain.application.PunishmentExpectation;
 import net.enthusia.staff.domain.application.PunishmentPlan;
+import net.enthusia.staff.domain.application.PunishmentReasonOption;
 import net.enthusia.staff.domain.application.PunishmentResult;
 import net.enthusia.staff.domain.auth.Actor;
 import net.enthusia.staff.domain.auth.StaffRank;
@@ -47,6 +48,23 @@ class MinecraftPunishmentPreparationMapperTest {
 
         assertEquals(List.of(MUTE, BAN), restored.overrideSanctions());
         assertEquals(request.idempotencyKey(), restored.idempotencyKey());
+    }
+
+    @Test
+    void catalogRoundTripPreservesOnlyPublicReasonMetadata() {
+        List<PunishmentReasonOption> reasons = List.of(
+                new PunishmentReasonOption("chat.toxicity", "chat", "Chat toxicity"),
+                new PunishmentReasonOption("safety.credible-threat", "safety", "Credible threat")
+        );
+        String requestJson = MinecraftPunishmentWireCodec.encodeCatalogRequest(
+                MinecraftPunishmentCatalogMapper.request(ACTOR));
+        var request = MinecraftPunishmentWireCodec.decodeCatalogRequest(requestJson);
+        String responseJson = MinecraftPunishmentWireCodec.encodeCatalogResponse(
+                MinecraftPunishmentCatalogMapper.response(reasons));
+        var response = MinecraftPunishmentWireCodec.decodeCatalogResponse(responseJson);
+
+        assertEquals(ACTOR_ID, request.actorId());
+        assertEquals(reasons, MinecraftPunishmentCatalogMapper.reasons(response));
     }
 
     @Test

@@ -18,6 +18,7 @@ import java.util.logging.Level;
 import net.enthusia.staff.domain.OperationalMode;
 import net.enthusia.staff.domain.application.PunishmentService;
 import net.enthusia.staff.domain.auth.StaffRank;
+import net.enthusia.staff.protocol.MinecraftPunishmentCatalogWire;
 import net.enthusia.staff.protocol.MinecraftPunishmentCommitWire;
 import net.enthusia.staff.protocol.MinecraftPunishmentPreparationWire;
 import net.enthusia.staff.protocol.StaffAuthorityHttpSigning;
@@ -67,6 +68,9 @@ public final class DiscordStaffAuthorityEndpoint implements AutoCloseable {
         DiscordMinecraftCommitHandler commit = new DiscordMinecraftCommitHandler(
                 authenticator, this::resolve, punishments, mode
         );
+        DiscordMinecraftCatalogHandler catalog = new DiscordMinecraftCatalogHandler(
+                authenticator, this::resolve, punishments
+        );
         HttpServer createdServer = HttpServer.create(
                 bindAddress(configuration.bindHost(), configuration.port()), BACKLOG);
         ThreadPoolExecutor createdExecutor = new ThreadPoolExecutor(
@@ -83,6 +87,7 @@ public final class DiscordStaffAuthorityEndpoint implements AutoCloseable {
             createdServer.createContext(PATH, this::handle);
             createdServer.createContext(MinecraftPunishmentPreparationWire.PATH, preparation::handle);
             createdServer.createContext(MinecraftPunishmentCommitWire.PATH, commit::handle);
+            createdServer.createContext(MinecraftPunishmentCatalogWire.PATH, catalog::handle);
             createdServer.start();
         } catch (RuntimeException exception) {
             createdServer.stop(0);

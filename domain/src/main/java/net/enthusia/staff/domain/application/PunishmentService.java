@@ -203,6 +203,23 @@ public final class PunishmentService {
         }
     }
 
+    public List<PunishmentReasonOption> availableReasons(Actor actor) {
+        Objects.requireNonNull(actor);
+        if (!authorization.permits(actor, ModerationAction.ISSUE_POLICY_SANCTION)) {
+            return List.of();
+        }
+        return policies.all().stream()
+                .filter(policy -> actor.rank() == StaffRank.SYSTEM
+                        ? policy.automaticDetectionAllowed()
+                        : meetsReasonRank(actor.rank(), policy.requiredRank()))
+                .map(policy -> new PunishmentReasonOption(
+                        policy.id(), policy.family(), policy.publicReason()))
+                .sorted(java.util.Comparator.comparing(PunishmentReasonOption::family)
+                        .thenComparing(PunishmentReasonOption::label)
+                        .thenComparing(PunishmentReasonOption::id))
+                .toList();
+    }
+
     public PunishmentEvaluation evaluate(CreatePunishmentRequest request, OperationalMode mode) {
         PunishmentEvaluation evaluation = evaluate(
                 request,
