@@ -53,18 +53,17 @@ enter Market or this public repository.
 ## 8. Current paired source checkpoint
 
 - Staff main currently is
-  313add94027d16bcfe08529136972fe49f6746f5.
+  63e920d1b9cc95491cc4950abf944e7efb1d3b6a.
 - Market main remains cc19fa966dcb155fa1743f5076fb5152e74bdf8f.
 - Market PR #7 product head is
-  a7534f2475a6bf298aff50a87cb132f34c7aa063.
-- Staff PR #139 current normal merge head is
-  99e46102a6e33a39d30a29470cd229c7439689b1, which merged immediate paired
-  product parent d97a082523012edfac05db1d75fbd59a92d9b253 with then-current
-  `main` c1054da6a8f89b312df2e05e25edc958fceda7ef; it must merge current
-  `main` before acceptance.
+  9f4a4145ab3628831edc27a534c4420faa5e23f1.
+- Staff PR #139 current head is
+  47b0b13cb1fd3786fc2743ee8765cc322a6d7a0f. Its parent `f69aef6f` normally
+  merged then-current `main` `63e920d1b9cc95491cc4950abf944e7efb1d3b6a`
+  before the paired listener-routing commit.
 - Clean-clone component_sync.py compare reports 512 shared files with no added,
   missing, or modified path. Both product trees have hash
-  bc302a74a4c9acc69cba22947f46688d0c108a666cb896774655cc8eb09588c9.
+  d266bb0039f9b7e60cf59b253b52de15e60cd42b17a0c425bbe3ad98896bbd52.
 - Staff owns V20, X03 owns V21, and D09 reserves V22. X03 and D09 retain
   disjoint PaperCommandRegistrar.java hunks.
 
@@ -88,36 +87,42 @@ existing validated-price fallback; TRADE keeps its parsed positive item quantity
 and serialized cost item. Existing shops, balances, migrations, and the Java
 menu are unchanged.
 
+The latest paired listener repair handles only the main-hand interaction, so
+Paper's per-hand interaction events cannot open duplicate creation flows. It
+preserves the established sign, shop, container, stall, authority, denial, and
+held-item guard order while adding direct Java-route, Bedrock-route, empty-hand,
+off-hand, and missing-target regression coverage.
+
 ## 10. Exact-head validation record
 
 - **Market local:** PASS. Test, shadow JAR, JaCoCo, and Detekt passed with
   the repository-pinned LumaGuilds artifact.
-- **Market hosted:** PASS. Run 35524744229 passed build, tests, shadow JAR,
+- **Market hosted:** PASS. Run 35542232664 passed build, tests, shadow JAR,
   MariaDB verification, security, and Detekt.
-- **Market Wiki:** PASS. Run 35524744279 passed Markdown, frontmatter, and
+- **Market Wiki:** PASS. Run 35542232684 passed Markdown, frontmatter, and
   strict MkDocs checks.
 - **Staff local:** PASS. Full component test, shadow JAR, JaCoCo, and Detekt
   passed with the repository-pinned LumaGuilds artifact.
-- **Staff coverage/build:** PASS. Run 35526526618 / job 106119546309 passed
+- **Staff coverage/build:** PASS. Run 35542245591 / job 106161876789 passed
   at the exact Staff merge head, including aggregate build/tests, runtime JAR
   inspection, coverage, and artifact upload.
 - **Diff hygiene and component parity:** PASS. Every paired checkpoint passed
   git diff --check; the final paired hash is
-  bc302a74a4c9acc69cba22947f46688d0c108a666cb896774655cc8eb09588c9.
+  d266bb0039f9b7e60cf59b253b52de15e60cd42b17a0c425bbe3ad98896bbd52.
 - **PR review:** No live inline threads. CodeRabbit is skipped/manual for
   Staff and draft-skipped for Market, not an automated full-review approval.
-- **Codacy static analysis:** NOT PASS. Exact Staff check 106119707074 is
-  ACTION_REQUIRED; current triage records 1,129 findings.
-- **Canonical Pi:** NOT PASS. Staff run 35526525971 failed before private
+- **Codacy static analysis:** NOT PASS. Exact Staff check 106161999175 is
+  ACTION_REQUIRED with 1,126 reported issues.
+- **Canonical Pi:** NOT PASS. Staff run 35542244424 failed before private
   dispatch on HTTP 401 Bad credentials.
-- **Durable Sentinel restart:** PASS. Artifact run 35526526642 / job
-  106119546325 passed; durable job 463 returned PAPER_RESTART_OK after two
+- **Durable Sentinel restart:** PASS. Artifact run 35542245567 / job
+  106161876827 passed; durable job 476 returned PAPER_RESTART_OK after two
   clean readiness and stop cycles against one disposable state.
 
 ## 11. Static-analysis disposition
 
-The non-passing Codacy result is not suppressed. Exact check 106119707074 is
-ACTION_REQUIRED; current triage records 1,129 findings. Prior triage identified Markdownlint, production
+The non-passing Codacy result is not suppressed. Exact check 106161999175 is
+ACTION_REQUIRED with 1,126 reported issues. Prior triage identified Markdownlint, production
 Lizard, immutable-migration RAC-table, and dependency-coordinate
 secret-pattern categories; each current finding requires scoped verification.
 The narrow source, test, and dialect scopes remain in place. A broader
@@ -130,7 +135,7 @@ component-wide exclusion.
 The aggregate component and standalone Market product tree are exactly equal
 at the current paired heads. Clean-clone comparison found 512 shared files and
 the shared hash is
-bc302a74a4c9acc69cba22947f46688d0c108a666cb896774655cc8eb09588c9.
+d266bb0039f9b7e60cf59b253b52de15e60cd42b17a0c425bbe3ad98896bbd52.
 Post-merge parity and component metadata updates remain required.
 
 ## 13. Exact unblock condition
@@ -142,8 +147,8 @@ findings into an unbounded cleanup. The staging owner must rotate or replace
 ENTHUSIASTAFF_STAGING_TOKEN with a least-privilege credential that can read
 workflow history and dispatch the required private workflow. Do not use a
 personal credential or bypass the public bridge. After a changed product head,
-normal current-main merge, or credential repair, freeze the heads and rerun
-every applicable exact hosted, static, review, Sentinel, and Pi gate.
+or credential repair, freeze the heads and rerun every applicable exact hosted,
+static, review, Sentinel, and Pi gate.
 
 ## 14. Completion definition
 
