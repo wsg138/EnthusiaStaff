@@ -1,42 +1,103 @@
-# ES-X03 parked: static-analysis boundary and Pi bridge authentication
+# ES-X03 parked: paired static remediation and Pi bridge authentication
 
-Date: 2026-09-18
-Package: `ES-X03 — EnthusiaMarket destructive provider`
-Terminal worker state: `BLOCKED` / `PARKED_BLOCKED`
+Date: 2026-09-19, updated in place
 
-## Scope and immutable references
+Package: **ES-X03 — EnthusiaMarket destructive provider**
 
-- Canonical Staff `main` at reconciliation: `6201765f0e07b08f9b22ed7ce96838c01fa94007`.
-- Existing Staff implementation: [PR #139](https://github.com/wsg138/EnthusiaStaff/pull/139), branch `package/es-x03-market-provider`, exact head `879eae12df35253cce6cd12179d5cef1afe95dd9`. The PR is open, non-draft, and mergeable; it is preserved unchanged.
-- Standalone EnthusiaMarket `main`: `cc19fa966dcb155fa1743f5076fb5152e74bdf8f`. The aggregate component on preserved Staff PR #139 matched that standalone product tree at reconciliation, but canonical `main` remains `NOT_IMPORTED` until Staff merges and final post-merge parity remains required. Standalone [PR #6](https://github.com/wsg138/EnthusiaMarket/pull/6) is a separate, unpaired hardening proposal and is preserved; it is not absorbed, rebased, or merged as part of X03.
+Terminal worker state: **BLOCKED / PARKED_BLOCKED**
 
-## Reconciliation and collision result
+## Routing, scope, and collision result
 
-The former D04 serialization blocker is resolved. Staff `main` owns V20, X03 owns branch-local `V21__market_compliance_journal.sql`, and active D09 reserves V22. X03 and D09 both touch `PaperCommandRegistrar.java`, but their hunks are disjoint. There is no X03 exact-path overlap with the user-owned dirty root worktree.
+The owner-authorized Bedrock currency-shop repair preserved Staff
+[PR #139](https://github.com/wsg138/EnthusiaStaff/pull/139) on
+package/es-x03-market-provider and opened draft Market
+[PR #7](https://github.com/wsg138/EnthusiaMarket/pull/7) on
+package/es-x03-market-static-remediation. Unpaired Market PR #6 remains
+preserved and excluded.
 
-Manual review of the frozen X03 head covered the journal migration, JDBC store, reconciliation coordinator, provider boundary, command surface, lifecycle maintenance, and focused unit/integration coverage. It found durable intent before provider mutation, idempotency and optimistic-revision handling, fail-closed provider writes, explicit approval before confiscation, and recovery that does not auto-approve. No new source defect was found; the implementation head is left frozen.
+Staff main at current reconciliation is
+d4b5d44d6b88126f9663974d892e3e8b6aac5b9d, and Market main remains
+cc19fa966dcb155fa1743f5076fb5152e74bdf8f. Staff owns V20, X03 owns V21,
+and D09 reserves V22; the one shared registrar-file hunk is disjoint. No
+user-owned root-worktree path was changed.
 
-## Exact-head validation record
+## Frozen paired product heads and parity
 
-| Gate | Result | Evidence |
-| --- | --- | --- |
-| Diff hygiene | PASS | `git diff --check origin/main...879eae12df35253cce6cd12179d5cef1afe95dd9` produced no output. |
-| Coverage/full build | PASS | GitHub Actions run `35168774609`, job `105035696843`, on exact X03 head. |
-| Sentinel restart artifact | PASS | Run `35168774608`, job `105035696425`, on exact X03 head; the required manifest is present. |
-| PR review | No live inline threads | CodeRabbit's successful status is a skipped/manual review status, not an automated full-review approval. |
-| Codacy static analysis | NOT PASS | Check `105036637444` is `action_required` with 2,085 new issues. |
-| Canonical Pi supersession | NOT PASS | Run `35168772060` failed before private dispatch: public workflow-history lookup returned HTTP 401 `Bad credentials`. No private Pi/Paper/MariaDB runtime ran. |
-| Durable Sentinel restart | NOT RUN | [Status command 5730170958](https://github.com/wsg138/EnthusiaStaff/pull/139#issuecomment-5730170958) completed [ACTIONED / STATUS_NO_JOB](https://github.com/wsg138/EnthusiaStaff/pull/139#issuecomment-5730177011) for the exact SHA; no restart was requested. |
+- Market PR #7: 5b6606c2f71a410ed6f369b0b893a7888638a7f2.
+- Staff PR #139: e67a67585179b7a8dd6b6dc8c81c9fe567f04ef1.
+- component_sync.py compare: parity true, with no added, missing, or modified
+  shared paths.
+- Shared product hash:
+  6ba7be19e647b9093bb9670b79026585eb5306f83e66480894fed3912b1f96f7.
 
-The static result is not dismissed wholesale. Of the 2,085 reports, 1,989 are under the aggregate Market component and 96 are Staff/agent Markdown. Some high findings are demonstrable analyzer mismatches (the Staff-specific RAC-table pattern against Market table names, SQLint against component SQLite migrations, and dependency-coordinate literals mistaken for keys), while the report also contains real component-owned complexity, Markdown, and dependency debt, including a Trivy medium finding. The root `.codacy.yml` must not be broadened to hide `components/enthusia-market/**`, and the frozen X03 integration package must not silently take ownership of a new paired provider remediation.
+## Completed remediation
 
-## Exact unblock and preservation rules
+- Updated mkdocs-material and brought Market documentation through its
+  configured Markdown, frontmatter, and strict MkDocs checks.
+- Routed Geyser and its transitives through OpenCollab before JitPack, fixing
+  the hosted dependency-resolution failure without adding private
+  infrastructure to Market.
+- Kept production analysis enabled while limiting only Market test complexity
+  and component SQLite dialect handling.
+- Refactored bounded parser, configuration, projection, eviction, duration,
+  and cache-state helpers. New focused tests cover public snapshots, eviction
+  order, and duration parsing. These refactors preserve product behavior.
+- Repaired Bedrock SELL/BUY currency pricing. Valid form submissions previously
+  supplied a non-null zero cost override and violated the existing positive-cost
+  invariant before persistence. Currency shops now use the existing price fallback;
+  TRADE retains its parsed item quantity and cost item.
 
-Keep PR #139 and `package/es-x03-market-provider`; do not create a replacement implementation branch. Before a fresh exact-head static check, the owner must choose and record one of these bounded paths:
+## Exact-head validation
 
-1. authorize a paired standalone-Market and aggregate remediation scope for valid provider static debt; or
-2. make a reviewed analyzer-boundary/configuration decision that preserves standalone Market validation and does not globally suppress valid component findings.
+- **Market local:** PASS. Test, shadow JAR, JaCoCo, and Detekt passed with
+  the repository-pinned LumaGuilds artifact.
+- **Market hosted:** PASS. Run 35474189763 passed build, tests, shadow JAR,
+  MariaDB verification, security, and Detekt.
+- **Market Wiki:** PASS. Run 35474189668 passed Markdown, frontmatter, and
+  strict MkDocs checks.
+- **Staff local:** PASS. Full component test, shadow JAR, JaCoCo, and Detekt
+  passed with the repository-pinned LumaGuilds artifact.
+- **Staff coverage/build:** PASS. Run 35474547939 passed at exact Staff head
+  e67a67585179b7a8dd6b6dc8c81c9fe567f04ef1.
+- **Diff hygiene and parity:** PASS. Every checkpoint passed git diff --check;
+  final component parity is exact.
+- **Review:** No live inline threads. CodeRabbit is skipped/manual for Staff
+  and draft-skipped for Market, not an automated full-review approval.
+- **Codacy static:** NOT PASS. ACTION_REQUIRED with 1,129 findings.
+- **Canonical Pi:** NOT PASS. Run 35474189686 failed before private dispatch
+  on HTTP 401 Bad credentials.
+- **Durable Sentinel restart:** NOT RUN. No fresh exact-head durable restart
+  result exists.
 
-The Codacy configuration decision must be made at the supported repository/analyzer scope, including any required enablement of supported tool configuration; it cannot be guessed by adding a broad aggregate exclusion. Independently, restore the public Pi workflow-history authentication/effective permission used by the supersession bridge. Only after both conditions change should a worker freeze the resulting exact head and rerun all required hosted/static/manual-review/Sentinel/Pi gates. Merge #139 normally only when every required gate is terminal and green, then prove post-merge standalone↔aggregate parity and update component metadata.
+Codacy is not dismissed: 1,076 findings are Markdownlint, 43 are Market
+production Lizard reports, eight are RAC-table reports against immutable Market
+migrations, and two are dependency-coordinate secret-pattern reports. Broad
+component suppression is not authorized.
 
-No production listing, balance, item, player, database, deployment, Discord configuration, authority, LiteBans, or cutover state changed.
+Staff PR #139 is `DIRTY` because later `main` state records overlap four
+`ai-agents` tracking files. No component-source conflict was found. Do not
+merge `main` merely to make this parked branch current while the independent
+external gates remain non-passing.
+
+## Blocker and exact next action
+
+No private Pi, Paper, or MariaDB runtime ran. The staging owner must rotate or
+replace ENTHUSIASTAFF_STAGING_TOKEN with a least-privilege credential able to
+read workflow history and dispatch the required private workflow. Do not use a
+personal credential or bypass the public bridge.
+
+An authorized, path-scoped Codacy rule or configuration decision is required
+for analyzer configuration mismatches. Remaining stateful transaction, auction,
+persistence, listener, and GUI findings need a separate bounded remediation and
+review plan. When those conditions change, resume these preserved branches,
+freeze new exact heads, and rerun hosted, static, review, Sentinel, and
+canonical Pi gates before normal merges and post-merge parity.
+
+The owner authorized the pre-existing Bedrock currency-priced shop repair. The
+paired change is limited to new form submissions: it replaces the invalid zero
+override with the factory's existing validated-price fallback. No existing shop,
+balance, item, migration, or Java-menu behavior changed.
+
+No production listing, balance, item, player data, database, deployment,
+Discord configuration, authority, LiteBans, cutover, or issue #43 acceptance
+changed.

@@ -1,6 +1,6 @@
 # Workspace state
 
-Last updated: 2026-09-18
+Last updated: 2026-09-20
 
 Live GitHub overrides stale records. Detailed package evidence remains in the registries, selected package record, canonical handoff, and PR verification ledgers.
 
@@ -8,20 +8,20 @@ Live GitHub overrides stale records. Detailed package evidence remains in the re
 
 | Field | Value |
 | --- | --- |
-| Universal package active state | X01 parked; X03 partial; X04 complete. |
+| Universal package active state | `ES-X04 — EnthusiaCommend reputation provider` is `COMPLETE`; `ES-X01` remains `BLOCKED` / `PARKED_BLOCKED`; `ES-X03` is `PARTIAL` / `ACTIONABLE_CONTINUATION` while its paired static remediation and required aggregate synchronization continue. |
 | X01 current classification | `BLOCKED` / `PARKED_BLOCKED` after a 2026-08-26 `ACTIONABLE_CONTINUATION`. The historical repository-resolution blocker materially changed, but the verified provider license now blocks the canonical public aggregate-copy/parity requirement. |
 | X01 standalone | Verified `wsg138/Enthusia-RoseChat`, default `master`, reconciliation head `8fcca5420b0f54207d6efa332327b9fd18edb8d8`. GitHub identifies it as a public fork of `BadgersMC/Enthusia-RoseChat`, sourced from `Rosewood-Development/RoseChat`. No provider `AGENTS.md` was present in the verified source tree. |
 | X01 license boundary | The checked-in Rosewood Development `LICENSE` permits use/copy/modify/merge while expressly excluding publication and (re)distribution rights. `wsg138/EnthusiaStaff` is public, while `BRANCH-AND-MIRROR-POLICY.md` requires the aggregate component directory to reproduce the standalone source tree for parity excluding only `.git` and aggregate-only `COMPONENT-METADATA.md`. No durable repository evidence currently grants the redistribution right required for that public second copy. |
 | X01 implementation state | No provider or Staff implementation branch/PR was created, no RoseChat source was imported, and no product code/test/migration/runtime configuration changed. The worker stopped at the verified license/import gate rather than creating unmergeable or unauthorized work. |
 | X01 exact unblock | Obtain a durable, verifiable license change or authorization permitting the required public aggregate copy, or an explicitly authorized canonical package/mirror-policy redesign that removes republication while retaining deterministic supported-source verification. Then reconcile live heads again and perform the normal two-PR implementation, exact-head validation, normal merges, and synchronization/parity process. |
-| X03 status | `PARTIAL` / `ACTIONABLE_CONTINUATION`; #139/#7. |
-| X03 standalone | Market #7 draft at `80cf7c3`; #6 is preserved. |
-| X03 aggregate | Staff #139 is the paired aggregate leg. |
-| X03 hosted | Current checks pending; prior checks are historical. |
-| X03 static/review | Remediation is active; production rules remain enabled. |
-| X03 Pi/Sentinel | Pi bridge authentication remains non-passing. |
-| X03 migration/collision state | V21 is unchanged; D09 keeps V22. |
-| X03 exact unblock | Finish #7/#139; repair Pi credential; rerun exact gates. |
+| X03 status | `PARTIAL` / `ACTIONABLE_CONTINUATION`; paired #139/#7 remediation and normal current-main merge in progress. |
+| X03 standalone | Market #7 draft at `a7534f2`; unpaired #6 is preserved. |
+| X03 aggregate | Pre-merge Staff #139 product head `d97a082`; current `main` is `c1054da`. |
+| X03 hosted | Market exact-head build/security/Detekt and Wiki pass; Staff Coverage `35525198519` / job `106116024419` passed for pre-merge `d97a082`. |
+| X03 static/review | Codacy `ACTION_REQUIRED`, 1,127; manual CodeRabbit review is skipped. |
+| X03 Pi/Sentinel | Pi `35524782510` failed pre-dispatch on HTTP 401; no exact pre-merge Sentinel artifact ran because #139 was conflicted. |
+| X03 migrations | Main V20; X03 V21; D09 V22; product hunks remain disjoint. |
+| X03 exact unblock | Complete normal merge and fresh exact-head gates; continue valid static remediation; repair Pi credential. |
 | X04 standalone | `wsg138/EnthusiaCommend` PR #12 merged normally as `b4a1b57ba918f10ab28d140f9fc0e588a95389c1` after exact reviewed head `325c304512187f274463c31f1649efe0ae56ab7d`. Its fully contained package branch remains safe to delete when an authorized branch-deletion path is available. |
 | X04 aggregate | Staff PR #152 merged normally as `e91fc1150a82cc0df081a82bb3dd69714f8bfc14` after exact reviewed head `7ef4b70ed01ad46b925669a0b1378053d8e26789`; the temporary Staff package branch is deleted. |
 | X04 product state | Transactional/versioned reputation moderation and the Staff sanction projection are implemented and merged. Post-merge standalone↔aggregate shared Git objects are identical; aggregate-only `COMPONENT-METADATA.md` is the one allowed extra file and records `IN_SYNC`. |
@@ -31,15 +31,21 @@ Live GitHub overrides stale records. Detailed package evidence remains in the re
 | X04 Sentinel | Exact-head Sentinel workflow `32882926734` PASS; durable job `250` reached `PAPER_RESTART_OK`. |
 | X04 canonical Pi | Public run `32882924737` and correlated private run `32883859152` / job `97919562717` PASS on trusted `Lincoln-PI-4`, including exact artifact verification, guarded disposable Paper boot/restart, durable sanitized evidence, and cleanup. |
 | X04 remaining work | No implementation, validation, synchronization, merge, or canonical-publication work remains. Only deletion of the fully contained standalone package branch is pending because the prior connected mutation surface did not expose branch deletion. |
-| Discord program live work | No D07 implementation worker remains. `ES-D07 — Discord punishment enforcement` is `COMPLETE`. `ES-D09` is dependency-complete `READY` for a future Discord worker but is not active. `ES-D08` remains `PLANNED` pending its separate live Minecraft integration-readiness proof. `ES-D12` remains `PLANNED` because D09 is not complete. `ES-D13` remains `BLOCKED` / `PARKED_BLOCKED` with PR #178 preserved open/unmerged. This worker stops after D07 terminal publication. |
+| Discord program live work | `ES-D09` is `BLOCKED` / `PARKED_BLOCKED`; PR #203 remains preserved open/unmerged at frozen executable head `a48390c50c6968e75437abd2dd05c0faeece355d`. Exact executable validation/static/review evidence is green; merge is blocked by migration serialization because `main` owns through V20, X03 / PR #139 owns branch-local V21, and D09 owns V22. D08 remains `PLANNED`; D10/D12 remain `PLANNED` because D09 is incomplete; D13 remains independently parked. |
 | Discord latest completion | `ES-D07 — Discord punishment enforcement` is the latest completed Discord implementation package. |
+| D09 implementation state | `BLOCKED` / `PARKED_BLOCKED`. PR #203 remains open/unmerged on `package/es-d09-discord-investigations` at frozen executable/product head `a48390c50c6968e75437abd2dd05c0faeece355d`. |
+| D09 executable validation | Exact repair validation `35387277563` / job `105737009460` PASS: Java 21 clean build/tests, MariaDB/Testcontainers integration tests, StaffBot runtime verification, PMD zero valid changed-code findings, changed-method complexity bounds, regression bounds, and `git diff --check`. |
+| D09 hosted/static/review | Exact-head Coverage `35388283034` / job `105740323648`, Staff Bot PR Artifact `35388283005`, Staff Bot Configuration Cache `35388283022`, Sentinel Restart Artifact `35388282989`, Codacy Static `105740695905`, Codacy diff coverage, and Codacy coverage variation all PASS. Codacy static has zero annotations / zero new valid findings. CodeRabbit status is successful; all substantive product-code threads are resolved. |
+| D09 migration blocker | Live `main` owns Staff migrations through V20; X03 / PR #139 legitimately owns branch-local V21; D09 owns V22. V21 is absent from `main`, so D09 cannot safely merge V22. |
+| D09 exact unblock | Merge the legitimate owner of Staff migration V21 into `main`, then reconcile D09 with the resulting live migration chain, resolve only legitimate conflicts, rerun all exact-head executable gates affected by reconciliation, refresh review/Codacy evidence, and only then reconsider merging PR #203. |
+| D09 production boundary | No production Discord mutation/data access/configuration, deployment, cutover, LiteBans authority change, AutoMod enforcement, cross-platform authority change, or issue #43 acceptance occurred. |
 | D07 implementation state | `COMPLETE`. PR #201 merged normally as `ca949a8531ea39efdf1becccc052b9c59cf30d24`; package base `074c0ae0bee7222bcd5c9096f8db0071f5b84cdf`; frozen executable product `aea6696cb97df4463b90abfcbbd8bfa4bb80b913`; final pre-merge head `e9d8a904c4192c9a4ab5fdfe34df8d2590567a95`. Merge parents are exactly the base and final feature head. |
 | D07 executable validation | Review-repair workflow `34925882460` / job `104243730808` PASS: Temurin Java 21.0.12+1, full clean build/tests, `:staff-bot:verifyStaffBotRuntime`, PMD zero findings, changed-Java CCN <= 8, practical method length <= 50, argument count <= 8, bounded worker-test size 431, and `git diff --check`. Frozen executable Codacy check `104245761385` PASS with zero annotations/up-to-standards. All four substantive CodeRabbit findings were repaired with regression coverage and all four threads are resolved. |
 | D07 final state-only validation | Exact `aea6696...` → `e9d8a904...` delta is only three `ai-agents` Markdown tracking files. Exact final-head Coverage `34926790460`, Staff Bot PR Artifact `34926790540`, Staff Bot Configuration Cache `34926790404`, Sentinel Restart Artifact `34926790424`, and state-only Codacy Static `104247092167` all PASS. No executable input changed. |
 | D07 destructive staging | `NOT RUN / unavailable`, not passed. No authorized non-production D07 destructive target/fixture/harness was found; production Discord was not used as a substitute and no production Discord action/config/data mutation occurred. |
 | D07 merge/containment | Merge `ca949a8531ea39efdf1becccc052b9c59cf30d24` exactly contains final feature head `e9d8a904...`; post-merge comparison is one merge commit with zero file differences. `package/es-d07-discord-punishment-enforcement` is absent. |
 | D07 temporary tooling | `tmp/es-d07-codacy-inspect-20260914` contains only disposable D07 inspection/repair scripts/workflow state and no unique product work; it is safe to delete. The connected GitHub mutation surface exposes no branch-delete action. |
-| D07 downstream routing | D09 is dependency-complete `READY` but not started. D08 remains `PLANNED` because its separate live proof that current Minecraft moderation services can accept integration without changing production authority is not established. D12 remains `PLANNED` because D09 is not complete. D13 remains parked. |
+| D07 downstream routing | D09 is now `BLOCKED` / `PARKED_BLOCKED` on V21→V22 migration serialization with #203 preserved. D08 remains `PLANNED` because its separate live proof that current Minecraft moderation services can accept integration without changing production authority is not established. D10/D12 remain `PLANNED` because D09 is incomplete. D13 remains parked. |
 | D13 implementation state | Product implementation is complete enough for acceptance testing on PR #178 / `package/es-d13-role-sync-replacement`; frozen head `92b207d67a1098acc2dcfbddd35ac56e01711f95`, observed base/main `e7b338979c3824687147a0b3253638324571a3a7`. Six concrete CodeRabbit findings were repaired with regression coverage and all visible review threads are resolved. Production ENFORCE remains rejected. |
 | D13 hosted/static validation | Exact frozen head: Coverage/full validation `34893756317` / job `104142632033` PASS; 52.52% line / 42.70% branch / 54.75% instruction coverage; 27 provider API source types / 0 leaks; Staff Bot PR Artifact `34893756524` PASS; Staff Bot Configuration Cache `34893756377` PASS; Sentinel Restart Artifact `34893756520` / job `104142890224` PASS; Codacy Static `104143227910` PASS with zero annotations/new valid findings; Codacy Diff Coverage `104145475928` PASS at 55.93% with no repository gate defined. |
 | D13 canonical Pi | **NOT PASS / private runtime NOT RUN.** Public exact-head run `34893930914` built successfully, but bridge job `104146199543` failed before private dispatch during `Revalidate exact candidate and supersede stale staging` because the staging workflow-history request returned HTTP `401 Bad credentials`. No Pi/Paper/database runtime ran; transient transfer cleanup succeeded. Do not rerun the identical path without evidence the cross-repository credential/authorization condition changed. |
@@ -70,11 +76,11 @@ Live GitHub overrides stale records. Detailed package evidence remains in the re
 | D06 Sentinel/canonical Pi | Durable Sentinel job `327` reached `PAPER_RESTART_OK`. Canonical public Pi `33204694500` and correlated private `33205431529` / job `98965140421` PASS on trusted `Lincoln-PI-4`, including exact bridge verification, guarded disposable Paper boot/restart, sanitized/durable evidence, transient-transfer cleanup, and terminal publication. Sanitized runtime SHA-256 `728ab454b9cb546625985a02fa5d6c9fc7a6e37020974a409862f411e58dc96b`. |
 | D06 merge/containment | PR #177 merged normally as `5eab4d8ff7bf0c25253df828c837fbc8c96edfb3` with exact feature head `b624ee799aea7db7c561b0b064733374d4c61067` as second parent. Merge and feature trees are identical at `5b3fd4d313dd4437dc04c346bd39efcc4e00f007`; post-merge compare is one ahead/zero behind with zero file differences. The implementation branch is absent. |
 | D06 remaining work | None. The temporary diagnostic workflow is removed and its retained diagnostic branch has zero file differences from merged `main`; it is safe to delete when a branch-delete mutation is available. No unique D06 work remains. |
-| Migration state | Canonical `main` owns D04's forward-only V20. X03's reconciled implementation owns branch-local `V21__market_compliance_journal.sql`; active D09 reserves V22. D16's owner-authorized transition path successfully applied/populated the selected EnthusiaStaff schema during authorized staging. D05/D06/D07/X01/D13 status publication adds no migration/source migration, and D07 implementation itself adds no Flyway migration. |
-| Independently parked packages | `ES-X01` remains independently `BLOCKED` / `PARKED_BLOCKED` on verified license/public-aggregate authorization. `ES-D13` remains independently `BLOCKED` / `PARKED_BLOCKED` on unavailable original DiscordSRV non-production parity input/runtime. X03 is independently `BLOCKED` / `PARKED_BLOCKED`: Codacy static does not pass and the Pi bridge fails before private dispatch. |
-| Production boundary | D07 is complete as Discord-only enforcement code but no production Discord configuration/data/action, deployment/cutover, LiteBans authority change, AutoMod enforcement, cross-platform `Both`, or issue #43 acceptance occurred. D16 remains read-only/simulation-only; D13 remains unmerged/parked. Credentials, private production data, raw player/message evidence, PM data, and secrets remain excluded from repository/CI/chat evidence. LiteBans remains authoritative. |
+| Migration state | Canonical `main` owns D04's forward-only V20. X03 / PR #139 owns branch-local `V21__market_compliance_journal.sql`; parked D09 / PR #203 owns `V22__discord_investigation_state.sql`. V21 is still absent from live `main`, so D09 V22 cannot merge. D16's owner-authorized transition path successfully applied/populated the selected EnthusiaStaff schema during authorized staging. D05/D06/D07/X01/D13 status publication adds no migration/source migration, and D07 implementation itself adds no Flyway migration. |
+| Independently parked packages | `ES-X01` remains independently `BLOCKED` / `PARKED_BLOCKED` on verified license/public-aggregate authorization. `ES-X03` remains independently `BLOCKED` / `PARKED_BLOCKED` on its Codacy/Pi boundary and legitimately owns branch-local Staff V21. `ES-D09` is independently `BLOCKED` / `PARKED_BLOCKED` on migration serialization because V21 is absent from `main` while D09 owns V22. `ES-D13` remains independently `BLOCKED` / `PARKED_BLOCKED` on unavailable original DiscordSRV non-production parity input/runtime. |
+| Production boundary | D07 is complete as Discord-only enforcement code. D09 remains unmerged/parked at #203 and performed no production Discord mutation/data/configuration, deployment/cutover, LiteBans authority change, AutoMod enforcement, or issue #43 acceptance. D16 remains read-only/simulation-only; D13 remains unmerged/parked. Credentials, private production data, raw player/message evidence, PM data, and secrets remain excluded from repository/CI/chat evidence. LiteBans remains authoritative. |
 | Universal current handoff | `ai-agents/reports/package-handoffs/2026-09-18-es-x03-parked-static-and-pi.md` |
-| Discord current handoff | `ai-agents/reports/package-handoffs/2026-09-14-es-d07-active.md` — terminal `COMPLETE` publication. |
+| Discord current handoff | `ai-agents/reports/package-handoffs/2026-09-19-es-d09-investigations-blocked.md` — terminal `BLOCKED` / `PARKED_BLOCKED` publication. |
 | Discord parked handoff | `ai-agents/reports/package-handoffs/2026-09-14-es-d13-role-sync-blocked.md` |
 
 ## X01 current parked record
@@ -87,17 +93,50 @@ Exact unblock is a durable, verifiable license/authorization change that permits
 
 ## X03 current parked record
 
-The 2026-09-18 universal worker resumed the existing PR #139 and reconciled D04 without replacing the branch. Exact X03 head `879eae12df35253cce6cd12179d5cef1afe95dd9` carries V21 over canonical `main` `6201765f0e07b08f9b22ed7ce96838c01fa94007`; D09's reserved V22 and shared registrar hunks are disjoint. Focused manual review found no new source defect. Coverage/full build `35168774609` / job `105035696843` and Sentinel artifact `35168774608` / job `105035696425` passed.
+The paired continuation preserves Market PR #7 at
+5b6606c2f71a410ed6f369b0b893a7888638a7f2 and Staff PR #139 at
+e67a67585179b7a8dd6b6dc8c81c9fe567f04ef1. Exact component parity is true
+at shared hash
+6ba7be19e647b9093bb9670b79026585eb5306f83e66480894fed3912b1f96f7.
+The owner-authorized repair corrects Bedrock SELL/BUY submissions that passed
+a zero cost override and failed the existing positive-cost invariant before
+persistence. It uses the existing price fallback; TRADE behavior, existing
+shops, balances, migrations, and Java menus are unchanged.
 
-X03 is now parked on two independent non-passing gates. Codacy `105036637444` is `action_required` with 2,085 reports, mostly aggregate Market component findings that include both analyzer mismatches and real component-owned debt. Pi `35168772060` failed before private dispatch because the public workflow-history lookup returned HTTP 401 `Bad credentials`; no private runtime ran. Sentinel durable restart is `NOT RUN`: its exact-head status command completed `ACTIONED` / `STATUS_NO_JOB`, and no restart was sent.
+Market build 35474189763 and Wiki 35474189668 passed. Staff Coverage
+35474547939 passed at the exact paired head. V20, V21, V22, and shared-file
+ownership remain unchanged and disjoint.
 
-Preserve PR #139 and standalone Market PR #6. The owner must authorize a paired Market/static remediation or a reviewed non-suppressive analyzer boundary, and restore Pi bridge authentication, before a fresh exact-head gate run. Only fully green gates permit normal merge; post-merge standalone↔aggregate parity is still mandatory. Current handoff: `ai-agents/reports/package-handoffs/2026-09-18-es-x03-parked-static-and-pi.md`.
+X03 remains parked on two independent non-passing gates. Codacy is
+ACTION_REQUIRED with 1,129 findings that include Markdownlint, Lizard,
+immutable-migration RAC-table, and dependency-coordinate secret-pattern
+reports. Pi run 35474189686 failed before private dispatch on HTTP 401 Bad
+credentials; no private runtime ran. Durable Sentinel restart is NOT RUN.
+
+Preserve PR #139, Market PR #7, and unpaired Market PR #6. An authorized
+path-scoped Codacy decision and repaired Pi workflow-history authentication
+are required before a fresh exact-head gate run. Only terminal green required
+gates permit normal merges; post-merge standalone-to-aggregate parity remains
+mandatory. Current handoff:
+ai-agents/reports/package-handoffs/2026-09-18-es-x03-parked-static-and-pi.md.
 
 ## X04 completed record
 
 X04 completed through normally merged Commend PR #12 and Staff PR #152 after exact-head Java 21, test, static, review, Sentinel, and canonical Pi gates. Post-merge containment and standalone↔aggregate shared Git objects are identical, and component metadata records `IN_SYNC`.
 
 The only residual cleanup is the fully contained standalone package branch. It has no unique work and is safe to delete when an authorized branch-deletion path is available; it is not an implementation or validation blocker.
+
+## D09 current parked record
+
+D09 implementation PR #203 remains open/unmerged at exact frozen executable/product head `a48390c50c6968e75437abd2dd05c0faeece355d` on `package/es-d09-discord-investigations`.
+
+Exact repair validation `35387277563` / job `105737009460` passed the full Java 21/MariaDB/Testcontainers/StaffBot runtime path, PMD, changed-method complexity, regression bounds, and `git diff --check`. Exact frozen-head Coverage `35388283034` / job `105740323648`, Staff Bot PR Artifact `35388283005`, Staff Bot Configuration Cache `35388283022`, Sentinel Restart Artifact `35388282989`, Codacy Static `105740695905`, diff coverage, and coverage variation all succeeded. Codacy static has zero annotations / zero new valid findings. CodeRabbit is successful and every substantive product-code review thread is resolved.
+
+The package cannot merge because the Staff Flyway chain is serialized. Live `main` contains migrations through V20; X03 / PR #139 legitimately owns branch-local V21; D09 owns V22. V21 remains absent from `main`. D09 must not renumber V22 or absorb X03.
+
+Exact unblock: merge the legitimate owner of Staff migration V21 into `main`, then reconcile D09 with the resulting live migration chain, resolve only legitimate conflicts, rerun all exact-head executable gates affected by reconciliation, refresh review/Codacy evidence, and only then reconsider merging PR #203.
+
+No production Discord mutation/data/configuration, deployment, cutover, LiteBans authority change, AutoMod enforcement, cross-platform authority change, or issue #43 acceptance was performed. Canonical handoff: `ai-agents/reports/package-handoffs/2026-09-19-es-d09-investigations-blocked.md`.
 
 ## D13 current parked record
 
@@ -166,13 +205,15 @@ No production import, Discord production change, private-data access, deployment
 ## Independent ES-X03 routing
 
 An owner-directed continuation selected paired static remediation. Market PR #7
-is the draft provider leg at `80cf7c32fdb1bda6242b91b3b82977fafb665e45`;
-preserved Staff PR #139 is its aggregate leg. The aggregate normally merged
-current `main` and mirrors the provider checkpoint exactly, excluding only
-aggregate metadata.
+is the draft provider leg at `a7534f2475a6bf298aff50a87cb132f34c7aa063`;
+pre-merge Staff PR #139 product head is
+`d97a082523012edfac05db1d75fbd59a92d9b253`. A clean-clone component comparison
+found 512 shared product files, no drift, and content hash
+`bc302a74a4c9acc69cba22947f46688d0c108a666cb896774655cc8eb09588c9`.
 
-The remediation keeps production static analysis enabled and scopes only Market
-test complexity and Market SQLite migration dialect checks. It does not bypass
-the private staging bridge. The Pi workflow-history credential remains invalid,
-so no private runtime is claimed. Preserve standalone PR #6 unchanged and use
-the active X03 handoff for exact validation and remaining complexity work.
+The Staff leg is reconciling current `main` through a normal merge. Conflicts
+are limited to package-state records; Market component code/tests, migrations,
+and workflow content merge cleanly. This synchronization restores automatic
+`pull_request` Coverage and Sentinel artifact validation that GitHub skips for
+merge-conflicted PRs. Production static analysis remains enabled, Pi is not
+bypassed, and standalone PR #6 remains preserved.

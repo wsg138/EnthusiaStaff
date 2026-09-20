@@ -4,11 +4,11 @@
 `ES-D01`; Internal; primary `COMP-STAFF`; priority 130; parallel safe only with work that does not touch shared domain/package-state files.
 
 ## 2. Status
-`READY_FOR_REVIEW` — implementation is frozen and exact-product-head hosted validation passed. Merge, containment verification, and branch cleanup remain pending.
+`COMPLETE` — the frozen implementation passed its exact-head validation and PR #146 merged normally on 2026-08-23. The PR head `7d95184a662bf7483efa439b05aeaed077f4f0b6` is the second parent of merge commit `a0971d86d2cfedbb933b85451985feb2480511de`, contains the frozen product head, and is contained in current `main`; the remote implementation branch is gone.
 
 Starting `main`: `a0337614a85fab6e9b29beff663396cea86cdce1`.
 Frozen product head: `8490fbf8373ee9e237d83d12dcde5f37c970e5be`.
-PR: #146.
+PR: #146. Normal merge: `a0971d86d2cfedbb933b85451985feb2480511de`.
 
 ## 3. Objective
 Establish the type-safe domain contract for moderation subjects, Discord identities, Discord↔Minecraft linking cardinality/history, automatic/staff-overridden main Minecraft account selection, explicit enforcement scopes, and 30-day inactive-case closure policy without adding persistence or runtime enforcement.
@@ -54,9 +54,9 @@ PR #146 to `wsg138/EnthusiaStaff:main`, opened draft and promoted for review aft
 - [x] Check applicable review/static status and live review threads.
 - [x] Freeze product head `8490fbf8373ee9e237d83d12dcde5f37c970e5be`.
 - [x] Reconcile package state/handoff documentation.
-- [ ] Complete human/owner PR review.
-- [ ] Merge normally only after approval.
-- [ ] Verify post-merge containment and clean temporary branch.
+- [x] Complete normal repository merge of PR #146.
+- [x] Verify post-merge containment of the frozen product head.
+- [x] Confirm the remote temporary implementation branch was deleted.
 
 ## 13. Acceptance criteria
 Domain code permits Discord-only subjects; permits one Discord account to own several current Minecraft links; rejects two current Discord owners for one Minecraft UUID; preserves ended link records; first linked Minecraft account starts as main; automatic main changes only at >=25% active-playtime advantage; staff override wins and stale override fails closed; effective main preserves its selection source; enforcement targets cannot pair a Discord scope with a Minecraft identity or vice versa; cross-platform selection is multiple explicit scopes rather than a magic BOTH state; only OPEN cases become inactivity-close candidates at 30 days.
@@ -93,13 +93,13 @@ No provider call is added. Current `wsg138/PlayTimePlugin` exposes `PlaytimeServ
 One normal-merge PR, complete domain behavior/tests, exact-head applicable checks green, zero valid unresolved review threads, package state published, containment verified, temporary branch safely removed.
 
 ## 23. Resume state
-Worker: ChatGPT package worker. Branch: `package/es-d01-discord-identity-contract`. PR: #146. Starting SHA: `a0337614a85fab6e9b29beff663396cea86cdce1`. Frozen product SHA: `8490fbf8373ee9e237d83d12dcde5f37c970e5be`. Product implementation is frozen; remaining work is review/merge/containment only.
+Terminal record: PR #146 merged normally as `a0971d86d2cfedbb933b85451985feb2480511de` on 2026-08-23. The frozen product head `8490fbf8373ee9e237d83d12dcde5f37c970e5be` is contained in `main`; the remote implementation branch is deleted.
 
 ## 24. Last completed checkpoint
 Exact-product-head Java 21 build/tests, aggregate coverage generation, runtime-JAR inspection, Sentinel artifact build, CodeRabbit status, and zero-thread review check passed. Package state was reconciled without changing the frozen product tree.
 
 ## 25. Remaining checklist
-Human/owner review of PR #146, normal merge if approved, post-merge containment verification, branch cleanup, then a fresh worker may select dependent `ES-D02`.
+None. D01 is terminal; its merged domain contract is available to dependent packages.
 
 ## 26. Known blockers
 NONE inside D01. ES-X03 remains independently parked on its runtime-host blocker and is not a dependency of D01.
@@ -115,6 +115,8 @@ NONE inside D01. ES-X03 remains independently parked on its runtime-host blocker
 - CodeRabbit exact-product-head status: success.
 - Live inline review threads before state publication: 0.
 - Website/competition/component paths changed: 0.
+- Normal merge: PR #146 merged as `a0971d86d2cfedbb933b85451985feb2480511de` on 2026-08-23; its second parent `7d95184a662bf7483efa439b05aeaed077f4f0b6` contains the frozen product head and is contained in current `main`.
+- Remote implementation branch: deleted.
 
 ## 28. Merge and synchronization record
-Pending owner/human review and normal merge. No deployment, production data change, Discord configuration change, schema migration, authority change, or cutover occurred in D01.
+PR #146 merged normally on 2026-08-23 as `a0971d86d2cfedbb933b85451985feb2480511de`. Its second parent `7d95184a662bf7483efa439b05aeaed077f4f0b6` contains frozen product head `8490fbf8373ee9e237d83d12dcde5f37c970e5be`; current `main` contains both, and the remote implementation branch no longer exists. No deployment, production data change, Discord configuration change, schema migration, authority change, or cutover occurred in D01.
