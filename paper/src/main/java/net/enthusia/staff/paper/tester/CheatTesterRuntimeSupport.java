@@ -12,6 +12,7 @@ final class CheatTesterRuntimeSupport {
     private final JavaPlugin plugin;
     private final ExecutorService workers;
     private final CheatTesterSettings settings;
+    private final FoliaPlayerHandoff handoff;
     private final java.util.concurrent.atomic.AtomicBoolean closed;
 
     CheatTesterRuntimeSupport(
@@ -23,17 +24,12 @@ final class CheatTesterRuntimeSupport {
         this.plugin = java.util.Objects.requireNonNull(plugin, "plugin");
         this.workers = java.util.Objects.requireNonNull(workers, "workers");
         this.settings = java.util.Objects.requireNonNull(settings, "settings");
+        this.handoff = new FoliaPlayerHandoff(plugin);
         this.closed = java.util.Objects.requireNonNull(closed, "closed");
     }
 
-    void scheduleTarget(UUID targetId, Runnable operation, Runnable retired) {
-        plugin.getServer().getGlobalRegionScheduler().execute(plugin, () -> {
-            Player target = plugin.getServer().getPlayer(targetId);
-            if (target == null || !target.isOnline()
-                    || !target.getScheduler().execute(plugin, operation, retired, 1L)) {
-                retired.run();
-            }
-        });
+    void scheduleTarget(UUID targetId, java.util.function.Consumer<Player> operation, Runnable retired) {
+        handoff.execute(targetId, operation, retired);
     }
 
     boolean submit(Runnable operation) {

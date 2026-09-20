@@ -45,6 +45,7 @@ public final class FakeBaseManager implements Listener, AutoCloseable {
     private final FakeBasePlacementPlanner planner = new FakeBasePlacementPlanner();
     private final FakeBaseRenderer renderer;
     private final FakeBaseAuditWriter audits;
+    private final FoliaPlayerHandoff handoff;
     private final Map<UUID, FakeBaseOperation> activeByTarget = new ConcurrentHashMap<>();
     private final Object registryLock = new Object();
     private final AtomicBoolean closed = new AtomicBoolean();
@@ -58,6 +59,7 @@ public final class FakeBaseManager implements Listener, AutoCloseable {
         this.staffMode = java.util.Objects.requireNonNull(staffMode, "staffMode");
         this.renderer = new FakeBaseRenderer(plugin, template);
         this.audits = new FakeBaseAuditWriter(plugin, clock, serverId, auditStore, workers);
+        this.handoff = new FoliaPlayerHandoff(plugin);
     }
 
     boolean authorized(Player staff) {
@@ -469,16 +471,7 @@ public final class FakeBaseManager implements Listener, AutoCloseable {
     }
 
     private void onEntity(UUID playerId, java.util.function.Consumer<Player> operation) {
-        try {
-            plugin.getServer().getGlobalRegionScheduler().execute(plugin, () -> {
-                Player player = plugin.getServer().getPlayer(playerId);
-                if (player != null && player.isOnline()) {
-                    player.getScheduler().execute(plugin, () -> operation.accept(player), null, 1L);
-                }
-            });
-        } catch (RuntimeException exception) {
-            plugin.getLogger().log(Level.FINE, "Fake-base entity scheduling retired during shutdown", exception);
-        }
+        handoff.execute(playerId, operation, () -> { });
     }
 
     private void message(UUID playerId, Component message) {
