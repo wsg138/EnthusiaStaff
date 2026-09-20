@@ -67,7 +67,7 @@ Canonical D09 blocker handoff: `ai-agents/reports/package-handoffs/2026-09-19-es
 
 | ID | Title | Status | Classification | Priority | Dependencies | Assignment / live work |
 | --- | --- | --- | --- | ---: | --- | --- |
-| `ES-T01` | Random staff-teleport stale-target hardening | `ACTIVE` | `ACTIONABLE_CONTINUATION` | 5 | `ES-P04` | owner-authorized 2026-09-20 test-hardening repair on `package/es-t01-staff-teleport-hardening`; no active-package product-path collision |
+| `ES-T01` | Random staff-teleport stale-target hardening | `ACTIVE` | `ACTIONABLE_CONTINUATION` | 5 | `ES-P04` | owner-authorized 2026-09-20 test-hardening repair; draft PR #215 on `package/es-t01-staff-teleport-hardening`; frozen product `d69b48a8088c`; no active-package product-path collision |
 | `ES-P01` | Exact-sanction appeal isolation | `COMPLETE` | — | 10 | — | merged PR #68 |
 | `ES-R01` | Billing-independent staging bridge recovery | `COMPLETE` | — | 15 | — | canonical public→private staging route proven |
 | `ES-R02` | Report integration fixture clock recovery | `COMPLETE` | — | 16 | — | merged PR #103 |

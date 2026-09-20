@@ -40,7 +40,8 @@ One normal-merge PR to `EnthusiaStaff:main`.
 - [x] Implement execution-time target revalidation and fallback retry.
 - [x] Add focused state-change regression coverage.
 - [x] Run focused Java 21 tests and changed-code analyzers locally.
-- [ ] Open PR and run exact-head hosted/static validation.
+- [x] Open draft PR #215 for the product checkpoint.
+- [ ] Run exact-head hosted/static validation.
 - [ ] Harsh-review final diff and resolve valid findings.
 - [ ] Merge normally, verify containment, publish terminal state, clean branch when safe.
 
@@ -75,7 +76,7 @@ None.
 One normal-merge PR; focused and full applicable tests green on exact head; zero valid unresolved review/static findings; merge containment verified; canonical state published.
 
 ## 23. Resume state
-Worker: automatic owner-authorized testing-hardening worker. Branch: `package/es-t01-staff-teleport-hardening`. PR: not yet opened at initial checkpoint. Start `main`: `c1054da6a8f89b312df2e05e25edc958fceda7ef`.
+Worker: automatic owner-authorized testing-hardening worker. Branch: `package/es-t01-staff-teleport-hardening`. PR: #215 (draft) at initial product checkpoint `d69b48a8088c8562b6d0a6ccd39a005f95266e4a`. Start `main`: `c1054da6a8f89b312df2e05e25edc958fceda7ef`.
 
 ## 24. Last completed checkpoint
 Concrete stale-target defect repaired. Java 21.0.6 focused tests and full `:paper:test` pass; Lizard reports zero threshold violations at CCN <= 8, method length <= 50, and arguments <= 8; `git diff --check` passes. The orchestration validator still reports pre-existing legacy Dxx/X03 record-format errors, while its own 8 unit tests pass and T01 adds no new reported orchestration error.
