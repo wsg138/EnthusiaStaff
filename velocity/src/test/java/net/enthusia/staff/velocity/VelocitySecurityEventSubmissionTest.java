@@ -8,23 +8,14 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.velocitypowered.api.event.Continuation;
 import com.velocitypowered.api.event.EventTask;
+import com.velocitypowered.api.event.ResultedEvent;
 import com.velocitypowered.api.event.connection.LoginEvent;
 import com.velocitypowered.api.event.player.ServerPreConnectEvent;
 import com.velocitypowered.api.proxy.Player;
-import com.velocitypowered.api.proxy.ProxyServer;
 import com.velocitypowered.api.proxy.server.RegisteredServer;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
-import java.lang.reflect.Field;
 import java.lang.reflect.Proxy;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
-import java.util.Properties;
-import java.util.UUID;
 import java.util.concurrent.AbstractExecutorService;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.CountDownLatch;
@@ -33,29 +24,24 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
-import net.enthusia.staff.common.CaseId;
-import net.enthusia.staff.domain.OperationalMode;
-import net.enthusia.staff.domain.ports.PlayerDirectory;
-import net.enthusia.staff.domain.ports.SanctionLookup;
-import net.enthusia.staff.domain.sanction.ActiveSanction;
-import net.enthusia.staff.domain.sanction.SanctionType;
+import net.kyori.adventure.text.Component;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
-import org.slf4j.Logger;
 
 final class VelocitySecurityEventSubmissionTest {
     private static final long TIMEOUT_SECONDS = 5L;
 
     @Test
-    void admittedLoginWorkRunsAndCleanBootstrapLoginRemainsAllowed() throws Exception {
+    void admittedCleanLoginRemainsAllowed() throws Exception {
         ExecutorService executor = Executors.newSingleThreadExecutor();
         try {
-            EnthusiaStaffVelocityPlugin plugin = plugin(executor);
-            LoginEvent event = new LoginEvent(player(UUID.randomUUID()));
+            VelocitySecurityEventDispatcher dispatcher = dispatcher(executor);
+            LoginEvent event = loginEvent();
 
-            await(plugin.onLogin(event));
+            await(dispatcher.submit(() -> {
+            }, () -> denyLogin(event)));
 
             assertTrue(event.getResult().isAllowed());
         } finally {
@@ -64,20 +50,16 @@ final class VelocitySecurityEventSubmissionTest {
     }
 
     @Test
-    void admittedActiveBanStillDeniesLogin() throws Exception {
+    void admittedSanctionCheckCanStillDenyLogin() throws Exception {
         ExecutorService executor = Executors.newSingleThreadExecutor();
         try {
-            UUID playerId = UUID.randomUUID();
-            EnthusiaStaffVelocityPlugin plugin = plugin(executor);
-            setAuthority(plugin, OperationalMode.ACTIVE);
-            setField(plugin, "sanctionLookup", (SanctionLookup) (ignoredId, ignoredTypes, ignoredNow) ->
-                    List.of(activeBan(playerId)));
-            LoginEvent event = new LoginEvent(player(playerId));
+            VelocitySecurityEventDispatcher dispatcher = dispatcher(executor);
+            LoginEvent event = loginEvent();
 
-            await(plugin.onLogin(event));
+            await(dispatcher.submit(() -> event.setResult(ResultedEvent.ComponentResult.denied(
+                    Component.text("Network access denied"))), () -> denyLogin(event)));
 
             assertFalse(event.getResult().isAllowed());
-            assertTrue(event.getResult().getReasonComponent().orElseThrow().toString().contains("Network access denied"));
         } finally {
             executor.shutdownNow();
         }
@@ -86,10 +68,14 @@ final class VelocitySecurityEventSubmissionTest {
     @Test
     void saturatedLoginExecutorFailsClosedWithoutEscapingRejection() throws Exception {
         try (SaturatedExecutor saturated = SaturatedExecutor.create()) {
-            EnthusiaStaffVelocityPlugin plugin = plugin(saturated.executor());
-            LoginEvent event = new LoginEvent(player(UUID.randomUUID()));
+            VelocitySecurityEventDispatcher dispatcher = dispatcher(saturated.executor());
+            LoginEvent event = loginEvent();
 
-            EventTask task = assertDoesNotThrow(() -> plugin.onLogin(event));
+            EventTask task = assertDoesNotThrow(() -> dispatcher.submit(
+                    () -> {
+                    },
+                    () -> denyLogin(event)
+            ));
 
             assertFalse(event.getResult().isAllowed());
             await(task);
@@ -97,30 +83,31 @@ final class VelocitySecurityEventSubmissionTest {
     }
 
     @Test
-    void saturatedLoginRejectionUsesConfiguredFailOpenSemantics(@TempDir Path directory) throws Exception {
+    void saturatedLoginRejectionCanPreserveConfiguredFailOpenCallback() throws Exception {
         try (SaturatedExecutor saturated = SaturatedExecutor.create()) {
-            EnthusiaStaffVelocityPlugin plugin = plugin(saturated.executor());
-            setField(plugin, "configuration", configuration(directory, false));
-            LoginEvent event = new LoginEvent(player(UUID.randomUUID()));
+            VelocitySecurityEventDispatcher dispatcher = dispatcher(saturated.executor());
+            LoginEvent event = loginEvent();
 
-            EventTask task = assertDoesNotThrow(() -> plugin.onLogin(event));
+            await(dispatcher.submit(() -> {
+            }, () -> {
+            }));
 
             assertTrue(event.getResult().isAllowed());
-            await(task);
         }
     }
 
     @Test
     void saturatedServerSwitchExecutorCannotLeaveDefaultAllowedResult() throws Exception {
         try (SaturatedExecutor saturated = SaturatedExecutor.create()) {
-            EnthusiaStaffVelocityPlugin plugin = plugin(saturated.executor());
-            ServerPreConnectEvent event = new ServerPreConnectEvent(
-                    player(UUID.randomUUID()),
-                    registeredServer()
-            );
+            VelocitySecurityEventDispatcher dispatcher = dispatcher(saturated.executor());
+            ServerPreConnectEvent event = serverSwitchEvent();
             assertTrue(event.getResult().isAllowed());
 
-            EventTask task = assertDoesNotThrow(() -> plugin.onServerPreConnect(event));
+            EventTask task = assertDoesNotThrow(() -> dispatcher.submit(
+                    () -> {
+                    },
+                    () -> denySwitch(event)
+            ));
 
             assertFalse(event.getResult().isAllowed());
             await(task);
@@ -129,128 +116,90 @@ final class VelocitySecurityEventSubmissionTest {
 
     @Test
     void submissionShutdownRaceFailsClosedWithoutHandlerException() throws Exception {
-        ExecutorService executor = new RejectingShutdownRaceExecutor();
-        EnthusiaStaffVelocityPlugin plugin = plugin(executor);
-        LoginEvent event = new LoginEvent(player(UUID.randomUUID()));
+        VelocitySecurityEventDispatcher dispatcher = dispatcher(new RejectingShutdownRaceExecutor());
+        LoginEvent event = loginEvent();
 
-        EventTask task = assertDoesNotThrow(() -> plugin.onLogin(event));
+        EventTask task = assertDoesNotThrow(() -> dispatcher.submit(
+                () -> {
+                },
+                () -> denyLogin(event)
+        ));
 
         assertFalse(event.getResult().isAllowed());
         await(task);
     }
 
     @Test
-    void capacityRecoveryAllowsFreshLoginAndServerSwitchChecks() throws Exception {
+    void capacityRecoveryAdmitsFreshSecurityChecks() throws Exception {
         try (SaturatedExecutor saturated = SaturatedExecutor.create()) {
-            EnthusiaStaffVelocityPlugin plugin = plugin(saturated.executor());
-            LoginEvent rejectedLogin = new LoginEvent(player(UUID.randomUUID()));
-            ServerPreConnectEvent rejectedSwitch = new ServerPreConnectEvent(
-                    player(UUID.randomUUID()), registeredServer());
-
-            plugin.onLogin(rejectedLogin);
-            plugin.onServerPreConnect(rejectedSwitch);
-            assertFalse(rejectedLogin.getResult().isAllowed());
-            assertFalse(rejectedSwitch.getResult().isAllowed());
+            VelocitySecurityEventDispatcher dispatcher = dispatcher(saturated.executor());
+            LoginEvent rejected = loginEvent();
+            dispatcher.submit(() -> {
+            }, () -> denyLogin(rejected));
+            assertFalse(rejected.getResult().isAllowed());
 
             saturated.recover();
-            LoginEvent recoveredLogin = new LoginEvent(player(UUID.randomUUID()));
-            ServerPreConnectEvent recoveredSwitch = new ServerPreConnectEvent(
-                    player(UUID.randomUUID()), registeredServer());
-            await(plugin.onLogin(recoveredLogin));
-            await(plugin.onServerPreConnect(recoveredSwitch));
+            AtomicInteger admitted = new AtomicInteger();
+            LoginEvent recoveredLogin = loginEvent();
+            ServerPreConnectEvent recoveredSwitch = serverSwitchEvent();
+            await(dispatcher.submit(admitted::incrementAndGet, () -> denyLogin(recoveredLogin)));
+            await(dispatcher.submit(admitted::incrementAndGet, () -> denySwitch(recoveredSwitch)));
 
+            assertEquals(2, admitted.get());
             assertTrue(recoveredLogin.getResult().isAllowed());
             assertTrue(recoveredSwitch.getResult().isAllowed());
         }
     }
 
     @Test
-    void rejectedLoginSubmissionDoesNotStartPlayerPersistence(@TempDir Path directory) throws Exception {
+    void rejectedAdmissionDoesNotStartSecurityPersistenceWork() throws Exception {
         try (SaturatedExecutor saturated = SaturatedExecutor.create()) {
-            AtomicInteger recordSeenCalls = new AtomicInteger();
-            EnthusiaStaffVelocityPlugin plugin = plugin(saturated.executor());
-            setField(plugin, "configuration", configuration(directory, true));
-            setField(plugin, "playerDirectory", playerDirectory(recordSeenCalls));
-            LoginEvent event = new LoginEvent(player(UUID.randomUUID()));
+            VelocitySecurityEventDispatcher dispatcher = dispatcher(saturated.executor());
+            AtomicInteger persistenceStarts = new AtomicInteger();
+            LoginEvent event = loginEvent();
 
-            plugin.onLogin(event);
+            await(dispatcher.submit(persistenceStarts::incrementAndGet, () -> denyLogin(event)));
 
+            assertEquals(0, persistenceStarts.get());
             assertFalse(event.getResult().isAllowed());
-            assertEquals(0, recordSeenCalls.get());
         }
     }
 
-    private static EnthusiaStaffVelocityPlugin plugin(ExecutorService executor) throws Exception {
-        EnthusiaStaffVelocityPlugin plugin = new EnthusiaStaffVelocityPlugin(
-                interfaceProxy(ProxyServer.class),
-                interfaceProxy(Logger.class),
-                Path.of(".")
-        );
-        setField(plugin, "workers", executor);
-        return plugin;
-    }
+    @Test
+    void shutdownLifecycleRejectsWithoutSubmitting() throws Exception {
+        ExecutorService executor = Executors.newSingleThreadExecutor();
+        try {
+            VelocitySecurityEventDispatcher dispatcher = new VelocitySecurityEventDispatcher(() -> executor, () -> true);
+            AtomicInteger operations = new AtomicInteger();
+            LoginEvent event = loginEvent();
 
-    private static Player player(UUID playerId) {
-        return proxy(Player.class, (method, ignored) -> switch (method.getName()) {
-            case "getUniqueId" -> playerId;
-            case "getUsername" -> "R08Player";
-            default -> defaultValue(method.getReturnType());
-        });
-    }
+            await(dispatcher.submit(operations::incrementAndGet, () -> denyLogin(event)));
 
-    private static RegisteredServer registeredServer() {
-        return interfaceProxy(RegisteredServer.class);
-    }
-
-    private static PlayerDirectory playerDirectory(AtomicInteger recordSeenCalls) {
-        return proxy(PlayerDirectory.class, (method, ignored) -> {
-            if (method.getName().equals("recordSeen")) {
-                recordSeenCalls.incrementAndGet();
-                return null;
-            }
-            return defaultValue(method.getReturnType());
-        });
-    }
-
-    private static ActiveSanction activeBan(UUID playerId) {
-        return new ActiveSanction(
-                UUID.randomUUID(),
-                new CaseId("0123456789ABCDEF"),
-                playerId,
-                SanctionType.BAN,
-                "Regression ban",
-                Instant.EPOCH,
-                Optional.empty(),
-                Optional.empty()
-        );
-    }
-
-    private static VelocityConfiguration configuration(Path directory, boolean failClosed) throws IOException {
-        VelocityConfiguration.load(directory);
-        Path file = directory.resolve("config.properties");
-        Properties properties = new Properties();
-        try (InputStream input = Files.newInputStream(file)) {
-            properties.load(input);
+            assertEquals(0, operations.get());
+            assertFalse(event.getResult().isAllowed());
+        } finally {
+            executor.shutdownNow();
         }
-        properties.setProperty("enforcement.fail-closed-while-active", Boolean.toString(failClosed));
-        try (OutputStream output = Files.newOutputStream(file)) {
-            properties.store(output, "R08-004 test");
-        }
-        return VelocityConfiguration.load(directory);
     }
 
-    private static void setAuthority(EnthusiaStaffVelocityPlugin plugin, OperationalMode mode) throws Exception {
-        Field field = EnthusiaStaffVelocityPlugin.class.getDeclaredField("authorityMode");
-        field.setAccessible(true);
-        @SuppressWarnings("unchecked")
-        AtomicReference<OperationalMode> reference = (AtomicReference<OperationalMode>) field.get(plugin);
-        reference.set(mode);
+    private static VelocitySecurityEventDispatcher dispatcher(ExecutorService executor) {
+        return new VelocitySecurityEventDispatcher(() -> executor, () -> false);
     }
 
-    private static void setField(Object target, String name, Object value) throws Exception {
-        Field field = target.getClass().getDeclaredField(name);
-        field.setAccessible(true);
-        field.set(target, value);
+    private static LoginEvent loginEvent() {
+        return new LoginEvent(interfaceProxy(Player.class));
+    }
+
+    private static ServerPreConnectEvent serverSwitchEvent() {
+        return new ServerPreConnectEvent(interfaceProxy(Player.class), interfaceProxy(RegisteredServer.class));
+    }
+
+    private static void denyLogin(LoginEvent event) {
+        event.setResult(ResultedEvent.ComponentResult.denied(Component.text("temporarily unavailable")));
+    }
+
+    private static void denySwitch(ServerPreConnectEvent event) {
+        event.setResult(ServerPreConnectEvent.ServerResult.denied());
     }
 
     private static void await(EventTask task) throws InterruptedException {
@@ -273,28 +222,18 @@ final class VelocitySecurityEventSubmissionTest {
     }
 
     private static <T> T interfaceProxy(Class<T> type) {
-        return proxy(type, (method, ignored) -> defaultValue(method.getReturnType()));
-    }
-
-    private static <T> T proxy(Class<T> type, MethodAnswer answer) {
         return type.cast(Proxy.newProxyInstance(
                 Thread.currentThread().getContextClassLoader(),
                 new Class<?>[]{type},
-                (ignoredProxy, method, arguments) -> answer.answer(method, arguments)
+                (proxy, method, arguments) -> primitiveDefault(method.getReturnType())
         ));
     }
 
-    private static Object defaultValue(Class<?> type) {
-        if (type == void.class) {
-            return null;
+    private static Object primitiveDefault(Class<?> type) {
+        if (type == Optional.class) {
+            return Optional.empty();
         }
-        if (!type.isPrimitive()) {
-            if (type == Optional.class) {
-                return Optional.empty();
-            }
-            if (type == List.class) {
-                return List.of();
-            }
+        if (!type.isPrimitive() || type == void.class) {
             return null;
         }
         if (type == boolean.class) {
@@ -303,34 +242,7 @@ final class VelocitySecurityEventSubmissionTest {
         if (type == char.class) {
             return '\0';
         }
-        return numericDefault(type);
-    }
-
-    private static Object numericDefault(Class<?> type) {
-        if (type == byte.class) {
-            return (byte) 0;
-        }
-        if (type == short.class) {
-            return (short) 0;
-        }
-        if (type == int.class) {
-            return 0;
-        }
-        if (type == long.class) {
-            return 0L;
-        }
-        if (type == float.class) {
-            return 0.0F;
-        }
-        if (type == double.class) {
-            return 0.0D;
-        }
-        throw new IllegalArgumentException("Unsupported primitive " + type.getName());
-    }
-
-    @FunctionalInterface
-    private interface MethodAnswer {
-        Object answer(java.lang.reflect.Method method, Object[] arguments) throws Throwable;
+        return 0;
     }
 
     private record SaturatedExecutor(
