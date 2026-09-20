@@ -35,11 +35,11 @@ No product rewrite was needed during recovery review. The implementation already
 - Hosted Sentinel artifact build run `35537362980`: PASS on the exact product head.
 - Sentinel Paper artifact id `10612739527`, digest `sha256:1b7aa494bd7378a2c5efcd1c0d137cccb445c96893efaa041bbfc30a6df74041`.
 - Authority bridge artifact id `10613283727`, digest `sha256:c99f9c565ee5a313485245f3cdeb131f1ccff5bc559ffa0c089eb1a951963dc9`.
+- Sentinel exact-SHA restart job `473`: PASS with terminal `PAPER_RESTART_OK` on `4eab447191ee7a379328ad8d5e7c36ad755e046d`; Paper reached readiness and stopped cleanly twice against one disposable state. Source comment `5752881805`; status comment `5752885142`.
 - Codacy: 0 new valid issues; static analysis PASS; reported PR complexity metric 6.
 - Independent Lizard changed-production-code gate: PASS, zero warnings at CCN `<= 8`, method length `<= 50`, args `<= 8`.
 - `git diff --check origin/main...HEAD`: PASS.
 - Review reconciliation: no human review submissions, no inline review threads, no requested changes, and no valid Codacy findings. CodeRabbit did not auto-review this repository; that is not represented as review evidence.
-- Sentinel exact-SHA restart command was submitted on PR #221 as source comment `5752881805`; job `473` is bound to `4eab447191ee7a379328ad8d5e7c36ad755e046d`. At this checkpoint its status comment `5752885142` remains non-terminal `RUNNING`, so no Sentinel runtime pass is claimed yet.
 - Local root clean build is not separately claimed because the workstation has no usable Docker command; the hosted exact-head clean build above is the applicable executable evidence.
 
 ## Persistence, schema, and collision boundary
@@ -48,11 +48,11 @@ This repair contains no schema or migration change. The claimed migration bounda
 Shared `PACKAGE-REGISTRY.md`, `WORKSPACE-STATE.md`, and `agent-handoffs/latest.md` are intentionally not modified here because the concurrent T01 package owns those shared orchestration paths, and the owner explicitly directed this recovery worker not to create a replacement branch or PR. This handoff and the unique ES-F01004 package file therefore carry the package-local parked state until shared-state ownership is available.
 
 ## Genuine blocker
-The finding itself requires representative real Folia acceptance. The repository currently has no Folia staging profile: `.enthusia-test.yml` exposes only the Paper `restart` profile. Current repository status/requirements documentation also explicitly records representative Folia staging as unavailable/staging-pending for staff tools and cheat testers. The Sentinel restart profile is useful Paper runtime evidence but cannot substitute for a real Folia ownership run.
+The finding itself requires representative real Folia acceptance. The repository currently has no Folia staging profile: `.enthusia-test.yml` exposes only the Paper `restart` profile. Current repository status/requirements documentation also explicitly records representative Folia staging as unavailable/staging-pending for staff tools and cheat testers. The successful Sentinel restart is useful Paper runtime evidence but cannot substitute for a real Folia ownership run.
 
 Because unavailable/skipped/stale infrastructure evidence is not a pass, PR #221 must not be merged yet.
 
 ## Exact unblock condition and next action
-Provision or expose an owner-approved representative Folia staging environment capable of running the frozen product behavior, then exercise Cheat Tester start, finish/restoration, durable restart/recovery, unavailable/retired target handling, and fake-base owner handoffs on a current candidate derived from product head `4eab447191ee7a379328ad8d5e7c36ad755e046d`. Require a genuine terminal Folia pass. Also require the Sentinel restart job to reach a terminal pass if it has not already done so. After the external blocker changes, reconcile current `main` and all path ownership, synchronize only as needed, rerun any exact-head gates invalidated by synchronization, and merge PR #221 with a normal merge commit only.
+Provision or expose an owner-approved representative Folia staging environment capable of running the frozen product behavior, then exercise Cheat Tester start, finish/restoration, durable restart/recovery, unavailable/retired target handling, and fake-base owner handoffs on a current candidate derived from product head `4eab447191ee7a379328ad8d5e7c36ad755e046d`. Require a genuine terminal Folia pass. After the external blocker changes, reconcile current `main` and all path ownership, synchronize only as needed, rerun any exact-head gates invalidated by synchronization, and merge PR #221 with a normal merge commit only.
 
 Do not select another finding from this worker.
