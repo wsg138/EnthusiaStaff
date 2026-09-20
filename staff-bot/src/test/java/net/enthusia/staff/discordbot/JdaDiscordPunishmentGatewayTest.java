@@ -134,6 +134,24 @@ class JdaDiscordPunishmentGatewayTest {
     }
 
     @Test
+    void currentMuteOwnershipRejectsNewerExternalRemovalAcrossPages() {
+        long roleId = 789L;
+        List<JdaMuteRoleOwnership.Observation> observations = unrelatedNewerObservations(roleId, 125);
+        observations.add(roleRemovalObservation(
+                TARGET_ID, BOT_ID + 1, "manual unmute", ISSUED_AT.plusSeconds(2), roleId
+        ));
+        observations.add(roleObservation(
+                TARGET_ID,
+                BOT_ID,
+                JdaMuteRoleOwnership.marker(PUNISHMENT_ID) + " reason",
+                ISSUED_AT.plusSeconds(1),
+                roleId
+        ));
+
+        assertFalse(currentlyOwnedNewestFirst(observations, roleId));
+    }
+
+    @Test
     void currentMuteOwnershipDoesNotSearchBeforeIssuanceBoundary() {
         long roleId = 789L;
         List<JdaMuteRoleOwnership.Observation> observations = new ArrayList<>();
@@ -195,6 +213,24 @@ class JdaDiscordPunishmentGatewayTest {
                 createdAt,
                 Set.of(roleId),
                 Set.of()
+        );
+    }
+
+    private static JdaMuteRoleOwnership.Observation roleRemovalObservation(
+            long targetId,
+            long actorId,
+            String reason,
+            Instant createdAt,
+            long roleId
+    ) {
+        return new JdaMuteRoleOwnership.Observation(
+                ActionType.MEMBER_ROLE_UPDATE,
+                targetId,
+                actorId,
+                reason,
+                createdAt,
+                Set.of(),
+                Set.of(roleId)
         );
     }
 
