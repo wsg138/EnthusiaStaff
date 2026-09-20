@@ -19,6 +19,8 @@ class JdaDiscordPunishmentGatewayTest {
     private static final Instant ISSUED_AT = Instant.parse("2026-09-14T20:00:00Z");
     private static final long TARGET_ID = 123L;
     private static final long BOT_ID = 456L;
+    private static final String REASON_SUFFIX = " reason";
+    private static final String OWNED_REASON = JdaMuteRoleOwnership.marker(PUNISHMENT_ID) + REASON_SUFFIX;
 
     @Test
     void freshMuteRejectsAnAlreadyPresentManagedRole() {
@@ -50,20 +52,19 @@ class JdaDiscordPunishmentGatewayTest {
 
     @Test
     void applyRetryRequiresExactBotTargetAndPunishmentMarker() {
-        String ownedReason = JdaMuteRoleOwnership.marker(PUNISHMENT_ID) + " reason";
         JdaMuteRoleOwnership.Observation owned = observation(
-                ActionType.MEMBER_ROLE_UPDATE, TARGET_ID, BOT_ID, ownedReason, ISSUED_AT.plusSeconds(1)
+                ActionType.MEMBER_ROLE_UPDATE, TARGET_ID, BOT_ID, OWNED_REASON, ISSUED_AT.plusSeconds(1)
         );
 
         assertTrue(proves(owned));
         assertFalse(proves(observation(
-                ActionType.MEMBER_UPDATE, TARGET_ID, BOT_ID, ownedReason, ISSUED_AT.plusSeconds(1)
+                ActionType.MEMBER_UPDATE, TARGET_ID, BOT_ID, OWNED_REASON, ISSUED_AT.plusSeconds(1)
         )));
         assertFalse(proves(observation(
-                ActionType.MEMBER_ROLE_UPDATE, TARGET_ID + 1, BOT_ID, ownedReason, ISSUED_AT.plusSeconds(1)
+                ActionType.MEMBER_ROLE_UPDATE, TARGET_ID + 1, BOT_ID, OWNED_REASON, ISSUED_AT.plusSeconds(1)
         )));
         assertFalse(proves(observation(
-                ActionType.MEMBER_ROLE_UPDATE, TARGET_ID, BOT_ID + 1, ownedReason, ISSUED_AT.plusSeconds(1)
+                ActionType.MEMBER_ROLE_UPDATE, TARGET_ID, BOT_ID + 1, OWNED_REASON, ISSUED_AT.plusSeconds(1)
         )));
         assertFalse(proves(observation(
                 ActionType.MEMBER_ROLE_UPDATE, TARGET_ID, BOT_ID, "manual role assignment", ISSUED_AT.plusSeconds(1)
@@ -72,14 +73,14 @@ class JdaDiscordPunishmentGatewayTest {
                 ActionType.MEMBER_ROLE_UPDATE,
                 TARGET_ID,
                 BOT_ID,
-                JdaMuteRoleOwnership.marker(UUID.randomUUID()) + " reason",
+                JdaMuteRoleOwnership.marker(UUID.randomUUID()) + REASON_SUFFIX,
                 ISSUED_AT.plusSeconds(1)
         )));
         assertFalse(proves(observation(
                 ActionType.MEMBER_ROLE_UPDATE,
                 TARGET_ID,
                 BOT_ID,
-                ownedReason,
+                OWNED_REASON,
                 ISSUED_AT.minusSeconds(120)
         )));
     }
@@ -87,9 +88,8 @@ class JdaDiscordPunishmentGatewayTest {
     @Test
     void currentMuteOwnershipRequiresLatestRoleChangeToBeOwnedAssignment() {
         long roleId = 789L;
-        String ownedReason = JdaMuteRoleOwnership.marker(PUNISHMENT_ID) + " reason";
         JdaMuteRoleOwnership.Observation owned = roleObservation(
-                TARGET_ID, BOT_ID, ownedReason, ISSUED_AT.plusSeconds(1), roleId
+                TARGET_ID, BOT_ID, OWNED_REASON, ISSUED_AT.plusSeconds(1), roleId
         );
         JdaMuteRoleOwnership.Observation external = roleObservation(
                 TARGET_ID, BOT_ID + 1, "manual mute", ISSUED_AT.plusSeconds(2), roleId
@@ -107,7 +107,7 @@ class JdaDiscordPunishmentGatewayTest {
         observations.add(roleObservation(
                 TARGET_ID,
                 BOT_ID,
-                JdaMuteRoleOwnership.marker(PUNISHMENT_ID) + " reason",
+                OWNED_REASON,
                 ISSUED_AT.plusSeconds(1),
                 roleId
         ));
@@ -125,7 +125,7 @@ class JdaDiscordPunishmentGatewayTest {
         observations.add(roleObservation(
                 TARGET_ID,
                 BOT_ID,
-                JdaMuteRoleOwnership.marker(PUNISHMENT_ID) + " reason",
+                OWNED_REASON,
                 ISSUED_AT.plusSeconds(1),
                 roleId
         ));
@@ -143,7 +143,7 @@ class JdaDiscordPunishmentGatewayTest {
         observations.add(roleObservation(
                 TARGET_ID,
                 BOT_ID,
-                JdaMuteRoleOwnership.marker(PUNISHMENT_ID) + " reason",
+                OWNED_REASON,
                 ISSUED_AT.plusSeconds(1),
                 roleId
         ));
