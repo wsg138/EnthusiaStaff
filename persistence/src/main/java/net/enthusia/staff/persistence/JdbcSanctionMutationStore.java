@@ -57,28 +57,7 @@ public final class JdbcSanctionMutationStore implements SanctionMutationStore {
                     connection.rollback();
                     return new SanctionChangeResult.Rejected("CASE_NOT_FOUND", "The case does not exist");
                 }
-                SanctionChangeResult.Rejected hierarchy = validateHierarchy(request, caseRow);
-                if (hierarchy != null) {
-                    connection.rollback();
-                    return hierarchy;
-                }
-                Instant now = clock.instant();
-                expireOverturnRequest(connection, request.caseId().value(), now);
-                SanctionChangeResult.Rejected stale = validateExpectation(connection, request, caseRow, now);
-                if (stale != null) {
-                    connection.rollback();
-                    return stale;
-                }
-                Change change = applyChange(connection, request, now);
-                if (change.rejection() != null) {
-                    connection.rollback();
-                    return change.rejection();
-                }
-                insertSanctionEvents(connection, request, change.sanctionIds(), now);
-                insertAudit(connection, request, caseRow.targetId(), change.sanctionIds(), now);
-                insertOutboxes(connection, request, caseRow.targetId(), now);
-                connection.commit();
-                return new SanctionChangeResult.Applied(change.sanctionIds().size(), false);
+                return applyLockedCase(connection, request, caseRow);
             } catch (SQLException | JsonProcessingException exception) {
                 rollback(connection, exception);
                 if (isReplayAfterConflict(request.idempotencyKey().value())) {
@@ -91,6 +70,35 @@ public final class JdbcSanctionMutationStore implements SanctionMutationStore {
         } catch (SQLException exception) {
             throw new ModerationPersistenceException("Unable to open sanction change transaction", exception);
         }
+    }
+
+    private SanctionChangeResult applyLockedCase(
+            Connection connection,
+            SanctionChangeRequest request,
+            CaseRow caseRow
+    ) throws SQLException, JsonProcessingException {
+        SanctionChangeResult.Rejected hierarchy = validateHierarchy(request, caseRow);
+        if (hierarchy != null) {
+            connection.rollback();
+            return hierarchy;
+        }
+        Instant now = clock.instant();
+        expireOverturnRequest(connection, request.caseId().value(), now);
+        SanctionChangeResult.Rejected stale = validateExpectation(connection, request, caseRow, now);
+        if (stale != null) {
+            connection.rollback();
+            return stale;
+        }
+        Change change = applyChange(connection, request, now);
+        if (change.rejection() != null) {
+            connection.rollback();
+            return change.rejection();
+        }
+        insertSanctionEvents(connection, request, change.sanctionIds(), now);
+        insertAudit(connection, request, caseRow.targetId(), change.sanctionIds(), now);
+        insertOutboxes(connection, request, caseRow.targetId(), now);
+        connection.commit();
+        return new SanctionChangeResult.Applied(change.sanctionIds().size(), false);
     }
 
     private static SanctionChangeResult.Rejected validateHierarchy(

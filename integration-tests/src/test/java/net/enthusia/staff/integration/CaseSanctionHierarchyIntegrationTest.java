@@ -44,6 +44,10 @@ class CaseSanctionHierarchyIntegrationTest {
     private static final Actor MODERATOR = new Actor(uuid(900), "Moderator", StaffRank.MOD);
     private static final Actor ADMIN = new Actor(uuid(901), "Admin", StaffRank.ADMIN);
     private static final Actor FOUNDER = new Actor(uuid(902), "Founder", StaffRank.FOUNDER);
+    private static final String ADMIN_RANK = "ADMIN";
+    private static final String HELPER_RANK = "HELPER";
+    private static final String SANCTION_EVENTS = "sanction_events";
+    private static final String AUDIT_EVENTS = "audit_events";
 
     @Container
     private static final MariaDBContainer<?> DATABASE = new MariaDBContainer<>("mariadb:11.8.3")
@@ -94,10 +98,13 @@ class CaseSanctionHierarchyIntegrationTest {
     @Test
     void rejectsHigherAndSystemIssuedCasesWithoutSideEffects() throws Exception {
         List<DeniedCase> deniedCases = List.of(
-                new DeniedCase(seed(1, "ADMIN"), MODERATOR),
+                new DeniedCase(seed(1, ADMIN_RANK), MODERATOR),
                 new DeniedCase(seed(2, "FOUNDER"), MODERATOR),
                 new DeniedCase(seed(3, "FOUNDER"), ADMIN),
-                new DeniedCase(seed(4, "SYSTEM"), FOUNDER)
+                new DeniedCase(seed(4, "SYSTEM"), FOUNDER),
+                new DeniedCase(seed(10, "OWNER"), ADMIN),
+                new DeniedCase(seed(11, ""), FOUNDER),
+                new DeniedCase(seed(12, "LEGACY_UNKNOWN"), FOUNDER)
         );
 
         try (MariaDbRuntime runtime = MariaDb.initialize(databaseConfig())) {
@@ -118,7 +125,7 @@ class CaseSanctionHierarchyIntegrationTest {
 
     @Test
     void allowsModToMutateHelperAndModCasesAndReplaysAcrossRestart() throws Exception {
-        Fixture helperCase = seed(5, "HELPER");
+        Fixture helperCase = seed(5, HELPER_RANK);
         Fixture modCase = seed(6, "MOD");
         SanctionChangeRequest helperRequest = request(helperCase, MODERATOR, "allowed-helper");
         SanctionChangeRequest modRequest = request(modCase, MODERATOR, "allowed-mod");
@@ -133,15 +140,15 @@ class CaseSanctionHierarchyIntegrationTest {
 
         assertEquals("ENDED_EARLY", sanctionStatus(helperCase));
         assertEquals("ENDED_EARLY", sanctionStatus(modCase));
-        assertEquals(2, count("sanction_events"));
-        assertEquals(2, count("audit_events"));
+        assertEquals(2, count(SANCTION_EVENTS));
+        assertEquals(2, count(AUDIT_EVENTS));
         assertEquals(2, count("network_outbox"));
         assertEquals(2, count("discord_outbox"));
     }
 
     @Test
     void staleExpectationStillRejectsAuthorizedMutationWithoutSideEffects() throws Exception {
-        Fixture fixture = seed(7, "HELPER");
+        Fixture fixture = seed(7, HELPER_RANK);
         SanctionChangeExpectation stale = new SanctionChangeExpectation(
                 1,
                 Map.of(fixture.sanctionId(), 0L),
@@ -164,20 +171,20 @@ class CaseSanctionHierarchyIntegrationTest {
 
     @Test
     void rejectedRequestReevaluatesPersistedIssuerRankAfterRestart() throws Exception {
-        Fixture fixture = seed(8, "ADMIN");
+        Fixture fixture = seed(8, ADMIN_RANK);
         SanctionChangeRequest request = request(fixture, MODERATOR, "recovery-rank-change");
 
         try (MariaDbRuntime runtime = MariaDb.initialize(databaseConfig())) {
             assertHierarchyDenied(runtime, request);
         }
-        updateIssuerRank(fixture, "HELPER");
+        updateIssuerRank(fixture, HELPER_RANK);
         try (MariaDbRuntime restarted = MariaDb.initialize(databaseConfig())) {
             assertApplied(restarted.sanctionMutationStore().apply(request), 1, false);
         }
 
         assertEquals("ENDED_EARLY", sanctionStatus(fixture));
-        assertEquals(1, count("sanction_events"));
-        assertEquals(1, count("audit_events"));
+        assertEquals(1, count(SANCTION_EVENTS));
+        assertEquals(1, count(AUDIT_EVENTS));
     }
 
     @Test
@@ -190,7 +197,7 @@ class CaseSanctionHierarchyIntegrationTest {
              Connection updater = dataSource.getConnection();
              ExecutorService executor = Executors.newSingleThreadExecutor()) {
             updater.setAutoCommit(false);
-            updateIssuerRank(updater, fixture, "ADMIN");
+            updateIssuerRank(updater, fixture, ADMIN_RANK);
             Future<SanctionChangeResult> result = executor.submit(
                     () -> runtime.sanctionMutationStore().apply(request)
             );
@@ -206,7 +213,7 @@ class CaseSanctionHierarchyIntegrationTest {
             assertEquals("HIERARCHY_DENIED", rejected.code());
         }
 
-        assertEquals("ADMIN", issuerRank(fixture));
+        assertEquals(ADMIN_RANK, issuerRank(fixture));
         assertUnchanged(fixture);
         assertNoMutationSideEffects();
     }
@@ -232,8 +239,8 @@ class CaseSanctionHierarchyIntegrationTest {
     }
 
     private static void assertNoMutationSideEffects() throws SQLException {
-        assertEquals(0, count("sanction_events"));
-        assertEquals(0, count("audit_events"));
+        assertEquals(0, count(SANCTION_EVENTS));
+        assertEquals(0, count(AUDIT_EVENTS));
         assertEquals(0, count("network_outbox"));
         assertEquals(0, count("discord_outbox"));
     }
@@ -367,26 +374,37 @@ class CaseSanctionHierarchyIntegrationTest {
     }
 
     private static String sanctionStatus(Fixture fixture) throws SQLException {
-        return stringValue("SELECT status FROM sanctions WHERE sanction_id = ?", fixture, true);
+        try (HikariDataSource dataSource = MariaDb.open(databaseConfig());
+             Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement(
+                     "SELECT status FROM sanctions WHERE sanction_id = ?")) {
+            statement.setBytes(1, MariaDbIntegrationSupport.uuidBytes(fixture.sanctionId()));
+            try (ResultSet result = statement.executeQuery()) {
+                assertTrue(result.next());
+                return result.getString(1);
+            }
+        }
     }
 
     private static String caseState(Fixture fixture) throws SQLException {
-        return stringValue("SELECT state FROM cases WHERE case_id = ?", fixture, false);
+        try (HikariDataSource dataSource = MariaDb.open(databaseConfig());
+             Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement(
+                     "SELECT state FROM cases WHERE case_id = ?")) {
+            statement.setString(1, fixture.caseId().value());
+            try (ResultSet result = statement.executeQuery()) {
+                assertTrue(result.next());
+                return result.getString(1);
+            }
+        }
     }
 
     private static String issuerRank(Fixture fixture) throws SQLException {
-        return stringValue("SELECT actor_rank FROM cases WHERE case_id = ?", fixture, false);
-    }
-
-    private static String stringValue(String sql, Fixture fixture, boolean sanctionId) throws SQLException {
         try (HikariDataSource dataSource = MariaDb.open(databaseConfig());
              Connection connection = dataSource.getConnection();
-             PreparedStatement statement = connection.prepareStatement(sql)) {
-            if (sanctionId) {
-                statement.setBytes(1, MariaDbIntegrationSupport.uuidBytes(fixture.sanctionId()));
-            } else {
-                statement.setString(1, fixture.caseId().value());
-            }
+             PreparedStatement statement = connection.prepareStatement(
+                     "SELECT actor_rank FROM cases WHERE case_id = ?")) {
+            statement.setString(1, fixture.caseId().value());
             try (ResultSet result = statement.executeQuery()) {
                 assertTrue(result.next());
                 return result.getString(1);
@@ -409,8 +427,8 @@ class CaseSanctionHierarchyIntegrationTest {
 
     private static int count(String table) throws SQLException {
         String sql = switch (table) {
-            case "sanction_events" -> "SELECT COUNT(*) FROM sanction_events";
-            case "audit_events" -> "SELECT COUNT(*) FROM audit_events";
+            case SANCTION_EVENTS -> "SELECT COUNT(*) FROM sanction_events";
+            case AUDIT_EVENTS -> "SELECT COUNT(*) FROM audit_events";
             case "network_outbox" -> "SELECT COUNT(*) FROM network_outbox";
             case "discord_outbox" -> "SELECT COUNT(*) FROM discord_outbox";
             default -> throw new IllegalArgumentException("unsupported count table");
