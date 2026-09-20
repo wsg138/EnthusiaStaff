@@ -1,16 +1,38 @@
 # Latest agent handoff
 
-Current handoff: **ES-D09 — Discord evidence, cases, notes and linked-alt alerts** — **BLOCKED / PARKED_BLOCKED**.
+Current handoff: **ES-X03 — EnthusiaMarket destructive provider** — **PARTIAL / ACTIONABLE_CONTINUATION**.
 
 Canonical package handoff:
-ai-agents/reports/package-handoffs/2026-09-19-es-d09-investigations-blocked.md.
+ai-agents/reports/package-handoffs/2026-09-20-es-x03-static-remediation-active.md.
 
-Implementation PR #203 remains open/unmerged on `package/es-d09-discord-investigations` at frozen executable/product head `a48390c50c6968e75437abd2dd05c0faeece355d`.
+Market [PR #7](https://github.com/wsg138/EnthusiaMarket/pull/7) is
+OPEN/DRAFT/CLEAN on `package/es-x03-market-static-remediation` at
+`a7534f2475a6bf298aff50a87cb132f34c7aa063`; Staff
+[PR #139](https://github.com/wsg138/EnthusiaStaff/pull/139) is
+OPEN/non-draft/UNSTABLE on `package/es-x03-market-provider` at normal
+two-parent merge `99e46102a6e33a39d30a29470cd229c7439689b1` of immediate
+paired product parent `d97a082523012edfac05db1d75fbd59a92d9b253`. Live Staff
+`main` then advanced to `a2c835419656adc2ddbf7f77fc49292ca43ee8f3`, so #139
+needs a later normal current-main merge before acceptance. Clean-clone
+component comparison found 512 shared files with no delta and hash
+`bc302a74a4c9acc69cba22947f46688d0c108a666cb896774655cc8eb09588c9`.
 
-Exact repair validation `35387277563` / job `105737009460` passed the Java 21 clean build/tests, MariaDB/Testcontainers coverage, StaffBot runtime verification, PMD, changed-method complexity, regression bounds, and `git diff --check`. Exact frozen-head Coverage `35388283034` / job `105740323648`, Staff Bot PR Artifact `35388283005`, Staff Bot Configuration Cache `35388283022`, and Sentinel Restart Artifact `35388282989` all passed. Codacy Static Code Analysis `105740695905` passed with zero annotations / zero new valid findings; CodeRabbit status is successful and all substantive product-code review threads are resolved.
+Market hosted runs `35524744229` and `35524744279` passed. Exact Staff
+Coverage `35526526618` / job `106119546309` and Sentinel artifact
+`35526526642` / job `106119546325` passed; durable Sentinel job `463` returned
+`PAPER_RESTART_OK`. No live review thread remains.
 
-The remaining blocker is migration serialization: live `main` contains Staff migrations through V20, ES-X03 / PR #139 legitimately owns branch-local V21, and D09 owns V22. V21 is still absent from `main`, so PR #203 must remain preserved open/unmerged.
+Codacy static check `106119707074` remains `ACTION_REQUIRED`; current triage
+records 1,129 findings. Canonical Pi `35526525971` stopped before private dispatch when its
+workflow-history lookup returned HTTP 401 Bad credentials; no private Pi,
+Paper, or MariaDB runtime ran.
 
-Exact unblock: merge the legitimate owner of Staff migration V21 into `main`, then reconcile D09 with the resulting live migration chain, resolve only legitimate conflicts, rerun all exact-head executable gates affected by reconciliation, refresh review/Codacy evidence, and only then reconsider merging PR #203.
+Continue only small paired fixes for validated static findings, preserving
+Market #7, Staff #139, and exact component parity. Merge current `main`
+normally before acceptance. The staging owner must repair the least-privilege
+bridge credential before a fresh canonical Pi run. Do not use a personal
+credential or bypass the public bridge.
 
-No production Discord mutation, production/private data access, deployment, cutover, production Discord configuration/intents change, LiteBans authority change, AutoMod enforcement, or issue #43 acceptance was performed. ES-X03 and ES-D13 remain separately parked and untouched.
+No production listing, balance, item, player data, database, deployment,
+authority, LiteBans, cutover, or issue #43 acceptance was performed. D09
+remains preserved while X03 owns branch-local V21.

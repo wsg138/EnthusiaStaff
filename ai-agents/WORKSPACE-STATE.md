@@ -1,6 +1,6 @@
 # Workspace state
 
-Last updated: 2026-09-19
+Last updated: 2026-09-20
 
 Live GitHub overrides stale records. Detailed package evidence remains in the registries, selected package record, canonical handoff, and PR verification ledgers.
 
@@ -8,20 +8,20 @@ Live GitHub overrides stale records. Detailed package evidence remains in the re
 
 | Field | Value |
 | --- | --- |
-| Universal package active state | `ES-X04 — EnthusiaCommend reputation provider` is `COMPLETE`; `ES-X01` remains `BLOCKED` / `PARKED_BLOCKED`; `ES-X03` completed its owner-authorized Bedrock repair but remains independently `BLOCKED` / `PARKED_BLOCKED` on Codacy and Pi bridge authentication. |
+| Universal package active state | `ES-X04 — EnthusiaCommend reputation provider` is `COMPLETE`; `ES-X01` remains `BLOCKED` / `PARKED_BLOCKED`; `ES-X03` is `PARTIAL` / `ACTIONABLE_CONTINUATION` while bounded paired static remediation continues. |
 | X01 current classification | `BLOCKED` / `PARKED_BLOCKED` after a 2026-08-26 `ACTIONABLE_CONTINUATION`. The historical repository-resolution blocker materially changed, but the verified provider license now blocks the canonical public aggregate-copy/parity requirement. |
 | X01 standalone | Verified `wsg138/Enthusia-RoseChat`, default `master`, reconciliation head `8fcca5420b0f54207d6efa332327b9fd18edb8d8`. GitHub identifies it as a public fork of `BadgersMC/Enthusia-RoseChat`, sourced from `Rosewood-Development/RoseChat`. No provider `AGENTS.md` was present in the verified source tree. |
 | X01 license boundary | The checked-in Rosewood Development `LICENSE` permits use/copy/modify/merge while expressly excluding publication and (re)distribution rights. `wsg138/EnthusiaStaff` is public, while `BRANCH-AND-MIRROR-POLICY.md` requires the aggregate component directory to reproduce the standalone source tree for parity excluding only `.git` and aggregate-only `COMPONENT-METADATA.md`. No durable repository evidence currently grants the redistribution right required for that public second copy. |
 | X01 implementation state | No provider or Staff implementation branch/PR was created, no RoseChat source was imported, and no product code/test/migration/runtime configuration changed. The worker stopped at the verified license/import gate rather than creating unmergeable or unauthorized work. |
 | X01 exact unblock | Obtain a durable, verifiable license change or authorization permitting the required public aggregate copy, or an explicitly authorized canonical package/mirror-policy redesign that removes republication while retaining deterministic supported-source verification. Then reconcile live heads again and perform the normal two-PR implementation, exact-head validation, normal merges, and synchronization/parity process. |
-| X03 state | BLOCKED / PARKED_BLOCKED; see current handoff. |
-| X03 standalone | PR #7 at 5b6606c; unpaired PR #6 preserved. |
-| X03 aggregate | PR #139 at e67a675; main d4b5d44. |
-| X03 hosted | Market build 35474189763, Wiki 35474189668, and Staff Coverage 35474547939 PASS. |
-| X03 static/review | Codacy ACTION_REQUIRED, 1,129; review skipped. |
-| X03 Pi/Sentinel | Pi 35474189686 pre-dispatch 401; durable restart NOT RUN. |
+| X03 state | `PARTIAL` / `ACTIONABLE_CONTINUATION`; fresh code and restart evidence is current, but acceptance remains blocked by Codacy and canonical Pi. |
+| X03 standalone | Market PR #7 is OPEN/DRAFT/CLEAN on `package/es-x03-market-static-remediation` at `a7534f2`; unpaired Market PR #6 is preserved. |
+| X03 aggregate | Staff PR #139 is OPEN/non-draft/UNSTABLE on `package/es-x03-market-provider` at normal merge `99e4610` of product parent `d97a082` with then-current `main` `c1054da`; live `main` subsequently advanced to `a2c8354`. |
+| X03 hosted | Market runs `35524744229`/`35524744279`, Staff Coverage `35526526618`, and Sentinel artifact `35526526642` PASS. |
+| X03 static/review | Exact Staff Codacy check `106119707074` is `ACTION_REQUIRED`; current triage records 1,129 findings; no live review threads; CodeRabbit is skipped/manual. |
+| X03 Pi/Sentinel | Pi `35526525971` failed pre-dispatch on HTTP 401; durable Sentinel job `463` PASS (`PAPER_RESTART_OK`). |
 | X03 migrations | Main V20; X03 V21; D09 V22; hunks disjoint. |
-| X03 unblock | Scoped Codacy action and Pi authentication repair. |
+| X03 unblock | Continue small paired fixes for validated static findings, merge live `main` normally before acceptance, and have the staging owner repair the bridge credential; then freeze and rerun exact-head gates. |
 | X04 standalone | `wsg138/EnthusiaCommend` PR #12 merged normally as `b4a1b57ba918f10ab28d140f9fc0e588a95389c1` after exact reviewed head `325c304512187f274463c31f1649efe0ae56ab7d`. Its fully contained package branch remains safe to delete when an authorized branch-deletion path is available. |
 | X04 aggregate | Staff PR #152 merged normally as `e91fc1150a82cc0df081a82bb3dd69714f8bfc14` after exact reviewed head `7ef4b70ed01ad46b925669a0b1378053d8e26789`; the temporary Staff package branch is deleted. |
 | X04 product state | Transactional/versioned reputation moderation and the Staff sanction projection are implemented and merged. Post-merge standalone↔aggregate shared Git objects are identical; aggregate-only `COMPONENT-METADATA.md` is the one allowed extra file and records `IN_SYNC`. |
@@ -204,9 +204,13 @@ No production import, Discord production change, private-data access, deployment
 
 ## Independent ES-X03 routing
 
-D04 serialization is no longer the X03 blocker. Preserve Market #7 at
-5b6606c and Staff #139 at e67a675; their final pre-merge product trees have
-exact parity. Codacy remains non-passing and the Pi bridge cannot authenticate
-to public workflow history. Follow the current X03 handoff; do not replace
-either implementation branch, absorb standalone Market PR #6, or treat
-missing private runtime as a pass.
+D04 serialization is no longer the X03 blocker. Market #7 at `a7534f2` and
+Staff #139 at `99e4610` have exact component parity at
+`bc302a74a4c9acc69cba22947f46688d0c108a666cb896774655cc8eb09588c9`.
+Fresh Staff Coverage, the Sentinel artifact, and durable restart job `463`
+passed for that aggregate head. Live `main` has since advanced to `a2c8354`,
+so a normal current-main merge will be needed before acceptance. Codacy remains
+`ACTION_REQUIRED`, and canonical Pi stopped before private dispatch because its
+bridge credential was rejected. Follow the active X03 handoff; do not replace
+either implementation branch, absorb standalone Market PR #6, bypass the
+bridge, or treat missing private runtime as a pass.
