@@ -58,7 +58,7 @@ jobs:
           name: enthusiastaff-sentinel-paper
           path: sentinel-artifact/EnthusiaStaff-Paper.jar
           if-no-files-found: error
-          retention-days: 2
+          retention-days: 7
 
       - name: Publish the exact authority bridge artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -66,4 +66,4 @@ jobs:
           name: enthusiastaff-authority-bridge
           path: authority-bridge-artifact/
           if-no-files-found: error
-          retention-days: 2
+          retention-days: 7
