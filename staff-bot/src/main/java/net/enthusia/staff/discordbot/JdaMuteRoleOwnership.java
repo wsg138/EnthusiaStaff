@@ -100,7 +100,7 @@ final class JdaMuteRoleOwnership {
             long actorId,
             Instant issuedAt
     ) {
-        if (observation == null || punishmentId == null || issuedAt == null || observation.createdAt() == null) {
+        if (observation == null || punishmentId == null || issuedAt == null) {
             return false;
         }
         return observation.type() == ActionType.MEMBER_ROLE_UPDATE
