@@ -305,26 +305,36 @@ public final class EnthusiaStaffVelocityPlugin {
 
     @Subscribe
     public EventTask onLogin(LoginEvent event) {
-        ExecutorService executor = workers;
-        if (executor == null || executor.isShutdown()) {
-            denyUnavailable(event);
-            return EventTask.async(() -> {
-            });
-        }
-        return EventTask.resumeWhenComplete(CompletableFuture.runAsync(() -> enforceLogin(event), executor));
+        return submitEventWorker(
+                () -> enforceLogin(event),
+                () -> denyUnavailable(event)
+        );
     }
 
     @Subscribe
     public EventTask onServerPreConnect(ServerPreConnectEvent event) {
-        ExecutorService executor = workers;
-        if (executor == null || executor.isShutdown()) {
-            denyServerSwitch(event, "Asset safety status is temporarily unavailable.");
-            return EventTask.async(() -> {
-            });
-        }
-        return EventTask.resumeWhenComplete(CompletableFuture.runAsync(() -> enforceSafeServerSwitch(event), executor));
+        return submitEventWorker(
+                () -> enforceSafeServerSwitch(event),
+                () -> denyServerSwitch(event, "Asset safety status is temporarily unavailable.")
+        );
     }
 
+    private EventTask submitEventWorker(Runnable operation, Runnable rejected) {
+        ExecutorService executor = workers;
+        if (executor == null || executor.isShutdown() || shuttingDown.get()) {
+            return rejectedEventTask(rejected);
+        }
+        try {
+            return EventTask.resumeWhenComplete(CompletableFuture.runAsync(operation, executor));
+        } catch (RejectedExecutionException exception) {
+            return rejectedEventTask(rejected);
+        }
+    }
+
+    private static EventTask rejectedEventTask(Runnable rejected) {
+        rejected.run();
+        return EventTask.resumeWhenComplete(CompletableFuture.completedFuture(null));
+    }
     @Subscribe
     public void onServerPostConnect(ServerPostConnectEvent event) {
         PlayerDirectory directory = playerDirectory;
