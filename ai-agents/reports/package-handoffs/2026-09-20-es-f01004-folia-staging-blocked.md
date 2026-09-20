@@ -7,7 +7,7 @@
 - Branch: `package/es-f01004-cheat-tester-folia-handoff`.
 - Claimed from `main` `c1054da6a8f89b312df2e05e25edc958fceda7ef`.
 - Frozen validated product head: `4eab447191ee7a379328ad8d5e7c36ad755e046d`.
-- Reconciled live `main`: `a2c835419656adc2ddbf7f77fc49292ca43ee8f3`.
+- Reconciled live `main`: `313add94027d16bcfe08529136972fe49f6746f5`.
 - Classification: `BLOCKED` / `PARKED_BLOCKED` pending representative real Folia acceptance.
 
 ## Recovery reconstruction
@@ -43,9 +43,9 @@ No product rewrite was needed during recovery review. The implementation already
 - Local root clean build is not separately claimed because the workstation has no usable Docker command; the hosted exact-head clean build above is the applicable executable evidence.
 
 ## Persistence, schema, and collision boundary
-This repair contains no schema or migration change. The claimed migration boundary remains merged V20 with preserved branch-local migration ownership elsewhere. The product/test diff is confined to the Cheat Tester/fake-base tester package. Reconciliation found no active PR owning those exact product paths. Live `main` advanced only through PR #218's punishment-request Folia repair, which changes punishment GUI paths rather than tester paths.
+This repair contains no schema or migration change. The claimed migration boundary remains merged V20 with preserved branch-local migration ownership elsewhere. The product/test diff is confined to the Cheat Tester/fake-base tester package. Reconciliation found no active PR owning those exact product paths. Live `main` advanced after claim through PR #218's punishment-request Folia repair and PR #217's StaffBot mute-ownership repair; neither changes tester paths or collides with R01-004.
 
-Shared `PACKAGE-REGISTRY.md`, `WORKSPACE-STATE.md`, and `agent-handoffs/latest.md` are intentionally not modified here because the concurrent T01 package owns those shared orchestration paths, and the owner explicitly directed this recovery worker not to create a replacement branch or PR. This handoff and the unique ES-F01004 package file therefore carry the package-local parked state until shared-state ownership is available.
+Shared `PACKAGE-REGISTRY.md`, `WORKSPACE-STATE.md`, and `agent-handoffs/latest.md` are intentionally not modified here because the concurrent T01 package remains open and owns those shared orchestration paths, and the owner explicitly directed this recovery worker not to create a replacement branch or PR. This handoff and the unique ES-F01004 package file therefore carry the package-local parked state until shared-state ownership is available.
 
 ## Genuine blocker
 The finding itself requires representative real Folia acceptance. The repository currently has no Folia staging profile: `.enthusia-test.yml` exposes only the Paper `restart` profile. Current repository status/requirements documentation also explicitly records representative Folia staging as unavailable/staging-pending for staff tools and cheat testers. The successful Sentinel restart is useful Paper runtime evidence but cannot substitute for a real Folia ownership run.
