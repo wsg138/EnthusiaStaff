@@ -14,6 +14,10 @@ import java.sql.ResultSet;
 import java.sql.Statement;
 import java.time.Instant;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import net.enthusia.staff.domain.auth.StaffRank;
 import net.enthusia.staff.domain.player.PlayerPlatform;
 import net.enthusia.staff.domain.ports.VanishStore;
@@ -124,6 +128,46 @@ class VanishAtomicPersistenceIntegrationTest {
     }
 
     @Test
+    void convergesStaleMirrorWithoutRepeatingCanonicalEvents() throws Exception {
+        UUID staffId = identifier("vanish-atomic-stale-mirror");
+        try (MariaDbRuntime runtime = runtimeWithActiveSession(staffId)) {
+            VanishStore store = runtime.vanishStore();
+            assertEquals(VanishStore.WriteResult.COMMITTED, write(store, staffId, true, NOW.plusSeconds(1)));
+            forceSessionMirror(staffId, false);
+            assertFalse(runtime.staffSessionStore().active(staffId).orElseThrow().vanishActive());
+
+            assertEquals(VanishStore.WriteResult.COMMITTED, write(store, staffId, true, NOW.plusSeconds(2)));
+            assertStoredState(runtime, staffId, true);
+            assertEquals(1, auditCount(staffId));
+            assertEquals(1, outboxCount(staffId));
+        }
+    }
+
+    @Test
+    void concurrentWritesKeepCanonicalAndSessionMirrorConverged() throws Exception {
+        UUID staffId = identifier("vanish-atomic-concurrent-writes");
+        try (MariaDbRuntime runtime = runtimeWithActiveSession(staffId);
+             ExecutorService executor = Executors.newFixedThreadPool(2)) {
+            VanishStore store = runtime.vanishStore();
+            assertEquals(VanishStore.WriteResult.COMMITTED, write(store, staffId, false, NOW.plusSeconds(1)));
+            CountDownLatch ready = new CountDownLatch(2);
+            CountDownLatch start = new CountDownLatch(1);
+            Future<VanishStore.WriteResult> enable = concurrentWrite(
+                    executor, ready, start, store, staffId, true, NOW.plusSeconds(2));
+            Future<VanishStore.WriteResult> disable = concurrentWrite(
+                    executor, ready, start, store, staffId, false, NOW.plusSeconds(3));
+            ready.await();
+            start.countDown();
+            enable.get();
+            disable.get();
+
+            StoredVanish canonical = storedVanish(staffId);
+            boolean mirror = runtime.staffSessionStore().active(staffId).orElseThrow().vanishActive();
+            assertEquals(canonical.vanished(), mirror);
+        }
+    }
+
+    @Test
     void mirrorFailureSurvivesRestartAndRetryCommitsOnce() throws Exception {
         UUID staffId = identifier("vanish-atomic-rollback");
         try (MariaDbRuntime runtime = runtimeWithActiveSession(staffId)) {
@@ -196,6 +240,22 @@ class VanishAtomicPersistenceIntegrationTest {
             assertEquals(2, auditCount(staffId));
             assertEquals(2, outboxCount(staffId));
         }
+    }
+
+    private static Future<VanishStore.WriteResult> concurrentWrite(
+            ExecutorService executor,
+            CountDownLatch ready,
+            CountDownLatch start,
+            VanishStore store,
+            UUID staffId,
+            boolean vanished,
+            Instant now
+    ) {
+        return executor.submit(() -> {
+            ready.countDown();
+            start.await();
+            return write(store, staffId, vanished, now);
+        });
     }
 
     private static VanishStore.WriteResult write(
@@ -309,6 +369,18 @@ class VanishAtomicPersistenceIntegrationTest {
         try (ResultSet result = statement.executeQuery()) {
             assertTrue(result.next());
             return result.getInt(1);
+        }
+    }
+
+    private static void forceSessionMirror(UUID staffId, boolean vanished) throws Exception {
+        try (Connection connection = connection();
+             PreparedStatement statement = connection.prepareStatement("""
+                     UPDATE staff_sessions SET vanish_active = ?
+                     WHERE staff_id = ? AND state IN ('ACTIVE', 'RECOVERY_REQUIRED')
+                     """)) {
+            statement.setBoolean(1, vanished);
+            statement.setBytes(2, uuidBytes(staffId));
+            assertEquals(1, statement.executeUpdate());
         }
     }
 
