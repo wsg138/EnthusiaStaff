@@ -28,11 +28,18 @@ final class InventoryEditAuthorityGate {
     static boolean current(AuthorityQuery query, Duration timeout) {
         Objects.requireNonNull(query, "query");
         Objects.requireNonNull(timeout, "timeout");
+        if (timeout.isZero() || timeout.isNegative()) {
+            throw new IllegalArgumentException("timeout must be positive");
+        }
         CompletableFuture<Boolean> decision = new CompletableFuture<>();
-        query.execute(
-                () -> decision.complete(query.online() && query.hasEditPermission()),
-                () -> decision.complete(false)
-        );
+        try {
+            query.execute(
+                    () -> decision.complete(query.online() && query.hasEditPermission()),
+                    () -> decision.complete(false)
+            );
+        } catch (RuntimeException exception) {
+            return false;
+        }
         return await(decision, timeout);
     }
 
