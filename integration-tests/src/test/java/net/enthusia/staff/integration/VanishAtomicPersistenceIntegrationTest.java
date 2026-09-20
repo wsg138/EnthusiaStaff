@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
@@ -30,12 +31,14 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 class VanishAtomicPersistenceIntegrationTest {
     private static final Instant NOW = Instant.parse("2026-09-20T20:00:00Z");
     private static final String SERVER_ID = "SMP";
+    private static final String SNAPSHOT_CHECKSUM = "a".repeat(64);
+    private static final String DATABASE_PASSWORD = UUID.randomUUID().toString();
 
     @Container
     private static final MariaDBContainer<?> DATABASE = new MariaDBContainer<>("mariadb:11.8.3")
             .withDatabaseName("enthusia_staff_vanish_atomicity_test")
             .withUsername("enthusia_test")
-            .withPassword("enthusia_test_password");
+            .withPassword(DATABASE_PASSWORD);
 
     @Test
     void commitsBothDurableStatesAndMakesRetriesIdempotent() throws Exception {
@@ -56,6 +59,34 @@ class VanishAtomicPersistenceIntegrationTest {
             assertEquals(VanishStore.WriteResult.UNCHANGED, write(store, staffId, false, NOW.plusSeconds(4)));
             assertEquals(2, auditCount(staffId));
             assertEquals(2, outboxCount(staffId));
+        }
+    }
+
+    @Test
+    void mirrorsRecoveryRequiredSessionInTheSameCommit() throws Exception {
+        UUID staffId = identifier("vanish-atomic-recovery-required");
+        try (MariaDbRuntime runtime = runtimeWithActiveSession(staffId)) {
+            StaffSessionSnapshot active = runtime.staffSessionStore().active(staffId).orElseThrow();
+            runtime.staffSessionStore().recoveryRequired(
+                    active.sessionId(),
+                    "forced recovery-required test state",
+                    NOW.plusSeconds(1)
+            );
+            assertEquals(
+                    StaffSessionState.RECOVERY_REQUIRED,
+                    runtime.staffSessionStore().active(staffId).orElseThrow().state()
+            );
+
+            assertEquals(VanishStore.WriteResult.COMMITTED, write(
+                    runtime.vanishStore(), staffId, true, NOW.plusSeconds(2)
+            ));
+            assertStoredState(runtime, staffId, true);
+            assertEquals(
+                    StaffSessionState.RECOVERY_REQUIRED,
+                    runtime.staffSessionStore().active(staffId).orElseThrow().state()
+            );
+            assertEquals(1, auditCount(staffId));
+            assertEquals(1, outboxCount(staffId));
         }
     }
 
@@ -93,7 +124,7 @@ class VanishAtomicPersistenceIntegrationTest {
     }
 
     @Test
-    void mirrorFailureRollsBackEverythingAndRetryCommitsOnce() throws Exception {
+    void mirrorFailureSurvivesRestartAndRetryCommitsOnce() throws Exception {
         UUID staffId = identifier("vanish-atomic-rollback");
         try (MariaDbRuntime runtime = runtimeWithActiveSession(staffId)) {
             installMirrorFailureTrigger();
@@ -106,13 +137,16 @@ class VanishAtomicPersistenceIntegrationTest {
                 dropMirrorFailureTrigger();
             }
             assertRolledBack(runtime, staffId);
+        }
 
+        try (MariaDbRuntime restarted = MariaDb.initialize(MariaDbIntegrationSupport.databaseConfig(DATABASE))) {
+            assertRolledBack(restarted, staffId);
             assertEquals(VanishStore.WriteResult.COMMITTED, write(
-                    runtime.vanishStore(), staffId, true, NOW.plusSeconds(2)
+                    restarted.vanishStore(), staffId, true, NOW.plusSeconds(2)
             ));
-            assertStoredState(runtime, staffId, true);
+            assertStoredState(restarted, staffId, true);
             assertEquals(VanishStore.WriteResult.UNCHANGED, write(
-                    runtime.vanishStore(), staffId, true, NOW.plusSeconds(3)
+                    restarted.vanishStore(), staffId, true, NOW.plusSeconds(3)
             ));
             assertEquals(1, auditCount(staffId));
             assertEquals(1, outboxCount(staffId));
@@ -139,13 +173,48 @@ class VanishAtomicPersistenceIntegrationTest {
         }
     }
 
+    @Test
+    void ordinaryStaffModeExitCanDisableCanonicalStateAfterSessionClosure() throws Exception {
+        UUID staffId = identifier("vanish-atomic-ordinary-exit");
+        try (MariaDbRuntime runtime = runtimeWithActiveSession(staffId)) {
+            VanishStore store = runtime.vanishStore();
+            assertEquals(VanishStore.WriteResult.COMMITTED, write(store, staffId, true, NOW.plusSeconds(1)));
+            StaffSessionSnapshot exiting = runtime.staffSessionStore()
+                    .beginExit(staffId, NOW.plusSeconds(2))
+                    .orElseThrow();
+            assertTrue(runtime.staffSessionStore().completeExit(
+                    exiting.sessionId(), SNAPSHOT_CHECKSUM, NOW.plusSeconds(3)
+            ));
+            assertTrue(runtime.staffSessionStore().active(staffId).isEmpty());
+
+            assertEquals(VanishStore.WriteResult.COMMITTED, write(
+                    store, staffId, false, NOW.plusSeconds(4), false
+            ));
+            StoredVanish stored = storedVanish(staffId);
+            assertFalse(stored.vanished());
+            assertEquals(StaffRank.MOD, stored.rank());
+            assertEquals(2, auditCount(staffId));
+            assertEquals(2, outboxCount(staffId));
+        }
+    }
+
     private static VanishStore.WriteResult write(
             VanishStore store,
             UUID staffId,
             boolean vanished,
             Instant now
     ) {
-        return store.set(staffId, StaffRank.MOD, vanished, staffId, now, true);
+        return write(store, staffId, vanished, now, true);
+    }
+
+    private static VanishStore.WriteResult write(
+            VanishStore store,
+            UUID staffId,
+            boolean vanished,
+            Instant now,
+            boolean requireActiveSession
+    ) {
+        return store.set(staffId, StaffRank.MOD, vanished, staffId, now, requireActiveSession);
     }
 
     private static MariaDbRuntime runtimeWithActiveSession(UUID staffId) {
@@ -154,7 +223,7 @@ class VanishAtomicPersistenceIntegrationTest {
                 staffId,
                 SERVER_ID,
                 1,
-                "a".repeat(64),
+                SNAPSHOT_CHECKSUM,
                 new byte[]{1},
                 NOW
         );
@@ -205,14 +274,24 @@ class VanishAtomicPersistenceIntegrationTest {
     }
 
     private static int vanishRowCount(UUID staffId) throws Exception {
-        return count("SELECT COUNT(*) FROM staff_vanish_states WHERE staff_id = ?", staffId);
+        try (Connection connection = connection();
+             PreparedStatement statement = connection.prepareStatement("""
+                     SELECT COUNT(*) FROM staff_vanish_states WHERE staff_id = ?
+                     """)) {
+            statement.setBytes(1, uuidBytes(staffId));
+            return singleCount(statement);
+        }
     }
 
     private static int auditCount(UUID staffId) throws Exception {
-        return count("""
-                SELECT COUNT(*) FROM audit_events
-                WHERE event_type = 'VANISH_CHANGED' AND target_id = ?
-                """, staffId);
+        try (Connection connection = connection();
+             PreparedStatement statement = connection.prepareStatement("""
+                     SELECT COUNT(*) FROM audit_events
+                     WHERE event_type = 'VANISH_CHANGED' AND target_id = ?
+                     """)) {
+            statement.setBytes(1, uuidBytes(staffId));
+            return singleCount(statement);
+        }
     }
 
     private static int outboxCount(UUID staffId) throws Exception {
@@ -222,20 +301,14 @@ class VanishAtomicPersistenceIntegrationTest {
                      WHERE event_type = 'VANISH_CHANGED' AND payload_json LIKE ?
                      """)) {
             statement.setString(1, "%" + staffId + "%");
-            try (ResultSet result = statement.executeQuery()) {
-                assertTrue(result.next());
-                return result.getInt(1);
-            }
+            return singleCount(statement);
         }
     }
 
-    private static int count(String sql, UUID staffId) throws Exception {
-        try (Connection connection = connection(); PreparedStatement statement = connection.prepareStatement(sql)) {
-            statement.setBytes(1, uuidBytes(staffId));
-            try (ResultSet result = statement.executeQuery()) {
-                assertTrue(result.next());
-                return result.getInt(1);
-            }
+    private static int singleCount(PreparedStatement statement) throws Exception {
+        try (ResultSet result = statement.executeQuery()) {
+            assertTrue(result.next());
+            return result.getInt(1);
         }
     }
 
@@ -266,7 +339,7 @@ class VanishAtomicPersistenceIntegrationTest {
     }
 
     private static UUID identifier(String value) {
-        return UUID.nameUUIDFromBytes(value.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        return UUID.nameUUIDFromBytes(value.getBytes(StandardCharsets.UTF_8));
     }
 
     private static byte[] uuidBytes(UUID value) {

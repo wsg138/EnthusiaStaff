@@ -15,6 +15,8 @@ import net.enthusia.staff.domain.ports.VanishStore;
 import net.enthusia.staff.domain.staff.VanishRecord;
 
 public final class JdbcVanishStore implements VanishStore {
+    private static final int SINGLE_ROW_UPDATE = 1;
+
     private final DataSource dataSource;
 
     public JdbcVanishStore(DataSource dataSource) {
@@ -100,24 +102,56 @@ public final class JdbcVanishStore implements VanishStore {
             connection.rollback();
             return WriteResult.STAFF_SESSION_NOT_ACTIVE;
         }
-        boolean stateChanged = !matches(current, rank, vanished);
-        boolean sessionChanged = session != null && session.vanished() != vanished;
-        if (!stateChanged && !sessionChanged) {
+        ChangeSet changes = changes(current, session, rank, vanished);
+        if (!changes.changed()) {
             connection.rollback();
             return WriteResult.UNCHANGED;
         }
-        if (stateChanged) {
-            writeState(connection, staffId, actorId, rank, vanished, now);
-        }
-        if (sessionChanged) {
-            updateSessionMirror(connection, session.sessionId(), vanished);
-        }
-        if (stateChanged) {
-            insertAudit(connection, staffId, actorId, rank, vanished, now);
-            insertDiscord(connection, staffId, actorId, rank, vanished, now);
-        }
+        persistChanges(connection, staffId, actorId, rank, vanished, now, session, changes);
         connection.commit();
         return WriteResult.COMMITTED;
+    }
+
+    private static ChangeSet changes(
+            VanishState current,
+            SessionMirror session,
+            StaffRank rank,
+            boolean vanished
+    ) {
+        return new ChangeSet(
+                !matches(current, rank, vanished),
+                session != null && session.vanished() != vanished
+        );
+    }
+
+    private static void persistChanges(
+            Connection connection,
+            UUID staffId,
+            UUID actorId,
+            StaffRank rank,
+            boolean vanished,
+            Instant now,
+            SessionMirror session,
+            ChangeSet changes
+    ) throws SQLException {
+        if (!changes.stateChanged()) {
+            updateSessionMirror(connection, session.sessionId(), vanished);
+            return;
+        }
+        writeState(connection, staffId, actorId, rank, vanished, now);
+        updateSessionMirrorIfChanged(connection, session, vanished);
+        insertAudit(connection, staffId, actorId, rank, vanished, now);
+        insertDiscord(connection, staffId, actorId, rank, vanished, now);
+    }
+
+    private static void updateSessionMirrorIfChanged(
+            Connection connection,
+            SessionMirror session,
+            boolean vanished
+    ) throws SQLException {
+        if (session != null && session.vanished() != vanished) {
+            updateSessionMirror(connection, session.sessionId(), vanished);
+        }
     }
 
     private static void validateWrite(UUID staffId, StaffRank rank, UUID actorId, Instant now) {
@@ -201,7 +235,7 @@ public final class JdbcVanishStore implements VanishStore {
                 """)) {
             statement.setBoolean(1, vanished);
             statement.setBytes(2, UuidBytes.toBytes(sessionId));
-            if (statement.executeUpdate() != 1) {
+            if (statement.executeUpdate() != SINGLE_ROW_UPDATE) {
                 throw new SQLException("locked staff session left a mirrorable state before vanish commit");
             }
         }
@@ -274,5 +308,11 @@ public final class JdbcVanishStore implements VanishStore {
     }
 
     private record SessionMirror(UUID sessionId, boolean vanished) {
+    }
+
+    private record ChangeSet(boolean stateChanged, boolean sessionChanged) {
+        private boolean changed() {
+            return stateChanged || sessionChanged;
+        }
     }
 }
