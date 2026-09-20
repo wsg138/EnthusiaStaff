@@ -17,6 +17,10 @@ final class StaffToolRandomTeleportWiringTest {
     void finalSelectionRevalidatesTargetAndRetriesStaleCandidates() throws IOException {
         String source = Files.readString(SERVICE_SOURCE).replace("\r\n", "\n");
 
+        assertTrue(source.contains("List<Player> candidates = List.copyOf(plugin.getServer().getOnlinePlayers())"));
+        assertTrue(source.contains("boolean scheduled = target.getScheduler().execute("));
+        assertTrue(source.contains("eligible.add(target.getUniqueId())"));
+        assertFalse(source.contains(".map(Player::getUniqueId)"));
         assertTrue(source.contains("target -> revalidateCandidate(actorId, candidates, target)"));
         assertTrue(source.contains("if (!eligibleCandidate(actorId, target)) {\n"
                 + "            attemptNextCandidate(actorId, candidates);"));

@@ -6,7 +6,7 @@ Owner authorization: 2026-09-20 request to create review/bug-finding/fixing work
 
 Start `main`: `c1054da6a8f89b312df2e05e25edc958fceda7ef`.
 Branch: `package/es-t01-staff-teleport-hardening`.
-PR: #215 (draft). Frozen executable/product checkpoint: `d69b48a8088c8562b6d0a6ccd39a005f95266e4a`.
+PR: #215. Initial product checkpoint `d69b48a8088c8562b6d0a6ccd39a005f95266e4a` was superseded during harsh review by an additional same-service Folia-safety repair; the new pushed PR head is the current product candidate.
 
 Collision preflight: active X03 PR #139, D08 PR #214, parked D09 PR #203, and parked D13 PR #178 do not own `paper/src/main/java/net/enthusia/staff/paper/staff/StaffToolRandomTeleportService.java` or `paper/src/test/java/net/enthusia/staff/paper/staff/StaffToolTargetPolicyTest.java`. No migration is added.
 
@@ -16,8 +16,10 @@ Repair: store eligible IDs during collection, shuffle once, then revalidate the 
 
 Focused regression coverage extends `StaffToolTargetPolicyTest` with a candidate that is initially eligible and then becomes vanished/frozen before execution.
 
-Local validation: Java 21.0.6 focused tests PASS; full `:paper:test` PASS; Lizard zero warnings at CCN <= 8 / method length <= 50 / args <= 8; `git diff --check` PASS. The repository orchestration validator reports pre-existing Dxx/X03 format debt, while its 8 validator unit tests pass and no T01-specific error is emitted.
+Local validation after both repairs: Java 21.0.6 focused tests PASS; full `:paper:test` PASS; Lizard zero warnings at CCN <= 8 / method length <= 50 / args <= 8; `git diff --check` PASS. The repository orchestration validator reports pre-existing Dxx/X03 format debt, while its 8 validator unit tests pass and no T01-specific error is emitted.
 
 Draft PR #215 is open. Next action: complete hosted/static/review gates on the resulting exact head, repair every valid finding, then proceed through the normal merge gate.
 
 Do not disturb X03/D08/D09/D13, V21/V22 ownership, private staging configuration, production authority, or issue #43.
+
+Finding `T01-STAFF-RTP-002`: candidate collection ran on the global scheduler and called `Player#getUniqueId()` for every online player there. The staff-tools menu in the same subsystem already documents the safer rule: enumerate player references globally, then read mutable/entity identity state on the player's entity scheduler. Repair: candidate collection now snapshots `Player` references only, schedules each candidate directly on its entity scheduler, reads UUID/state there, and uses an atomic completion guard so retirement and execution cannot decrement the collection twice.

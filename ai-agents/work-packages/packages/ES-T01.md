@@ -15,8 +15,10 @@ On 2026-09-20 the owner explicitly authorized creation of review/bug-finding/fix
 ## 5. Included audit IDs
 `T01-STAFF-RTP-001` — execution-time target revalidation and stale-location avoidance.
 
+`T01-STAFF-RTP-002` — move candidate identity/state reads off the global scheduler and onto each target entity scheduler.
+
 ## 6. Included behavior
-Revalidate the selected target on its entity scheduler immediately before actor teleport orchestration; reject targets that became staff-mode, vanished, frozen, exempt, dead, sleeping, mounted, spectator, or located in a disabled world; retry another candidate when a selected target becomes invalid/offline; capture the live location only after successful revalidation; preserve actor authorization revalidation and asynchronous teleport failure handling.
+Enumerate only player references globally, then read candidate identity/state on each target entity scheduler; revalidate the selected target on its entity scheduler immediately before actor teleport orchestration; reject targets that became staff-mode, vanished, frozen, exempt, dead, sleeping, mounted, spectator, or located in a disabled world; retry another candidate when a selected target becomes invalid/offline; capture the live location only after successful revalidation; preserve actor authorization revalidation and asynchronous teleport failure handling.
 
 ## 7. Explicit exclusions
 No X03/D08/D09/D13 files, migrations, Discord behavior, provider integration, staff-mode persistence redesign, production deployment, authority change, or cutover.
@@ -76,10 +78,10 @@ None.
 One normal-merge PR; focused and full applicable tests green on exact head; zero valid unresolved review/static findings; merge containment verified; canonical state published.
 
 ## 23. Resume state
-Worker: automatic owner-authorized testing-hardening worker. Branch: `package/es-t01-staff-teleport-hardening`. PR: #215 (draft) at initial product checkpoint `d69b48a8088c8562b6d0a6ccd39a005f95266e4a`. Start `main`: `c1054da6a8f89b312df2e05e25edc958fceda7ef`.
+Worker: automatic owner-authorized testing-hardening worker. Branch: `package/es-t01-staff-teleport-hardening`. PR: #215. Initial product checkpoint `d69b48a8088c8562b6d0a6ccd39a005f95266e4a` was superseded by the same-package Folia-safety follow-up; the current live PR head becomes the next product candidate after push. Start `main`: `c1054da6a8f89b312df2e05e25edc958fceda7ef`.
 
 ## 24. Last completed checkpoint
-Concrete stale-target defect repaired. Java 21.0.6 focused tests and full `:paper:test` pass; Lizard reports zero threshold violations at CCN <= 8, method length <= 50, and arguments <= 8; `git diff --check` passes. The orchestration validator still reports pre-existing legacy Dxx/X03 record-format errors, while its own 8 unit tests pass and T01 adds no new reported orchestration error.
+Concrete stale-target defect repaired, plus review found and repaired a same-service Folia issue where UUIDs were read from the global scheduler. Java 21.0.6 focused tests and full `:paper:test` pass after both repairs; Lizard reports zero threshold violations at CCN <= 8, method length <= 50, and arguments <= 8; `git diff --check` passes. The orchestration validator still reports pre-existing legacy Dxx/X03 record-format errors, while its own 8 unit tests pass and T01 adds no new reported orchestration error.
 
 ## 25. Remaining checklist
 Open/checkpoint the PR, complete exact-head hosted/static/review gates, normal merge, containment, and terminal publication.

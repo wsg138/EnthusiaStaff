@@ -6,6 +6,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 import net.enthusia.staff.paper.freeze.FreezeManager;
@@ -56,9 +57,7 @@ final class StaffToolRandomTeleportService {
     }
 
     private void collectCandidates(UUID actorId) {
-        List<UUID> candidates = plugin.getServer().getOnlinePlayers().stream()
-                .map(Player::getUniqueId)
-                .toList();
+        List<Player> candidates = List.copyOf(plugin.getServer().getOnlinePlayers());
         if (candidates.isEmpty()) {
             message(actorId, "No suitable random-teleport target is online.");
             return;
@@ -66,8 +65,8 @@ final class StaffToolRandomTeleportService {
         ConcurrentLinkedQueue<UUID> eligible = new ConcurrentLinkedQueue<>();
         AtomicInteger remaining = new AtomicInteger(candidates.size());
         Runnable finishedOne = () -> finishCandidateCollection(actorId, eligible, remaining);
-        for (UUID candidateId : candidates) {
-            snapshotCandidate(actorId, candidateId, eligible, finishedOne);
+        for (Player candidate : candidates) {
+            snapshotCandidate(actorId, candidate, eligible, finishedOne);
         }
     }
 
@@ -83,19 +82,35 @@ final class StaffToolRandomTeleportService {
 
     private void snapshotCandidate(
             UUID actorId,
-            UUID targetId,
+            Player target,
             Collection<UUID> eligible,
             Runnable finished
     ) {
-        onEntity(targetId, target -> {
-            try {
-                if (eligibleCandidate(actorId, target)) {
-                    eligible.add(targetId);
-                }
-            } finally {
-                finished.run();
-            }
-        }, finished);
+        AtomicBoolean completed = new AtomicBoolean();
+        Runnable retired = () -> completeCandidate(completed, finished);
+        boolean scheduled = target.getScheduler().execute(
+                plugin,
+                () -> {
+                    try {
+                        if (eligibleCandidate(actorId, target)) {
+                            eligible.add(target.getUniqueId());
+                        }
+                    } finally {
+                        retired.run();
+                    }
+                },
+                retired,
+                1L
+        );
+        if (!scheduled) {
+            retired.run();
+        }
+    }
+
+    private static void completeCandidate(AtomicBoolean completed, Runnable finished) {
+        if (completed.compareAndSet(false, true)) {
+            finished.run();
+        }
     }
 
     private boolean eligibleCandidate(UUID actorId, Player target) {
