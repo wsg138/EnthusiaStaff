@@ -12,6 +12,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import net.enthusia.staff.common.CaseId;
 import net.enthusia.staff.common.IdempotencyKey;
 import net.enthusia.staff.common.SecureIdentifiers;
 import net.enthusia.staff.domain.OperationalMode;
@@ -103,6 +104,29 @@ class PunishmentServiceTest {
         assertEquals(canonical.family(), committed.family());
         assertEquals(canonical.publicReason(), committed.publicReason());
         assertEquals("v2", committed.configurationVersion());
+    }
+
+    @Test
+    void confirmedSharedCaseIdIsPreservedAtCommit() {
+        CapturingStore store = new CapturingStore(List.of());
+        PunishmentService service = service(
+                new AtomicReasonPolicyRepository("v1", List.of(policy(StaffRank.MOD, standardSteps()))),
+                store
+        );
+        CreatePunishmentRequest request = request(StaffRank.MOD, List.of());
+        PunishmentAssessment reviewed = assertInstanceOf(
+                PunishmentEvaluation.Allowed.class, service.evaluate(request, OperationalMode.ACTIVE)
+        ).assessment();
+        CaseId shared = new CaseId("FEDCBA9876543210");
+
+        PunishmentResult.Accepted accepted = assertInstanceOf(
+                PunishmentResult.Accepted.class,
+                service.createConfirmed(
+                        request, OperationalMode.ACTIVE, PunishmentExpectation.from(reviewed), shared)
+        );
+
+        assertEquals(shared, accepted.caseId());
+        assertEquals(shared, store.plans.getFirst().caseId());
     }
 
     @Test

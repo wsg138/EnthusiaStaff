@@ -111,13 +111,13 @@ public final class MinecraftPunishmentPreparationMapper {
         );
     }
 
-    private static MinecraftPunishmentPreparationWire.Sanction sanction(SanctionSpec value) {
+    static MinecraftPunishmentPreparationWire.Sanction sanction(SanctionSpec value) {
         return new MinecraftPunishmentPreparationWire.Sanction(
                 value.type(), value.length().kind(), value.length().temporary().map(Duration::toSeconds).orElse(null)
         );
     }
 
-    private static SanctionSpec sanction(MinecraftPunishmentPreparationWire.Sanction value) {
+    static SanctionSpec sanction(MinecraftPunishmentPreparationWire.Sanction value) {
         SanctionLength length = switch (value.lengthKind()) {
             case INSTANT -> SanctionLength.instant();
             case PERMANENT -> SanctionLength.permanent();

@@ -12,21 +12,26 @@ import java.time.Duration;
 import java.util.Base64;
 import net.enthusia.staff.common.CaseId;
 import net.enthusia.staff.domain.application.CreatePunishmentRequest;
-import net.enthusia.staff.domain.application.MinecraftPunishmentPreparer;
+import net.enthusia.staff.domain.application.MinecraftPunishmentGateway;
+import net.enthusia.staff.domain.application.PunishmentExpectation;
+import net.enthusia.staff.domain.application.PunishmentResult;
 import net.enthusia.staff.domain.application.PunishmentPlan;
 import net.enthusia.staff.domain.application.PunishmentPreparation;
-import net.enthusia.staff.protocol.MinecraftPunishmentPreparationCodec;
+import net.enthusia.staff.protocol.MinecraftPunishmentCommitMapper;
+import net.enthusia.staff.protocol.MinecraftPunishmentCommitWire;
+import net.enthusia.staff.protocol.MinecraftPunishmentWireCodec;
 import net.enthusia.staff.protocol.MinecraftPunishmentPreparationMapper;
 import net.enthusia.staff.protocol.MinecraftPunishmentPreparationWire;
 import net.enthusia.staff.protocol.StaffAuthorityHttpSigning;
 
 /** Signed D08 client for Paper's non-committing Minecraft punishment preparation endpoint. */
-final class HttpMinecraftPunishmentPreparer implements MinecraftPunishmentPreparer {
+final class HttpMinecraftPunishmentPreparer implements MinecraftPunishmentGateway {
     private static final Duration CONNECT_TIMEOUT = Duration.ofSeconds(2);
     private static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(4);
     private static final int NONCE_BYTES = 24;
 
-    private final URI endpoint;
+    private final URI prepareEndpoint;
+    private final URI commitEndpoint;
     private final String credential;
     private final StaffModerationConfiguration.AuthorityTransport transport;
     private final PrivateSplitAuthorityEndpointResolver privateResolver;
@@ -55,7 +60,8 @@ final class HttpMinecraftPunishmentPreparer implements MinecraftPunishmentPrepar
                 || privateResolver == null || clock == null || random == null) {
             throw new IllegalArgumentException("Minecraft preparation client configuration must be present");
         }
-        this.endpoint = authorityEndpoint.resolve(MinecraftPunishmentPreparationWire.PATH);
+        this.prepareEndpoint = authorityEndpoint.resolve(MinecraftPunishmentPreparationWire.PATH);
+        this.commitEndpoint = authorityEndpoint.resolve(MinecraftPunishmentCommitWire.PATH);
         this.credential = credential;
         this.transport = transport;
         this.privateResolver = privateResolver;
@@ -66,19 +72,33 @@ final class HttpMinecraftPunishmentPreparer implements MinecraftPunishmentPrepar
 
     @Override
     public PunishmentPreparation prepareConfirmed(CreatePunishmentRequest request, CaseId caseId) {
-        String body = MinecraftPunishmentPreparationCodec.encodeRequest(
+        String body = MinecraftPunishmentWireCodec.encodeRequest(
                 MinecraftPunishmentPreparationMapper.request(caseId, request)
         );
-        RequestCall call = request(body);
+        RequestCall call = request(body, prepareEndpoint, MinecraftPunishmentPreparationWire.PATH);
         HttpResponse<String> response = send(call.request());
         verifySignedResponse(call, response);
-        if (response.statusCode() != 200) {
-            throw new StaffAuthorityClient.UnavailableException("Minecraft preparation request was not successful");
-        }
+        requireSuccess(response);
         return decode(request, caseId, response.body());
     }
 
-    private RequestCall request(String body) {
+    @Override
+    public PunishmentResult commitConfirmed(
+            CreatePunishmentRequest request,
+            CaseId caseId,
+            PunishmentExpectation expectation
+    ) {
+        String body = MinecraftPunishmentWireCodec.encodeCommitRequest(
+                MinecraftPunishmentCommitMapper.request(caseId, request, expectation)
+        );
+        RequestCall call = request(body, commitEndpoint, MinecraftPunishmentCommitWire.PATH);
+        HttpResponse<String> response = send(call.request());
+        verifySignedResponse(call, response);
+        requireSuccess(response);
+        return decodeCommit(caseId, response.body());
+    }
+
+    private RequestCall request(String body, URI endpoint, String path) {
         URI resolved = transport == StaffModerationConfiguration.AuthorityTransport.BLOOM_PRIVATE_SPLIT
                 ? privateResolver.resolve(endpoint) : endpoint;
         HttpRequest.Builder builder = HttpRequest.newBuilder(resolved)
@@ -90,7 +110,7 @@ final class HttpMinecraftPunishmentPreparer implements MinecraftPunishmentPrepar
         }
         String nonce = nonce();
         StaffAuthorityHttpSigning.RequestProof proof = StaffAuthorityHttpSigning.signBodyRequest(
-                credential, "POST", MinecraftPunishmentPreparationWire.PATH, body, clock.instant(), nonce
+                credential, "POST", path, body, clock.instant(), nonce
         );
         return new RequestCall(
                 builder.header(StaffAuthorityHttpSigning.TIMESTAMP_HEADER, proof.timestamp())
@@ -105,10 +125,10 @@ final class HttpMinecraftPunishmentPreparer implements MinecraftPunishmentPrepar
         try {
             return client.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
         } catch (IOException exception) {
-            throw new StaffAuthorityClient.UnavailableException("Minecraft preparation request failed", exception);
+            throw new StaffAuthorityClient.UnavailableException("Minecraft punishment request failed", exception);
         } catch (InterruptedException exception) {
             Thread.currentThread().interrupt();
-            throw new StaffAuthorityClient.UnavailableException("Minecraft preparation request interrupted", exception);
+            throw new StaffAuthorityClient.UnavailableException("Minecraft punishment request interrupted", exception);
         }
     }
 
@@ -121,8 +141,25 @@ final class HttpMinecraftPunishmentPreparer implements MinecraftPunishmentPrepar
                 .orElse(null);
         if (!StaffAuthorityHttpSigning.verifyResponse(
                 credential, call.nonce(), response.statusCode(), response.body(), signature)) {
-            throw new StaffAuthorityClient.UnavailableException("Minecraft preparation response authentication failed");
+            throw new StaffAuthorityClient.UnavailableException("Minecraft punishment response authentication failed");
         }
+    }
+
+
+    private static void requireSuccess(HttpResponse<String> response) {
+        if (response.statusCode() != 200) {
+            throw new StaffAuthorityClient.UnavailableException("Minecraft punishment request was not successful");
+        }
+    }
+
+    private static PunishmentResult decodeCommit(CaseId caseId, String body) {
+        PunishmentResult result = MinecraftPunishmentCommitMapper.result(
+                MinecraftPunishmentWireCodec.decodeCommitResponse(body));
+        if (result instanceof PunishmentResult.Accepted accepted && !accepted.caseId().equals(caseId)) {
+            throw new StaffAuthorityClient.UnavailableException(
+                    "Minecraft punishment commit response did not match the requested case");
+        }
+        return result;
     }
 
     private static PunishmentPreparation decode(
@@ -130,7 +167,7 @@ final class HttpMinecraftPunishmentPreparer implements MinecraftPunishmentPrepar
             CaseId caseId,
             String body
     ) {
-        MinecraftPunishmentPreparationWire.Response response = MinecraftPunishmentPreparationCodec.decodeResponse(body);
+        MinecraftPunishmentPreparationWire.Response response = MinecraftPunishmentWireCodec.decodeResponse(body);
         if (response.outcome() == MinecraftPunishmentPreparationWire.Outcome.REJECTED) {
             return new PunishmentPreparation.Rejected(response.code(), response.message());
         }

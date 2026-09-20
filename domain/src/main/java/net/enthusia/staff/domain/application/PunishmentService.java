@@ -99,6 +99,18 @@ public final class PunishmentService {
             OperationalMode mode,
             PunishmentExpectation expectation
     ) {
+        return createConfirmed(request, mode, expectation, identifiers.newCaseId());
+    }
+
+    public PunishmentResult createConfirmed(
+            CreatePunishmentRequest request,
+            OperationalMode mode,
+            PunishmentExpectation expectation,
+            CaseId caseId
+    ) {
+        if (caseId == null) {
+            throw new IllegalArgumentException("caseId must be present");
+        }
         PunishmentEvaluation evaluation = evaluate(request, mode);
         if (evaluation instanceof PunishmentEvaluation.Rejected rejected) {
             return new PunishmentResult.Rejected(rejected.code(), rejected.message());
@@ -107,7 +119,7 @@ public final class PunishmentService {
         if (expectation != null && !expectation.matches(assessment)) {
             return recommendationChanged();
         }
-        return createEvaluated(request, assessment);
+        return createEvaluated(request, assessment, caseId);
     }
 
     /**
@@ -128,7 +140,7 @@ public final class PunishmentService {
                 && !assessment.escalation().selectedStep().label().equals(expectedStepLabel)) {
             return recommendationChanged();
         }
-        return createEvaluated(request, assessment);
+        return createEvaluated(request, assessment, identifiers.newCaseId());
     }
 
     private static PunishmentResult.Rejected recommendationChanged() {
@@ -140,9 +152,10 @@ public final class PunishmentService {
 
     private PunishmentResult createEvaluated(
             CreatePunishmentRequest request,
-            PunishmentAssessment assessment
+            PunishmentAssessment assessment,
+            CaseId caseId
     ) {
-        PunishmentPlan plan = plan(request, assessment, identifiers.newCaseId(), clock.instant());
+        PunishmentPlan plan = plan(request, assessment, caseId, clock.instant());
         PunishmentResult result = store.createPunishment(plan);
         if (result instanceof PunishmentResult.Accepted) {
             notifyCommitted(plan);

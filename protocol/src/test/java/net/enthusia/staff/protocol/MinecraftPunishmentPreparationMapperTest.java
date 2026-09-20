@@ -9,7 +9,9 @@ import java.util.UUID;
 import net.enthusia.staff.common.CaseId;
 import net.enthusia.staff.common.IdempotencyKey;
 import net.enthusia.staff.domain.application.CreatePunishmentRequest;
+import net.enthusia.staff.domain.application.PunishmentExpectation;
 import net.enthusia.staff.domain.application.PunishmentPlan;
+import net.enthusia.staff.domain.application.PunishmentResult;
 import net.enthusia.staff.domain.auth.Actor;
 import net.enthusia.staff.domain.auth.StaffRank;
 import net.enthusia.staff.domain.casefile.CaseVisibility;
@@ -38,13 +40,33 @@ class MinecraftPunishmentPreparationMapperTest {
                 "harassment.sexual", "multi sanction test", CaseVisibility.PUBLIC, List.of(MUTE, BAN)
         );
 
-        String json = MinecraftPunishmentPreparationCodec.encodeRequest(
+        String json = MinecraftPunishmentWireCodec.encodeRequest(
                 MinecraftPunishmentPreparationMapper.request(CASE_ID, request));
-        var decoded = MinecraftPunishmentPreparationCodec.decodeRequest(json);
+        var decoded = MinecraftPunishmentWireCodec.decodeRequest(json);
         CreatePunishmentRequest restored = MinecraftPunishmentPreparationMapper.request(decoded, ACTOR);
 
         assertEquals(List.of(MUTE, BAN), restored.overrideSanctions());
         assertEquals(request.idempotencyKey(), restored.idempotencyKey());
+    }
+
+    @Test
+    void commitRoundTripPreservesSharedCaseAndFullExpectation() {
+        CreatePunishmentRequest request = new CreatePunishmentRequest(
+                new IdempotencyKey("d08:commit:request"), TARGET_ID, ACTOR,
+                "harassment.sexual", "commit multi sanction test", CaseVisibility.PUBLIC, List.of(MUTE, BAN)
+        );
+        PunishmentExpectation expectation = new PunishmentExpectation(
+                "d08-commit-v1", 2, "30 day mute and 14 day ban", List.of(MUTE, BAN));
+
+        String json = MinecraftPunishmentWireCodec.encodeCommitRequest(
+                MinecraftPunishmentCommitMapper.request(CASE_ID, request, expectation));
+        var decoded = MinecraftPunishmentWireCodec.decodeCommitRequest(json);
+
+        assertEquals(CASE_ID.value(), decoded.punishment().caseId());
+        assertEquals(expectation, MinecraftPunishmentCommitMapper.expectation(decoded.expectation()));
+        PunishmentResult.Accepted result = (PunishmentResult.Accepted) MinecraftPunishmentCommitMapper.result(
+                MinecraftPunishmentCommitWire.Response.accepted(CASE_ID.value(), false));
+        assertEquals(CASE_ID, result.caseId());
     }
 
     @Test
@@ -59,10 +81,10 @@ class MinecraftPunishmentPreparationMapperTest {
         );
 
         var wire = MinecraftPunishmentPreparationMapper.plan(plan);
-        String json = MinecraftPunishmentPreparationCodec.encodeResponse(
+        String json = MinecraftPunishmentWireCodec.encodeResponse(
                 MinecraftPunishmentPreparationWire.Response.prepared(wire));
         PunishmentPlan restored = MinecraftPunishmentPreparationMapper.plan(
-                MinecraftPunishmentPreparationCodec.decodeResponse(json).plan());
+                MinecraftPunishmentWireCodec.decodeResponse(json).plan());
 
         assertEquals(List.of(MUTE, BAN), restored.sanctions());
         assertEquals(step.sanctions(), restored.escalation().selectedStep().sanctions());
