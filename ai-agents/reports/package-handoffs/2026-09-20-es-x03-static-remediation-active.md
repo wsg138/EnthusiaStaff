@@ -14,7 +14,7 @@ aggregate leg. Market [PR #7](https://github.com/wsg138/EnthusiaMarket/pull/7)
 is OPEN/DRAFT/CLEAN on `package/es-x03-market-static-remediation` and remains
 the paired provider leg. Preserve unpaired Market PR #6 unchanged.
 
-- Direct Staff `main`: `a2c835419656adc2ddbf7f77fc49292ca43ee8f3`.
+- Direct Staff `main`: `313add94027d16bcfe08529136972fe49f6746f5`.
 - Staff PR #139: `99e46102a6e33a39d30a29470cd229c7439689b1`, a normal
   two-parent merge of immediate paired product parent
   `d97a082523012edfac05db1d75fbd59a92d9b253` and then-current `main`

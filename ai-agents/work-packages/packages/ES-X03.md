@@ -53,7 +53,7 @@ enter Market or this public repository.
 ## 8. Current paired source checkpoint
 
 - Staff main currently is
-  a2c835419656adc2ddbf7f77fc49292ca43ee8f3.
+  313add94027d16bcfe08529136972fe49f6746f5.
 - Market main remains cc19fa966dcb155fa1743f5076fb5152e74bdf8f.
 - Market PR #7 product head is
   a7534f2475a6bf298aff50a87cb132f34c7aa063.

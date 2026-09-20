@@ -12,7 +12,7 @@ OPEN/DRAFT/CLEAN on `package/es-x03-market-static-remediation` at
 OPEN/non-draft/UNSTABLE on `package/es-x03-market-provider` at normal
 two-parent merge `99e46102a6e33a39d30a29470cd229c7439689b1` of immediate
 paired product parent `d97a082523012edfac05db1d75fbd59a92d9b253`. Live Staff
-`main` then advanced to `a2c835419656adc2ddbf7f77fc49292ca43ee8f3`, so #139
+`main` then advanced to `313add94027d16bcfe08529136972fe49f6746f5`, so #139
 needs a later normal current-main merge before acceptance. Clean-clone
 component comparison found 512 shared files with no delta and hash
 `bc302a74a4c9acc69cba22947f46688d0c108a666cb896774655cc8eb09588c9`.

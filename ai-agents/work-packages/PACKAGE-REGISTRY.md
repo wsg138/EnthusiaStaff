@@ -32,7 +32,7 @@ UNSTABLE on `package/es-x03-market-provider` at normal two-parent merge
 `99e46102a6e33a39d30a29470cd229c7439689b1` of immediate paired product parent
 `d97a082523012edfac05db1d75fbd59a92d9b253`; their component trees match
 exactly at `bc302a74a4c9acc69cba22947f46688d0c108a666cb896774655cc8eb09588c9`.
-Live Staff `main` subsequently advanced to `a2c835419656adc2ddbf7f77fc49292ca43ee8f3`,
+Live Staff `main` subsequently advanced to `313add94027d16bcfe08529136972fe49f6746f5`,
 so #139 needs a later normal current-main merge before acceptance.
 Market hosted checks, Staff Coverage `35526526618`, Sentinel artifact
 `35526526642`, and durable Sentinel job `463` (`PAPER_RESTART_OK`) passed.
@@ -123,7 +123,7 @@ Canonical D09 blocker handoff: `ai-agents/reports/package-handoffs/2026-09-19-es
   `99e46102a6e33a39d30a29470cd229c7439689b1`, a normal merge of immediate
   paired product parent `d97a082523012edfac05db1d75fbd59a92d9b253` with then-current Staff `main`
   `c1054da6a8f89b312df2e05e25edc958fceda7ef`. Live `main` subsequently
-  advanced to `a2c835419656adc2ddbf7f77fc49292ca43ee8f3`; #139 therefore
+  advanced to `313add94027d16bcfe08529136972fe49f6746f5`; #139 therefore
   needs a normal current-main merge before acceptance. Staff owns V20, X03
   owns V21, and D09 reserves V22 with disjoint registrar hunks.
 - Clean-clone component comparison reports 512 shared files with no added,

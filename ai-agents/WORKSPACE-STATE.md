@@ -16,7 +16,7 @@ Live GitHub overrides stale records. Detailed package evidence remains in the re
 | X01 exact unblock | Obtain a durable, verifiable license change or authorization permitting the required public aggregate copy, or an explicitly authorized canonical package/mirror-policy redesign that removes republication while retaining deterministic supported-source verification. Then reconcile live heads again and perform the normal two-PR implementation, exact-head validation, normal merges, and synchronization/parity process. |
 | X03 state | `PARTIAL` / `ACTIONABLE_CONTINUATION`; fresh code and restart evidence is current, but acceptance remains blocked by Codacy and canonical Pi. |
 | X03 standalone | Market PR #7 is OPEN/DRAFT/CLEAN on `package/es-x03-market-static-remediation` at `a7534f2`; unpaired Market PR #6 is preserved. |
-| X03 aggregate | Staff PR #139 is OPEN/non-draft/UNSTABLE on `package/es-x03-market-provider` at normal merge `99e4610` of product parent `d97a082` with then-current `main` `c1054da`; live `main` subsequently advanced to `a2c8354`. |
+| X03 aggregate | Staff PR #139 is OPEN/non-draft/UNSTABLE on `package/es-x03-market-provider` at normal merge `99e4610` of product parent `d97a082` with then-current `main` `c1054da`; live `main` subsequently advanced to `313add9`. |
 | X03 hosted | Market runs `35524744229`/`35524744279`, Staff Coverage `35526526618`, and Sentinel artifact `35526526642` PASS. |
 | X03 static/review | Exact Staff Codacy check `106119707074` is `ACTION_REQUIRED`; current triage records 1,129 findings; no live review threads; CodeRabbit is skipped/manual. |
 | X03 Pi/Sentinel | Pi `35526525971` failed pre-dispatch on HTTP 401; durable Sentinel job `463` PASS (`PAPER_RESTART_OK`). |
@@ -208,7 +208,7 @@ D04 serialization is no longer the X03 blocker. Market #7 at `a7534f2` and
 Staff #139 at `99e4610` have exact component parity at
 `bc302a74a4c9acc69cba22947f46688d0c108a666cb896774655cc8eb09588c9`.
 Fresh Staff Coverage, the Sentinel artifact, and durable restart job `463`
-passed for that aggregate head. Live `main` has since advanced to `a2c8354`,
+passed for that aggregate head. Live `main` has since advanced to `313add9`,
 so a normal current-main merge will be needed before acceptance. Codacy remains
 `ACTION_REQUIRED`, and canonical Pi stopped before private dispatch because its
 bridge credential was rejected. Follow the active X03 handoff; do not replace
