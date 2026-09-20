@@ -38,6 +38,21 @@ class StaffToolTargetPolicyTest {
     }
 
     @Test
+    void executionTimeRevalidationRejectsTargetWhoseStateChanged() {
+        assertTrue(eligible(TARGET, safeState(), safeEnvironment()));
+        assertFalse(eligible(
+                TARGET,
+                state(false, true, false, false, false, false, false),
+                safeEnvironment()
+        ));
+        assertFalse(eligible(
+                TARGET,
+                state(false, false, true, false, false, false, false),
+                safeEnvironment()
+        ));
+    }
+
+    @Test
     void randomTeleportExcludesSpectatorsAndDisabledWorlds() {
         assertFalse(eligible(TARGET, safeState(), new StaffToolTargetPolicy.Environment(GameMode.SPECTATOR, true)));
         assertFalse(eligible(TARGET, safeState(), new StaffToolTargetPolicy.Environment(GameMode.SURVIVAL, false)));

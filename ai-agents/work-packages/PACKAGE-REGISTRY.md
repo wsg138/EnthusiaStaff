@@ -1,6 +1,6 @@
 # Package registry
 
-Last updated: 2026-09-19
+Last updated: 2026-09-20
 
 Live GitHub overrides stale text. Detailed historical evidence remains in package files and canonical handoffs; this registry is the current routing authority.
 
@@ -58,10 +58,16 @@ Canonical D16 terminal handoff: `ai-agents/reports/package-handoffs/2026-09-13-e
 Canonical D13 blocker handoff: `ai-agents/reports/package-handoffs/2026-09-14-es-d13-role-sync-blocked.md`.
 Canonical D09 blocker handoff: `ai-agents/reports/package-handoffs/2026-09-19-es-d09-investigations-blocked.md`.
 
+
+### Owner-authorized test-hardening lane
+
+`ES-T01 — Random staff-teleport stale-target hardening` is `ACTIVE` / `ACTIONABLE_CONTINUATION` under the owner's 2026-09-20 authorization to create review/bug-finding/fixing work for immediate plugin testing. It is intentionally scoped to merged staff-tool paths that do not collide with active X03/D08 or parked D09/D13 work. Canonical handoff: `ai-agents/reports/package-handoffs/2026-09-20-es-t01-staff-teleport-hardening.md`.
+
 ## Canonical package index
 
 | ID | Title | Status | Classification | Priority | Dependencies | Assignment / live work |
 | --- | --- | --- | --- | ---: | --- | --- |
+| `ES-T01` | Random staff-teleport stale-target hardening | `ACTIVE` | `ACTIONABLE_CONTINUATION` | 5 | `ES-P04` | owner-authorized 2026-09-20 test-hardening repair on `package/es-t01-staff-teleport-hardening`; no active-package product-path collision |
 | `ES-P01` | Exact-sanction appeal isolation | `COMPLETE` | — | 10 | — | merged PR #68 |
 | `ES-R01` | Billing-independent staging bridge recovery | `COMPLETE` | — | 15 | — | canonical public→private staging route proven |
 | `ES-R02` | Report integration fixture clock recovery | `COMPLETE` | — | 16 | — | merged PR #103 |

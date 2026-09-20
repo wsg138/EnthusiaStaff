@@ -1,6 +1,6 @@
 # Workspace state
 
-Last updated: 2026-09-19
+Last updated: 2026-09-20
 
 Live GitHub overrides stale records. Detailed package evidence remains in the registries, selected package record, canonical handoff, and PR verification ledgers.
 
@@ -8,6 +8,7 @@ Live GitHub overrides stale records. Detailed package evidence remains in the re
 
 | Field | Value |
 | --- | --- |
+| Test-hardening live work | `ES-T01` is `ACTIVE` / `ACTIONABLE_CONTINUATION` on `package/es-t01-staff-teleport-hardening` from exact `main` `c1054da6a8f89b312df2e05e25edc958fceda7ef`; scope is limited to random staff-teleport stale-target revalidation and focused tests, with no X03/D08/D09/D13 product-path overlap. |
 | Universal package active state | `ES-X04 — EnthusiaCommend reputation provider` is `COMPLETE`; `ES-X01` remains `BLOCKED` / `PARKED_BLOCKED`; `ES-X03` completed its owner-authorized Bedrock repair but remains independently `BLOCKED` / `PARKED_BLOCKED` on Codacy and Pi bridge authentication. |
 | X01 current classification | `BLOCKED` / `PARKED_BLOCKED` after a 2026-08-26 `ACTIONABLE_CONTINUATION`. The historical repository-resolution blocker materially changed, but the verified provider license now blocks the canonical public aggregate-copy/parity requirement. |
 | X01 standalone | Verified `wsg138/Enthusia-RoseChat`, default `master`, reconciliation head `8fcca5420b0f54207d6efa332327b9fd18edb8d8`. GitHub identifies it as a public fork of `BadgersMC/Enthusia-RoseChat`, sourced from `Rosewood-Development/RoseChat`. No provider `AGENTS.md` was present in the verified source tree. |

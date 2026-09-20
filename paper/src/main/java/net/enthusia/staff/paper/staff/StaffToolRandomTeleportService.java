@@ -2,10 +2,10 @@ package net.enthusia.staff.paper.staff;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentLinkedQueue;
-import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 import net.enthusia.staff.paper.freeze.FreezeManager;
@@ -63,7 +63,7 @@ final class StaffToolRandomTeleportService {
             message(actorId, "No suitable random-teleport target is online.");
             return;
         }
-        ConcurrentLinkedQueue<TargetSnapshot> eligible = new ConcurrentLinkedQueue<>();
+        ConcurrentLinkedQueue<UUID> eligible = new ConcurrentLinkedQueue<>();
         AtomicInteger remaining = new AtomicInteger(candidates.size());
         Runnable finishedOne = () -> finishCandidateCollection(actorId, eligible, remaining);
         for (UUID candidateId : candidates) {
@@ -73,7 +73,7 @@ final class StaffToolRandomTeleportService {
 
     private void finishCandidateCollection(
             UUID actorId,
-            Collection<TargetSnapshot> eligible,
+            Collection<UUID> eligible,
             AtomicInteger remaining
     ) {
         if (remaining.decrementAndGet() == 0) {
@@ -84,13 +84,13 @@ final class StaffToolRandomTeleportService {
     private void snapshotCandidate(
             UUID actorId,
             UUID targetId,
-            Collection<TargetSnapshot> eligible,
+            Collection<UUID> eligible,
             Runnable finished
     ) {
         onEntity(targetId, target -> {
             try {
                 if (eligibleCandidate(actorId, target)) {
-                    eligible.add(new TargetSnapshot(targetId, target.getName(), target.getLocation().clone()));
+                    eligible.add(targetId);
                 }
             } finally {
                 finished.run();
@@ -119,21 +119,45 @@ final class StaffToolRandomTeleportService {
         return StaffToolTargetPolicy.eligibleRandomTarget(candidate);
     }
 
-    private void finishTeleport(UUID actorId, Collection<TargetSnapshot> candidates) {
-        onEntity(actorId, actor -> {
-            if (!canContinue(actor)) {
-                return;
-            }
-            List<TargetSnapshot> shuffled = new ArrayList<>(candidates);
-            if (shuffled.isEmpty()) {
-                actor.sendMessage(Component.text("No suitable random-teleport target is online."));
-                return;
-            }
-            TargetSnapshot target = shuffled.get(ThreadLocalRandom.current().nextInt(shuffled.size()));
-            actor.teleportAsync(target.location()).whenComplete(
-                    (success, failure) -> finishTeleport(actorId, target, success, failure)
-            );
-        });
+    private void finishTeleport(UUID actorId, Collection<UUID> candidates) {
+        List<UUID> shuffled = new ArrayList<>(candidates);
+        Collections.shuffle(shuffled);
+        attemptNextCandidate(actorId, new ConcurrentLinkedQueue<>(shuffled));
+    }
+
+    private void attemptNextCandidate(UUID actorId, ConcurrentLinkedQueue<UUID> candidates) {
+        UUID targetId = candidates.poll();
+        if (targetId == null) {
+            message(actorId, "No suitable random-teleport target is online.");
+            return;
+        }
+        onEntity(
+                targetId,
+                target -> revalidateCandidate(actorId, candidates, target),
+                () -> attemptNextCandidate(actorId, candidates)
+        );
+    }
+
+    private void revalidateCandidate(
+            UUID actorId,
+            ConcurrentLinkedQueue<UUID> candidates,
+            Player target
+    ) {
+        if (!eligibleCandidate(actorId, target)) {
+            attemptNextCandidate(actorId, candidates);
+            return;
+        }
+        TargetSnapshot snapshot = new TargetSnapshot(target.getName(), target.getLocation().clone());
+        onEntity(actorId, actor -> teleportToSnapshot(actorId, actor, snapshot));
+    }
+
+    private void teleportToSnapshot(UUID actorId, Player actor, TargetSnapshot target) {
+        if (!canContinue(actor)) {
+            return;
+        }
+        actor.teleportAsync(target.location()).whenComplete(
+                (success, failure) -> finishTeleport(actorId, target, success, failure)
+        );
     }
 
     private boolean canContinue(Player actor) {
@@ -184,6 +208,6 @@ final class StaffToolRandomTeleportService {
         onEntity(playerId, player -> player.sendMessage(Component.text(text)));
     }
 
-    private record TargetSnapshot(UUID playerId, String name, Location location) {
+    private record TargetSnapshot(String name, Location location) {
     }
 }
