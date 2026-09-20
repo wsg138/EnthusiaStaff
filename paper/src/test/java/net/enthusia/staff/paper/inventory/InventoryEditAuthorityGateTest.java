@@ -75,6 +75,14 @@ final class InventoryEditAuthorityGateTest {
         assertFalse(InventoryEditAuthorityGate.current(query, TIMEOUT));
     }
 
+    @Test
+    void laterRetryUsesFreshAuthorityState() {
+        assertFalse(InventoryEditAuthorityGate.current(
+                new ImmediateQuery(true, false, false), TIMEOUT));
+        assertTrue(InventoryEditAuthorityGate.current(
+                new ImmediateQuery(true, true, false), TIMEOUT));
+    }
+
     private record ImmediateQuery(
             boolean online,
             boolean permitted,
