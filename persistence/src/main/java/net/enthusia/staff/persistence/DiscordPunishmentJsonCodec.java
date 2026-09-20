@@ -8,6 +8,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
+import net.enthusia.staff.common.CaseId;
 import net.enthusia.staff.domain.auth.Actor;
 import net.enthusia.staff.domain.auth.DiscordConsequenceType;
 import net.enthusia.staff.domain.auth.StaffRank;
@@ -62,6 +63,7 @@ final class DiscordPunishmentJsonCodec {
             int version,
             UUID punishmentId,
             UUID subjectId,
+            String caseId,
             String targetUserId,
             String guildId,
             UUID issuerId,
@@ -100,6 +102,7 @@ final class DiscordPunishmentJsonCodec {
                     DOCUMENT_VERSION,
                     punishment.punishmentId(),
                     punishment.subjectId().value(),
+                    punishment.caseId().map(CaseId::value).orElse(null),
                     punishment.targetUserId().value(),
                     punishment.guildId().value(),
                     punishment.issuer().id(),
@@ -147,6 +150,7 @@ final class DiscordPunishmentJsonCodec {
             return new DiscordPunishment(
                     punishmentId,
                     new ModerationSubjectId(subjectId),
+                    Optional.ofNullable(caseId).map(CaseId::new),
                     new DiscordUserId(targetUserId),
                     new DiscordGuildId(guildId),
                     new Actor(issuerId, issuerName, StaffRank.valueOf(issuerRank)),
