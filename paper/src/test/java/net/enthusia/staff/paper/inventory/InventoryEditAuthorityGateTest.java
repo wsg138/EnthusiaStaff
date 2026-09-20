@@ -53,6 +53,28 @@ final class InventoryEditAuthorityGateTest {
         assertFalse(InventoryEditAuthorityGate.current(query, TIMEOUT));
     }
 
+    @Test
+    void schedulerSubmissionFailureFailsClosed() {
+        InventoryEditAuthorityGate.AuthorityQuery query = new InventoryEditAuthorityGate.AuthorityQuery() {
+            @Override
+            public void execute(Runnable operation, Runnable retired) {
+                throw new IllegalStateException("scheduler unavailable");
+            }
+
+            @Override
+            public boolean online() {
+                return true;
+            }
+
+            @Override
+            public boolean hasEditPermission() {
+                return true;
+            }
+        };
+
+        assertFalse(InventoryEditAuthorityGate.current(query, TIMEOUT));
+    }
+
     private record ImmediateQuery(
             boolean online,
             boolean permitted,
