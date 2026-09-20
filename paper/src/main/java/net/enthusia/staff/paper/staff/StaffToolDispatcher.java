@@ -383,6 +383,26 @@ public final class StaffToolDispatcher implements Listener, CommandExecutor, Tab
             return;
         }
         UUID actorId = actor.getUniqueId();
+        onEntity(
+                target.playerId(),
+                liveTarget -> revalidateFollowTarget(actorId, target, liveTarget),
+                () -> message(actorId, "Follow/Spectate was cancelled because that target is no longer online.")
+        );
+    }
+
+    private void revalidateFollowTarget(UUID actorId, TargetSnapshot snapshot, Player liveTarget) {
+        if (!spectateTargetEligible(liveTarget)) {
+            message(actorId, "Follow/Spectate was cancelled because that target became protected.");
+            return;
+        }
+        onEntity(actorId, actor -> teleportAfterTargetRevalidation(actor, snapshot));
+    }
+
+    private void teleportAfterTargetRevalidation(Player actor, TargetSnapshot target) {
+        if (!canContinueSpectate(actor)) {
+            return;
+        }
+        UUID actorId = actor.getUniqueId();
         actor.teleportAsync(target.location()).whenComplete(
                 (success, failure) -> finishFollowTeleport(actorId, target, success, failure)
         );
@@ -398,6 +418,13 @@ public final class StaffToolDispatcher implements Listener, CommandExecutor, Tab
                 NamedTextColor.RED
         ));
         return false;
+    }
+
+    private boolean spectateTargetEligible(Player target) {
+        return StaffToolSpectateTargetPolicy.eligible(
+                vanish.isVanished(target.getUniqueId()),
+                target.hasPermission(SPECTATE_EXEMPT_PERMISSION)
+        );
     }
 
     private void finishFollowTeleport(UUID actorId, TargetSnapshot target, Boolean success, Throwable failure) {
@@ -426,7 +453,7 @@ public final class StaffToolDispatcher implements Listener, CommandExecutor, Tab
     }
 
     private void prepareSpectatorAttachment(UUID actorId, TargetSnapshot snapshot, Player liveTarget) {
-        if (vanish.isVanished(liveTarget.getUniqueId())) {
+        if (!spectateTargetEligible(liveTarget)) {
             message(actorId, "Teleported to the last safe target location; direct spectating is no longer available.");
             return;
         }
