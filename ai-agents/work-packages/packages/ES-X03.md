@@ -8,11 +8,11 @@ destructive-state overlap.
 
 ## 2. Status
 
-`PARTIAL` / `ACTIONABLE_CONTINUATION` under an owner-directed paired
-static-remediation continuation. The historical D04 serialization blocker is
-resolved. Safe, bounded provider remediation and required aggregate
-synchronization remain actionable; Codacy and canonical Pi are still
-non-passing and block acceptance.
+**PARTIAL / ACTIONABLE_CONTINUATION** after the paired static-remediation and
+owner-authorized Bedrock currency-pricing repair. The historical D04
+serialization blocker is resolved. Fresh parity, aggregate Coverage, and
+durable Sentinel restart evidence are current; Codacy and canonical Pi remain
+non-passing acceptance gates.
 
 ## 3. Objective
 
@@ -38,11 +38,11 @@ load, or process-kill acceptance assigned to `ES-V03`.
 
 ## 7. Repository and privacy boundaries
 
-The existing Staff [PR #139](https://github.com/wsg138/EnthusiaStaff/pull/139)
-on `package/es-x03-market-provider` remains the aggregate leg. Market
-[PR #7](https://github.com/wsg138/EnthusiaMarket/pull/7) on
-`package/es-x03-market-static-remediation` is its paired provider leg and
-remains a draft. Preserve the separate unpaired Market
+Staff [PR #139](https://github.com/wsg138/EnthusiaStaff/pull/139) is
+OPEN/non-draft/UNSTABLE on `package/es-x03-market-provider` and remains the
+aggregate leg. Market [PR #7](https://github.com/wsg138/EnthusiaMarket/pull/7)
+is OPEN/DRAFT/CLEAN on `package/es-x03-market-static-remediation` and remains
+the paired provider leg. Preserve the separate unpaired Market
 [PR #6](https://github.com/wsg138/EnthusiaMarket/pull/6) unchanged.
 
 Market uses only ordinary public repository CI. No private Pi/staging runner
@@ -50,20 +50,21 @@ configuration, bridge implementation, credentials, topology, artifact-transfer
 mechanism, Sentinel infrastructure, or private evidence may enter Market or
 this public repository.
 
-## 8. Current source and pairing checkpoint
+## 8. Current paired source checkpoint
 
-- Direct Staff `main` at merge reconciliation is
-  `c1054da6a8f89b312df2e05e25edc958fceda7ef`.
-- The pre-merge aggregate product head is
-  `d97a082523012edfac05db1d75fbd59a92d9b253`.
-- Market `main` remains `cc19fa966dcb155fa1743f5076fb5152e74bdf8f`.
-- Market PR #7 currently carries provider head
-  `a7534f2475a6bf298aff50a87cb132f34c7aa063`.
-- The paired product trees at those pre-merge heads contain 512 shared files;
-  clean-clone `component_sync.py compare` found no added, missing, or modified
-  paths and recorded shared content hash
-  `bc302a74a4c9acc69cba22947f46688d0c108a666cb896774655cc8eb09588c9`.
-  `COMPONENT-METADATA.md` is the only aggregate-only component file.
+- Staff main currently is
+  313add94027d16bcfe08529136972fe49f6746f5.
+- Market main remains cc19fa966dcb155fa1743f5076fb5152e74bdf8f.
+- Market PR #7 product head is
+  a7534f2475a6bf298aff50a87cb132f34c7aa063.
+- Staff PR #139 current normal merge head is
+  99e46102a6e33a39d30a29470cd229c7439689b1, which merged immediate paired
+  product parent d97a082523012edfac05db1d75fbd59a92d9b253 with then-current
+  `main` c1054da6a8f89b312df2e05e25edc958fceda7ef; it must merge current
+  `main` before acceptance.
+- Clean-clone component_sync.py compare reports 512 shared files with no added,
+  missing, or modified path. Both product trees have hash
+  bc302a74a4c9acc69cba22947f46688d0c108a666cb896774655cc8eb09588c9.
 - Staff owns V20, X03 owns V21, and D09 reserves V22. X03 and D09 retain
   disjoint hunks in `PaperCommandRegistrar.java`.
 
@@ -89,30 +90,40 @@ and invalid trade pricing.
 
 ## 10. Validation record
 
-- Market and aggregate component focused `BedrockCreateShopFormTest` runs
-  passed with nine tests each; component Detekt passed in both repositories.
-- The Market component full `test shadowJar jacocoTestReport` target passed in
-  both the standalone and aggregate component checkouts. `git diff --check`
-  passed, and local Lizard reports no method above CCN 8 or 50 lines in the
-  refactored Bedrock form.
-- Market exact-head run `35524744229` passed build, Test/shadowJar, MariaDB
-  verification, coverage upload, security, and Detekt. Wiki run `35524744279`
-  passed all checks.
-- Staff manual exact-head Coverage run `35525198519` / job `106116024419` passed
-  for pre-merge product head `d97a082...`. It is diagnostic only: the current
-  normal merge will require fresh exact-head aggregate validation.
-- Staff PR #139's pre-merge automatic `pull_request` Coverage and Sentinel
-  workflows did not run because the PR was merge-conflicted. The public Pi
-  `pull_request_target` workflow is a distinct trigger and did run.
+- **Market local:** PASS. Test, shadow JAR, JaCoCo, and Detekt passed with
+  the repository-pinned LumaGuilds artifact.
+- **Market hosted:** PASS. Run 35524744229 passed build, tests, shadow JAR,
+  MariaDB verification, security, and Detekt.
+- **Market Wiki:** PASS. Run 35524744279 passed Markdown, frontmatter, and
+  strict MkDocs checks.
+- **Staff local:** PASS. Full component test, shadow JAR, JaCoCo, and Detekt
+  passed with the repository-pinned LumaGuilds artifact.
+- **Staff coverage/build:** PASS. Run 35526526618 / job 106119546309 passed
+  at the exact Staff merge head, including aggregate build/tests, runtime JAR
+  inspection, coverage, and artifact upload.
+- **Diff hygiene and component parity:** PASS. Every paired checkpoint passed
+  git diff --check; the final paired hash is
+  bc302a74a4c9acc69cba22947f46688d0c108a666cb896774655cc8eb09588c9.
+- **PR review:** No live inline threads. CodeRabbit is skipped/manual for
+  Staff and draft-skipped for Market, not an automated full-review approval.
+- **Codacy static analysis:** NOT PASS. Exact Staff check 106119707074 is
+  ACTION_REQUIRED; current triage records 1,129 findings.
+- **Canonical Pi:** NOT PASS. Staff run 35526525971 failed before private
+  dispatch on HTTP 401 Bad credentials.
+- **Durable Sentinel restart:** PASS. Artifact run 35526526642 / job
+  106119546325 passed; durable job 463 returned PAPER_RESTART_OK after two
+  clean readiness and stop cycles against one disposable state.
 
 ## 11. Remaining blockers and non-suppressive boundaries
 
-Codacy is non-passing on pre-merge Staff head `d97a082...`: `ACTION_REQUIRED`
-with 1,127 findings (1,076 Markdownlint, 41 Lizard production-complexity,
-eight RAC-table reports against immutable Market migrations, and two
-dependency-coordinate secret-pattern reports). Existing narrow source/test and
-dialect scopes remain; no broad component, migration, security, or Opengrep
-suppression is authorized.
+The non-passing Codacy result is not suppressed. Exact check 106119707074 is
+ACTION_REQUIRED; current triage records 1,129 findings. Prior triage identified Markdownlint, production
+Lizard, immutable-migration RAC-table, and dependency-coordinate
+secret-pattern categories; each current finding requires scoped verification.
+The narrow source, test, and dialect scopes remain in place. A broader
+suppression or analyzer-rule decision requires explicit authorization and
+supported Codacy configuration; it must not be guessed in source through a
+component-wide exclusion.
 
 Canonical Pi is `NOT PASS`: public supersession run `35524782510` failed before
 private dispatch when the workflow-history request returned HTTP 401 `Bad
@@ -121,7 +132,11 @@ must rotate or replace `ENTHUSIASTAFF_STAGING_TOKEN` with a least-privilege
 credential able to read and dispatch the required private Actions workflow. Do
 not use a personal credential or bypass the public bridge.
 
-## 12. Exact next actions
+The aggregate component and standalone Market product tree are exactly equal
+at the current paired heads. Clean-clone comparison found 512 shared files and
+the shared hash is
+bc302a74a4c9acc69cba22947f46688d0c108a666cb896774655cc8eb09588c9.
+Post-merge parity and component metadata updates remain required.
 
 Finish the normal merge of current Staff `main`, preserving the paired Market
 component source and tests, then push the merge commit. Re-establish exact
@@ -131,7 +146,17 @@ small, tested paired batches. After the staging owner repairs the private bridge
 credential, freeze the resulting heads and rerun required hosted, static,
 review, Sentinel, and canonical Pi gates.
 
-## 13. Completion definition
+Keep both implementation PRs and branches. Continue only small paired repairs
+for validated static findings, with matching tests and parity checks; do not
+fold unrelated stateful transaction, auction, persistence, listener, or GUI
+findings into an unbounded cleanup. The staging owner must rotate or replace
+ENTHUSIASTAFF_STAGING_TOKEN with a least-privilege credential that can read
+workflow history and dispatch the required private workflow. Do not use a
+personal credential or bypass the public bridge. After a changed product head,
+normal current-main merge, or credential repair, freeze the heads and rerun
+every applicable exact hosted, static, review, Sentinel, and Pi gate.
+
+## 14. Completion definition
 
 ES-X03 is complete only after both paired PRs have terminal green required
 gates, normal merges, exact post-merge standalone-to-aggregate parity, and
@@ -140,12 +165,8 @@ load acceptance.
 
 ## 14. Handoffs and production boundary
 
-Historical handoffs remain
-`ai-agents/reports/package-handoffs/2026-08-14-es-x03-market-provider-blocked.md`,
-`ai-agents/reports/package-handoffs/2026-08-26-es-x03-discord-serialization-blocked.md`,
-and `ai-agents/reports/package-handoffs/2026-09-18-es-x03-parked-static-and-pi.md`.
-The active handoff is
-`ai-agents/reports/package-handoffs/2026-09-18-es-x03-static-remediation-active.md`.
+Canonical handoff:
+ai-agents/reports/package-handoffs/2026-09-20-es-x03-static-remediation-active.md.
 
 No production listing, balance, item, player data, database, deployment,
 Discord configuration, authority, LiteBans, cutover, or issue #43 acceptance

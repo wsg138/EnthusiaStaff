@@ -1,37 +1,38 @@
 # Latest agent handoff
 
-Current handoff: `ES-X03 — EnthusiaMarket destructive provider` — `PARTIAL` /
-`ACTIONABLE_CONTINUATION`.
+Current handoff: **ES-X03 — EnthusiaMarket destructive provider** — **PARTIAL / ACTIONABLE_CONTINUATION**.
 
 Canonical package handoff:
-`ai-agents/reports/package-handoffs/2026-09-18-es-x03-static-remediation-active.md`.
+ai-agents/reports/package-handoffs/2026-09-20-es-x03-static-remediation-active.md.
 
-An owner-directed paired remediation continues on Market
-[PR #7](https://github.com/wsg138/EnthusiaMarket/pull/7) at
-`a7534f2475a6bf298aff50a87cb132f34c7aa063` and Staff
-[PR #139](https://github.com/wsg138/EnthusiaStaff/pull/139). The pre-merge
-Staff product head is `d97a082523012edfac05db1d75fbd59a92d9b253`; clean-clone
-component comparison proved 512 shared files and content hash
-`bc302a74a4c9acc69cba22947f46688d0c108a666cb896774655cc8eb09588c9`, with no
-added, missing, or modified product path. `COMPONENT-METADATA.md` is the only
-aggregate-only component file.
+Market [PR #7](https://github.com/wsg138/EnthusiaMarket/pull/7) is
+OPEN/DRAFT/CLEAN on `package/es-x03-market-static-remediation` at
+`a7534f2475a6bf298aff50a87cb132f34c7aa063`; Staff
+[PR #139](https://github.com/wsg138/EnthusiaStaff/pull/139) is
+OPEN/non-draft/UNSTABLE on `package/es-x03-market-provider` at normal
+two-parent merge `99e46102a6e33a39d30a29470cd229c7439689b1` of immediate
+paired product parent `d97a082523012edfac05db1d75fbd59a92d9b253`. Live Staff
+`main` then advanced to `313add94027d16bcfe08529136972fe49f6746f5`, so #139
+needs a later normal current-main merge before acceptance. Clean-clone
+component comparison found 512 shared files with no delta and hash
+`bc302a74a4c9acc69cba22947f46688d0c108a666cb896774655cc8eb09588c9`.
 
-The Bedrock form now creates valid currency shops through the factory's
-validated-price fallback and has callback-level regression coverage. Market
-exact-head build, security, Detekt, tests, shadow JAR, MariaDB verification,
-coverage upload, and Wiki checks passed. Staff Coverage `35525198519` / job
-`106116024419` passed for the pre-merge product head and must be rerun for the
-pending normal merge head.
+Market hosted runs `35524744229` and `35524744279` passed. Exact Staff
+Coverage `35526526618` / job `106119546309` and Sentinel artifact
+`35526526642` / job `106119546325` passed; durable Sentinel job `463` returned
+`PAPER_RESTART_OK`. No live review thread remains.
 
-Staff PR #139 was merge-conflicted against current `main`, preventing automatic
-`pull_request` Coverage and Sentinel artifact runs. A normal current-main merge
-is in progress; it has documentation-only conflicts and no Market component,
-migration, or workflow conflict. Preserve Market PR #6 unchanged.
+Codacy static check `106119707074` remains `ACTION_REQUIRED`; current triage
+records 1,129 findings. Canonical Pi `35526525971` stopped before private dispatch when its
+workflow-history lookup returned HTTP 401 Bad credentials; no private Pi,
+Paper, or MariaDB runtime ran.
 
-Codacy remains `ACTION_REQUIRED` with 1,127 PR-wide findings. Canonical Pi is
-`NOT PASS`: run `35524782510` failed before private dispatch with HTTP 401 `Bad
-credentials`; no private Pi, Paper, or MariaDB runtime ran. Do not bypass the
-bridge or use a personal credential.
+Continue only small paired fixes for validated static findings, preserving
+Market #7, Staff #139, and exact component parity. Merge current `main`
+normally before acceptance. The staging owner must repair the least-privilege
+bridge credential before a fresh canonical Pi run. Do not use a personal
+credential or bypass the public bridge.
 
 No production listing, balance, item, player data, database, deployment,
-authority, LiteBans, cutover, or issue #43 acceptance changed.
+authority, LiteBans, cutover, or issue #43 acceptance was performed. D09
+remains preserved while X03 owns branch-local V21.
