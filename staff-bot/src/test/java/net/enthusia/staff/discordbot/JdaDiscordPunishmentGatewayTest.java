@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
@@ -99,9 +100,83 @@ class JdaDiscordPunishmentGatewayTest {
         assertFalse(currentlyOwned(List.of(external), roleId));
     }
 
+    @Test
+    void currentMuteOwnershipSearchesBeyondFirstAuditPage() {
+        long roleId = 789L;
+        List<JdaMuteRoleOwnership.Observation> observations = unrelatedNewerObservations(roleId, 125);
+        observations.add(roleObservation(
+                TARGET_ID,
+                BOT_ID,
+                JdaMuteRoleOwnership.marker(PUNISHMENT_ID) + " reason",
+                ISSUED_AT.plusSeconds(1),
+                roleId
+        ));
+
+        assertTrue(currentlyOwnedNewestFirst(observations, roleId));
+    }
+
+    @Test
+    void currentMuteOwnershipRejectsNewerExternalChangeAcrossPages() {
+        long roleId = 789L;
+        List<JdaMuteRoleOwnership.Observation> observations = unrelatedNewerObservations(roleId, 125);
+        observations.add(roleObservation(
+                TARGET_ID, BOT_ID + 1, "manual mute", ISSUED_AT.plusSeconds(2), roleId
+        ));
+        observations.add(roleObservation(
+                TARGET_ID,
+                BOT_ID,
+                JdaMuteRoleOwnership.marker(PUNISHMENT_ID) + " reason",
+                ISSUED_AT.plusSeconds(1),
+                roleId
+        ));
+
+        assertFalse(currentlyOwnedNewestFirst(observations, roleId));
+    }
+
+    @Test
+    void currentMuteOwnershipDoesNotSearchBeforeIssuanceBoundary() {
+        long roleId = 789L;
+        List<JdaMuteRoleOwnership.Observation> observations = new ArrayList<>();
+        observations.add(roleObservation(
+                TARGET_ID + 1, BOT_ID + 1, "unrelated", ISSUED_AT.plusSeconds(1), roleId
+        ));
+        observations.add(roleObservation(
+                TARGET_ID,
+                BOT_ID,
+                JdaMuteRoleOwnership.marker(PUNISHMENT_ID) + " stale",
+                ISSUED_AT.minusSeconds(120),
+                roleId
+        ));
+
+        assertFalse(currentlyOwnedNewestFirst(observations, roleId));
+    }
+
+    private static List<JdaMuteRoleOwnership.Observation> unrelatedNewerObservations(long roleId, int count) {
+        List<JdaMuteRoleOwnership.Observation> observations = new ArrayList<>(count + 1);
+        for (int index = 0; index < count; index++) {
+            observations.add(roleObservation(
+                    TARGET_ID + index + 1,
+                    BOT_ID + 1,
+                    "unrelated",
+                    ISSUED_AT.plusSeconds(count - index + 10L),
+                    roleId
+            ));
+        }
+        return observations;
+    }
+
     private static boolean currentlyOwned(List<JdaMuteRoleOwnership.Observation> observations, long roleId) {
         return JdaMuteRoleOwnership.provesCurrentOwnership(
                 observations, PUNISHMENT_ID, TARGET_ID, BOT_ID, roleId, ISSUED_AT
+        );
+    }
+
+    private static boolean currentlyOwnedNewestFirst(
+            List<JdaMuteRoleOwnership.Observation> observations,
+            long roleId
+    ) {
+        return JdaMuteRoleOwnership.provesCurrentOwnershipNewestFirst(
+                observations.stream(), PUNISHMENT_ID, TARGET_ID, BOT_ID, roleId, ISSUED_AT
         );
     }
 
