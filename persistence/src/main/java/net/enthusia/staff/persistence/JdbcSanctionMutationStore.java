@@ -20,6 +20,8 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import javax.sql.DataSource;
+import net.enthusia.staff.domain.auth.StaffHierarchy;
+import net.enthusia.staff.domain.auth.StaffRank;
 import net.enthusia.staff.domain.ports.SanctionMutationStore;
 import net.enthusia.staff.domain.sanction.SanctionChangeAction;
 import net.enthusia.staff.domain.sanction.SanctionChangeRequest;
@@ -55,6 +57,11 @@ public final class JdbcSanctionMutationStore implements SanctionMutationStore {
                     connection.rollback();
                     return new SanctionChangeResult.Rejected("CASE_NOT_FOUND", "The case does not exist");
                 }
+                SanctionChangeResult.Rejected hierarchy = validateHierarchy(request, caseRow);
+                if (hierarchy != null) {
+                    connection.rollback();
+                    return hierarchy;
+                }
                 Instant now = clock.instant();
                 expireOverturnRequest(connection, request.caseId().value(), now);
                 SanctionChangeResult.Rejected stale = validateExpectation(connection, request, caseRow, now);
@@ -84,6 +91,19 @@ public final class JdbcSanctionMutationStore implements SanctionMutationStore {
         } catch (SQLException exception) {
             throw new ModerationPersistenceException("Unable to open sanction change transaction", exception);
         }
+    }
+
+    private static SanctionChangeResult.Rejected validateHierarchy(
+            SanctionChangeRequest request,
+            CaseRow caseRow
+    ) {
+        if (StaffHierarchy.mayMutate(request.actor().rank(), caseRow.issuerRank(), false)) {
+            return null;
+        }
+        return new SanctionChangeResult.Rejected(
+                "HIERARCHY_DENIED",
+                "The sanction was issued outside the actor's mutation hierarchy"
+        );
     }
 
     private Change applyChange(
@@ -399,7 +419,7 @@ public final class JdbcSanctionMutationStore implements SanctionMutationStore {
 
     private static CaseRow lockCase(Connection connection, String caseId) throws SQLException {
         try (PreparedStatement statement = connection.prepareStatement("""
-                SELECT target_id, state, revision FROM cases WHERE case_id = ? FOR UPDATE
+                SELECT target_id, state, revision, actor_rank FROM cases WHERE case_id = ? FOR UPDATE
                 """)) {
             statement.setString(1, caseId);
             try (ResultSet result = statement.executeQuery()) {
@@ -407,10 +427,25 @@ public final class JdbcSanctionMutationStore implements SanctionMutationStore {
                         ? new CaseRow(
                                 UuidBytes.fromBytes(result.getBytes("target_id")),
                                 result.getString("state"),
-                                result.getLong("revision")
+                                result.getLong("revision"),
+                                issuerRank(result.getString("actor_rank"))
                         )
                         : null;
             }
+        }
+    }
+
+    private static StaffRank issuerRank(String stored) {
+        if (stored == null || stored.isBlank()) {
+            return StaffRank.SYSTEM;
+        }
+        if (stored.equalsIgnoreCase("OWNER")) {
+            return StaffRank.FOUNDER;
+        }
+        try {
+            return StaffRank.valueOf(stored.toUpperCase(java.util.Locale.ROOT));
+        } catch (IllegalArgumentException exception) {
+            return StaffRank.SYSTEM;
         }
     }
 
@@ -557,7 +592,7 @@ public final class JdbcSanctionMutationStore implements SanctionMutationStore {
         }
     }
 
-    private record CaseRow(UUID targetId, String state, long revision) {
+    private record CaseRow(UUID targetId, String state, long revision, StaffRank issuerRank) {
     }
 
     private record Change(List<UUID> sanctionIds, SanctionChangeResult.Rejected rejection) {
