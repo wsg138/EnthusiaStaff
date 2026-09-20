@@ -8,6 +8,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
+import java.lang.reflect.Proxy;
 import java.nio.ByteBuffer;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -23,6 +26,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import javax.sql.DataSource;
 import net.enthusia.staff.common.security.ProtectedNetworkIdentity;
 import net.enthusia.staff.domain.alt.AltRelationshipState;
 import net.enthusia.staff.domain.alt.NetworkIdentityObservationResult;
@@ -161,6 +165,105 @@ class NetworkIdentityStoreIntegrationTest {
     }
 
     @Test
+    void stableOfflineSingleNewAccountStillInheritsExactlyOnce() throws SQLException {
+        Instant now = Instant.parse("2026-08-07T15:15:00Z");
+        AltInheritanceFixture fixture = automaticInheritanceFixture(now, (byte) 21, "ALTCASE000000021");
+
+        NetworkIdentityObservationResult first = store().observeAndInherit(
+                fixture.joining(), fixture.identity(), now, false
+        );
+        NetworkIdentityObservationResult retry = store().observeAndInherit(
+                fixture.joining(), fixture.identity(), now.plusSeconds(1), false
+        );
+
+        assertEquals(1, first.inheritedSanctions());
+        assertEquals(0, retry.inheritedSanctions());
+        assertEquals(1, inheritedSanctionCount(fixture.joining(), fixture.sourceSanction()));
+    }
+
+    @Test
+    void concurrentSourceLoginAfterMatchDiscoveryPreventsAutomaticInheritance() throws Exception {
+        Instant now = Instant.parse("2026-08-07T15:30:00Z");
+        AltInheritanceFixture fixture = automaticInheritanceFixture(now, (byte) 22, "ALTCASE000000022");
+        CountDownLatch matched = new CountDownLatch(1);
+        CountDownLatch resume = new CountDownLatch(1);
+        JdbcNetworkIdentityStore paused = pausedMatchStore(matched, resume);
+        ExecutorService executor = Executors.newSingleThreadExecutor();
+        try {
+            Future<NetworkIdentityObservationResult> observation = executor.submit(() -> paused.observeAndInherit(
+                    fixture.joining(), fixture.identity(), now, false
+            ));
+            assertTrue(matched.await(10, TimeUnit.SECONDS));
+            setCurrentServer(fixture.source(), "SMP");
+            resume.countDown();
+
+            NetworkIdentityObservationResult result = observation.get(20, TimeUnit.SECONDS);
+            assertEquals(0, result.inheritedSanctions());
+            assertEquals(AltRelationshipState.LOW_CONFIDENCE,
+                    relationshipState(fixture.source(), fixture.joining()));
+            assertEquals(1, evidenceCount(fixture.source(), fixture.joining(), "SIMULTANEOUS_PLAY"));
+            assertEquals(0, inheritedSanctionCount(fixture.joining(), fixture.sourceSanction()));
+        } finally {
+            resume.countDown();
+            executor.shutdownNow();
+        }
+    }
+
+    @Test
+    void concurrentSourceLogoutDoesNotUpgradeTransientSimultaneousPlayToAutomaticInheritance() throws Exception {
+        Instant now = Instant.parse("2026-08-07T15:45:00Z");
+        AltInheritanceFixture fixture = automaticInheritanceFixture(now, (byte) 23, "ALTCASE000000023");
+        setCurrentServer(fixture.source(), "SMP");
+        CountDownLatch matched = new CountDownLatch(1);
+        CountDownLatch resume = new CountDownLatch(1);
+        JdbcNetworkIdentityStore paused = pausedMatchStore(matched, resume);
+        ExecutorService executor = Executors.newSingleThreadExecutor();
+        try {
+            Future<NetworkIdentityObservationResult> observation = executor.submit(() -> paused.observeAndInherit(
+                    fixture.joining(), fixture.identity(), now, false
+            ));
+            assertTrue(matched.await(10, TimeUnit.SECONDS));
+            clearCurrentServer(fixture.source());
+            resume.countDown();
+
+            NetworkIdentityObservationResult result = observation.get(20, TimeUnit.SECONDS);
+            assertEquals(0, result.inheritedSanctions());
+            assertEquals(AltRelationshipState.LOW_CONFIDENCE,
+                    relationshipState(fixture.source(), fixture.joining()));
+            assertEquals(1, evidenceCount(fixture.source(), fixture.joining(), "SIMULTANEOUS_PLAY"));
+        } finally {
+            resume.countDown();
+            executor.shutdownNow();
+        }
+    }
+
+    @Test
+    void oppositeDirectionObservationsUseOneDeterministicPlayerLockOrder() throws Exception {
+        Instant now = Instant.parse("2026-08-07T15:50:00Z");
+        UUID first = UUID.fromString("00000000-0000-0000-0000-000000000010");
+        UUID second = UUID.fromString("00000000-0000-0000-0000-000000000020");
+        ProtectedNetworkIdentity identity = identity(1, (byte) 24);
+        MariaDbIntegrationSupport.insertPlayer(DATABASE, first, "FirstLock", now.minusSeconds(60));
+        MariaDbIntegrationSupport.insertPlayer(DATABASE, second, "SecondLock", now.minusSeconds(60));
+        insertToken(first, identity, now.minusSeconds(10));
+        insertToken(second, identity, now.minusSeconds(10));
+        CountDownLatch start = new CountDownLatch(1);
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        try {
+            Future<?> firstObservation = executor.submit(() -> observeAfter(start, first, identity, now));
+            Future<?> secondObservation = executor.submit(() -> observeAfter(start, second, identity, now));
+            start.countDown();
+            firstObservation.get(20, TimeUnit.SECONDS);
+            secondObservation.get(20, TimeUnit.SECONDS);
+        } finally {
+            executor.shutdownNow();
+        }
+
+        assertEquals(1, relationshipCount(first));
+        assertEquals(1, evidenceCount(first, second, "SAME_NETWORK"));
+    }
+
+    @Test
     void broadSharedNetworkSuppressesAutomaticGraphExpansion() throws SQLException {
         Instant now = Instant.parse("2026-08-07T16:00:00Z");
         ProtectedNetworkIdentity identity = identity(1, (byte) 13);
@@ -283,6 +386,115 @@ class NetworkIdentityStoreIntegrationTest {
         return new JdbcNetworkIdentityStore(dataSource, new ObjectMapper());
     }
 
+    private JdbcNetworkIdentityStore pausedMatchStore(CountDownLatch matched, CountDownLatch resume) {
+        return new JdbcNetworkIdentityStore(pausingMatchDataSource(matched, resume), new ObjectMapper());
+    }
+
+    private AltInheritanceFixture automaticInheritanceFixture(Instant now, byte token, String caseId)
+            throws SQLException {
+        UUID actor = UUID.randomUUID();
+        UUID source = UUID.randomUUID();
+        UUID joining = UUID.randomUUID();
+        UUID sourceSanction = UUID.randomUUID();
+        MariaDbIntegrationSupport.insertPlayer(DATABASE, actor, "AutoAdmin", now.minusSeconds(90));
+        MariaDbIntegrationSupport.insertPlayer(DATABASE, source, SOURCE_NAME, now.minusSeconds(60));
+        MariaDbIntegrationSupport.insertPlayer(DATABASE, joining, JOINING_NAME, now.minusSeconds(10));
+        MariaDbIntegrationSupport.insertCase(DATABASE, caseId, source, actor, now.minusSeconds(45));
+        MariaDbIntegrationSupport.insertSanction(
+                DATABASE, sourceSanction, caseId, source, "BAN", "ACTIVE",
+                now.minusSeconds(40), now.plus(Duration.ofDays(2))
+        );
+        ProtectedNetworkIdentity identity = identity(1, token);
+        insertToken(source, identity, now.minusSeconds(30));
+        insertCutover(actor, now.minusSeconds(20));
+        return new AltInheritanceFixture(source, joining, sourceSanction, identity);
+    }
+
+    private NetworkIdentityObservationResult observeAfter(
+            CountDownLatch start,
+            UUID playerId,
+            ProtectedNetworkIdentity identity,
+            Instant observedAt
+    ) throws Exception {
+        start.await();
+        return store().observeAndInherit(playerId, identity, observedAt, false);
+    }
+
+    private DataSource pausingMatchDataSource(CountDownLatch matched, CountDownLatch resume) {
+        return (DataSource) Proxy.newProxyInstance(
+                getClass().getClassLoader(),
+                new Class<?>[]{DataSource.class},
+                (proxy, method, args) -> {
+                    Object value = invoke(method, dataSource, args);
+                    if ("getConnection".equals(method.getName())) {
+                        return pausingConnection((Connection) value, matched, resume);
+                    }
+                    return value;
+                }
+        );
+    }
+
+    private Connection pausingConnection(Connection connection, CountDownLatch matched, CountDownLatch resume) {
+        return (Connection) Proxy.newProxyInstance(
+                getClass().getClassLoader(),
+                new Class<?>[]{Connection.class},
+                (proxy, method, args) -> {
+                    Object value = invoke(method, connection, args);
+                    if (isMatchQuery(method, args)) {
+                        return pausingStatement((PreparedStatement) value, matched, resume);
+                    }
+                    return value;
+                }
+        );
+    }
+
+    private static boolean isMatchQuery(Method method, Object[] args) {
+        return "prepareStatement".equals(method.getName())
+                && args != null
+                && args.length > 0
+                && args[0] instanceof String sql
+                && sql.contains("FROM network_identity_tokens n")
+                && sql.contains("JOIN players p");
+    }
+
+    private PreparedStatement pausingStatement(
+            PreparedStatement statement,
+            CountDownLatch matched,
+            CountDownLatch resume
+    ) {
+        return (PreparedStatement) Proxy.newProxyInstance(
+                getClass().getClassLoader(),
+                new Class<?>[]{PreparedStatement.class},
+                (proxy, method, args) -> {
+                    Object value = invoke(method, statement, args);
+                    if ("executeQuery".equals(method.getName()) && (args == null || args.length == 0)) {
+                        matched.countDown();
+                        awaitResume(resume);
+                    }
+                    return value;
+                }
+        );
+    }
+
+    private static Object invoke(Method method, Object target, Object[] args) throws Throwable {
+        try {
+            return method.invoke(target, args);
+        } catch (InvocationTargetException exception) {
+            throw exception.getCause();
+        }
+    }
+
+    private static void awaitResume(CountDownLatch resume) throws SQLException {
+        try {
+            if (!resume.await(10, TimeUnit.SECONDS)) {
+                throw new SQLException("Timed out waiting to resume network identity match query");
+            }
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+            throw new SQLException("Interrupted while waiting to resume network identity match query", exception);
+        }
+    }
+
     private static ProtectedNetworkIdentity identity(int keyVersion, byte value) {
         byte[] token = new byte[32];
         byte[] encrypted = new byte[32];
@@ -311,6 +523,21 @@ class NetworkIdentityStoreIntegrationTest {
         }
     }
 
+    private void insertCutover(UUID actorId, Instant authorizedAt) throws SQLException {
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement("""
+                     INSERT INTO cutover_records(
+                         cutover_id, assessment_json, blockers_json, founder_override_used,
+                         authorized_by, authorized_at
+                     ) VALUES (?, '{}', '[]', FALSE, ?, ?)
+                     """)) {
+            statement.setBytes(1, MariaDbIntegrationSupport.uuidBytes(UUID.randomUUID()));
+            statement.setBytes(2, MariaDbIntegrationSupport.uuidBytes(actorId));
+            statement.setTimestamp(3, Timestamp.from(authorizedAt));
+            statement.executeUpdate();
+        }
+    }
+
     private void insertOldEvidence(UUID first, UUID second, Instant observedAt) throws SQLException {
         try (Connection connection = dataSource.getConnection();
              PreparedStatement statement = connection.prepareStatement("""
@@ -331,6 +558,15 @@ class NetworkIdentityStoreIntegrationTest {
                      "UPDATE players SET current_server = ? WHERE player_id = ?")) {
             statement.setString(1, serverId);
             statement.setBytes(2, MariaDbIntegrationSupport.uuidBytes(playerId));
+            assertEquals(1, statement.executeUpdate());
+        }
+    }
+
+    private void clearCurrentServer(UUID playerId) throws SQLException {
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement(
+                     "UPDATE players SET current_server = NULL WHERE player_id = ?")) {
+            statement.setBytes(1, MariaDbIntegrationSupport.uuidBytes(playerId));
             assertEquals(1, statement.executeUpdate());
         }
     }
@@ -450,6 +686,7 @@ class NetworkIdentityStoreIntegrationTest {
         try (Connection connection = dataSource.getConnection();
              java.sql.Statement statement = connection.createStatement()) {
             statement.executeUpdate("DELETE FROM staff_alerts");
+            statement.executeUpdate("DELETE FROM cutover_records");
             statement.executeUpdate("DELETE FROM discord_outbox");
             statement.executeUpdate("DELETE FROM network_outbox");
             statement.executeUpdate("DELETE FROM sanction_events");
@@ -463,6 +700,14 @@ class NetworkIdentityStoreIntegrationTest {
             statement.executeUpdate("DELETE FROM player_names");
             statement.executeUpdate("DELETE FROM players");
         }
+    }
+
+    private record AltInheritanceFixture(
+            UUID source,
+            UUID joining,
+            UUID sourceSanction,
+            ProtectedNetworkIdentity identity
+    ) {
     }
 
     private static HikariDataSource dataSource() {
