@@ -46,6 +46,9 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 class NetworkIdentityStoreIntegrationTest {
     private static final String SOURCE_NAME = "Source";
     private static final String JOINING_NAME = "Joining";
+    private static final String GET_CONNECTION_METHOD = "getConnection";
+    private static final String EXECUTE_QUERY_METHOD = "executeQuery";
+    private static final int NO_ARGUMENTS = 0;
 
     @Container
     private static final MariaDBContainer<?> DATABASE = new MariaDBContainer<>("mariadb:11.8.3")
@@ -422,11 +425,11 @@ class NetworkIdentityStoreIntegrationTest {
 
     private DataSource pausingMatchDataSource(CountDownLatch matched, CountDownLatch resume) {
         return (DataSource) Proxy.newProxyInstance(
-                getClass().getClassLoader(),
+                Thread.currentThread().getContextClassLoader(),
                 new Class<?>[]{DataSource.class},
                 (proxy, method, args) -> {
                     Object value = invoke(method, dataSource, args);
-                    if ("getConnection".equals(method.getName())) {
+                    if (GET_CONNECTION_METHOD.equals(method.getName())) {
                         return pausingConnection((Connection) value, matched, resume);
                     }
                     return value;
@@ -436,7 +439,7 @@ class NetworkIdentityStoreIntegrationTest {
 
     private Connection pausingConnection(Connection connection, CountDownLatch matched, CountDownLatch resume) {
         return (Connection) Proxy.newProxyInstance(
-                getClass().getClassLoader(),
+                Thread.currentThread().getContextClassLoader(),
                 new Class<?>[]{Connection.class},
                 (proxy, method, args) -> {
                     Object value = invoke(method, connection, args);
@@ -463,11 +466,12 @@ class NetworkIdentityStoreIntegrationTest {
             CountDownLatch resume
     ) {
         return (PreparedStatement) Proxy.newProxyInstance(
-                getClass().getClassLoader(),
+                Thread.currentThread().getContextClassLoader(),
                 new Class<?>[]{PreparedStatement.class},
                 (proxy, method, args) -> {
                     Object value = invoke(method, statement, args);
-                    if ("executeQuery".equals(method.getName()) && (args == null || args.length == 0)) {
+                    if (EXECUTE_QUERY_METHOD.equals(method.getName())
+                            && (args == null || args.length == NO_ARGUMENTS)) {
                         matched.countDown();
                         awaitResume(resume);
                     }

@@ -42,6 +42,9 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 
 @Testcontainers
 class NetworkIdentityStoreFailureIntegrationTest {
+    private static final String GET_CONNECTION_METHOD = "getConnection";
+    private static final String EXECUTE_UPDATE_METHOD = "executeUpdate";
+    private static final int NO_ARGUMENTS = 0;
     @Container
     private static final MariaDBContainer<?> DATABASE = new MariaDBContainer<>("mariadb:11.8.3")
             .withDatabaseName("enthusia_staff_identity_failure_test")
@@ -153,11 +156,11 @@ class NetworkIdentityStoreFailureIntegrationTest {
     private DataSource failingInheritedEventDataSource() {
         AtomicBoolean failed = new AtomicBoolean();
         return (DataSource) Proxy.newProxyInstance(
-                getClass().getClassLoader(),
+                Thread.currentThread().getContextClassLoader(),
                 new Class<?>[]{DataSource.class},
                 (proxy, method, args) -> {
                     Object value = invoke(method, dataSource, args);
-                    if ("getConnection".equals(method.getName())) {
+                    if (GET_CONNECTION_METHOD.equals(method.getName())) {
                         return failingInheritedEventConnection((Connection) value, failed);
                     }
                     return value;
@@ -167,7 +170,7 @@ class NetworkIdentityStoreFailureIntegrationTest {
 
     private Connection failingInheritedEventConnection(Connection connection, AtomicBoolean failed) {
         return (Connection) Proxy.newProxyInstance(
-                getClass().getClassLoader(),
+                Thread.currentThread().getContextClassLoader(),
                 new Class<?>[]{Connection.class},
                 (proxy, method, args) -> {
                     Object value = invoke(method, connection, args);
@@ -190,11 +193,11 @@ class NetworkIdentityStoreFailureIntegrationTest {
 
     private PreparedStatement failingInheritedEventStatement(PreparedStatement statement, AtomicBoolean failed) {
         return (PreparedStatement) Proxy.newProxyInstance(
-                getClass().getClassLoader(),
+                Thread.currentThread().getContextClassLoader(),
                 new Class<?>[]{PreparedStatement.class},
                 (proxy, method, args) -> {
-                    if ("executeUpdate".equals(method.getName())
-                            && (args == null || args.length == 0)
+                    if (EXECUTE_UPDATE_METHOD.equals(method.getName())
+                            && (args == null || args.length == NO_ARGUMENTS)
                             && failed.compareAndSet(false, true)) {
                         throw new SQLException("Synthetic transient inherited-event failure");
                     }
@@ -333,20 +336,25 @@ class NetworkIdentityStoreFailureIntegrationTest {
     }
 
     private int inheritedEventCount() throws SQLException {
-        return count("SELECT COUNT(*) FROM sanction_events WHERE event_type = 'INHERITED'");
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement(
+                     "SELECT COUNT(*) FROM sanction_events WHERE event_type = 'INHERITED'")) {
+            return readCount(statement);
+        }
     }
 
     private int networkOutboxCount() throws SQLException {
-        return count("SELECT COUNT(*) FROM network_outbox WHERE message_type = 'SANCTION_CHANGED'");
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement(
+                     "SELECT COUNT(*) FROM network_outbox WHERE message_type = 'SANCTION_CHANGED'")) {
+            return readCount(statement);
+        }
     }
 
     private int discordOutboxCount() throws SQLException {
-        return count("SELECT COUNT(*) FROM discord_outbox WHERE event_type = 'SANCTION_INHERITED'");
-    }
-
-    private int count(String sql) throws SQLException {
         try (Connection connection = dataSource.getConnection();
-             PreparedStatement statement = connection.prepareStatement(sql)) {
+             PreparedStatement statement = connection.prepareStatement(
+                     "SELECT COUNT(*) FROM discord_outbox WHERE event_type = 'SANCTION_INHERITED'")) {
             return readCount(statement);
         }
     }
