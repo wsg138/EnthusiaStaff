@@ -30,7 +30,7 @@ runs:
         repositories: EnthusiaStaff-Staging
         permission-actions: write
 
-    - name: Export staging token for the current job
+    - name: Validate minted staging token
       shell: bash
       env:
         TOKEN: ${{ steps.app-token.outputs.token }}
@@ -41,4 +41,3 @@ runs:
           exit 1
         }
         echo "::add-mask::$TOKEN"
-        printf 'STAGING_TOKEN=%s\n' "$TOKEN" >> "$GITHUB_ENV"
