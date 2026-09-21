@@ -29,3 +29,16 @@ runs:
         owner: wsg138
         repositories: EnthusiaStaff-Staging
         permission-actions: write
+
+    - name: Export staging token for the current job
+      shell: bash
+      env:
+        TOKEN: ${{ steps.app-token.outputs.token }}
+      run: |
+        set -Eeuo pipefail
+        [[ -n "$TOKEN" ]] || {
+          echo '::error::GitHub App token minting returned an empty token.'
+          exit 1
+        }
+        echo "::add-mask::$TOKEN"
+        printf 'STAGING_TOKEN=%s\n' "$TOKEN" >> "$GITHUB_ENV"
