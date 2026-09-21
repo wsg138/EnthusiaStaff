@@ -6,7 +6,7 @@
 ## 2. Status
 `PARKED_BLOCKED`.
 
-Frozen executable product head: `12bfd267a2d9d2dd3709060300efd6d2bc3a220b`. Any later commit that only records package/handoff state does not supersede this executable candidate.
+Frozen executable/validation candidate: `991315dbe3f90c3a46842ca63a8ae6a76a716572`. The executable production tree is unchanged from the previously validated `12bfd267a2d9d2dd3709060300efd6d2bc3a220b`; commits after that point contain package-state documentation and a test-only Codacy remediation.
 
 ## 3. Objective
 Remove stale-target behavior from the random staff teleport tool before hands-on test-server validation begins.
@@ -23,7 +23,7 @@ On 2026-09-20 the owner explicitly authorized creation of review/bug-finding/fix
 Enumerate only player references globally, then read candidate identity/state on each target entity scheduler; revalidate the selected target on its entity scheduler immediately before actor teleport orchestration; reject targets that became staff-mode, vanished, frozen, exempt, dead, sleeping, mounted, spectator, or located in a disabled world; retry another candidate when a selected target becomes invalid/offline; capture the live location only after successful revalidation; preserve actor authorization revalidation and asynchronous teleport failure handling.
 
 ## 7. Explicit exclusions
-No X03/D08/D09/D13 files, migrations, Discord behavior, provider integration, staff-mode persistence redesign, production deployment, authority change, or cutover.
+No X03/D08/D09/D13 files, migrations, Discord behavior, provider integration, staff-mode persistence redesign, production deployment, authority change, cutover, or issue #216 finding.
 
 ## 8. Dependencies
 `ES-P04` is `COMPLETE`. Owner authorization on 2026-09-20 permits this independent test-hardening repair.
@@ -35,30 +35,31 @@ Only `wsg138/EnthusiaStaff`; product changes are limited to `paper/.../staff/Sta
 `package/es-t01-staff-teleport-hardening` from exact start `c1054da6a8f89b312df2e05e25edc958fceda7ef`.
 
 ## 11. Required PRs
-One normal-merge PR to `EnthusiaStaff:main`.
+One normal-merge PR to `EnthusiaStaff:main`: PR #215.
 
 ## 12. Implementation checklist
 - [x] Reconcile live `main`, open PRs, migrations, parked packages, and collision paths.
-- [x] Confirm no active package owns `paper/.../staff/StaffToolRandomTeleportService.java` or `StaffToolTargetPolicyTest.java`.
-- [x] Create package branch from exact live `main`.
+- [x] Confirm no active package owned the random-teleport production/test paths at implementation time.
 - [x] Implement execution-time target revalidation and fallback retry.
-- [x] Add focused state-change regression coverage.
-- [x] Run focused Java 21 tests and changed-code analyzers locally.
-- [x] Open draft PR #215 for the product checkpoint.
-- [x] Run executable exact-head Coverage and Sentinel validation on frozen product head `12bfd267a2d9d2dd3709060300efd6d2bc3a220b`.
-- [ ] Resolve the one Codacy Performance finding after its individual rule/path/line evidence becomes available.
-- [ ] Obtain a successful canonical Pi private-staging result after the staging credential is repaired.
-- [ ] Harsh-review final diff and resolve every valid finding.
-- [ ] Merge normally, verify containment, publish terminal state, clean branch when safe.
+- [x] Move candidate identity/state reads onto each target entity scheduler.
+- [x] Add focused success/rejection/retry/retirement/reconnect/authorization/teleport-failure coverage.
+- [x] Run focused Java 21 tests and full applicable Paper tests.
+- [x] Run changed-code complexity/method-length checks and `git diff --check`.
+- [x] Open and continue PR #215 only.
+- [x] Clear the hosted Codacy finding without suppression.
+- [x] Run exact-head Coverage and Sentinel Artifact validation on `991315dbe3f90c3a46842ca63a8ae6a76a716572`.
+- [ ] Restore the approved canonical staging credential.
+- [ ] After credential repair, reconcile current `main` normally, freeze the resulting head, rerun every invalidated exact-head gate, and run canonical Pi exactly once.
+- [ ] Merge normally only after every package-required gate is terminal green, then verify containment and publish `COMPLETE`.
 
 ## 13. Acceptance criteria
 A target that was eligible during collection but is invalid at final selection is not teleported to; another candidate is tried when available; the selected target location is captured only after final revalidation; actor authorization is still checked before teleport; no active package work is overwritten.
 
 ## 14. Test requirements
-Focused `:paper:test` coverage including target-policy state changes; full applicable Java 21 repository validation on the exact final executable PR head; `git diff --check`; changed-code complexity/method-length checks. Sentinel and canonical Pi are package-required under the reconciled validation policy for this runtime-sensitive change.
+Focused `:paper:test` coverage including target-policy state changes; full applicable Java 21 repository validation on the exact final executable PR head; `git diff --check`; changed-code complexity/method-length checks. Sentinel and canonical Pi remain package-required under the reconciled validation policy for this runtime-sensitive change.
 
 ## 15. Static-analysis requirements
-Zero new valid Codacy/PMD findings in changed code. No broad suppressions. The current Codacy check exposes only an aggregate one-new-issue summary (`Performance`, `MEDIUM`) through the available GitHub evidence surface; the individual rule/path/line is not exposed. Per repository policy, that finding is not being guessed at, silently accepted, or broadly suppressed. Its validity remains unresolved until the individual evidence can be inspected.
+Zero new valid Codacy/PMD findings in changed code. No broad suppressions. The former single `MEDIUM` Performance finding was validly remediated in test code by moving loop-local `Harness` construction into per-case helper methods and hoisting the repeated behavior list. Hosted Codacy Static Code Analysis check `106544003807` on `991315dbe3f90c3a46842ca63a8ae6a76a716572` is `SUCCESS` with zero annotations; the PR summary reports `0` new issues. Codacy Diff Coverage `106546409672` and Coverage Variation `106546409662` are also `SUCCESS`.
 
 ## 16. Documentation requirements
 Registry, workspace state, package handoff, latest handoff, PR evidence, and terminal state.
@@ -67,7 +68,7 @@ Registry, workspace state, package handoff, latest handoff, PR evidence, and ter
 No private player data, production data, credentials, raw logs, or secrets.
 
 ## 18. Migration impact
-None. Live `main` remains through V20; X03 owns branch-local V21 and D09 owns V22.
+None. At this checkpoint no ES-T01 migration exists or is owned.
 
 ## 19. Bedrock considerations
 No protocol-specific UI change; target eligibility remains based on server-side player state and permissions for Java and Bedrock players alike.
@@ -79,28 +80,46 @@ All mutable target reads occur on the target entity scheduler; actor authorizati
 None.
 
 ## 22. Completion definition
-One normal-merge PR; focused and full applicable tests green on exact executable head; zero valid unresolved review/static findings; canonical Pi private staging green; merge containment verified; canonical state published.
+One normal-merge PR; focused and full applicable tests green on the final executable head; zero valid unresolved review/static findings; canonical Pi private staging green; merge containment verified; canonical state published.
 
 ## 23. Resume state
-Worker: automatic owner-authorized testing-hardening worker. Branch: `package/es-t01-staff-teleport-hardening`. PR: #215. Initial product checkpoint `d69b48a8088c8562b6d0a6ccd39a005f95266e4a` was superseded by the same-package Folia-safety follow-up. Frozen executable product candidate: `12bfd267a2d9d2dd3709060300efd6d2bc3a220b`. Start `main`: `c1054da6a8f89b312df2e05e25edc958fceda7ef`.
+Branch: `package/es-t01-staff-teleport-hardening`. PR: #215. Frozen executable/validation candidate: `991315dbe3f90c3a46842ca63a8ae6a76a716572`. Start `main`: `c1054da6a8f89b312df2e05e25edc958fceda7ef`.
+
+The production implementation remains the one already validated at `12bfd267a2d9d2dd3709060300efd6d2bc3a220b`. Between that commit and `991315d...`, GitHub compare shows only this package/handoff documentation plus `StaffToolRandomTeleportServiceTest.java`; no production Java changed.
 
 ## 24. Last completed checkpoint
-The stale-target defect and same-service Folia issue were repaired. Java 21.0.6 focused tests and full `:paper:test` pass; Lizard reports zero threshold violations at CCN <= 8, method length <= 50, and arguments <= 8; `git diff --check` passes. On frozen executable head `12bfd267a2d9d2dd3709060300efd6d2bc3a220b`, hosted Coverage run `35640745316` succeeded, Sentinel Restart Artifact run `35640745025` succeeded, and live Sentinel restart job `506` passed with `PAPER_RESTART_OK`.
+The stale-target and Folia ownership defects are repaired. Local Java 21 focused tests and full `:paper:test` passed; changed production code stayed within the practical complexity/method bounds and `git diff --check` passed.
+
+Exact hosted evidence for `991315dbe3f90c3a46842ca63a8ae6a76a716572`:
+- Coverage run `35663450629`: `SUCCESS`.
+- Sentinel Restart Artifact run `35663450669`: `SUCCESS`.
+- Codacy Static Code Analysis `106544003807`: `SUCCESS`, zero annotations / zero new issues.
+- Codacy Diff Coverage `106546409672`: `SUCCESS`, `78.9%` diff coverage.
+- Codacy Coverage Variation `106546409662`: `SUCCESS`, `+0.18%` variation.
+- Review threads: none.
+
+The prior live Sentinel job `506` passed on executable head `12bfd267a2d9d2dd3709060300efd6d2bc3a220b` with `PAPER_RESTART_OK`. A fresh restart command (`5768485647`) and status query (`5768569846`) were issued after the test-only Codacy repair, but the Sentinel bot has not published a new result. This is not represented as a fresh exact-SHA pass. Hosted artifact comparison provides supporting executable-equivalence evidence: the Paper JARs built from `12bfd267...` and `991315d...` contain the same 4,641 unpacked runtime files with zero byte-content differences; only archive/build metadata changes the container hashes.
 
 ## 25. Remaining checklist
-Inspect and individually disposition the exact Codacy finding; if a product fix is required, rerun every gate invalidated by the new product head. Repair the staging credential and then run canonical Pi exactly once on the frozen/current executable candidate, requiring an actual successful private staging result. Only after both blockers clear may normal merge and terminal publication proceed.
+The Codacy blocker is cleared. The remaining package blocker is the canonical staging credential. After it is legitimately repaired, reconcile the then-current `main` into this branch with a normal merge (never rebase/squash/force-push), rerun every exact-head gate invalidated by that reconciliation, run canonical Pi exactly once on the final frozen candidate, require an actual successful private staging result plus cleanup, then perform final reconciliation and normal merge.
+
+Current `main` at this state publication has advanced to `4ffab626f4f044ef03adcf2d41c25690e1bdaa71` via PR #223. ES-T01 is intentionally not churning its blocked branch merely to absorb moving `main`; that reconciliation belongs immediately after the external credential prerequisite is restored and before final validation/merge.
 
 ## 26. Known blockers
-1. **Codacy evidence blocker.** Check run `106469630650` reports one new `MEDIUM` `Performance` issue, but the available GitHub check/PR evidence exposes no individual rule, path, or line and the Codacy issue surface is unavailable through the authorized connector. Repository policy requires individual evidence before a fix or false-positive suppression. No speculative product edit or broad exclusion has been made. Exact unblock: expose/export the individual Codacy finding (rule, path, line/message) or restore an authorized analyzer/evidence surface, then classify it; narrowly fix it if valid or document that exact finding if false.
-2. **Canonical Pi staging credential blocker.** Exact-head run `35641111973` built the exact Paper runtime successfully, then failed before private dispatch while revalidating/superseding staging because access to `wsg138/EnthusiaStaff-Staging` returned `HTTP 401: Bad credentials`. The private staging run never occurred, so this is not a product failure and not a staging pass. Fresh repository-wide evidence at 2026-09-21 20:21 UTC still shows the staging credential failing with the same HTTP 401 in Pi Staging Supersession run `35650514529`; therefore ES-T01 staging was not rerun. Exact unblock: repair/rotate `ENTHUSIASTAFF_STAGING_TOKEN`/the staging token used by the workflows so it can authenticate to `wsg138/EnthusiaStaff-Staging` with the required Actions access, then run canonical Pi exactly once and require a real successful private result plus cleanup.
+1. **Canonical Pi staging credential blocker.** Original ES-T01 run `35641111973` built the exact Paper runtime successfully, then failed before private dispatch because access to `wsg138/EnthusiaStaff-Staging` returned `HTTP 401: Bad credentials`; no private staging run occurred.
+2. The condition remains current. Pi Staging Supersession run `35663448866` on `991315dbe3f90c3a46842ca63a8ae6a76a716572` again failed while using `STAGING_TOKEN` with `HTTP 401: Bad credentials` before any private staging execution.
+
+Exact unblock: the staging owner must rotate or replace `ENTHUSIASTAFF_STAGING_TOKEN` with the approved least-privilege automation credential that can read Actions workflow history and dispatch the required private workflow in `wsg138/EnthusiaStaff-Staging`. Repository policy explicitly forbids substituting a personal credential or bypassing the public bridge. The GitHub connector available to this worker does not expose Actions-secret mutation APIs, so this credential cannot be repaired from this worker session.
 
 ## 27. Final evidence
-Frozen executable product head `12bfd267a2d9d2dd3709060300efd6d2bc3a220b`:
-- Coverage `35640745316`: `SUCCESS`.
-- Sentinel Restart Artifact `35640745025`: `SUCCESS`.
-- live Sentinel restart job `506`: `PASSED` / `PAPER_RESTART_OK`.
-- Codacy check `106469630650`: unresolved one-new-issue aggregate (`Performance`, `MEDIUM`); individual evidence unavailable, so zero-new-valid is not yet established.
-- Canonical Pi `35641111973`: `FAILURE` before private dispatch due `HTTP 401: Bad credentials`; exact runtime build succeeded; no private staging result exists.
+Frozen executable/validation candidate `991315dbe3f90c3a46842ca63a8ae6a76a716572`:
+- Coverage `35663450629`: `SUCCESS`.
+- Sentinel Restart Artifact `35663450669`: `SUCCESS`.
+- Codacy Static `106544003807`: `SUCCESS`, zero annotations.
+- Codacy diff/variation checks: `SUCCESS`.
+- PR review threads: zero.
+- Prior unchanged-runtime live Sentinel: job `506`, `PASSED` / `PAPER_RESTART_OK` at `12bfd267...`; no fresh bot result is claimed for `991315d...`.
+- Canonical Pi: not rerun because the required credential is still demonstrably invalid; fresh supersession `35663448866` proves the same 401 condition remains.
 
 ## 28. Merge and synchronization record
-`BLOCKED`; PR #215 remains open and must not merge while either blocker remains. Internal package; external parity is not applicable. Because the owner explicitly prohibited creation of another branch/package/PR for this continuation, this parked-state record is kept on the existing ES-T01 branch/PR rather than opening a separate state-publication PR.
+`BLOCKED`; PR #215 remains open and must not merge while the canonical Pi credential prerequisite remains unresolved. No direct-main push, rebase, squash, force-push, auto-merge, replacement branch/package/PR, or issue #216 finding was used.
