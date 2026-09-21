@@ -1,0 +1,54 @@
+name: ES-F01003 Exact Local Gates
+
+on:
+  push:
+    branches:
+      - package/es-f01003-spectate-exempt-revalidation
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Validate frozen R01-003 head
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out exact frozen product head
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: 056ff4693ddd925fc1aed64c7a6611043bc6b8f0
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Bind exact source and current main
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          test "$(git rev-parse HEAD)" = "056ff4693ddd925fc1aed64c7a6611043bc6b8f0"
+          git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+          printf 'validated_head=%s\n' "$(git rev-parse HEAD)"
+          printf 'current_main=%s\n' "$(git rev-parse origin/main)"
+
+      - name: Check exact diff whitespace
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          git diff --check origin/main...HEAD
+
+      - name: Install exact Lizard version
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python3 -m pip install --disable-pip-version-check --quiet 'lizard==1.23.0'
+          lizard --version
+
+      - name: Check changed Java complexity bounds
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          mapfile -t files < <(git diff --name-only origin/main...HEAD -- '*.java' | awk 'NF' | sort -u)
+          ((${#files[@]} > 0))
+          printf 'Checking %d changed Java files:\n' "${#files[@]}"
+          printf '  %s\n' "${files[@]}"
+          lizard -l java -C 8 -L 50 -a 8 -w "${files[@]}"
