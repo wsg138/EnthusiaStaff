@@ -6,7 +6,6 @@ import java.time.Instant;
 import java.time.format.DateTimeParseException;
 import java.util.List;
 import java.util.Locale;
-import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -30,6 +29,7 @@ import net.enthusia.staff.domain.sanction.SanctionChangeAction;
 import net.enthusia.staff.domain.sanction.SanctionChangeRequest;
 import net.enthusia.staff.domain.sanction.SanctionChangeResult;
 import net.enthusia.staff.paper.auth.PaperActorResolver;
+import net.enthusia.staff.paper.gui.ViewerInputCaptureRegistry;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 import org.bukkit.entity.Player;
@@ -53,7 +53,7 @@ public final class SanctionChangeGuiController implements Listener {
     private final ExecutorService workers;
     private final SanctionChangeGuiCatalog catalog;
     private final SanctionChangeGuiRenderer renderer;
-    private final Map<UUID, InputCapture> inputCaptures = new ConcurrentHashMap<>();
+    private final ViewerInputCaptureRegistry<InputCapture> inputCaptures = new ViewerInputCaptureRegistry<>();
     private final Set<UUID> confirmations = ConcurrentHashMap.newKeySet();
 
     public SanctionChangeGuiController(
@@ -89,6 +89,7 @@ public final class SanctionChangeGuiController implements Listener {
         if (actor == null) {
             return;
         }
+        inputCaptures.invalidate(viewer.getUniqueId());
         String normalizedCommand = commandName.toLowerCase(Locale.ROOT);
         submit(viewer, () -> resolveAndOpen(viewer, targetQuery, normalizedCommand));
     }
@@ -132,19 +133,23 @@ public final class SanctionChangeGuiController implements Listener {
     @EventHandler(priority = EventPriority.HIGHEST)
     public void onChat(AsyncChatEvent event) {
         Player viewer = event.getPlayer();
-        InputCapture capture = inputCaptures.remove(viewer.getUniqueId());
+        ViewerInputCaptureRegistry.Capture<InputCapture> capture = inputCaptures.take(viewer.getUniqueId());
         if (capture == null) {
             return;
         }
         event.setCancelled(true);
         String input = PlainTextComponentSerializer.plainText().serialize(event.message()).trim();
-        onEntity(viewer, () -> handleInput(viewer, capture, input));
+        onEntity(viewer, () -> {
+            if (inputCaptures.claim(viewer.getUniqueId(), capture)) {
+                handleInput(viewer, capture.payload(), input);
+            }
+        });
     }
 
     @EventHandler(priority = EventPriority.MONITOR)
     public void onQuit(PlayerQuitEvent event) {
         UUID viewerId = event.getPlayer().getUniqueId();
-        inputCaptures.remove(viewerId);
+        inputCaptures.invalidate(viewerId);
         confirmations.remove(viewerId);
     }
 
@@ -284,7 +289,7 @@ public final class SanctionChangeGuiController implements Listener {
     ) {
         boolean expiration = action == SanctionChangeAction.REDUCE_DURATION
                 || action == SanctionChangeAction.REPLACE_EXPIRATION;
-        inputCaptures.put(viewer.getUniqueId(), new InputCapture(
+        inputCaptures.begin(viewer.getUniqueId(), new InputCapture(
                 state,
                 action,
                 expiration ? InputStage.EXPIRATION : InputStage.REASON,
@@ -315,7 +320,7 @@ public final class SanctionChangeGuiController implements Listener {
                 openState(viewer, capture.state());
                 return;
             }
-            inputCaptures.put(viewer.getUniqueId(), new InputCapture(
+            inputCaptures.begin(viewer.getUniqueId(), new InputCapture(
                     capture.state(), capture.action(), InputStage.REASON, Optional.of(expiration)
             ));
             viewer.sendMessage(Component.text(

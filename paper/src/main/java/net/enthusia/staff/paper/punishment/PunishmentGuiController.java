@@ -3,7 +3,6 @@ package net.enthusia.staff.paper.punishment;
 import io.papermc.paper.event.player.AsyncChatEvent;
 import java.util.List;
 import java.util.Locale;
-import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -30,6 +29,7 @@ import net.enthusia.staff.domain.player.PlayerIdentity;
 import net.enthusia.staff.domain.ports.PlayerDirectory;
 import net.enthusia.staff.domain.ports.ReasonPolicyRepository;
 import net.enthusia.staff.paper.auth.PaperActorResolver;
+import net.enthusia.staff.paper.gui.ViewerInputCaptureRegistry;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.event.ClickEvent;
 import net.kyori.adventure.text.event.HoverEvent;
@@ -58,7 +58,7 @@ public final class PunishmentGuiController implements Listener {
     private final PunishmentGuiRenderer renderer;
     private final Set<UUID> suppressedClosures = ConcurrentHashMap.newKeySet();
     private final Set<UUID> confirmations = ConcurrentHashMap.newKeySet();
-    private final Map<UUID, NoteCapture> noteCaptures = new ConcurrentHashMap<>();
+    private final ViewerInputCaptureRegistry<NoteCapture> noteCaptures = new ViewerInputCaptureRegistry<>();
 
     public PunishmentGuiController(
             JavaPlugin plugin,
@@ -89,6 +89,7 @@ public final class PunishmentGuiController implements Listener {
         if (actor == null) {
             return;
         }
+        noteCaptures.invalidate(viewer.getUniqueId());
         String normalizedCommand = normalizeCommand(commandName);
         resolveTarget(viewer, targetQuery, target -> openState(
                 viewer,
@@ -101,6 +102,7 @@ public final class PunishmentGuiController implements Listener {
         if (actor == null) {
             return;
         }
+        noteCaptures.invalidate(viewer.getUniqueId());
         resolveTarget(viewer, targetQuery, target -> submit(viewer, () -> {
             PunishmentDraftWorkflow workflow = workflows.get();
             if (workflow == null) {
@@ -182,27 +184,31 @@ public final class PunishmentGuiController implements Listener {
     @EventHandler(priority = EventPriority.HIGHEST)
     public void onChat(AsyncChatEvent event) {
         Player viewer = event.getPlayer();
-        NoteCapture capture = noteCaptures.remove(viewer.getUniqueId());
+        ViewerInputCaptureRegistry.Capture<NoteCapture> capture = noteCaptures.take(viewer.getUniqueId());
         if (capture == null) {
             return;
         }
         event.setCancelled(true);
         String note = PlainTextComponentSerializer.plainText().serialize(event.message()).trim();
         onEntity(viewer, () -> {
+            if (!noteCaptures.claim(viewer.getUniqueId(), capture)) {
+                return;
+            }
+            NoteCapture pending = capture.payload();
             if (note.equalsIgnoreCase("cancel")) {
-                openState(viewer, capture.review());
+                openState(viewer, pending.review());
                 return;
             }
             if (note.isBlank() || note.length() > 4_000) {
                 viewer.sendMessage(Component.text(
                         "The internal explanation must contain 1 to 4000 characters; the prior draft remains saved."
                 ));
-                openState(viewer, capture.review());
+                openState(viewer, pending.review());
                 return;
             }
             Actor actor = authorizedActor(viewer);
             if (actor != null) {
-                reprepare(viewer, actor, capture.review(), note, capture.review().draft().visibility());
+                reprepare(viewer, actor, pending.review(), note, pending.review().draft().visibility());
             }
         });
     }
@@ -210,7 +216,7 @@ public final class PunishmentGuiController implements Listener {
     @EventHandler(priority = EventPriority.MONITOR)
     public void onQuit(PlayerQuitEvent event) {
         UUID viewerId = event.getPlayer().getUniqueId();
-        noteCaptures.remove(viewerId);
+        noteCaptures.invalidate(viewerId);
         suppressedClosures.remove(viewerId);
         confirmations.remove(viewerId);
     }
@@ -300,7 +306,7 @@ public final class PunishmentGuiController implements Listener {
             return;
         }
         if (slot == PunishmentGuiRenderer.NOTE_SLOT) {
-            noteCaptures.put(viewer.getUniqueId(), new NoteCapture(state));
+            noteCaptures.begin(viewer.getUniqueId(), new NoteCapture(state));
             suppressedClosures.add(viewer.getUniqueId());
             viewer.closeInventory();
             viewer.sendMessage(Component.text(
