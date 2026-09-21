@@ -84,17 +84,18 @@ class DiscordPunishmentCoordinatorTest {
 
     @Test
     void pauseSurfacesUnexpectedQueueRejection() {
-        ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
-        DiscordPunishmentCoordinator coordinator = new DiscordPunishmentCoordinator(
-                () -> { }, Duration.ofSeconds(1), scheduler
-        );
-        try {
-            coordinator.start();
-            scheduler.shutdownNow();
+        try (ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor()) {
+            DiscordPunishmentCoordinator coordinator = new DiscordPunishmentCoordinator(
+                    () -> { }, Duration.ofSeconds(1), scheduler
+            );
+            try {
+                coordinator.start();
+                scheduler.shutdownNow();
 
-            assertThrows(IllegalStateException.class, coordinator::pause);
-        } finally {
-            coordinator.close();
+                assertThrows(IllegalStateException.class, coordinator::pause);
+            } finally {
+                coordinator.close();
+            }
         }
     }
 
