@@ -25,6 +25,8 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 @Testcontainers
 class FreezeNetworkReconciliationIntegrationTest {
     private static final String NETWORK_KEY_PREFIX = "freeze-reconcile:";
+    private static final String FROZEN_EVENT = "PLAYER_FROZEN";
+    private static final String UNFROZEN_EVENT = "PLAYER_UNFROZEN";
     private static final Instant NOW = Instant.parse("2026-09-20T20:00:00Z");
     private static final UUID ACTOR = UUID.fromString("44000000-0000-0000-0000-000000000001");
     private static final UUID TARGET = UUID.fromString("44000000-0000-0000-0000-000000000002");
@@ -74,14 +76,14 @@ class FreezeNetworkReconciliationIntegrationTest {
                     () -> store.apply(APPLY_ROLLBACK, ACTOR, "must roll back", NOW)
             );
             assertEquals(0L, freezeCount(APPLY_ROLLBACK));
-            assertEquals(0L, auditCount(APPLY_ROLLBACK, "PLAYER_FROZEN"));
-            assertEquals(0L, discordCount(APPLY_ROLLBACK, "PLAYER_FROZEN"));
+            assertEquals(0L, auditCount(APPLY_ROLLBACK, FROZEN_EVENT));
+            assertEquals(0L, discordCount(APPLY_ROLLBACK, FROZEN_EVENT));
 
             deleteConflictingKey(APPLY_ROLLBACK, 0L);
             store.apply(APPLY_ROLLBACK, ACTOR, "retry succeeds", NOW.plusSeconds(1));
             assertEquals(1L, freezeCount(APPLY_ROLLBACK));
-            assertEquals(1L, auditCount(APPLY_ROLLBACK, "PLAYER_FROZEN"));
-            assertEquals(1L, discordCount(APPLY_ROLLBACK, "PLAYER_FROZEN"));
+            assertEquals(1L, auditCount(APPLY_ROLLBACK, FROZEN_EVENT));
+            assertEquals(1L, discordCount(APPLY_ROLLBACK, FROZEN_EVENT));
             assertEquals(1, networkRows(APPLY_ROLLBACK).size());
         }
     }
@@ -99,14 +101,14 @@ class FreezeNetworkReconciliationIntegrationTest {
                     () -> store.release(RELEASE_ROLLBACK, ACTOR, "must roll back", NOW.plusSeconds(1))
             );
             assertTrue(store.readActive(RELEASE_ROLLBACK, NOW.plusSeconds(2)).isPresent());
-            assertEquals(0L, auditCount(RELEASE_ROLLBACK, "PLAYER_UNFROZEN"));
-            assertEquals(0L, discordCount(RELEASE_ROLLBACK, "PLAYER_UNFROZEN"));
+            assertEquals(0L, auditCount(RELEASE_ROLLBACK, UNFROZEN_EVENT));
+            assertEquals(0L, discordCount(RELEASE_ROLLBACK, UNFROZEN_EVENT));
 
             deleteConflictingKey(RELEASE_ROLLBACK, 1L);
             assertTrue(store.release(RELEASE_ROLLBACK, ACTOR, "retry succeeds", NOW.plusSeconds(3)));
             assertFalse(store.readActive(RELEASE_ROLLBACK, NOW.plusSeconds(4)).isPresent());
-            assertEquals(1L, auditCount(RELEASE_ROLLBACK, "PLAYER_UNFROZEN"));
-            assertEquals(1L, discordCount(RELEASE_ROLLBACK, "PLAYER_UNFROZEN"));
+            assertEquals(1L, auditCount(RELEASE_ROLLBACK, UNFROZEN_EVENT));
+            assertEquals(1L, discordCount(RELEASE_ROLLBACK, UNFROZEN_EVENT));
             assertEquals(2, networkRows(RELEASE_ROLLBACK).size());
         }
     }
