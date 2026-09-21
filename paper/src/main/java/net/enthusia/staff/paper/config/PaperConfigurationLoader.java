@@ -10,6 +10,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import net.enthusia.staff.paper.alert.PunishmentRequestAlertWorkerSettings;
+import net.enthusia.staff.paper.staff.StaffToolSettings;
 
 public final class PaperConfigurationLoader {
     public static final int SUPPORTED_VERSION = 1;
@@ -55,10 +56,12 @@ public final class PaperConfigurationLoader {
         JsonNode tls = ConfigurationNodes.requiredMapping(channel, "tls", "channel.tls", errors);
 
         String serverId = ConfigurationNodes.text(network, "server-id", "network.server-id", "SMP", errors);
+        StaffToolSettings staffToolSettings = new StaffToolConfigurationParser().parse(root, errors);
         RestartRequiredConfiguration restart = new RestartRequiredConfiguration(
                 ConfigurationNodes.text(storage, "jdbc-url-environment", "storage.jdbc-url-environment", "ES_DATABASE_URL", errors),
                 ConfigurationNodes.text(storage, "username-environment", "storage.username-environment", "ES_DATABASE_USER", errors),
                 ConfigurationNodes.text(storage, "password-environment", "storage.password-environment", "ES_DATABASE_PASSWORD", errors),
+                ConfigurationNodes.text(storage, "credentials-file", "storage.credentials-file", "plugins/EnthusiaStaff/database.properties", errors),
                 ConfigurationNodes.boundedInteger(storage, "maximum-pool-size", "storage.maximum-pool-size", 8, 1, 128, errors),
                 ConfigurationNodes.boundedLong(storage, "connection-timeout-millis", "storage.connection-timeout-millis", 5_000, 250, 120_000, errors),
                 ConfigurationNodes.boundedInteger(workers, "threads", "workers.threads", 4, 1, 64, errors),
@@ -73,7 +76,8 @@ public final class PaperConfigurationLoader {
                 ConfigurationNodes.text(channel, "proxy-secret-environment", "channel.proxy-secret-environment", "ES_CHANNEL_PROXY_SECRET", errors),
                 ConfigurationNodes.text(tls, "trust-store", "channel.tls.trust-store", "channel-trust.p12", errors),
                 ConfigurationNodes.text(tls, "trust-store-password-environment", "channel.tls.trust-store-password-environment", "ES_CHANNEL_TLS_TRUSTSTORE_PASSWORD", errors),
-                new CheatTesterConfigurationParser().parse(root, errors)
+                new CheatTesterConfigurationParser().parse(root, errors),
+                staffToolSettings
         );
         validateChannel(restart, dataDirectory, errors);
 

@@ -7,7 +7,7 @@ import java.util.stream.Collectors;
 import org.bukkit.configuration.file.FileConfiguration;
 
 /** Restart-scoped staff-tool runtime settings read from the validated plugin configuration file. */
-record StaffToolSettings(
+public record StaffToolSettings(
         Set<String> disabledServers,
         Set<String> disabledWorlds,
         Duration randomCooldown,
@@ -20,13 +20,24 @@ record StaffToolSettings(
     private static final long DEFAULT_TOGGLE_COOLDOWN_MILLIS = 500L;
     private static final long DEFAULT_MENU_COOLDOWN_MILLIS = 500L;
 
-    StaffToolSettings {
+    public StaffToolSettings {
         disabledServers = normalize(disabledServers);
         disabledWorlds = normalize(disabledWorlds);
         randomCooldown = checked(randomCooldown, "randomCooldown");
         targetCooldown = checked(targetCooldown, "targetCooldown");
         toggleCooldown = checked(toggleCooldown, "toggleCooldown");
         menuCooldown = checked(menuCooldown, "menuCooldown");
+    }
+
+    public static StaffToolSettings defaults() {
+        return new StaffToolSettings(
+                Set.of(),
+                Set.of(),
+                Duration.ofMillis(DEFAULT_RANDOM_COOLDOWN_MILLIS),
+                Duration.ofMillis(DEFAULT_TARGET_COOLDOWN_MILLIS),
+                Duration.ofMillis(DEFAULT_TOGGLE_COOLDOWN_MILLIS),
+                Duration.ofMillis(DEFAULT_MENU_COOLDOWN_MILLIS)
+        );
     }
 
     static StaffToolSettings load(FileConfiguration configuration) {

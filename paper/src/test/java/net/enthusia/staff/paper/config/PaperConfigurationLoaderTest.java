@@ -31,6 +31,11 @@ class PaperConfigurationLoaderTest {
         assertEquals(Duration.ofSeconds(4), snapshot.restartRequired().cheatTesterSettings().sessionTimeout());
         assertEquals(8, snapshot.restartRequired().cheatTesterSettings().maximumActiveGlobal());
         assertEquals(3.0D, snapshot.restartRequired().cheatTesterSettings().fakeEntityDistance());
+        assertEquals("plugins/EnthusiaStaff/database.properties", snapshot.restartRequired().storageCredentialsFile());
+        assertTrue(snapshot.restartRequired().staffToolSettings().disabledServers().contains("hub"));
+        assertTrue(snapshot.restartRequired().staffToolSettings().disabledWorlds().contains("staffworld"));
+        assertEquals(Duration.ofMillis(2_000L), snapshot.restartRequired().staffToolSettings().randomCooldown());
+        assertEquals(Duration.ofMillis(750L), snapshot.restartRequired().staffToolSettings().targetCooldown());
         assertTrue(snapshot.punishmentRequestAlerts().enabled());
         assertEquals(Duration.ofSeconds(10), snapshot.punishmentRequestAlerts().pollInterval());
         assertEquals(Duration.ofSeconds(2), snapshot.punishmentRequestAlerts().joinDelay());
@@ -56,6 +61,10 @@ class PaperConfigurationLoaderTest {
         assertEquals(
                 net.enthusia.staff.paper.tester.CheatTesterSettings.defaults(),
                 snapshot.restartRequired().cheatTesterSettings()
+        );
+        assertEquals(
+                net.enthusia.staff.paper.staff.StaffToolSettings.defaults(),
+                snapshot.restartRequired().staffToolSettings()
         );
     }
 
@@ -134,6 +143,16 @@ class PaperConfigurationLoaderTest {
     }
 
     @Test
+    void rejectsInvalidStaffToolCooldownDuringConfigurationLoad() throws IOException {
+        PaperConfigurationValidationException exception = assertThrows(
+                PaperConfigurationValidationException.class,
+                () -> load(validConfiguration().replace("menu-millis: 500", "menu-millis: 60001"))
+        );
+
+        assertContains(exception.errors(), "staff-tools.cooldowns.menu-millis must be between 0 and 60000");
+    }
+
+    @Test
     void rejectsZeroNegativeExcessiveAndNonScalarValues() throws IOException {
         String configuration = validConfiguration()
                 .replace("  maximum-attempts: 6", "  maximum-attempts: 0")
@@ -160,21 +179,28 @@ class PaperConfigurationLoaderTest {
     void restartSignatureReportsEveryChangedStartupOnlyPath() throws IOException {
         RestartRequiredConfiguration active = load(validConfiguration()).restartRequired();
         RestartRequiredConfiguration changed = load(validConfiguration()
+                .replace("credentials-file: plugins/EnthusiaStaff/database.properties",
+                        "credentials-file: plugins/EnthusiaStaff/database-next.properties")
                 .replace("maximum-pool-size: 8", "maximum-pool-size: 9")
                 .replace("queue-capacity: 300", "queue-capacity: 301")
                 .replace("server-id: SMP", "server-id: HUB")
                 .replace("scope-id: SMP", "scope-id: HUB")
                 .replace("host: 127.0.0.1", "host: 127.0.0.2")
                 .replace("timeout-millis: 4000", "timeout-millis: 5000")
+                .replace("disabled-servers: [HUB]", "disabled-servers: [HUB, LOBBY]")
+                .replace("menu-millis: 500", "menu-millis: 600")
         ).restartRequired();
 
         assertEquals(List.of(
+                "storage.credentials-file",
                 "storage.maximum-pool-size",
                 "workers.queue-capacity",
                 "network.server-id",
                 "inventory.scope-id",
                 "channel.host",
-                "staff-tools.cheat-tester"
+                "staff-tools.cheat-tester",
+                "staff-tools.random-teleport",
+                "staff-tools.cooldowns"
         ), active.differencePaths(changed));
     }
 
@@ -260,6 +286,7 @@ class PaperConfigurationLoaderTest {
                   jdbc-url-environment: ES_DATABASE_URL
                   username-environment: ES_DATABASE_USER
                   password-environment: ES_DATABASE_PASSWORD
+                  credentials-file: plugins/EnthusiaStaff/database.properties
                   maximum-pool-size: 8
                   connection-timeout-millis: 5000
                 workers:
@@ -286,6 +313,9 @@ class PaperConfigurationLoaderTest {
     private static String testerConfiguration() {
         return """
                 staff-tools:
+                  random-teleport:
+                    disabled-servers: [HUB]
+                    disabled-worlds: [StaffWorld]
                   cheat-tester:
                     timeout-millis: 4000
                     probe-ticks: 60
@@ -297,6 +327,11 @@ class PaperConfigurationLoaderTest {
                       vertical: 0.30
                     no-fall:
                       vertical: 0.70
+                  cooldowns:
+                    random-teleport-millis: 2000
+                    target-tool-millis: 750
+                    toggle-tool-millis: 500
+                    menu-millis: 500
                 """;
     }
 

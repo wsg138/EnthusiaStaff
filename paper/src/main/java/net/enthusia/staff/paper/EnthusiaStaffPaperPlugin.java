@@ -88,10 +88,10 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
             getServer().getPluginManager().disablePlugin(this);
             return;
         }
-        databaseSettings = PaperDatabaseConfiguration.snapshot(getConfig());
+        RestartRequiredConfiguration bootstrap = configurationSnapshot.restartRequired();
+        databaseSettings = PaperDatabaseConfiguration.snapshot(bootstrap);
         saveResource("reason-policies.yml", false);
         boolean policiesReady = loadReasonPolicies();
-        RestartRequiredConfiguration bootstrap = configurationSnapshot.restartRequired();
         workers = BoundedExecutorFactory.create(bootstrap.workerThreads(), bootstrap.workerQueueCapacity());
         initializeAlertController();
         if (policiesReady) {
@@ -167,6 +167,7 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
             integrations.closeChatBridge();
         }
         resources.close("mute enforcement", muteEnforcement);
+        resources.close("cheat tester", runtimeComponents == null ? null : runtimeComponents.cheatTester());
         resources.close("inventory coordinator", runtimeComponents == null ? null : runtimeComponents.inventory());
         if (integrations != null) {
             integrations.closeEconomyResources();
@@ -824,7 +825,13 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
     private PaperRuntimeComponents createRuntimeComponents() {
         return PaperRuntimeComponents.create(new PaperRuntimeComponents.Dependencies(
                 new PaperRuntimeComponents.Environment(
-                        this, Clock.systemUTC(), networkServerId(), inventoryScopeId(), workers
+                        this,
+                        Clock.systemUTC(),
+                        networkServerId(),
+                        inventoryScopeId(),
+                        workers,
+                        configurationSnapshot.restartRequired().cheatTesterSettings(),
+                        configurationSnapshot.restartRequired().staffToolSettings()
                 ),
                 new PaperRuntimeComponents.Policy(this::effectiveWriteMode),
                 new PaperRuntimeComponents.Stores(

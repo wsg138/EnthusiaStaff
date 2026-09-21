@@ -2,12 +2,14 @@ package net.enthusia.staff.paper.config;
 
 import java.util.ArrayList;
 import java.util.List;
+import net.enthusia.staff.paper.staff.StaffToolSettings;
 import net.enthusia.staff.paper.tester.CheatTesterSettings;
 
 public record RestartRequiredConfiguration(
         String storageJdbcUrlEnvironment,
         String storageUsernameEnvironment,
         String storagePasswordEnvironment,
+        String storageCredentialsFile,
         int storageMaximumPoolSize,
         long storageConnectionTimeoutMillis,
         int workerThreads,
@@ -22,11 +24,18 @@ public record RestartRequiredConfiguration(
         String channelProxySecretEnvironment,
         String channelTrustStore,
         String channelTrustStorePasswordEnvironment,
-        CheatTesterSettings cheatTesterSettings
+        CheatTesterSettings cheatTesterSettings,
+        StaffToolSettings staffToolSettings
 ) {
     public RestartRequiredConfiguration {
+        if (storageCredentialsFile == null || storageCredentialsFile.isBlank()) {
+            storageCredentialsFile = "plugins/EnthusiaStaff/database.properties";
+        }
         if (cheatTesterSettings == null) {
             cheatTesterSettings = CheatTesterSettings.defaults();
+        }
+        if (staffToolSettings == null) {
+            staffToolSettings = StaffToolSettings.defaults();
         }
     }
 
@@ -55,6 +64,7 @@ public record RestartRequiredConfiguration(
                 storageJdbcUrlEnvironment,
                 storageUsernameEnvironment,
                 storagePasswordEnvironment,
+                "plugins/EnthusiaStaff/database.properties",
                 storageMaximumPoolSize,
                 storageConnectionTimeoutMillis,
                 workerThreads,
@@ -69,7 +79,8 @@ public record RestartRequiredConfiguration(
                 channelProxySecretEnvironment,
                 channelTrustStore,
                 channelTrustStorePasswordEnvironment,
-                CheatTesterSettings.defaults()
+                CheatTesterSettings.defaults(),
+                StaffToolSettings.defaults()
         );
     }
 
@@ -81,6 +92,7 @@ public record RestartRequiredConfiguration(
         compare(differences, "storage.jdbc-url-environment", storageJdbcUrlEnvironment, candidate.storageJdbcUrlEnvironment);
         compare(differences, "storage.username-environment", storageUsernameEnvironment, candidate.storageUsernameEnvironment);
         compare(differences, "storage.password-environment", storagePasswordEnvironment, candidate.storagePasswordEnvironment);
+        compare(differences, "storage.credentials-file", storageCredentialsFile, candidate.storageCredentialsFile);
         compare(differences, "storage.maximum-pool-size", storageMaximumPoolSize, candidate.storageMaximumPoolSize);
         compare(differences, "storage.connection-timeout-millis", storageConnectionTimeoutMillis, candidate.storageConnectionTimeoutMillis);
         compare(differences, "workers.threads", workerThreads, candidate.workerThreads);
@@ -96,6 +108,16 @@ public record RestartRequiredConfiguration(
         compare(differences, "channel.tls.trust-store", channelTrustStore, candidate.channelTrustStore);
         compare(differences, "channel.tls.trust-store-password-environment", channelTrustStorePasswordEnvironment, candidate.channelTrustStorePasswordEnvironment);
         compare(differences, "staff-tools.cheat-tester", cheatTesterSettings, candidate.cheatTesterSettings);
+        if (!java.util.Objects.equals(staffToolSettings.disabledServers(), candidate.staffToolSettings.disabledServers())
+                || !java.util.Objects.equals(staffToolSettings.disabledWorlds(), candidate.staffToolSettings.disabledWorlds())) {
+            differences.add("staff-tools.random-teleport");
+        }
+        if (!java.util.Objects.equals(staffToolSettings.randomCooldown(), candidate.staffToolSettings.randomCooldown())
+                || !java.util.Objects.equals(staffToolSettings.targetCooldown(), candidate.staffToolSettings.targetCooldown())
+                || !java.util.Objects.equals(staffToolSettings.toggleCooldown(), candidate.staffToolSettings.toggleCooldown())
+                || !java.util.Objects.equals(staffToolSettings.menuCooldown(), candidate.staffToolSettings.menuCooldown())) {
+            differences.add("staff-tools.cooldowns");
+        }
         return List.copyOf(differences);
     }
 

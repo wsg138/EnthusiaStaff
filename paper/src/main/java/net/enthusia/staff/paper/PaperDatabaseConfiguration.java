@@ -11,6 +11,7 @@ import java.util.Optional;
 import java.util.Properties;
 import java.util.Set;
 import java.util.function.Function;
+import net.enthusia.staff.paper.config.RestartRequiredConfiguration;
 import net.enthusia.staff.persistence.DatabaseConfig;
 import org.bukkit.configuration.file.FileConfiguration;
 
@@ -43,6 +44,18 @@ final class PaperDatabaseConfiguration {
                 configuration.getString("storage.credentials-file", DEFAULT_CREDENTIALS_FILE),
                 configuration.getInt("storage.maximum-pool-size", 8),
                 configuration.getLong("storage.connection-timeout-millis", 5_000)
+        );
+    }
+
+    static Settings snapshot(RestartRequiredConfiguration configuration) {
+        Objects.requireNonNull(configuration, "configuration");
+        return new Settings(
+                configuration.storageJdbcUrlEnvironment(),
+                configuration.storageUsernameEnvironment(),
+                configuration.storagePasswordEnvironment(),
+                configuration.storageCredentialsFile(),
+                configuration.storageMaximumPoolSize(),
+                configuration.storageConnectionTimeoutMillis()
         );
     }
 

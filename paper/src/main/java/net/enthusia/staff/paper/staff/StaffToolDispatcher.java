@@ -60,13 +60,14 @@ public final class StaffToolDispatcher implements Listener, CommandExecutor, Tab
             StaffModeManager staffMode,
             VanishManager vanish,
             FreezeManager freeze,
-            CheatTesterManager cheatTester
+            CheatTesterManager cheatTester,
+            StaffToolSettings settings
     ) {
         this.plugin = java.util.Objects.requireNonNull(plugin, "plugin");
         this.staffMode = java.util.Objects.requireNonNull(staffMode, "staffMode");
         this.vanish = java.util.Objects.requireNonNull(vanish, "vanish");
         this.cheatTester = java.util.Objects.requireNonNull(cheatTester, "cheatTester");
-        this.settings = StaffToolSettings.load(plugin.getConfig());
+        this.settings = java.util.Objects.requireNonNull(settings, "settings");
         this.cooldowns = new StaffToolCooldowns(java.util.Objects.requireNonNull(clock, "clock"));
         this.randomTeleport = new StaffToolRandomTeleportService(
                 plugin,
