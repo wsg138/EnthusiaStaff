@@ -61,12 +61,11 @@ class DiscordKickRetryAmbiguityTest {
     @Test
     void preEffectTransportFailurePersistsSafeRetryBoundaryThenSucceeds() {
         DiscordPunishmentWorkerFakeRepository repository = repository(kick());
-        DiscordPunishmentWorkerFakeGateway gateway = new DiscordPunishmentWorkerFakeGateway();
-        gateway.applyFailure = new DiscordPunishmentGateway.EffectException("APPLY_TRANSPORT_FAILURE", true);
+        DiscordPunishmentWorkerFakeGateway failingGateway = new DiscordPunishmentWorkerFakeGateway();
+        failingGateway.applyFailure = new DiscordPunishmentGateway.EffectException("APPLY_TRANSPORT_FAILURE", true);
         repository.enqueue(WorkType.APPLY, NOW, 1);
-        DiscordPunishmentWorker worker = worker(repository, gateway);
 
-        worker.runCycle();
+        worker(repository, failingGateway).runCycle();
 
         DiscordPunishment retry = repository.current.punishment();
         assertEquals(DiscordPunishmentState.RETRY_APPLY, retry.state());
@@ -74,13 +73,14 @@ class DiscordKickRetryAmbiguityTest {
         assertTrue(DiscordKickRetryPolicy.mayDispatch(retry, 2));
         assertFalse(retry.externalApplied());
 
-        gateway.applyFailure = null;
+        DiscordPunishmentWorkerFakeGateway retryGateway = new DiscordPunishmentWorkerFakeGateway();
         repository.makeNextDue();
-        worker.runCycle();
+        worker(repository, retryGateway).runCycle();
 
         assertEquals(DiscordPunishmentState.COMPLETED, repository.current.punishment().state());
-        assertEquals(2, gateway.applyCalls);
-        assertEquals(1, gateway.notifyAppliedCalls);
+        assertEquals(1, failingGateway.applyCalls);
+        assertEquals(1, retryGateway.applyCalls);
+        assertEquals(1, retryGateway.notifyAppliedCalls);
     }
 
     @Test
@@ -114,21 +114,23 @@ class DiscordKickRetryAmbiguityTest {
     @Test
     void restartCanSettleAmbiguousKickOnlyWhenVerificationProvesOwnership() {
         DiscordPunishmentWorkerFakeRepository repository = repository(kick());
-        DiscordPunishmentWorkerFakeGateway gateway = new DiscordPunishmentWorkerFakeGateway();
-        gateway.applyFailure = ambiguousFailure();
+        DiscordPunishmentWorkerFakeGateway failingGateway = new DiscordPunishmentWorkerFakeGateway();
+        failingGateway.applyFailure = ambiguousFailure();
         repository.enqueue(WorkType.APPLY, NOW, 1);
 
-        worker(repository, gateway).runCycle();
+        worker(repository, failingGateway).runCycle();
         DiscordPunishment uncertain = repository.current.punishment();
         assertTrue(DiscordKickRetryPolicy.verificationOnly(uncertain, 2));
 
-        gateway.applyFailure = null;
+        DiscordPunishmentWorkerFakeGateway restartedGateway = new DiscordPunishmentWorkerFakeGateway();
         repository.makeNextDue();
-        worker(repository, gateway).runCycle();
+        worker(repository, restartedGateway).runCycle();
 
         assertEquals(DiscordPunishmentState.COMPLETED, repository.current.punishment().state());
         assertTrue(repository.current.punishment().externalApplied());
-        assertEquals(1, gateway.notifyAppliedCalls);
+        assertEquals(1, failingGateway.applyCalls);
+        assertEquals(1, restartedGateway.applyCalls);
+        assertEquals(1, restartedGateway.notifyAppliedCalls);
         assertTrue(repository.work.isEmpty());
     }
 
