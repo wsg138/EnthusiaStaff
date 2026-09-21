@@ -25,7 +25,6 @@ import net.enthusia.staff.domain.ports.SanctionLookup;
 import net.enthusia.staff.domain.report.CreateReportRequest;
 import net.enthusia.staff.domain.report.ReportSubmissionResult;
 import net.enthusia.staff.domain.sanction.SanctionType;
-import net.enthusia.staff.paper.client.ClientEvidenceCollector;
 import net.enthusia.staff.paper.report.ChatContextBuffer;
 import net.enthusia.staff.paper.scheduler.PlayerEntityScheduler;
 import net.kyori.adventure.text.Component;
@@ -35,7 +34,7 @@ import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
 import org.bukkit.command.TabCompleter;
 import org.bukkit.entity.Player;
-import org.bukkit.plugin.java.JavaPlugin;
+import org.bukkit.plugin.Plugin;
 
 public final class ReportCommand implements CommandExecutor, TabCompleter {
     private static final Set<SanctionType> REPORT_RESTRICTIONS = Set.of(SanctionType.REPORT_RESTRICTION);
@@ -324,7 +323,7 @@ public final class ReportCommand implements CommandExecutor, TabCompleter {
     }
 
     public record Dependencies(
-            JavaPlugin plugin,
+            Plugin plugin,
             Clock clock,
             String serverId,
             Supplier<OperationalMode> mode,
@@ -333,8 +332,13 @@ public final class ReportCommand implements CommandExecutor, TabCompleter {
             Supplier<SanctionLookup> sanctions,
             ReasonPolicyRepository policies,
             ChatContextBuffer chat,
-            ClientEvidenceCollector clientEvidence
+            ClientEvidenceCapture clientEvidence
     ) {
+    }
+
+    @FunctionalInterface
+    public interface ClientEvidenceCapture {
+        ClientEvidenceSnapshot capture(Player player);
     }
 
     private record StorageAccess(

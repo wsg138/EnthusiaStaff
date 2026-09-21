@@ -201,7 +201,8 @@ final class PaperCommandRegistrar {
                         storage(PaperStorageBindings::playerDirectory),
                         reportStore,
                         storage(PaperStorageBindings::sanctionLookup),
-                        reasons(), dependencies.evidence().chatContext(), dependencies.evidence().clientEvidence()
+                        reasons(), dependencies.evidence().chatContext(),
+                        dependencies.evidence().clientEvidence()::capture
                 ),
                 workers()
         );
