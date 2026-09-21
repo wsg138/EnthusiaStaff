@@ -70,7 +70,8 @@ public final class FreezeNetworkReconciler {
         targets.dispatch(
                 playerId,
                 () -> submitLookup(playerId, completion),
-                () -> completion.complete(true)
+                () -> completion.complete(true),
+                () -> completion.complete(false)
         );
         return await(completion);
     }
@@ -95,7 +96,8 @@ public final class FreezeNetworkReconciler {
             targets.dispatch(
                     playerId,
                     () -> applyAuthoritativeState(playerId, active, completion),
-                    () -> completion.complete(true)
+                    () -> completion.complete(true),
+                    () -> completion.complete(false)
             );
         } catch (RuntimeException exception) {
             logger.log(Level.WARNING, "Freeze network reconciliation lookup failed", exception);
@@ -132,21 +134,50 @@ public final class FreezeNetworkReconciler {
 
     private static LocalTargetRouter localTargetRouter(JavaPlugin plugin) {
         java.util.Objects.requireNonNull(plugin, "plugin");
-        return (playerId, present, unavailable) ->
-                plugin.getServer().getGlobalRegionScheduler().execute(plugin, () -> {
-                    Player player = plugin.getServer().getPlayer(playerId);
-                    if (player == null) {
-                        unavailable.run();
-                        return;
-                    }
-                    AtomicBoolean completed = new AtomicBoolean();
-                    Runnable owned = once(completed, present);
-                    Runnable retired = once(completed, unavailable);
-                    boolean scheduled = player.getScheduler().execute(plugin, owned, retired, 1L);
-                    if (!scheduled) {
-                        retired.run();
-                    }
-                });
+        return (playerId, present, absent, failed) -> {
+            try {
+                plugin.getServer().getGlobalRegionScheduler().execute(
+                        plugin,
+                        () -> routeFromGlobal(plugin, playerId, present, absent, failed)
+                );
+            } catch (RuntimeException exception) {
+                failed.run();
+            }
+        };
+    }
+
+    private static void routeFromGlobal(
+            JavaPlugin plugin,
+            UUID playerId,
+            Runnable present,
+            Runnable absent,
+            Runnable failed
+    ) {
+        Player player = plugin.getServer().getPlayer(playerId);
+        if (player == null) {
+            absent.run();
+            return;
+        }
+        scheduleOnOwner(plugin, player, present, failed);
+    }
+
+    private static void scheduleOnOwner(
+            JavaPlugin plugin,
+            Player player,
+            Runnable present,
+            Runnable failed
+    ) {
+        AtomicBoolean completed = new AtomicBoolean();
+        Runnable owned = once(completed, present);
+        Runnable rejected = once(completed, failed);
+        try {
+            boolean scheduled = player.getScheduler().execute(plugin, owned, rejected, 1L);
+            if (!scheduled) {
+                rejected.run();
+            }
+        } catch (RuntimeException exception) {
+            rejected.run();
+        }
     }
 
     private static Runnable once(AtomicBoolean completed, Runnable action) {
@@ -187,6 +218,6 @@ public final class FreezeNetworkReconciler {
 
     @FunctionalInterface
     interface LocalTargetRouter {
-        void dispatch(UUID playerId, Runnable present, Runnable unavailable);
+        void dispatch(UUID playerId, Runnable present, Runnable absent, Runnable failed);
     }
 }

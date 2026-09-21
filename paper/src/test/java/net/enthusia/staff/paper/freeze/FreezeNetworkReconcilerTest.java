@@ -11,6 +11,8 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.Executor;
 import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.logging.Logger;
 import net.enthusia.staff.domain.freeze.FreezeRecord;
 import net.enthusia.staff.domain.ports.FreezeStore;
@@ -81,6 +83,62 @@ class FreezeNetworkReconcilerTest {
     }
 
     @Test
+    void ownershipLostAfterLookupDoesNotMutateRuntime() {
+        MutableFreezeStore store = new MutableFreezeStore(true);
+        RecordingRestrictions restrictions = new RecordingRestrictions(false);
+        FreezeNetworkReconciler reconciler = reconciler(
+                store, restrictions, presentThenAbsentRouter(), Runnable::run);
+
+        assertTrue(reconciler.reconcile(PLAYER));
+        assertTrue(store.read);
+        assertFalse(restrictions.applied);
+        assertFalse(restrictions.released);
+    }
+
+    @Test
+    void schedulerFailureBeforeLookupLeavesSignalRetryable() {
+        MutableFreezeStore store = new MutableFreezeStore(true);
+        RecordingRestrictions restrictions = new RecordingRestrictions(false);
+        FreezeNetworkReconciler reconciler = reconciler(store, restrictions, failedRouter(), Runnable::run);
+
+        assertFalse(reconciler.reconcile(PLAYER));
+        assertFalse(store.read);
+        assertFalse(restrictions.applied);
+    }
+
+    @Test
+    void schedulerFailureAfterLookupLeavesSignalRetryable() {
+        MutableFreezeStore store = new MutableFreezeStore(true);
+        RecordingRestrictions restrictions = new RecordingRestrictions(false);
+        FreezeNetworkReconciler reconciler = reconciler(
+                store, restrictions, presentThenFailedRouter(), Runnable::run);
+
+        assertFalse(reconciler.reconcile(PLAYER));
+        assertTrue(store.read);
+        assertFalse(restrictions.applied);
+        assertFalse(restrictions.released);
+    }
+
+    @Test
+    void retryAfterSchedulerFailureEventuallyConverges() {
+        MutableFreezeStore store = new MutableFreezeStore(true);
+        RecordingRestrictions restrictions = new RecordingRestrictions(false);
+        AtomicBoolean failFirst = new AtomicBoolean(true);
+        FreezeNetworkReconciler.LocalTargetRouter router = (id, present, absent, failed) -> {
+            if (failFirst.compareAndSet(true, false)) {
+                failed.run();
+            } else {
+                present.run();
+            }
+        };
+        FreezeNetworkReconciler reconciler = reconciler(store, restrictions, router, Runnable::run);
+
+        assertFalse(reconciler.reconcile(PLAYER));
+        assertTrue(reconciler.reconcile(PLAYER));
+        assertTrue(restrictions.restricted(PLAYER));
+    }
+
+    @Test
     void storageOutageDoesNotAcknowledgeOrMutateRuntime() {
         MutableFreezeStore store = new MutableFreezeStore(true);
         store.failure = new IllegalStateException("database unavailable");
@@ -146,11 +204,36 @@ class FreezeNetworkReconcilerTest {
     }
 
     private static FreezeNetworkReconciler.LocalTargetRouter presentRouter() {
-        return (playerId, present, unavailable) -> present.run();
+        return (playerId, present, absent, failed) -> present.run();
     }
 
     private static FreezeNetworkReconciler.LocalTargetRouter absentRouter() {
-        return (playerId, present, unavailable) -> unavailable.run();
+        return (playerId, present, absent, failed) -> absent.run();
+    }
+
+    private static FreezeNetworkReconciler.LocalTargetRouter failedRouter() {
+        return (playerId, present, absent, failed) -> failed.run();
+    }
+
+    private static FreezeNetworkReconciler.LocalTargetRouter presentThenAbsentRouter() {
+        return stagedRouter(false);
+    }
+
+    private static FreezeNetworkReconciler.LocalTargetRouter presentThenFailedRouter() {
+        return stagedRouter(true);
+    }
+
+    private static FreezeNetworkReconciler.LocalTargetRouter stagedRouter(boolean failSecond) {
+        AtomicInteger calls = new AtomicInteger();
+        return (playerId, present, absent, failed) -> {
+            if (calls.incrementAndGet() == 1) {
+                present.run();
+            } else if (failSecond) {
+                failed.run();
+            } else {
+                absent.run();
+            }
+        };
     }
 
     private static final class RecordingRestrictions implements FreezeNetworkReconciler.RestrictionController {
