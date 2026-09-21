@@ -10,11 +10,13 @@ import net.dv8tion.jda.api.audit.AuditLogEntry;
 import net.dv8tion.jda.api.entities.Guild;
 import net.dv8tion.jda.api.entities.Member;
 import net.dv8tion.jda.api.entities.UserSnowflake;
+import net.dv8tion.jda.api.exceptions.ErrorResponseException;
+import net.dv8tion.jda.api.exceptions.HierarchyException;
+import net.dv8tion.jda.api.exceptions.InsufficientPermissionException;
 import net.enthusia.staff.domain.discord.DiscordPunishment;
 
 /** Makes one-shot kicks crash-safe without risking duplicate enforcement on a reclaimed lease. */
 final class JdaKickEnforcer {
-    private static final int FIRST_ATTEMPT = 1;
     private static final int AUDIT_LIMIT = 100;
     private static final int MAX_AUDIT_REASON = 500;
     private static final Duration AUDIT_CLOCK_SKEW = Duration.ofMinutes(1);
@@ -34,20 +36,44 @@ final class JdaKickEnforcer {
     }
 
     void apply(Guild guild, Member target, DiscordPunishment punishment, int attemptCount) {
-        requireAttempt(attemptCount);
+        boolean mayDispatch = DiscordKickRetryPolicy.mayDispatch(punishment, attemptCount);
         preflight(guild);
         if (ownedKickExists(guild, punishment)) {
             return;
         }
+        if (!mayDispatch) {
+            throw failure(DiscordKickRetryPolicy.RESULT_AMBIGUOUS, false);
+        }
         if (target == null) {
             return;
         }
-        if (attemptCount > FIRST_ATTEMPT) {
-            throw failure("KICK_OWNERSHIP_UNVERIFIED", true);
+        dispatch(guild, punishment);
+    }
+
+    private void dispatch(Guild guild, DiscordPunishment punishment) {
+        try {
+            guild.kick(UserSnowflake.fromId(punishment.targetUserId().value()))
+                    .reason(auditReason(punishment))
+                    .complete();
+        } catch (RuntimeException failure) {
+            throw classifyDispatchFailure(failure);
         }
-        guild.kick(UserSnowflake.fromId(punishment.targetUserId().value()))
-                .reason(auditReason(punishment))
-                .complete();
+    }
+
+    static DiscordPunishmentGateway.EffectException classifyDispatchFailure(RuntimeException failure) {
+        if (failure instanceof DiscordPunishmentGateway.EffectException effect) {
+            return effect;
+        }
+        if (failure instanceof InsufficientPermissionException || failure instanceof HierarchyException) {
+            return failure("APPLY_PERMISSION_DENIED", false, failure);
+        }
+        if (failure instanceof ErrorResponseException response) {
+            String code = response.getErrorResponse().name();
+            if (!retryableCode(code)) {
+                return failure("APPLY_DISCORD_" + code, false, failure);
+            }
+        }
+        return failure(DiscordKickRetryPolicy.RESULT_AMBIGUOUS, false, failure);
     }
 
     private boolean ownedKickExists(Guild guild, DiscordPunishment punishment) {
@@ -109,13 +135,19 @@ final class JdaKickEnforcer {
         );
     }
 
-    private static void requireAttempt(int attemptCount) {
-        if (attemptCount < FIRST_ATTEMPT) {
-            throw new IllegalArgumentException("kick attempt count must be positive");
-        }
+    private static boolean retryableCode(String code) {
+        return code.contains("SERVER") || code.contains("TEMPORAR") || code.contains("RATE_LIMIT");
     }
 
     private static DiscordPunishmentGateway.EffectException failure(String code, boolean retryable) {
         return new DiscordPunishmentGateway.EffectException(code, retryable);
+    }
+
+    private static DiscordPunishmentGateway.EffectException failure(
+            String code,
+            boolean retryable,
+            Throwable cause
+    ) {
+        return new DiscordPunishmentGateway.EffectException(code, retryable, cause);
     }
 }

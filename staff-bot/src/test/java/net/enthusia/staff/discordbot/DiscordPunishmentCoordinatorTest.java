@@ -16,6 +16,7 @@ import org.junit.jupiter.api.Test;
 
 class DiscordPunishmentCoordinatorTest {
     private static final int FIRST_CYCLE = 1;
+
     @Test
     void pauseWaitsForInflightCycleAndRuntimeCanResume() throws Exception {
         CountDownLatch firstEntered = new CountDownLatch(1);
@@ -78,6 +79,22 @@ class DiscordPunishmentCoordinatorTest {
                 coordinator.close();
                 control.shutdownNow();
             }
+        }
+    }
+
+    @Test
+    void pauseSurfacesUnexpectedQueueRejection() {
+        ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
+        DiscordPunishmentCoordinator coordinator = new DiscordPunishmentCoordinator(
+                () -> { }, Duration.ofSeconds(1), scheduler
+        );
+        try {
+            coordinator.start();
+            scheduler.shutdownNow();
+
+            assertThrows(IllegalStateException.class, coordinator::pause);
+        } finally {
+            coordinator.close();
         }
     }
 

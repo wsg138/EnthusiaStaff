@@ -139,9 +139,13 @@ final class JdaDiscordPunishmentGateway implements DiscordPunishmentGateway {
 
     @Override
     public void apply(DiscordPunishment punishment, int attemptCount) {
+        boolean verificationOnly = DiscordKickRetryPolicy.verificationOnly(punishment, attemptCount);
         try {
             applyEffect(guild(punishment.guildId()), punishment, attemptCount);
         } catch (RuntimeException failure) {
+            if (verificationOnly) {
+                throw new EffectException(DiscordKickRetryPolicy.RESULT_AMBIGUOUS, false, failure);
+            }
             throw classify("APPLY", failure);
         }
     }
