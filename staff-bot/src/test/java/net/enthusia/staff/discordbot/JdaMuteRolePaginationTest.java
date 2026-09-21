@@ -316,7 +316,7 @@ final class JdaMuteRolePaginationTest {
 
     @SuppressWarnings("unchecked")
     private static <T> T proxy(Class<T> type, InvocationHandler handler) {
-        return (T) Proxy.newProxyInstance(type.getClassLoader(), new Class<?>[]{type}, handler);
+        return (T) Proxy.newProxyInstance(Thread.currentThread().getContextClassLoader(), new Class<?>[]{type}, handler);
     }
 
     private static Object objectOrUnexpected(Object proxy, Method method, Object[] args) {
@@ -326,7 +326,7 @@ final class JdaMuteRolePaginationTest {
         return switch (method.getName()) {
             case "toString" -> proxy.getClass().getInterfaces()[0].getSimpleName() + "Proxy";
             case "hashCode" -> System.identityHashCode(proxy);
-            case "equals" -> proxy == args[0];
+            case "equals" -> System.identityHashCode(proxy) == System.identityHashCode(args[0]);
             default -> throw new AssertionError("unexpected Object call: " + method);
         };
     }
