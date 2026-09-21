@@ -2,6 +2,8 @@ package net.enthusia.staff.paper.freeze;
 
 import io.papermc.paper.threadedregions.scheduler.EntityScheduler;
 import io.papermc.paper.threadedregions.scheduler.GlobalRegionScheduler;
+import java.lang.invoke.MethodHandles;
+import java.lang.invoke.VarHandle;
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
 import java.time.Clock;
@@ -14,6 +16,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.logging.Logger;
 import net.enthusia.staff.domain.ports.FreezeStore;
+import org.bukkit.Bukkit;
 import org.bukkit.Server;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.Plugin;
@@ -77,8 +80,20 @@ public final class FreezeSchedulerBoundaryHarness {
         });
     }
 
-    public ServicesManager servicesManager() {
-        return java.util.Objects.requireNonNull(servicesManager, "servicesManager");
+    public AutoCloseable installAsBukkitServer() {
+        VarHandle serverHandle = bukkitServerHandle();
+        Object previous = serverHandle.get();
+        serverHandle.set(server);
+        return () -> serverHandle.set(previous);
+    }
+
+    private static VarHandle bukkitServerHandle() {
+        try {
+            return MethodHandles.privateLookupIn(Bukkit.class, MethodHandles.lookup())
+                    .findStaticVarHandle(Bukkit.class, "server", Server.class);
+        } catch (ReflectiveOperationException exception) {
+            throw new IllegalStateException("Unable to install Bukkit test server", exception);
+        }
     }
 
     public FreezeNetworkReconciler reconciler(
@@ -124,6 +139,7 @@ public final class FreezeSchedulerBoundaryHarness {
         return switch (method.getName()) {
             case "getGlobalRegionScheduler" -> globalScheduler;
             case "getPlayer" -> localPlayer();
+            case "getServicesManager" -> java.util.Objects.requireNonNull(servicesManager, "servicesManager");
             case "getLogger" -> LOGGER;
             default -> unexpected(method);
         };

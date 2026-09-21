@@ -8,12 +8,10 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.function.Consumer;
 import java.util.function.Function;
-import java.util.function.Supplier;
 import net.enthusia.staff.domain.ports.NetworkOutboxStore;
 import net.enthusia.staff.paper.freeze.FreezeNetworkReconciler;
 import net.enthusia.staff.protocol.ProtocolEnvelope;
 import org.bukkit.Bukkit;
-import org.bukkit.plugin.ServicesManager;
 
 final class PaperNetworkMessageHandler {
     private static final Set<String> SANCTION_EVENTS = Set.of(
@@ -29,16 +27,7 @@ final class PaperNetworkMessageHandler {
     private final Function<UUID, Boolean> reconcileFreeze;
 
     PaperNetworkMessageHandler(ObjectMapper json, Clock clock, Consumer<UUID> invalidateSanctionCache) {
-        this(json, clock, invalidateSanctionCache, Bukkit::getServicesManager);
-    }
-
-    PaperNetworkMessageHandler(
-            ObjectMapper json,
-            Clock clock,
-            Consumer<UUID> invalidateSanctionCache,
-            Supplier<ServicesManager> services
-    ) {
-        this(json, clock, invalidateSanctionCache, playerId -> reconcileFreeze(services.get(), playerId));
+        this(json, clock, invalidateSanctionCache, PaperNetworkMessageHandler::reconcileFreeze);
     }
 
     PaperNetworkMessageHandler(
@@ -101,8 +90,8 @@ final class PaperNetworkMessageHandler {
         }
     }
 
-    private static boolean reconcileFreeze(ServicesManager services, UUID playerId) {
-        FreezeNetworkReconciler reconciler = services.load(FreezeNetworkReconciler.class);
+    private static boolean reconcileFreeze(UUID playerId) {
+        FreezeNetworkReconciler reconciler = Bukkit.getServicesManager().load(FreezeNetworkReconciler.class);
         return reconciler != null && reconciler.reconcile(playerId);
     }
 }

@@ -26,7 +26,6 @@ import net.enthusia.staff.domain.ports.NetworkOutboxStore;
 import net.enthusia.staff.paper.freeze.FreezeNetworkReconciler;
 import net.enthusia.staff.paper.freeze.FreezeSchedulerBoundaryHarness;
 import net.enthusia.staff.protocol.ProtocolEnvelope;
-import org.bukkit.plugin.ServicesManager;
 import org.junit.jupiter.api.Test;
 
 class PaperFreezeNetworkMessageHandlerTest {
@@ -82,19 +81,24 @@ class PaperFreezeNetworkMessageHandlerTest {
         RecordingInbox inbox = new RecordingInbox(new ArrayList<>());
         ProtocolEnvelope message = freezeEnvelope(TARGET);
 
-        PaperNetworkMessageHandler handler = serviceHandler(scheduler.servicesManager());
-        assertFalse(handler.handle(inbox, "paper-a", message));
-        assertFalse(store.read);
-        assertEquals(0, inbox.acceptedReceiptCount());
+        AutoCloseable bukkitServer = scheduler.installAsBukkitServer();
+        try {
+            PaperNetworkMessageHandler handler = serviceHandler();
+            assertFalse(handler.handle(inbox, "paper-a", message));
+            assertFalse(store.read);
+            assertEquals(0, inbox.acceptedReceiptCount());
 
-        assertTrue(handler.handle(inbox, "paper-a", message));
-        assertTrue(store.read);
-        assertTrue(restricted.get());
-        assertEquals(1, inbox.acceptedReceiptCount());
+            assertTrue(handler.handle(inbox, "paper-a", message));
+            assertTrue(store.read);
+            assertTrue(restricted.get());
+            assertEquals(1, inbox.acceptedReceiptCount());
 
-        assertTrue(handler.handle(inbox, "paper-a", message));
-        assertEquals(1, inbox.acceptedReceiptCount());
-        assertEquals(3, serviceLoads.get());
+            assertTrue(handler.handle(inbox, "paper-a", message));
+            assertEquals(1, inbox.acceptedReceiptCount());
+            assertEquals(3, serviceLoads.get());
+        } finally {
+            bukkitServer.close();
+        }
     }
 
     @Test
@@ -112,21 +116,26 @@ class PaperFreezeNetworkMessageHandlerTest {
         RecordingInbox inbox = new RecordingInbox(new ArrayList<>());
         ProtocolEnvelope message = freezeEnvelope(TARGET);
 
-        PaperNetworkMessageHandler handler = serviceHandler(scheduler.servicesManager());
-        assertFalse(handler.handle(inbox, "paper-a", message));
-        assertTrue(store.read);
-        assertFalse(restricted.get());
-        assertEquals(0, inbox.acceptedReceiptCount());
+        AutoCloseable bukkitServer = scheduler.installAsBukkitServer();
+        try {
+            PaperNetworkMessageHandler handler = serviceHandler();
+            assertFalse(handler.handle(inbox, "paper-a", message));
+            assertTrue(store.read);
+            assertFalse(restricted.get());
+            assertEquals(0, inbox.acceptedReceiptCount());
 
-        assertTrue(handler.handle(inbox, "paper-a", message));
-        assertTrue(restricted.get());
-        assertEquals(1, inbox.acceptedReceiptCount());
-        assertEquals(2, serviceLoads.get());
+            assertTrue(handler.handle(inbox, "paper-a", message));
+            assertTrue(restricted.get());
+            assertEquals(1, inbox.acceptedReceiptCount());
+            assertEquals(2, serviceLoads.get());
+        } finally {
+            bukkitServer.close();
+        }
     }
 
-    private static PaperNetworkMessageHandler serviceHandler(ServicesManager services) {
+    private static PaperNetworkMessageHandler serviceHandler() {
         return new PaperNetworkMessageHandler(new ObjectMapper(), CLOCK, target -> {
-        }, () -> services);
+        });
     }
 
     private static PaperNetworkMessageHandler handler(List<String> actions, boolean result) {
