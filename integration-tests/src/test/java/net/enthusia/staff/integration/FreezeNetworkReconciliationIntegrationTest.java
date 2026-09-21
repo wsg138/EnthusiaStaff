@@ -24,6 +24,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 
 @Testcontainers
 class FreezeNetworkReconciliationIntegrationTest {
+    private static final String NETWORK_KEY_PREFIX = "freeze-reconcile:";
     private static final Instant NOW = Instant.parse("2026-09-20T20:00:00Z");
     private static final UUID ACTOR = UUID.fromString("44000000-0000-0000-0000-000000000001");
     private static final UUID TARGET = UUID.fromString("44000000-0000-0000-0000-000000000002");
@@ -47,8 +48,8 @@ class FreezeNetworkReconciliationIntegrationTest {
 
             List<NetworkRow> rows = networkRows(TARGET);
             assertEquals(2, rows.size());
-            assertEquals("freeze-reconcile:" + TARGET + ":0", rows.get(0).idempotencyKey());
-            assertEquals("freeze-reconcile:" + TARGET + ":1", rows.get(1).idempotencyKey());
+            assertEquals(networkKey(TARGET, 0L), rows.get(0).idempotencyKey());
+            assertEquals(networkKey(TARGET, 1L), rows.get(1).idempotencyKey());
             for (NetworkRow row : rows) {
                 assertEquals("broadcast", row.destination());
                 assertEquals("FREEZE_CHANGED", row.messageType());
@@ -62,23 +63,31 @@ class FreezeNetworkReconciliationIntegrationTest {
     }
 
     @Test
-    void applyRollsBackWhenDurableReconciliationCannotBeEnqueued() throws Exception {
+    void applyRollsBackAndRetryCommitsExactlyOnceWhenReconciliationCanBeEnqueued() throws Exception {
         try (MariaDbRuntime runtime = MariaDb.initialize(MariaDbIntegrationSupport.databaseConfig(DATABASE))) {
             insertPlayers(APPLY_ROLLBACK);
             insertConflictingKey(APPLY_ROLLBACK, 0L);
+            FreezeStore store = runtime.freezeStore();
 
             assertThrows(
                     ModerationPersistenceException.class,
-                    () -> runtime.freezeStore().apply(APPLY_ROLLBACK, ACTOR, "must roll back", NOW)
+                    () -> store.apply(APPLY_ROLLBACK, ACTOR, "must roll back", NOW)
             );
-            assertEquals(0L, count("player_freezes", APPLY_ROLLBACK));
+            assertEquals(0L, freezeCount(APPLY_ROLLBACK));
             assertEquals(0L, auditCount(APPLY_ROLLBACK, "PLAYER_FROZEN"));
             assertEquals(0L, discordCount(APPLY_ROLLBACK, "PLAYER_FROZEN"));
+
+            deleteConflictingKey(APPLY_ROLLBACK, 0L);
+            store.apply(APPLY_ROLLBACK, ACTOR, "retry succeeds", NOW.plusSeconds(1));
+            assertEquals(1L, freezeCount(APPLY_ROLLBACK));
+            assertEquals(1L, auditCount(APPLY_ROLLBACK, "PLAYER_FROZEN"));
+            assertEquals(1L, discordCount(APPLY_ROLLBACK, "PLAYER_FROZEN"));
+            assertEquals(1, networkRows(APPLY_ROLLBACK).size());
         }
     }
 
     @Test
-    void releaseRollsBackWhenDurableReconciliationCannotBeEnqueued() throws Exception {
+    void releaseRollsBackAndRetryCommitsExactlyOnceWhenReconciliationCanBeEnqueued() throws Exception {
         try (MariaDbRuntime runtime = MariaDb.initialize(MariaDbIntegrationSupport.databaseConfig(DATABASE))) {
             insertPlayers(RELEASE_ROLLBACK);
             FreezeStore store = runtime.freezeStore();
@@ -92,6 +101,13 @@ class FreezeNetworkReconciliationIntegrationTest {
             assertTrue(store.readActive(RELEASE_ROLLBACK, NOW.plusSeconds(2)).isPresent());
             assertEquals(0L, auditCount(RELEASE_ROLLBACK, "PLAYER_UNFROZEN"));
             assertEquals(0L, discordCount(RELEASE_ROLLBACK, "PLAYER_UNFROZEN"));
+
+            deleteConflictingKey(RELEASE_ROLLBACK, 1L);
+            assertTrue(store.release(RELEASE_ROLLBACK, ACTOR, "retry succeeds", NOW.plusSeconds(3)));
+            assertFalse(store.readActive(RELEASE_ROLLBACK, NOW.plusSeconds(4)).isPresent());
+            assertEquals(1L, auditCount(RELEASE_ROLLBACK, "PLAYER_UNFROZEN"));
+            assertEquals(1L, discordCount(RELEASE_ROLLBACK, "PLAYER_UNFROZEN"));
+            assertEquals(2, networkRows(RELEASE_ROLLBACK).size());
         }
     }
 
@@ -109,9 +125,19 @@ class FreezeNetworkReconciliationIntegrationTest {
                      ) VALUES (?, ?, 'broadcast', 'TEST_CONFLICT', 1, '{}', ?, ?)
                      """)) {
             statement.setBytes(1, MariaDbIntegrationSupport.uuidBytes(UUID.randomUUID()));
-            statement.setString(2, "freeze-reconcile:" + target + ':' + revision);
+            statement.setString(2, networkKey(target, revision));
             statement.setTimestamp(3, Timestamp.from(NOW));
             statement.setTimestamp(4, Timestamp.from(NOW));
+            statement.executeUpdate();
+        }
+    }
+
+    private static void deleteConflictingKey(UUID target, long revision) throws Exception {
+        try (Connection connection = MariaDbIntegrationSupport.connection(DATABASE);
+             PreparedStatement statement = connection.prepareStatement(
+                     "DELETE FROM network_outbox WHERE idempotency_key = ? AND message_type = 'TEST_CONFLICT'"
+             )) {
+            statement.setString(1, networkKey(target, revision));
             statement.executeUpdate();
         }
     }
@@ -124,7 +150,7 @@ class FreezeNetworkReconciliationIntegrationTest {
                      WHERE idempotency_key LIKE ?
                      ORDER BY idempotency_key ASC
                      """)) {
-            statement.setString(1, "freeze-reconcile:" + target + ":%");
+            statement.setString(1, NETWORK_KEY_PREFIX + target + ":%");
             try (ResultSet result = statement.executeQuery()) {
                 List<NetworkRow> rows = new ArrayList<>();
                 while (result.next()) {
@@ -141,10 +167,7 @@ class FreezeNetworkReconciliationIntegrationTest {
         }
     }
 
-    private static long count(String table, UUID target) throws Exception {
-        if (!"player_freezes".equals(table)) {
-            throw new IllegalArgumentException("unsupported table");
-        }
+    private static long freezeCount(UUID target) throws Exception {
         try (Connection connection = MariaDbIntegrationSupport.connection(DATABASE);
              PreparedStatement statement = connection.prepareStatement(
                      "SELECT COUNT(*) FROM player_freezes WHERE player_id = ?"
@@ -184,6 +207,10 @@ class FreezeNetworkReconciliationIntegrationTest {
                 return result.getLong(1);
             }
         }
+    }
+
+    private static String networkKey(UUID target, long revision) {
+        return NETWORK_KEY_PREFIX + target + ':' + revision;
     }
 
     private record NetworkRow(

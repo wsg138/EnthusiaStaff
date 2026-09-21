@@ -12,7 +12,6 @@ import java.util.UUID;
 import java.util.concurrent.Executor;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.logging.Logger;
 import net.enthusia.staff.domain.freeze.FreezeRecord;
 import net.enthusia.staff.domain.ports.FreezeStore;
@@ -224,9 +223,9 @@ class FreezeNetworkReconcilerTest {
     }
 
     private static FreezeNetworkReconciler.LocalTargetRouter stagedRouter(boolean failSecond) {
-        AtomicInteger calls = new AtomicInteger();
+        AtomicBoolean firstDispatch = new AtomicBoolean(true);
         return (playerId, present, absent, failed) -> {
-            if (calls.incrementAndGet() == 1) {
+            if (firstDispatch.compareAndSet(true, false)) {
                 present.run();
             } else if (failSecond) {
                 failed.run();
