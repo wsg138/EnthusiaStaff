@@ -132,6 +132,7 @@ public final class EnthusiaStaffVelocityPlugin {
     private final AtomicBoolean shuttingDown = new AtomicBoolean();
     private final AtomicBoolean reloadRunning = new AtomicBoolean();
     private final AtomicBoolean migrationRunning = new AtomicBoolean();
+    private final VelocitySecurityEventDispatcher securityEventDispatcher;
     private final java.util.concurrent.ConcurrentHashMap<UUID, CompletableFuture<Void>> presenceUpdates =
             new java.util.concurrent.ConcurrentHashMap<>();
 
@@ -164,6 +165,7 @@ public final class EnthusiaStaffVelocityPlugin {
         this.proxy = proxy;
         this.logger = logger;
         this.dataDirectory = dataDirectory;
+        this.securityEventDispatcher = new VelocitySecurityEventDispatcher(() -> workers, shuttingDown::get);
     }
 
     @Subscribe
@@ -305,24 +307,18 @@ public final class EnthusiaStaffVelocityPlugin {
 
     @Subscribe
     public EventTask onLogin(LoginEvent event) {
-        ExecutorService executor = workers;
-        if (executor == null || executor.isShutdown()) {
-            denyUnavailable(event);
-            return EventTask.async(() -> {
-            });
-        }
-        return EventTask.resumeWhenComplete(CompletableFuture.runAsync(() -> enforceLogin(event), executor));
+        return securityEventDispatcher.submit(
+                () -> enforceLogin(event),
+                () -> denyUnavailable(event)
+        );
     }
 
     @Subscribe
     public EventTask onServerPreConnect(ServerPreConnectEvent event) {
-        ExecutorService executor = workers;
-        if (executor == null || executor.isShutdown()) {
-            denyServerSwitch(event, "Asset safety status is temporarily unavailable.");
-            return EventTask.async(() -> {
-            });
-        }
-        return EventTask.resumeWhenComplete(CompletableFuture.runAsync(() -> enforceSafeServerSwitch(event), executor));
+        return securityEventDispatcher.submit(
+                () -> enforceSafeServerSwitch(event),
+                () -> denyServerSwitch(event, "Asset safety status is temporarily unavailable.")
+        );
     }
 
     @Subscribe
