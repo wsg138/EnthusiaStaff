@@ -36,7 +36,7 @@ public final class PunishmentRequestGuiController implements Listener {
     private static final String REVIEW_PERMISSION = "enthusiastaff.punishment.requests.review";
     private static final String NOT_READY_MESSAGE = "Punishment request storage is not ready.";
 
-    private final JavaPlugin plugin;
+    private final Plugin plugin;
     private final Supplier<PunishmentRequestService> services;
     private final Supplier<PlayerDirectory> players;
     private final AuthorizationPolicy authorization;
@@ -44,6 +44,16 @@ public final class PunishmentRequestGuiController implements Listener {
 
     public PunishmentRequestGuiController(
             JavaPlugin plugin,
+            Supplier<PunishmentRequestService> services,
+            Supplier<PlayerDirectory> players,
+            AuthorizationPolicy authorization,
+            ExecutorService workers
+    ) {
+        this((Plugin) plugin, services, players, authorization, workers);
+    }
+
+    PunishmentRequestGuiController(
+            Plugin plugin,
             Supplier<PunishmentRequestService> services,
             Supplier<PlayerDirectory> players,
             AuthorizationPolicy authorization,
@@ -330,7 +340,7 @@ public final class PunishmentRequestGuiController implements Listener {
             player.closeInventory();
         } else if (slot == PunishmentRequestGuiRenderer.BACK_SLOT) {
             openQueue(player, details.returnPage());
-        } else if (slot == PunishmentRequestGuiRenderer.REFRESH_SLOT) {
+        } else if (slot == PunishmentRequestGuiRenderer.DETAILS_REFRESH_SLOT) {
             refreshDetails(player, details);
         }
     }
