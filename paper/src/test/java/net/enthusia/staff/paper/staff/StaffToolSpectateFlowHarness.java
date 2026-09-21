@@ -38,7 +38,8 @@ final class StaffToolSpectateFlowHarness {
     final AtomicBoolean failNextGlobal = new AtomicBoolean();
     final GlobalRegionScheduler globalScheduler = proxy(GlobalRegionScheduler.class, this::globalSchedulerCall);
     final Server server = proxy(Server.class, this::serverCall);
-    final Plugin plugin = proxy(Plugin.class, this::pluginCall);
+    final Plugin plugin = proxy(Plugin.class, (method, ignored) -> pluginCall(method));
+    int nextEntityId = 100;
     final Handle actor = new Handle(actorId, "Actor", true);
     Handle target = new Handle(targetId, "Target", false);
     final StaffToolSpectateFlow flow;
@@ -143,7 +144,7 @@ final class StaffToolSpectateFlowHarness {
         return handle == null ? null : handle.player;
     }
 
-    private Object pluginCall(Method method, Object[] arguments) {
+    private Object pluginCall(Method method) {
         return switch (method.getName()) {
             case "getServer" -> server;
             case "getName" -> "spectate-flow-test";
@@ -163,6 +164,7 @@ final class StaffToolSpectateFlowHarness {
         final UUID id;
         final String name;
         final boolean actorHandle;
+        final int entityId;
         final AtomicBoolean online = new AtomicBoolean(true);
         final AtomicBoolean permission = new AtomicBoolean(true);
         final AtomicBoolean exempt = new AtomicBoolean();
@@ -181,6 +183,7 @@ final class StaffToolSpectateFlowHarness {
             this.id = id;
             this.name = name;
             this.actorHandle = actorHandle;
+            this.entityId = nextEntityId++;
         }
 
         void retireNext() {
@@ -255,11 +258,26 @@ final class StaffToolSpectateFlowHarness {
 
         private Object playerCall(Method method, Object[] arguments) {
             return switch (method.getName()) {
+                case "getUniqueId", "getName", "getLocation", "getEntityId", "getScheduler", "isOnline"
+                        -> playerStateCall(method);
+                default -> playerActionCall(method, arguments);
+            };
+        }
+
+        private Object playerStateCall(Method method) {
+            return switch (method.getName()) {
                 case "getUniqueId" -> id;
                 case "getName" -> name;
                 case "getLocation" -> new Location(null, 10.0, 64.0, -5.0);
+                case "getEntityId" -> entityId;
                 case "getScheduler" -> scheduler;
                 case "isOnline" -> online.get();
+                default -> unexpected(method);
+            };
+        }
+
+        private Object playerActionCall(Method method, Object[] arguments) {
+            return switch (method.getName()) {
                 case "hasPermission" -> permission((String) arguments[0]);
                 case "getGameMode" -> actorHandle ? GameMode.SPECTATOR : GameMode.SURVIVAL;
                 case "teleportAsync" -> teleport((Location) arguments[0]);

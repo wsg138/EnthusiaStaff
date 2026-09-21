@@ -47,7 +47,7 @@ final class StaffToolSpectateFlow {
                 target.getUniqueId(),
                 target.getName(),
                 target.getLocation().clone(),
-                target
+                target.getEntityId()
         );
         onEntity(actorId, actor -> followSnapshot(actor, snapshot));
     }
@@ -136,7 +136,7 @@ final class StaffToolSpectateFlow {
             return;
         }
         Player currentTarget = plugin.getServer().getPlayer(snapshot.playerId());
-        if (currentTarget != snapshot.connection()) {
+        if (currentTarget == null || connectionChanged(snapshot, currentTarget)) {
             actor.sendMessage(Component.text(
                     "Direct spectating was cancelled because the target connection changed.",
                     NamedTextColor.YELLOW
@@ -173,7 +173,7 @@ final class StaffToolSpectateFlow {
     }
 
     private static boolean connectionChanged(TargetSnapshot snapshot, Player liveTarget) {
-        return snapshot.connection() != liveTarget;
+        return snapshot.entityId() != liveTarget.getEntityId();
     }
 
     private void onEntity(UUID playerId, Consumer<Player> operation) {
@@ -245,9 +245,9 @@ final class StaffToolSpectateFlow {
         onEntity(playerId, player -> player.sendMessage(Component.text(text)));
     }
 
-    private record TargetSnapshot(UUID playerId, String name, Location location, Player connection) {
+    private record TargetSnapshot(UUID playerId, String name, Location location, int entityId) {
         private TargetSnapshot withLocation(Location currentLocation) {
-            return new TargetSnapshot(playerId, name, currentLocation, connection);
+            return new TargetSnapshot(playerId, name, currentLocation, entityId);
         }
     }
 }
