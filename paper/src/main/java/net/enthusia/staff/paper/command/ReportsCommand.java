@@ -46,6 +46,7 @@ public final class ReportsCommand implements CommandExecutor, TabCompleter {
     private final ExecutorService workers;
     private final ReportGuiController gui;
     private final ReportEvidenceFormatter evidenceFormatter;
+    private final CommandResponseDispatcher responses;
 
     public ReportsCommand(
             JavaPlugin plugin,
@@ -75,6 +76,7 @@ public final class ReportsCommand implements CommandExecutor, TabCompleter {
         this.workers = workers;
         this.gui = gui;
         this.evidenceFormatter = evidenceFormatter;
+        this.responses = new CommandResponseDispatcher(plugin);
     }
 
     @Override
@@ -367,16 +369,16 @@ public final class ReportsCommand implements CommandExecutor, TabCompleter {
                 }
             });
         } catch (RejectedExecutionException exception) {
-            sender.sendMessage(Component.text("The bounded work queue is full; no report operation started."));
+            send(sender, "The bounded work queue is full; no report operation started.");
         }
     }
 
     private void send(CommandSender sender, String message) {
-        plugin.getServer().getGlobalRegionScheduler().execute(plugin, () -> sender.sendMessage(Component.text(message)));
+        responses.send(sender, Component.text(message));
     }
 
     private void sendEvidenceAware(CommandSender sender, Supplier<String> authorizedMessage, String deniedMessage) {
-        plugin.getServer().getGlobalRegionScheduler().execute(plugin, () -> {
+        responses.execute(sender, () -> {
             String message = sender.hasPermission(EVIDENCE_PERMISSION) ? authorizedMessage.get() : deniedMessage;
             sender.sendMessage(Component.text(message));
         });
@@ -384,7 +386,7 @@ public final class ReportsCommand implements CommandExecutor, TabCompleter {
 
     private void sendSensitive(CommandSender sender, List<String> messages) {
         List<String> output = List.copyOf(messages);
-        plugin.getServer().getGlobalRegionScheduler().execute(plugin, () -> {
+        responses.execute(sender, () -> {
             if (!sender.hasPermission(EVIDENCE_PERMISSION)) {
                 sender.sendMessage(Component.text("Sensitive report evidence access is no longer permitted."));
                 return;

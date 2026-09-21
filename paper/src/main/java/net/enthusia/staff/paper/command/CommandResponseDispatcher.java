@@ -21,12 +21,17 @@ final class CommandResponseDispatcher {
 
     void send(CommandSender sender, List<Component> messages) {
         List<Component> immutable = List.copyOf(messages);
-        Runnable delivery = () -> immutable.forEach(sender::sendMessage);
+        execute(sender, () -> immutable.forEach(sender::sendMessage));
+    }
+
+    void execute(CommandSender sender, Runnable action) {
+        Objects.requireNonNull(sender, "sender");
+        Objects.requireNonNull(action, "action");
         try {
             if (sender instanceof Player player) {
                 boolean scheduled = player.getScheduler().execute(
                         plugin,
-                        delivery,
+                        action,
                         () -> plugin.getLogger().fine(
                                 "Command response was discarded because the sender disconnected"
                         ),
@@ -37,7 +42,7 @@ final class CommandResponseDispatcher {
                 }
                 return;
             }
-            plugin.getServer().getGlobalRegionScheduler().execute(plugin, delivery);
+            plugin.getServer().getGlobalRegionScheduler().execute(plugin, action);
         } catch (RuntimeException exception) {
             plugin.getLogger().log(Level.WARNING, "Unable to deliver command response", exception);
         }
