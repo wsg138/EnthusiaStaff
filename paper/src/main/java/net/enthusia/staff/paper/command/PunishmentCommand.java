@@ -54,6 +54,7 @@ public final class PunishmentCommand implements CommandExecutor, TabCompleter {
     private final PunishmentGuiController gui;
     private final PunishmentRequestCommandHandler requestCommands;
     private final ExecutorService workers;
+    private final CommandResponseDispatcher responses;
 
     public PunishmentCommand(
             JavaPlugin plugin,
@@ -77,6 +78,7 @@ public final class PunishmentCommand implements CommandExecutor, TabCompleter {
         this.gui = gui;
         this.requestCommands = requestCommands;
         this.workers = workers;
+        this.responses = new CommandResponseDispatcher(plugin);
     }
 
     @Override
@@ -373,7 +375,7 @@ public final class PunishmentCommand implements CommandExecutor, TabCompleter {
     }
 
     private void send(CommandSender sender, Component message) {
-        plugin.getServer().getScheduler().runTask(plugin, () -> sender.sendMessage(message));
+        responses.send(sender, message);
     }
 
     private boolean permitsPunishmentDraft(Actor actor) {

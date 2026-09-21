@@ -3,6 +3,7 @@ package net.enthusia.staff.paper.command;
 import java.util.List;
 import java.util.Objects;
 import java.util.logging.Level;
+import net.enthusia.staff.paper.scheduler.PlayerEntityScheduler;
 import net.kyori.adventure.text.Component;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
@@ -29,17 +30,11 @@ final class CommandResponseDispatcher {
         Objects.requireNonNull(action, "action");
         try {
             if (sender instanceof Player player) {
-                boolean scheduled = player.getScheduler().execute(
-                        plugin,
-                        action,
-                        () -> plugin.getLogger().fine(
+                PlayerEntityScheduler.execute(plugin, player, action, () ->
+                        plugin.getLogger().fine(
                                 "Command response was discarded because the sender disconnected"
-                        ),
-                        1L
+                        )
                 );
-                if (!scheduled) {
-                    plugin.getLogger().fine("Command response sender is no longer schedulable");
-                }
                 return;
             }
             plugin.getServer().getGlobalRegionScheduler().execute(plugin, action);
