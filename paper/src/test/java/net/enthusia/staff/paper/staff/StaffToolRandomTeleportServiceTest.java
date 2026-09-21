@@ -28,6 +28,13 @@ final class StaffToolRandomTeleportServiceTest {
     private static final UUID ACTOR_ID = UUID.fromString("11111111-1111-1111-1111-111111111111");
     private static final UUID FIRST_ID = UUID.fromString("22222222-2222-2222-2222-222222222222");
     private static final UUID SECOND_ID = UUID.fromString("33333333-3333-3333-3333-333333333333");
+    private static final List<EntityBehavior> FAILURE_BEHAVIORS = List.of(
+            EntityBehavior.RETIRE,
+            EntityBehavior.REJECT,
+            EntityBehavior.THROW,
+            EntityBehavior.RETIRE_AND_REJECT,
+            EntityBehavior.RETIRE_THEN_ACTION
+    );
 
     @Test
     void onlyEligibleTargetIsRevalidatedAndTeleportedFromItsCurrentLocation() {
@@ -111,52 +118,48 @@ final class StaffToolRandomTeleportServiceTest {
 
     @Test
     void finalSchedulerRetirementRejectionExceptionAndDuplicateCallbacksRetryOnce() {
-        for (EntityBehavior behavior : List.of(
-                EntityBehavior.RETIRE,
-                EntityBehavior.REJECT,
-                EntityBehavior.THROW,
-                EntityBehavior.RETIRE_AND_REJECT,
-                EntityBehavior.RETIRE_THEN_ACTION
-        )) {
-            Harness harness = new Harness();
-            TestTarget first = harness.addTarget(FIRST_ID, "first", 10.0, true);
-            harness.addTarget(SECOND_ID, "second", 20.0, true);
-            harness.teleportFuture.set(CompletableFuture.completedFuture(true));
-            harness.startCollection();
-
-            harness.platform.setBehavior(first.player(), behavior);
-            harness.platform.runNextGlobal();
-            assertEquals(1, harness.platform.pendingGlobal(), behavior.name());
-
-            harness.platform.runNextGlobal();
-            harness.platform.runNextGlobal();
-            assertEquals(1, harness.teleports.size(), behavior.name());
-            assertEquals(20.0, harness.teleports.getFirst().getX(), behavior.name());
-            assertEquals(0, first.locationReads().get(), behavior.name());
+        for (EntityBehavior behavior : FAILURE_BEHAVIORS) {
+            assertFinalSchedulerRetry(behavior);
         }
+    }
+
+    private static void assertFinalSchedulerRetry(EntityBehavior behavior) {
+        Harness harness = new Harness();
+        TestTarget first = harness.addTarget(FIRST_ID, "first", 10.0, true);
+        harness.addTarget(SECOND_ID, "second", 20.0, true);
+        harness.teleportFuture.set(CompletableFuture.completedFuture(true));
+        harness.startCollection();
+
+        harness.platform.setBehavior(first.player(), behavior);
+        harness.platform.runNextGlobal();
+        assertEquals(1, harness.platform.pendingGlobal(), behavior.name());
+
+        harness.platform.runNextGlobal();
+        harness.platform.runNextGlobal();
+        assertEquals(1, harness.teleports.size(), behavior.name());
+        assertEquals(20.0, harness.teleports.getFirst().getX(), behavior.name());
+        assertEquals(0, first.locationReads().get(), behavior.name());
     }
 
     @Test
     void collectionSchedulerFailuresSettleCandidateExactlyOnce() {
-        for (EntityBehavior behavior : List.of(
-                EntityBehavior.RETIRE,
-                EntityBehavior.REJECT,
-                EntityBehavior.THROW,
-                EntityBehavior.RETIRE_AND_REJECT,
-                EntityBehavior.RETIRE_THEN_ACTION
-        )) {
-            Harness harness = new Harness();
-            TestTarget target = harness.addTarget(FIRST_ID, "target", 10.0, true);
-            harness.platform.setBehavior(target.player(), behavior);
-
-            harness.startCollection();
-            assertEquals(1, harness.platform.pendingGlobal(), behavior.name());
-            assertEquals(0, harness.eligibilityReads.get(), behavior.name());
-
-            harness.platform.runNextGlobal();
-            assertEquals(1, harness.messages.size(), behavior.name());
-            assertEquals(0, harness.platform.pendingGlobal(), behavior.name());
+        for (EntityBehavior behavior : FAILURE_BEHAVIORS) {
+            assertCollectionSchedulerFailureSettles(behavior);
         }
+    }
+
+    private static void assertCollectionSchedulerFailureSettles(EntityBehavior behavior) {
+        Harness harness = new Harness();
+        TestTarget target = harness.addTarget(FIRST_ID, "target", 10.0, true);
+        harness.platform.setBehavior(target.player(), behavior);
+
+        harness.startCollection();
+        assertEquals(1, harness.platform.pendingGlobal(), behavior.name());
+        assertEquals(0, harness.eligibilityReads.get(), behavior.name());
+
+        harness.platform.runNextGlobal();
+        assertEquals(1, harness.messages.size(), behavior.name());
+        assertEquals(0, harness.platform.pendingGlobal(), behavior.name());
     }
 
     @Test
