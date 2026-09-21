@@ -43,6 +43,7 @@ public final class JdbcNetworkIdentityStore implements NetworkIdentityStore {
     private final DataSource dataSource;
     private final ObjectMapper json;
     private final AltInheritancePolicy inheritancePolicy = new AltInheritancePolicy();
+    private final JdbcTransactionRetry transactionRetry = new JdbcTransactionRetry();
 
     public JdbcNetworkIdentityStore(DataSource dataSource, ObjectMapper json) {
         if (dataSource == null || json == null) {
@@ -62,11 +63,25 @@ public final class JdbcNetworkIdentityStore implements NetworkIdentityStore {
         if (joiningPlayerId == null || identity == null || observedAt == null) {
             throw new IllegalArgumentException("network identity observation fields must be present");
         }
+        Map<UUID, Boolean> observedOnline = new HashMap<>();
+        return transactionRetry.execute(
+                "Network identity observation retry interrupted",
+                () -> observeOnce(joiningPlayerId, identity, observedAt, suppressAutomatedEvidence, observedOnline)
+        );
+    }
+
+    private NetworkIdentityObservationResult observeOnce(
+            UUID joiningPlayerId,
+            ProtectedNetworkIdentity identity,
+            Instant observedAt,
+            boolean suppressAutomatedEvidence,
+            Map<UUID, Boolean> observedOnline
+    ) {
         try (Connection connection = dataSource.getConnection()) {
             connection.setAutoCommit(false);
             try {
                 NetworkIdentityObservationResult result = observeInTransaction(
-                        connection, joiningPlayerId, identity, observedAt, suppressAutomatedEvidence
+                        connection, joiningPlayerId, identity, observedAt, suppressAutomatedEvidence, observedOnline
                 );
                 connection.commit();
                 return result;
@@ -86,18 +101,20 @@ public final class JdbcNetworkIdentityStore implements NetworkIdentityStore {
             UUID joiningPlayerId,
             ProtectedNetworkIdentity identity,
             Instant observedAt,
-            boolean suppressAutomatedEvidence
+            boolean suppressAutomatedEvidence,
+            Map<UUID, Boolean> observedOnline
     ) throws SQLException, JsonProcessingException {
         List<MatchingPlayer> candidates = suppressAutomatedEvidence
                 ? List.of()
                 : matchingPlayers(connection, joiningPlayerId, identity);
+        rememberOnlineCandidates(candidates, observedOnline);
         if (candidates.size() > MAX_AUTOMATED_MATCHES) {
-            lockObservationPlayers(connection, joiningPlayerId, List.of());
+            lockObservationPlayers(connection, joiningPlayerId, List.of(), observedOnline);
             upsertIdentity(connection, joiningPlayerId, identity, observedAt);
             return new NetworkIdentityObservationResult(candidates.size(), 0, 0, true);
         }
 
-        LockedObservation locked = lockObservationPlayers(connection, joiningPlayerId, candidates);
+        LockedObservation locked = lockObservationPlayers(connection, joiningPlayerId, candidates, observedOnline);
         upsertIdentity(connection, joiningPlayerId, identity, observedAt);
         if (suppressAutomatedEvidence) {
             return new NetworkIdentityObservationResult(0, 0, 0, true);
@@ -349,7 +366,8 @@ public final class JdbcNetworkIdentityStore implements NetworkIdentityStore {
     private static LockedObservation lockObservationPlayers(
             Connection connection,
             UUID joiningPlayerId,
-            List<MatchingPlayer> candidates
+            List<MatchingPlayer> candidates,
+            Map<UUID, Boolean> observedOnline
     ) throws SQLException {
         List<UUID> playerIds = new ArrayList<>(candidates.size() + 1);
         playerIds.add(joiningPlayerId);
@@ -366,10 +384,23 @@ public final class JdbcNetworkIdentityStore implements NetworkIdentityStore {
         List<MatchingPlayer> matches = candidates.stream()
                 .map(candidate -> new MatchingPlayer(
                         candidate.playerId(),
-                        candidate.currentlyOnline() || locked.get(candidate.playerId()).currentlyOnline()
+                        candidate.currentlyOnline()
+                                || locked.get(candidate.playerId()).currentlyOnline()
+                                || observedOnline.getOrDefault(candidate.playerId(), false)
                 ))
                 .toList();
         return new LockedObservation(joining.firstSeenAt(), matches);
+    }
+
+    private static void rememberOnlineCandidates(
+            List<MatchingPlayer> candidates,
+            Map<UUID, Boolean> observedOnline
+    ) {
+        for (MatchingPlayer candidate : candidates) {
+            if (candidate.currentlyOnline()) {
+                observedOnline.put(candidate.playerId(), true);
+            }
+        }
     }
 
     private static LockedPlayer lockPlayer(Connection connection, UUID playerId) throws SQLException {
