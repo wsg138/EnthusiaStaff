@@ -7,31 +7,28 @@ ai-agents/reports/package-handoffs/2026-09-20-es-x03-static-remediation-active.m
 
 Market [PR #7](https://github.com/wsg138/EnthusiaMarket/pull/7) is
 OPEN/DRAFT/CLEAN on `package/es-x03-market-static-remediation` at
-`a7534f2475a6bf298aff50a87cb132f34c7aa063`; Staff
+`9f4a4145ab3628831edc27a534c4420faa5e23f1`; Staff
 [PR #139](https://github.com/wsg138/EnthusiaStaff/pull/139) is
 OPEN/non-draft/UNSTABLE on `package/es-x03-market-provider` at normal
-two-parent merge `99e46102a6e33a39d30a29470cd229c7439689b1` of immediate
-paired product parent `d97a082523012edfac05db1d75fbd59a92d9b253`. Live Staff
-`main` then advanced to `313add94027d16bcfe08529136972fe49f6746f5`, so #139
-needs a later normal current-main merge before acceptance. Clean-clone
+listener-routing head `47b0b13cb1fd3786fc2743ee8765cc322a6d7a0f`. Its parent
+`f69aef6f` normally merged current `main` `63e920d1`. Clean-clone
 component comparison found 512 shared files with no delta and hash
-`bc302a74a4c9acc69cba22947f46688d0c108a666cb896774655cc8eb09588c9`.
+`d266bb0039f9b7e60cf59b253b52de15e60cd42b17a0c425bbe3ad98896bbd52`.
 
-Market hosted runs `35524744229` and `35524744279` passed. Exact Staff
-Coverage `35526526618` / job `106119546309` and Sentinel artifact
-`35526526642` / job `106119546325` passed; durable Sentinel job `463` returned
+Market hosted runs `35542232664` and `35542232684` passed. Exact Staff
+Coverage `35542245591` / job `106161876789` and Sentinel artifact
+`35542245567` / job `106161876827` passed; durable Sentinel job `476` returned
 `PAPER_RESTART_OK`. No live review thread remains.
 
-Codacy static check `106119707074` remains `ACTION_REQUIRED`; current triage
-records 1,129 findings. Canonical Pi `35526525971` stopped before private dispatch when its
+Codacy static check `106161999175` remains `ACTION_REQUIRED` with 1,126
+reported issues. Canonical Pi `35542244424` stopped before private dispatch when its
 workflow-history lookup returned HTTP 401 Bad credentials; no private Pi,
 Paper, or MariaDB runtime ran.
 
 Continue only small paired fixes for validated static findings, preserving
-Market #7, Staff #139, and exact component parity. Merge current `main`
-normally before acceptance. The staging owner must repair the least-privilege
-bridge credential before a fresh canonical Pi run. Do not use a personal
-credential or bypass the public bridge.
+Market #7, Staff #139, and exact component parity. The staging owner must
+repair the least-privilege bridge credential before a fresh canonical Pi run.
+Do not use a personal credential or bypass the public bridge.
 
 No production listing, balance, item, player data, database, deployment,
 authority, LiteBans, cutover, or issue #43 acceptance was performed. D09

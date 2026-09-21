@@ -13,6 +13,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -42,6 +43,7 @@ public final class JdbcNetworkIdentityStore implements NetworkIdentityStore {
     private final DataSource dataSource;
     private final ObjectMapper json;
     private final AltInheritancePolicy inheritancePolicy = new AltInheritancePolicy();
+    private final JdbcTransactionRetry transactionRetry = new JdbcTransactionRetry();
 
     public JdbcNetworkIdentityStore(DataSource dataSource, ObjectMapper json) {
         if (dataSource == null || json == null) {
@@ -61,94 +63,28 @@ public final class JdbcNetworkIdentityStore implements NetworkIdentityStore {
         if (joiningPlayerId == null || identity == null || observedAt == null) {
             throw new IllegalArgumentException("network identity observation fields must be present");
         }
+        Map<UUID, Boolean> observedOnline = new HashMap<>();
+        return transactionRetry.execute(
+                "Network identity observation retry interrupted",
+                () -> observeOnce(joiningPlayerId, identity, observedAt, suppressAutomatedEvidence, observedOnline)
+        );
+    }
+
+    private NetworkIdentityObservationResult observeOnce(
+            UUID joiningPlayerId,
+            ProtectedNetworkIdentity identity,
+            Instant observedAt,
+            boolean suppressAutomatedEvidence,
+            Map<UUID, Boolean> observedOnline
+    ) {
         try (Connection connection = dataSource.getConnection()) {
             connection.setAutoCommit(false);
             try {
-                Instant firstSeenAt = lockPlayerFirstSeen(connection, joiningPlayerId);
-                upsertIdentity(connection, joiningPlayerId, identity, observedAt);
-                if (suppressAutomatedEvidence) {
-                    connection.commit();
-                    return new NetworkIdentityObservationResult(0, 0, 0, true);
-                }
-
-                Optional<Instant> cutoverAt = latestCutover(connection);
-                List<MatchingPlayer> matches = matchingPlayers(connection, joiningPlayerId, identity);
-                if (matches.size() > MAX_AUTOMATED_MATCHES) {
-                    connection.commit();
-                    return new NetworkIdentityObservationResult(matches.size(), 0, 0, true);
-                }
-
-                boolean singleNetworkCandidate = matches.size() == 1;
-                boolean hasProtectedHistory = hasProtectedRelationshipHistory(connection, joiningPlayerId);
-                int inherited = 0;
-                int alerts = 0;
-                for (MatchingPlayer match : matches) {
-                    UUID otherPlayerId = match.playerId();
-                    Relationship relationship = lockOrCreateRelationship(
-                            connection, joiningPlayerId, otherPlayerId, observedAt
-                    );
-                    if (match.currentlyOnline() && !relationship.manuallyManaged()) {
-                        relationship = lowerAutomaticConfidence(connection, relationship, observedAt);
-                        insertEvidenceIfDue(
-                                connection,
-                                relationship,
-                                "SIMULTANEOUS_PLAY",
-                                -0.2500,
-                                "PLAYER_DIRECTORY_PRESENCE",
-                                observedAt
-                        );
-                    } else {
-                        insertEvidenceIfDue(
-                                connection,
-                                relationship,
-                                "SAME_NETWORK",
-                                0.2500,
-                                "PROXY_IDENTITY_TOKEN",
-                                observedAt
-                        );
-                    }
-
-                    List<SourceSanction> active = activeInheritableSanctions(connection, otherPlayerId, observedAt);
-                    if (active.isEmpty()) {
-                        continue;
-                    }
-                    boolean unambiguousNewAccountEvidence = relationship.created()
-                            && singleNetworkCandidate
-                            && !match.currentlyOnline();
-                    boolean shouldInherit = inheritancePolicy.shouldInherit(
-                            relationship.state(),
-                            unambiguousNewAccountEvidence,
-                            firstSeenAt,
-                            cutoverAt,
-                            hasProtectedHistory
-                    );
-                    if (shouldInherit) {
-                        for (SourceSanction source : active) {
-                            if (inherit(
-                                    connection,
-                                    joiningPlayerId,
-                                    otherPlayerId,
-                                    source,
-                                    relationship.state(),
-                                    observedAt
-                            )) {
-                                inherited++;
-                                alerts++;
-                            }
-                        }
-                    } else if (!relationship.state().preventsAutomaticInheritance()) {
-                        alerts += insertLowerConfidenceAlert(
-                                connection,
-                                joiningPlayerId,
-                                otherPlayerId,
-                                relationship.state(),
-                                active,
-                                observedAt
-                        );
-                    }
-                }
+                NetworkIdentityObservationResult result = observeInTransaction(
+                        connection, joiningPlayerId, identity, observedAt, suppressAutomatedEvidence, observedOnline
+                );
                 connection.commit();
-                return new NetworkIdentityObservationResult(matches.size(), inherited, alerts, false);
+                return result;
             } catch (SQLException | JsonProcessingException exception) {
                 rollback(connection, exception);
                 throw new ModerationPersistenceException("Network identity observation transaction failed", exception);
@@ -158,6 +94,128 @@ public final class JdbcNetworkIdentityStore implements NetworkIdentityStore {
         } catch (SQLException exception) {
             throw new ModerationPersistenceException("Unable to open network identity transaction", exception);
         }
+    }
+
+    private NetworkIdentityObservationResult observeInTransaction(
+            Connection connection,
+            UUID joiningPlayerId,
+            ProtectedNetworkIdentity identity,
+            Instant observedAt,
+            boolean suppressAutomatedEvidence,
+            Map<UUID, Boolean> observedOnline
+    ) throws SQLException, JsonProcessingException {
+        List<MatchingPlayer> candidates = suppressAutomatedEvidence
+                ? List.of()
+                : matchingPlayers(connection, joiningPlayerId, identity);
+        rememberOnlineCandidates(candidates, observedOnline);
+        if (candidates.size() > MAX_AUTOMATED_MATCHES) {
+            lockObservationPlayers(connection, joiningPlayerId, List.of(), observedOnline);
+            upsertIdentity(connection, joiningPlayerId, identity, observedAt);
+            return new NetworkIdentityObservationResult(candidates.size(), 0, 0, true);
+        }
+
+        LockedObservation locked = lockObservationPlayers(connection, joiningPlayerId, candidates, observedOnline);
+        upsertIdentity(connection, joiningPlayerId, identity, observedAt);
+        if (suppressAutomatedEvidence) {
+            return new NetworkIdentityObservationResult(0, 0, 0, true);
+        }
+        return processMatches(connection, joiningPlayerId, locked, observedAt);
+    }
+
+    private NetworkIdentityObservationResult processMatches(
+            Connection connection,
+            UUID joiningPlayerId,
+            LockedObservation locked,
+            Instant observedAt
+    ) throws SQLException, JsonProcessingException {
+        Optional<Instant> cutoverAt = latestCutover(connection);
+        boolean protectedHistory = hasProtectedRelationshipHistory(connection, joiningPlayerId);
+        boolean singleCandidate = locked.matches().size() == 1;
+        int inherited = 0;
+        int alerts = 0;
+        for (MatchingPlayer match : locked.matches()) {
+            MatchOutcome outcome = processMatch(
+                    connection, joiningPlayerId, match, singleCandidate,
+                    locked.firstSeenAt(), cutoverAt, protectedHistory, observedAt
+            );
+            inherited += outcome.inherited();
+            alerts += outcome.alerts();
+        }
+        return new NetworkIdentityObservationResult(locked.matches().size(), inherited, alerts, false);
+    }
+
+    private MatchOutcome processMatch(
+            Connection connection,
+            UUID joiningPlayerId,
+            MatchingPlayer match,
+            boolean singleCandidate,
+            Instant firstSeenAt,
+            Optional<Instant> cutoverAt,
+            boolean protectedHistory,
+            Instant observedAt
+    ) throws SQLException, JsonProcessingException {
+        Relationship relationship = lockOrCreateRelationship(
+                connection, joiningPlayerId, match.playerId(), observedAt
+        );
+        relationship = recordPresenceEvidence(connection, relationship, match, observedAt);
+        List<SourceSanction> active = activeInheritableSanctions(connection, match.playerId(), observedAt);
+        if (active.isEmpty()) {
+            return new MatchOutcome(0, 0);
+        }
+        boolean unambiguous = relationship.created() && singleCandidate && !match.currentlyOnline();
+        if (inheritancePolicy.shouldInherit(
+                relationship.state(), unambiguous, firstSeenAt, cutoverAt, protectedHistory
+        )) {
+            int inherited = inheritAll(
+                    connection, joiningPlayerId, match.playerId(), relationship.state(), active, observedAt
+            );
+            return new MatchOutcome(inherited, inherited);
+        }
+        if (relationship.state().preventsAutomaticInheritance()) {
+            return new MatchOutcome(0, 0);
+        }
+        int alerts = insertLowerConfidenceAlert(
+                connection, joiningPlayerId, match.playerId(), relationship.state(), active, observedAt
+        );
+        return new MatchOutcome(0, alerts);
+    }
+
+    private Relationship recordPresenceEvidence(
+            Connection connection,
+            Relationship relationship,
+            MatchingPlayer match,
+            Instant observedAt
+    ) throws SQLException, JsonProcessingException {
+        if (match.currentlyOnline() && !relationship.manuallyManaged()) {
+            Relationship lowered = lowerAutomaticConfidence(connection, relationship, observedAt);
+            insertEvidenceIfDue(
+                    connection, lowered, "SIMULTANEOUS_PLAY", -0.2500,
+                    "PLAYER_DIRECTORY_PRESENCE", observedAt
+            );
+            return lowered;
+        }
+        insertEvidenceIfDue(
+                connection, relationship, "SAME_NETWORK", 0.2500,
+                "PROXY_IDENTITY_TOKEN", observedAt
+        );
+        return relationship;
+    }
+
+    private int inheritAll(
+            Connection connection,
+            UUID joiningPlayerId,
+            UUID sourcePlayerId,
+            AltRelationshipState state,
+            List<SourceSanction> active,
+            Instant observedAt
+    ) throws SQLException, JsonProcessingException {
+        int inherited = 0;
+        for (SourceSanction source : active) {
+            if (inherit(connection, joiningPlayerId, sourcePlayerId, source, state, observedAt)) {
+                inherited++;
+            }
+        }
+        return inherited;
     }
 
     @Override
@@ -305,15 +363,58 @@ public final class JdbcNetworkIdentityStore implements NetworkIdentityStore {
         }
     }
 
-    private static Instant lockPlayerFirstSeen(Connection connection, UUID playerId) throws SQLException {
+    private static LockedObservation lockObservationPlayers(
+            Connection connection,
+            UUID joiningPlayerId,
+            List<MatchingPlayer> candidates,
+            Map<UUID, Boolean> observedOnline
+    ) throws SQLException {
+        List<UUID> playerIds = new ArrayList<>(candidates.size() + 1);
+        playerIds.add(joiningPlayerId);
+        candidates.forEach(candidate -> playerIds.add(candidate.playerId()));
+        playerIds.sort((first, second) -> Arrays.compareUnsigned(
+                UuidBytes.toBytes(first), UuidBytes.toBytes(second)
+        ));
+
+        Map<UUID, LockedPlayer> locked = new HashMap<>();
+        for (UUID playerId : playerIds) {
+            locked.put(playerId, lockPlayer(connection, playerId));
+        }
+        LockedPlayer joining = locked.get(joiningPlayerId);
+        List<MatchingPlayer> matches = candidates.stream()
+                .map(candidate -> new MatchingPlayer(
+                        candidate.playerId(),
+                        candidate.currentlyOnline()
+                                || locked.get(candidate.playerId()).currentlyOnline()
+                                || observedOnline.getOrDefault(candidate.playerId(), false)
+                ))
+                .toList();
+        return new LockedObservation(joining.firstSeenAt(), matches);
+    }
+
+    private static void rememberOnlineCandidates(
+            List<MatchingPlayer> candidates,
+            Map<UUID, Boolean> observedOnline
+    ) {
+        for (MatchingPlayer candidate : candidates) {
+            if (candidate.currentlyOnline()) {
+                observedOnline.put(candidate.playerId(), true);
+            }
+        }
+    }
+
+    private static LockedPlayer lockPlayer(Connection connection, UUID playerId) throws SQLException {
         try (PreparedStatement statement = connection.prepareStatement(
-                "SELECT first_seen_at FROM players WHERE player_id = ? FOR UPDATE")) {
+                "SELECT first_seen_at, current_server FROM players WHERE player_id = ? FOR UPDATE")) {
             statement.setBytes(1, UuidBytes.toBytes(playerId));
             try (ResultSet result = statement.executeQuery()) {
                 if (!result.next()) {
                     throw new SQLException("Player directory record is missing");
                 }
-                return result.getTimestamp(1).toInstant();
+                return new LockedPlayer(
+                        result.getTimestamp("first_seen_at").toInstant(),
+                        result.getString("current_server") != null
+                );
             }
         }
     }
@@ -923,6 +1024,15 @@ public final class JdbcNetworkIdentityStore implements NetworkIdentityStore {
     }
 
     private record MatchingPlayer(UUID playerId, boolean currentlyOnline) {
+    }
+
+    private record LockedPlayer(Instant firstSeenAt, boolean currentlyOnline) {
+    }
+
+    private record LockedObservation(Instant firstSeenAt, List<MatchingPlayer> matches) {
+    }
+
+    private record MatchOutcome(int inherited, int alerts) {
     }
 
     private record Relationship(
