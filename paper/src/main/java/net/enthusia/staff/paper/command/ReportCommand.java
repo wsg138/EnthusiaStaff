@@ -4,7 +4,6 @@ import java.time.Clock;
 import java.time.Instant;
 import java.util.Arrays;
 import java.util.List;
-import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -35,7 +34,6 @@ import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
 import org.bukkit.command.TabCompleter;
 import org.bukkit.entity.Player;
-import org.bukkit.plugin.Plugin;
 import org.bukkit.plugin.java.JavaPlugin;
 
 public final class ReportCommand implements CommandExecutor, TabCompleter {
@@ -135,7 +133,7 @@ public final class ReportCommand implements CommandExecutor, TabCompleter {
                             unavailable.run();
                             return;
                         }
-                        scheduleOnTarget(
+                        PlayerEntityScheduler.execute(
                                 dependencies.plugin(),
                                 onlineTarget,
                                 () -> completeSubmission(
@@ -299,29 +297,6 @@ public final class ReportCommand implements CommandExecutor, TabCompleter {
 
     private void send(CommandSender sender, String message) {
         responses.send(sender, Component.text(message));
-    }
-
-    static boolean scheduleOnTarget(Plugin plugin, Player target, Runnable action, Runnable retired) {
-        Objects.requireNonNull(plugin, "plugin");
-        Objects.requireNonNull(target, "target");
-        Objects.requireNonNull(action, "action");
-        Objects.requireNonNull(retired, "retired");
-        AtomicBoolean retiredOnce = new AtomicBoolean();
-        Runnable finishRetired = () -> {
-            if (retiredOnce.compareAndSet(false, true)) {
-                retired.run();
-            }
-        };
-        try {
-            boolean scheduled = target.getScheduler().execute(plugin, action, finishRetired, 1L);
-            if (!scheduled) {
-                finishRetired.run();
-            }
-            return scheduled;
-        } catch (RuntimeException exception) {
-            finishRetired.run();
-            return false;
-        }
     }
 
     private static String description(String[] arguments) {

@@ -28,6 +28,7 @@ public final class ClientCommand implements CommandExecutor, TabCompleter {
     private final ClientEvidenceCollector collector;
     private final Supplier<ClientEvidenceStore> evidenceStore;
     private final ExecutorService workers;
+    private final CommandResponseDispatcher responses;
 
     public ClientCommand(
             JavaPlugin plugin,
@@ -39,6 +40,7 @@ public final class ClientCommand implements CommandExecutor, TabCompleter {
         this.collector = java.util.Objects.requireNonNull(collector, "collector");
         this.evidenceStore = java.util.Objects.requireNonNull(evidenceStore, "evidenceStore");
         this.workers = java.util.Objects.requireNonNull(workers, "workers");
+        this.responses = new CommandResponseDispatcher(plugin);
     }
 
     @Override
@@ -59,16 +61,8 @@ public final class ClientCommand implements CommandExecutor, TabCompleter {
             usage(sender, label);
             return true;
         }
-        Player target = onlinePlayer(arguments[0]);
-        if (target == null) {
-            sender.sendMessage(Component.text(
-                    "Client evidence is live-only; that player is not online on this server."
-            ));
-            return true;
-        }
-        ClientEvidenceSnapshot snapshot = collector.capture(target);
-        display(sender, target.getName(), snapshot);
         if (arguments.length == 1) {
+            beginCapture(sender, arguments[0], false);
             return true;
         }
         if (!arguments[1].equalsIgnoreCase(SAVE_ARGUMENT)) {
@@ -81,55 +75,100 @@ public final class ClientCommand implements CommandExecutor, TabCompleter {
             ));
             return true;
         }
-        submitSave(sender, snapshot);
+        beginCapture(sender, arguments[0], true);
         return true;
     }
 
+    private void beginCapture(CommandSender sender, String targetReference, boolean save) {
+        Runnable unavailable = () -> send(
+                sender, "Client evidence is live-only; that player is not online on this server."
+        );
+        try {
+            plugin.getServer().getGlobalRegionScheduler().execute(plugin, () -> {
+                Player target;
+                try {
+                    target = onlinePlayer(targetReference);
+                } catch (RuntimeException exception) {
+                    unavailable.run();
+                    return;
+                }
+                if (target == null) {
+                    unavailable.run();
+                    return;
+                }
+                PlayerEntityScheduler.execute(plugin, target, () -> {
+                    CapturedEvidence evidence = capture(target);
+                    if (evidence == null) {
+                        send(sender, "Client evidence capture failed; inspect the sanitized server log.");
+                        return;
+                    }
+                    display(sender, evidence.targetName(), evidence.snapshot());
+                    if (save) {
+                        submitSave(sender, evidence.snapshot());
+                    }
+                }, unavailable);
+            });
+        } catch (RuntimeException exception) {
+            unavailable.run();
+        }
+    }
+
+    private CapturedEvidence capture(Player target) {
+        try {
+            return new CapturedEvidence(target.getName(), collector.capture(target));
+        } catch (RuntimeException exception) {
+            plugin.getLogger().log(java.util.logging.Level.SEVERE, "Client evidence capture failed", exception);
+            return null;
+        }
+    }
+
     private void display(CommandSender sender, String targetName, ClientEvidenceSnapshot snapshot) {
-        sender.sendMessage(Component.text("Client evidence for " + targetName + ':'));
-        sender.sendMessage(Component.text(
+        List<Component> messages = new ArrayList<>();
+        messages.add(Component.text("Client evidence for " + targetName + ':'));
+        messages.add(Component.text(
                 "Platform=" + snapshot.platform()
                         + " version=" + snapshot.minecraftVersion().orElse(UNAVAILABLE_VALUE)
                         + " protocol=" + snapshot.protocolVersion()
                                 .map(String::valueOf).orElse(UNAVAILABLE_VALUE)
         ));
-        sender.sendMessage(Component.text(
+        messages.add(Component.text(
                 "Reported brand=" + snapshot.reportedBrand().orElse(UNAVAILABLE_VALUE)
         ));
-        sender.sendMessage(Component.text(
+        messages.add(Component.text(
                 "ViaVersion=" + snapshot.viaVersion()
                         + " plugin-version="
                         + snapshot.viaVersionPluginVersion().orElse(UNAVAILABLE_VALUE)
         ));
-        sender.sendMessage(Component.text(
+        messages.add(Component.text(
                 "Floodgate=" + snapshot.floodgate()
                         + " player=" + snapshot.floodgatePlayer()
                         + " Bedrock-version=" + snapshot.bedrockVersion().orElse(UNAVAILABLE_VALUE)
                         + " device=" + snapshot.bedrockDevice().orElse(UNAVAILABLE_VALUE)
         ));
-        sender.sendMessage(Component.text("Geyser=" + snapshot.geyser()));
+        messages.add(Component.text("Geyser=" + snapshot.geyser()));
         AutoClickerHandshakeEvidence handshake = snapshot.autoClickerHandshake().orElse(null);
         if (handshake == null) {
-            sender.sendMessage(Component.text(
+            messages.add(Component.text(
                     "Enthusia AutoClicker=" + snapshot.autoClicker() + " handshake=not detected"
             ));
         } else {
-            sender.sendMessage(Component.text(
+            messages.add(Component.text(
                     "Enthusia AutoClicker=" + snapshot.autoClicker()
                             + " handshake=reported mod=" + handshake.modVersion()
                             + " loader=" + handshake.loader()
                             + " minecraft=" + handshake.minecraftVersion()
                             + " received=" + handshake.receivedAt()
             ));
-            sender.sendMessage(Component.text(
+            messages.add(Component.text(
                     "The AutoClicker handshake is a convenience signal, not cryptographic proof."
             ));
         }
-        sender.sendMessage(Component.text(
+        messages.add(Component.text(
                 "Polar=" + snapshot.polar()
                         + " metadata=" + snapshot.polarMetadata().orElse(UNAVAILABLE_VALUE)
                         + " captured=" + snapshot.capturedAt()
         ));
+        responses.send(sender, messages);
     }
 
     private void submitSave(CommandSender sender, ClientEvidenceSnapshot snapshot) {
@@ -153,9 +192,7 @@ public final class ClientCommand implements CommandExecutor, TabCompleter {
                 }
             });
         } catch (RejectedExecutionException exception) {
-            sender.sendMessage(Component.text(
-                    "The bounded work queue is full; no client evidence was saved."
-            ));
+            send(sender, "The bounded work queue is full; no client evidence was saved.");
         }
     }
 
@@ -172,14 +209,19 @@ public final class ClientCommand implements CommandExecutor, TabCompleter {
     }
 
     private void send(CommandSender sender, String message) {
-        plugin.getServer().getGlobalRegionScheduler().execute(
-                plugin,
-                () -> sender.sendMessage(Component.text(message))
-        );
+        responses.send(sender, Component.text(message));
     }
 
     private static void usage(CommandSender sender, String label) {
         sender.sendMessage(Component.text("Usage: /" + label + " <player|uuid> [save CONFIRM]"));
+    }
+
+    private record CapturedEvidence(String targetName, ClientEvidenceSnapshot snapshot) {
+        private CapturedEvidence {
+            if (targetName == null || targetName.isBlank() || snapshot == null) {
+                throw new IllegalArgumentException("captured client evidence is required");
+            }
+        }
     }
 
     @Override

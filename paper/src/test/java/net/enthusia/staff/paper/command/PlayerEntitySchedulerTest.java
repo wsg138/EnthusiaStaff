@@ -14,9 +14,9 @@ import org.bukkit.entity.Player;
 import org.bukkit.plugin.Plugin;
 import org.junit.jupiter.api.Test;
 
-class ReportCommandFoliaSchedulingTest {
+class PlayerEntitySchedulerTest {
     @Test
-    void targetCaptureRunsThroughTheTargetsEntityScheduler() {
+    void targetActionRunsThroughThePlayersEntityScheduler() {
         AtomicBoolean captured = new AtomicBoolean();
         Plugin plugin = plugin();
         EntityScheduler scheduler = scheduler((seenPlugin, action, retired, delay) -> {
@@ -26,7 +26,7 @@ class ReportCommandFoliaSchedulingTest {
             return true;
         });
 
-        boolean scheduled = ReportCommand.scheduleOnTarget(
+        boolean scheduled = PlayerEntityScheduler.execute(
                 plugin, player(scheduler), () -> captured.set(true), () -> {
                 }
         );
@@ -36,7 +36,7 @@ class ReportCommandFoliaSchedulingTest {
     }
 
     @Test
-    void retirementRunsTheFallbackOnceWithoutCapturingTargetEvidence() {
+    void retirementRunsTheFallbackOnceWithoutRunningTheTargetAction() {
         AtomicBoolean captured = new AtomicBoolean();
         AtomicInteger fallbacks = new AtomicInteger();
         EntityScheduler scheduler = scheduler((plugin, action, retired, delay) -> {
@@ -44,7 +44,7 @@ class ReportCommandFoliaSchedulingTest {
             return true;
         });
 
-        boolean scheduled = ReportCommand.scheduleOnTarget(
+        boolean scheduled = PlayerEntityScheduler.execute(
                 plugin(), player(scheduler), () -> captured.set(true), fallbacks::incrementAndGet
         );
 
@@ -59,7 +59,7 @@ class ReportCommandFoliaSchedulingTest {
         AtomicInteger fallbacks = new AtomicInteger();
         EntityScheduler scheduler = scheduler((plugin, action, retired, delay) -> false);
 
-        boolean scheduled = ReportCommand.scheduleOnTarget(
+        boolean scheduled = PlayerEntityScheduler.execute(
                 plugin(), player(scheduler), () -> captured.set(true), fallbacks::incrementAndGet
         );
 
@@ -76,20 +76,20 @@ class ReportCommandFoliaSchedulingTest {
             return false;
         });
 
-        ReportCommand.scheduleOnTarget(plugin(), player(scheduler), () -> {
+        PlayerEntityScheduler.execute(plugin(), player(scheduler), () -> {
         }, fallbacks::incrementAndGet);
 
         assertEquals(1, fallbacks.get());
     }
 
     @Test
-    void schedulerFailureRunsTheFallbackInsteadOfDroppingTheReport() {
+    void schedulerFailureRunsTheFallbackInsteadOfDroppingTheOperation() {
         AtomicInteger fallbacks = new AtomicInteger();
         EntityScheduler scheduler = scheduler((plugin, action, retired, delay) -> {
             throw new IllegalStateException("scheduler unavailable");
         });
 
-        boolean scheduled = ReportCommand.scheduleOnTarget(
+        boolean scheduled = PlayerEntityScheduler.execute(
                 plugin(), player(scheduler), () -> {
                 }, fallbacks::incrementAndGet
         );
