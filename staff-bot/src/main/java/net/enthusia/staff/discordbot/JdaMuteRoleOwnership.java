@@ -7,6 +7,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Stream;
 import net.dv8tion.jda.api.Permission;
 import net.dv8tion.jda.api.audit.ActionType;
 import net.dv8tion.jda.api.audit.AuditLogChange;
@@ -67,22 +68,23 @@ final class JdaMuteRoleOwnership {
         requirePermissions(guild);
         long targetId = Long.parseLong(punishment.targetUserId().value());
         long actorId = guild.getSelfMember().getIdLong();
-        List<Observation> observations = guild.retrieveAuditLogs()
+        try (Stream<Observation> observations = guild.retrieveAuditLogs()
                 .type(ActionType.MEMBER_ROLE_UPDATE)
                 .limit(AUDIT_LIMIT)
-                .complete().stream()
-                .map(JdaMuteRoleOwnership::observation)
-                .toList();
-        boolean owned = provesCurrentOwnership(
-                observations,
-                punishment.punishmentId(),
-                targetId,
-                actorId,
-                role.getIdLong(),
-                punishment.issuedAt()
-        );
-        if (!owned) {
-            throw failure("MUTE_ROLE_OWNERSHIP_UNVERIFIED", true);
+                .cache(false)
+                .stream()
+                .map(JdaMuteRoleOwnership::observation)) {
+            boolean owned = provesCurrentOwnershipNewestFirst(
+                    observations,
+                    punishment.punishmentId(),
+                    targetId,
+                    actorId,
+                    role.getIdLong(),
+                    punishment.issuedAt()
+            );
+            if (!owned) {
+                throw failure("MUTE_ROLE_OWNERSHIP_UNVERIFIED", true);
+            }
         }
     }
 
@@ -120,14 +122,49 @@ final class JdaMuteRoleOwnership {
             return false;
         }
         return observations.stream()
+                .filter(entry -> entry != null && entry.createdAt() != null)
                 .filter(entry -> entry.type() == ActionType.MEMBER_ROLE_UPDATE)
                 .filter(entry -> entry.targetId() == targetId && entry.changes(roleId))
                 .filter(entry -> !entry.createdAt().isBefore(issuedAt.minus(AUDIT_CLOCK_SKEW)))
                 .max(java.util.Comparator.comparing(Observation::createdAt))
-                .map(entry -> entry.addedRoleIds().contains(roleId)
-                        && !entry.removedRoleIds().contains(roleId)
-                        && provesOwnership(entry, punishmentId, targetId, actorId, issuedAt))
+                .map(entry -> isOwnedAssignment(entry, punishmentId, targetId, actorId, roleId, issuedAt))
                 .orElse(false);
+    }
+
+    static boolean provesCurrentOwnershipNewestFirst(
+            Stream<Observation> observations,
+            UUID punishmentId,
+            long targetId,
+            long actorId,
+            long roleId,
+            Instant issuedAt
+    ) {
+        if (observations == null || punishmentId == null || issuedAt == null) {
+            return false;
+        }
+        Instant earliest = issuedAt.minus(AUDIT_CLOCK_SKEW);
+        return observations
+                .takeWhile(entry -> entry != null
+                        && entry.createdAt() != null
+                        && !entry.createdAt().isBefore(earliest))
+                .filter(entry -> entry.type() == ActionType.MEMBER_ROLE_UPDATE)
+                .filter(entry -> entry.targetId() == targetId && entry.changes(roleId))
+                .findFirst()
+                .map(entry -> isOwnedAssignment(entry, punishmentId, targetId, actorId, roleId, issuedAt))
+                .orElse(false);
+    }
+
+    private static boolean isOwnedAssignment(
+            Observation observation,
+            UUID punishmentId,
+            long targetId,
+            long actorId,
+            long roleId,
+            Instant issuedAt
+    ) {
+        return observation.addedRoleIds().contains(roleId)
+                && !observation.removedRoleIds().contains(roleId)
+                && provesOwnership(observation, punishmentId, targetId, actorId, issuedAt);
     }
 
     static String marker(UUID punishmentId) {
