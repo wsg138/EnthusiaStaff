@@ -47,7 +47,7 @@ final class StaffToolSpectateFlow {
                 target.getUniqueId(),
                 target.getName(),
                 target.getLocation().clone(),
-                target.getEntityId()
+                target
         );
         onEntity(actorId, actor -> followSnapshot(actor, snapshot));
     }
@@ -173,7 +173,14 @@ final class StaffToolSpectateFlow {
     }
 
     private static boolean connectionChanged(TargetSnapshot snapshot, Player liveTarget) {
-        return snapshot.entityId() != liveTarget.getEntityId();
+        return !sameConnection(snapshot.connection(), liveTarget);
+    }
+
+    // Player equality is UUID-oriented, but this guard must distinguish a reconnect that reuses the same UUID.
+    // Reference identity is intentional and avoids reading target-owned entity state from the actor scheduler.
+    @SuppressWarnings("PMD.CompareObjectsWithEquals")
+    private static boolean sameConnection(Player expected, Player actual) {
+        return expected == actual;
     }
 
     private void onEntity(UUID playerId, Consumer<Player> operation) {
@@ -245,9 +252,9 @@ final class StaffToolSpectateFlow {
         onEntity(playerId, player -> player.sendMessage(Component.text(text)));
     }
 
-    private record TargetSnapshot(UUID playerId, String name, Location location, int entityId) {
+    private record TargetSnapshot(UUID playerId, String name, Location location, Player connection) {
         private TargetSnapshot withLocation(Location currentLocation) {
-            return new TargetSnapshot(playerId, name, currentLocation, entityId);
+            return new TargetSnapshot(playerId, name, currentLocation, connection);
         }
     }
 }
