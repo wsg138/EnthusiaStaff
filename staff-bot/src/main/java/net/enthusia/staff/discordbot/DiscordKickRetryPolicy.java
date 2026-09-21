@@ -8,6 +8,7 @@ import net.enthusia.staff.domain.discord.DiscordPunishmentState;
 final class DiscordKickRetryPolicy {
     static final String PRE_EFFECT_RETRY = "KICK_PRE_EFFECT_RETRY";
     static final String RESULT_AMBIGUOUS = "KICK_RESULT_AMBIGUOUS";
+    private static final int FIRST_ATTEMPT = 1;
 
     private DiscordKickRetryPolicy() {
     }
@@ -17,10 +18,10 @@ final class DiscordKickRetryPolicy {
     }
 
     static boolean mayDispatch(DiscordPunishment punishment, int attemptCount) {
-        if (!isKick(punishment) || attemptCount < 1) {
+        if (!isKick(punishment) || attemptCount < FIRST_ATTEMPT) {
             throw new IllegalArgumentException("kick retry policy requires a kick and positive attempt count");
         }
-        if (attemptCount == 1) {
+        if (attemptCount == FIRST_ATTEMPT) {
             return true;
         }
         return punishment.state() == DiscordPunishmentState.RETRY_APPLY
