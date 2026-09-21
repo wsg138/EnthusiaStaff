@@ -2,7 +2,6 @@ package net.enthusia.staff.paper.freeze;
 
 import io.papermc.paper.threadedregions.scheduler.EntityScheduler;
 import io.papermc.paper.threadedregions.scheduler.GlobalRegionScheduler;
-import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
 import java.time.Clock;
@@ -13,7 +12,6 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.logging.Logger;
 import net.enthusia.staff.domain.ports.FreezeStore;
-import org.bukkit.Bukkit;
 import org.bukkit.Server;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.Plugin;
@@ -56,7 +54,7 @@ public final class FreezeSchedulerBoundaryHarness {
     }
 
     public FreezeSchedulerBoundaryHarness globalException() {
-        return enqueue(Dispatch.globalFailure());
+        return enqueue(Dispatch.globalDispatchFailure());
     }
 
     public int globalDispatchCount() {
@@ -77,12 +75,8 @@ public final class FreezeSchedulerBoundaryHarness {
         });
     }
 
-    public AutoCloseable installAsBukkitServer() throws ReflectiveOperationException {
-        Field serverField = Bukkit.class.getDeclaredField("server");
-        serverField.setAccessible(true);
-        Object previous = serverField.get(null);
-        serverField.set(null, server);
-        return () -> serverField.set(null, previous);
+    public ServicesManager servicesManager() {
+        return java.util.Objects.requireNonNull(servicesManager, "servicesManager");
     }
 
     public FreezeNetworkReconciler reconciler(
@@ -128,7 +122,6 @@ public final class FreezeSchedulerBoundaryHarness {
         return switch (method.getName()) {
             case "getGlobalRegionScheduler" -> globalScheduler;
             case "getPlayer" -> active().present() ? player : null;
-            case "getServicesManager" -> servicesManager;
             case "getLogger" -> LOGGER;
             default -> unexpected(method);
         };
@@ -224,27 +217,28 @@ public final class FreezeSchedulerBoundaryHarness {
         return type.cast(Proxy.newProxyInstance(
                 Thread.currentThread().getContextClassLoader(),
                 new Class<?>[]{type},
-                (instance, method, arguments) -> invokeProxy(type, invocation, method, arguments)
+                (instance, method, arguments) -> invokeProxy(instance, type, invocation, method, arguments)
         ));
     }
 
     private static Object invokeProxy(
+            Object instance,
             Class<?> type,
             Invocation invocation,
             Method method,
             Object[] arguments
     ) throws Throwable {
         if (method.getDeclaringClass() == Object.class) {
-            return objectMethod(type, method, arguments);
+            return objectMethod(instance, type, method, arguments);
         }
         return invocation.invoke(method, arguments == null ? new Object[0] : arguments);
     }
 
-    private static Object objectMethod(Class<?> type, Method method, Object[] arguments) {
+    private static Object objectMethod(Object instance, Class<?> type, Method method, Object[] arguments) {
         return switch (method.getName()) {
             case "toString" -> type.getSimpleName() + "Proxy";
-            case "hashCode" -> System.identityHashCode(type);
-            case "equals" -> false;
+            case "hashCode" -> System.identityHashCode(instance);
+            case "equals" -> instance == arguments[0];
             default -> unexpected(method);
         };
     }
@@ -270,7 +264,7 @@ public final class FreezeSchedulerBoundaryHarness {
             return new Dispatch(true, false, outcome);
         }
 
-        private static Dispatch globalFailure() {
+        private static Dispatch globalDispatchFailure() {
             return new Dispatch(false, true, EntityOutcome.OWNED);
         }
     }
