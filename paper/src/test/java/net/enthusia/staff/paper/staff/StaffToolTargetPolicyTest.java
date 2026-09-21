@@ -3,6 +3,7 @@ package net.enthusia.staff.paper.staff;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.util.List;
 import java.util.UUID;
 import org.bukkit.GameMode;
 import org.junit.jupiter.api.Test;
@@ -28,27 +29,26 @@ class StaffToolTargetPolicyTest {
 
     @Test
     void randomTeleportExcludesStaffHiddenFrozenExemptAndUnsafePlayerStates() {
-        assertFalse(eligible(TARGET, state(true, false, false, false, false, false, false), safeEnvironment()));
-        assertFalse(eligible(TARGET, state(false, true, false, false, false, false, false), safeEnvironment()));
-        assertFalse(eligible(TARGET, state(false, false, true, false, false, false, false), safeEnvironment()));
-        assertFalse(eligible(TARGET, state(false, false, false, true, false, false, false), safeEnvironment()));
-        assertFalse(eligible(TARGET, state(false, false, false, false, true, false, false), safeEnvironment()));
-        assertFalse(eligible(TARGET, state(false, false, false, false, false, true, false), safeEnvironment()));
-        assertFalse(eligible(TARGET, state(false, false, false, false, false, false, true), safeEnvironment()));
+        for (StaffToolTargetPolicy.State unsafe : unsafeStates()) {
+            assertFalse(eligible(TARGET, unsafe, safeEnvironment()));
+        }
     }
 
     @Test
-    void executionTimeRevalidationRejectsTargetWhoseStateChanged() {
+    void executionTimeRevalidationRejectsEverySupportedStateChange() {
         assertTrue(eligible(TARGET, safeState(), safeEnvironment()));
+        for (StaffToolTargetPolicy.State unsafe : unsafeStates()) {
+            assertFalse(eligible(TARGET, unsafe, safeEnvironment()));
+        }
         assertFalse(eligible(
                 TARGET,
-                state(false, true, false, false, false, false, false),
-                safeEnvironment()
+                safeState(),
+                new StaffToolTargetPolicy.Environment(GameMode.SPECTATOR, true)
         ));
         assertFalse(eligible(
                 TARGET,
-                state(false, false, true, false, false, false, false),
-                safeEnvironment()
+                safeState(),
+                new StaffToolTargetPolicy.Environment(GameMode.SURVIVAL, false)
         ));
     }
 
@@ -69,6 +69,18 @@ class StaffToolTargetPolicyTest {
                 state,
                 environment
         ));
+    }
+
+    private static List<StaffToolTargetPolicy.State> unsafeStates() {
+        return List.of(
+                state(true, false, false, false, false, false, false),
+                state(false, true, false, false, false, false, false),
+                state(false, false, true, false, false, false, false),
+                state(false, false, false, true, false, false, false),
+                state(false, false, false, false, true, false, false),
+                state(false, false, false, false, false, true, false),
+                state(false, false, false, false, false, false, true)
+        );
     }
 
     private static StaffToolTargetPolicy.State safeState() {
