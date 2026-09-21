@@ -8,10 +8,6 @@ ROOT = Path(__file__).parents[2]
 CHECK_WORKFLOW = ROOT / ".github/workflows/pi-staging-check.yml"
 SUPERSEDE_WORKFLOW = ROOT / ".github/workflows/pi-staging-supersede.yml"
 APP_ACTION = ROOT / ".github/actions/staging-app-token/action.yml"
-LEGACY_SECRET = "secrets.ENTHUSIASTAFF_STAGING_TOKEN"
-CLIENT_ID = "vars.ENTHUSIASTAFF_STAGING_APP_CLIENT_ID"
-PRIVATE_KEY = "secrets.ENTHUSIASTAFF_STAGING_APP_PRIVATE_KEY"
-PINNED_APP_TOKEN_ACTION = "actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1"
 
 
 class StagingAppAuthTests(unittest.TestCase):
@@ -20,9 +16,9 @@ class StagingAppAuthTests(unittest.TestCase):
 
     def test_canonical_bridge_uses_short_lived_app_auth(self):
         workflow = self.read(CHECK_WORKFLOW)
-        self.assertNotIn(LEGACY_SECRET, workflow)
-        self.assertIn(CLIENT_ID, workflow)
-        self.assertIn(PRIVATE_KEY, workflow)
+        self.assertNotIn("secrets.ENTHUSIASTAFF_STAGING_TOKEN", workflow)
+        self.assertIn("vars.ENTHUSIASTAFF_STAGING_APP_CLIENT_ID", workflow)
+        self.assertIn("secrets.ENTHUSIASTAFF_STAGING_APP_PRIVATE_KEY", workflow)
         self.assertIn("./staging-controls/.github/actions/staging-app-token", workflow)
         self.assertIn("Verify private staging Actions access", workflow)
         self.assertLess(
@@ -32,9 +28,9 @@ class StagingAppAuthTests(unittest.TestCase):
 
     def test_supersession_uses_short_lived_app_auth(self):
         workflow = self.read(SUPERSEDE_WORKFLOW)
-        self.assertNotIn(LEGACY_SECRET, workflow)
-        self.assertIn(CLIENT_ID, workflow)
-        self.assertIn(PRIVATE_KEY, workflow)
+        self.assertNotIn("secrets.ENTHUSIASTAFF_STAGING_TOKEN", workflow)
+        self.assertIn("vars.ENTHUSIASTAFF_STAGING_APP_CLIENT_ID", workflow)
+        self.assertIn("secrets.ENTHUSIASTAFF_STAGING_APP_PRIVATE_KEY", workflow)
         self.assertIn("./.github/actions/staging-app-token", workflow)
         self.assertLess(
             workflow.index("Mint short-lived private staging token"),
@@ -43,7 +39,10 @@ class StagingAppAuthTests(unittest.TestCase):
 
     def test_app_token_is_pinned_and_least_privilege(self):
         action = self.read(APP_ACTION)
-        self.assertIn(PINNED_APP_TOKEN_ACTION, action)
+        self.assertIn(
+            "actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1",
+            action,
+        )
         self.assertIn("owner: wsg138", action)
         self.assertIn("repositories: EnthusiaStaff-Staging", action)
         self.assertIn("permission-actions: write", action)
