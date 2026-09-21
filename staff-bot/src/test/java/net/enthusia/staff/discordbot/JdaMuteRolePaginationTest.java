@@ -29,7 +29,8 @@ import net.dv8tion.jda.api.audit.AuditLogKey;
 import net.dv8tion.jda.api.entities.Guild;
 import net.dv8tion.jda.api.entities.Member;
 import net.dv8tion.jda.api.entities.Role;
-import net.dv8tion.jda.api.requests.RestAction;
+import net.dv8tion.jda.api.entities.SelfMember;
+import net.dv8tion.jda.api.requests.restaction.CacheRestAction;
 import net.dv8tion.jda.api.requests.restaction.pagination.AuditLogPaginationAction;
 import net.dv8tion.jda.api.utils.TimeUtil;
 import net.enthusia.staff.domain.auth.Actor;
@@ -197,7 +198,7 @@ final class JdaMuteRolePaginationTest {
     }
 
     private static Guild guild(AuditPages pages) {
-        Member self = member(BOT_ID, List.of());
+        SelfMember self = selfMember();
         return proxy(Guild.class, (proxy, method, args) -> switch (method.getName()) {
             case "getSelfMember" -> self;
             case "retrieveAuditLogs" -> pages.action();
@@ -207,7 +208,7 @@ final class JdaMuteRolePaginationTest {
 
     private static Guild gatewayGuild(AuditPages pages, AtomicInteger removals) {
         Role muteRole = role();
-        Member self = member(BOT_ID, List.of());
+        SelfMember self = selfMember();
         Member target = member(TARGET_ID, List.of(muteRole));
         return proxy(Guild.class, (proxy, method, args) -> switch (method.getName()) {
             case "getSelfMember" -> self;
@@ -215,6 +216,14 @@ final class JdaMuteRolePaginationTest {
             case "getRoleById" -> muteRole;
             case "retrieveMemberById" -> completedAction(target);
             case "removeRoleFromMember" -> removalAction(removals);
+            default -> objectOrUnexpected(proxy, method, args);
+        });
+    }
+
+    private static SelfMember selfMember() {
+        return proxy(SelfMember.class, (proxy, method, args) -> switch (method.getName()) {
+            case "getIdLong" -> BOT_ID;
+            case "hasPermission", "canInteract" -> true;
             default -> objectOrUnexpected(proxy, method, args);
         });
     }
@@ -243,8 +252,8 @@ final class JdaMuteRolePaginationTest {
     }
 
     @SuppressWarnings("unchecked")
-    private static RestAction<Member> completedAction(Member member) {
-        return proxy(RestAction.class, (proxy, method, args) -> switch (method.getName()) {
+    private static CacheRestAction<Member> completedAction(Member member) {
+        return proxy(CacheRestAction.class, (proxy, method, args) -> switch (method.getName()) {
             case "complete" -> member;
             default -> objectOrUnexpected(proxy, method, args);
         });
