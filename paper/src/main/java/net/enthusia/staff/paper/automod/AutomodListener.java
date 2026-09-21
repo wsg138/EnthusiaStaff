@@ -20,6 +20,7 @@ import net.enthusia.staff.domain.application.PunishmentService;
 import net.enthusia.staff.domain.auth.Actor;
 import net.enthusia.staff.domain.auth.StaffRank;
 import net.enthusia.staff.domain.casefile.CaseVisibility;
+import net.enthusia.staff.paper.scheduler.PlayerEntityScheduler;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 import org.bukkit.command.CommandSender;
@@ -142,7 +143,8 @@ public final class AutomodListener implements Listener {
     }
 
     private void onEntity(Player player, Runnable action) {
-        player.getScheduler().execute(plugin, action, null, 1L);
+        PlayerEntityScheduler.execute(plugin, player, action, () -> {
+        });
     }
 
     private record Detection(int fingerprint, Instant detectedAt) {

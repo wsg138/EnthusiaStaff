@@ -9,6 +9,7 @@ import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 import net.enthusia.staff.paper.freeze.FreezeManager;
+import net.enthusia.staff.paper.scheduler.PlayerEntityScheduler;
 import net.enthusia.staff.paper.visibility.VanishManager;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
@@ -168,15 +169,7 @@ final class StaffToolRandomTeleportService {
                 retired.run();
                 return;
             }
-            boolean scheduled = player.getScheduler().execute(
-                    plugin,
-                    () -> operation.accept(player),
-                    retired,
-                    1L
-            );
-            if (!scheduled) {
-                retired.run();
-            }
+            PlayerEntityScheduler.execute(plugin, player, () -> operation.accept(player), retired);
         });
     }
 

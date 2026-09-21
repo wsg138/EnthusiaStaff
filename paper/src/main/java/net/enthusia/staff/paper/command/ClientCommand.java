@@ -11,6 +11,7 @@ import net.enthusia.staff.domain.evidence.AutoClickerHandshakeEvidence;
 import net.enthusia.staff.domain.evidence.ClientEvidenceSnapshot;
 import net.enthusia.staff.domain.ports.ClientEvidenceStore;
 import net.enthusia.staff.paper.client.ClientEvidenceCollector;
+import net.enthusia.staff.paper.scheduler.PlayerEntityScheduler;
 import net.kyori.adventure.text.Component;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;

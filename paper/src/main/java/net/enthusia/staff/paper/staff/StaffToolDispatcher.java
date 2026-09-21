@@ -8,6 +8,7 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.function.Consumer;
 import net.enthusia.staff.paper.freeze.FreezeManager;
+import net.enthusia.staff.paper.scheduler.PlayerEntityScheduler;
 import net.enthusia.staff.paper.tester.CheatTesterManager;
 import net.enthusia.staff.paper.visibility.VanishManager;
 import net.kyori.adventure.text.Component;
@@ -528,15 +529,7 @@ public final class StaffToolDispatcher implements Listener, CommandExecutor, Tab
                 retired.run();
                 return;
             }
-            boolean scheduled = player.getScheduler().execute(
-                    plugin,
-                    () -> operation.accept(player),
-                    retired,
-                    1L
-            );
-            if (!scheduled) {
-                retired.run();
-            }
+            PlayerEntityScheduler.execute(plugin, player, () -> operation.accept(player), retired);
         });
     }
 

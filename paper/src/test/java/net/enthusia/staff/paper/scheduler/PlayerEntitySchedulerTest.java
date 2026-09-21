@@ -1,4 +1,4 @@
-package net.enthusia.staff.paper.command;
+package net.enthusia.staff.paper.scheduler;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
