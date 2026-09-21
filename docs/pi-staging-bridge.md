@@ -48,7 +48,7 @@ One-time setup:
 5. Generate one App private key and store the PEM value as repository Actions secret `ENTHUSIASTAFF_STAGING_APP_PRIVATE_KEY`.
 6. Run canonical staging and stale-run supersession once. After both prove GitHub App authentication works, delete the obsolete `ENTHUSIASTAFF_STAGING_TOKEN` PAT secret rather than keeping two credential paths.
 
-The App private key does not have the normal PAT expiration lifecycle. If it is deliberately revoked or rotated, replace only `ENTHUSIASTAFF_STAGING_APP_PRIVATE_KEY`; workflows continue minting fresh least-privilege installation tokens automatically.
+The GitHub App private key is not a user PAT and does not participate in the PAT expiration lifecycle that caused the recurring 401s. If the private key is deliberately revoked or rotated, replace only `ENTHUSIASTAFF_STAGING_APP_PRIVATE_KEY`; workflows continue minting fresh least-privilege installation tokens automatically. Keep at least one valid App private key configured, and rotate it deliberately rather than on every staging run.
 
 ## Artifact handoff and retention
 
