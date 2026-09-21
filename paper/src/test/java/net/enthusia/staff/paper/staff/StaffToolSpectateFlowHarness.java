@@ -349,16 +349,15 @@ final class StaffToolSpectateFlowHarness {
             Object[] arguments
     ) throws Throwable {
         if (method.getDeclaringClass() == Object.class) {
-            return objectMethod(instance, type, method, arguments);
+            return objectMethod(instance, type, method);
         }
         return invocation.invoke(method, arguments == null ? new Object[0] : arguments);
     }
 
-    private static Object objectMethod(Object instance, Class<?> type, Method method, Object[] arguments) {
+    private static Object objectMethod(Object instance, Class<?> type, Method method) {
         return switch (method.getName()) {
             case "toString" -> type.getSimpleName() + "Proxy";
             case "hashCode" -> System.identityHashCode(instance);
-            case "equals" -> arguments != null && arguments.length == 1 && instance == arguments[0];
             default -> unexpected(method);
         };
     }
