@@ -7,6 +7,8 @@ import java.lang.reflect.Proxy;
 import java.time.Clock;
 import java.util.ArrayDeque;
 import java.util.Deque;
+import java.util.IdentityHashMap;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -25,13 +27,13 @@ public final class FreezeSchedulerBoundaryHarness {
     private final AtomicInteger globalDispatches = new AtomicInteger();
     private final AtomicInteger entityDispatches = new AtomicInteger();
     private final Plugin plugin = proxy(Plugin.class, this::pluginCall);
-    private final EntityScheduler entityScheduler = proxy(EntityScheduler.class, this::entitySchedulerCall);
+    private final EntityScheduler entityScheduler = proxyWithArguments(EntityScheduler.class, this::entitySchedulerCall);
     private final Player player = proxy(Player.class, this::playerCall);
-    private final GlobalRegionScheduler globalScheduler = proxy(GlobalRegionScheduler.class, this::globalSchedulerCall);
+    private final GlobalRegionScheduler globalScheduler = proxyWithArguments(GlobalRegionScheduler.class, this::globalSchedulerCall);
     private final Server server = proxy(Server.class, this::serverCall);
 
     private ServicesManager servicesManager;
-    private Dispatch activeDispatch;
+    private Optional<Dispatch> activeDispatch = Optional.empty();
 
     public FreezeSchedulerBoundaryHarness absent() {
         return enqueue(Dispatch.absent());
@@ -66,7 +68,7 @@ public final class FreezeSchedulerBoundaryHarness {
     }
 
     public void exposeService(FreezeNetworkReconciler reconciler, AtomicInteger loads) {
-        servicesManager = proxy(ServicesManager.class, (method, arguments) -> {
+        servicesManager = proxyWithArguments(ServicesManager.class, (method, arguments) -> {
             if (method.getName().equals("load") && arguments[0] == FreezeNetworkReconciler.class) {
                 loads.incrementAndGet();
                 return reconciler;
@@ -109,25 +111,32 @@ public final class FreezeSchedulerBoundaryHarness {
             throw new IllegalStateException("global dispatch rejected");
         }
         assertPlugin(arguments[0]);
-        activeDispatch = dispatch;
+        activeDispatch = Optional.of(dispatch);
         try {
             ((Runnable) arguments[1]).run();
         } finally {
-            activeDispatch = null;
+            activeDispatch = Optional.empty();
         }
         return null;
     }
 
-    private Object serverCall(Method method, Object[] arguments) {
+    private Object serverCall(Method method) {
         return switch (method.getName()) {
             case "getGlobalRegionScheduler" -> globalScheduler;
-            case "getPlayer" -> active().present() ? player : null;
+            case "getPlayer" -> localPlayer();
             case "getLogger" -> LOGGER;
             default -> unexpected(method);
         };
     }
 
-    private Object playerCall(Method method, Object[] arguments) {
+    private Player localPlayer() {
+        if (active().present()) {
+            return player;
+        }
+        return null;
+    }
+
+    private Object playerCall(Method method) {
         if (method.getName().equals("getScheduler")) {
             return entityScheduler;
         }
@@ -148,7 +157,7 @@ public final class FreezeSchedulerBoundaryHarness {
         return executeEntity(active().entityOutcome(), owned, retired);
     }
 
-    private Object pluginCall(Method method, Object[] arguments) {
+    private Object pluginCall(Method method) {
         if (method.getName().equals("getName")) {
             return "freeze-boundary-test";
         }
@@ -173,10 +182,9 @@ public final class FreezeSchedulerBoundaryHarness {
     }
 
     private Dispatch active() {
-        if (activeDispatch == null) {
-            throw new AssertionError("No active global scheduler dispatch");
-        }
-        return activeDispatch;
+        return activeDispatch.orElseThrow(
+                () -> new AssertionError("No active global scheduler dispatch")
+        );
     }
 
     private void assertPlugin(Object seenPlugin) {
@@ -213,7 +221,11 @@ public final class FreezeSchedulerBoundaryHarness {
         throw new AssertionError("Unexpected call: " + method.getName());
     }
 
-    private static <T> T proxy(Class<T> type, Invocation invocation) {
+    private static <T> T proxy(Class<T> type, MethodInvocation invocation) {
+        return proxyWithArguments(type, (method, arguments) -> invocation.invoke(method));
+    }
+
+    private static <T> T proxyWithArguments(Class<T> type, Invocation invocation) {
         return type.cast(Proxy.newProxyInstance(
                 Thread.currentThread().getContextClassLoader(),
                 new Class<?>[]{type},
@@ -238,9 +250,20 @@ public final class FreezeSchedulerBoundaryHarness {
         return switch (method.getName()) {
             case "toString" -> type.getSimpleName() + "Proxy";
             case "hashCode" -> System.identityHashCode(instance);
-            case "equals" -> instance == arguments[0];
+            case "equals" -> sameReference(instance, arguments[0]);
             default -> unexpected(method);
         };
+    }
+
+    private static boolean sameReference(Object expected, Object actual) {
+        IdentityHashMap<Object, Boolean> references = new IdentityHashMap<>();
+        references.put(expected, Boolean.TRUE);
+        return references.containsKey(actual);
+    }
+
+    @FunctionalInterface
+    private interface MethodInvocation {
+        Object invoke(Method method) throws Throwable;
     }
 
     @FunctionalInterface
