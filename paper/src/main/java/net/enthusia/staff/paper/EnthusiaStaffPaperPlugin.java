@@ -41,6 +41,7 @@ import net.enthusia.staff.paper.config.reload.ConfigurationReloadCoordinator;
 import net.enthusia.staff.paper.config.reload.ConfigurationReloadResult;
 import net.enthusia.staff.paper.enforcement.MuteEnforcementListener;
 import net.enthusia.staff.paper.report.ChatContextBuffer;
+import net.enthusia.staff.paper.scheduler.PlayerEntityScheduler;
 import net.enthusia.staff.persistence.DatabaseConfig;
 import net.enthusia.staff.persistence.MariaDb;
 import net.enthusia.staff.persistence.MariaDbRuntime;
@@ -445,8 +446,9 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
             retired.run();
             return;
         }
-        boolean scheduled = located.getScheduler().execute(
+        PlayerEntityScheduler.execute(
                 this,
+                located,
                 () -> {
                     Player current = getServer().getPlayer(playerId);
                     if (current == null || !current.isOnline()) {
@@ -457,12 +459,8 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
                     captured.accept(new StorageBootstrapCoordinator.PlayerSnapshot(
                             playerId, current.getName(), rank));
                 },
-                retired,
-                1L
+                retired
         );
-        if (!scheduled) {
-            retired.run();
-        }
     }
 
     private void attachPunishmentRequestAlerts(PaperStorageBindings bindings) {
