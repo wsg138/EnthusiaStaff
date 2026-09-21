@@ -15,6 +15,9 @@ import net.enthusia.staff.domain.freeze.FreezeRecord;
 import net.enthusia.staff.domain.ports.FreezeStore;
 
 public final class JdbcFreezeStore implements FreezeStore {
+    private static final int PROTOCOL_VERSION = 1;
+    private static final String FREEZE_CHANGED = "FREEZE_CHANGED";
+
     private final DataSource dataSource;
 
     public JdbcFreezeStore(DataSource dataSource) {
@@ -46,6 +49,7 @@ public final class JdbcFreezeStore implements FreezeStore {
                 insertAudit(connection, playerId, actorId, "PLAYER_FROZEN", reason, now);
                 insertDiscord(connection, playerId, actorId, "PLAYER_FROZEN", reason, now);
                 FreezeRecord record = lockAndRead(connection, playerId);
+                insertNetworkReconciliation(connection, playerId, record.revision(), now);
                 connection.commit();
                 return record;
             } catch (SQLException exception) {
@@ -78,6 +82,7 @@ public final class JdbcFreezeStore implements FreezeStore {
                 if (changed) {
                     insertAudit(connection, playerId, actorId, "PLAYER_UNFROZEN", reason, now);
                     insertDiscord(connection, playerId, actorId, "PLAYER_UNFROZEN", reason, now);
+                    insertNetworkReconciliation(connection, playerId, currentRevision(connection, playerId), now);
                 }
                 connection.commit();
                 return changed;
@@ -244,6 +249,20 @@ public final class JdbcFreezeStore implements FreezeStore {
         }
     }
 
+    private static long currentRevision(Connection connection, UUID playerId) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement("""
+                SELECT revision FROM player_freezes WHERE player_id = ?
+                """)) {
+            statement.setBytes(1, UuidBytes.toBytes(playerId));
+            try (ResultSet result = statement.executeQuery()) {
+                if (!result.next()) {
+                    throw new SQLException("freeze row disappeared while publishing reconciliation");
+                }
+                return result.getLong(1);
+            }
+        }
+    }
+
     private static FreezeRecord readRecord(ResultSet result) throws SQLException {
         Timestamp offline = result.getTimestamp("offline_expires_at");
         return new FreezeRecord(
@@ -306,6 +325,30 @@ public final class JdbcFreezeStore implements FreezeStore {
                     + actorId + "\",\"reason\":\"" + escape(reason.trim()) + "\"}");
             statement.setTimestamp(5, Timestamp.from(now));
             statement.setTimestamp(6, Timestamp.from(now));
+            statement.executeUpdate();
+        }
+    }
+
+    private static void insertNetworkReconciliation(
+            Connection connection,
+            UUID playerId,
+            long revision,
+            Instant now
+    ) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement("""
+                INSERT INTO network_outbox(
+                    message_id, idempotency_key, destination, message_type,
+                    protocol_version, payload_json, available_at, created_at
+                ) VALUES (?, ?, 'broadcast', ?, ?, ?, ?, ?)
+                """)) {
+            UUID messageId = UUID.randomUUID();
+            statement.setBytes(1, UuidBytes.toBytes(messageId));
+            statement.setString(2, "freeze-reconcile:" + playerId + ':' + revision);
+            statement.setString(3, FREEZE_CHANGED);
+            statement.setInt(4, PROTOCOL_VERSION);
+            statement.setString(5, "{\"targetId\":\"" + playerId + "\"}");
+            statement.setTimestamp(6, Timestamp.from(now));
+            statement.setTimestamp(7, Timestamp.from(now));
             statement.executeUpdate();
         }
     }

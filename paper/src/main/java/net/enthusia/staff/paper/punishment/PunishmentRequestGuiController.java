@@ -5,6 +5,7 @@ import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.logging.Level;
@@ -27,6 +28,7 @@ import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryDragEvent;
+import org.bukkit.plugin.Plugin;
 import org.bukkit.plugin.java.JavaPlugin;
 
 public final class PunishmentRequestGuiController implements Listener {
@@ -34,7 +36,7 @@ public final class PunishmentRequestGuiController implements Listener {
     private static final String REVIEW_PERMISSION = "enthusiastaff.punishment.requests.review";
     private static final String NOT_READY_MESSAGE = "Punishment request storage is not ready.";
 
-    private final JavaPlugin plugin;
+    private final Plugin plugin;
     private final Supplier<PunishmentRequestService> services;
     private final Supplier<PlayerDirectory> players;
     private final AuthorizationPolicy authorization;
@@ -42,6 +44,16 @@ public final class PunishmentRequestGuiController implements Listener {
 
     public PunishmentRequestGuiController(
             JavaPlugin plugin,
+            Supplier<PunishmentRequestService> services,
+            Supplier<PlayerDirectory> players,
+            AuthorizationPolicy authorization,
+            ExecutorService workers
+    ) {
+        this((Plugin) plugin, services, players, authorization, workers);
+    }
+
+    PunishmentRequestGuiController(
+            Plugin plugin,
             Supplier<PunishmentRequestService> services,
             Supplier<PlayerDirectory> players,
             AuthorizationPolicy authorization,
@@ -144,7 +156,7 @@ public final class PunishmentRequestGuiController implements Listener {
                 page,
                 PunishmentRequestGuiRenderer.QUEUE_CONTENT_SIZE
         );
-        onMain(() -> player.openInventory(PunishmentRequestGuiRenderer.renderQueue(state)));
+        onEntity(player, () -> player.openInventory(PunishmentRequestGuiRenderer.renderQueue(state)));
     }
 
     private void openRequest(Player player, Actor actor, UUID requestId, int returnPage) {
@@ -158,11 +170,11 @@ public final class PunishmentRequestGuiController implements Listener {
         }
         PunishmentApprovalRequest request = service.find(requestId).orElse(null);
         if (request == null) {
-            onMain(() -> rejection(player, rejected("REQUEST_NOT_FOUND", "The punishment request does not exist")));
+            onEntity(player, () -> rejection(player, rejected("REQUEST_NOT_FOUND", "The punishment request does not exist")));
             return;
         }
         if (!service.mayReview(actor, request)) {
-            onMain(() -> rejection(player, rejected(
+            onEntity(player, () -> rejection(player, rejected(
                     "FORBIDDEN",
                     "You are not authorized to review this punishment request"
             )));
@@ -184,7 +196,7 @@ public final class PunishmentRequestGuiController implements Listener {
                     new PunishmentRequestGuiState.RequestView(request, resolvedTargetName),
                     returnPage
             );
-            onMain(() -> player.openInventory(PunishmentRequestGuiRenderer.renderDetails(state)));
+            onEntity(player, () -> player.openInventory(PunishmentRequestGuiRenderer.renderDetails(state)));
             return;
         }
         acquireAndOpen(player, actor, request.requestId(), resolvedTargetName, returnPage, service);
@@ -205,17 +217,17 @@ public final class PunishmentRequestGuiController implements Listener {
                     targetName,
                     returnPage
             );
-            onMain(() -> player.openInventory(PunishmentRequestGuiRenderer.renderReview(state)));
+            onEntity(player, () -> player.openInventory(PunishmentRequestGuiRenderer.renderReview(state)));
             return;
         }
         PunishmentApprovalRequest current = service.find(requestId).orElse(null);
         if (current != null && current.status() != PunishmentRequestStatus.PENDING && service.mayReview(actor, current)) {
             PunishmentRequestGuiState.Details state = new PunishmentRequestGuiState.Details(view(current), returnPage);
-            onMain(() -> player.openInventory(PunishmentRequestGuiRenderer.renderDetails(state)));
+            onEntity(player, () -> player.openInventory(PunishmentRequestGuiRenderer.renderDetails(state)));
             return;
         }
         PunishmentRequestResult.Rejected rejected = (PunishmentRequestResult.Rejected) result;
-        onMain(() -> rejection(player, rejected));
+        onEntity(player, () -> rejection(player, rejected));
     }
 
     private void handleQueueClick(Player player, PunishmentRequestGuiState.Queue queue, int slot) {
@@ -328,7 +340,7 @@ public final class PunishmentRequestGuiController implements Listener {
             player.closeInventory();
         } else if (slot == PunishmentRequestGuiRenderer.BACK_SLOT) {
             openQueue(player, details.returnPage());
-        } else if (slot == PunishmentRequestGuiRenderer.REFRESH_SLOT) {
+        } else if (slot == PunishmentRequestGuiRenderer.DETAILS_REFRESH_SLOT) {
             refreshDetails(player, details);
         }
     }
@@ -364,7 +376,7 @@ public final class PunishmentRequestGuiController implements Listener {
         }
         PunishmentRequestResult result = decision.apply(service);
         PunishmentRequestGuiState.RequestView resolvedView = resolvedView(service, actor, lease, result);
-        onMain(() -> presentDecision(player, result, resolvedView, returnPage));
+        onEntity(player, () -> presentDecision(player, result, resolvedView, returnPage));
     }
 
     private PunishmentRequestGuiState.RequestView resolvedView(
@@ -451,11 +463,35 @@ public final class PunishmentRequestGuiController implements Listener {
     }
 
     private void message(Player player, String text) {
-        onMain(() -> player.sendMessage(Component.text(text, NamedTextColor.RED)));
+        onEntity(player, () -> player.sendMessage(Component.text(text, NamedTextColor.RED)));
     }
 
-    private void onMain(Runnable action) {
-        plugin.getServer().getScheduler().runTask(plugin, action);
+    private void onEntity(Player player, Runnable action) {
+        scheduleOnOwner(
+                plugin,
+                player,
+                action,
+                () -> plugin.getLogger().fine("Skipped punishment request GUI callback for a retired player session")
+        );
+    }
+
+    static boolean scheduleOnOwner(
+            Plugin plugin,
+            Player player,
+            Runnable action,
+            Runnable retired
+    ) {
+        AtomicBoolean retiredOnce = new AtomicBoolean();
+        Runnable retireOnce = () -> {
+            if (retiredOnce.compareAndSet(false, true)) {
+                retired.run();
+            }
+        };
+        boolean scheduled = player.getScheduler().execute(plugin, action, retireOnce, 1L);
+        if (!scheduled) {
+            retireOnce.run();
+        }
+        return scheduled;
     }
 
     private PunishmentRequestGuiState.RequestView view(PunishmentApprovalRequest request) {
