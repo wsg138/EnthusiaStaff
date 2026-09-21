@@ -21,6 +21,7 @@ import net.enthusia.staff.paper.api.StaffModeQueryService;
 import net.enthusia.staff.paper.api.StaffSessionService;
 import net.enthusia.staff.paper.api.StaffVisibilityService;
 import net.enthusia.staff.paper.freeze.FreezeManager;
+import net.enthusia.staff.paper.freeze.FreezeNetworkReconciler;
 import net.enthusia.staff.paper.inventory.InventoryCoordinator;
 import net.enthusia.staff.paper.inventory.InventoryOperationContext;
 import net.enthusia.staff.paper.inventory.InventoryRecoveryGuard;
@@ -43,6 +44,7 @@ import org.bukkit.plugin.java.JavaPlugin;
 record PaperRuntimeComponents(
         ReportEvidenceMaintenance reportEvidenceMaintenance,
         FreezeManager freeze,
+        FreezeNetworkReconciler freezeNetworkReconciler,
         StaffModeManager staffMode,
         CheatTesterManager cheatTester,
         FakeBaseManager fakeBases,
@@ -60,6 +62,13 @@ record PaperRuntimeComponents(
                 dependencies.environment().plugin().getLogger()
         );
         FreezeManager freeze = createFreezeManager(dependencies);
+        FreezeNetworkReconciler freezeNetworkReconciler = new FreezeNetworkReconciler(
+                dependencies.environment().plugin(),
+                dependencies.environment().clock(),
+                dependencies.stores().freezeStore(),
+                dependencies.environment().workers(),
+                freeze
+        );
         StaffModeManager staffMode = createStaffModeManager(dependencies);
         DefaultStaffVisibilityService visibility = createVisibilityService(dependencies);
         VanishManager vanish = createVanishManager(dependencies, staffMode, visibility);
@@ -89,6 +98,7 @@ record PaperRuntimeComponents(
         return new PaperRuntimeComponents(
                 evidence,
                 freeze,
+                freezeNetworkReconciler,
                 staffMode,
                 cheatTester,
                 fakeBases,
@@ -122,6 +132,12 @@ record PaperRuntimeComponents(
         plugin.getServer().getServicesManager().register(
                 StaffSessionService.class,
                 staffMode::active,
+                plugin,
+                ServicePriority.Normal
+        );
+        plugin.getServer().getServicesManager().register(
+                FreezeNetworkReconciler.class,
+                freezeNetworkReconciler,
                 plugin,
                 ServicePriority.Normal
         );
