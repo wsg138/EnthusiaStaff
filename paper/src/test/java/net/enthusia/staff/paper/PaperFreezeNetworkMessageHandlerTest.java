@@ -12,17 +12,27 @@ import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
+import net.enthusia.staff.domain.freeze.FreezeRecord;
 import net.enthusia.staff.domain.network.NetworkOutboxMessage;
+import net.enthusia.staff.domain.ports.FreezeStore;
 import net.enthusia.staff.domain.ports.NetworkOutboxStore;
+import net.enthusia.staff.paper.freeze.FreezeNetworkReconciler;
+import net.enthusia.staff.paper.freeze.FreezeSchedulerBoundaryHarness;
 import net.enthusia.staff.protocol.ProtocolEnvelope;
 import org.junit.jupiter.api.Test;
 
 class PaperFreezeNetworkMessageHandlerTest {
     private static final Instant NOW = Instant.parse("2026-09-20T20:00:00Z");
+    private static final Clock CLOCK = Clock.fixed(NOW, ZoneOffset.UTC);
     private static final UUID TARGET = UUID.fromString("10000000-0000-0000-0000-000000000011");
+    private static final UUID ACTOR = UUID.fromString("20000000-0000-0000-0000-000000000011");
 
     @Test
     void successfulFreezeReconciliationPrecedesInboxReceipt() {
@@ -55,10 +65,77 @@ class PaperFreezeNetworkMessageHandlerTest {
         assertTrue(actions.isEmpty());
     }
 
+    @Test
+    void productionServicePathRejectsPreLookupSchedulerFailureAndRetryRecordsOnce() throws Exception {
+        FreezeSchedulerBoundaryHarness scheduler = new FreezeSchedulerBoundaryHarness()
+                .rejected()
+                .owned()
+                .owned()
+                .owned()
+                .owned();
+        RecordingFreezeStore store = new RecordingFreezeStore();
+        AtomicBoolean restricted = new AtomicBoolean();
+        FreezeNetworkReconciler reconciler = scheduler.reconciler(CLOCK, store, restricted);
+        AtomicInteger serviceLoads = new AtomicInteger();
+        scheduler.exposeService(reconciler, serviceLoads);
+        RecordingInbox inbox = new RecordingInbox(new ArrayList<>());
+        ProtocolEnvelope message = freezeEnvelope(TARGET);
+
+        try (AutoCloseable ignored = scheduler.installAsBukkitServer()) {
+            PaperNetworkMessageHandler handler = defaultHandler();
+            assertFalse(handler.handle(inbox, "paper-a", message));
+            assertFalse(store.read);
+            assertEquals(0, inbox.acceptedReceiptCount());
+
+            assertTrue(handler.handle(inbox, "paper-a", message));
+            assertTrue(store.read);
+            assertTrue(restricted.get());
+            assertEquals(1, inbox.acceptedReceiptCount());
+
+            assertTrue(handler.handle(inbox, "paper-a", message));
+            assertEquals(1, inbox.acceptedReceiptCount());
+            assertEquals(3, serviceLoads.get());
+        }
+    }
+
+    @Test
+    void productionServicePathRejectsPostLookupRetirementBeforeInboxReceipt() throws Exception {
+        FreezeSchedulerBoundaryHarness scheduler = new FreezeSchedulerBoundaryHarness()
+                .owned()
+                .retired()
+                .owned()
+                .owned();
+        RecordingFreezeStore store = new RecordingFreezeStore();
+        AtomicBoolean restricted = new AtomicBoolean();
+        FreezeNetworkReconciler reconciler = scheduler.reconciler(CLOCK, store, restricted);
+        AtomicInteger serviceLoads = new AtomicInteger();
+        scheduler.exposeService(reconciler, serviceLoads);
+        RecordingInbox inbox = new RecordingInbox(new ArrayList<>());
+        ProtocolEnvelope message = freezeEnvelope(TARGET);
+
+        try (AutoCloseable ignored = scheduler.installAsBukkitServer()) {
+            PaperNetworkMessageHandler handler = defaultHandler();
+            assertFalse(handler.handle(inbox, "paper-a", message));
+            assertTrue(store.read);
+            assertFalse(restricted.get());
+            assertEquals(0, inbox.acceptedReceiptCount());
+
+            assertTrue(handler.handle(inbox, "paper-a", message));
+            assertTrue(restricted.get());
+            assertEquals(1, inbox.acceptedReceiptCount());
+            assertEquals(2, serviceLoads.get());
+        }
+    }
+
+    private static PaperNetworkMessageHandler defaultHandler() {
+        return new PaperNetworkMessageHandler(new ObjectMapper(), CLOCK, target -> {
+        });
+    }
+
     private static PaperNetworkMessageHandler handler(List<String> actions, boolean result) {
         return new PaperNetworkMessageHandler(
                 new ObjectMapper(),
-                Clock.fixed(NOW, ZoneOffset.UTC),
+                CLOCK,
                 target -> actions.add("sanction:" + target),
                 target -> {
                     actions.add("reconcile:" + target);
@@ -84,11 +161,64 @@ class PaperFreezeNetworkMessageHandlerTest {
         );
     }
 
+    private static final class RecordingFreezeStore implements FreezeStore {
+        private boolean read;
+
+        @Override
+        public Optional<FreezeRecord> active(UUID playerId, Instant now) {
+            read = true;
+            return Optional.of(new FreezeRecord(
+                    TARGET,
+                    ACTOR,
+                    "authoritative",
+                    NOW,
+                    Optional.empty(),
+                    false,
+                    1L
+            ));
+        }
+
+        @Override
+        public FreezeRecord apply(UUID playerId, UUID actorId, String reason, Instant now) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public boolean release(UUID playerId, UUID actorId, String reason, Instant now) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public boolean keepActive(UUID playerId, UUID actorId, String reason, Instant now) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public void disconnected(UUID playerId, Instant offlineExpiration, Instant now) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public Optional<FreezeRecord> readActive(UUID playerId, Instant now) {
+            return active(playerId, now);
+        }
+
+        @Override
+        public List<FreezeRecord> listActive(Instant now, int limit) {
+            return List.of();
+        }
+    }
+
     private static final class RecordingInbox implements NetworkOutboxStore {
         private final List<String> actions;
+        private final Set<UUID> acceptedReceipts = new HashSet<>();
 
         private RecordingInbox(List<String> actions) {
             this.actions = actions;
+        }
+
+        private int acceptedReceiptCount() {
+            return acceptedReceipts.size();
         }
 
         @Override
@@ -99,8 +229,11 @@ class PaperFreezeNetworkMessageHandlerTest {
                 String outcomeJson,
                 Instant now
         ) {
-            actions.add("receipt");
-            return true;
+            boolean accepted = acceptedReceipts.add(messageId);
+            if (accepted) {
+                actions.add("receipt");
+            }
+            return accepted;
         }
 
         @Override

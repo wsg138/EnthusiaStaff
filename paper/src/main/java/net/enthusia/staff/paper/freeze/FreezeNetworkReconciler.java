@@ -15,7 +15,9 @@ import java.util.function.Supplier;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import net.enthusia.staff.domain.ports.FreezeStore;
+import org.bukkit.Server;
 import org.bukkit.entity.Player;
+import org.bukkit.plugin.Plugin;
 import org.bukkit.plugin.java.JavaPlugin;
 
 /** Reconciles a broadcast freeze change against authoritative storage on the target backend. */
@@ -134,11 +136,17 @@ public final class FreezeNetworkReconciler {
 
     private static LocalTargetRouter localTargetRouter(JavaPlugin plugin) {
         java.util.Objects.requireNonNull(plugin, "plugin");
+        return localTargetRouter(plugin.getServer(), plugin);
+    }
+
+    static LocalTargetRouter localTargetRouter(Server server, Plugin plugin) {
+        java.util.Objects.requireNonNull(server, "server");
+        java.util.Objects.requireNonNull(plugin, "plugin");
         return (playerId, present, absent, failed) -> {
             try {
-                plugin.getServer().getGlobalRegionScheduler().execute(
+                server.getGlobalRegionScheduler().execute(
                         plugin,
-                        () -> routeFromGlobal(plugin, playerId, present, absent, failed)
+                        () -> routeFromGlobal(server, plugin, playerId, present, absent, failed)
                 );
             } catch (RuntimeException exception) {
                 failed.run();
@@ -147,13 +155,14 @@ public final class FreezeNetworkReconciler {
     }
 
     private static void routeFromGlobal(
-            JavaPlugin plugin,
+            Server server,
+            Plugin plugin,
             UUID playerId,
             Runnable present,
             Runnable absent,
             Runnable failed
     ) {
-        Player player = plugin.getServer().getPlayer(playerId);
+        Player player = server.getPlayer(playerId);
         if (player == null) {
             absent.run();
             return;
@@ -162,7 +171,7 @@ public final class FreezeNetworkReconciler {
     }
 
     private static void scheduleOnOwner(
-            JavaPlugin plugin,
+            Plugin plugin,
             Player player,
             Runnable present,
             Runnable failed
