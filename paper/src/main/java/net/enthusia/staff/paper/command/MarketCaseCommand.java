@@ -391,6 +391,13 @@ public final class MarketCaseCommand implements TabExecutor {
         if (!sender.hasPermission(PERMISSION)) {
             return List.of();
         }
+        return tabCompletions(arguments);
+    }
+
+    static List<String> tabCompletions(String[] arguments) {
+        if (arguments.length == 0) {
+            return ACTIONS;
+        }
         String action = arguments[0].toLowerCase(Locale.ROOT);
         return switch (arguments.length) {
             case ACTION_ARGUMENT_COUNT -> matches(arguments[0], ACTIONS);
