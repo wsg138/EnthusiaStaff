@@ -1,4 +1,51 @@
 import java.util.zip.ZipFile
+import org.gradle.api.DefaultTask
+import org.gradle.api.file.RegularFileProperty
+import org.gradle.api.provider.ListProperty
+import org.gradle.api.tasks.Input
+import org.gradle.api.tasks.InputFile
+import org.gradle.api.tasks.PathSensitive
+import org.gradle.api.tasks.PathSensitivity
+import org.gradle.api.tasks.TaskAction
+
+abstract class VerifyTransitionBridgeRuntime : DefaultTask() {
+    @get:InputFile
+    @get:PathSensitive(PathSensitivity.RELATIVE)
+    abstract val runtimeJar: RegularFileProperty
+
+    @get:Input
+    abstract val forbiddenEntries: ListProperty<String>
+
+    @get:Input
+    abstract val requiredEntries: ListProperty<String>
+
+    @get:Input
+    abstract val requiredMigrationEntries: ListProperty<String>
+
+    @TaskAction
+    fun verifyRuntimeJar() {
+        ZipFile(runtimeJar.get().asFile).use { archive ->
+            forbiddenEntries.get().forEach { entry ->
+                check(archive.getEntry(entry) == null) {
+                    "Transition bridge contains forbidden runtime class: $entry"
+                }
+            }
+            requiredEntries.get().forEach { entry ->
+                check(archive.getEntry(entry) != null) {
+                    "Transition bridge is missing required runtime entry: $entry"
+                }
+            }
+            check(requiredMigrationEntries.get().isNotEmpty()) {
+                "No transition migration resources were discovered at build time"
+            }
+            requiredMigrationEntries.get().forEach { entry ->
+                check(archive.getEntry(entry) != null) {
+                    "Transition bridge is missing migration resource: $entry"
+                }
+            }
+        }
+    }
+}
 
 plugins {
     id("com.gradleup.shadow")
@@ -23,7 +70,7 @@ val requiredTransitionBridgeEntries = listOf(
     "org/mariadb/jdbc/Driver.class"
 )
 
-val requiredMigrationEntries = project(":persistence")
+val requiredTransitionMigrationEntries = project(":persistence")
     .fileTree("src/main/resources/db/migration") {
         include("V*.sql")
     }
@@ -63,22 +110,22 @@ tasks.shadowJar {
         exclude(dependency("com.zaxxer:HikariCP:.*"))
         exclude(dependency("org.slf4j:slf4j-api:.*"))
     }
-    doLast {
-        ZipFile(archiveFile.get().asFile).use { archive ->
-            forbiddenTransitionBridgeEntries.forEach { entry ->
-                check(archive.getEntry(entry) == null) { "Transition bridge contains forbidden runtime class: $entry" }
-            }
-            requiredTransitionBridgeEntries.forEach { entry ->
-                check(archive.getEntry(entry) != null) { "Transition bridge is missing required runtime entry: $entry" }
-            }
-            check(requiredMigrationEntries.isNotEmpty()) { "No transition migration resources were discovered at build time" }
-            requiredMigrationEntries.forEach { entry ->
-                check(archive.getEntry(entry) != null) { "Transition bridge is missing migration resource: $entry" }
-            }
-        }
-    }
+}
+
+val verifyTransitionBridgeRuntime by tasks.registering(VerifyTransitionBridgeRuntime::class) {
+    group = "verification"
+    description = "Verifies required and forbidden entries in the shaded transition bridge runtime."
+    dependsOn(tasks.shadowJar)
+    runtimeJar.set(tasks.shadowJar.flatMap { it.archiveFile })
+    forbiddenEntries.set(forbiddenTransitionBridgeEntries)
+    requiredEntries.set(requiredTransitionBridgeEntries)
+    requiredMigrationEntries.set(requiredTransitionMigrationEntries)
 }
 
 tasks.assemble {
-    dependsOn(tasks.shadowJar)
+    dependsOn(verifyTransitionBridgeRuntime)
+}
+
+tasks.check {
+    dependsOn(verifyTransitionBridgeRuntime)
 }
