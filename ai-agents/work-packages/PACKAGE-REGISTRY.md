@@ -1,6 +1,6 @@
 # Package registry
 
-Last updated: 2026-09-20
+Last updated: 2026-09-22
 
 Live GitHub overrides stale text. Detailed historical evidence remains in package files and canonical handoffs; this registry is the current routing authority.
 
@@ -26,16 +26,15 @@ The later live Sentinel restart attempts remain explicit non-passing diagnostic 
 
 **ES-X03 — EnthusiaMarket destructive provider** is **PARTIAL /
 ACTIONABLE_CONTINUATION**. Market [PR #7](https://github.com/wsg138/EnthusiaMarket/pull/7)
-is at `9f4a4145ab3628831edc27a534c4420faa5e23f1` and Staff
+is at `81b14c349be0ad404edeedbac5e109e2a375c255` and Staff
 [PR #139](https://github.com/wsg138/EnthusiaStaff/pull/139) is OPEN/non-draft/
 UNSTABLE on `package/es-x03-market-provider` at
-`47b0b13cb1fd3786fc2743ee8765cc322a6d7a0f`. Its parent `f69aef6f` is the
-normal merge of then-current Staff `main` `63e920d1`; their component trees
-match exactly at `d266bb0039f9b7e60cf59b253b52de15e60cd42b17a0c425bbe3ad98896bbd52`.
-Market hosted checks, Staff Coverage `35542245591`, Sentinel artifact
-`35542245567`, and durable Sentinel job `476` (`PAPER_RESTART_OK`) passed.
-Codacy static check `106161999175` remains `ACTION_REQUIRED` with 1,126
-reported issues. Canonical Pi `35542244424` failed before private dispatch on
+`f6732816f35e3a9634068badb56c220b5d679bd4`; their component trees match
+exactly at `e7082c5bb1aacbcd95ac8457aa17392a740c3fe5df6154e743eebb4bc6019839`.
+Market hosted checks, Staff Coverage `35733465364`, Sentinel artifact
+`35733465456`, and durable Sentinel restart job `516` passed. Codacy static
+check `106765372218` remains `ACTION_REQUIRED` with 1,141
+reported issues. Canonical Pi `35733463593` failed before private dispatch on
 HTTP 401 Bad credentials. Preserve #139, #7, and unpaired Market PR #6;
 continue only bounded paired remediation and do not bypass the bridge.
 
@@ -78,7 +77,7 @@ Canonical D09 blocker handoff: `ai-agents/reports/package-handoffs/2026-09-19-es
 | `ES-P11` | Fake-base generation and cleanup | `COMPLETE` | — | 90 | `ES-P10` | merged PR #88 |
 | `ES-X01` | RoseChat provider and communication integration | `BLOCKED` | `PARKED_BLOCKED` | 100 | `ES-P03`, `ES-P04`, `ES-P05` | provider repo resolved to `wsg138/Enthusia-RoseChat:master` at `8fcca542...`; verified license/public-aggregate redistribution boundary blocks canonical import/parity; no implementation branches/PRs created; exact unblock is durable redistribution authorization/license change or explicitly authorized mirror-policy redesign |
 | `ES-X02` | EnthusiaCurrency destructive provider | `COMPLETE` | — | 110 | `ES-P08` | Currency PR #14 and Staff PR #137 merged; post-merge parity exact; branches cleaned |
-| ES-X03 | Market | PARTIAL | ACTIONABLE_CONTINUATION | 120 | P08/X02 | #7 `9f4a414` ↔ #139 `47b0b13` parity; Coverage/Sentinel restart pass; Codacy and Pi remain non-passing. |
+| ES-X03 | Market | PARTIAL | ACTIONABLE_CONTINUATION | 120 | P08/X02 | #7 `81b14c3` ↔ #139 `f673281` parity; Coverage/artifact/durable Sentinel pass; Codacy static and Pi non-passing. |
 | `ES-X04` | EnthusiaCommend reputation provider | `COMPLETE` | — | 125 | `ES-P08`, `ES-X02` | Commend PR #12 and Staff PR #152 merged normally after exact-head build/static/review/Sentinel/Pi gates; containment and post-merge provider parity exact; component `IN_SYNC` |
 | `ES-V01` | Private LiteBans representative-data verification | `COMPLETE` | — | 200 | — | merged PR #110; terminal evidence retained |
 | `ES-V02` | Distributed and Java/Bedrock staging | `DEFERRED` | `PARKED_BLOCKED` | 250 | `ES-P06`, `ES-P09`, `ES-P11`, `ES-X01`, `ES-X03`, `ES-X04`, `ES-X05` | ES-X01 and ES-X03 remain incomplete |
@@ -116,31 +115,28 @@ Canonical D09 blocker handoff: `ai-agents/reports/package-handoffs/2026-09-19-es
 
 - Market PR #7 is OPEN/DRAFT/CLEAN on
   `package/es-x03-market-static-remediation` at
-  `9f4a4145ab3628831edc27a534c4420faa5e23f1`; Staff PR #139 is
+  `81b14c349be0ad404edeedbac5e109e2a375c255`; Staff PR #139 is
   OPEN/non-draft/UNSTABLE on `package/es-x03-market-provider` at
-  `47b0b13cb1fd3786fc2743ee8765cc322a6d7a0f`, whose parent `f69aef6f` is a
-  normal merge of then-current Staff `main` `63e920d1b9cc95491cc4950abf944e7efb1d3b6a`.
-  Staff owns V20, X03 owns V21, and D09 reserves V22 with disjoint registrar
-  hunks.
-- Clean-clone component comparison reports 512 shared files with no added,
-  missing, or modified path and shared hash
-  `d266bb0039f9b7e60cf59b253b52de15e60cd42b17a0c425bbe3ad98896bbd52`.
-- Market runs `35542232664` and `35542232684`, Staff Coverage `35542245591`
-  / job `106161876789`, and Staff Sentinel artifact `35542245567` / job
-  `106161876827` passed. Durable Sentinel job `476` returned
-  `PAPER_RESTART_OK`; no live review thread remains.
-- Codacy static check `106161999175` is `ACTION_REQUIRED` with 1,126 reported
+  `f6732816f35e3a9634068badb56c220b5d679bd4`. Staff owns V20, X03 owns V21,
+  and D09 reserves V22 with disjoint registrar hunks.
+- Clean-clone component comparison reports no added, missing, or modified path
+  and shared hash
+  `e7082c5bb1aacbcd95ac8457aa17392a740c3fe5df6154e743eebb4bc6019839`.
+- Market runs `35601165548` and `35601165577`, Staff Coverage `35733465364`
+  / job `106764602834`, Sentinel artifact `35733465456` / job `106764605492`,
+  and durable Sentinel job `516` passed. No live review thread remains.
+- Codacy static check `106765372218` is `ACTION_REQUIRED` with 1,141 reported
   issues. Treat the static backlog as scoped remediation work, not as a reason
   for broad suppression or a passing result.
-- Canonical Pi `35542244424` failed before private dispatch when its workflow
+- Canonical Pi `35733463593` failed before private dispatch when its workflow
   history lookup returned HTTP 401 Bad credentials. No private Pi, Paper, or
   MariaDB runtime ran.
 - Exact next action: continue only small paired repairs for validated static
-  findings, preserve component parity, and have the staging owner repair the
-  least-privilege bridge credential before a fresh canonical Pi attempt.
+  findings and have the staging owner repair the least-privilege bridge
+  credential before a fresh canonical Pi attempt.
 - No production listing, balance, item, player, database, deployment,
   authority, LiteBans, or cutover state changed. Canonical current handoff:
-  `ai-agents/reports/package-handoffs/2026-09-20-es-x03-static-remediation-active.md`.
+  `ai-agents/reports/package-handoffs/2026-09-22-es-x03-marketcase-completion-validation.md`.
 
 ## ES-X02 terminal record
 
