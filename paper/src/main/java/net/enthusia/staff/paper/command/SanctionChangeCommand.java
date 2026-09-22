@@ -43,6 +43,7 @@ public final class SanctionChangeCommand implements CommandExecutor, TabComplete
     private final AuthorizationPolicy authorization;
     private final ExecutorService workers;
     private final SanctionChangeGuiController gui;
+    private volatile CommandResponseDispatcher responses;
 
     public SanctionChangeCommand(
             JavaPlugin plugin,
@@ -196,12 +197,21 @@ public final class SanctionChangeCommand implements CommandExecutor, TabComplete
         try {
             workers.execute(action);
         } catch (RejectedExecutionException exception) {
-            sender.sendMessage(Component.text("The moderation work queue is full; no change was made."));
+            send(sender, "The moderation work queue is full; no change was made.");
         }
     }
 
     private void send(CommandSender sender, String message) {
-        plugin.getServer().getGlobalRegionScheduler().execute(plugin, () -> sender.sendMessage(Component.text(message)));
+        responses().send(sender, Component.text(message));
+    }
+
+    private CommandResponseDispatcher responses() {
+        CommandResponseDispatcher current = responses;
+        if (current == null) {
+            current = new CommandResponseDispatcher(plugin);
+            responses = current;
+        }
+        return current;
     }
 
     @Override

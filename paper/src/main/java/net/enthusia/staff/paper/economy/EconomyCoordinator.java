@@ -31,6 +31,7 @@ import net.enthusia.staff.domain.economy.EconomyTerminalUpdate;
 import net.enthusia.staff.domain.economy.EconomyValidatedPlan;
 import net.enthusia.staff.domain.ports.EconomyJournalStore;
 import net.enthusia.staff.paper.auth.PaperActorResolver;
+import net.enthusia.staff.paper.scheduler.PlayerEntityScheduler;
 import net.kyori.adventure.text.Component;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -1469,8 +1470,12 @@ public final class EconomyCoordinator implements Listener, AutoCloseable {
     private void alertStaff(String body) {
         plugin.getServer().getGlobalRegionScheduler().execute(plugin, () ->
                 plugin.getServer().getOnlinePlayers().stream()
-                        .filter(player -> player.hasPermission("enthusiastaff.alerts"))
-                        .forEach(player -> player.sendMessage(Component.text(body))));
+                        .forEach(player -> PlayerEntityScheduler.execute(plugin, player, () -> {
+                            if (player.hasPermission("enthusiastaff.alerts")) {
+                                player.sendMessage(Component.text(body));
+                            }
+                        }, () -> {
+                        })));
     }
 
     private static String bounded(String detail) {

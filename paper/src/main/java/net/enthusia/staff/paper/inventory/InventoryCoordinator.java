@@ -28,6 +28,7 @@ import net.enthusia.staff.domain.player.PlayerPresence;
 import net.enthusia.staff.domain.ports.InventoryJournalStore;
 import net.enthusia.staff.domain.ports.PlayerDirectory;
 import net.enthusia.staff.paper.api.InventoryLockService;
+import net.enthusia.staff.paper.scheduler.PlayerEntityScheduler;
 import net.kyori.adventure.text.Component;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
@@ -1073,8 +1074,12 @@ public final class InventoryCoordinator implements Listener, InventoryLockServic
     private void alertStaff(String body) {
         plugin.getServer().getGlobalRegionScheduler().execute(plugin, () ->
                 plugin.getServer().getOnlinePlayers().stream()
-                        .filter(player -> player.hasPermission("enthusiastaff.alerts"))
-                        .forEach(player -> player.sendMessage(Component.text(body))));
+                        .forEach(player -> PlayerEntityScheduler.execute(plugin, player, () -> {
+                            if (player.hasPermission("enthusiastaff.alerts")) {
+                                player.sendMessage(Component.text(body));
+                            }
+                        }, () -> {
+                        })));
     }
 
     @Override

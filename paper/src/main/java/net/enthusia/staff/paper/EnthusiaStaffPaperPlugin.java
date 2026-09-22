@@ -41,6 +41,7 @@ import net.enthusia.staff.paper.config.reload.ConfigurationReloadCoordinator;
 import net.enthusia.staff.paper.config.reload.ConfigurationReloadResult;
 import net.enthusia.staff.paper.enforcement.MuteEnforcementListener;
 import net.enthusia.staff.paper.report.ChatContextBuffer;
+import net.enthusia.staff.paper.scheduler.PlayerEntityScheduler;
 import net.enthusia.staff.persistence.DatabaseConfig;
 import net.enthusia.staff.persistence.MariaDb;
 import net.enthusia.staff.persistence.MariaDbRuntime;
@@ -88,10 +89,10 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
             getServer().getPluginManager().disablePlugin(this);
             return;
         }
-        databaseSettings = PaperDatabaseConfiguration.snapshot(getConfig());
+        RestartRequiredConfiguration bootstrap = configurationSnapshot.restartRequired();
+        databaseSettings = PaperDatabaseConfiguration.snapshot(bootstrap);
         saveResource("reason-policies.yml", false);
         boolean policiesReady = loadReasonPolicies();
-        RestartRequiredConfiguration bootstrap = configurationSnapshot.restartRequired();
         workers = BoundedExecutorFactory.create(bootstrap.workerThreads(), bootstrap.workerQueueCapacity());
         initializeAlertController();
         if (policiesReady) {
@@ -167,6 +168,7 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
             integrations.closeChatBridge();
         }
         resources.close("mute enforcement", muteEnforcement);
+        resources.close("cheat tester", runtimeComponents == null ? null : runtimeComponents.cheatTester());
         resources.close("inventory coordinator", runtimeComponents == null ? null : runtimeComponents.inventory());
         if (integrations != null) {
             integrations.closeEconomyResources();
@@ -444,8 +446,9 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
             retired.run();
             return;
         }
-        boolean scheduled = located.getScheduler().execute(
+        PlayerEntityScheduler.execute(
                 this,
+                located,
                 () -> {
                     Player current = getServer().getPlayer(playerId);
                     if (current == null || !current.isOnline()) {
@@ -456,12 +459,8 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
                     captured.accept(new StorageBootstrapCoordinator.PlayerSnapshot(
                             playerId, current.getName(), rank));
                 },
-                retired,
-                1L
+                retired
         );
-        if (!scheduled) {
-            retired.run();
-        }
     }
 
     private void attachPunishmentRequestAlerts(PaperStorageBindings bindings) {
@@ -511,6 +510,7 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
                     exception);
         }
         if (!lifecycle.stopping()) {
+            integrations.storageReady();
             registerOperationalStateTask();
         }
     }
@@ -813,6 +813,7 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
                         integrations::confiscation,
                         integrations::roseChat,
                         integrations::market,
+                        integrations::marketCompliance,
                         integrations::reputation
                 ),
                 new PaperCommandRegistrar.EvidenceComponents(chatContext, clientEvidenceCollector)
@@ -822,7 +823,13 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
     private PaperRuntimeComponents createRuntimeComponents() {
         return PaperRuntimeComponents.create(new PaperRuntimeComponents.Dependencies(
                 new PaperRuntimeComponents.Environment(
-                        this, Clock.systemUTC(), networkServerId(), inventoryScopeId(), workers
+                        this,
+                        Clock.systemUTC(),
+                        networkServerId(),
+                        inventoryScopeId(),
+                        workers,
+                        configurationSnapshot.restartRequired().cheatTesterSettings(),
+                        configurationSnapshot.restartRequired().staffToolSettings()
                 ),
                 new PaperRuntimeComponents.Policy(this::effectiveWriteMode),
                 new PaperRuntimeComponents.Stores(
@@ -848,7 +855,9 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
                 new PaperIntegrationManager.Stores(
                         () -> storageValue(PaperStorageBindings::punishmentService),
                         () -> storageValue(PaperStorageBindings::economyJournalStore),
-                        () -> storageValue(PaperStorageBindings::inventoryJournalStore)
+                        () -> storageValue(PaperStorageBindings::inventoryJournalStore),
+                        () -> storageValue(PaperStorageBindings::marketComplianceStore),
+                        () -> storageValue(PaperStorageBindings::caseLookup)
                 ),
                 new PaperIntegrationManager.PlayerComponents(
                         runtimeComponents.freeze(),

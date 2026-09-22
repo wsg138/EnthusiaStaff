@@ -1,4 +1,37 @@
 import java.util.zip.ZipFile
+import com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar
+import org.gradle.api.Action
+import org.gradle.api.Task
+
+private class VerifyTransitionBridgeArchiveAction(
+    private val forbiddenEntries: List<String>,
+    private val requiredEntries: List<String>,
+    private val requiredMigrations: List<String>
+) : Action<Task> {
+    override fun execute(task: Task) {
+        val archive = (task as ShadowJar).archiveFile.get().asFile
+        ZipFile(archive).use { zip ->
+            forbiddenEntries.forEach { entry ->
+                check(zip.getEntry(entry) == null) {
+                    "Transition bridge contains forbidden runtime class: $entry"
+                }
+            }
+            requiredEntries.forEach { entry ->
+                check(zip.getEntry(entry) != null) {
+                    "Transition bridge is missing required runtime entry: $entry"
+                }
+            }
+            check(requiredMigrations.isNotEmpty()) {
+                "No transition migration resources were discovered at build time"
+            }
+            requiredMigrations.forEach { entry ->
+                check(zip.getEntry(entry) != null) {
+                    "Transition bridge is missing migration resource: $entry"
+                }
+            }
+        }
+    }
+}
 
 plugins {
     id("com.gradleup.shadow")
@@ -63,20 +96,13 @@ tasks.shadowJar {
         exclude(dependency("com.zaxxer:HikariCP:.*"))
         exclude(dependency("org.slf4j:slf4j-api:.*"))
     }
-    doLast {
-        ZipFile(archiveFile.get().asFile).use { archive ->
-            forbiddenTransitionBridgeEntries.forEach { entry ->
-                check(archive.getEntry(entry) == null) { "Transition bridge contains forbidden runtime class: $entry" }
-            }
-            requiredTransitionBridgeEntries.forEach { entry ->
-                check(archive.getEntry(entry) != null) { "Transition bridge is missing required runtime entry: $entry" }
-            }
-            check(requiredMigrationEntries.isNotEmpty()) { "No transition migration resources were discovered at build time" }
-            requiredMigrationEntries.forEach { entry ->
-                check(archive.getEntry(entry) != null) { "Transition bridge is missing migration resource: $entry" }
-            }
-        }
-    }
+    doLast(
+        VerifyTransitionBridgeArchiveAction(
+            forbiddenTransitionBridgeEntries,
+            requiredTransitionBridgeEntries,
+            requiredMigrationEntries
+        )
+    )
 }
 
 tasks.assemble {

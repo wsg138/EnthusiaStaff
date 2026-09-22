@@ -80,6 +80,21 @@ final class PunishmentRequestWiringTest {
         assertFalse(source.contains("requestCommands.bindPlayerDirectory(players);"));
     }
 
+    @Test
+    void workerResponsesUseTheFoliaAwareDispatcher() throws IOException {
+        String command = normalizedSource(COMMAND_SOURCE);
+        String requests = normalizedSource(Path.of(
+                "src/main/java/net/enthusia/staff/paper/command/PunishmentRequestCommandHandler.java"
+        ));
+
+        assertTrue(command.contains("this.responses = new CommandResponseDispatcher(plugin);"));
+        assertTrue(command.contains("responses.send(sender, message);"));
+        assertTrue(requests.contains("this.responses = new CommandResponseDispatcher(plugin);"));
+        assertTrue(requests.contains("responses.execute(sender, action);"));
+        assertFalse(command.contains("getScheduler().runTask"));
+        assertFalse(requests.contains("getScheduler().runTask"));
+    }
+
     private static String normalizedSource(Path source) throws IOException {
         return Files.readString(source).replace("\r\n", "\n");
     }

@@ -4,6 +4,7 @@ import io.papermc.paper.threadedregions.scheduler.ScheduledTask;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.RejectedExecutionException;
+import net.enthusia.staff.paper.scheduler.PlayerEntityScheduler;
 import net.kyori.adventure.text.Component;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
@@ -29,10 +30,11 @@ final class CheatTesterRuntimeSupport {
     void scheduleTarget(UUID targetId, Runnable operation, Runnable retired) {
         plugin.getServer().getGlobalRegionScheduler().execute(plugin, () -> {
             Player target = plugin.getServer().getPlayer(targetId);
-            if (target == null || !target.isOnline()
-                    || !target.getScheduler().execute(plugin, operation, retired, 1L)) {
+            if (target == null || !target.isOnline()) {
                 retired.run();
+                return;
             }
+            PlayerEntityScheduler.execute(plugin, target, operation, retired);
         });
     }
 
@@ -52,7 +54,8 @@ final class CheatTesterRuntimeSupport {
         plugin.getServer().getGlobalRegionScheduler().execute(plugin, () -> {
             Player player = plugin.getServer().getPlayer(playerId);
             if (player != null) {
-                player.getScheduler().execute(plugin, () -> player.sendMessage(message), null, 1L);
+                PlayerEntityScheduler.execute(plugin, player, () -> player.sendMessage(message), () -> {
+                });
             }
         });
     }

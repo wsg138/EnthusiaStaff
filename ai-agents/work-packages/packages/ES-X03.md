@@ -1,9 +1,9 @@
-# ES-X03 — EnthusiaMarket destructive provider
+# `ES-X03` — EnthusiaMarket destructive provider
 
 ## 1. Package identity
 
-**ES-X03**; external/multi-repository; primary **COMP-STAFF**; other
-**COMP-MARKET**; priority 120; conditional parallelism only without shared
+`ES-X03`; external/multi-repository; primary `COMP-STAFF`; other
+`COMP-MARKET`; priority 120; conditional parallelism only without shared
 destructive-state overlap.
 
 ## 2. Status
@@ -29,12 +29,12 @@ missing/version-mismatch behavior, and matching aggregate parity.
 ## 5. Explicit exclusions
 
 Production listings; whole-market rollback; currency or reputation work;
-unverified reflection against provider internals; and representative
-destructive, load, or process-kill acceptance assigned to ES-V03.
+unverified reflection against provider internals; and representative destructive,
+load, or process-kill acceptance assigned to `ES-V03`.
 
 ## 6. Dependencies
 
-ES-P08 and ES-X02 are complete.
+`ES-P08` and `ES-X02` are `COMPLETE`.
 
 ## 7. Repository and privacy boundaries
 
@@ -45,10 +45,10 @@ is OPEN/DRAFT/CLEAN on `package/es-x03-market-static-remediation` and remains
 the paired provider leg. Preserve the separate unpaired Market
 [PR #6](https://github.com/wsg138/EnthusiaMarket/pull/6) unchanged.
 
-Market uses only ordinary public repository CI. No private Pi or staging
-runner configuration, bridge implementation, credentials, topology,
-artifact-transfer mechanism, Sentinel infrastructure, or private evidence may
-enter Market or this public repository.
+Market uses only ordinary public repository CI. No private Pi/staging runner
+configuration, bridge implementation, credentials, topology, artifact-transfer
+mechanism, Sentinel infrastructure, or private evidence may enter Market or
+this public repository.
 
 ## 8. Current paired source checkpoint
 
@@ -65,27 +65,27 @@ enter Market or this public repository.
   missing, or modified path. Both product trees have hash
   d266bb0039f9b7e60cf59b253b52de15e60cd42b17a0c425bbe3ad98896bbd52.
 - Staff owns V20, X03 owns V21, and D09 reserves V22. X03 and D09 retain
-  disjoint PaperCommandRegistrar.java hunks.
+  disjoint hunks in `PaperCommandRegistrar.java`.
 
-## 9. Completed paired remediation
+## 9. Remediation included so far
 
-The checkpoint upgrades mkdocs-material, makes Market Markdown clean under
-Market's configured linting, and routes Geyser and transitive dependencies
-through OpenCollab before JitPack. It keeps production analysis enabled while
-scoping only Market test complexity and component SQLite dialect handling.
+The paired checkpoint upgrades `mkdocs-material`, makes Market Markdown clean
+under the default rule set, scopes test-only Detekt and Lizard complexity checks
+to test source, and keeps Market SQLite migrations out of aggregate SQL Server
+dialect engines.
 
-Behavior-preserving refactors reduced verified parser and projection debt in
-search, auction configuration, wiki front matter, shop edit/create plumbing,
-web synchronization, public snapshots, LumaGuilds helpers, stall eviction,
-break-delete duration parsing, and maintenance-freeze state checks. Focused
-tests cover newly separated projection, eviction, and duration behavior.
+It also removes verified parser-facing complexity without changing the intended
+provider contracts: search predicate parsing, auction config accessors, wiki
+front-matter validation, shop-edit helpers, shop-creation input grouping,
+web-sync helpers, stall eviction cleanup, break-duration parsing, public
+snapshot projection, and LumaGuilds helper bodies.
 
-The owner-authorized Bedrock repair corrects valid SELL/BUY form submissions
-that supplied a non-null zero cost override. That override violated the existing
-Shop positive-cost invariant before persistence. SELL/BUY now use the factory's
-existing validated-price fallback; TRADE keeps its parsed positive item quantity
-and serialized cost item. Existing shops, balances, migrations, and the Java
-menu are unchanged.
+The Bedrock creation path received a distinct functional repair: valid SELL and
+BUY submissions now leave `ShopFactory.Pricing.costAmountOverride` null, so the
+factory applies the validated currency price instead of attempting to construct
+an invalid zero-cost shop. The actual Cumulus callback is covered for SELL,
+BUY, TRADE, the maximum-price clamp, malformed/missing amounts, invalid amount,
+and invalid trade pricing.
 
 The latest paired listener repair handles only the main-hand interaction, so
 Paper's per-hand interaction events cannot open duplicate creation flows. It
@@ -119,7 +119,7 @@ off-hand, and missing-target regression coverage.
   106161876827 passed; durable job 476 returned PAPER_RESTART_OK after two
   clean readiness and stop cycles against one disposable state.
 
-## 11. Static-analysis disposition
+## 11. Remaining blockers and non-suppressive boundaries
 
 The non-passing Codacy result is not suppressed. Exact check 106161999175 is
 ACTION_REQUIRED with 1,126 reported issues. Prior triage identified Markdownlint, production
@@ -130,7 +130,12 @@ suppression or analyzer-rule decision requires explicit authorization and
 supported Codacy configuration; it must not be guessed in source through a
 component-wide exclusion.
 
-## 12. Current synchronization evidence
+Canonical Pi is `NOT PASS`: public supersession run `35524782510` failed before
+private dispatch when the workflow-history request returned HTTP 401 `Bad
+credentials`. No private Pi, Paper, or MariaDB runtime ran. The staging owner
+must rotate or replace `ENTHUSIASTAFF_STAGING_TOKEN` with a least-privilege
+credential able to read and dispatch the required private Actions workflow. Do
+not use a personal credential or bypass the public bridge.
 
 The aggregate component and standalone Market product tree are exactly equal
 at the current paired heads. Clean-clone comparison found 512 shared files and
@@ -138,7 +143,13 @@ the shared hash is
 d266bb0039f9b7e60cf59b253b52de15e60cd42b17a0c425bbe3ad98896bbd52.
 Post-merge parity and component metadata updates remain required.
 
-## 13. Exact unblock condition
+Finish the normal merge of current Staff `main`, preserving the paired Market
+component source and tests, then push the merge commit. Re-establish exact
+component parity and run fresh aggregate Coverage and Sentinel artifact gates
+for that merge head. Continue only valid production-complexity refactors in
+small, tested paired batches. After the staging owner repairs the private bridge
+credential, freeze the resulting heads and rerun required hosted, static,
+review, Sentinel, and canonical Pi gates.
 
 Keep both implementation PRs and branches. Continue only small paired repairs
 for validated static findings, with matching tests and parity checks; do not
@@ -154,10 +165,10 @@ static, review, Sentinel, and Pi gate.
 
 ES-X03 is complete only after both paired PRs have terminal green required
 gates, normal merges, exact post-merge standalone-to-aggregate parity, and
-updated component metadata. ES-V03 retains representative destructive and
+updated component metadata. `ES-V03` retains representative destructive and
 load acceptance.
 
-## 15. Handoff and production boundary
+## 14. Handoffs and production boundary
 
 Canonical handoff:
 ai-agents/reports/package-handoffs/2026-09-20-es-x03-static-remediation-active.md.

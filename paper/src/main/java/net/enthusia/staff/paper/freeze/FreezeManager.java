@@ -411,14 +411,15 @@ public final class FreezeManager implements Listener {
         String playerName = player.getName();
         Component rendered = Component.text("<" + playerName + "> ").append(body);
         scheduleGlobal(() -> {
-            Player current = plugin.getServer().getPlayer(playerId);
-            if (current != null) {
-                current.sendMessage(rendered);
-            }
+            onEntity(playerId, current -> current.sendMessage(rendered));
             plugin.getServer().getOnlinePlayers().stream()
-                    .filter(staff -> !staff.getUniqueId().equals(playerId))
-                    .filter(staff -> staff.hasPermission("enthusiastaff.freeze.chat"))
-                    .forEach(staff -> staff.sendMessage(Component.text("[Frozen Chat] ").append(rendered)));
+                    .map(Player::getUniqueId)
+                    .filter(staffId -> !staffId.equals(playerId))
+                    .forEach(staffId -> onEntity(staffId, staff -> {
+                        if (staff.hasPermission("enthusiastaff.freeze.chat")) {
+                            staff.sendMessage(Component.text("[Frozen Chat] ").append(rendered));
+                        }
+                    }));
         });
     }
 
@@ -466,8 +467,12 @@ public final class FreezeManager implements Listener {
             return;
         }
         plugin.getServer().getOnlinePlayers().stream()
-                .filter(player -> player.hasPermission("enthusiastaff.freeze"))
-                .forEach(player -> player.sendMessage(Component.text(message)));
+                .map(Player::getUniqueId)
+                .forEach(playerId -> onEntity(playerId, player -> {
+                    if (player.hasPermission("enthusiastaff.freeze")) {
+                        player.sendMessage(Component.text(message));
+                    }
+                }));
     }
 
     private boolean submit(Runnable operation) {

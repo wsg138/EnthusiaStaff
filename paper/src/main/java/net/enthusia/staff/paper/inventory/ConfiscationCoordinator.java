@@ -40,6 +40,7 @@ import net.enthusia.staff.domain.inventory.InventoryPrepareRequest;
 import net.enthusia.staff.domain.ports.InventoryJournalStore;
 import net.enthusia.staff.paper.auth.PaperActorResolver;
 import net.enthusia.staff.paper.economy.CurrencyGateway;
+import net.enthusia.staff.paper.scheduler.PlayerEntityScheduler;
 import net.kyori.adventure.text.Component;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
@@ -1830,8 +1831,12 @@ public final class ConfiscationCoordinator implements Listener, AutoCloseable {
     private void alertStaff(String body) {
         plugin.getServer().getGlobalRegionScheduler().execute(plugin, () ->
                 plugin.getServer().getOnlinePlayers().stream()
-                        .filter(player -> player.hasPermission("enthusiastaff.alerts"))
-                        .forEach(player -> player.sendMessage(Component.text(body))));
+                        .forEach(player -> PlayerEntityScheduler.execute(plugin, player, () -> {
+                            if (player.hasPermission("enthusiastaff.alerts")) {
+                                player.sendMessage(Component.text(body));
+                            }
+                        }, () -> {
+                        })));
     }
 
     private boolean authorize(Player player, ModerationAction action) {

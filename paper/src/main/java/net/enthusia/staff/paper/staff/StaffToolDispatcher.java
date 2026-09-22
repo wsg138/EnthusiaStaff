@@ -8,6 +8,7 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.function.Consumer;
 import net.enthusia.staff.paper.freeze.FreezeManager;
+import net.enthusia.staff.paper.scheduler.PlayerEntityScheduler;
 import net.enthusia.staff.paper.tester.CheatTesterManager;
 import net.enthusia.staff.paper.visibility.VanishManager;
 import net.kyori.adventure.text.Component;
@@ -60,13 +61,14 @@ public final class StaffToolDispatcher implements Listener, CommandExecutor, Tab
             StaffModeManager staffMode,
             VanishManager vanish,
             FreezeManager freeze,
-            CheatTesterManager cheatTester
+            CheatTesterManager cheatTester,
+            StaffToolSettings settings
     ) {
         this.plugin = java.util.Objects.requireNonNull(plugin, "plugin");
         this.staffMode = java.util.Objects.requireNonNull(staffMode, "staffMode");
         this.vanish = java.util.Objects.requireNonNull(vanish, "vanish");
         this.cheatTester = java.util.Objects.requireNonNull(cheatTester, "cheatTester");
-        this.settings = StaffToolSettings.load(plugin.getConfig());
+        this.settings = java.util.Objects.requireNonNull(settings, "settings");
         this.cooldowns = new StaffToolCooldowns(java.util.Objects.requireNonNull(clock, "clock"));
         this.randomTeleport = new StaffToolRandomTeleportService(
                 plugin,
@@ -527,15 +529,7 @@ public final class StaffToolDispatcher implements Listener, CommandExecutor, Tab
                 retired.run();
                 return;
             }
-            boolean scheduled = player.getScheduler().execute(
-                    plugin,
-                    () -> operation.accept(player),
-                    retired,
-                    1L
-            );
-            if (!scheduled) {
-                retired.run();
-            }
+            PlayerEntityScheduler.execute(plugin, player, () -> operation.accept(player), retired);
         });
     }
 

@@ -9,6 +9,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Supplier;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -24,8 +25,8 @@ import net.enthusia.staff.domain.ports.SanctionLookup;
 import net.enthusia.staff.domain.report.CreateReportRequest;
 import net.enthusia.staff.domain.report.ReportSubmissionResult;
 import net.enthusia.staff.domain.sanction.SanctionType;
-import net.enthusia.staff.paper.client.ClientEvidenceCollector;
 import net.enthusia.staff.paper.report.ChatContextBuffer;
+import net.enthusia.staff.paper.scheduler.PlayerEntityScheduler;
 import net.kyori.adventure.text.Component;
 import org.bukkit.Location;
 import org.bukkit.command.Command;
@@ -33,7 +34,7 @@ import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
 import org.bukkit.command.TabCompleter;
 import org.bukkit.entity.Player;
-import org.bukkit.plugin.java.JavaPlugin;
+import org.bukkit.plugin.Plugin;
 
 public final class ReportCommand implements CommandExecutor, TabCompleter {
     private static final Set<SanctionType> REPORT_RESTRICTIONS = Set.of(SanctionType.REPORT_RESTRICTION);
@@ -47,6 +48,7 @@ public final class ReportCommand implements CommandExecutor, TabCompleter {
 
     private final Dependencies dependencies;
     private final ExecutorService workers;
+    private final CommandResponseDispatcher responses;
 
     public ReportCommand(Dependencies dependencies, ExecutorService workers) {
         if (dependencies == null || workers == null) {
@@ -54,6 +56,7 @@ public final class ReportCommand implements CommandExecutor, TabCompleter {
         }
         this.dependencies = dependencies;
         this.workers = workers;
+        this.responses = new CommandResponseDispatcher(dependencies.plugin());
     }
 
     @Override
@@ -62,14 +65,14 @@ public final class ReportCommand implements CommandExecutor, TabCompleter {
             sender.sendMessage(Component.text("Only a player can submit a player report."));
             return true;
         }
-        SubmissionContext submission = prepareSubmission(sender, reporter, arguments);
+        SubmissionDraft submission = prepareSubmission(sender, reporter, arguments);
         if (submission != null) {
-            submit(sender, () -> submitReport(sender, submission));
+            beginTargetEvidenceCapture(reporter, submission);
         }
         return true;
     }
 
-    private SubmissionContext prepareSubmission(CommandSender sender, Player reporter, String[] arguments) {
+    private SubmissionDraft prepareSubmission(CommandSender sender, Player reporter, String[] arguments) {
         if (arguments.length < REQUIRED_ARGUMENTS) {
             sender.sendMessage(Component.text("Usage: /report <player|uuid> <reason-id> <description>"));
             return null;
@@ -94,29 +97,106 @@ public final class ReportCommand implements CommandExecutor, TabCompleter {
         return captureSubmission(reporter, arguments[TARGET_ARGUMENT], policy.id(), description);
     }
 
-    private SubmissionContext captureSubmission(
+    private SubmissionDraft captureSubmission(
             Player reporter,
             String targetReference,
             String reasonId,
             String description
     ) {
-        Player onlineTarget = onlineTarget(targetReference);
-        Optional<ClientEvidenceSnapshot> targetClientEvidence = onlineTarget == null
-                ? Optional.empty()
-                : Optional.of(dependencies.clientEvidence().capture(onlineTarget));
-        Instant now = dependencies.clock().instant();
-        return new SubmissionContext(
+        return new SubmissionDraft(
                 reporter.getUniqueId(),
                 targetReference,
                 reasonId,
                 description,
                 reporter.getWorld().getKey().asString(),
-                coordinates(reporter.getLocation()),
-                onlineTarget == null ? null : coordinates(onlineTarget.getLocation()),
-                now,
-                dependencies.chat().snapshot(now),
-                targetClientEvidence
+                coordinates(reporter.getLocation())
         );
+    }
+
+    private void beginTargetEvidenceCapture(Player reporter, SubmissionDraft submission) {
+        AtomicBoolean completed = new AtomicBoolean();
+        Runnable unavailable = () -> completeSubmission(
+                reporter, submission, TargetEvidence.unavailable(), completed
+        );
+        try {
+            dependencies.plugin().getServer().getGlobalRegionScheduler().execute(
+                    dependencies.plugin(),
+                    () -> {
+                        Player onlineTarget;
+                        try {
+                            onlineTarget = onlineTarget(submission.targetName());
+                        } catch (RuntimeException exception) {
+                            unavailable.run();
+                            return;
+                        }
+                        if (onlineTarget == null) {
+                            unavailable.run();
+                            return;
+                        }
+                        PlayerEntityScheduler.execute(
+                                dependencies.plugin(),
+                                onlineTarget,
+                                () -> completeSubmission(
+                                        reporter,
+                                        submission,
+                                        captureTargetEvidence(onlineTarget),
+                                        completed
+                                ),
+                                unavailable
+                        );
+                    }
+            );
+        } catch (RuntimeException exception) {
+            unavailable.run();
+        }
+    }
+
+    private TargetEvidence captureTargetEvidence(Player target) {
+        try {
+            return new TargetEvidence(
+                    coordinates(target.getLocation()),
+                    Optional.ofNullable(dependencies.clientEvidence().capture(target))
+            );
+        } catch (RuntimeException exception) {
+            Logger logger = dependencies.plugin().getLogger();
+            if (logger.isLoggable(Level.FINE)) {
+                logger.log(Level.FINE, "Unable to capture report target evidence", exception);
+            }
+            return TargetEvidence.unavailable();
+        }
+    }
+
+    private void completeSubmission(
+            Player reporter,
+            SubmissionDraft draft,
+            TargetEvidence targetEvidence,
+            AtomicBoolean completed
+    ) {
+        if (!completed.compareAndSet(false, true)) {
+            return;
+        }
+        Instant createdAt = createdAt(targetEvidence.clientEvidence());
+        SubmissionContext submission = new SubmissionContext(
+                draft.reporterId(),
+                draft.targetName(),
+                draft.reasonId(),
+                draft.description(),
+                draft.world(),
+                draft.reporterCoordinates(),
+                targetEvidence.coordinates(),
+                createdAt,
+                dependencies.chat().snapshot(createdAt),
+                targetEvidence.clientEvidence()
+        );
+        submit(reporter, () -> submitReport(reporter, submission));
+    }
+
+    private Instant createdAt(Optional<ClientEvidenceSnapshot> targetClientEvidence) {
+        Instant now = dependencies.clock().instant();
+        return targetClientEvidence
+                .map(ClientEvidenceSnapshot::capturedAt)
+                .filter(capturedAt -> capturedAt.isAfter(now))
+                .orElse(now);
     }
 
     private Player onlineTarget(String targetReference) {
@@ -199,7 +279,7 @@ public final class ReportCommand implements CommandExecutor, TabCompleter {
         try {
             workers.execute(() -> execute(sender, action));
         } catch (RejectedExecutionException exception) {
-            sender.sendMessage(Component.text("The report queue is full; no report was created."));
+            send(sender, "The report queue is full; no report was created.");
         }
     }
 
@@ -216,11 +296,7 @@ public final class ReportCommand implements CommandExecutor, TabCompleter {
     }
 
     private void send(CommandSender sender, String message) {
-        JavaPlugin plugin = dependencies.plugin();
-        plugin.getServer().getGlobalRegionScheduler().execute(
-                plugin,
-                () -> sender.sendMessage(Component.text(message))
-        );
+        responses.send(sender, Component.text(message));
     }
 
     private static String description(String[] arguments) {
@@ -247,7 +323,7 @@ public final class ReportCommand implements CommandExecutor, TabCompleter {
     }
 
     public record Dependencies(
-            JavaPlugin plugin,
+            Plugin plugin,
             Clock clock,
             String serverId,
             Supplier<OperationalMode> mode,
@@ -256,8 +332,13 @@ public final class ReportCommand implements CommandExecutor, TabCompleter {
             Supplier<SanctionLookup> sanctions,
             ReasonPolicyRepository policies,
             ChatContextBuffer chat,
-            ClientEvidenceCollector clientEvidence
+            ClientEvidenceCapture clientEvidence
     ) {
+    }
+
+    @FunctionalInterface
+    public interface ClientEvidenceCapture {
+        ClientEvidenceSnapshot capture(Player player);
     }
 
     private record StorageAccess(
@@ -265,6 +346,29 @@ public final class ReportCommand implements CommandExecutor, TabCompleter {
             ReportStore reports,
             SanctionLookup sanctions
     ) {
+    }
+
+    private record SubmissionDraft(
+            UUID reporterId,
+            String targetName,
+            String reasonId,
+            String description,
+            String world,
+            String reporterCoordinates
+    ) {
+    }
+
+    private record TargetEvidence(
+            String coordinates,
+            Optional<ClientEvidenceSnapshot> clientEvidence
+    ) {
+        private TargetEvidence {
+            clientEvidence = Optional.ofNullable(clientEvidence).orElse(Optional.empty());
+        }
+
+        private static TargetEvidence unavailable() {
+            return new TargetEvidence(null, Optional.empty());
+        }
     }
 
     private record SubmissionContext(

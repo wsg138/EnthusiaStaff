@@ -29,6 +29,7 @@ import net.enthusia.staff.paper.report.ReportEvidenceMaintenance;
 import net.enthusia.staff.paper.staff.StaffModeManager;
 import net.enthusia.staff.paper.staff.StaffModeWorldInteractionListener;
 import net.enthusia.staff.paper.staff.StaffToolDispatcher;
+import net.enthusia.staff.paper.staff.StaffToolSettings;
 import net.enthusia.staff.paper.staff.StaffToolTransferListener;
 import net.enthusia.staff.paper.tester.CheatTesterCommand;
 import net.enthusia.staff.paper.tester.CheatTesterManager;
@@ -247,7 +248,7 @@ record PaperRuntimeComponents(
                 inventory,
                 testerStore,
                 dependencies.environment().workers(),
-                CheatTesterSettings.load(plugin.getConfig().getConfigurationSection("staff-tools.cheat-tester"))
+                dependencies.environment().cheatTesterSettings()
         );
         registerListener(plugin, manager);
         CheatTesterCommand commandHandler = new CheatTesterCommand(plugin, manager, fakeBases);
@@ -282,7 +283,8 @@ record PaperRuntimeComponents(
                 staffMode,
                 vanish,
                 freeze,
-                cheatTester
+                cheatTester,
+                dependencies.environment().staffToolSettings()
         );
         registerListener(plugin, dispatcher);
         registerListener(plugin, dispatcher.menuListener());
@@ -329,8 +331,10 @@ record PaperRuntimeComponents(
             Clock clock,
             String serverId,
             String inventoryScopeId,
-            ExecutorService workers
-    ) {
+            ExecutorService workers,
+            CheatTesterSettings cheatTesterSettings,
+            StaffToolSettings staffToolSettings
+        ) {
     }
 
     record Policy(

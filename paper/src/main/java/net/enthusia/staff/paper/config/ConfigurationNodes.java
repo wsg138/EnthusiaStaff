@@ -1,6 +1,7 @@
 package net.enthusia.staff.paper.config;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import java.util.LinkedHashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Set;
@@ -173,5 +174,31 @@ final class ConfigurationNodes {
             return fallback;
         }
         return value.textValue().trim();
+    }
+
+    static Set<String> textSet(
+            JsonNode parent,
+            String field,
+            String path,
+            List<String> errors
+    ) {
+        JsonNode value = parent == null ? null : parent.get(field);
+        if (value == null || value.isNull()) {
+            return Set.of();
+        }
+        if (!value.isArray()) {
+            errors.add(path + " must be a list of strings");
+            return Set.of();
+        }
+        Set<String> values = new LinkedHashSet<>();
+        for (int index = 0; index < value.size(); index++) {
+            JsonNode entry = value.get(index);
+            if (entry == null || !entry.isTextual() || entry.textValue().isBlank()) {
+                errors.add(path + "[" + index + "] must be a non-blank string");
+                continue;
+            }
+            values.add(entry.textValue());
+        }
+        return Set.copyOf(values);
     }
 }
