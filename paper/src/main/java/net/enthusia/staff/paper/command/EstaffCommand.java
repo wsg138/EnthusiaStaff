@@ -6,6 +6,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
 import java.util.logging.Level;
 import net.enthusia.staff.paper.RuntimeHealth;
@@ -26,7 +27,11 @@ public final class EstaffCommand implements CommandExecutor, TabCompleter {
     );
     private static final String STATUS_PERMISSION = "enthusiastaff.status";
     private static final String VERIFY_PERMISSION = "enthusiastaff.verify";
+    private static final String DIAGNOSTICS_PERMISSION = "enthusiastaff.diagnostics";
     private static final String RELOAD_PERMISSION = "enthusiastaff.reload";
+    private static final String STATUS_OPERATION = "status";
+    private static final String VERIFY_OPERATION = "verify";
+    private static final String FULL_VERIFICATION_ARGUMENT = "full";
     private static final String RELOAD_OPERATION = "reload";
     private static final String SANCTION_OPERATION = "sanction";
     private static final int MAX_RELOAD_DETAILS = 5;
@@ -34,7 +39,10 @@ public final class EstaffCommand implements CommandExecutor, TabCompleter {
     private final RuntimeHealth health;
     private final ConfigurationReloadAction reloadAction;
     private final ReloadDispatcher reloadDispatcher;
+    private final JavaPlugin runtimePlugin;
+    private final FullVerificationAction fallbackFullVerification;
     private final CopyOnWriteArrayList<Runnable> successfulReloadHooks = new CopyOnWriteArrayList<>();
+    private volatile BooleanSupplier storagePublished = () -> false;
     private volatile SanctionLifecycleCommand sanctionLifecycle;
 
     public EstaffCommand(RuntimeHealth health) {
@@ -45,12 +53,34 @@ public final class EstaffCommand implements CommandExecutor, TabCompleter {
                         "EnthusiaStaff reload is unavailable",
                         List.of(),
                         false
-                )
+                ),
+                ReloadDispatcher.immediate(),
+                null,
+                () -> List.of("WARNING full verification is unavailable without the Paper runtime.")
         );
     }
 
     public EstaffCommand(RuntimeHealth health, ConfigurationReloadAction reloadAction) {
-        this(health, reloadAction, ReloadDispatcher.immediate());
+        this(
+                health,
+                reloadAction,
+                ReloadDispatcher.immediate(),
+                null,
+                () -> List.of("WARNING full verification is unavailable without the Paper runtime.")
+        );
+    }
+
+    public EstaffCommand(JavaPlugin plugin, RuntimeHealth health) {
+        this(
+                plugin,
+                health,
+                () -> new ConfigurationReloadResult(
+                        ConfigurationReloadResult.Outcome.APPLY_FAILED,
+                        "EnthusiaStaff reload is unavailable",
+                        List.of(),
+                        false
+                )
+        );
     }
 
     public EstaffCommand(
@@ -58,7 +88,7 @@ public final class EstaffCommand implements CommandExecutor, TabCompleter {
             RuntimeHealth health,
             ConfigurationReloadAction reloadAction
     ) {
-        this(health, reloadAction, ReloadDispatcher.folia(plugin));
+        this(health, reloadAction, ReloadDispatcher.folia(plugin), plugin, List::of);
     }
 
     EstaffCommand(
@@ -66,9 +96,36 @@ public final class EstaffCommand implements CommandExecutor, TabCompleter {
             ConfigurationReloadAction reloadAction,
             ReloadDispatcher reloadDispatcher
     ) {
+        this(
+                health,
+                reloadAction,
+                reloadDispatcher,
+                null,
+                () -> List.of("WARNING full verification is unavailable without the Paper runtime.")
+        );
+    }
+
+    EstaffCommand(
+            RuntimeHealth health,
+            ConfigurationReloadAction reloadAction,
+            ReloadDispatcher reloadDispatcher,
+            FullVerificationAction fallbackFullVerification
+    ) {
+        this(health, reloadAction, reloadDispatcher, null, fallbackFullVerification);
+    }
+
+    private EstaffCommand(
+            RuntimeHealth health,
+            ConfigurationReloadAction reloadAction,
+            ReloadDispatcher reloadDispatcher,
+            JavaPlugin runtimePlugin,
+            FullVerificationAction fallbackFullVerification
+    ) {
         this.health = Objects.requireNonNull(health, "health");
         this.reloadAction = Objects.requireNonNull(reloadAction, "reloadAction");
         this.reloadDispatcher = Objects.requireNonNull(reloadDispatcher, "reloadDispatcher");
+        this.runtimePlugin = runtimePlugin;
+        this.fallbackFullVerification = Objects.requireNonNull(fallbackFullVerification, "fallbackFullVerification");
     }
 
     public void configureSanctionLifecycle(SanctionLifecycleCommand lifecycle) {
@@ -77,6 +134,10 @@ public final class EstaffCommand implements CommandExecutor, TabCompleter {
 
     public void addSuccessfulReloadHook(Runnable hook) {
         successfulReloadHooks.add(Objects.requireNonNull(hook, "hook"));
+    }
+
+    public void configureStorageAvailability(BooleanSupplier storagePublished) {
+        this.storagePublished = Objects.requireNonNull(storagePublished, "storagePublished");
     }
 
     @Override
@@ -91,7 +152,7 @@ public final class EstaffCommand implements CommandExecutor, TabCompleter {
             return lifecycle.execute(sender, label, args);
         }
 
-        String operation = args.length == 0 ? "status" : args[0].toLowerCase(Locale.ROOT);
+        String operation = args.length == 0 ? STATUS_OPERATION : args[0].toLowerCase(Locale.ROOT);
         String permission = permissionFor(operation);
         if (permission == null) {
             if (requirePermission(
@@ -99,7 +160,7 @@ public final class EstaffCommand implements CommandExecutor, TabCompleter {
                     STATUS_PERMISSION,
                     "You do not have permission to view EnthusiaStaff status."
             )) {
-                sender.sendMessage("Usage: /" + label + " <status|verify|reload|sanction>");
+                reportUsage(sender, label);
             }
             return true;
         }
@@ -107,7 +168,33 @@ public final class EstaffCommand implements CommandExecutor, TabCompleter {
             return true;
         }
         if (operation.equals(RELOAD_OPERATION)) {
+            if (args.length != 1) {
+                reportUsage(sender, label);
+                return true;
+            }
             dispatchReload(sender);
+            return true;
+        }
+        if (operation.equals(VERIFY_OPERATION)) {
+            if (args.length == 1) {
+                reportStatus(sender);
+                return true;
+            }
+            if (args.length == 2 && args[1].equalsIgnoreCase(FULL_VERIFICATION_ARGUMENT)) {
+                if (requirePermission(
+                        sender,
+                        DIAGNOSTICS_PERMISSION,
+                        "You do not have permission to run full EnthusiaStaff diagnostics."
+                )) {
+                    reportFullVerification(sender);
+                }
+                return true;
+            }
+            reportUsage(sender, label);
+            return true;
+        }
+        if (args.length > 1) {
+            reportUsage(sender, label);
             return true;
         }
         reportStatus(sender);
@@ -125,13 +212,21 @@ public final class EstaffCommand implements CommandExecutor, TabCompleter {
         if (args.length > 0 && args[0].equalsIgnoreCase(SANCTION_OPERATION) && lifecycle != null) {
             return lifecycle.complete(sender, args);
         }
-        if (args.length != 1) {
+        if (args.length == 2 && args[0].equalsIgnoreCase(VERIFY_OPERATION)) {
+            if (allowedWithoutMessage(sender, VERIFY_PERMISSION)
+                    && allowedWithoutMessage(sender, DIAGNOSTICS_PERMISSION)
+                    && FULL_VERIFICATION_ARGUMENT.startsWith(args[1].toLowerCase(Locale.ROOT))) {
+                return List.of(FULL_VERIFICATION_ARGUMENT);
+            }
             return List.of();
         }
-        String prefix = args[0].toLowerCase(Locale.ROOT);
+        if (args.length > 1) {
+            return List.of();
+        }
+        String prefix = args.length == 0 ? "" : args[0].toLowerCase(Locale.ROOT);
         List<String> matches = new ArrayList<>();
-        addCompletion(sender, matches, prefix, "status", STATUS_PERMISSION);
-        addCompletion(sender, matches, prefix, "verify", VERIFY_PERMISSION);
+        addCompletion(sender, matches, prefix, STATUS_OPERATION, STATUS_PERMISSION);
+        addCompletion(sender, matches, prefix, VERIFY_OPERATION, VERIFY_PERMISSION);
         addCompletion(sender, matches, prefix, RELOAD_OPERATION, RELOAD_PERMISSION);
         if (lifecycle != null && SANCTION_OPERATION.startsWith(prefix)
                 && hasAnySanctionPermission(sender)) {
@@ -170,6 +265,22 @@ public final class EstaffCommand implements CommandExecutor, TabCompleter {
         for (Map.Entry<String, String> issue : snapshot.issues().entrySet()) {
             sender.sendMessage("DISABLED " + issue.getKey() + ": " + issue.getValue());
         }
+    }
+
+    private void reportFullVerification(CommandSender sender) {
+        try {
+            List<String> messages = runtimePlugin == null
+                    ? fallbackFullVerification.verify()
+                    : new FullRuntimeVerifier(runtimePlugin, health, storagePublished).verify();
+            messages.forEach(sender::sendMessage);
+        } catch (RuntimeException exception) {
+            LOGGER.log(Level.WARNING, "Full EnthusiaStaff verification failed", exception);
+            sender.sendMessage("CRITICAL full verification failed; see the sanitized server log.");
+        }
+    }
+
+    private static void reportUsage(CommandSender sender, String label) {
+        sender.sendMessage("Usage: /" + label + " <status|verify [full]|reload|sanction>");
     }
 
     private void reportReload(CommandSender sender, ConfigurationReloadResult result) {
@@ -224,8 +335,8 @@ public final class EstaffCommand implements CommandExecutor, TabCompleter {
 
     private static String permissionFor(String operation) {
         return switch (operation) {
-            case "status" -> STATUS_PERMISSION;
-            case "verify" -> VERIFY_PERMISSION;
+            case STATUS_OPERATION -> STATUS_PERMISSION;
+            case VERIFY_OPERATION -> VERIFY_PERMISSION;
             case RELOAD_OPERATION -> RELOAD_PERMISSION;
             default -> null;
         };
@@ -233,7 +344,7 @@ public final class EstaffCommand implements CommandExecutor, TabCompleter {
 
     private static String denialMessage(String operation) {
         return switch (operation) {
-            case "verify" -> "You do not have permission to verify EnthusiaStaff runtime state.";
+            case VERIFY_OPERATION -> "You do not have permission to verify EnthusiaStaff runtime state.";
             case RELOAD_OPERATION -> "You do not have permission to reload EnthusiaStaff configuration.";
             default -> "You do not have permission to view EnthusiaStaff status.";
         };
@@ -332,5 +443,10 @@ public final class EstaffCommand implements CommandExecutor, TabCompleter {
                 );
             }
         }
+    }
+
+    @FunctionalInterface
+    interface FullVerificationAction {
+        List<String> verify();
     }
 }

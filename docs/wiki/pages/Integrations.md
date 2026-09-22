@@ -133,15 +133,19 @@ Representative release staging should install supported providers together and t
 
 ## Verification output
 
-`/estaff verify full` should distinguish states such as:
+`/estaff verify full` distinguishes these non-destructive observation states:
 
 - `PASS`
 - `WARNING`
 - `DISABLED`
-- `RESTART REQUIRED`
 - `CRITICAL`
 
-“Plugin present” is insufficient. Verification should identify whether the compatible API/service needed by the dependent capability is actually available. Verification must not perform destructive provider operations merely to prove discovery.
+Reload results separately report when a configuration change requires restart.
+
+“Plugin present” is insufficient. Full verification reports an enabled provider
+without claiming capability compatibility, because it does not perform provider
+operations merely to prove discovery. Use the relevant staging check to resolve
+that `WARNING` into representative compatibility evidence.
 
 ## Current state
 
