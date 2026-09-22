@@ -34,6 +34,9 @@ public final class EstaffCommand implements CommandExecutor, TabCompleter {
     private static final String FULL_VERIFICATION_ARGUMENT = "full";
     private static final String RELOAD_OPERATION = "reload";
     private static final String SANCTION_OPERATION = "sanction";
+    private static final int NO_ARGUMENTS = 0;
+    private static final int SINGLE_ARGUMENT = 1;
+    private static final int FULL_VERIFICATION_ARGUMENTS = 2;
     private static final int MAX_RELOAD_DETAILS = 5;
 
     private final RuntimeHealth health;
@@ -152,7 +155,7 @@ public final class EstaffCommand implements CommandExecutor, TabCompleter {
             return lifecycle.execute(sender, label, args);
         }
 
-        String operation = args.length == 0 ? STATUS_OPERATION : args[0].toLowerCase(Locale.ROOT);
+        String operation = args.length == NO_ARGUMENTS ? STATUS_OPERATION : args[0].toLowerCase(Locale.ROOT);
         String permission = permissionFor(operation);
         if (permission == null) {
             if (requirePermission(
@@ -168,7 +171,7 @@ public final class EstaffCommand implements CommandExecutor, TabCompleter {
             return true;
         }
         if (operation.equals(RELOAD_OPERATION)) {
-            if (args.length != 1) {
+            if (args.length != SINGLE_ARGUMENT) {
                 reportUsage(sender, label);
                 return true;
             }
@@ -176,11 +179,11 @@ public final class EstaffCommand implements CommandExecutor, TabCompleter {
             return true;
         }
         if (operation.equals(VERIFY_OPERATION)) {
-            if (args.length == 1) {
+            if (args.length == SINGLE_ARGUMENT) {
                 reportStatus(sender);
                 return true;
             }
-            if (args.length == 2 && args[1].equalsIgnoreCase(FULL_VERIFICATION_ARGUMENT)) {
+            if (args.length == FULL_VERIFICATION_ARGUMENTS && args[1].equalsIgnoreCase(FULL_VERIFICATION_ARGUMENT)) {
                 if (requirePermission(
                         sender,
                         DIAGNOSTICS_PERMISSION,
@@ -193,7 +196,7 @@ public final class EstaffCommand implements CommandExecutor, TabCompleter {
             reportUsage(sender, label);
             return true;
         }
-        if (args.length > 1) {
+        if (args.length > SINGLE_ARGUMENT) {
             reportUsage(sender, label);
             return true;
         }
@@ -212,7 +215,7 @@ public final class EstaffCommand implements CommandExecutor, TabCompleter {
         if (args.length > 0 && args[0].equalsIgnoreCase(SANCTION_OPERATION) && lifecycle != null) {
             return lifecycle.complete(sender, args);
         }
-        if (args.length == 2 && args[0].equalsIgnoreCase(VERIFY_OPERATION)) {
+        if (args.length == FULL_VERIFICATION_ARGUMENTS && args[0].equalsIgnoreCase(VERIFY_OPERATION)) {
             if (allowedWithoutMessage(sender, VERIFY_PERMISSION)
                     && allowedWithoutMessage(sender, DIAGNOSTICS_PERMISSION)
                     && FULL_VERIFICATION_ARGUMENT.startsWith(args[1].toLowerCase(Locale.ROOT))) {
@@ -220,10 +223,10 @@ public final class EstaffCommand implements CommandExecutor, TabCompleter {
             }
             return List.of();
         }
-        if (args.length > 1) {
+        if (args.length > SINGLE_ARGUMENT) {
             return List.of();
         }
-        String prefix = args.length == 0 ? "" : args[0].toLowerCase(Locale.ROOT);
+        String prefix = args.length == NO_ARGUMENTS ? "" : args[0].toLowerCase(Locale.ROOT);
         List<String> matches = new ArrayList<>();
         addCompletion(sender, matches, prefix, STATUS_OPERATION, STATUS_PERMISSION);
         addCompletion(sender, matches, prefix, VERIFY_OPERATION, VERIFY_PERMISSION);
