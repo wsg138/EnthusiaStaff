@@ -1,4 +1,4 @@
-name: T01 Codacy cloud diagnostics
+name: T01 Codacy hosted PR diagnostics
 
 on:
   push:
@@ -10,56 +10,25 @@ permissions:
 
 jobs:
   diagnose:
-    name: Report Codacy Cloud findings on changed files
+    name: Read hosted Codacy PR diff
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 10
     env:
       CODACY_PROJECT_TOKEN: ${{ secrets.CODACY_PROJECT_TOKEN }}
     steps:
-      - name: Check out exact branch head
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: 0
-          persist-credentials: false
-
       - name: Set up Node 22
         uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: "22"
 
-      - name: Install Codacy Analysis CLI
+      - name: Install Codacy Cloud CLI
         shell: bash
-        run: npm install --global @codacy/analysis-cli
+        run: npm install --global @codacy/codacy-cloud-cli
 
-      - name: Pull exact Codacy Cloud configuration
+      - name: Print hosted PR analysis and annotated diff
         shell: bash
         run: |
           set -euo pipefail
           test -n "${CODACY_PROJECT_TOKEN}"
-          codacy-analysis init --remote gh wsg138 EnthusiaStaff --repository-token "${CODACY_PROJECT_TOKEN}"
-
-      - name: Analyze changed files and print structured findings
-        shell: bash
-        run: |
-          set -euo pipefail
-          git fetch --no-tags origin main
-          mapfile -t files < <(git diff --name-only origin/main...HEAD -- '*.java' '*.kt' '*.kts' '*.py' '*.sh' '*.yml' '*.yaml' '*.xml' '*.sql')
-          if (( ${#files[@]} == 0 )); then
-            echo 'No analyzable changed files.'
-            exit 0
-          fi
-          set +e
-          codacy-analysis analyze \
-            --install-dependencies \
-            --files "${files[@]}" \
-            --parallel-tools 2 \
-            --tool-timeout 900000 \
-            --output-format json \
-            --output /tmp/codacy-results.json
-          status=$?
-          set -e
-          echo "Codacy Analysis CLI exit status: ${status}"
-          jq '{issues: [.issues[] | {toolId, patternId, filePath, line, column, message, severity, category}], toolResults, errors}' /tmp/codacy-results.json
-          if (( status > 1 )); then
-            exit "${status}"
-          fi
+          codacy pull-request gh wsg138 EnthusiaStaff 215 --output json
+          codacy pull-request gh wsg138 EnthusiaStaff 215 --diff --output json
