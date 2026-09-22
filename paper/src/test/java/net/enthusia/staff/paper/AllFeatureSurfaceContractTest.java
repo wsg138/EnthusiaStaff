@@ -107,7 +107,7 @@ final class AllFeatureSurfaceContractTest {
         JsonNode permissions = metadata.path("permissions");
         Set<String> actualUnpermissioned = new TreeSet<>();
 
-        commands.fields().forEachRemaining(entry -> {
+        commands.properties().forEach(entry -> {
             JsonNode permission = entry.getValue().path("permission");
             if (permission.isMissingNode() || permission.asText().isBlank()) {
                 actualUnpermissioned.add(entry.getKey());
@@ -125,7 +125,7 @@ final class AllFeatureSurfaceContractTest {
     @Test
     void allStaffPermissionsFailClosedAndEveryChildPermissionExists() throws IOException {
         JsonNode permissions = pluginMetadata().path("permissions");
-        permissions.fields().forEachRemaining(entry -> {
+        permissions.properties().forEach(entry -> {
             String permission = entry.getKey();
             JsonNode definition = entry.getValue();
             assertTrue(permission.startsWith("enthusiastaff."), permission);
@@ -136,7 +136,7 @@ final class AllFeatureSurfaceContractTest {
             if (!children.isObject()) {
                 return;
             }
-            children.fields().forEachRemaining(child -> {
+            children.properties().forEach(child -> {
                 assertTrue(permissions.has(child.getKey()),
                         () -> permission + " references undeclared child " + child.getKey());
                 assertTrue(child.getValue().asBoolean(),
