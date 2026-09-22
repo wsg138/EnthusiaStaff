@@ -89,7 +89,7 @@ tasks.register("runtimeJars") {
     description = "Builds the deployable Paper, authority-bridge, Velocity, and staff-bot runtime jars."
     dependsOn(
         ":paper:shadowJar",
-        ":paper-authority-bridge:shadowJar",
+        ":paper-authority-bridge:verifyTransitionBridgeRuntime",
         ":velocity:shadowJar",
         ":staff-bot:shadowJar"
     )
