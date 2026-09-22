@@ -20,6 +20,7 @@ import net.enthusia.staff.domain.ports.PlayerDirectory;
 import net.enthusia.staff.domain.ports.SanctionLookup;
 import net.enthusia.staff.domain.sanction.ActiveSanction;
 import net.enthusia.staff.domain.sanction.SanctionType;
+import net.enthusia.staff.paper.PlayerMessageDispatcher;
 import net.enthusia.staff.paper.client.PaperPlayerPlatformResolver;
 import net.kyori.adventure.text.Component;
 import org.bukkit.entity.Player;
@@ -43,6 +44,7 @@ public final class MuteEnforcementListener implements Listener, AutoCloseable {
     private final Supplier<PlayerDirectory> players;
     private final ExecutorService workers;
     private final PaperPlayerPlatformResolver platforms;
+    private final PlayerMessageDispatcher messages;
     private final ConcurrentHashMap<UUID, Entry> cache = new ConcurrentHashMap<>();
     private ScheduledTask refreshTask;
 
@@ -63,6 +65,7 @@ public final class MuteEnforcementListener implements Listener, AutoCloseable {
         this.players = players;
         this.workers = workers;
         this.platforms = PaperPlayerPlatformResolver.discover(plugin);
+        this.messages = new PlayerMessageDispatcher(plugin);
     }
 
     public void start() {
@@ -177,7 +180,7 @@ public final class MuteEnforcementListener implements Listener, AutoCloseable {
     }
 
     private void notifyPlayer(Player player, String message) {
-        plugin.getServer().getGlobalRegionScheduler().execute(plugin, () -> player.sendMessage(Component.text(message)));
+        messages.send(player, Component.text(message));
     }
 
     @Override
