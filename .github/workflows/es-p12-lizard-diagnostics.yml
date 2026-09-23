@@ -1,0 +1,36 @@
+name: ES-P12 Lizard diagnostics
+
+on:
+  push:
+    branches:
+      - "package/es-p12-staff-operational-hardening"
+
+permissions:
+  contents: read
+
+jobs:
+  lizard:
+    if: github.event.head_commit.message == '[ES-P12] Stage Lizard diagnostics'
+    name: Report Lizard findings on changed Java
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out exact branch head
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Install Lizard 1.23.0
+        run: python3 -m pip install --disable-pip-version-check lizard==1.23.0
+
+      - name: Analyze changed Java against project bounds
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin main
+          mapfile -t files < <(git diff --name-only origin/main...HEAD -- '*.java')
+          if (( ${#files[@]} == 0 )); then
+            echo "No changed Java files."
+            exit 0
+          fi
+          lizard -C 8 -L 50 -a 8 -w "${files[@]}"
