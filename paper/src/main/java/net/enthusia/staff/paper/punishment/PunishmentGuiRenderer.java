@@ -123,18 +123,7 @@ final class PunishmentGuiRenderer {
         recommendation.add(Component.text(
                 "Policy version: " + draft.expectation().configurationVersion(), NamedTextColor.DARK_GRAY
         ));
-        assessment.ifPresent(value -> {
-            recommendation.add(Component.text(
-                    "Raw " + value.escalation().rawOrdinal()
-                            + " → effective " + value.escalation().effectiveOrdinal(),
-                    NamedTextColor.GRAY
-            ));
-            recommendation.add(Component.text(
-                    "Recency bonus: " + value.escalation().recencyBonus()
-                            + "; related contributions: " + value.escalation().contributions().size(),
-                    NamedTextColor.GRAY
-            ));
-        });
+        assessment.ifPresent(value -> addAssessmentLore(recommendation, value));
         inventory.setItem(14, item(Material.ANVIL, "Authoritative recommendation", recommendation));
         inventory.setItem(16, item(
                 Material.CLOCK,
@@ -173,6 +162,22 @@ final class PunishmentGuiRenderer {
                 Material.BARRIER,
                 "Save and close",
                 List.of(Component.text("Resume within 24 hours with /punish resume <player>", NamedTextColor.GRAY))
+        ));
+    }
+
+    private static void addAssessmentLore(List<Component> recommendation, PunishmentAssessment assessment) {
+        PunishmentLadderPresentation.lines(assessment).forEach(line ->
+                recommendation.add(Component.text(line, NamedTextColor.AQUA))
+        );
+        recommendation.add(Component.text(
+                "Raw " + assessment.escalation().rawOrdinal()
+                        + " → effective " + assessment.escalation().effectiveOrdinal(),
+                NamedTextColor.GRAY
+        ));
+        recommendation.add(Component.text(
+                "Recency bonus: " + assessment.escalation().recencyBonus()
+                        + "; related contributions: " + assessment.escalation().contributions().size(),
+                NamedTextColor.GRAY
         ));
     }
 
