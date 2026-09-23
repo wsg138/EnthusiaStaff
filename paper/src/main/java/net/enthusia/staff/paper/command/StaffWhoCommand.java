@@ -6,6 +6,7 @@ import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.function.Supplier;
+import java.util.logging.Level;
 import net.enthusia.staff.domain.application.PunishmentRequestService;
 import net.enthusia.staff.domain.auth.StaffRank;
 import net.enthusia.staff.paper.auth.PaperStaffRankResolver;
@@ -51,8 +52,7 @@ public final class StaffWhoCommand implements CommandExecutor {
             sender.sendMessage(Component.text("Usage: /staffwho"));
             return true;
         }
-        List<Entry> online = snapshotOnlineStaff();
-        submit(sender, online);
+        submit(sender, snapshotOnlineStaff());
         return true;
     }
 
@@ -75,15 +75,23 @@ public final class StaffWhoCommand implements CommandExecutor {
 
     private void submit(CommandSender sender, List<Entry> online) {
         try {
-            workers.execute(() -> loadAndRespond(sender, online));
+            workers.execute(() -> respond(sender, online, loadPendingLabel()));
         } catch (RejectedExecutionException exception) {
             sender.sendMessage(Component.text("The staff status work queue is full; try again shortly."));
         }
     }
 
-    private void loadAndRespond(CommandSender sender, List<Entry> online) {
-        PunishmentRequestService service = requests.get();
-        String pending = service == null ? "unavailable" : pendingLabel(service.pending(PENDING_LIMIT).size());
+    private String loadPendingLabel() {
+        try {
+            PunishmentRequestService service = requests.get();
+            return service == null ? "unavailable" : pendingLabel(service.pending(PENDING_LIMIT).size());
+        } catch (RuntimeException exception) {
+            plugin.getLogger().log(Level.WARNING, "Pending punishment-request count is unavailable", exception);
+            return "unavailable";
+        }
+    }
+
+    private void respond(CommandSender sender, List<Entry> online, String pending) {
         List<String> lines = render(online, pending);
         plugin.getServer().getGlobalRegionScheduler().execute(
                 plugin,
