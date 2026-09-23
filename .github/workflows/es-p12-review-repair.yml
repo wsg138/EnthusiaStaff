@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   repair:
-    if: github.event.head_commit.message == '[ES-P12] Stage review repair batch v2'
+    if: github.event.head_commit.message == '[ES-P12] Stage review repair batch v3'
     name: Validate and publish review repair batch
     runs-on: ubuntu-latest
     timeout-minutes: 25
@@ -80,12 +80,16 @@ jobs:
             'https://github.com/pmd/pmd/releases/download/pmd_releases%2F6.55.0/pmd-bin-6.55.0.zip' \
             --output /tmp/pmd.zip
           unzip -q /tmp/pmd.zip -d /tmp
+          set +e
           /tmp/pmd-bin-6.55.0/bin/run.sh pmd \
             -d 'paper/src/main/java/net/enthusia/staff/paper/command/StaffWhoCommand.java,paper/src/main/java/net/enthusia/staff/paper/visibility/VanishManager.java,paper/src/main/java/net/enthusia/staff/paper/enforcement/PaperBanEnforcementListener.java,paper/src/main/java/net/enthusia/staff/paper/freeze/FreezeManager.java,paper/src/main/java/net/enthusia/staff/paper/PaperPresenceListener.java,paper/src/main/java/net/enthusia/staff/paper/staff/StaffModeManager.java,paper/src/main/java/net/enthusia/staff/paper/freeze/FreezeNoticeService.java,paper/src/main/java/net/enthusia/staff/paper/PaperRuntimeComponents.java,paper/src/main/java/net/enthusia/staff/paper/PaperCommandRegistrar.java,paper/src/main/java/net/enthusia/staff/paper/EnthusiaStaffPaperPlugin.java,paper/src/main/java/net/enthusia/staff/paper/command/FreezeCommand.java,paper/src/test/java/net/enthusia/staff/paper/command/StaffWhoCommandTest.java,paper/src/test/java/net/enthusia/staff/paper/enforcement/PaperBanEnforcementListenerTest.java,paper/src/test/java/net/enthusia/staff/paper/freeze/FreezeMovementAndCommandTest.java,paper/src/test/java/net/enthusia/staff/paper/PaperPresenceListenerTest.java,paper/src/test/java/net/enthusia/staff/paper/staff/StaffModeRestorationWiringTest.java,paper/src/test/java/net/enthusia/staff/paper/freeze/FreezeNoticeServiceTest.java,paper/src/test/java/net/enthusia/staff/paper/freeze/FreezeSchedulerBoundaryTest.java,paper/src/test/java/net/enthusia/staff/paper/command/FreezeCommandHierarchyTest.java' \
             -R ruleset.xml \
             -f text \
             -r /tmp/pmd-findings.txt
-          cat /tmp/pmd-findings.txt
+          status=$?
+          set -e
+          cat /tmp/pmd-findings.txt || true
+          exit "$status"
 
       - name: Run Paper tests and runtime build
         shell: bash
