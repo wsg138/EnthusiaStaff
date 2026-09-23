@@ -36,6 +36,7 @@ import net.enthusia.staff.paper.tester.CheatTesterSettings;
 import net.enthusia.staff.paper.tester.FakeBaseCommand;
 import net.enthusia.staff.paper.tester.FakeBaseManager;
 import net.enthusia.staff.paper.visibility.DefaultStaffVisibilityService;
+import net.enthusia.staff.paper.visibility.VanishBroadcastListener;
 import net.enthusia.staff.paper.visibility.VanishManager;
 import org.bukkit.event.Listener;
 import org.bukkit.plugin.ServicePriority;
@@ -72,6 +73,7 @@ record PaperRuntimeComponents(
         StaffModeManager staffMode = createStaffModeManager(dependencies);
         DefaultStaffVisibilityService visibility = createVisibilityService(dependencies);
         VanishManager vanish = createVanishManager(dependencies, staffMode, visibility);
+        registerOperationalListeners(dependencies, vanish);
         InventoryOperationContext inventoryContext = new InventoryOperationContext(
                 dependencies.environment().clock(),
                 dependencies.environment().inventoryScopeId(),
@@ -205,6 +207,18 @@ record PaperRuntimeComponents(
         staffMode.setExitListener(vanish::staffModeExited);
         registerListener(dependencies.environment().plugin(), vanish);
         return vanish;
+    }
+
+    private static void registerOperationalListeners(Dependencies dependencies, VanishManager vanish) {
+        JavaPlugin plugin = dependencies.environment().plugin();
+        registerListener(plugin, new PaperPresenceListener(
+                plugin,
+                dependencies.environment().clock(),
+                dependencies.environment().serverId(),
+                dependencies.stores().playerDirectory(),
+                dependencies.environment().workers()
+        ));
+        registerListener(plugin, new VanishBroadcastListener(plugin, vanish));
     }
 
     private static FakeBaseManager createFakeBaseManager(
