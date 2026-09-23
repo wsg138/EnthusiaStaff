@@ -81,3 +81,5 @@ elif text.count(legacy) == 0 and text.count(runtime) == 1:
 else:
     raise SystemExit("FreezeCommand registrar construction shape changed unexpectedly")
 registrar.write_text(text)
+
+# Retry trigger only; this file is removed by the validated publish step.
