@@ -27,6 +27,8 @@ import org.bukkit.plugin.ServicesManager;
 import org.junit.jupiter.api.Test;
 
 class StaffChatCommandTest {
+    private static final String STAFF_CHAT_LABEL = "staffchat";
+    private static final String STAFF_CHANNEL = "staff";
     private static final UUID PLAYER_ID = UUID.fromString("10000000-0000-0000-0000-000000000001");
     private static final Map<Class<?>, Object> PRIMITIVE_DEFAULTS = Map.of(
             boolean.class, false,
@@ -49,7 +51,7 @@ class StaffChatCommandTest {
             return null;
         });
 
-        assertTrue(command.onCommand(player, null, "staffchat", new String[0]));
+        assertTrue(command.onCommand(player, null, STAFF_CHAT_LABEL, new String[0]));
         assertEquals(0, lookups.get());
         assertEquals(List.of(Component.text("You do not have permission to use staff chat.")), messages);
     }
@@ -64,7 +66,7 @@ class StaffChatCommandTest {
             return null;
         });
 
-        assertTrue(command.onCommand(sender, null, "staffchat", new String[0]));
+        assertTrue(command.onCommand(sender, null, STAFF_CHAT_LABEL, new String[0]));
         assertEquals(0, lookups.get());
         assertEquals(List.of("RoseChat channel state belongs to an online player."), messages);
     }
@@ -89,19 +91,19 @@ class StaffChatCommandTest {
         List<Object> missingMessages = new ArrayList<>();
         StaffChatCommand missing = new StaffChatCommand(() -> null);
 
-        assertTrue(missing.onCommand(player(true, missingMessages), null, "staffchat", new String[0]));
+        assertTrue(missing.onCommand(player(true, missingMessages), null, STAFF_CHAT_LABEL, new String[0]));
         assertEquals(List.of(Component.text("RoseChat staff-channel integration is unavailable.")), missingMessages);
 
         List<Object> inactiveMessages = new ArrayList<>();
         RoseChatIntegration inactiveIntegration = integration(
                 false,
                 true,
-                Optional.of("staff"),
+                Optional.of(STAFF_CHANNEL),
                 new AtomicReference<>()
         );
         StaffChatCommand inactive = new StaffChatCommand(() -> inactiveIntegration);
 
-        assertTrue(inactive.onCommand(player(true, inactiveMessages), null, "staffchat", new String[0]));
+        assertTrue(inactive.onCommand(player(true, inactiveMessages), null, STAFF_CHAT_LABEL, new String[0]));
         assertEquals(List.of(Component.text("RoseChat staff-channel integration is unavailable.")), inactiveMessages);
     }
 
@@ -112,7 +114,7 @@ class StaffChatCommandTest {
         RoseChatIntegration integration = integration(true, false, Optional.empty(), toggledPlayer);
         StaffChatCommand command = new StaffChatCommand(() -> integration);
 
-        assertTrue(command.onCommand(player(true, messages), null, "staffchat", new String[0]));
+        assertTrue(command.onCommand(player(true, messages), null, STAFF_CHAT_LABEL, new String[0]));
         assertEquals(PLAYER_ID, toggledPlayer.get());
         assertEquals(List.of(Component.text("RoseChat has no configured staff channel.")), messages);
     }
@@ -121,10 +123,10 @@ class StaffChatCommandTest {
     void successfulToggleReportsTheCurrentChannel() {
         List<Object> messages = new ArrayList<>();
         AtomicReference<UUID> toggledPlayer = new AtomicReference<>();
-        RoseChatIntegration integration = integration(true, true, Optional.of("staff"), toggledPlayer);
+        RoseChatIntegration integration = integration(true, true, Optional.of(STAFF_CHANNEL), toggledPlayer);
         StaffChatCommand command = new StaffChatCommand(() -> integration);
 
-        assertTrue(command.onCommand(player(true, messages), null, "staffchat", new String[0]));
+        assertTrue(command.onCommand(player(true, messages), null, STAFF_CHAT_LABEL, new String[0]));
         assertEquals(PLAYER_ID, toggledPlayer.get());
         assertEquals(List.of(Component.text("RoseChat channel switched to staff.")), messages);
     }
@@ -135,7 +137,24 @@ class StaffChatCommandTest {
             Optional<String> currentChannel,
             AtomicReference<UUID> toggledPlayer
     ) {
-        BridgeRegistration registration = (BridgeRegistration) Proxy.newProxyInstance(
+        BridgeRegistration registration = registration(active);
+        RoseChatStaffService service = service(toggleResult, currentChannel, toggledPlayer, registration);
+        RoseChatIntegration.Discovery discovery = RoseChatIntegration.discoverAndInstall(
+                services(service),
+                new StaffChannelConfiguration(STAFF_CHANNEL),
+                () -> OperationalMode.ACTIVE,
+                () -> null,
+                new FreezeManager(null, Clock.systemUTC(), () -> null, null),
+                visibility(),
+                new ChatContextBuffer(Clock.systemUTC())
+        );
+
+        assertTrue(discovery.issue().isEmpty(), discovery.issue());
+        return discovery.integration().orElseThrow();
+    }
+
+    private static BridgeRegistration registration(boolean active) {
+        return (BridgeRegistration) Proxy.newProxyInstance(
                 Thread.currentThread().getContextClassLoader(),
                 new Class<?>[]{BridgeRegistration.class},
                 (proxy, method, arguments) -> switch (method.getName()) {
@@ -144,7 +163,15 @@ class StaffChatCommandTest {
                     default -> defaultValue(method.getReturnType());
                 }
         );
-        RoseChatStaffService service = (RoseChatStaffService) Proxy.newProxyInstance(
+    }
+
+    private static RoseChatStaffService service(
+            boolean toggleResult,
+            Optional<String> currentChannel,
+            AtomicReference<UUID> toggledPlayer,
+            BridgeRegistration registration
+    ) {
+        return (RoseChatStaffService) Proxy.newProxyInstance(
                 Thread.currentThread().getContextClassLoader(),
                 new Class<?>[]{RoseChatStaffService.class},
                 (proxy, method, arguments) -> switch (method.getName()) {
@@ -159,7 +186,10 @@ class StaffChatCommandTest {
                     default -> defaultValue(method.getReturnType());
                 }
         );
-        ServicesManager services = (ServicesManager) Proxy.newProxyInstance(
+    }
+
+    private static ServicesManager services(RoseChatStaffService service) {
+        return (ServicesManager) Proxy.newProxyInstance(
                 Thread.currentThread().getContextClassLoader(),
                 new Class<?>[]{ServicesManager.class},
                 (proxy, method, arguments) -> switch (method.getName()) {
@@ -167,7 +197,10 @@ class StaffChatCommandTest {
                     default -> defaultValue(method.getReturnType());
                 }
         );
-        StaffVisibilityService visibility = new StaffVisibilityService() {
+    }
+
+    private static StaffVisibilityService visibility() {
+        return new StaffVisibilityService() {
             @Override
             public boolean isVanished(UUID playerId) {
                 return false;
@@ -178,18 +211,6 @@ class StaffChatCommandTest {
                 return true;
             }
         };
-        RoseChatIntegration.Discovery discovery = RoseChatIntegration.discoverAndInstall(
-                services,
-                new StaffChannelConfiguration("staff"),
-                () -> OperationalMode.ACTIVE,
-                () -> null,
-                new FreezeManager(null, Clock.systemUTC(), () -> null, null),
-                visibility,
-                new ChatContextBuffer(Clock.systemUTC())
-        );
-
-        assertTrue(discovery.issue().isEmpty(), discovery.issue());
-        return discovery.integration().orElseThrow();
     }
 
     private static Player player(boolean allowed, List<Object> messages) {
