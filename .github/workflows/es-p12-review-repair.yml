@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   repair:
-    if: github.event.head_commit.message == '[ES-P12] Stage review repair batch v4'
+    if: github.event.head_commit.message == '[ES-P12] Stage review repair batch v5'
     name: Validate and publish review repair batch
     runs-on: ubuntu-latest
     timeout-minutes: 25
@@ -32,14 +32,106 @@ jobs:
           python3 scripts/es_p12_review_repair_v2.py
           python3 - <<'PY'
           from pathlib import Path
-          path = Path('paper/src/test/java/net/enthusia/staff/paper/PaperPresenceListenerTest.java')
-          text = path.read_text()
+
+          presence = Path('paper/src/test/java/net/enthusia/staff/paper/PaperPresenceListenerTest.java')
+          text = presence.read_text()
           old = '    private static final Logger LOGGER = Logger.getLogger(PaperPresenceListenerTest.class.getName());'
           new = '    private static final int FIRST_ATTEMPT = 1;\n' + old
           if text.count(old) != 1 or text.count('attempts.incrementAndGet() == 1') != 1:
               raise SystemExit('presence retry test shape changed unexpectedly')
-          text = text.replace(old, new).replace('attempts.incrementAndGet() == 1', 'attempts.incrementAndGet() == FIRST_ATTEMPT')
-          path.write_text(text)
+          text = text.replace(old, new).replace(
+              'attempts.incrementAndGet() == 1',
+              'attempts.incrementAndGet() == FIRST_ATTEMPT'
+          )
+          presence.write_text(text)
+
+          freeze = Path('paper/src/main/java/net/enthusia/staff/paper/command/FreezeCommand.java')
+          text = freeze.read_text()
+          old = '''    public FreezeCommand(
+                  JavaPlugin plugin,
+                  Clock clock,
+                  Supplier<OperationalMode> mode,
+                  Supplier<PlayerDirectory> players,
+                  Supplier<FreezeStore> freezes,
+                  FreezeManager manager,
+                  ExecutorService workers
+          ) {
+              this(plugin, clock, mode, players, freezes, manager, workers, FreezeNoticeSink.noOp());
+          }
+
+          public FreezeCommand(
+                  JavaPlugin plugin,
+                  Clock clock,
+                  Supplier<OperationalMode> mode,
+                  Supplier<PlayerDirectory> players,
+                  Supplier<FreezeStore> freezes,
+                  FreezeManager manager,
+                  ExecutorService workers,
+                  FreezeNoticeSink targetNotices
+          ) {
+              this(
+                      plugin, clock, mode, players, freezes, manager, workers,
+                      new RuntimeHooks(
+                              LuckPermsStaffTargetGuard.discover(plugin),
+                              new FreezeStaffNotifier(plugin),
+                              targetNotices,
+                              commandResponses(plugin)
+                      )
+              );
+          }
+          '''
+          new = '''    public FreezeCommand(
+                  JavaPlugin plugin,
+                  Clock clock,
+                  Supplier<OperationalMode> mode,
+                  Supplier<PlayerDirectory> players,
+                  Supplier<FreezeStore> freezes,
+                  FreezeManager manager,
+                  ExecutorService workers
+          ) {
+              this(
+                      plugin, clock, mode, players, freezes, manager, workers,
+                      new RuntimeHooks(
+                              LuckPermsStaffTargetGuard.discover(plugin),
+                              new FreezeStaffNotifier(plugin),
+                              FreezeNoticeSink.noOp(),
+                              commandResponses(plugin)
+                      )
+              );
+          }
+
+          public static FreezeCommand createRuntime(
+                  JavaPlugin plugin,
+                  Clock clock,
+                  Supplier<OperationalMode> mode,
+                  Supplier<PlayerDirectory> players,
+                  Supplier<FreezeStore> freezes,
+                  FreezeManager manager,
+                  ExecutorService workers,
+                  FreezeNoticeSink targetNotices
+          ) {
+              return new FreezeCommand(
+                      plugin, clock, mode, players, freezes, manager, workers,
+                      new RuntimeHooks(
+                              LuckPermsStaffTargetGuard.discover(plugin),
+                              new FreezeStaffNotifier(plugin),
+                              targetNotices,
+                              commandResponses(plugin)
+                      )
+              );
+          }
+          '''
+          if text.count(old) != 1:
+              raise SystemExit('FreezeCommand runtime constructor shape changed unexpectedly')
+          freeze.write_text(text.replace(old, new))
+
+          registrar = Path('paper/src/main/java/net/enthusia/staff/paper/PaperCommandRegistrar.java')
+          text = registrar.read_text()
+          old = 'FreezeCommand freezeCommand = new FreezeCommand('
+          new = 'FreezeCommand freezeCommand = FreezeCommand.createRuntime('
+          if text.count(old) != 1:
+              raise SystemExit('FreezeCommand registrar construction shape changed unexpectedly')
+          registrar.write_text(text.replace(old, new))
           PY
 
       - name: Install Lizard
