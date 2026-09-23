@@ -6,7 +6,6 @@ import java.time.Clock;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.function.Supplier;
@@ -72,31 +71,26 @@ final class PaperIntegrationManager {
     }
 
     void initializeEconomy() {
-        Optional<CurrencyGateway> discovered = discoverCurrencyGateway();
-        installConfiscation(discovered.orElseGet(InventoryOnlyCurrencyGateway::new));
-        if (discovered.isEmpty()) {
-            return;
-        }
-        try {
-            installEconomy(discovered.orElseThrow(), configuredRemovalOrder());
-            clearIssue(CURRENCY);
-        } catch (IllegalArgumentException exception) {
-            issue(CURRENCY, "Economy removal order is invalid; economy confiscation is unavailable");
-            plugin().getLogger().log(Level.SEVERE, "Economy integration configuration failed", exception);
-        }
-    }
-
-    private Optional<CurrencyGateway> discoverCurrencyGateway() {
         if (!plugin().getServer().getPluginManager().isPluginEnabled("EnthusiaCurrency")) {
             issue(CURRENCY, "EnthusiaCurrency is absent; economy confiscation is unavailable; item confiscation remains available");
-            return Optional.empty();
+            installConfiscation(new InventoryOnlyCurrencyGateway());
+            return;
         }
         EnthusiaCurrencyGateway.Discovery discovery =
                 EnthusiaCurrencyGateway.discover(plugin().getServer().getServicesManager());
         if (discovery.gateway().isEmpty()) {
-            issue(CURRENCY, discovery.issue() + "; item confiscation remains available");
+            issue(CURRENCY, discovery.issue() + "; confiscation is disabled fail-safe while the provider is present but unavailable");
+            return;
         }
-        return discovery.gateway();
+        CurrencyGateway gateway = discovery.gateway().orElseThrow();
+        installConfiscation(gateway);
+        try {
+            installEconomy(gateway, configuredRemovalOrder());
+            clearIssue(CURRENCY);
+        } catch (IllegalArgumentException exception) {
+            issue(CURRENCY, "Economy removal order is invalid; economy confiscation is unavailable; item confiscation remains available");
+            plugin().getLogger().log(Level.SEVERE, "Economy integration configuration failed", exception);
+        }
     }
 
     void initializeModerationProviders() {
