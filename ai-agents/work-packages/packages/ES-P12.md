@@ -94,15 +94,16 @@ Validation in progress. Resume only this package/branch/PR until it reaches a pr
 
 ## 24. Exact-head evidence
 - Repository-native PMD 6.55 diagnostics run `35894852700` exposed 13 concrete findings across changed Java; no broad suppressions were introduced.
-- Atomic repair run `35895206799` passed the repository PMD 6.55 rules with zero findings and passed focused `:domain:test :paper:test` before publishing repair commit `419412b4a8615063f5e180a9306c29cc238dee66`.
-- The repair commit removed both temporary PMD workflows. Its normal GitHub Actions checks were created as `action_required` with no jobs because the push was authored by `github-actions[bot]`; this package-state commit intentionally retriggers the standard exact-head checks under the normal repository actor.
-- Hosted Coverage, Sentinel artifact, Wiki validation, and Codacy results on the new exact head remain pending and supersede all earlier hosted results.
+- Atomic PMD repair run `35895206799` passed the repository PMD 6.55 rules with zero findings and passed focused `:domain:test :paper:test` before publishing repair commit `419412b4a8615063f5e180a9306c29cc238dee66`.
+- Lizard 1.23 diagnostics identified the remaining new constructor-bound complexity. Validated repair run `35896989276` passed the targeted Lizard bounds, repository PMD 6.55 with zero findings, and `:paper:test`, then published `31d8fb455b39d4b88d9fe36d921b15626cb76705` and removed all temporary complexity diagnostic/repair files.
+- Live `main` remains `fd999968ed5ffbd2e47e041482dc9e936528d7a7`, matching the package base, so no mainline reconciliation is currently required.
+- This package-state commit intentionally retriggers the standard exact-head Coverage, Sentinel artifact, Wiki validation, and Codacy checks under the normal repository actor; those final hosted results supersede all earlier checks.
 
 ## 25. Private acceptance boundary
 No live production deployment is authorized by this package. Staging/manual evidence may supplement but does not replace exact-head repository validation.
 
 ## 26. Merge and synchronization record
-Branch base: `fd999968ed5ffbd2e47e041482dc9e936528d7a7`. Final current-main/mergeability reconciliation and merge record remain pending.
+Branch base and current live `main`: `fd999968ed5ffbd2e47e041482dc9e936528d7a7`. Final mergeability/review reconciliation and merge record remain pending.
 
 ## 27. Remaining package work
-Obtain green exact-head hosted Coverage/build/tests/runtime-JAR, Sentinel artifact, Wiki validation, and Codacy zero-new-valid-finding evidence; perform final review and current-main/mergeability reconciliation; then mark PR #246 review-ready. No merge is authorized by this record alone.
+Obtain green exact-head hosted Coverage/build/tests/runtime-JAR, Sentinel artifact, Wiki validation, and Codacy zero-new-valid-finding evidence; perform final review and mergeability reconciliation; then mark PR #246 review-ready. No merge is authorized by this record alone.
