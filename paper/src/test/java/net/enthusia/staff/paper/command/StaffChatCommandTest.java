@@ -5,23 +5,39 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.rosewood.rosechat.api.staff.BridgeRegistration;
 import dev.rosewood.rosechat.api.staff.RoseChatStaffService;
-import java.lang.reflect.Array;
-import java.lang.reflect.Constructor;
+import dev.rosewood.rosechat.api.staff.StaffChannelConfiguration;
 import java.lang.reflect.Proxy;
+import java.time.Clock;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
+import net.enthusia.staff.domain.OperationalMode;
+import net.enthusia.staff.paper.api.StaffVisibilityService;
+import net.enthusia.staff.paper.freeze.FreezeManager;
 import net.enthusia.staff.paper.integration.RoseChatIntegration;
+import net.enthusia.staff.paper.report.ChatContextBuffer;
 import net.kyori.adventure.text.Component;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
+import org.bukkit.plugin.ServicesManager;
 import org.junit.jupiter.api.Test;
 
 class StaffChatCommandTest {
     private static final UUID PLAYER_ID = UUID.fromString("10000000-0000-0000-0000-000000000001");
+    private static final Map<Class<?>, Object> PRIMITIVE_DEFAULTS = Map.of(
+            boolean.class, false,
+            byte.class, (byte) 0,
+            short.class, (short) 0,
+            int.class, 0,
+            long.class, 0L,
+            float.class, 0F,
+            double.class, 0D,
+            char.class, '\0'
+    );
 
     @Test
     void permissionDenialStopsBeforeIntegrationLookup() {
@@ -69,7 +85,7 @@ class StaffChatCommandTest {
     }
 
     @Test
-    void missingOrInactiveBridgeFailsClosed() throws Exception {
+    void missingOrInactiveBridgeFailsClosed() {
         List<Object> missingMessages = new ArrayList<>();
         StaffChatCommand missing = new StaffChatCommand(() -> null);
 
@@ -90,7 +106,7 @@ class StaffChatCommandTest {
     }
 
     @Test
-    void missingStaffChannelReportsConfigurationProblem() throws Exception {
+    void missingStaffChannelReportsConfigurationProblem() {
         List<Object> messages = new ArrayList<>();
         AtomicReference<UUID> toggledPlayer = new AtomicReference<>();
         RoseChatIntegration integration = integration(true, false, Optional.empty(), toggledPlayer);
@@ -102,7 +118,7 @@ class StaffChatCommandTest {
     }
 
     @Test
-    void successfulToggleReportsTheCurrentChannel() throws Exception {
+    void successfulToggleReportsTheCurrentChannel() {
         List<Object> messages = new ArrayList<>();
         AtomicReference<UUID> toggledPlayer = new AtomicReference<>();
         RoseChatIntegration integration = integration(true, true, Optional.of("staff"), toggledPlayer);
@@ -118,7 +134,16 @@ class StaffChatCommandTest {
             boolean toggleResult,
             Optional<String> currentChannel,
             AtomicReference<UUID> toggledPlayer
-    ) throws Exception {
+    ) {
+        BridgeRegistration registration = (BridgeRegistration) Proxy.newProxyInstance(
+                Thread.currentThread().getContextClassLoader(),
+                new Class<?>[]{BridgeRegistration.class},
+                (proxy, method, arguments) -> switch (method.getName()) {
+                    case "isActive" -> active;
+                    case "close" -> null;
+                    default -> defaultValue(method.getReturnType());
+                }
+        );
         RoseChatStaffService service = (RoseChatStaffService) Proxy.newProxyInstance(
                 Thread.currentThread().getContextClassLoader(),
                 new Class<?>[]{RoseChatStaffService.class},
@@ -129,25 +154,42 @@ class StaffChatCommandTest {
                     }
                     case "getCurrentChannel" -> currentChannel;
                     case "apiVersion" -> RoseChatStaffService.API_VERSION;
+                    case "getBridgeOwner" -> Optional.empty();
+                    case "installBridge" -> registration;
                     default -> defaultValue(method.getReturnType());
                 }
         );
-        BridgeRegistration registration = (BridgeRegistration) Proxy.newProxyInstance(
+        ServicesManager services = (ServicesManager) Proxy.newProxyInstance(
                 Thread.currentThread().getContextClassLoader(),
-                new Class<?>[]{BridgeRegistration.class},
+                new Class<?>[]{ServicesManager.class},
                 (proxy, method, arguments) -> switch (method.getName()) {
-                    case "isActive" -> active;
-                    case "close" -> null;
+                    case "load" -> service;
                     default -> defaultValue(method.getReturnType());
                 }
+        );
+        StaffVisibilityService visibility = new StaffVisibilityService() {
+            @Override
+            public boolean isVanished(UUID playerId) {
+                return false;
+            }
+
+            @Override
+            public boolean canSee(UUID viewerId, UUID targetId) {
+                return true;
+            }
+        };
+        RoseChatIntegration.Discovery discovery = RoseChatIntegration.discoverAndInstall(
+                services,
+                new StaffChannelConfiguration("staff"),
+                () -> OperationalMode.ACTIVE,
+                () -> null,
+                new FreezeManager(null, Clock.systemUTC(), () -> null, null),
+                visibility,
+                new ChatContextBuffer(Clock.systemUTC())
         );
 
-        Constructor<RoseChatIntegration> constructor = RoseChatIntegration.class.getDeclaredConstructor(
-                RoseChatStaffService.class,
-                BridgeRegistration.class
-        );
-        constructor.setAccessible(true);
-        return constructor.newInstance(service, registration);
+        assertTrue(discovery.issue().isEmpty(), discovery.issue());
+        return discovery.integration().orElseThrow();
     }
 
     private static Player player(boolean allowed, List<Object> messages) {
@@ -187,6 +229,6 @@ class StaffChatCommandTest {
         if (type == void.class || !type.isPrimitive()) {
             return null;
         }
-        return Array.get(Array.newInstance(type, 1), 0);
+        return PRIMITIVE_DEFAULTS.get(type);
     }
 }
