@@ -29,7 +29,9 @@ import net.enthusia.staff.domain.escalation.ReasonPolicy;
 import net.enthusia.staff.domain.player.PlayerIdentity;
 import net.enthusia.staff.domain.ports.PlayerDirectory;
 import net.enthusia.staff.domain.ports.ReasonPolicyRepository;
+import net.enthusia.staff.paper.auth.LuckPermsStaffTargetGuard;
 import net.enthusia.staff.paper.auth.PaperActorResolver;
+import net.enthusia.staff.paper.auth.StaffTargetGuard;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.event.ClickEvent;
 import net.kyori.adventure.text.event.HoverEvent;
@@ -54,6 +56,7 @@ public final class PunishmentGuiController implements Listener {
     private final AuthorizationPolicy authorization;
     private final ReasonPolicyRepository policies;
     private final ExecutorService workers;
+    private final StaffTargetGuard targetGuard;
     private final PunishmentGuiCatalog catalog;
     private final PunishmentGuiRenderer renderer;
     private final Set<UUID> suppressedClosures = ConcurrentHashMap.newKeySet();
@@ -69,8 +72,30 @@ public final class PunishmentGuiController implements Listener {
             ReasonPolicyRepository policies,
             ExecutorService workers
     ) {
+        this(
+                plugin,
+                mode,
+                workflows,
+                players,
+                authorization,
+                policies,
+                workers,
+                LuckPermsStaffTargetGuard.discover(plugin)
+        );
+    }
+
+    PunishmentGuiController(
+            JavaPlugin plugin,
+            Supplier<OperationalMode> mode,
+            Supplier<PunishmentDraftWorkflow> workflows,
+            Supplier<PlayerDirectory> players,
+            AuthorizationPolicy authorization,
+            ReasonPolicyRepository policies,
+            ExecutorService workers,
+            StaffTargetGuard targetGuard
+    ) {
         if (plugin == null || mode == null || workflows == null || players == null
-                || authorization == null || policies == null || workers == null) {
+                || authorization == null || policies == null || workers == null || targetGuard == null) {
             throw new IllegalArgumentException("punishment GUI dependencies must be present");
         }
         this.plugin = plugin;
@@ -80,6 +105,7 @@ public final class PunishmentGuiController implements Listener {
         this.authorization = authorization;
         this.policies = policies;
         this.workers = workers;
+        this.targetGuard = targetGuard;
         this.catalog = new PunishmentGuiCatalog(policies, authorization);
         this.renderer = new PunishmentGuiRenderer(catalog);
     }
@@ -90,10 +116,13 @@ public final class PunishmentGuiController implements Listener {
             return;
         }
         String normalizedCommand = normalizeCommand(commandName);
-        resolveTarget(viewer, targetQuery, target -> openState(
-                viewer,
-                new PunishmentGuiState.Categories(viewer.getUniqueId(), target, normalizedCommand, 0)
-        ));
+        resolveTarget(viewer, targetQuery, target -> {
+            if (targetAllowed(viewer, actor, target.playerId())) {
+                openState(viewer, new PunishmentGuiState.Categories(
+                        viewer.getUniqueId(), target, normalizedCommand, 0
+                ));
+            }
+        });
     }
 
     public void resume(Player viewer, String targetQuery, String invokedCommand) {
@@ -102,6 +131,9 @@ public final class PunishmentGuiController implements Listener {
             return;
         }
         resolveTarget(viewer, targetQuery, target -> submit(viewer, () -> {
+            if (!targetAllowed(viewer, actor, target.playerId())) {
+                return;
+            }
             PunishmentDraftWorkflow workflow = workflows.get();
             if (workflow == null) {
                 message(viewer, "Moderation storage is not ready; no draft was opened.");
@@ -320,6 +352,9 @@ public final class PunishmentGuiController implements Listener {
             ReasonPolicy policy
     ) {
         submit(viewer, () -> {
+            if (!targetAllowed(viewer, actor, state.target().playerId())) {
+                return;
+            }
             PunishmentDraftWorkflow workflow = workflows.get();
             if (workflow == null) {
                 message(viewer, "Moderation storage is not ready; no draft was created.");
@@ -348,6 +383,9 @@ public final class PunishmentGuiController implements Listener {
             CaseVisibility visibility
     ) {
         submit(viewer, () -> {
+            if (!targetAllowed(viewer, actor, state.target().playerId())) {
+                return;
+            }
             PunishmentDraftWorkflow workflow = workflows.get();
             if (workflow == null) {
                 message(viewer, "Moderation storage is not ready; the existing draft remains saved.");
@@ -402,6 +440,9 @@ public final class PunishmentGuiController implements Listener {
         }
         boolean submitted = submit(viewer, () -> {
             try {
+                if (!targetAllowed(viewer, actor, state.target().playerId())) {
+                    return;
+                }
                 PunishmentDraftWorkflow workflow = workflows.get();
                 if (workflow == null) {
                     message(viewer, "Moderation storage is not ready; no action was taken.");
@@ -482,6 +523,15 @@ public final class PunishmentGuiController implements Listener {
             }
             continuation.accept(target);
         });
+    }
+
+    private boolean targetAllowed(Player viewer, Actor actor, UUID targetId) {
+        StaffTargetGuard.Result result = targetGuard.check(actor, targetId, false);
+        if (result.allowed()) {
+            return true;
+        }
+        message(viewer, result.message());
+        return false;
     }
 
     private void openState(Player viewer, PunishmentGuiState state) {
