@@ -25,7 +25,9 @@ import net.enthusia.staff.paper.economy.CurrencyGateway;
 import net.enthusia.staff.paper.economy.EconomyCoordinator;
 import net.enthusia.staff.paper.economy.EconomyCoordinatorRuntime;
 import net.enthusia.staff.paper.economy.EnthusiaCurrencyGateway;
+import net.enthusia.staff.paper.enforcement.MuteCommandFallbackListener;
 import net.enthusia.staff.paper.enforcement.MuteEnforcementListener;
+import net.enthusia.staff.paper.enforcement.PaperBanEnforcementListener;
 import net.enthusia.staff.paper.enforcement.PaperPunishmentCommitEffects;
 import net.enthusia.staff.paper.freeze.FreezeManager;
 import net.enthusia.staff.paper.integration.MarketIntegration;
@@ -88,6 +90,15 @@ final class PaperIntegrationManager {
     }
 
     void initializeModerationProviders() {
+        plugin().getServer().getPluginManager().registerEvents(
+                new PaperBanEnforcementListener(
+                        plugin(),
+                        clock(),
+                        dependencies.policy().authoritativeMode(),
+                        dependencies.stores().punishmentService()
+                ),
+                plugin()
+        );
         punishmentEffects = new PaperPunishmentCommitEffects(
                 plugin(),
                 dependencies.stores().punishmentService(),
@@ -142,7 +153,11 @@ final class PaperIntegrationManager {
 
     void initializeRoseChat() {
         if (!plugin().getServer().getPluginManager().isPluginEnabled("RoseChat")) {
-            issue(ROSECHAT, "RoseChat is absent; staff channel and chat bridge are unavailable");
+            plugin().getServer().getPluginManager().registerEvents(
+                    new MuteCommandFallbackListener(dependencies.evidence().muteEnforcement()),
+                    plugin()
+            );
+            issue(ROSECHAT, "RoseChat is absent; staff channel/chat bridge are unavailable; private-message mute fallback is active");
             return;
         }
         try {
