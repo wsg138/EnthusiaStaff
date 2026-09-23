@@ -10,8 +10,8 @@ permissions:
 
 jobs:
   lizard:
-    if: github.event.head_commit.message == '[ES-P12] Stage Lizard diagnostics'
-    name: Report Lizard findings on changed Java
+    if: github.event.head_commit.message == '[ES-P12] Compare Lizard baseline'
+    name: Compare Lizard findings with main
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -23,7 +23,7 @@ jobs:
       - name: Install Lizard 1.23.0
         run: python3 -m pip install --disable-pip-version-check lizard==1.23.0
 
-      - name: Analyze changed Java against project bounds
+      - name: Compare changed Java against main
         shell: bash
         run: |
           set -euo pipefail
@@ -33,4 +33,23 @@ jobs:
             echo "No changed Java files."
             exit 0
           fi
-          lizard -C 8 -L 50 -a 8 -w "${files[@]}"
+
+          set +e
+          lizard -C 8 -L 50 -a 8 -w "${files[@]}" > /tmp/head.txt 2>&1
+          set -e
+
+          git worktree add --detach /tmp/main origin/main
+          main_files=()
+          for file in "${files[@]}"; do
+            if [[ -f "/tmp/main/${file}" ]]; then
+              main_files+=("/tmp/main/${file}")
+            fi
+          done
+          set +e
+          lizard -C 8 -L 50 -a 8 -w "${main_files[@]}" > /tmp/main.txt 2>&1
+          set -e
+
+          echo '=== HEAD WARNINGS ==='
+          grep 'warning:' /tmp/head.txt || true
+          echo '=== MAIN WARNINGS ==='
+          sed 's#/tmp/main/##g' /tmp/main.txt | grep 'warning:' || true
