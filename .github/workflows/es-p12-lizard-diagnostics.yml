@@ -1,4 +1,4 @@
-name: ES-P12 Codacy diagnostics
+name: ES-P12 complexity repair
 
 on:
   push:
@@ -6,36 +6,249 @@ on:
       - "package/es-p12-staff-operational-hardening"
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
-  codacy:
-    if: github.event.head_commit.message == '[ES-P12] Query Codacy remaining'
-    name: Query public Codacy PR issues
+  repair:
+    if: github.event.head_commit.message == '[ES-P12] Apply constructor complexity repair'
+    name: Repair new Lizard constructor findings
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 20
     steps:
-      - name: Query public Codacy PR issues
+      - name: Check out exact branch head
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Install Lizard 1.23.0
+        run: python3 -m pip install --disable-pip-version-check lizard==1.23.0
+
+      - name: Refactor injected dependency boundaries
         shell: bash
         run: |
           set -euo pipefail
           python3 - <<'PY'
-          import json
-          import urllib.request
+          from pathlib import Path
 
-          url = "https://api.codacy.com/api/v3/analysis/organizations/gh/wsg138/repositories/EnthusiaStaff/pull-requests/246/issues?status=new"
-          request = urllib.request.Request(url, headers={"Accept": "application/json"})
-          with urllib.request.urlopen(request, timeout=30) as response:
-              payload = json.load(response)
-          for entry in payload.get("data", []):
-              issue = entry.get("commitIssue") or {}
-              pattern = issue.get("patternInfo") or {}
-              print(json.dumps({
-                  "file": issue.get("filePath"),
-                  "line": issue.get("lineNumber"),
-                  "pattern": pattern.get("id"),
-                  "level": pattern.get("level"),
-                  "message": issue.get("message"),
-              }, sort_keys=True))
-          print("TOTAL", len(payload.get("data", [])))
+          def replace_section(path, start_marker, end_marker, replacement):
+              file = Path(path)
+              text = file.read_text(encoding="utf-8")
+              start = text.index(start_marker)
+              end = text.index(end_marker, start)
+              text = text[:start] + replacement + text[end:]
+              file.write_text(text, encoding="utf-8")
+
+          command_path = "paper/src/main/java/net/enthusia/staff/paper/command/PunishmentCommand.java"
+          command_constructors = '''    public PunishmentCommand(
+              JavaPlugin plugin,
+              Supplier<OperationalMode> mode,
+              Supplier<PunishmentDraftWorkflow> workflows,
+              Supplier<PlayerDirectory> players,
+              AuthorizationPolicy authorization,
+              PunishmentGuiController gui,
+              PunishmentRequestCommandHandler requestCommands,
+              ExecutorService workers
+          ) {
+              this(
+                      new Dependencies(
+                              plugin,
+                              mode,
+                              workflows,
+                              players,
+                              authorization,
+                              gui,
+                              requestCommands,
+                              workers
+                      ),
+                      LuckPermsStaffTargetGuard.discover(plugin)
+              );
+          }
+
+          PunishmentCommand(Dependencies dependencies, StaffTargetGuard targetGuard) {
+              Dependencies checked = java.util.Objects.requireNonNull(dependencies, "dependencies");
+              this.plugin = checked.plugin();
+              this.mode = checked.mode();
+              this.workflows = checked.workflows();
+              this.players = checked.players();
+              this.authorization = checked.authorization();
+              this.gui = checked.gui();
+              this.requestCommands = checked.requestCommands();
+              this.workers = checked.workers();
+              this.targetGuard = java.util.Objects.requireNonNull(targetGuard, "targetGuard");
+          }
+
+'''
+          replace_section(
+              command_path,
+              "    public PunishmentCommand(\n",
+              "    @Override\n    public boolean onCommand",
+              command_constructors,
+          )
+          command_file = Path(command_path)
+          command_text = command_file.read_text(encoding="utf-8")
+          command_record = '''
+
+    record Dependencies(
+            JavaPlugin plugin,
+            Supplier<OperationalMode> mode,
+            Supplier<PunishmentDraftWorkflow> workflows,
+            Supplier<PlayerDirectory> players,
+            AuthorizationPolicy authorization,
+            PunishmentGuiController gui,
+            PunishmentRequestCommandHandler requestCommands,
+            ExecutorService workers
+    ) {
+        Dependencies {
+            plugin = java.util.Objects.requireNonNull(plugin, "plugin");
+            mode = java.util.Objects.requireNonNull(mode, "mode");
+            workflows = java.util.Objects.requireNonNull(workflows, "workflows");
+            players = java.util.Objects.requireNonNull(players, "players");
+            authorization = java.util.Objects.requireNonNull(authorization, "authorization");
+            gui = java.util.Objects.requireNonNull(gui, "gui");
+            requestCommands = java.util.Objects.requireNonNull(requestCommands, "requestCommands");
+            workers = java.util.Objects.requireNonNull(workers, "workers");
+        }
+    }
+'''
+          prefix, suffix = command_text.rsplit("\n}", 1)
+          command_file.write_text(prefix + command_record + "\n}" + suffix, encoding="utf-8")
+
+          gui_path = "paper/src/main/java/net/enthusia/staff/paper/punishment/PunishmentGuiController.java"
+          gui_constructors = '''    public PunishmentGuiController(
+              JavaPlugin plugin,
+              Supplier<OperationalMode> mode,
+              Supplier<PunishmentDraftWorkflow> workflows,
+              Supplier<PlayerDirectory> players,
+              AuthorizationPolicy authorization,
+              ReasonPolicyRepository policies,
+              ExecutorService workers
+          ) {
+              this(
+                      new Dependencies(
+                              plugin,
+                              mode,
+                              workflows,
+                              players,
+                              authorization,
+                              policies,
+                              workers
+                      ),
+                      LuckPermsStaffTargetGuard.discover(plugin)
+              );
+          }
+
+          PunishmentGuiController(Dependencies dependencies, StaffTargetGuard targetGuard) {
+              Dependencies checked = java.util.Objects.requireNonNull(dependencies, "dependencies");
+              this.plugin = checked.plugin();
+              this.mode = checked.mode();
+              this.workflows = checked.workflows();
+              this.players = checked.players();
+              this.authorization = checked.authorization();
+              this.policies = checked.policies();
+              this.workers = checked.workers();
+              this.targetGuard = java.util.Objects.requireNonNull(targetGuard, "targetGuard");
+              this.catalog = new PunishmentGuiCatalog(this.policies, this.authorization);
+              this.renderer = new PunishmentGuiRenderer(catalog);
+          }
+
+'''
+          replace_section(
+              gui_path,
+              "    public PunishmentGuiController(\n",
+              "    public void open",
+              gui_constructors,
+          )
+          gui_file = Path(gui_path)
+          gui_text = gui_file.read_text(encoding="utf-8")
+          gui_record = '''    record Dependencies(
+            JavaPlugin plugin,
+            Supplier<OperationalMode> mode,
+            Supplier<PunishmentDraftWorkflow> workflows,
+            Supplier<PlayerDirectory> players,
+            AuthorizationPolicy authorization,
+            ReasonPolicyRepository policies,
+            ExecutorService workers
+    ) {
+        Dependencies {
+            plugin = java.util.Objects.requireNonNull(plugin, "plugin");
+            mode = java.util.Objects.requireNonNull(mode, "mode");
+            workflows = java.util.Objects.requireNonNull(workflows, "workflows");
+            players = java.util.Objects.requireNonNull(players, "players");
+            authorization = java.util.Objects.requireNonNull(authorization, "authorization");
+            policies = java.util.Objects.requireNonNull(policies, "policies");
+            workers = java.util.Objects.requireNonNull(workers, "workers");
+        }
+    }
+
+'''
+          marker = "    private record NoteCapture(PunishmentGuiState.Review review) {\n"
+          if gui_text.count(marker) != 1:
+              raise SystemExit("PunishmentGuiController NoteCapture insertion point changed")
+          gui_file.write_text(gui_text.replace(marker, gui_record + marker, 1), encoding="utf-8")
           PY
+
+      - name: Verify targeted Lizard findings are gone
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin main
+          mapfile -t files < <(git diff --name-only origin/main...HEAD -- '*.java')
+          set +e
+          lizard -C 8 -L 50 -a 8 -w "${files[@]}" > /tmp/lizard.txt 2>&1
+          set -e
+          cat /tmp/lizard.txt
+          if grep -q 'PunishmentCommand::PunishmentCommand' /tmp/lizard.txt; then
+            echo 'PunishmentCommand constructor remains over a Lizard bound' >&2
+            exit 1
+          fi
+          if grep -q 'PunishmentGuiController::PunishmentGuiController' /tmp/lizard.txt; then
+            echo 'PunishmentGuiController constructor remains over a Lizard bound' >&2
+            exit 1
+          fi
+
+      - name: Verify repository PMD rules
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --location --silent --show-error \
+            'https://github.com/pmd/pmd/releases/download/pmd_releases%2F6.55.0/pmd-bin-6.55.0.zip' \
+            --output /tmp/pmd.zip
+          unzip -q /tmp/pmd.zip -d /tmp
+          mapfile -t files < <(git diff --name-only origin/main...HEAD -- '*.java')
+          input="$(IFS=,; echo "${files[*]}")"
+          /tmp/pmd-bin-6.55.0/bin/run.sh pmd \
+            -d "${input}" \
+            -R ruleset.xml \
+            -f text \
+            -r /tmp/pmd-findings.txt
+          cat /tmp/pmd-findings.txt
+
+      - name: Run focused Java tests
+        shell: bash
+        run: |
+          chmod +x gradlew
+          ./gradlew :paper:test \
+            --no-daemon \
+            --no-build-cache \
+            --no-configuration-cache \
+            --console=plain
+
+      - name: Commit validated repair and remove temporary diagnostic
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm .github/workflows/es-p12-lizard-diagnostics.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add \
+            paper/src/main/java/net/enthusia/staff/paper/command/PunishmentCommand.java \
+            paper/src/main/java/net/enthusia/staff/paper/punishment/PunishmentGuiController.java \
+            .github/workflows/es-p12-lizard-diagnostics.yml
+          git commit -m "ES-P12: resolve Codacy constructor complexity"
+          git push origin HEAD:package/es-p12-staff-operational-hardening
