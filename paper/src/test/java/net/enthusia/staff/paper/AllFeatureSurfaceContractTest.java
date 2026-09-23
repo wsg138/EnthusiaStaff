@@ -29,6 +29,11 @@ import org.junit.jupiter.api.Test;
  * reviewed contract and without a concrete regression suite somewhere in the repository.</p>
  */
 final class AllFeatureSurfaceContractTest {
+    private static final String RANK_HELPER = "enthusiastaff.rank.helper";
+    private static final String RANK_MOD = "enthusiastaff.rank.mod";
+    private static final String RANK_ADMIN = "enthusiastaff.rank.admin";
+    private static final String RANK_FOUNDER = "enthusiastaff.rank.founder";
+
     private static final Set<String> EXPECTED_COMMANDS = Set.of(
             "estaff",
             "history",
@@ -125,6 +130,9 @@ final class AllFeatureSurfaceContractTest {
     @Test
     void allStaffPermissionsFailClosedAndEveryChildPermissionExists() throws IOException {
         JsonNode permissions = pluginMetadata().path("permissions");
+        assertTrue(permissions.isObject() && !permissions.isEmpty(),
+                "plugin.yml must declare Staff permissions");
+
         permissions.properties().forEach(entry -> {
             String permission = entry.getKey();
             JsonNode definition = entry.getValue();
@@ -152,18 +160,18 @@ final class AllFeatureSurfaceContractTest {
     @Test
     void staffRankInheritanceRetainsTheReviewedEscalationChain() throws IOException {
         JsonNode permissions = pluginMetadata().path("permissions");
-        assertGranted(permissions, "enthusiastaff.rank.mod", "enthusiastaff.rank.helper");
-        assertGranted(permissions, "enthusiastaff.rank.admin", "enthusiastaff.rank.mod");
-        assertGranted(permissions, "enthusiastaff.rank.founder", "enthusiastaff.rank.admin");
+        assertGranted(permissions, RANK_MOD, RANK_HELPER);
+        assertGranted(permissions, RANK_ADMIN, RANK_MOD);
+        assertGranted(permissions, RANK_FOUNDER, RANK_ADMIN);
 
-        assertGranted(permissions, "enthusiastaff.rank.helper", "enthusiastaff.staffmode");
-        assertGranted(permissions, "enthusiastaff.rank.helper", "enthusiastaff.stafftools.teleport");
-        assertGranted(permissions, "enthusiastaff.rank.helper", "enthusiastaff.stafftools.spectate");
-        assertGranted(permissions, "enthusiastaff.rank.helper", "enthusiastaff.vanish");
-        assertGranted(permissions, "enthusiastaff.rank.mod", "enthusiastaff.remove");
-        assertGranted(permissions, "enthusiastaff.rank.mod", "enthusiastaff.inventory.edit");
-        assertGranted(permissions, "enthusiastaff.rank.admin", "enthusiastaff.cheattester.cancel-any");
-        assertGranted(permissions, "enthusiastaff.rank.founder", "enthusiastaff.owner.recovery");
+        assertGranted(permissions, RANK_HELPER, "enthusiastaff.staffmode");
+        assertGranted(permissions, RANK_HELPER, "enthusiastaff.stafftools.teleport");
+        assertGranted(permissions, RANK_HELPER, "enthusiastaff.stafftools.spectate");
+        assertGranted(permissions, RANK_HELPER, "enthusiastaff.vanish");
+        assertGranted(permissions, RANK_MOD, "enthusiastaff.remove");
+        assertGranted(permissions, RANK_MOD, "enthusiastaff.inventory.edit");
+        assertGranted(permissions, RANK_ADMIN, "enthusiastaff.cheattester.cancel-any");
+        assertGranted(permissions, RANK_FOUNDER, "enthusiastaff.owner.recovery");
     }
 
     @Test
