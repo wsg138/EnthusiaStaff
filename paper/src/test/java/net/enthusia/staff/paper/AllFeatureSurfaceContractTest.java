@@ -130,7 +130,9 @@ final class AllFeatureSurfaceContractTest {
             JsonNode definition = entry.getValue();
             assertTrue(permission.startsWith("enthusiastaff."), permission);
             assertTrue(definition.has("default"), permission + " has no explicit default");
-            assertFalse(definition.path("default").asBoolean(), permission + " must default to false");
+            JsonNode defaultValue = definition.get("default");
+            assertTrue(defaultValue.isBoolean(), permission + " default must be literal boolean false");
+            assertFalse(defaultValue.booleanValue(), permission + " must default to false");
 
             JsonNode children = definition.path("children");
             if (!children.isObject()) {
@@ -139,7 +141,9 @@ final class AllFeatureSurfaceContractTest {
             children.properties().forEach(child -> {
                 assertTrue(permissions.has(child.getKey()),
                         () -> permission + " references undeclared child " + child.getKey());
-                assertTrue(child.getValue().asBoolean(),
+                assertTrue(child.getValue().isBoolean(),
+                        () -> permission + " must declare a boolean grant for child " + child.getKey());
+                assertTrue(child.getValue().booleanValue(),
                         () -> permission + " must grant child " + child.getKey());
             });
         });
