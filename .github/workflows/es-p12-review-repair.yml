@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   repair:
-    if: github.event.head_commit.message == '[ES-P12] Stage review repair batch v3'
+    if: github.event.head_commit.message == '[ES-P12] Stage review repair batch v4'
     name: Validate and publish review repair batch
     runs-on: ubuntu-latest
     timeout-minutes: 25
@@ -27,7 +27,20 @@ jobs:
           java-version: "21"
 
       - name: Apply repair batch
-        run: python3 scripts/es_p12_review_repair_v2.py
+        shell: bash
+        run: |
+          python3 scripts/es_p12_review_repair_v2.py
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('paper/src/test/java/net/enthusia/staff/paper/PaperPresenceListenerTest.java')
+          text = path.read_text()
+          old = '    private static final Logger LOGGER = Logger.getLogger(PaperPresenceListenerTest.class.getName());'
+          new = '    private static final int FIRST_ATTEMPT = 1;\n' + old
+          if text.count(old) != 1 or text.count('attempts.incrementAndGet() == 1') != 1:
+              raise SystemExit('presence retry test shape changed unexpectedly')
+          text = text.replace(old, new).replace('attempts.incrementAndGet() == 1', 'attempts.incrementAndGet() == FIRST_ATTEMPT')
+          path.write_text(text)
+          PY
 
       - name: Install Lizard
         run: python3 -m pip install --disable-pip-version-check lizard==1.23.0
