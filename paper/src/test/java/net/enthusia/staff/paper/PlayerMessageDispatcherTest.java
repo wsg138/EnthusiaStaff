@@ -1,5 +1,6 @@
 package net.enthusia.staff.paper;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -46,6 +47,21 @@ class PlayerMessageDispatcherTest {
         new PlayerMessageDispatcher(plugin()).send(player, Component.text("Rejected"));
 
         assertEquals(0, messages.get());
+    }
+
+    @Test
+    void unavailableEntitySchedulerDoesNotEscapeTheCallingWorker() {
+        Player player = proxy(Player.class, (method, arguments) -> {
+            if (method.getName().equals("getScheduler")) {
+                throw new IllegalStateException("retiring");
+            }
+            return unexpected(method);
+        });
+
+        assertDoesNotThrow(() -> new PlayerMessageDispatcher(plugin()).send(
+                player,
+                Component.text("Unavailable")
+        ));
     }
 
     private static Plugin plugin() {
