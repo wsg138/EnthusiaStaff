@@ -35,7 +35,7 @@ class StaffChatCommandTest {
 
         assertTrue(command.onCommand(player, null, "staffchat", new String[0]));
         assertEquals(0, lookups.get());
-        assertEquals(List.of("You do not have permission to use staff chat."), messages);
+        assertEquals(List.of(Component.text("You do not have permission to use staff chat.")), messages);
     }
 
     @Test
