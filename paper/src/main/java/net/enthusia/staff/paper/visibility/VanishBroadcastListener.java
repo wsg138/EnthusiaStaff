@@ -1,23 +1,23 @@
 package net.enthusia.staff.paper.visibility;
 
 import com.destroystokyo.paper.event.server.PaperServerListPingEvent;
+import java.util.Iterator;
+import java.util.UUID;
+import java.util.function.Predicate;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.entity.PlayerDeathEvent;
 import org.bukkit.event.player.PlayerAdvancementDoneEvent;
-import org.bukkit.plugin.java.JavaPlugin;
 
 /**
  * Removes vanished staff from public broadcast and server-list surfaces.
  */
 public final class VanishBroadcastListener implements Listener {
-    private final JavaPlugin plugin;
     private final VanishManager vanish;
 
-    public VanishBroadcastListener(JavaPlugin plugin, VanishManager vanish) {
-        this.plugin = java.util.Objects.requireNonNull(plugin, "plugin");
+    public VanishBroadcastListener(VanishManager vanish) {
         this.vanish = java.util.Objects.requireNonNull(vanish, "vanish");
     }
 
@@ -37,17 +37,23 @@ public final class VanishBroadcastListener implements Listener {
 
     @EventHandler(priority = EventPriority.HIGHEST)
     public void onPing(PaperServerListPingEvent event) {
-        event.getListedPlayers().removeIf(entry -> vanish.isVanished(entry.id()));
-        if (!event.shouldHidePlayers()) {
-            event.setNumPlayers(visibleCount(event.getNumPlayers(), vanishedOnlineCount()));
+        int reportedPlayers = event.getNumPlayers();
+        int removed = removeVanished(event.iterator(), vanish::isVanished);
+        if (!event.shouldHidePlayers() && removed > 0 && event.getNumPlayers() == reportedPlayers) {
+            event.setNumPlayers(visibleCount(reportedPlayers, removed));
         }
     }
 
-    private int vanishedOnlineCount() {
-        return (int) plugin.getServer().getOnlinePlayers().stream()
-                .map(Player::getUniqueId)
-                .filter(vanish::isVanished)
-                .count();
+    static int removeVanished(Iterator<Player> players, Predicate<UUID> vanished) {
+        int removed = 0;
+        while (players.hasNext()) {
+            Player player = players.next();
+            if (vanished.test(player.getUniqueId())) {
+                players.remove();
+                removed++;
+            }
+        }
+        return removed;
     }
 
     static int visibleCount(int reportedPlayers, int vanishedPlayers) {

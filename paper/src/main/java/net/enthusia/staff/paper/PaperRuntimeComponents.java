@@ -218,7 +218,7 @@ record PaperRuntimeComponents(
                 dependencies.stores().playerDirectory(),
                 dependencies.environment().workers()
         ));
-        registerListener(plugin, new VanishBroadcastListener(plugin, vanish));
+        registerListener(plugin, new VanishBroadcastListener(vanish));
     }
 
     private static FakeBaseManager createFakeBaseManager(
