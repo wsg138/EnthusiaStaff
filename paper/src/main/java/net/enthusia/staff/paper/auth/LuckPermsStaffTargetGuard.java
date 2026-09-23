@@ -41,7 +41,9 @@ public final class LuckPermsStaffTargetGuard implements StaffTargetGuard {
         }
         Logger logger = plugin.getLogger();
         if (!plugin.getServer().getPluginManager().isPluginEnabled("LuckPerms")) {
-            logger.warning("LuckPerms is absent; staff-target hierarchy checks will fail closed.");
+            if (logger.isLoggable(Level.WARNING)) {
+                logger.warning("LuckPerms is absent; staff-target hierarchy checks will fail closed.");
+            }
             return unavailable(logger);
         }
         try {
@@ -52,7 +54,9 @@ public final class LuckPermsStaffTargetGuard implements StaffTargetGuard {
                     logger
             );
         } catch (IllegalStateException exception) {
-            logger.log(Level.WARNING, "LuckPerms staff-target authority is unavailable", exception);
+            if (logger.isLoggable(Level.WARNING)) {
+                logger.log(Level.WARNING, "LuckPerms staff-target authority is unavailable", exception);
+            }
             return unavailable(logger);
         }
     }
@@ -89,7 +93,9 @@ public final class LuckPermsStaffTargetGuard implements StaffTargetGuard {
                     ? Result.allow()
                     : Result.deny(PROTECTED_MESSAGE);
         } catch (RuntimeException exception) {
-            logger.log(Level.WARNING, "Staff-target rank verification failed", exception);
+            if (logger.isLoggable(Level.WARNING)) {
+                logger.log(Level.WARNING, "Staff-target rank verification failed", exception);
+            }
             return Result.deny(UNAVAILABLE_MESSAGE);
         }
     }
