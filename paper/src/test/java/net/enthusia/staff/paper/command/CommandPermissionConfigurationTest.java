@@ -38,6 +38,7 @@ class CommandPermissionConfigurationTest {
             Map.entry("fakebase", "enthusiastaff.cheattester.fake-base"),
             Map.entry("vanish", "enthusiastaff.vanish"),
             Map.entry("staffchat", "enthusiastaff.staffchat"),
+            Map.entry("staffwho", "enthusiastaff.staffwho"),
             Map.entry("client", "enthusiastaff.client"),
             Map.entry("invsee", INVENTORY_VIEW_PERMISSION),
             Map.entry("endersee", INVENTORY_VIEW_PERMISSION),
