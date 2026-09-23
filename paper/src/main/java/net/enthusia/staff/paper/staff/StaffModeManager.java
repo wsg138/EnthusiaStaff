@@ -327,6 +327,35 @@ public final class StaffModeManager implements Listener {
         );
     }
 
+    private void activateDurableSession(
+            UUID playerId,
+            StaffSessionSnapshot session,
+            StaffSessionStore loaded,
+            Player player,
+            StaffRank rank,
+            StaffModeActivationCoordinator.ActivationPath path,
+            String successMessage
+    ) {
+        boolean activated = activation.activate(
+                playerId,
+                session,
+                loaded,
+                rank,
+                path,
+                () -> applyStaffState(player, rank),
+                () -> {
+                    StaffSessionSnapshot exiting = loaded.beginExit(playerId, clock.instant()).orElseThrow(() ->
+                            new IllegalStateException("staff session disappeared during activation rollback"));
+                    restoreAndVerify(playerId, exiting, loaded);
+                },
+                message -> player.sendMessage(Component.text(message)),
+                successMessage
+        );
+        if (!activated) {
+            toolSessions.remove(playerId);
+        }
+    }
+
     @EventHandler(priority = EventPriority.MONITOR)
     public void onQuit(PlayerQuitEvent event) {
         UUID playerId = event.getPlayer().getUniqueId();
