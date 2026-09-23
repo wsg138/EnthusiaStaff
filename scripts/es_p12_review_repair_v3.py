@@ -4,14 +4,6 @@ import runpy
 runpy.run_path("scripts/es_p12_review_repair_v2.py", run_name="__main__")
 
 
-def replace_once(path: str, old: str, new: str) -> None:
-    file = Path(path)
-    text = file.read_text()
-    if text.count(old) != 1:
-        raise SystemExit(f"expected exactly one v3 match in {path}: {old!r}")
-    file.write_text(text.replace(old, new))
-
-
 # PMD: make the retry-test sentinel explicit instead of using a control-flow literal.
 presence = Path("paper/src/test/java/net/enthusia/staff/paper/PaperPresenceListenerTest.java")
 text = presence.read_text()
@@ -78,8 +70,14 @@ replacement = '''    public FreezeCommand(
 '''
 freeze.write_text(text[:start] + replacement + text[end:])
 
-replace_once(
-    "paper/src/main/java/net/enthusia/staff/paper/PaperCommandRegistrar.java",
-    "FreezeCommand freezeCommand = new FreezeCommand(",
-    "FreezeCommand freezeCommand = FreezeCommand.createRuntime("
-)
+registrar = Path("paper/src/main/java/net/enthusia/staff/paper/PaperCommandRegistrar.java")
+text = registrar.read_text()
+legacy = "FreezeCommand freezeCommand = new FreezeCommand("
+runtime = "FreezeCommand freezeCommand = FreezeCommand.createRuntime("
+if text.count(legacy) == 1 and text.count(runtime) == 0:
+    text = text.replace(legacy, runtime)
+elif text.count(legacy) == 0 and text.count(runtime) == 1:
+    pass
+else:
+    raise SystemExit("FreezeCommand registrar construction shape changed unexpectedly")
+registrar.write_text(text)
