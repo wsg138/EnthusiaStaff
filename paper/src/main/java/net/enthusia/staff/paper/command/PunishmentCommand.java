@@ -23,7 +23,9 @@ import net.enthusia.staff.domain.auth.ModerationAction;
 import net.enthusia.staff.domain.casefile.CaseVisibility;
 import net.enthusia.staff.domain.player.PlayerIdentity;
 import net.enthusia.staff.domain.ports.PlayerDirectory;
+import net.enthusia.staff.paper.auth.LuckPermsStaffTargetGuard;
 import net.enthusia.staff.paper.auth.PaperActorResolver;
+import net.enthusia.staff.paper.auth.StaffTargetGuard;
 import net.enthusia.staff.paper.punishment.PunishmentGuiController;
 import net.enthusia.staff.paper.punishment.PunishmentRequestPresentation;
 import net.kyori.adventure.text.Component;
@@ -54,6 +56,7 @@ public final class PunishmentCommand implements CommandExecutor, TabCompleter {
     private final PunishmentGuiController gui;
     private final PunishmentRequestCommandHandler requestCommands;
     private final ExecutorService workers;
+    private final StaffTargetGuard targetGuard;
 
     public PunishmentCommand(
             JavaPlugin plugin,
@@ -65,8 +68,32 @@ public final class PunishmentCommand implements CommandExecutor, TabCompleter {
             PunishmentRequestCommandHandler requestCommands,
             ExecutorService workers
     ) {
+        this(
+                plugin,
+                mode,
+                workflows,
+                players,
+                authorization,
+                gui,
+                requestCommands,
+                workers,
+                LuckPermsStaffTargetGuard.discover(plugin)
+        );
+    }
+
+    PunishmentCommand(
+            JavaPlugin plugin,
+            Supplier<OperationalMode> mode,
+            Supplier<PunishmentDraftWorkflow> workflows,
+            Supplier<PlayerDirectory> players,
+            AuthorizationPolicy authorization,
+            PunishmentGuiController gui,
+            PunishmentRequestCommandHandler requestCommands,
+            ExecutorService workers,
+            StaffTargetGuard targetGuard
+    ) {
         if (plugin == null || mode == null || workflows == null || players == null || authorization == null
-                || gui == null || requestCommands == null || workers == null) {
+                || gui == null || requestCommands == null || workers == null || targetGuard == null) {
             throw new IllegalArgumentException("punishment command dependencies must be present");
         }
         this.plugin = plugin;
@@ -77,6 +104,7 @@ public final class PunishmentCommand implements CommandExecutor, TabCompleter {
         this.gui = gui;
         this.requestCommands = requestCommands;
         this.workers = workers;
+        this.targetGuard = targetGuard;
     }
 
     @Override
@@ -137,7 +165,7 @@ public final class PunishmentCommand implements CommandExecutor, TabCompleter {
             String[] args
     ) {
         PlayerIdentity target = findTarget(sender, args[0]);
-        if (target == null) {
+        if (target == null || !targetAllowed(sender, actor, target.playerId())) {
             return;
         }
         PunishmentDraftWorkflow workflow = workflows.get();
@@ -201,6 +229,10 @@ public final class PunishmentCommand implements CommandExecutor, TabCompleter {
         PunishmentDraftWorkflow workflow = workflows.get();
         if (workflow == null) {
             send(sender, Component.text("Moderation storage is not ready; no action was taken.", NamedTextColor.RED));
+            return;
+        }
+        PunishmentDraft draft = workflow.find(draftId, actor.id()).orElse(null);
+        if (draft != null && !targetAllowed(sender, actor, draft.targetId())) {
             return;
         }
         try {
@@ -279,6 +311,15 @@ public final class PunishmentCommand implements CommandExecutor, TabCompleter {
             send(sender, Component.text("Unknown player: " + input, NamedTextColor.RED));
         }
         return target;
+    }
+
+    private boolean targetAllowed(CommandSender sender, Actor actor, UUID targetId) {
+        StaffTargetGuard.Result result = targetGuard.check(actor, targetId, !(sender instanceof Player));
+        if (result.allowed()) {
+            return true;
+        }
+        send(sender, Component.text(result.message(), NamedTextColor.RED));
+        return false;
     }
 
     private void submit(CommandSender sender, Runnable operation) {
