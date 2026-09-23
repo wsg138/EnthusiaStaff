@@ -8,6 +8,7 @@ import java.lang.reflect.Proxy;
 import java.time.Clock;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import net.kyori.adventure.text.Component;
@@ -55,7 +56,7 @@ class FreezeMovementAndCommandTest {
         FreezeManager manager = restrictedManager();
         List<Component> messages = new ArrayList<>();
         Player player = player(messages);
-        PlayerCommandPreprocessEvent event = new PlayerCommandPreprocessEvent(player, "/spawn");
+        PlayerCommandPreprocessEvent event = new PlayerCommandPreprocessEvent(player, "/spawn", Set.of(player));
 
         manager.onCommand(event);
 
