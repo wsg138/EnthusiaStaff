@@ -1,6 +1,7 @@
 package net.enthusia.staff.paper.staff;
 
 import java.time.Clock;
+import java.time.Instant;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -45,6 +46,7 @@ import org.bukkit.plugin.java.JavaPlugin;
 public final class StaffModeManager implements Listener {
     private final JavaPlugin plugin;
     private final Clock clock;
+    private final Instant runtimeStartedAt;
     private final String serverId;
     private final Supplier<StaffSessionStore> store;
     private final ExecutorService workers;
@@ -74,6 +76,7 @@ public final class StaffModeManager implements Listener {
     ) {
         this.plugin = plugin;
         this.clock = clock;
+        this.runtimeStartedAt = clock.instant();
         this.serverId = serverId;
         this.store = store;
         this.workers = workers;
@@ -233,6 +236,10 @@ public final class StaffModeManager implements Listener {
                     message(playerId, "Your staff session requires recovery on backend " + session.serverId() + '.');
                     return;
                 }
+                if (staleFromPriorRuntime(session)) {
+                    recoverPriorRuntimeSession(playerId, session, loaded);
+                    return;
+                }
                 if (session.state() == StaffSessionState.EXITING
                         || session.state() == StaffSessionState.RECOVERY_REQUIRED) {
                     StaffSessionSnapshot restoring = session.state() == StaffSessionState.RECOVERY_REQUIRED
@@ -260,6 +267,23 @@ public final class StaffModeManager implements Listener {
             recoveryGate.retry(playerId);
             message(playerId, "The bounded work queue is full; staff session recovery did not start.");
         }
+    }
+
+    private boolean staleFromPriorRuntime(StaffSessionSnapshot session) {
+        return session.state() == StaffSessionState.ACTIVE && session.startedAt().isBefore(runtimeStartedAt);
+    }
+
+    private void recoverPriorRuntimeSession(
+            UUID playerId,
+            StaffSessionSnapshot session,
+            StaffSessionStore loaded
+    ) {
+        Instant now = clock.instant();
+        loaded.recoveryRequired(session.sessionId(), "Server process restarted before staff-mode exit", now);
+        StaffSessionSnapshot restoring = loaded.beginExit(playerId, now).orElseThrow(() ->
+                new IllegalStateException("stale active staff session disappeared during crash recovery"));
+        message(playerId, "A previous staff-mode session did not exit cleanly; restoring your saved state.");
+        restoreAndVerify(playerId, restoring, loaded);
     }
 
     private void finishActiveRecovery(
@@ -301,35 +325,6 @@ public final class StaffModeManager implements Listener {
                 StaffModeActivationCoordinator.ActivationPath.ACTIVE_RECOVERY,
                 "Your active staff session was resumed."
         );
-    }
-
-    private void activateDurableSession(
-            UUID playerId,
-            StaffSessionSnapshot session,
-            StaffSessionStore loaded,
-            Player player,
-            StaffRank rank,
-            StaffModeActivationCoordinator.ActivationPath path,
-            String successMessage
-    ) {
-        boolean activated = activation.activate(
-                playerId,
-                session,
-                loaded,
-                rank,
-                path,
-                () -> applyStaffState(player, rank),
-                () -> {
-                    StaffSessionSnapshot exiting = loaded.beginExit(playerId, clock.instant()).orElseThrow(() ->
-                            new IllegalStateException("staff session disappeared during activation rollback"));
-                    restoreAndVerify(playerId, exiting, loaded);
-                },
-                message -> player.sendMessage(Component.text(message)),
-                successMessage
-        );
-        if (!activated) {
-            toolSessions.remove(playerId);
-        }
     }
 
     @EventHandler(priority = EventPriority.MONITOR)
