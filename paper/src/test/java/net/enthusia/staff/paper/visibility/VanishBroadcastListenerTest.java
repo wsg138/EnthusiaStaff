@@ -13,6 +13,9 @@ class VanishBroadcastListenerTest {
     private static final Path SOURCE = Path.of(
             "src/main/java/net/enthusia/staff/paper/visibility/VanishBroadcastListener.java"
     );
+    private static final Path MANAGER_SOURCE = Path.of(
+            "src/main/java/net/enthusia/staff/paper/visibility/VanishManager.java"
+    );
 
     @Test
     void vanishedPlayersAreRemovedFromAdvertisedCountWithoutGoingNegative() {
@@ -22,10 +25,15 @@ class VanishBroadcastListenerTest {
     }
 
     @Test
-    void pingFilteringUsesEventOwnedPlayersInsteadOfServerRosterScan() throws IOException {
+    void pingFilteringAvoidsDeprecatedOrCrossThreadRosterIteration() throws IOException {
         String source = Files.readString(SOURCE);
+        String manager = Files.readString(MANAGER_SOURCE);
 
-        assertTrue(source.contains("removeVanished(event.iterator(), vanish::isVanished)"));
+        assertTrue(source.contains("event.getListedPlayers().removeIf"));
+        assertTrue(source.contains("vanish.vanishedOnlineCount()"));
+        assertFalse(source.contains("event.iterator()"));
         assertFalse(source.contains("getServer().getOnlinePlayers()"));
+        assertTrue(manager.contains("audiences.playerIds().stream()"));
+        assertTrue(manager.contains(".filter(this::isVanished)"));
     }
 }
