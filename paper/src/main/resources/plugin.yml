@@ -25,8 +25,8 @@ softdepend:
   - EnthusiaServerAutoClicker
 commands:
   estaff:
-    description: EnthusiaStaff status, reload, and exact sanction lifecycle commands
-    usage: /estaff <status|verify|reload|sanction>
+    description: EnthusiaStaff status, non-destructive verification, reload, and exact sanction lifecycle commands
+    usage: /estaff <status|verify [full]|reload|sanction>
   history:
     description: View database-paginated punishment and moderation history
     usage: /history <player|uuid> [page]

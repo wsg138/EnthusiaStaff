@@ -87,7 +87,7 @@ final class PaperCommandRegistrar {
     }
 
     static void registerStatus(JavaPlugin plugin, RuntimeHealth health) {
-        registerStatus(plugin, health, new EstaffCommand(health));
+        registerStatus(plugin, health, new EstaffCommand(plugin, health));
     }
 
     static void registerStatus(
@@ -125,6 +125,7 @@ final class PaperCommandRegistrar {
         if (!(command.getExecutor() instanceof EstaffCommand estaff)) {
             throw new IllegalStateException("estaff command executor was not registered before feature commands");
         }
+        estaff.configureStorageAvailability(() -> dependencies.storage().get().isPresent());
         estaff.addSuccessfulReloadHook(() -> moderationSettings.reloadFrom(
                 dependencies.environment().moderationFeatures().get()
         ));
