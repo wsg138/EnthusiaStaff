@@ -1,10 +1,15 @@
 package net.enthusia.staff.paper.command;
 
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Consumer;
 import java.util.function.Supplier;
 import java.util.logging.Level;
 import net.enthusia.staff.domain.application.PunishmentRequestService;
@@ -17,6 +22,7 @@ import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
+import org.bukkit.plugin.Plugin;
 import org.bukkit.plugin.java.JavaPlugin;
 
 public final class StaffWhoCommand implements CommandExecutor {
@@ -52,16 +58,54 @@ public final class StaffWhoCommand implements CommandExecutor {
             sender.sendMessage(Component.text("Usage: /staffwho"));
             return true;
         }
-        submit(sender, snapshotOnlineStaff());
+        collectOnlineStaff(sender);
         return true;
     }
 
-    private List<Entry> snapshotOnlineStaff() {
-        return plugin.getServer().getOnlinePlayers().stream()
-                .map(this::snapshot)
-                .filter(java.util.Objects::nonNull)
-                .sorted(Comparator.comparing(Entry::name, String.CASE_INSENSITIVE_ORDER))
-                .toList();
+    private void collectOnlineStaff(CommandSender sender) {
+        plugin.getServer().getGlobalRegionScheduler().execute(plugin, () -> {
+            List<Player> online = new ArrayList<>(plugin.getServer().getOnlinePlayers());
+            if (online.isEmpty()) {
+                submit(sender, List.of());
+                return;
+            }
+            collectOwnedSnapshots(sender, online);
+        });
+    }
+
+    private void collectOwnedSnapshots(CommandSender sender, List<Player> online) {
+        ConcurrentLinkedQueue<Entry> entries = new ConcurrentLinkedQueue<>();
+        AtomicInteger remaining = new AtomicInteger(online.size());
+        for (Player player : online) {
+            scheduleSnapshot(
+                    plugin,
+                    player,
+                    () -> safeSnapshot(player),
+                    entries::add,
+                    () -> completeSnapshot(sender, entries, remaining)
+            );
+        }
+    }
+
+    private void completeSnapshot(
+            CommandSender sender,
+            ConcurrentLinkedQueue<Entry> entries,
+            AtomicInteger remaining
+    ) {
+        if (remaining.decrementAndGet() == 0) {
+            submit(sender, entries.stream()
+                    .sorted(Comparator.comparing(Entry::name, String.CASE_INSENSITIVE_ORDER))
+                    .toList());
+        }
+    }
+
+    private Entry safeSnapshot(Player player) {
+        try {
+            return snapshot(player);
+        } catch (RuntimeException exception) {
+            plugin.getLogger().log(Level.WARNING, "Staff presence snapshot failed", exception);
+            return null;
+        }
     }
 
     private Entry snapshot(Player player) {
@@ -73,11 +117,53 @@ public final class StaffWhoCommand implements CommandExecutor {
         return new Entry(player.getName(), rank, staffMode.active(playerId), vanish.isVanished(playerId));
     }
 
+    static boolean scheduleSnapshot(
+            Plugin plugin,
+            Player player,
+            Supplier<Entry> snapshot,
+            Consumer<Entry> accepted,
+            Runnable finished
+    ) {
+        AtomicBoolean settled = new AtomicBoolean();
+        Runnable retired = () -> finishOnce(settled, finished);
+        Runnable owned = () -> {
+            if (!settled.compareAndSet(false, true)) {
+                return;
+            }
+            try {
+                Entry entry = snapshot.get();
+                if (entry != null) {
+                    accepted.accept(entry);
+                }
+            } finally {
+                finished.run();
+            }
+        };
+        try {
+            boolean scheduled = player.getScheduler().execute(plugin, owned, retired, 1L);
+            if (!scheduled) {
+                retired.run();
+            }
+            return scheduled;
+        } catch (RuntimeException exception) {
+            retired.run();
+            return false;
+        }
+    }
+
+    private static void finishOnce(AtomicBoolean settled, Runnable finished) {
+        if (settled.compareAndSet(false, true)) {
+            finished.run();
+        }
+    }
+
     private void submit(CommandSender sender, List<Entry> online) {
         try {
             workers.execute(() -> respond(sender, online, loadPendingLabel()));
         } catch (RejectedExecutionException exception) {
-            sender.sendMessage(Component.text("The staff status work queue is full; try again shortly."));
+            deliver(sender, () -> sender.sendMessage(Component.text(
+                    "The staff status work queue is full; try again shortly."
+            )));
         }
     }
 
@@ -93,10 +179,15 @@ public final class StaffWhoCommand implements CommandExecutor {
 
     private void respond(CommandSender sender, List<Entry> online, String pending) {
         List<String> lines = render(online, pending);
-        plugin.getServer().getGlobalRegionScheduler().execute(
-                plugin,
-                () -> lines.forEach(line -> sender.sendMessage(Component.text(line)))
-        );
+        deliver(sender, () -> lines.forEach(line -> sender.sendMessage(Component.text(line))));
+    }
+
+    private void deliver(CommandSender sender, Runnable delivery) {
+        if (sender instanceof Player player) {
+            player.getScheduler().execute(plugin, delivery, null, 1L);
+            return;
+        }
+        plugin.getServer().getGlobalRegionScheduler().execute(plugin, delivery);
     }
 
     static String pendingLabel(int count) {
@@ -108,7 +199,7 @@ public final class StaffWhoCommand implements CommandExecutor {
                 .map(entry -> "- " + entry.name() + " [" + entry.rank() + "] staff-mode="
                         + onOff(entry.staffMode()) + " vanished=" + yesNo(entry.vanished()))
                 .toList();
-        java.util.ArrayList<String> lines = new java.util.ArrayList<>();
+        ArrayList<String> lines = new ArrayList<>();
         lines.add("Online staff: " + entries.size() + " | pending punishment requests: " + pending);
         lines.addAll(body);
         if (entries.isEmpty()) {
