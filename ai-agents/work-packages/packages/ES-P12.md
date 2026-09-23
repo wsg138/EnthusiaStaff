@@ -4,7 +4,7 @@
 `ES-P12`; Internal; primary `COMP-STAFF`; owner-directed feature package; priority 95.
 
 ## 2. Status
-`VALIDATING` — implementation, focused tests, and final code-level review are complete on `package/es-p12-staff-operational-hardening`; exact-head hosted validation, Codacy, and final concurrent-path reconciliation remain.
+`VALIDATING` — implementation, focused tests, and repeated final code-level review are complete on `package/es-p12-staff-operational-hardening`; exact-head hosted validation, Codacy, external review, and final concurrent-path reconciliation remain after the latest executable repair.
 
 ## 3. Objective
 Harden day-to-day staff operations so rank boundaries, freeze visibility, vanish privacy, mute fallback behavior, punishment escalation context, confiscation availability, staff-presence reporting, and bare-Paper presence tracking behave safely and predictably.
@@ -56,9 +56,9 @@ One draft implementation PR targeting `main`; normal merge only after exact-head
 - [x] Decouple item confiscation from EnthusiaCurrency while preserving operation locking guarantees.
 - [x] Add Paper-side presence disconnect tracking for bare-Paper/offline inventory use.
 - [x] Add focused authorization, rejection, fallback, retry/failure, conflict, and presentation tests.
-- [x] Perform final code-level review and repair scheduler/thread-ownership defects found in `/staffwho` and server-list vanish filtering.
-- [ ] Run exact-head hosted clean build/tests/check/runtime-JAR, migration validation, static analysis, coverage, and Codacy; resolve all valid findings.
-- [ ] Reconcile concurrent PR changes before final review/merge transition.
+- [x] Perform final code-level review and repair scheduler/thread-ownership defects found in `/staffwho`, server-list vanish filtering, and freeze-alert fanout.
+- [ ] Run exact-head hosted clean build/tests/check/runtime-JAR, migration validation, static analysis, coverage, and Codacy after the latest executable repair; resolve all valid findings.
+- [ ] Reconcile concurrent PR changes and external review before final merge transition.
 
 ## 13. Acceptance criteria
 A lower/equal-rank staff member cannot freeze or punish protected staff; staff can accurately inspect live staff state; vanish does not leak through the covered broadcasts/ping surface; mute fallback blocks PM aliases without RoseChat; punishment review shows escalation context; freezes explain their state; normal staff-mode exit is not noisy; item confiscation does not require the currency plugin; standalone Paper disconnects clear authoritative presence; existing fail-closed safety remains intact.
@@ -100,9 +100,11 @@ Validation in progress. Resume only this package/branch/PR until it reaches a pr
 - Final code review found `/staffwho` reading other players from the invoking player's region. Commit `782e865897d7e9c2731df3e65b1687a71b7f52a2` moved every staff snapshot onto the target player's entity scheduler, made retirement/rejection completion exactly-once, and routes player responses back through the sender's entity scheduler. Regression coverage verifies those ownership boundaries.
 - Final code review also rejected the original server-roster scan in the ping listener. The first event-iterator replacement on `1db920bc501c46b1efe6c7a332dd59cca045d36e` was correctly rejected by Sentinel run `35930515437` because Paper marks that iterator deprecated-for-removal and this repository compiles with `-Werror`; no suppression was added and that head is not passing evidence.
 - Validated repair run `35930958715` replaced the deprecated iterator with `getListedPlayers()` for sample filtering plus a concurrency-safe online UUID snapshot already maintained by `VanishManager`; `:paper:test` and `-Werror` compilation passed before publishing repair commit `6ed79fdf1abc2e2868ab6b1f275413bc09359938` and deleting the temporary repair harness.
+- Exact head `91dccbe018484d055563278857b0bf6be0f8cae8` then passed Coverage `35931225668`, Sentinel artifact `35931225551`, Wiki `35931225621`, and Codacy static with zero new issues, but those results became historical when the later freeze-alert ownership defect was found and executable code changed.
+- Repeated review found `FreezeStaffNotifier` reading recipient permissions and sending messages from the global region after only moving roster traversal to the global scheduler. Repair workflow `35934026437` moved each staff check and delivery onto the recipient entity scheduler, added rejection/ownership regressions, passed Lizard 1.23 bounds, repository PMD 6.55 with zero findings, full `:paper:test`, and `git diff --check`, then published product repair commit `12397f91da774f61b4bd2f023eba8cf876afd23f` and removed its temporary repair harness.
 - PR #220 currently also changes `VanishManager`, but only its `persistState()` transaction path around the later persistence section. ES-P12's added `vanishedOnlineCount()` sits beside `isVanished()` and does not overlap that hunk; final live-head reconciliation is still required before merge.
 - Live `main` remains `fd999968ed5ffbd2e47e041482dc9e936528d7a7`, matching the package base, so no mainline reconciliation is currently required.
-- Repair commit `6ed79fdf1abc2e2868ab6b1f275413bc09359938` was authored by `github-actions[bot]`, so the normal hosted workflows were created as `action_required` with no jobs. This package-state commit intentionally retriggers Coverage, Sentinel artifact, Wiki validation, and Codacy under the normal repository actor; those exact-head results supersede all earlier hosted checks.
+- Product repair commit `12397f91da774f61b4bd2f023eba8cf876afd23f` was authored by `github-actions[bot]`. This package-state commit intentionally retriggers the standard exact-head Coverage, Sentinel artifact, Wiki validation, Codacy, review, and non-draft staging/supersession controls under the normal repository actor; those results will supersede all earlier acceptance checks.
 
 ## 25. Private acceptance boundary
 No live production deployment is authorized by this package. Staging/manual evidence may supplement but does not replace exact-head repository validation.
@@ -111,4 +113,4 @@ No live production deployment is authorized by this package. Staging/manual evid
 Branch base and current live `main`: `fd999968ed5ffbd2e47e041482dc9e936528d7a7`. Active PR #220 has a file-level but hunk-disjoint overlap in `VanishManager`; its transaction-owned `persistState()` repair and this package's scheduler-safe online-count accessor must both survive final reconciliation. Final mergeability/review reconciliation and merge record remain pending.
 
 ## 27. Remaining package work
-Obtain green exact-head hosted Coverage/build/tests/runtime-JAR, Sentinel artifact, Wiki validation, and Codacy zero-new-valid-finding evidence; re-read live main and active overlapping PRs; perform final mergeability/review reconciliation; then mark PR #246 review-ready. No merge is authorized by this record alone.
+Obtain green exact-head hosted Coverage/build/tests/runtime-JAR, Sentinel artifact, Wiki validation, Codacy zero-new-valid-finding evidence, and terminal external review on the normal-actor head that includes `12397f91da774f61b4bd2f023eba8cf876afd23f`; re-read live main and active overlapping PRs; perform final mergeability/review reconciliation. No merge is authorized by this record alone.
