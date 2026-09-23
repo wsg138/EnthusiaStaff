@@ -27,7 +27,7 @@ services recheck rank and action policy before a mutation.
 
 | Command | Usage | Purpose | Primary permission |
 | --- | --- | --- | --- |
-| `/estaff` | `/estaff <status\|verify\|reload\|sanction>` | Runtime status, safe reload and exact-sanction lifecycle commands | Subcommands check independent permission nodes |
+| `/estaff` | `/estaff <status\|verify [full]\|reload\|sanction>` | Runtime status, non-destructive full verification, safe reload and exact-sanction lifecycle commands | Subcommands check independent permission nodes; `verify full` also requires `enthusiastaff.diagnostics` |
 
 ### Punishment creation and requests
 
@@ -250,8 +250,15 @@ LuckPerms groups and authorization tests.
 ## Verification
 
 `/estaff verify full` is an operator/developer diagnostic, not an ordinary staff
-command. It is intended to inspect command ownership/conflicts, integrations,
-storage, configuration, runtime artifacts, migration state and backends.
+command. It requires both `enthusiastaff.verify` and
+`enthusiastaff.diagnostics`; bare `/estaff verify` remains the helper-safe
+runtime-health view.
+
+The full form inspects the published runtime-health snapshot, `/estaff` command
+binding, published storage/bootstrap state, runtime artifact readability, and
+enabled/absent optional providers. It reports unsupported conflict, provider,
+backend, and deep migration checks as `WARNING` rather than claiming they pass.
+Run the relevant staging checks for those warnings.
 
 Verification must never silently take command ownership from another plugin or
 run a destructive command as a test.

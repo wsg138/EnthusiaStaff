@@ -197,6 +197,120 @@ class EstaffCommandReloadTest {
         assertEquals(List.of("EnthusiaStaff mode: DEGRADED", "DISABLED alerts: waiting"), messages);
     }
 
+    @Test
+    void fullVerificationRequiresTheExistingDiagnosticsPermission() {
+        AtomicBoolean verified = new AtomicBoolean();
+        List<String> messages = new ArrayList<>();
+        EstaffCommand command = new EstaffCommand(
+                health(),
+                () -> result(ConfigurationReloadResult.Outcome.NO_CHANGES, "unused", List.of(), false),
+                EstaffCommand.ReloadDispatcher.immediate(),
+                () -> {
+                    verified.set(true);
+                    return List.of("PASS full verification");
+                }
+        );
+
+        command.onCommand(
+                sender(Map.of("enthusiastaff.verify", true), messages),
+                COMMAND,
+                "estaff",
+                new String[]{"verify", "full"}
+        );
+
+        assertFalse(verified.get());
+        assertEquals(List.of("You do not have permission to run full EnthusiaStaff diagnostics."), messages);
+    }
+
+    @Test
+    void fullVerificationRunsOnlyForAuthorizedDiagnosticsUsers() {
+        List<String> messages = new ArrayList<>();
+        EstaffCommand command = new EstaffCommand(
+                health(),
+                () -> result(ConfigurationReloadResult.Outcome.NO_CHANGES, "unused", List.of(), false),
+                EstaffCommand.ReloadDispatcher.immediate(),
+                () -> List.of("PASS command registration", "WARNING staged provider checks remain required")
+        );
+
+        command.onCommand(
+                sender(Map.of("enthusiastaff.verify", true, "enthusiastaff.diagnostics", true), messages),
+                COMMAND,
+                "estaff",
+                new String[]{"verify", "full"}
+        );
+
+        assertEquals(List.of("PASS command registration", "WARNING staged provider checks remain required"), messages);
+    }
+
+    @Test
+    void unsupportedTrailingArgumentsNeverRunAReloadOrReadStatus() {
+        AtomicBoolean reloaded = new AtomicBoolean();
+        List<String> reloadMessages = new ArrayList<>();
+        EstaffCommand command = new EstaffCommand(health(), () -> {
+            reloaded.set(true);
+            return result(ConfigurationReloadResult.Outcome.APPLIED, "unexpected", List.of(), false);
+        });
+
+        command.onCommand(
+                sender(Map.of("enthusiastaff.reload", true), reloadMessages),
+                COMMAND,
+                "estaff",
+                new String[]{"reload", "typo"}
+        );
+
+        assertFalse(reloaded.get());
+        assertEquals(List.of("Usage: /estaff <status|verify [full]|reload|sanction>"), reloadMessages);
+
+        List<String> statusMessages = new ArrayList<>();
+        command.onCommand(
+                sender(Map.of("enthusiastaff.status", true), statusMessages),
+                COMMAND,
+                "estaff",
+                new String[]{"status", "typo"}
+        );
+
+        assertEquals(List.of("Usage: /estaff <status|verify [full]|reload|sanction>"), statusMessages);
+
+        List<String> verifyMessages = new ArrayList<>();
+        command.onCommand(
+                sender(Map.of("enthusiastaff.verify", true), verifyMessages),
+                COMMAND,
+                "estaff",
+                new String[]{"verify", "typo"}
+        );
+
+        assertEquals(List.of("Usage: /estaff <status|verify [full]|reload|sanction>"), verifyMessages);
+    }
+
+    @Test
+    void tabCompletionOffersFullOnlyToDiagnosticsUsers() {
+        EstaffCommand command = new EstaffCommand(health());
+        CommandSender diagnostics = sender(Map.of(
+                "enthusiastaff.verify", true,
+                "enthusiastaff.diagnostics", true
+        ), new ArrayList<>());
+        CommandSender verifier = sender(Map.of("enthusiastaff.verify", true), new ArrayList<>());
+
+        assertEquals(List.of("full"), command.onTabComplete(
+                diagnostics,
+                COMMAND,
+                "estaff",
+                new String[]{"verify", ""}
+        ));
+        assertEquals(List.of(), command.onTabComplete(
+                verifier,
+                COMMAND,
+                "estaff",
+                new String[]{"verify", ""}
+        ));
+        assertEquals(List.of("verify"), command.onTabComplete(
+                verifier,
+                COMMAND,
+                "estaff",
+                new String[]{}
+        ));
+    }
+
     private static RuntimeHealth health() {
         return new RuntimeHealth();
     }
