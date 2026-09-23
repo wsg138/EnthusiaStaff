@@ -26,6 +26,7 @@ import net.enthusia.staff.paper.economy.EconomyCoordinator;
 import net.enthusia.staff.paper.economy.EconomyCoordinatorRuntime;
 import net.enthusia.staff.paper.economy.EnthusiaCurrencyGateway;
 import net.enthusia.staff.paper.enforcement.MuteEnforcementListener;
+import net.enthusia.staff.paper.enforcement.PaperPunishmentCommitEffects;
 import net.enthusia.staff.paper.freeze.FreezeManager;
 import net.enthusia.staff.paper.integration.MarketIntegration;
 import net.enthusia.staff.paper.integration.ReputationIntegration;
@@ -58,6 +59,7 @@ final class PaperIntegrationManager {
     private MarketIntegration market;
     private ReputationIntegration reputation;
     private ReputationRestrictionSynchronizer reputationRestrictions;
+    private PaperPunishmentCommitEffects punishmentEffects;
     private DiscordStaffAuthorityEndpoint discordStaffAuthority;
 
     PaperIntegrationManager(Dependencies dependencies) {
@@ -86,6 +88,12 @@ final class PaperIntegrationManager {
     }
 
     void initializeModerationProviders() {
+        punishmentEffects = new PaperPunishmentCommitEffects(
+                plugin(),
+                dependencies.stores().punishmentService(),
+                dependencies.evidence().muteEnforcement()
+        );
+        punishmentEffects.start();
         market = MarketIntegration.discover(
                 plugin().getServer().getServicesManager(),
                 plugin().getServer().getPluginManager().isPluginEnabled("EnthusiaMarket")
@@ -185,6 +193,7 @@ final class PaperIntegrationManager {
     }
 
     void closeModerationProviders() {
+        resources.close("punishment commit effects", punishmentEffects);
         resources.close("Discord staff authority endpoint", discordStaffAuthority);
         resources.close("reputation restriction synchronizer", reputationRestrictions);
     }
