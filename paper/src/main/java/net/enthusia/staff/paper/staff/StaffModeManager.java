@@ -16,6 +16,7 @@ import net.enthusia.staff.domain.staff.StaffSessionSnapshot;
 import net.enthusia.staff.domain.staff.StaffSessionState;
 import net.enthusia.staff.paper.auth.PaperStaffRankResolver;
 import net.kyori.adventure.text.Component;
+import org.bukkit.GameMode;
 import org.bukkit.NamespacedKey;
 import org.bukkit.attribute.Attribute;
 import org.bukkit.entity.Player;
@@ -591,8 +592,7 @@ public final class StaffModeManager implements Listener {
     private void restoreAndVerify(UUID playerId, StaffSessionSnapshot session, StaffSessionStore loaded) {
         onEntity(playerId, player -> {
             try {
-                removeStaffTools(player);
-                if (!codec.restore(player, session.snapshot())) {
+                if (!restoreSavedState(player, session)) {
                     submit(() -> loaded.recoveryRequired(
                             session.sessionId(), "Original location could not be restored", clock.instant()
                     ));
@@ -601,8 +601,9 @@ public final class StaffModeManager implements Listener {
                 }
                 StaffStateCodec.Captured restored = codec.capture(player, session.serverId());
                 if (!submit(() -> completeRestoration(playerId, session, loaded, restored))) {
+                    completeRuntimeExit(playerId);
                     player.sendMessage(Component.text(
-                            "State was restored, but durable verification is still pending; remain disconnected or contact staff."
+                            "State was restored, but durable verification is still pending; contact an administrator."
                     ));
                 }
             } catch (RuntimeException exception) {
@@ -615,6 +616,20 @@ public final class StaffModeManager implements Listener {
         });
     }
 
+    private boolean restoreSavedState(Player player, StaffSessionSnapshot session) {
+        UUID playerId = player.getUniqueId();
+        profileApplications.add(playerId);
+        try {
+            removeStaffTools(player);
+            if (player.getGameMode() == GameMode.SPECTATOR) {
+                player.setSpectatorTarget(null);
+            }
+            return codec.restore(player, session.snapshot());
+        } finally {
+            profileApplications.remove(playerId);
+        }
+    }
+
     private void completeRestoration(
             UUID playerId,
             StaffSessionSnapshot session,
@@ -625,14 +640,20 @@ public final class StaffModeManager implements Listener {
         try {
             closed = loaded.completeExit(session.sessionId(), restored.checksum(), clock.instant());
         } catch (RuntimeException exception) {
+            completeRuntimeExit(playerId);
             plugin.getLogger().log(Level.SEVERE, "Staff session closure verification failed", exception);
             safeMessage(playerId, "State was restored, but durable closure verification failed; contact an administrator.");
             return;
         }
+        completeRuntimeExit(playerId);
         if (!closed) {
             safeMessage(playerId, "State was restored, but checksum verification requires administrator review.");
             return;
         }
+        safeMessage(playerId, "Staff mode exited; your exact saved state was restored and verified.");
+    }
+
+    private void completeRuntimeExit(UUID playerId) {
         active.remove(playerId);
         ranks.remove(playerId);
         toolSessions.remove(playerId);
@@ -642,7 +663,6 @@ public final class StaffModeManager implements Listener {
         } catch (RuntimeException exception) {
             plugin.getLogger().log(Level.WARNING, "Post-exit staff-mode cleanup callback failed", exception);
         }
-        safeMessage(playerId, "Staff mode exited; your exact saved state was restored and verified.");
     }
 
     private void applyStaffState(Player player, StaffRank rank) {
