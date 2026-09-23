@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   repair:
-    if: github.event.head_commit.message == '[ES-P12] Stage review repair batch v5'
+    if: github.event.head_commit.message == '[ES-P12] Stage review repair batch v6'
     name: Validate and publish review repair batch
     runs-on: ubuntu-latest
     timeout-minutes: 25
@@ -27,112 +27,7 @@ jobs:
           java-version: "21"
 
       - name: Apply repair batch
-        shell: bash
-        run: |
-          python3 scripts/es_p12_review_repair_v2.py
-          python3 - <<'PY'
-          from pathlib import Path
-
-          presence = Path('paper/src/test/java/net/enthusia/staff/paper/PaperPresenceListenerTest.java')
-          text = presence.read_text()
-          old = '    private static final Logger LOGGER = Logger.getLogger(PaperPresenceListenerTest.class.getName());'
-          new = '    private static final int FIRST_ATTEMPT = 1;\n' + old
-          if text.count(old) != 1 or text.count('attempts.incrementAndGet() == 1') != 1:
-              raise SystemExit('presence retry test shape changed unexpectedly')
-          text = text.replace(old, new).replace(
-              'attempts.incrementAndGet() == 1',
-              'attempts.incrementAndGet() == FIRST_ATTEMPT'
-          )
-          presence.write_text(text)
-
-          freeze = Path('paper/src/main/java/net/enthusia/staff/paper/command/FreezeCommand.java')
-          text = freeze.read_text()
-          old = '''    public FreezeCommand(
-                  JavaPlugin plugin,
-                  Clock clock,
-                  Supplier<OperationalMode> mode,
-                  Supplier<PlayerDirectory> players,
-                  Supplier<FreezeStore> freezes,
-                  FreezeManager manager,
-                  ExecutorService workers
-          ) {
-              this(plugin, clock, mode, players, freezes, manager, workers, FreezeNoticeSink.noOp());
-          }
-
-          public FreezeCommand(
-                  JavaPlugin plugin,
-                  Clock clock,
-                  Supplier<OperationalMode> mode,
-                  Supplier<PlayerDirectory> players,
-                  Supplier<FreezeStore> freezes,
-                  FreezeManager manager,
-                  ExecutorService workers,
-                  FreezeNoticeSink targetNotices
-          ) {
-              this(
-                      plugin, clock, mode, players, freezes, manager, workers,
-                      new RuntimeHooks(
-                              LuckPermsStaffTargetGuard.discover(plugin),
-                              new FreezeStaffNotifier(plugin),
-                              targetNotices,
-                              commandResponses(plugin)
-                      )
-              );
-          }
-          '''
-          new = '''    public FreezeCommand(
-                  JavaPlugin plugin,
-                  Clock clock,
-                  Supplier<OperationalMode> mode,
-                  Supplier<PlayerDirectory> players,
-                  Supplier<FreezeStore> freezes,
-                  FreezeManager manager,
-                  ExecutorService workers
-          ) {
-              this(
-                      plugin, clock, mode, players, freezes, manager, workers,
-                      new RuntimeHooks(
-                              LuckPermsStaffTargetGuard.discover(plugin),
-                              new FreezeStaffNotifier(plugin),
-                              FreezeNoticeSink.noOp(),
-                              commandResponses(plugin)
-                      )
-              );
-          }
-
-          public static FreezeCommand createRuntime(
-                  JavaPlugin plugin,
-                  Clock clock,
-                  Supplier<OperationalMode> mode,
-                  Supplier<PlayerDirectory> players,
-                  Supplier<FreezeStore> freezes,
-                  FreezeManager manager,
-                  ExecutorService workers,
-                  FreezeNoticeSink targetNotices
-          ) {
-              return new FreezeCommand(
-                      plugin, clock, mode, players, freezes, manager, workers,
-                      new RuntimeHooks(
-                              LuckPermsStaffTargetGuard.discover(plugin),
-                              new FreezeStaffNotifier(plugin),
-                              targetNotices,
-                              commandResponses(plugin)
-                      )
-              );
-          }
-          '''
-          if text.count(old) != 1:
-              raise SystemExit('FreezeCommand runtime constructor shape changed unexpectedly')
-          freeze.write_text(text.replace(old, new))
-
-          registrar = Path('paper/src/main/java/net/enthusia/staff/paper/PaperCommandRegistrar.java')
-          text = registrar.read_text()
-          old = 'FreezeCommand freezeCommand = new FreezeCommand('
-          new = 'FreezeCommand freezeCommand = FreezeCommand.createRuntime('
-          if text.count(old) != 1:
-              raise SystemExit('FreezeCommand registrar construction shape changed unexpectedly')
-          registrar.write_text(text.replace(old, new))
-          PY
+        run: python3 scripts/es_p12_review_repair_v3.py
 
       - name: Install Lizard
         run: python3 -m pip install --disable-pip-version-check lizard==1.23.0
@@ -207,7 +102,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          rm scripts/es_p12_review_repair.py scripts/es_p12_review_repair_v2.py .github/workflows/es-p12-review-repair.yml
+          rm scripts/es_p12_review_repair.py scripts/es_p12_review_repair_v2.py scripts/es_p12_review_repair_v3.py .github/workflows/es-p12-review-repair.yml
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add \
@@ -232,6 +127,7 @@ jobs:
             paper/src/test/java/net/enthusia/staff/paper/command/FreezeCommandHierarchyTest.java \
             scripts/es_p12_review_repair.py \
             scripts/es_p12_review_repair_v2.py \
+            scripts/es_p12_review_repair_v3.py \
             .github/workflows/es-p12-review-repair.yml
           git commit -m "ES-P12: repair review findings and freeze runtime gaps"
           git push origin HEAD:package/es-p12-staff-operational-hardening
