@@ -434,75 +434,108 @@ public final class PunishmentGuiController implements Listener {
     }
 
     private void confirm(Player viewer, Actor actor, PunishmentGuiState.Review state) {
-        if (!confirmations.add(viewer.getUniqueId())) {
+        UUID viewerId = viewer.getUniqueId();
+        if (!confirmations.add(viewerId)) {
             viewer.sendMessage(Component.text("That punishment confirmation is already in progress."));
             return;
         }
-        boolean submitted = submit(viewer, () -> {
-            try {
-                if (!targetAllowed(viewer, actor, state.target().playerId())) {
-                    return;
-                }
-                PunishmentDraftWorkflow workflow = workflows.get();
-                if (workflow == null) {
-                    message(viewer, "Moderation storage is not ready; no action was taken.");
-                    return;
-                }
-                PunishmentDraftConfirmation result;
-                try {
-                    result = workflow.confirmRouted(state.draft().draftId(), actor, mode.get());
-                } catch (PunishmentDraftCleanupException exception) {
-                    plugin.getLogger().log(
-                            Level.SEVERE,
-                            "Punishment GUI draft cleanup failed after case commit " + exception.accepted().caseId(),
-                            exception
-                    );
-                    finish(viewer, "Punishment committed as case " + exception.accepted().caseId()
-                            + ", but draft cleanup failed. Reconfirming is idempotent.");
-                    return;
-                } catch (PunishmentRequestDraftCleanupException exception) {
-                    plugin.getLogger().log(
-                            Level.SEVERE,
-                            "Punishment GUI draft cleanup failed after request submission "
-                                    + exception.submitted().request().requestId(),
-                            exception
-                    );
-                    finish(viewer, "Punishment request submitted, but draft cleanup failed. "
-                            + "Reconfirming is idempotent.");
-                    return;
-                }
-                if (result instanceof PunishmentDraftConfirmation.Applied applied) {
-                    finish(viewer, "Punishment committed as case " + applied.accepted().caseId()
-                            + (applied.accepted().replayed() ? " (idempotent replay)" : "") + '.');
-                    return;
-                }
-                if (result instanceof PunishmentDraftConfirmation.Requested requested) {
-                    finish(viewer, "Punishment request "
-                            + (requested.submitted().replayed() ? "replayed" : "submitted")
-                            + "; expires " + requested.submitted().request().expiresAt() + '.');
-                    return;
-                }
-                PunishmentDraftConfirmation.Rejected rejected = (PunishmentDraftConfirmation.Rejected) result;
-                if ("RECOMMENDATION_CHANGED".equals(rejected.code())) {
-                    message(viewer, "The recommendation changed. A fresh review is being opened; "
-                            + "no punishment or request was created.");
-                    reprepare(
-                            viewer,
-                            actor,
-                            state,
-                            state.draft().internalExplanation(),
-                            state.draft().visibility()
-                    );
-                    return;
-                }
-                message(viewer, rejected.code() + ": " + rejected.message());
-            } finally {
-                confirmations.remove(viewer.getUniqueId());
-            }
-        });
+        boolean submitted = submit(viewer, () -> runConfirmation(viewer, actor, state, viewerId));
         if (!submitted) {
-            confirmations.remove(viewer.getUniqueId());
+            confirmations.remove(viewerId);
         }
+    }
+
+    private void runConfirmation(
+            Player viewer,
+            Actor actor,
+            PunishmentGuiState.Review state,
+            UUID viewerId
+    ) {
+        try {
+            confirmOnce(viewer, actor, state);
+        } finally {
+            confirmations.remove(viewerId);
+        }
+    }
+
+    private void confirmOnce(Player viewer, Actor actor, PunishmentGuiState.Review state) {
+        if (!targetAllowed(viewer, actor, state.target().playerId())) {
+            return;
+        }
+        PunishmentDraftWorkflow workflow = workflows.get();
+        if (workflow == null) {
+            message(viewer, "Moderation storage is not ready; no action was taken.");
+            return;
+        }
+        Optional<PunishmentDraftConfirmation> result = confirmDraft(viewer, actor, state, workflow);
+        if (result.isPresent()) {
+            handleConfirmation(viewer, actor, state, result.orElseThrow());
+        }
+    }
+
+    private Optional<PunishmentDraftConfirmation> confirmDraft(
+            Player viewer,
+            Actor actor,
+            PunishmentGuiState.Review state,
+            PunishmentDraftWorkflow workflow
+    ) {
+        try {
+            return Optional.of(workflow.confirmRouted(state.draft().draftId(), actor, mode.get()));
+        } catch (PunishmentDraftCleanupException exception) {
+            plugin.getLogger().log(
+                    Level.SEVERE,
+                    "Punishment GUI draft cleanup failed after case commit " + exception.accepted().caseId(),
+                    exception
+            );
+            finish(viewer, "Punishment committed as case " + exception.accepted().caseId()
+                    + ", but draft cleanup failed. Reconfirming is idempotent.");
+        } catch (PunishmentRequestDraftCleanupException exception) {
+            plugin.getLogger().log(
+                    Level.SEVERE,
+                    "Punishment GUI draft cleanup failed after request submission "
+                            + exception.submitted().request().requestId(),
+                    exception
+            );
+            finish(viewer, "Punishment request submitted, but draft cleanup failed. Reconfirming is idempotent.");
+        }
+        return Optional.empty();
+    }
+
+    private void handleConfirmation(
+            Player viewer,
+            Actor actor,
+            PunishmentGuiState.Review state,
+            PunishmentDraftConfirmation result
+    ) {
+        if (result instanceof PunishmentDraftConfirmation.Applied applied) {
+            finish(viewer, "Punishment committed as case " + applied.accepted().caseId()
+                    + (applied.accepted().replayed() ? " (idempotent replay)" : "") + '.');
+            return;
+        }
+        if (result instanceof PunishmentDraftConfirmation.Requested requested) {
+            finish(viewer, "Punishment request "
+                    + (requested.submitted().replayed() ? "replayed" : "submitted")
+                    + "; expires " + requested.submitted().request().expiresAt() + '.');
+            return;
+        }
+        handleRejected(viewer, actor, state, (PunishmentDraftConfirmation.Rejected) result);
+    }
+
+    private void handleRejected(
+            Player viewer,
+            Actor actor,
+            PunishmentGuiState.Review state,
+            PunishmentDraftConfirmation.Rejected rejected
+    ) {
+        if ("RECOMMENDATION_CHANGED".equals(rejected.code())) {
+            message(viewer, "The recommendation changed. A fresh review is being opened; "
+                    + "no punishment or request was created.");
+            reprepare(
+                    viewer, actor, state, state.draft().internalExplanation(), state.draft().visibility()
+            );
+            return;
+        }
+        message(viewer, rejected.code() + ": " + rejected.message());
     }
 
     private void resolveTarget(

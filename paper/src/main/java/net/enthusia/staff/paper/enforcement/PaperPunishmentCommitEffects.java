@@ -101,6 +101,7 @@ public final class PaperPunishmentCommitEffects implements AutoCloseable {
             ));
             case NONE -> {
             }
+            default -> throw new IllegalStateException("Unhandled punishment commit effect");
         }
     }
 
@@ -135,7 +136,6 @@ public final class PaperPunishmentCommitEffects implements AutoCloseable {
     public void close() {
         closed = true;
         ScheduledTask task = observerTask;
-        observerTask = null;
         if (task != null) {
             task.cancel();
         }

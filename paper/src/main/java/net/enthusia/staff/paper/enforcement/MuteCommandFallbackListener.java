@@ -42,6 +42,7 @@ public final class MuteCommandFallbackListener implements Listener {
                 block(event, "Your mute status is still being verified. Please try again shortly.");
                 enforcement.invalidate(event.getPlayer().getUniqueId());
             }
+            default -> block(event, "Private-message moderation is temporarily unavailable. Please try again shortly.");
         }
     }
 

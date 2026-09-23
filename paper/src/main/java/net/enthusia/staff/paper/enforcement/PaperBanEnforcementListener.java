@@ -61,6 +61,10 @@ public final class PaperBanEnforcementListener implements Listener {
                     AsyncPlayerPreLoginEvent.Result.KICK_OTHER,
                     Component.text(decision.message())
             );
+            default -> event.disallow(
+                    AsyncPlayerPreLoginEvent.Result.KICK_OTHER,
+                    Component.text("Moderation status could not be verified. Please retry shortly.")
+            );
         }
     }
 

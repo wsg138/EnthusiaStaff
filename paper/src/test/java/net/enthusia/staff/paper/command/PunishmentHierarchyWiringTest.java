@@ -40,10 +40,10 @@ class PunishmentHierarchyWiringTest {
 
     private static int occurrences(String source, String value) {
         int count = 0;
-        int offset = 0;
-        while ((offset = source.indexOf(value, offset)) >= 0) {
+        int offset = source.indexOf(value);
+        while (offset >= 0) {
             count++;
-            offset += value.length();
+            offset = source.indexOf(value, offset + value.length());
         }
         return count;
     }

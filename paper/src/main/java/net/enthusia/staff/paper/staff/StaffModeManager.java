@@ -44,6 +44,8 @@ import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.plugin.java.JavaPlugin;
 
 public final class StaffModeManager implements Listener {
+    private static final String RANK_REMOVED_MESSAGE =
+            "Your explicit staff rank is no longer assigned; restoring your saved state.";
     private final JavaPlugin plugin;
     private final Clock clock;
     private final Instant runtimeStartedAt;
@@ -253,7 +255,7 @@ public final class StaffModeManager implements Listener {
                         == StaffModeRankReconciliationPolicy.Action.EXIT_SESSION) {
                     StaffSessionSnapshot exiting = loaded.beginExit(playerId, clock.instant()).orElseThrow(() ->
                             new IllegalStateException("active staff session disappeared during rank-removal exit"));
-                    message(playerId, "Your explicit staff rank is no longer assigned; restoring your saved state.");
+                    message(playerId, RANK_REMOVED_MESSAGE);
                     restoreAndVerify(playerId, exiting, loaded);
                     return;
                 }
@@ -296,7 +298,7 @@ public final class StaffModeManager implements Listener {
         if (StaffModeRankReconciliationPolicy.decide(null, currentRank)
                 == StaffModeRankReconciliationPolicy.Action.EXIT_SESSION) {
             player.sendMessage(Component.text(
-                    "Your explicit staff rank is no longer assigned; restoring your saved state."
+                    RANK_REMOVED_MESSAGE
             ));
             if (!submit(() -> {
                 try {
@@ -546,7 +548,7 @@ public final class StaffModeManager implements Listener {
             return;
         }
         if (action == StaffModeRankReconciliationPolicy.Action.EXIT_SESSION) {
-            message(playerId, "Your explicit staff rank is no longer assigned; restoring your saved state.");
+            message(playerId, RANK_REMOVED_MESSAGE);
             beginDurableExit(playerId, "Staff rank removal");
             return;
         }
@@ -568,7 +570,7 @@ public final class StaffModeManager implements Listener {
             return;
         }
         if (action == StaffModeRankReconciliationPolicy.Action.EXIT_SESSION) {
-            message(playerId, "Your explicit staff rank is no longer assigned; restoring your saved state.");
+            message(playerId, RANK_REMOVED_MESSAGE);
             beginDurableExit(playerId, "Staff rank removal");
             return;
         }

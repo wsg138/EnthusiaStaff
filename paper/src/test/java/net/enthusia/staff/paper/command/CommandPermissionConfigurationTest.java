@@ -14,6 +14,8 @@ import java.util.Map;
 import org.junit.jupiter.api.Test;
 
 class CommandPermissionConfigurationTest {
+    private static final String COMMANDS_FIELD = "commands";
+    private static final String PERMISSION_FIELD = "permission";
     private static final String PUNISH_PERMISSION = "enthusiastaff.punish";
     private static final String REMOVE_PERMISSION = "enthusiastaff.remove";
     private static final String FREEZE_PERMISSION = "enthusiastaff.freeze";
@@ -47,12 +49,12 @@ class CommandPermissionConfigurationTest {
 
     @Test
     void staffOnlyCommandsRetainTheirOuterPermissionBoundary() throws IOException {
-        JsonNode commands = pluginMetadata().path("commands");
+        JsonNode commands = pluginMetadata().path(COMMANDS_FIELD);
 
         for (Map.Entry<String, String> expected : EXPECTED_PERMISSIONS.entrySet()) {
             assertEquals(
                     expected.getValue(),
-                    commands.path(expected.getKey()).path("permission").asText(),
+                    commands.path(expected.getKey()).path(PERMISSION_FIELD).asText(),
                     expected.getKey()
             );
         }
@@ -61,7 +63,7 @@ class CommandPermissionConfigurationTest {
     @Test
     void estaffDelegatesPermissionChecksToItsSubcommands() throws IOException {
         JsonNode metadata = pluginMetadata();
-        assertTrue(metadata.path("commands").path("estaff").path("permission").isMissingNode());
+        assertTrue(metadata.path(COMMANDS_FIELD).path("estaff").path(PERMISSION_FIELD).isMissingNode());
 
         JsonNode permissions = metadata.path("permissions");
         for (String permission : List.of(
@@ -77,13 +79,13 @@ class CommandPermissionConfigurationTest {
     @Test
     void historyUsesOuterPermissionWhileCaseAndExactSanctionsUseSubcommandPermissions() throws IOException {
         JsonNode metadata = pluginMetadata();
-        JsonNode commands = metadata.path("commands");
+        JsonNode commands = metadata.path(COMMANDS_FIELD);
         assertEquals(
                 HistoryCommand.VIEW_PERMISSION,
-                commands.path("history").path("permission").asText()
+                commands.path("history").path(PERMISSION_FIELD).asText()
         );
-        assertTrue(commands.path("case").path("permission").isMissingNode());
-        assertTrue(commands.path("estaff").path("permission").isMissingNode());
+        assertTrue(commands.path("case").path(PERMISSION_FIELD).isMissingNode());
+        assertTrue(commands.path("estaff").path(PERMISSION_FIELD).isMissingNode());
 
         JsonNode permissions = metadata.path("permissions");
         for (String permission : List.of(
@@ -104,7 +106,7 @@ class CommandPermissionConfigurationTest {
 
     @Test
     void playerReportCommandRemainsIntentionallyPublic() throws IOException {
-        assertTrue(pluginMetadata().path("commands").path("report").path("permission").isMissingNode());
+        assertTrue(pluginMetadata().path(COMMANDS_FIELD).path("report").path(PERMISSION_FIELD).isMissingNode());
     }
 
     private static JsonNode pluginMetadata() throws IOException {

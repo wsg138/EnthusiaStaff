@@ -268,7 +268,6 @@ public final class ReputationRestrictionSynchronizer implements Listener, AutoCl
     public void close() {
         closed = true;
         ScheduledTask currentTask = task;
-        task = null;
         if (currentTask != null) {
             currentTask.cancel();
         }
