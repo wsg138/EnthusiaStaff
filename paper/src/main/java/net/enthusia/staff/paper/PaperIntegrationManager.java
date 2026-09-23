@@ -6,6 +6,7 @@ import java.time.Clock;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.function.Supplier;
@@ -25,6 +26,7 @@ import net.enthusia.staff.paper.economy.CurrencyGateway;
 import net.enthusia.staff.paper.economy.EconomyCoordinator;
 import net.enthusia.staff.paper.economy.EconomyCoordinatorRuntime;
 import net.enthusia.staff.paper.economy.EnthusiaCurrencyGateway;
+import net.enthusia.staff.paper.economy.InventoryOnlyCurrencyGateway;
 import net.enthusia.staff.paper.enforcement.MuteCommandFallbackListener;
 import net.enthusia.staff.paper.enforcement.MuteEnforcementListener;
 import net.enthusia.staff.paper.enforcement.PaperBanEnforcementListener;
@@ -70,23 +72,31 @@ final class PaperIntegrationManager {
     }
 
     void initializeEconomy() {
-        if (!plugin().getServer().getPluginManager().isPluginEnabled("EnthusiaCurrency")) {
-            issue(CURRENCY, "EnthusiaCurrency is absent; economy confiscation is unavailable");
-            return;
-        }
-        EnthusiaCurrencyGateway.Discovery discovery =
-                EnthusiaCurrencyGateway.discover(plugin().getServer().getServicesManager());
-        if (discovery.gateway().isEmpty()) {
-            issue(CURRENCY, discovery.issue());
+        Optional<CurrencyGateway> discovered = discoverCurrencyGateway();
+        installConfiscation(discovered.orElseGet(InventoryOnlyCurrencyGateway::new));
+        if (discovered.isEmpty()) {
             return;
         }
         try {
-            installEconomy(discovery.gateway().orElseThrow(), configuredRemovalOrder());
+            installEconomy(discovered.orElseThrow(), configuredRemovalOrder());
             clearIssue(CURRENCY);
         } catch (IllegalArgumentException exception) {
             issue(CURRENCY, "Economy removal order is invalid; economy confiscation is unavailable");
             plugin().getLogger().log(Level.SEVERE, "Economy integration configuration failed", exception);
         }
+    }
+
+    private Optional<CurrencyGateway> discoverCurrencyGateway() {
+        if (!plugin().getServer().getPluginManager().isPluginEnabled("EnthusiaCurrency")) {
+            issue(CURRENCY, "EnthusiaCurrency is absent; economy confiscation is unavailable; item confiscation remains available");
+            return Optional.empty();
+        }
+        EnthusiaCurrencyGateway.Discovery discovery =
+                EnthusiaCurrencyGateway.discover(plugin().getServer().getServicesManager());
+        if (discovery.gateway().isEmpty()) {
+            issue(CURRENCY, discovery.issue() + "; item confiscation remains available");
+        }
+        return discovery.gateway();
     }
 
     void initializeModerationProviders() {
@@ -230,16 +240,20 @@ final class PaperIntegrationManager {
                         workers()
                 ),
                 gateway,
-                removalOrder, dependencies.environment().json()
+                removalOrder,
+                dependencies.environment().json()
         );
+        plugin().getServer().getPluginManager().registerEvents(discoveredEconomy, plugin());
+        economy = discoveredEconomy;
+    }
+
+    private void installConfiscation(CurrencyGateway movementGateway) {
         ConfiscationCoordinator discoveredConfiscation = new ConfiscationCoordinator(
                 plugin(), dependencies.players().inventoryContext(), dependencies.policy().writeMode(),
                 dependencies.policy().authorization(), dependencies.stores().inventoryJournal(), workers(),
-                dependencies.players().inventory(), gateway
+                dependencies.players().inventory(), movementGateway
         );
-        plugin().getServer().getPluginManager().registerEvents(discoveredEconomy, plugin());
         plugin().getServer().getPluginManager().registerEvents(discoveredConfiscation, plugin());
-        economy = discoveredEconomy;
         confiscation = discoveredConfiscation;
     }
 
