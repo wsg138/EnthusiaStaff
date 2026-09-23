@@ -8,6 +8,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.function.Consumer;
 import net.enthusia.staff.common.SecureIdentifiers;
 import net.enthusia.staff.domain.OperationalMode;
@@ -34,7 +35,7 @@ public final class PunishmentService {
     private final ModerationStore store;
     private final SanctionLookup sanctionLookup;
     private final EscalationEngine escalation;
-    private volatile Consumer<PunishmentPlan> committedObserver = ignored -> { };
+    private final List<Consumer<PunishmentPlan>> committedObservers = new CopyOnWriteArrayList<>();
 
     public PunishmentService(
             Clock clock,
@@ -66,16 +67,26 @@ public final class PunishmentService {
     }
 
     /**
-     * Installs a post-commit observer. The observer is notification-only and cannot change the
-     * already-durable punishment result. Durable consumers must independently reconcile missed
-     * notifications.
+     * Replaces all post-commit observers. Compatibility callers should prefer
+     * {@link #addCommittedObserver(Consumer)} when multiple independent consumers may coexist.
      */
     public void setCommittedObserver(Consumer<PunishmentPlan> observer) {
-        committedObserver = Objects.requireNonNull(observer, "observer");
+        committedObservers.clear();
+        committedObservers.add(Objects.requireNonNull(observer, "observer"));
+    }
+
+    /**
+     * Adds a notification-only post-commit observer without displacing existing consumers.
+     * The returned handle removes only this observer.
+     */
+    public Runnable addCommittedObserver(Consumer<PunishmentPlan> observer) {
+        Consumer<PunishmentPlan> checked = Objects.requireNonNull(observer, "observer");
+        committedObservers.add(checked);
+        return () -> committedObservers.remove(checked);
     }
 
     public void clearCommittedObserver() {
-        committedObserver = ignored -> { };
+        committedObservers.clear();
     }
 
     public List<ActiveSanction> activeSanctions(UUID playerId, Set<SanctionType> types, Instant now) {
@@ -165,10 +176,12 @@ public final class PunishmentService {
     }
 
     private void notifyCommitted(PunishmentPlan plan) {
-        try {
-            committedObserver.accept(plan);
-        } catch (RuntimeException ignored) {
-            // The punishment is already durable. Recovery consumers reconcile missed notifications.
+        for (Consumer<PunishmentPlan> observer : committedObservers) {
+            try {
+                observer.accept(plan);
+            } catch (RuntimeException ignored) {
+                // The punishment is already durable. Recovery consumers reconcile missed notifications.
+            }
         }
     }
 
