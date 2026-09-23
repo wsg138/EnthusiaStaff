@@ -11,6 +11,7 @@ import net.enthusia.staff.domain.auth.StaffRank;
 import net.enthusia.staff.domain.player.PlayerIdentity;
 import net.enthusia.staff.domain.player.PlayerPlatform;
 import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.event.ClickEvent;
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 import org.junit.jupiter.api.Test;
 
@@ -38,7 +39,7 @@ class FreezeStaffNotifierTest {
         assertTrue(plain.contains("Target frozen by Moderator"));
         assertTrue(plain.contains("screenshare"));
         Component teleport = message.children().getLast();
-        assertEquals("/tp Target", teleport.clickEvent().value());
+        assertEquals(ClickEvent.runCommand("/tp Target"), teleport.clickEvent());
     }
 
     @Test

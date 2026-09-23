@@ -13,31 +13,26 @@ public final class StaffTargetHierarchyPolicy {
 
     public Decision decide(StaffRank actorRank, StaffRank targetRank) {
         Objects.requireNonNull(actorRank, "actorRank");
-        if (targetRank == null) {
+        if (targetRank == null || actorRank == StaffRank.SYSTEM) {
             return Decision.ALLOW;
         }
-        if (actorRank == StaffRank.SYSTEM) {
-            return Decision.ALLOW;
-        }
-        if (targetRank == StaffRank.SYSTEM) {
-            return Decision.PROTECTED;
-        }
-        if (actorRank == StaffRank.FOUNDER) {
-            return targetRank == StaffRank.FOUNDER ? Decision.PROTECTED : Decision.ALLOW;
-        }
-        if (actorRank == StaffRank.DEVELOPER || targetRank == StaffRank.DEVELOPER) {
-            return Decision.PROTECTED;
-        }
-        Integer actorLevel = MODERATION_LEVELS.get(actorRank);
-        Integer targetLevel = MODERATION_LEVELS.get(targetRank);
-        if (actorLevel == null || targetLevel == null) {
-            return Decision.PROTECTED;
-        }
-        return actorLevel > targetLevel ? Decision.ALLOW : Decision.PROTECTED;
+        return protectedTarget(actorRank, targetRank) ? Decision.PROTECTED : Decision.ALLOW;
     }
 
     public boolean permits(StaffRank actorRank, StaffRank targetRank) {
         return decide(actorRank, targetRank) == Decision.ALLOW;
+    }
+
+    private static boolean protectedTarget(StaffRank actorRank, StaffRank targetRank) {
+        if (targetRank == StaffRank.SYSTEM) {
+            return true;
+        }
+        if (actorRank == StaffRank.FOUNDER) {
+            return targetRank == StaffRank.FOUNDER;
+        }
+        Integer actorLevel = MODERATION_LEVELS.get(actorRank);
+        Integer targetLevel = MODERATION_LEVELS.get(targetRank);
+        return actorLevel == null || targetLevel == null || actorLevel <= targetLevel;
     }
 
     private static Map<StaffRank, Integer> moderationLevels() {
