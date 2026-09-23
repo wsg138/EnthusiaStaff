@@ -1,4 +1,4 @@
-name: ES-P12 Lizard diagnostics
+name: ES-P12 Codacy diagnostics
 
 on:
   push:
@@ -9,47 +9,33 @@ permissions:
   contents: read
 
 jobs:
-  lizard:
-    if: github.event.head_commit.message == '[ES-P12] Compare Lizard baseline'
-    name: Compare Lizard findings with main
+  codacy:
+    if: github.event.head_commit.message == '[ES-P12] Query Codacy remaining'
+    name: Query public Codacy PR issues
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 5
     steps:
-      - name: Check out exact branch head
-        uses: actions/checkout@v6
-        with:
-          fetch-depth: 0
-
-      - name: Install Lizard 1.23.0
-        run: python3 -m pip install --disable-pip-version-check lizard==1.23.0
-
-      - name: Compare changed Java against main
+      - name: Query public Codacy PR issues
         shell: bash
         run: |
           set -euo pipefail
-          git fetch --no-tags origin main
-          mapfile -t files < <(git diff --name-only origin/main...HEAD -- '*.java')
-          if (( ${#files[@]} == 0 )); then
-            echo "No changed Java files."
-            exit 0
-          fi
+          python3 - <<'PY'
+          import json
+          import urllib.request
 
-          set +e
-          lizard -C 8 -L 50 -a 8 -w "${files[@]}" > /tmp/head.txt 2>&1
-          set -e
-
-          git worktree add --detach /tmp/main origin/main
-          main_files=()
-          for file in "${files[@]}"; do
-            if [[ -f "/tmp/main/${file}" ]]; then
-              main_files+=("/tmp/main/${file}")
-            fi
-          done
-          set +e
-          lizard -C 8 -L 50 -a 8 -w "${main_files[@]}" > /tmp/main.txt 2>&1
-          set -e
-
-          echo '=== HEAD WARNINGS ==='
-          grep 'warning:' /tmp/head.txt || true
-          echo '=== MAIN WARNINGS ==='
-          sed 's#/tmp/main/##g' /tmp/main.txt | grep 'warning:' || true
+          url = "https://api.codacy.com/api/v3/analysis/organizations/gh/wsg138/repositories/EnthusiaStaff/pull-requests/246/issues?status=new"
+          request = urllib.request.Request(url, headers={"Accept": "application/json"})
+          with urllib.request.urlopen(request, timeout=30) as response:
+              payload = json.load(response)
+          for entry in payload.get("data", []):
+              issue = entry.get("commitIssue") or {}
+              pattern = issue.get("patternInfo") or {}
+              print(json.dumps({
+                  "file": issue.get("filePath"),
+                  "line": issue.get("lineNumber"),
+                  "pattern": pattern.get("id"),
+                  "level": pattern.get("level"),
+                  "message": issue.get("message"),
+              }, sort_keys=True))
+          print("TOTAL", len(payload.get("data", [])))
+          PY
