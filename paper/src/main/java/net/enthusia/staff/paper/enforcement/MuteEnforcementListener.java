@@ -27,6 +27,7 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.player.AsyncPlayerChatEvent;
+import org.bukkit.event.player.AsyncPlayerPreLoginEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.plugin.java.JavaPlugin;
@@ -34,6 +35,11 @@ import org.bukkit.plugin.java.JavaPlugin;
 public final class MuteEnforcementListener implements Listener, AutoCloseable {
     private static final Duration CACHE_TTL = Duration.ofSeconds(45);
     private static final Set<SanctionType> MUTE_TYPES = Set.of(SanctionType.MUTE);
+    private static final Set<SanctionType> LOGIN_BLOCK_TYPES = Set.of(
+            SanctionType.BAN,
+            SanctionType.NETWORK_BAN,
+            SanctionType.NETWORK_IDENTITY_BAN
+    );
 
     private final JavaPlugin plugin;
     private final Clock clock;
@@ -73,6 +79,27 @@ public final class MuteEnforcementListener implements Listener, AutoCloseable {
                 15,
                 TimeUnit.SECONDS
         );
+    }
+
+    @EventHandler(priority = EventPriority.LOWEST)
+    public void onPreLogin(AsyncPlayerPreLoginEvent event) {
+        if (mode.get() != OperationalMode.ACTIVE) {
+            return;
+        }
+        SanctionLookup lookup = sanctions.get();
+        if (lookup == null) {
+            denyLoginUnavailable(event, "Authoritative ban storage is not ready");
+            return;
+        }
+        try {
+            List<ActiveSanction> active = lookup.activeFor(event.getUniqueId(), LOGIN_BLOCK_TYPES, clock.instant());
+            if (!active.isEmpty()) {
+                denyActiveBan(event, active.getFirst());
+            }
+        } catch (RuntimeException exception) {
+            plugin.getLogger().log(Level.SEVERE, "Authoritative ban lookup failed; login remains fail-closed", exception);
+            denyLoginUnavailable(event, "Authoritative ban verification failed");
+        }
     }
 
     @EventHandler(priority = EventPriority.MONITOR)
@@ -124,6 +151,23 @@ public final class MuteEnforcementListener implements Listener, AutoCloseable {
             String expiration = mute.expiresAt().map(Instant::toString).orElse("permanent");
             notifyPlayer(player, "You are muted (case " + mute.caseId() + ", expires " + expiration + ").");
         }
+    }
+
+    private void denyActiveBan(AsyncPlayerPreLoginEvent event, ActiveSanction sanction) {
+        String expiration = sanction.expiresAt().map(Instant::toString).orElse("permanent");
+        event.disallow(
+                AsyncPlayerPreLoginEvent.Result.KICK_BANNED,
+                Component.text("You are banned (case " + sanction.caseId() + ", expires " + expiration + "). "
+                        + sanction.publicReason())
+        );
+    }
+
+    private void denyLoginUnavailable(AsyncPlayerPreLoginEvent event, String logMessage) {
+        plugin.getLogger().warning(logMessage + "; blocking login while moderation is ACTIVE");
+        event.disallow(
+                AsyncPlayerPreLoginEvent.Result.KICK_OTHER,
+                Component.text("Moderation status could not be verified. Please retry shortly.")
+        );
     }
 
     private void refresh(Player player) {
