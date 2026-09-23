@@ -19,13 +19,29 @@ class LuckPermsStaffTargetGuardTest {
     @Test
     void ordinaryTargetsAreAllowedAndEqualOrHigherStaffAreProtected() {
         Actor mod = new Actor(ACTOR_ID, "Mod", StaffRank.MOD);
-        StaffTargetGuard ordinary = guard(Optional.empty());
-        StaffTargetGuard equal = guard(Optional.of(StaffRank.MOD));
-        StaffTargetGuard higher = guard(Optional.of(StaffRank.ADMIN));
 
-        assertTrue(ordinary.check(mod, TARGET_ID, false).allowed());
-        assertFalse(equal.check(mod, TARGET_ID, false).allowed());
-        assertFalse(higher.check(mod, TARGET_ID, false).allowed());
+        assertTrue(guard(StaffRank.MOD, Optional.empty()).check(mod, TARGET_ID, false).allowed());
+        assertFalse(guard(StaffRank.MOD, Optional.of(StaffRank.MOD)).check(mod, TARGET_ID, false).allowed());
+        assertFalse(guard(StaffRank.MOD, Optional.of(StaffRank.ADMIN)).check(mod, TARGET_ID, false).allowed());
+    }
+
+    @Test
+    void currentActorRankOverridesStaleCommandAuthority() {
+        Actor staleAdmin = new Actor(ACTOR_ID, "FormerAdmin", StaffRank.ADMIN);
+        StaffTargetGuard guard = guard(StaffRank.MOD, Optional.of(StaffRank.ADMIN));
+
+        assertFalse(guard.check(staleAdmin, TARGET_ID, false).allowed());
+    }
+
+    @Test
+    void actorThatNoLongerHasStaffRankFailsClosed() {
+        Actor staleAdmin = new Actor(ACTOR_ID, "FormerAdmin", StaffRank.ADMIN);
+        StaffTargetGuard guard = LuckPermsStaffTargetGuard.forTesting(
+                playerId -> playerId.equals(ACTOR_ID) ? Optional.empty() : Optional.of(StaffRank.MOD),
+                LOGGER
+        );
+
+        assertFalse(guard.check(staleAdmin, TARGET_ID, false).allowed());
     }
 
     @Test
@@ -67,7 +83,10 @@ class LuckPermsStaffTargetGuardTest {
         assertFalse(lookedUp.get());
     }
 
-    private static StaffTargetGuard guard(Optional<StaffRank> rank) {
-        return LuckPermsStaffTargetGuard.forTesting(ignored -> rank, LOGGER);
+    private static StaffTargetGuard guard(StaffRank actorRank, Optional<StaffRank> targetRank) {
+        return LuckPermsStaffTargetGuard.forTesting(
+                playerId -> playerId.equals(ACTOR_ID) ? Optional.of(actorRank) : targetRank,
+                LOGGER
+        );
     }
 }

@@ -55,6 +55,9 @@ public final class FreezeManager implements Listener {
     private static final Duration OFFLINE_EXPIRATION = Duration.ofMinutes(10);
     private static final String VERIFICATION_UNAVAILABLE_MESSAGE =
             "Your freeze status could not be verified. You remain restricted until staff review.";
+    private static final Component COMMAND_RESTRICTION_MESSAGE = Component.text(
+            "You are frozen; commands are unavailable until staff releases the freeze."
+    );
 
     private final JavaPlugin plugin;
     private final Clock clock;
@@ -223,10 +226,7 @@ public final class FreezeManager implements Listener {
         if (to == null || (from.getX() == to.getX() && from.getY() == to.getY() && from.getZ() == to.getZ())) {
             return;
         }
-        Location stationary = from.clone();
-        stationary.setYaw(to.getYaw());
-        stationary.setPitch(to.getPitch());
-        event.setTo(stationary);
+        event.setCancelled(true);
     }
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
@@ -348,7 +348,12 @@ public final class FreezeManager implements Listener {
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     public void onCommand(PlayerCommandPreprocessEvent event) {
-        cancel(event.getPlayer(), event);
+        Player player = event.getPlayer();
+        if (!restricted(player)) {
+            return;
+        }
+        event.setCancelled(true);
+        player.sendMessage(COMMAND_RESTRICTION_MESSAGE);
     }
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)

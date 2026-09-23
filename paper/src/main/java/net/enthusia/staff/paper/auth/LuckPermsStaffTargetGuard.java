@@ -80,8 +80,12 @@ public final class LuckPermsStaffTargetGuard implements StaffTargetGuard {
             return Result.deny(UNAVAILABLE_MESSAGE);
         }
         try {
+            StaffRank actorRank = ranks.resolve(actor.id()).orElse(null);
+            if (actorRank == null) {
+                return Result.deny(UNAVAILABLE_MESSAGE);
+            }
             StaffRank targetRank = ranks.resolve(targetId).orElse(null);
-            return hierarchy.permits(actor.rank(), targetRank)
+            return hierarchy.permits(actorRank, targetRank)
                     ? Result.allow()
                     : Result.deny(PROTECTED_MESSAGE);
         } catch (RuntimeException exception) {
