@@ -49,6 +49,8 @@ public final class ReputationRestrictionSynchronizer implements Listener, AutoCl
     private final Set<UUID> tracked = ConcurrentHashMap.newKeySet();
     private final Set<UUID> inFlight = ConcurrentHashMap.newKeySet();
     private volatile Optional<PunishmentService> observedService = Optional.empty();
+    private volatile Runnable observerRemoval = () -> {
+    };
     private volatile ScheduledTask task;
     private volatile boolean closed;
 
@@ -120,8 +122,8 @@ public final class ReputationRestrictionSynchronizer implements Listener, AutoCl
             if (current == null || observedService.filter(service -> service == current).isPresent()) {
                 return;
             }
-            observedService.ifPresent(PunishmentService::clearCommittedObserver);
-            current.setCommittedObserver(this::onPunishmentCommitted);
+            observerRemoval.run();
+            observerRemoval = current.addCommittedObserver(this::onPunishmentCommitted);
             observedService = Optional.of(current);
         } catch (RuntimeException exception) {
             plugin.getLogger().log(Level.FINE, "Reputation post-commit observer is not ready yet", exception);
@@ -270,9 +272,11 @@ public final class ReputationRestrictionSynchronizer implements Listener, AutoCl
         if (currentTask != null) {
             currentTask.cancel();
         }
-        Optional<PunishmentService> currentService = observedService;
         observedService = Optional.empty();
-        currentService.ifPresent(PunishmentService::clearCommittedObserver);
+        Runnable removal = observerRemoval;
+        observerRemoval = () -> {
+        };
+        removal.run();
         HandlerList.unregisterAll(this);
         tracked.clear();
         inFlight.clear();
