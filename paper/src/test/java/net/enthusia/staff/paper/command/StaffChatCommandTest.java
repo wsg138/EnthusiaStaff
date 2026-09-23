@@ -77,9 +77,13 @@ class StaffChatCommandTest {
         assertEquals(List.of(Component.text("RoseChat staff-channel integration is unavailable.")), missingMessages);
 
         List<Object> inactiveMessages = new ArrayList<>();
-        StaffChatCommand inactive = new StaffChatCommand(
-                () -> integration(false, true, Optional.of("staff"), new AtomicReference<>())
+        RoseChatIntegration inactiveIntegration = integration(
+                false,
+                true,
+                Optional.of("staff"),
+                new AtomicReference<>()
         );
+        StaffChatCommand inactive = new StaffChatCommand(() -> inactiveIntegration);
 
         assertTrue(inactive.onCommand(player(true, inactiveMessages), null, "staffchat", new String[0]));
         assertEquals(List.of(Component.text("RoseChat staff-channel integration is unavailable.")), inactiveMessages);
