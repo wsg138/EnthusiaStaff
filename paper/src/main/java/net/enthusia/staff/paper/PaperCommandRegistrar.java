@@ -38,6 +38,7 @@ import net.enthusia.staff.paper.command.SanctionChangeCommand;
 import net.enthusia.staff.paper.command.SanctionLifecycleCommand;
 import net.enthusia.staff.paper.command.StaffChatCommand;
 import net.enthusia.staff.paper.command.StaffModeCommand;
+import net.enthusia.staff.paper.command.StaffWhoCommand;
 import net.enthusia.staff.paper.command.VanishCommand;
 import net.enthusia.staff.paper.config.ModerationFeatureSettings;
 import net.enthusia.staff.paper.config.ReloadableModerationFeatureSettings;
@@ -141,9 +142,6 @@ final class PaperCommandRegistrar {
     }
 
     private void registerAccountLinkCommands() {
-        // All Bukkit/provider discovery happens during command registration on the server thread.
-        // The command itself runs persistence work on the bounded executor and receives only
-        // thread-safe/provider-neutral adapters from this point forward.
         ActivePlaytimeProvider playtime = PlayTimeActivePlaytimeProvider.discover(plugin());
         Optional<DiscordSrvLinkProviderAdapter> discordSrv = DiscordSrvLinkProviderAdapter.discover(plugin());
         PaperOnlinePlayerVerifier online = PaperOnlinePlayerVerifier.register(plugin());
@@ -234,6 +232,13 @@ final class PaperCommandRegistrar {
         bind("staff", new StaffModeCommand(writeMode(), dependencies.players().staffMode()));
         bind("vanish", new VanishCommand(writeMode(), dependencies.players().vanish()));
         bind("staffchat", new StaffChatCommand(dependencies.integrations().roseChat()));
+        bind("staffwho", new StaffWhoCommand(
+                plugin(),
+                storage(PaperStorageBindings::punishmentRequestService),
+                dependencies.players().staffMode(),
+                dependencies.players().vanish(),
+                workers()
+        ));
     }
 
     private void registerInventoryCommands() {
