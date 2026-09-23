@@ -69,42 +69,31 @@ public final class PunishmentCommand implements CommandExecutor, TabCompleter {
             ExecutorService workers
     ) {
         this(
-                plugin,
-                mode,
-                workflows,
-                players,
-                authorization,
-                gui,
-                requestCommands,
-                workers,
+                new Dependencies(
+                        plugin,
+                        mode,
+                        workflows,
+                        players,
+                        authorization,
+                        gui,
+                        requestCommands,
+                        workers
+                ),
                 LuckPermsStaffTargetGuard.discover(plugin)
         );
     }
 
-    PunishmentCommand(
-            JavaPlugin plugin,
-            Supplier<OperationalMode> mode,
-            Supplier<PunishmentDraftWorkflow> workflows,
-            Supplier<PlayerDirectory> players,
-            AuthorizationPolicy authorization,
-            PunishmentGuiController gui,
-            PunishmentRequestCommandHandler requestCommands,
-            ExecutorService workers,
-            StaffTargetGuard targetGuard
-    ) {
-        if (plugin == null || mode == null || workflows == null || players == null || authorization == null
-                || gui == null || requestCommands == null || workers == null || targetGuard == null) {
-            throw new IllegalArgumentException("punishment command dependencies must be present");
-        }
-        this.plugin = plugin;
-        this.mode = mode;
-        this.workflows = workflows;
-        this.players = players;
-        this.authorization = authorization;
-        this.gui = gui;
-        this.requestCommands = requestCommands;
-        this.workers = workers;
-        this.targetGuard = targetGuard;
+    PunishmentCommand(Dependencies dependencies, StaffTargetGuard targetGuard) {
+        Dependencies checked = java.util.Objects.requireNonNull(dependencies, "dependencies");
+        this.plugin = checked.plugin();
+        this.mode = checked.mode();
+        this.workflows = checked.workflows();
+        this.players = checked.players();
+        this.authorization = checked.authorization();
+        this.gui = checked.gui();
+        this.requestCommands = checked.requestCommands();
+        this.workers = checked.workers();
+        this.targetGuard = java.util.Objects.requireNonNull(targetGuard, "targetGuard");
     }
 
     @Override
@@ -494,4 +483,27 @@ public final class PunishmentCommand implements CommandExecutor, TabCompleter {
         }
         return completions;
     }
+
+    record Dependencies(
+            JavaPlugin plugin,
+            Supplier<OperationalMode> mode,
+            Supplier<PunishmentDraftWorkflow> workflows,
+            Supplier<PlayerDirectory> players,
+            AuthorizationPolicy authorization,
+            PunishmentGuiController gui,
+            PunishmentRequestCommandHandler requestCommands,
+            ExecutorService workers
+    ) {
+        Dependencies {
+            plugin = java.util.Objects.requireNonNull(plugin, "plugin");
+            mode = java.util.Objects.requireNonNull(mode, "mode");
+            workflows = java.util.Objects.requireNonNull(workflows, "workflows");
+            players = java.util.Objects.requireNonNull(players, "players");
+            authorization = java.util.Objects.requireNonNull(authorization, "authorization");
+            gui = java.util.Objects.requireNonNull(gui, "gui");
+            requestCommands = java.util.Objects.requireNonNull(requestCommands, "requestCommands");
+            workers = java.util.Objects.requireNonNull(workers, "workers");
+        }
+    }
+
 }

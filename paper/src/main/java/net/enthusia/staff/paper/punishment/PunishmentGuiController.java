@@ -73,40 +73,30 @@ public final class PunishmentGuiController implements Listener {
             ExecutorService workers
     ) {
         this(
-                plugin,
-                mode,
-                workflows,
-                players,
-                authorization,
-                policies,
-                workers,
+                new Dependencies(
+                        plugin,
+                        mode,
+                        workflows,
+                        players,
+                        authorization,
+                        policies,
+                        workers
+                ),
                 LuckPermsStaffTargetGuard.discover(plugin)
         );
     }
 
-    PunishmentGuiController(
-            JavaPlugin plugin,
-            Supplier<OperationalMode> mode,
-            Supplier<PunishmentDraftWorkflow> workflows,
-            Supplier<PlayerDirectory> players,
-            AuthorizationPolicy authorization,
-            ReasonPolicyRepository policies,
-            ExecutorService workers,
-            StaffTargetGuard targetGuard
-    ) {
-        if (plugin == null || mode == null || workflows == null || players == null
-                || authorization == null || policies == null || workers == null || targetGuard == null) {
-            throw new IllegalArgumentException("punishment GUI dependencies must be present");
-        }
-        this.plugin = plugin;
-        this.mode = mode;
-        this.workflows = workflows;
-        this.players = players;
-        this.authorization = authorization;
-        this.policies = policies;
-        this.workers = workers;
-        this.targetGuard = targetGuard;
-        this.catalog = new PunishmentGuiCatalog(policies, authorization);
+    PunishmentGuiController(Dependencies dependencies, StaffTargetGuard targetGuard) {
+        Dependencies checked = java.util.Objects.requireNonNull(dependencies, "dependencies");
+        this.plugin = checked.plugin();
+        this.mode = checked.mode();
+        this.workflows = checked.workflows();
+        this.players = checked.players();
+        this.authorization = checked.authorization();
+        this.policies = checked.policies();
+        this.workers = checked.workers();
+        this.targetGuard = java.util.Objects.requireNonNull(targetGuard, "targetGuard");
+        this.catalog = new PunishmentGuiCatalog(this.policies, this.authorization);
         this.renderer = new PunishmentGuiRenderer(catalog);
     }
 
@@ -641,6 +631,26 @@ public final class PunishmentGuiController implements Listener {
 
     private static String targetName(PlayerIdentity target) {
         return target.currentUsername().orElse(target.playerId().toString());
+    }
+
+    record Dependencies(
+            JavaPlugin plugin,
+            Supplier<OperationalMode> mode,
+            Supplier<PunishmentDraftWorkflow> workflows,
+            Supplier<PlayerDirectory> players,
+            AuthorizationPolicy authorization,
+            ReasonPolicyRepository policies,
+            ExecutorService workers
+    ) {
+        Dependencies {
+            plugin = java.util.Objects.requireNonNull(plugin, "plugin");
+            mode = java.util.Objects.requireNonNull(mode, "mode");
+            workflows = java.util.Objects.requireNonNull(workflows, "workflows");
+            players = java.util.Objects.requireNonNull(players, "players");
+            authorization = java.util.Objects.requireNonNull(authorization, "authorization");
+            policies = java.util.Objects.requireNonNull(policies, "policies");
+            workers = java.util.Objects.requireNonNull(workers, "workers");
+        }
     }
 
     private record NoteCapture(PunishmentGuiState.Review review) {
