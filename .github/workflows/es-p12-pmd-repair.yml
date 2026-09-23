@@ -1,0 +1,175 @@
+name: ES-P12 PMD repair
+
+on:
+  push:
+    branches:
+      - "package/es-p12-staff-operational-hardening"
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    if: github.event.head_commit.message == '[ES-P12] Apply PMD repairs'
+    name: Apply and validate ES-P12 PMD repairs
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out exact branch head
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Apply exact PMD repairs
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def edit(path, transform):
+              file = Path(path)
+              before = file.read_text(encoding="utf-8")
+              after = transform(before)
+              if after == before:
+                  raise SystemExit(f"Expected repair did not change {path}")
+              file.write_text(after, encoding="utf-8")
+
+          def replace_once(text, old, new, label):
+              if text.count(old) != 1:
+                  raise SystemExit(f"{label}: expected one match, found {text.count(old)}")
+              return text.replace(old, new, 1)
+
+          def mute(text):
+              old = '''            case VERIFY -> {\n                block(event, "Your mute status is still being verified. Please try again shortly.");\n                enforcement.invalidate(event.getPlayer().getUniqueId());\n            }\n        }\n'''
+              new = '''            case VERIFY -> {\n                block(event, "Your mute status is still being verified. Please try again shortly.");\n                enforcement.invalidate(event.getPlayer().getUniqueId());\n            }\n            default -> block(event, "Private-message moderation is temporarily unavailable. Please try again shortly.");\n        }\n'''
+              return replace_once(text, old, new, "mute switch")
+          edit("paper/src/main/java/net/enthusia/staff/paper/enforcement/MuteCommandFallbackListener.java", mute)
+
+          def ban(text):
+              old = '''            case UNVERIFIED -> event.disallow(\n                    AsyncPlayerPreLoginEvent.Result.KICK_OTHER,\n                    Component.text(decision.message())\n            );\n        }\n'''
+              new = '''            case UNVERIFIED -> event.disallow(\n                    AsyncPlayerPreLoginEvent.Result.KICK_OTHER,\n                    Component.text(decision.message())\n            );\n            default -> event.disallow(\n                    AsyncPlayerPreLoginEvent.Result.KICK_OTHER,\n                    Component.text("Moderation status could not be verified. Please retry shortly.")\n            );\n        }\n'''
+              return replace_once(text, old, new, "ban switch")
+          edit("paper/src/main/java/net/enthusia/staff/paper/enforcement/PaperBanEnforcementListener.java", ban)
+
+          def effects(text):
+              old = '''            case WARNING -> player.sendMessage(Component.text(\n                    "Staff warning: " + plan.publicReason() + " (case " + plan.caseId() + ')'\n            ));\n            case NONE -> {\n            }\n        }\n'''
+              new = '''            case WARNING -> player.sendMessage(Component.text(\n                    "Staff warning: " + plan.publicReason() + " (case " + plan.caseId() + ')'\n            ));\n            case NONE -> {\n            }\n            default -> throw new IllegalStateException("Unhandled punishment commit effect");\n        }\n'''
+              text = replace_once(text, old, new, "punishment effect switch")
+              return replace_once(text, "        observerTask = null;\n", "", "punishment observer null assignment")
+          edit("paper/src/main/java/net/enthusia/staff/paper/enforcement/PaperPunishmentCommitEffects.java", effects)
+
+          edit(
+              "paper/src/main/java/net/enthusia/staff/paper/integration/ReputationRestrictionSynchronizer.java",
+              lambda text: replace_once(text, "        task = null;\n", "", "reputation task null assignment")
+          )
+
+          def controller(text):
+              start = text.index("    private void confirm(Player viewer, Actor actor, PunishmentGuiState.Review state) {")
+              end = text.index("    private void resolveTarget(", start)
+              replacement = '''    private void confirm(Player viewer, Actor actor, PunishmentGuiState.Review state) {\n        UUID viewerId = viewer.getUniqueId();\n        if (!confirmations.add(viewerId)) {\n            viewer.sendMessage(Component.text("That punishment confirmation is already in progress."));\n            return;\n        }\n        boolean submitted = submit(viewer, () -> runConfirmation(viewer, actor, state, viewerId));\n        if (!submitted) {\n            confirmations.remove(viewerId);\n        }\n    }\n\n    private void runConfirmation(\n            Player viewer,\n            Actor actor,\n            PunishmentGuiState.Review state,\n            UUID viewerId\n    ) {\n        try {\n            confirmOnce(viewer, actor, state);\n        } finally {\n            confirmations.remove(viewerId);\n        }\n    }\n\n    private void confirmOnce(Player viewer, Actor actor, PunishmentGuiState.Review state) {\n        if (!targetAllowed(viewer, actor, state.target().playerId())) {\n            return;\n        }\n        PunishmentDraftWorkflow workflow = workflows.get();\n        if (workflow == null) {\n            message(viewer, "Moderation storage is not ready; no action was taken.");\n            return;\n        }\n        Optional<PunishmentDraftConfirmation> result = confirmDraft(viewer, actor, state, workflow);\n        if (result.isPresent()) {\n            handleConfirmation(viewer, actor, state, result.orElseThrow());\n        }\n    }\n\n    private Optional<PunishmentDraftConfirmation> confirmDraft(\n            Player viewer,\n            Actor actor,\n            PunishmentGuiState.Review state,\n            PunishmentDraftWorkflow workflow\n    ) {\n        try {\n            return Optional.of(workflow.confirmRouted(state.draft().draftId(), actor, mode.get()));\n        } catch (PunishmentDraftCleanupException exception) {\n            plugin.getLogger().log(\n                    Level.SEVERE,\n                    "Punishment GUI draft cleanup failed after case commit " + exception.accepted().caseId(),\n                    exception\n            );\n            finish(viewer, "Punishment committed as case " + exception.accepted().caseId()\n                    + ", but draft cleanup failed. Reconfirming is idempotent.");\n        } catch (PunishmentRequestDraftCleanupException exception) {\n            plugin.getLogger().log(\n                    Level.SEVERE,\n                    "Punishment GUI draft cleanup failed after request submission "\n                            + exception.submitted().request().requestId(),\n                    exception\n            );\n            finish(viewer, "Punishment request submitted, but draft cleanup failed. Reconfirming is idempotent.");\n        }\n        return Optional.empty();\n    }\n\n    private void handleConfirmation(\n            Player viewer,\n            Actor actor,\n            PunishmentGuiState.Review state,\n            PunishmentDraftConfirmation result\n    ) {\n        if (result instanceof PunishmentDraftConfirmation.Applied applied) {\n            finish(viewer, "Punishment committed as case " + applied.accepted().caseId()\n                    + (applied.accepted().replayed() ? " (idempotent replay)" : "") + '.');\n            return;\n        }\n        if (result instanceof PunishmentDraftConfirmation.Requested requested) {\n            finish(viewer, "Punishment request "\n                    + (requested.submitted().replayed() ? "replayed" : "submitted")\n                    + "; expires " + requested.submitted().request().expiresAt() + '.');\n            return;\n        }\n        handleRejected(viewer, actor, state, (PunishmentDraftConfirmation.Rejected) result);\n    }\n\n    private void handleRejected(\n            Player viewer,\n            Actor actor,\n            PunishmentGuiState.Review state,\n            PunishmentDraftConfirmation.Rejected rejected\n    ) {\n        if ("RECOMMENDATION_CHANGED".equals(rejected.code())) {\n            message(viewer, "The recommendation changed. A fresh review is being opened; "\n                    + "no punishment or request was created.");\n            reprepare(\n                    viewer, actor, state, state.draft().internalExplanation(), state.draft().visibility()\n            );\n            return;\n        }\n        message(viewer, rejected.code() + ": " + rejected.message());\n    }\n\n'''
+              return text[:start] + replacement + text[end:]
+          edit("paper/src/main/java/net/enthusia/staff/paper/punishment/PunishmentGuiController.java", controller)
+
+          def renderer(text):
+              text = replace_once(
+                  text,
+                  "    static final int NOTE_SLOT = 30;\n",
+                  "    static final int NOTE_SLOT = 30;\n    private static final int HIGH_SEVERITY_THRESHOLD = 75;\n    private static final int MODERATE_SEVERITY_THRESHOLD = 40;\n",
+                  "renderer thresholds"
+              )
+              old = '''            ReasonPolicy policy = reasons.get(offset + slot);\n            List<Component> lore = new ArrayList<>();\n            lore.add(Component.text(policy.id(), NamedTextColor.DARK_GRAY));\n            lore.add(Component.text("Severity: " + policy.severity(), NamedTextColor.GRAY));\n            lore.add(Component.text("Required rank: " + policy.requiredRank(), NamedTextColor.GRAY));\n            if (!policy.examples().isEmpty()) {\n                lore.add(Component.text("Examples:", NamedTextColor.GRAY));\n                policy.examples().stream().limit(3)\n                        .forEach(example -> lore.add(Component.text("• " + example, NamedTextColor.DARK_GRAY)));\n            }\n            lore.add(Component.text("Click to calculate the authoritative step", NamedTextColor.YELLOW));\n            inventory.setItem(slot, item(reasonMaterial(policy), policy.publicReason(), lore));\n'''
+              new = '''            ReasonPolicy policy = reasons.get(offset + slot);\n            inventory.setItem(slot, item(reasonMaterial(policy), policy.publicReason(), reasonLore(policy)));\n'''
+              text = replace_once(text, old, new, "renderer loop allocation")
+              marker = "    private void renderReview(Inventory inventory, PunishmentGuiState.Review state) {\n"
+              helper = '''    private static List<Component> reasonLore(ReasonPolicy policy) {\n        List<Component> lore = new ArrayList<>();\n        lore.add(Component.text(policy.id(), NamedTextColor.DARK_GRAY));\n        lore.add(Component.text("Severity: " + policy.severity(), NamedTextColor.GRAY));\n        lore.add(Component.text("Required rank: " + policy.requiredRank(), NamedTextColor.GRAY));\n        if (!policy.examples().isEmpty()) {\n            lore.add(Component.text("Examples:", NamedTextColor.GRAY));\n            policy.examples().stream().limit(3)\n                    .forEach(example -> lore.add(Component.text("• " + example, NamedTextColor.DARK_GRAY)));\n        }\n        lore.add(Component.text("Click to calculate the authoritative step", NamedTextColor.YELLOW));\n        return List.copyOf(lore);\n    }\n\n'''
+              text = replace_once(text, marker, helper + marker, "renderer lore helper")
+              text = replace_once(text, "policy.severity() >= 75", "policy.severity() >= HIGH_SEVERITY_THRESHOLD", "high severity literal")
+              return replace_once(text, "policy.severity() >= 40", "policy.severity() >= MODERATE_SEVERITY_THRESHOLD", "moderate severity literal")
+          edit("paper/src/main/java/net/enthusia/staff/paper/punishment/PunishmentGuiRenderer.java", renderer)
+
+          def staff_mode(text):
+              literal = '"Your explicit staff rank is no longer assigned; restoring your saved state."'
+              count = text.count(literal)
+              if count != 4:
+                  raise SystemExit(f"staff-mode rank-removal literal: expected 4 matches, found {count}")
+              text = text.replace(literal, "RANK_REMOVED_MESSAGE")
+              return replace_once(
+                  text,
+                  "public final class StaffModeManager implements Listener {\n",
+                  "public final class StaffModeManager implements Listener {\n    private static final String RANK_REMOVED_MESSAGE =\n            \"Your explicit staff rank is no longer assigned; restoring your saved state.\";\n",
+                  "staff-mode rank removal constant"
+              )
+          edit("paper/src/main/java/net/enthusia/staff/paper/staff/StaffModeManager.java", staff_mode)
+
+          def permission_test(text):
+              text = replace_once(
+                  text,
+                  "class CommandPermissionConfigurationTest {\n",
+                  "class CommandPermissionConfigurationTest {\n    private static final String COMMANDS_FIELD = \"commands\";\n    private static final String PERMISSION_FIELD = \"permission\";\n",
+                  "permission test constants"
+              )
+              text = text.replace('path("commands")', 'path(COMMANDS_FIELD)')
+              return text.replace('path("permission")', 'path(PERMISSION_FIELD)')
+          edit("paper/src/test/java/net/enthusia/staff/paper/command/CommandPermissionConfigurationTest.java", permission_test)
+
+          def hierarchy_test(text):
+              old = '''    private static int occurrences(String source, String value) {\n        int count = 0;\n        int offset = 0;\n        while ((offset = source.indexOf(value, offset)) >= 0) {\n            count++;\n            offset += value.length();\n        }\n        return count;\n    }\n'''
+              new = '''    private static int occurrences(String source, String value) {\n        int count = 0;\n        int offset = source.indexOf(value);\n        while (offset >= 0) {\n            count++;\n            offset = source.indexOf(value, offset + value.length());\n        }\n        return count;\n    }\n'''
+              return replace_once(text, old, new, "hierarchy occurrence loop")
+          edit("paper/src/test/java/net/enthusia/staff/paper/command/PunishmentHierarchyWiringTest.java", hierarchy_test)
+          PY
+
+      - name: Verify PMD findings are resolved
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin main
+          curl --fail --location --silent --show-error \
+            'https://github.com/pmd/pmd/releases/download/pmd_releases%2F6.55.0/pmd-bin-6.55.0.zip' \
+            --output /tmp/pmd.zip
+          unzip -q /tmp/pmd.zip -d /tmp
+          mapfile -t files < <(git diff --name-only origin/main...HEAD -- '*.java')
+          input="$(IFS=,; echo "${files[*]}")"
+          /tmp/pmd-bin-6.55.0/bin/run.sh pmd \
+            -d "${input}" \
+            -R ruleset.xml \
+            -f text \
+            -r /tmp/pmd-findings.txt
+          cat /tmp/pmd-findings.txt
+
+      - name: Run focused Java tests
+        shell: bash
+        run: |
+          chmod +x gradlew
+          ./gradlew :domain:test :paper:test \
+            --no-daemon \
+            --no-build-cache \
+            --no-configuration-cache \
+            --console=plain
+
+      - name: Commit repairs and remove temporary diagnostics
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm .github/workflows/es-p12-pmd-diagnostics.yml .github/workflows/es-p12-pmd-repair.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add paper/src/main/java/net/enthusia/staff/paper/enforcement/MuteCommandFallbackListener.java \
+            paper/src/main/java/net/enthusia/staff/paper/enforcement/PaperBanEnforcementListener.java \
+            paper/src/main/java/net/enthusia/staff/paper/enforcement/PaperPunishmentCommitEffects.java \
+            paper/src/main/java/net/enthusia/staff/paper/integration/ReputationRestrictionSynchronizer.java \
+            paper/src/main/java/net/enthusia/staff/paper/punishment/PunishmentGuiController.java \
+            paper/src/main/java/net/enthusia/staff/paper/punishment/PunishmentGuiRenderer.java \
+            paper/src/main/java/net/enthusia/staff/paper/staff/StaffModeManager.java \
+            paper/src/test/java/net/enthusia/staff/paper/command/CommandPermissionConfigurationTest.java \
+            paper/src/test/java/net/enthusia/staff/paper/command/PunishmentHierarchyWiringTest.java \
+            .github/workflows/es-p12-pmd-diagnostics.yml \
+            .github/workflows/es-p12-pmd-repair.yml
+          git commit -m "ES-P12: resolve PMD findings"
+          git push origin HEAD:package/es-p12-staff-operational-hardening
