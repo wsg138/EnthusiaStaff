@@ -4,7 +4,7 @@
 `ES-P12`; Internal; primary `COMP-STAFF`; owner-directed feature package; priority 95.
 
 ## 2. Status
-`ACTIVE` — created from the owner's September 23, 2026 request to implement the operational-hardening findings in one cohesive pull request. Implementation branch: `package/es-p12-staff-operational-hardening`.
+`VALIDATING` — implementation and focused tests are complete on `package/es-p12-staff-operational-hardening`; exact-head hosted validation, Codacy, final review, and current-main reconciliation remain.
 
 ## 3. Objective
 Harden day-to-day staff operations so rank boundaries, freeze visibility, vanish privacy, mute fallback behavior, punishment escalation context, confiscation availability, staff-presence reporting, and bare-Paper presence tracking behave safely and predictably.
@@ -45,17 +45,17 @@ One draft implementation PR targeting `main`; normal merge only after exact-head
 ## 12. Implementation checklist
 - [x] Reconcile live `main`, repository rules, package state, and open PR path ownership.
 - [x] Create the owner-directed package branch from exact live `main`.
-- [ ] Add and test explicit staff-target hierarchy policy and fresh target-rank resolution.
-- [ ] Apply hierarchy checks to freeze and punishment prepare/confirm paths.
-- [ ] Add `/staffwho` and pending-request summary.
-- [ ] Add freeze alerts and frozen-player context/reminders.
-- [ ] Add vanish-safe broadcast/ping handling.
-- [ ] Add RoseChat-absent PM mute fallback without colliding with the active mute scheduling repair.
-- [ ] Add punishment ladder progression presentation.
-- [ ] Correct staff-mode exit verification messaging so clean exits are silent.
-- [ ] Decouple item confiscation from EnthusiaCurrency while preserving operation locking guarantees.
-- [ ] Add Paper-side presence disconnect tracking for bare-Paper/offline inventory use.
-- [ ] Add focused authorization, rejection, fallback, retry/failure, conflict, and presentation tests.
+- [x] Add and test explicit staff-target hierarchy policy and fresh target-rank resolution.
+- [x] Apply hierarchy checks to freeze and punishment prepare/confirm paths.
+- [x] Add `/staffwho` and pending-request summary.
+- [x] Add freeze alerts and frozen-player context/reminders.
+- [x] Add vanish-safe broadcast/ping handling.
+- [x] Add RoseChat-absent PM mute fallback without colliding with the active mute scheduling repair.
+- [x] Add punishment ladder progression presentation.
+- [x] Correct staff-mode exit verification messaging so clean exits do not emit false mismatch warnings.
+- [x] Decouple item confiscation from EnthusiaCurrency while preserving operation locking guarantees.
+- [x] Add Paper-side presence disconnect tracking for bare-Paper/offline inventory use.
+- [x] Add focused authorization, rejection, fallback, retry/failure, conflict, and presentation tests.
 - [ ] Run exact-head hosted clean build/tests/check/runtime-JAR, migration validation, static analysis, coverage, and Codacy; resolve all valid findings.
 - [ ] Reconcile concurrent PR changes before final review and merge.
 
@@ -84,22 +84,25 @@ All new command/status information must remain usable as plain chat/text; clicka
 Hierarchy must not trust stale Bukkit presence. Presence clearing is backend-scoped and must not overwrite a newer network observation. Vanish broadcast suppression applies to the local Paper broadcast/ping surface; network-wide proxy presentation remains outside this package unless existing interfaces already support it safely.
 
 ## 21. External-provider considerations
-LuckPerms is the authoritative staff-rank source where hierarchy protection requires an offline/current target lookup. RoseChat absence activates the explicit PM fallback. EnthusiaCurrency absence disables only economy confiscation, not item confiscation.
+LuckPerms is the authoritative staff-rank source where hierarchy protection requires an offline/current target lookup. RoseChat absence activates the explicit PM fallback. EnthusiaCurrency absence disables only economy confiscation, not item confiscation. A present but incompatible EnthusiaCurrency provider fails closed rather than silently weakening cross-asset locking.
 
 ## 22. Completion definition
 All included behavior is implemented with focused tests; exact-head hosted validation and analyzers pass; zero new valid Codacy findings remain; concurrent branch ownership is reconciled; the PR is review-ready with no hidden production/cutover action.
 
 ## 23. Resume state
-Active implementation. Resume only this package/branch/PR until it reaches a protocol-valid terminal state.
+Validation in progress. Resume only this package/branch/PR until it reaches a protocol-valid terminal state.
 
 ## 24. Exact-head evidence
-Pending implementation head and hosted validation.
+- Repository-native PMD 6.55 diagnostics run `35894852700` exposed 13 concrete findings across changed Java; no broad suppressions were introduced.
+- Atomic repair run `35895206799` passed the repository PMD 6.55 rules with zero findings and passed focused `:domain:test :paper:test` before publishing repair commit `419412b4a8615063f5e180a9306c29cc238dee66`.
+- The repair commit removed both temporary PMD workflows. Its normal GitHub Actions checks were created as `action_required` with no jobs because the push was authored by `github-actions[bot]`; this package-state commit intentionally retriggers the standard exact-head checks under the normal repository actor.
+- Hosted Coverage, Sentinel artifact, Wiki validation, and Codacy results on the new exact head remain pending and supersede all earlier hosted results.
 
 ## 25. Private acceptance boundary
 No live production deployment is authorized by this package. Staging/manual evidence may supplement but does not replace exact-head repository validation.
 
 ## 26. Merge and synchronization record
-Branch base: `fd999968ed5ffbd2e47e041482dc9e936528d7a7`. Merge record pending.
+Branch base: `fd999968ed5ffbd2e47e041482dc9e936528d7a7`. Final current-main/mergeability reconciliation and merge record remain pending.
 
 ## 27. Remaining package work
-All unchecked checklist items above.
+Obtain green exact-head hosted Coverage/build/tests/runtime-JAR, Sentinel artifact, Wiki validation, and Codacy zero-new-valid-finding evidence; perform final review and current-main/mergeability reconciliation; then mark PR #246 review-ready. No merge is authorized by this record alone.
