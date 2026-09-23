@@ -20,9 +20,9 @@ import net.enthusia.staff.domain.application.PunishmentService;
 import net.enthusia.staff.domain.auth.Actor;
 import net.enthusia.staff.domain.auth.StaffRank;
 import net.enthusia.staff.domain.casefile.CaseVisibility;
-import net.enthusia.staff.paper.PlayerMessageDispatcher;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
+import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
@@ -32,7 +32,6 @@ import org.bukkit.plugin.java.JavaPlugin;
 
 public final class AutomodListener implements Listener {
     private static final String REASON_ID = "hate.full-slur-untargeted";
-    private static final String ALERT_PERMISSION = "enthusiastaff.alerts";
     private static final Duration DUPLICATE_WINDOW = Duration.ofSeconds(2);
     private static final Actor SYSTEM_ACTOR = new Actor(new UUID(0L, 0L), "Enthusia Automod", StaffRank.SYSTEM);
 
@@ -43,7 +42,6 @@ public final class AutomodListener implements Listener {
     private final Supplier<PunishmentService> punishments;
     private final ExecutorService workers;
     private final Consumer<UUID> invalidateMute;
-    private final PlayerMessageDispatcher messages;
     private final ConcurrentHashMap<UUID, Detection> recent = new ConcurrentHashMap<>();
 
     public AutomodListener(
@@ -62,7 +60,6 @@ public final class AutomodListener implements Listener {
         this.punishments = punishments;
         this.workers = workers;
         this.invalidateMute = invalidateMute;
-        this.messages = new PlayerMessageDispatcher(plugin);
     }
 
     @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
@@ -91,7 +88,7 @@ public final class AutomodListener implements Listener {
         }
         recent.entrySet().removeIf(entry -> entry.getValue().detectedAt().plus(DUPLICATE_WINDOW).isBefore(now));
         cancellation.accept(true);
-        notifyPlayer(player, "Your public message was blocked by network moderation.");
+        notify(player, "Your public message was blocked by network moderation.");
         try {
             workers.execute(() -> createCase(player.getUniqueId()));
         } catch (RejectedExecutionException exception) {
@@ -127,17 +124,14 @@ public final class AutomodListener implements Listener {
     }
 
     private void alertStaff(String message) {
-        Component notification = Component.text(message);
         plugin.getServer().getGlobalRegionScheduler().execute(plugin, () ->
-                plugin.getServer().getOnlinePlayers().forEach(player -> messages.sendIf(
-                        player,
-                        recipient -> recipient.hasPermission(ALERT_PERMISSION),
-                        notification
-                )));
+                plugin.getServer().getOnlinePlayers().stream()
+                        .filter(player -> player.hasPermission("enthusiastaff.alerts"))
+                        .forEach(player -> player.sendMessage(Component.text(message))));
     }
 
-    private void notifyPlayer(Player player, String message) {
-        messages.send(player, Component.text(message));
+    private void notify(CommandSender sender, String message) {
+        plugin.getServer().getGlobalRegionScheduler().execute(plugin, () -> sender.sendMessage(Component.text(message)));
     }
 
     private record Detection(int fingerprint, Instant detectedAt) {

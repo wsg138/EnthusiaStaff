@@ -2,7 +2,6 @@ package net.enthusia.staff.paper;
 
 import io.papermc.paper.threadedregions.scheduler.EntityScheduler;
 import java.util.Objects;
-import java.util.function.Predicate;
 import java.util.logging.Level;
 import net.kyori.adventure.text.Component;
 import org.bukkit.entity.Player;
@@ -21,22 +20,13 @@ public final class PlayerMessageDispatcher {
     }
 
     public void send(Player player, Component message) {
-        sendIf(player, ignored -> true, message);
-    }
-
-    public void sendIf(Player player, Predicate<Player> recipient, Component message) {
         Objects.requireNonNull(player, "player");
-        Objects.requireNonNull(recipient, "recipient");
         Objects.requireNonNull(message, "message");
         EntityScheduler scheduler = player.getScheduler();
         try {
             boolean scheduled = scheduler.execute(
                     plugin,
-                    () -> {
-                        if (recipient.test(player)) {
-                            player.sendMessage(message);
-                        }
-                    },
+                    () -> player.sendMessage(message),
                     () -> plugin.getLogger().fine(
                             "Player message was discarded because the player disconnected"
                     ),

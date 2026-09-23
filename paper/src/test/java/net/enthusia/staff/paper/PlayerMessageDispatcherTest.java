@@ -37,31 +37,6 @@ class PlayerMessageDispatcherTest {
     }
 
     @Test
-    void evaluatesAlertEligibilityOnTheRecipientEntityScheduler() {
-        Plugin plugin = plugin();
-        AtomicBoolean onEntityScheduler = new AtomicBoolean();
-        AtomicInteger messages = new AtomicInteger();
-        EntityScheduler scheduler = scheduler((seenPlugin, action, retired, delay) -> {
-            onEntityScheduler.set(true);
-            action.run();
-            onEntityScheduler.set(false);
-            return true;
-        });
-        Player player = player(scheduler, messages, onEntityScheduler);
-
-        new PlayerMessageDispatcher(plugin).sendIf(
-                player,
-                recipient -> {
-                    assertTrue(onEntityScheduler.get());
-                    return false;
-                },
-                Component.text("Alert")
-        );
-
-        assertEquals(0, messages.get());
-    }
-
-    @Test
     void rejectedEntitySchedulingDoesNotSendDirectly() {
         AtomicBoolean onEntityScheduler = new AtomicBoolean();
         AtomicInteger messages = new AtomicInteger();
