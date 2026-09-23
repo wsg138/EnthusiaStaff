@@ -3,27 +3,27 @@
 Current handoff: **ES-X03 — EnthusiaMarket destructive provider** — **PARTIAL / ACTIONABLE_CONTINUATION**.
 
 Canonical package handoff:
-ai-agents/reports/package-handoffs/2026-09-20-es-x03-static-remediation-active.md.
+ai-agents/reports/package-handoffs/2026-09-22-es-x03-marketcase-completion-validation.md.
 
 Market [PR #7](https://github.com/wsg138/EnthusiaMarket/pull/7) is
 OPEN/DRAFT/CLEAN on `package/es-x03-market-static-remediation` at
-`9f4a4145ab3628831edc27a534c4420faa5e23f1`; Staff
+`81b14c349be0ad404edeedbac5e109e2a375c255`; Staff
 [PR #139](https://github.com/wsg138/EnthusiaStaff/pull/139) is
-OPEN/non-draft/UNSTABLE on `package/es-x03-market-provider` at normal
-listener-routing head `47b0b13cb1fd3786fc2743ee8765cc322a6d7a0f`. Its parent
-`f69aef6f` normally merged current `main` `63e920d1`. Clean-clone
-component comparison found 512 shared files with no delta and hash
-`d266bb0039f9b7e60cf59b253b52de15e60cd42b17a0c425bbe3ad98896bbd52`.
+OPEN/non-draft/UNSTABLE on `package/es-x03-market-provider` at
+`f6732816f35e3a9634068badb56c220b5d679bd4`. Clean-clone component comparison
+found no product-file delta and hash
+`e7082c5bb1aacbcd95ac8457aa17392a740c3fe5df6154e743eebb4bc6019839`.
 
-Market hosted runs `35542232664` and `35542232684` passed. Exact Staff
-Coverage `35542245591` / job `106161876789` and Sentinel artifact
-`35542245567` / job `106161876827` passed; durable Sentinel job `476` returned
-`PAPER_RESTART_OK`. No live review thread remains.
+Market hosted runs `35601165548` and `35601165577` passed. Exact Staff Coverage
+`35733465364` / job `106764602834`, Sentinel artifact `35733465456` / job
+`106764605492`, and durable Sentinel restart job `516` (`PAPER_RESTART_OK`)
+passed. Codacy Diff Coverage and Coverage Variation passed. No live review
+thread remains.
 
-Codacy static check `106161999175` remains `ACTION_REQUIRED` with 1,126
-reported issues. Canonical Pi `35542244424` stopped before private dispatch when its
-workflow-history lookup returned HTTP 401 Bad credentials; no private Pi,
-Paper, or MariaDB runtime ran.
+Codacy static check `106765372218` remains `ACTION_REQUIRED` with 1,141
+reported issues. Canonical Pi `35733463593` / job `106764599729` stopped before
+private dispatch when its workflow-history lookup returned HTTP 401 Bad
+credentials; no private Pi, Paper, or MariaDB runtime ran.
 
 Continue only small paired fixes for validated static findings, preserving
 Market #7, Staff #139, and exact component parity. The staging owner must
