@@ -134,7 +134,10 @@ public final class MariaDbRuntime implements AutoCloseable {
         this.moderationHistoryStore = new JdbcModerationHistoryStore(dataSource, caseReviewStore);
         this.reportStore = new JdbcReportStore(dataSource, json, reportPolicy, clock);
         CompositeInventoryTesterJournalStore assetJournal = new CompositeInventoryTesterJournalStore(
-                new JdbcInventoryJournalStore(dataSource, json),
+                new PlayerRowEnsuringInventoryJournalStore(
+                        dataSource,
+                        new JdbcInventoryJournalStore(dataSource, json)
+                ),
                 new JdbcCheatTesterJournalStore(dataSource, json),
                 new JdbcFakeBaseAuditStore(dataSource, json)
         );
