@@ -1,6 +1,6 @@
 package net.enthusia.staff.paper.freeze;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.lang.reflect.Array;
@@ -21,21 +21,25 @@ class FreezeNoticeServiceTest {
     private static final UUID PLAYER_ID = UUID.fromString("91000000-0000-0000-0000-000000000001");
 
     @Test
-    void queuedNoticeIsSkippedAfterReleaseGenerationWins() {
+    void releasedThenRefrozenPlayerRejectsNoticeFromOlderGeneration() {
         FreezeManager manager = manager();
         List<Component> messages = new ArrayList<>();
         Player player = player(messages);
         FreezeRecord record = record();
 
-        manager.applyOnline(PLAYER_ID);
-        FreezeNoticeService.deliverIfRestricted(manager, record, "Moderator", player);
-        assertTrue(messages.size() > 1);
-        int beforeRelease = messages.size();
-
+        long staleGeneration = manager.applyOnline(PLAYER_ID);
         manager.releaseOnline(PLAYER_ID);
-        FreezeNoticeService.deliverIfRestricted(manager, record, "Moderator", player);
+        long currentGeneration = manager.applyOnline(PLAYER_ID);
 
-        assertEquals(beforeRelease, messages.size());
+        FreezeNoticeService.deliverIfCurrent(
+                manager, record, "OldModerator", staleGeneration, player
+        );
+        assertTrue(messages.isEmpty());
+
+        FreezeNoticeService.deliverIfCurrent(
+                manager, record, "CurrentModerator", currentGeneration, player
+        );
+        assertFalse(messages.isEmpty());
     }
 
     private static FreezeManager manager() {

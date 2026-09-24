@@ -166,10 +166,9 @@ record PaperRuntimeComponents(
     ) {
         JavaPlugin plugin = dependencies.environment().plugin();
         FreezeNoticeService notices = new FreezeNoticeService(
-                plugin, dependencies.environment().clock(), dependencies.stores().freezeStore(),
-                dependencies.stores().playerDirectory(), dependencies.environment().workers(), freeze
+                plugin, dependencies.stores().playerDirectory(), dependencies.environment().workers(), freeze
         );
-        registerListener(plugin, notices);
+        freeze.setNoticeSink(notices);
         return notices;
     }
 

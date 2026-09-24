@@ -1,6 +1,5 @@
 package net.enthusia.staff.paper.freeze;
 
-import java.time.Clock;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.RejectedExecutionException;
@@ -8,78 +7,56 @@ import java.util.function.Supplier;
 import java.util.logging.Level;
 import net.enthusia.staff.domain.freeze.FreezeRecord;
 import net.enthusia.staff.domain.player.PlayerIdentity;
-import net.enthusia.staff.domain.ports.FreezeStore;
 import net.enthusia.staff.domain.ports.PlayerDirectory;
 import org.bukkit.entity.Player;
-import org.bukkit.event.EventHandler;
-import org.bukkit.event.EventPriority;
-import org.bukkit.event.Listener;
-import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.plugin.java.JavaPlugin;
 
-public final class FreezeNoticeService implements Listener, FreezeNoticeSink {
+public final class FreezeNoticeService implements FreezeNoticeSink {
     private final JavaPlugin plugin;
-    private final Clock clock;
-    private final Supplier<FreezeStore> freezes;
     private final Supplier<PlayerDirectory> players;
     private final ExecutorService workers;
     private final FreezeManager manager;
 
     public FreezeNoticeService(
             JavaPlugin plugin,
-            Clock clock,
-            Supplier<FreezeStore> freezes,
             Supplier<PlayerDirectory> players,
             ExecutorService workers,
             FreezeManager manager
     ) {
         this.plugin = java.util.Objects.requireNonNull(plugin, "plugin");
-        this.clock = java.util.Objects.requireNonNull(clock, "clock");
-        this.freezes = java.util.Objects.requireNonNull(freezes, "freezes");
         this.players = java.util.Objects.requireNonNull(players, "players");
         this.workers = java.util.Objects.requireNonNull(workers, "workers");
         this.manager = java.util.Objects.requireNonNull(manager, "manager");
     }
 
     @Override
-    public void show(FreezeRecord record, String actorName) {
+    public void show(FreezeRecord record, String actorName, long generation) {
         if (record == null) {
             return;
         }
-        onEntity(record.playerId(), player -> deliverIfRestricted(manager, record, actorName, player));
+        String supplied = actorName == null ? "" : actorName.trim();
+        if (!supplied.isEmpty()) {
+            schedule(record, supplied, generation);
+            return;
+        }
+        submit(() -> schedule(record, actorName(record.frozenBy()), generation));
     }
 
-    static void deliverIfRestricted(
+    private void schedule(FreezeRecord record, String actorName, long generation) {
+        onEntity(record.playerId(), player -> deliverIfCurrent(manager, record, actorName, generation, player));
+    }
+
+    static void deliverIfCurrent(
             FreezeManager manager,
             FreezeRecord record,
             String actorName,
+            long generation,
             Player player
     ) {
-        if (!manager.isRestricted(record.playerId())) {
+        if (!manager.isCurrentFrozen(record.playerId(), generation)) {
             return;
         }
         FreezeNoticePresentation.render(record, actorName).forEach(player::sendMessage);
-    }
-
-    @EventHandler(priority = EventPriority.MONITOR)
-    public void onJoin(PlayerJoinEvent event) {
-        UUID playerId = event.getPlayer().getUniqueId();
-        submit(() -> showStoredNotice(playerId));
-    }
-
-    private void showStoredNotice(UUID playerId) {
-        FreezeStore store = freezes.get();
-        if (store == null) {
-            return;
-        }
-        try {
-            FreezeRecord record = store.active(playerId, clock.instant()).orElse(null);
-            if (record != null) {
-                show(record, actorName(record.frozenBy()));
-            }
-        } catch (RuntimeException exception) {
-            plugin.getLogger().log(Level.WARNING, "Freeze notice lookup failed", exception);
-        }
     }
 
     private String actorName(UUID actorId) {

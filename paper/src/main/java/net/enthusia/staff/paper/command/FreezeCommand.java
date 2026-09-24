@@ -305,8 +305,8 @@ public final class FreezeCommand implements CommandExecutor, TabCompleter {
 
     private void freeze(CommandSender sender, FreezeStore store, PlayerIdentity target, Actor actor, String reason) {
         FreezeRecord record = store.apply(target.playerId(), actor.id(), reason, clock.instant());
-        manager.applyOnline(target.playerId());
-        targetNotices.show(record, actor.displayName());
+        long generation = manager.applyOnline(target.playerId());
+        targetNotices.show(record, actor.displayName(), generation);
         alerts.frozen(target, actor, reason);
         respond(sender, "Player frozen and durable recovery state committed.");
     }

@@ -13,6 +13,7 @@ import java.util.function.Consumer;
 import java.util.function.Supplier;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import net.enthusia.staff.domain.freeze.FreezeRecord;
 import net.enthusia.staff.domain.ports.FreezeStore;
 import net.kyori.adventure.text.Component;
 import org.bukkit.Location;
@@ -71,6 +72,7 @@ public final class FreezeManager implements Listener {
     private final Logger logger;
     private final Consumer<String> staffAlertSink;
     private final FreezeRuntimeState runtimeState = new FreezeRuntimeState();
+    private volatile FreezeNoticeSink noticeSink = FreezeNoticeSink.noOp();
 
     public FreezeManager(
             JavaPlugin plugin,
@@ -120,7 +122,15 @@ public final class FreezeManager implements Listener {
         return runtimeState.isRestricted(playerId);
     }
 
-    public void applyOnline(UUID playerId) {
+    public boolean isCurrentFrozen(UUID playerId, long generation) {
+        return runtimeState.isCurrentFrozen(playerId, generation);
+    }
+
+    public void setNoticeSink(FreezeNoticeSink noticeSink) {
+        this.noticeSink = java.util.Objects.requireNonNull(noticeSink, "noticeSink");
+    }
+
+    public long applyOnline(UUID playerId) {
         long generation = runtimeState.apply(playerId);
         onEntity(playerId, player -> {
             if (!runtimeState.isCurrentFrozen(playerId, generation)) {
@@ -128,6 +138,7 @@ public final class FreezeManager implements Listener {
             }
             securePlayer(player);
         }, () -> runtimeState.retireIfCurrent(playerId, generation));
+        return generation;
     }
 
     public void releaseOnline(UUID playerId) {
@@ -181,10 +192,12 @@ public final class FreezeManager implements Listener {
                 }
                 return;
             }
-            boolean active = loaded.active(playerId, clock.instant()).isPresent();
+            FreezeRecord record = loaded.active(playerId, clock.instant()).orElse(null);
+            boolean active = record != null;
             if (!runtimeState.resolveVerification(playerId, verificationToken, active) || !active) {
                 return;
             }
+            noticeSink.show(record, null, verificationToken);
             onEntity(playerId, player -> {
                 if (!runtimeState.isCurrentFrozen(playerId, verificationToken)) {
                     return;
