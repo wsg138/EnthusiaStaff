@@ -7,7 +7,7 @@
 - Active temporary branches: `package/es-p12-staff-operational-hardening`
 - EnthusiaStaff PR: #246, open, non-draft, normal merge only
 - Standalone PRs: `NOT_APPLICABLE`
-- Latest pushed heads: executable product `b26eca2cd18bbd4148a02e9307fd81ada21a6fd3`; synchronized package/registry state `70fc26ffc730593b81ad9255f13f997d11d20b14`; this handoff commit is the normal-actor exact-head acceptance trigger.
+- Latest product head: executable product `b26eca2cd18bbd4148a02e9307fd81ada21a6fd3`. Package/registry state was synchronized at `70fc26ffc730593b81ad9255f13f997d11d20b14`; this canonical handoff and the later package-text correction are documentation-only descendants. Live GitHub's current PR head is the authoritative exact-head acceptance target.
 
 ## Completed work
 
@@ -19,7 +19,7 @@ The final freeze-notice race was tightened again so queued notices carry the exa
 
 ## Incomplete work
 
-Exact-head repository acceptance, Codacy, external review reconciliation, and final concurrent-path reconciliation remain. The PR must not merge until the normal-actor handoff head is terminal under the package's required checks and all valid review threads are dispositioned.
+Exact-head repository acceptance, Codacy, external review reconciliation, and final concurrent-path reconciliation remain. The PR must not merge until the current live normal-actor PR head is terminal under the package's required checks and all valid review findings are dispositioned.
 
 ## Tests and static analysis
 
@@ -32,7 +32,7 @@ Exact-head repository acceptance, Codacy, external review reconciliation, and fi
 
 Earlier green acceptance on executable head `91dccbe018484d055563278857b0bf6be0f8cae8` is historical only because later executable repairs changed the tree. Intermediate review-repair workflow failures remain non-passing diagnostic history: they exposed PMD test-literal cleanup, a `FreezeCommand` functional-interface constructor ambiguity, and brittle temporary harness matching before the final repair workflow passed. They are not relabeled as passes.
 
-Bot-authored executable heads can produce PR workflows marked `action_required` or otherwise not run; those are not acceptance evidence. This normal-actor handoff commit exists specifically to obtain fresh exact-head repository evidence.
+Bot-authored executable heads can produce PR workflows marked `action_required` or otherwise not run; those are not acceptance evidence. The current normal-actor package-state head exists specifically to obtain fresh exact-head repository evidence.
 
 ## Valid review findings and fixes
 
@@ -42,11 +42,11 @@ A final follow-up on the notice race found that a boolean/currently-frozen check
 
 ## Remaining review threads
 
-Product-code threads are fixed in the current tree but must be reconciled against the current exact head before resolution. The package-state synchronization thread is addressed by `ES-P12.md`, `PACKAGE-REGISTRY.md`, and this canonical handoff. Do not treat an old review submitted against `91dccbe...` as approval of the final executable tree.
+All currently visible product-code review threads are resolved against the repaired executable tree. CodeRabbit's package-state follow-up correctly identified that `ES-P12.md` still omitted PR #246 and described the already-published handoff as future work; the current documentation-only state correction fixes both details. Recheck review state against the final live PR head before merge and resolve only findings that still reproduce.
 
 ## Synchronization/parity
 
-Standalone-provider parity is `NOT_APPLICABLE`. Branch base and last reconciled live `main` are `fd999968ed5ffbd2e47e041482dc9e936528d7a7`. PR #220 also edits `VanishManager`; its transaction-owned `persistState()` repair is file-level but hunk-disjoint from ES-P12's visibility/online-count additions. Both changes must survive whichever PR merges second. No ES-P12 migration exists.
+Standalone-provider parity is `NOT_APPLICABLE`. Branch base and last reconciled live `main` are `fd999968ed5ffbd2e47e041482dc9e936528d7a7`. PR #220 also edits `VanishManager`; its transaction-owned `persistState()` repair is file-level but hunk-disjoint from ES-P12's visibility/online-count additions. PR #244's mute scheduling repair owns `PlayerMessageDispatcher` / `MuteEnforcementListener` paths that ES-P12 does not change. No ES-P12 migration exists.
 
 ## Blocker evidence
 
@@ -54,7 +54,7 @@ There is no external product blocker. Remaining blockers are validation-state bl
 
 ## Exact next action
 
-Treat this handoff commit as the normal-actor acceptance head. Wait for and inspect exact-head Coverage/build/tests/runtime-JAR, Sentinel artifact, Wiki validation, Codacy static/coverage results, Pi staging/supersession controls, and CodeRabbit/manual review. Resolve only findings that reproduce on the current head. Re-read live `main` and active overlapping PRs before merge. If executable code changes again, freeze the new product head and repeat exact-head acceptance; do not reuse stale evidence.
+Treat the current live PR head reported by GitHub as the acceptance head. Inspect exact-head Coverage/build/tests/runtime-JAR, Sentinel artifact, Wiki validation, Codacy static/coverage results, Pi staging/supersession controls, and CodeRabbit/manual review. Resolve only findings that reproduce on that head. Re-read live `main` and active overlapping PRs immediately before merge. If executable code changes again, freeze the new product head and repeat exact-head acceptance; do not reuse stale evidence.
 
 ## Systems and files not to disturb
 
