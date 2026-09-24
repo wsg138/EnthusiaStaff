@@ -1,65 +1,48 @@
 # `ES-P12` package handoff — 2026-09-24
 
 - Package ID: `ES-P12` — Staff operational hardening
-- Canonical status: `VALIDATING / ACTIONABLE_CONTINUATION`
-- Assigned worker/channel: current coding worker continuing PR #246
-- Starting SHAs by repository: EnthusiaStaff `fd999968ed5ffbd2e47e041482dc9e936528d7a7`
-- Active temporary branches: `package/es-p12-staff-operational-hardening`
-- EnthusiaStaff PR: #246, open, non-draft, normal merge only
+- Canonical status: `COMPLETE`
+- Starting Staff SHA: `fd999968ed5ffbd2e47e041482dc9e936528d7a7`
+- Frozen executable product head: `b26eca2cd18bbd4148a02e9307fd81ada21a6fd3`
+- Final accepted PR head: `e29bbab530f47473d9dbc9d7d60f57ec73dadea6`
+- Implementation PR: #246, merged normally as `753ef35496c15abe361cad51704b610af540b0f0`
+- Terminal publication PR: #247, documentation only
 - Standalone PRs: `NOT_APPLICABLE`
-- Latest product head: executable product `b26eca2cd18bbd4148a02e9307fd81ada21a6fd3`. Package/registry state was synchronized at `70fc26ffc730593b81ad9255f13f997d11d20b14`; this canonical handoff and the later package-text correction are documentation-only descendants. Live GitHub's current PR head is the authoritative exact-head acceptance target.
 
 ## Completed work
 
-The owner-requested staff operational hardening is implemented: staff hierarchy protection, `/staffwho`, freeze/unfreeze staff alerts and frozen-player context, vanish-safe broadcasts/ping presentation, RoseChat-absent PM mute fallback, punishment-ladder context, clean staff-mode exit verification, no-currency item confiscation, and bare-Paper disconnect presence tracking.
+The owner-requested staff operational hardening is complete: staff hierarchy protection, `/staffwho`, freeze/unfreeze staff alerts and frozen-player context, vanish-safe broadcasts/ping presentation, RoseChat-absent PM mute fallback, punishment-ladder context, clean staff-mode exit verification, no-currency item confiscation, and bare-Paper disconnect presence tracking.
 
-Repeated code review also repaired the scheduler/thread-ownership and correctness gaps discovered after the original implementation. The final executable tree filters `/staffwho` through the viewer/target vanish matrix, keeps ban login enforcement active in `READ_ONLY_FAILURE`, preserves requested yaw/pitch while blocking frozen-player translation, retries rejected disconnect presence work through the bounded retry path, retains the staff-mode recovery fence after failed restoration, performs freeze chat/alert player operations on entity schedulers, and wires frozen-player notices to authoritative freeze verification.
+Repeated review repaired scheduler/thread-ownership and correctness defects in `/staffwho`, vanished-player ping handling, freeze staff fanout, frozen movement orientation, read-only ban enforcement, disconnect retry behavior, staff-mode recovery fencing, and freeze notice delivery. The final notice path carries the exact freeze runtime generation, preventing release→re-freeze from reviving an older queued notice.
 
-The final freeze-notice race was tightened again so queued notices carry the exact freeze runtime generation. A release followed by a later re-freeze cannot make an old queued notice appear current merely because the player is frozen again.
+## Final validation
 
-## Incomplete work
+- Repair workflow `35936723820`: Lizard bounds PASS; repository PMD 6.55 PASS; full `:paper:test` PASS; `runtimeJars` PASS; `git diff --check` PASS.
+- Freeze-generation fence workflow `35937174002`: Lizard bounds PASS; repository PMD 6.55 PASS; full `:paper:test` PASS; `runtimeJars` PASS; `git diff --check` PASS; published executable `b26eca2cd18bbd4148a02e9307fd81ada21a6fd3`.
+- Final normal-actor accepted head `e29bbab530f47473d9dbc9d7d60f57ec73dadea6`: Coverage `35938430400` PASS, including full runtime build/tests, aggregate JaCoCo, runtime-JAR inspection, artifact upload, and Codacy coverage upload.
+- Validate Wiki `35938430413`: PASS.
+- Sentinel Restart Artifact `35938430464`: PASS.
+- Sentinel simulation: PASS, 5/5 cases.
+- Pi staging supersession: PASS.
+- Codacy static: PASS with zero annotations; seven issues reported solved.
+- Final visible review-thread count: zero unresolved.
 
-Exact-head repository acceptance, Codacy, external review reconciliation, and final concurrent-path reconciliation remain. The PR must not merge until the current live normal-actor PR head is terminal under the package's required checks and all valid review findings are dispositioned.
+Earlier failed, skipped, cancelled, superseded, or wrong-head checks remain historical non-passing evidence and were not relabeled as passes.
 
-## Tests and static analysis
+## Merge and containment
 
-- Freeze-alert ownership repair workflow `35934026437`: Lizard 1.23 bounds PASS; repository PMD 6.55 PASS with zero findings; full `:paper:test` PASS; `git diff --check` PASS; published `12397f91da774f61b4bd2f023eba8cf876afd23f`.
-- Broad review-repair workflow `35936723820`: Lizard bounds PASS; repository PMD 6.55 PASS; full `:paper:test` PASS; `runtimeJars` PASS; `git diff --check` PASS; published `34faf6763ad6669c2242716d0714260b92b9edc0`.
-- Exact freeze-generation fence workflow `35937174002`: Lizard bounds PASS; repository PMD 6.55 PASS; full `:paper:test` PASS; `runtimeJars` PASS; `git diff --check` PASS; published executable product head `b26eca2cd18bbd4148a02e9307fd81ada21a6fd3`.
-- Package/registry synchronizer `35937538358`: unique-target assertions PASS; docs-only changed-path assertion PASS; `git diff --check` PASS; published state head `70fc26ffc730593b81ad9255f13f997d11d20b14` and removed its temporary workflow.
+PR #246 merged normally as `753ef35496c15abe361cad51704b610af540b0f0`. Its parents are `fd999968ed5ffbd2e47e041482dc9e936528d7a7` and exact accepted head `e29bbab530f47473d9dbc9d7d60f57ec73dadea6`. The accepted head and merge commit both use tree `5471919009529ec675708d60d49de3cf2ec11bd5`, proving exact containment with no conflict-resolution drift.
 
-## Failed, skipped, cancelled, or superseded checks
+Immediately before merge, live `main` was still `fd999968ed5ffbd2e47e041482dc9e936528d7a7` and PR #246 remained mergeable. PR #220's `VanishManager.persistState()` change was rechecked as file-level but hunk-disjoint from ES-P12's visibility/online-count additions. PR #244 had no exact changed-file collision with ES-P12. No migration was added by ES-P12.
 
-Earlier green acceptance on executable head `91dccbe018484d055563278857b0bf6be0f8cae8` is historical only because later executable repairs changed the tree. Intermediate review-repair workflow failures remain non-passing diagnostic history: they exposed PMD test-literal cleanup, a `FreezeCommand` functional-interface constructor ambiguity, and brittle temporary harness matching before the final repair workflow passed. They are not relabeled as passes.
+## Remaining work
 
-Bot-authored executable heads can produce PR workflows marked `action_required` or otherwise not run; those are not acceptance evidence. The current normal-actor package-state head exists specifically to obtain fresh exact-head repository evidence.
-
-## Valid review findings and fixes
-
-The final CodeRabbit/manual review batch found valid issues in package-state synchronization, `/staffwho` vanished-staff visibility, read-only ban enforcement, frozen movement orientation, freeze-notice race handling, freeze staff fanout ownership, disconnect persistence on queue rejection, and staff-mode failed-exit recovery fencing. All corresponding product fixes are present in the executable tree. Additional manual review found that `FreezeNoticeService` was initially unwired and that FreezeManager chat/alert fanout still crossed Folia ownership boundaries; those were repaired and regression-tested as part of the same bounded review work.
-
-A final follow-up on the notice race found that a boolean/currently-frozen check still could not distinguish an old freeze from a later re-freeze. `b26eca2c...` carries the exact runtime generation through notice delivery and is the product head to validate.
-
-## Remaining review threads
-
-All currently visible product-code review threads are resolved against the repaired executable tree. CodeRabbit's package-state follow-up correctly identified that `ES-P12.md` still omitted PR #246 and described the already-published handoff as future work; the current documentation-only state correction fixes both details. Recheck review state against the final live PR head before merge and resolve only findings that still reproduce.
-
-## Synchronization/parity
-
-Standalone-provider parity is `NOT_APPLICABLE`. Branch base and last reconciled live `main` are `fd999968ed5ffbd2e47e041482dc9e936528d7a7`. PR #220 also edits `VanishManager`; its transaction-owned `persistState()` repair is file-level but hunk-disjoint from ES-P12's visibility/online-count additions. PR #244's mute scheduling repair owns `PlayerMessageDispatcher` / `MuteEnforcementListener` paths that ES-P12 does not change. No ES-P12 migration exists.
-
-## Blocker evidence
-
-There is no external product blocker. Remaining blockers are validation-state blockers only: terminal exact-head hosted checks, zero-new-valid-finding Codacy evidence, current-head review reconciliation, and a final live-main/open-PR ownership check.
-
-## Exact next action
-
-Treat the current live PR head reported by GitHub as the acceptance head. Inspect exact-head Coverage/build/tests/runtime-JAR, Sentinel artifact, Wiki validation, Codacy static/coverage results, Pi staging/supersession controls, and CodeRabbit/manual review. Resolve only findings that reproduce on that head. Re-read live `main` and active overlapping PRs immediately before merge. If executable code changes again, freeze the new product head and repeat exact-head acceptance; do not reuse stale evidence.
+None for ES-P12 implementation, validation, review, or merge. This terminal publication only synchronizes package-state documentation. The former implementation branch is fully contained by `main`; if branch deletion is desired, it is cleanup only and not a package blocker.
 
 ## Systems and files not to disturb
 
-Do not absorb ES-X03, Discord program packages, issue #216 repair packages, or PR #220's transaction-owned vanish persistence work. Preserve the active mute scheduling repair's listener/dispatcher ownership. Do not renumber or create migrations for ES-P12 without first reconciling the live migration ceiling.
+Do not absorb ES-X03, Discord program packages, issue #216 repair packages, PR #220's transaction-owned vanish persistence work, or PR #244's mute scheduling repair. Their owners must reconcile against the new `main` independently.
 
 ## Private/production boundary
 
-No production deployment, cutover, authority transfer, live player-data mutation, destructive production test, or private-data publication is authorized by this package. Staging/manual evidence may supplement but does not replace exact-head repository validation.
+No production deployment, cutover, authority transfer, live player-data mutation, destructive production test, or private-data publication was performed or authorized by ES-P12.
