@@ -82,4 +82,28 @@ else:
     raise SystemExit("FreezeCommand registrar construction shape changed unexpectedly")
 registrar.write_text(text)
 
+
+# The movement regression uses a real-world-shaped Location. Bukkit rejects setTo()
+# with a null world, which cannot occur for an actual online player's location.
+movement = Path("paper/src/test/java/net/enthusia/staff/paper/freeze/FreezeMovementAndCommandTest.java")
+text = movement.read_text()
+location_import = "import org.bukkit.Location;\n"
+if text.count(location_import) != 1:
+    raise SystemExit("movement test Location import shape changed unexpectedly")
+text = text.replace(location_import, location_import + "import org.bukkit.World;\n")
+null_locations = text.count("new Location(null,")
+if null_locations < 2:
+    raise SystemExit(f"expected at least two null-world locations, found {null_locations}")
+text = text.replace("new Location(null,", "new Location(world(),")
+player_marker = "    private static Player player(List<Component> messages) {\n"
+if text.count(player_marker) != 1:
+    raise SystemExit("movement test player helper shape changed unexpectedly")
+world_helper = '''    private static World world() {
+        return proxy(World.class);
+    }
+
+'''
+text = text.replace(player_marker, world_helper + player_marker)
+movement.write_text(text)
+
 # Retry trigger only; this file is removed by the validated publish step.
