@@ -5,6 +5,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.function.Supplier;
 import java.util.logging.Level;
+import net.enthusia.staff.domain.application.AccountLinkCodeException;
 import net.enthusia.staff.domain.application.DiscordSrvMigrationService.MirrorResult;
 import net.enthusia.staff.paper.account.PaperAccountLinkRuntime;
 import net.kyori.adventure.text.Component;
@@ -73,8 +74,12 @@ public final class AccountLinkCommand implements CommandExecutor {
 
     private void complete(Player player, UUID playerId, String code) {
         PaperAccountLinkRuntime current = requireRuntime();
-        var result = current.completeFromMinecraft(code, playerId);
-        send(player, "Discord account linked." + mirrorSuffix(result.mirrorResult()));
+        try {
+            var result = current.completeFromMinecraft(code, playerId);
+            send(player, "Discord account linked." + mirrorSuffix(result.mirrorResult()));
+        } catch (AccountLinkCodeException exception) {
+            send(player, linkCodeFailureMessage(exception.reason()));
+        }
     }
 
     private void unlink(Player player, UUID playerId) {
@@ -91,6 +96,15 @@ public final class AccountLinkCommand implements CommandExecutor {
             throw new IllegalStateException("Account-link storage is not ready");
         }
         return current;
+    }
+
+    static String linkCodeFailureMessage(AccountLinkCodeException.Reason reason) {
+        return switch (reason) {
+            case INVALID -> "That link code is invalid.";
+            case EXPIRED -> "That link code has expired. Request a new link code and try again.";
+            case REPLACED -> "That link code was replaced by a newer code. Use the newest link code.";
+            case ALREADY_USED -> "That link code was already used. Request a new link code if you still need to link.";
+        };
     }
 
     private static String mirrorSuffix(MirrorResult result) {
