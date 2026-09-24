@@ -1,6 +1,7 @@
 package net.enthusia.staff.paper.staff;
 
 import java.time.Clock;
+import java.time.Instant;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -16,6 +17,7 @@ import net.enthusia.staff.domain.staff.StaffSessionSnapshot;
 import net.enthusia.staff.domain.staff.StaffSessionState;
 import net.enthusia.staff.paper.auth.PaperStaffRankResolver;
 import net.kyori.adventure.text.Component;
+import org.bukkit.GameMode;
 import org.bukkit.NamespacedKey;
 import org.bukkit.attribute.Attribute;
 import org.bukkit.entity.Player;
@@ -42,8 +44,11 @@ import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.plugin.java.JavaPlugin;
 
 public final class StaffModeManager implements Listener {
+    private static final String RANK_REMOVED_MESSAGE =
+            "Your explicit staff rank is no longer assigned; restoring your saved state.";
     private final JavaPlugin plugin;
     private final Clock clock;
+    private final Instant runtimeStartedAt;
     private final String serverId;
     private final Supplier<StaffSessionStore> store;
     private final ExecutorService workers;
@@ -73,6 +78,7 @@ public final class StaffModeManager implements Listener {
     ) {
         this.plugin = plugin;
         this.clock = clock;
+        this.runtimeStartedAt = clock.instant();
         this.serverId = serverId;
         this.store = store;
         this.workers = workers;
@@ -232,6 +238,10 @@ public final class StaffModeManager implements Listener {
                     message(playerId, "Your staff session requires recovery on backend " + session.serverId() + '.');
                     return;
                 }
+                if (staleFromPriorRuntime(session)) {
+                    recoverPriorRuntimeSession(playerId, session, loaded);
+                    return;
+                }
                 if (session.state() == StaffSessionState.EXITING
                         || session.state() == StaffSessionState.RECOVERY_REQUIRED) {
                     StaffSessionSnapshot restoring = session.state() == StaffSessionState.RECOVERY_REQUIRED
@@ -245,7 +255,7 @@ public final class StaffModeManager implements Listener {
                         == StaffModeRankReconciliationPolicy.Action.EXIT_SESSION) {
                     StaffSessionSnapshot exiting = loaded.beginExit(playerId, clock.instant()).orElseThrow(() ->
                             new IllegalStateException("active staff session disappeared during rank-removal exit"));
-                    message(playerId, "Your explicit staff rank is no longer assigned; restoring your saved state.");
+                    message(playerId, RANK_REMOVED_MESSAGE);
                     restoreAndVerify(playerId, exiting, loaded);
                     return;
                 }
@@ -261,6 +271,23 @@ public final class StaffModeManager implements Listener {
         }
     }
 
+    private boolean staleFromPriorRuntime(StaffSessionSnapshot session) {
+        return session.state() == StaffSessionState.ACTIVE && session.startedAt().isBefore(runtimeStartedAt);
+    }
+
+    private void recoverPriorRuntimeSession(
+            UUID playerId,
+            StaffSessionSnapshot session,
+            StaffSessionStore loaded
+    ) {
+        Instant now = clock.instant();
+        loaded.recoveryRequired(session.sessionId(), "Server process restarted before staff-mode exit", now);
+        StaffSessionSnapshot restoring = loaded.beginExit(playerId, now).orElseThrow(() ->
+                new IllegalStateException("stale active staff session disappeared during crash recovery"));
+        message(playerId, "A previous staff-mode session did not exit cleanly; restoring your saved state.");
+        restoreAndVerify(playerId, restoring, loaded);
+    }
+
     private void finishActiveRecovery(
             UUID playerId,
             StaffSessionSnapshot session,
@@ -271,7 +298,7 @@ public final class StaffModeManager implements Listener {
         if (StaffModeRankReconciliationPolicy.decide(null, currentRank)
                 == StaffModeRankReconciliationPolicy.Action.EXIT_SESSION) {
             player.sendMessage(Component.text(
-                    "Your explicit staff rank is no longer assigned; restoring your saved state."
+                    RANK_REMOVED_MESSAGE
             ));
             if (!submit(() -> {
                 try {
@@ -521,7 +548,7 @@ public final class StaffModeManager implements Listener {
             return;
         }
         if (action == StaffModeRankReconciliationPolicy.Action.EXIT_SESSION) {
-            message(playerId, "Your explicit staff rank is no longer assigned; restoring your saved state.");
+            message(playerId, RANK_REMOVED_MESSAGE);
             beginDurableExit(playerId, "Staff rank removal");
             return;
         }
@@ -543,7 +570,7 @@ public final class StaffModeManager implements Listener {
             return;
         }
         if (action == StaffModeRankReconciliationPolicy.Action.EXIT_SESSION) {
-            message(playerId, "Your explicit staff rank is no longer assigned; restoring your saved state.");
+            message(playerId, RANK_REMOVED_MESSAGE);
             beginDurableExit(playerId, "Staff rank removal");
             return;
         }
@@ -591,8 +618,7 @@ public final class StaffModeManager implements Listener {
     private void restoreAndVerify(UUID playerId, StaffSessionSnapshot session, StaffSessionStore loaded) {
         onEntity(playerId, player -> {
             try {
-                removeStaffTools(player);
-                if (!codec.restore(player, session.snapshot())) {
+                if (!restoreSavedState(player, session)) {
                     submit(() -> loaded.recoveryRequired(
                             session.sessionId(), "Original location could not be restored", clock.instant()
                     ));
@@ -601,8 +627,9 @@ public final class StaffModeManager implements Listener {
                 }
                 StaffStateCodec.Captured restored = codec.capture(player, session.serverId());
                 if (!submit(() -> completeRestoration(playerId, session, loaded, restored))) {
+                    retainRecoveryAfterRuntimeExit(playerId);
                     player.sendMessage(Component.text(
-                            "State was restored, but durable verification is still pending; remain disconnected or contact staff."
+                            "State was restored, but durable verification is still pending; contact an administrator."
                     ));
                 }
             } catch (RuntimeException exception) {
@@ -615,6 +642,20 @@ public final class StaffModeManager implements Listener {
         });
     }
 
+    private boolean restoreSavedState(Player player, StaffSessionSnapshot session) {
+        UUID playerId = player.getUniqueId();
+        profileApplications.add(playerId);
+        try {
+            removeStaffTools(player);
+            if (player.getGameMode() == GameMode.SPECTATOR) {
+                player.setSpectatorTarget(null);
+            }
+            return codec.restore(player, session.snapshot());
+        } finally {
+            profileApplications.remove(playerId);
+        }
+    }
+
     private void completeRestoration(
             UUID playerId,
             StaffSessionSnapshot session,
@@ -625,24 +666,39 @@ public final class StaffModeManager implements Listener {
         try {
             closed = loaded.completeExit(session.sessionId(), restored.checksum(), clock.instant());
         } catch (RuntimeException exception) {
+            retainRecoveryAfterRuntimeExit(playerId);
             plugin.getLogger().log(Level.SEVERE, "Staff session closure verification failed", exception);
             safeMessage(playerId, "State was restored, but durable closure verification failed; contact an administrator.");
             return;
         }
         if (!closed) {
+            retainRecoveryAfterRuntimeExit(playerId);
             safeMessage(playerId, "State was restored, but checksum verification requires administrator review.");
             return;
         }
-        active.remove(playerId);
-        ranks.remove(playerId);
-        toolSessions.remove(playerId);
+        completeRuntimeExit(playerId);
+        safeMessage(playerId, "Staff mode exited; your exact saved state was restored and verified.");
+    }
+
+    private void retainRecoveryAfterRuntimeExit(UUID playerId) {
+        recoveryGate.retry(playerId);
+        removeRuntimeState(playerId);
+    }
+
+    private void completeRuntimeExit(UUID playerId) {
+        removeRuntimeState(playerId);
         recoveryGate.clear(playerId);
         try {
             exitListener.accept(playerId);
         } catch (RuntimeException exception) {
             plugin.getLogger().log(Level.WARNING, "Post-exit staff-mode cleanup callback failed", exception);
         }
-        safeMessage(playerId, "Staff mode exited; your exact saved state was restored and verified.");
+    }
+
+    private void removeRuntimeState(UUID playerId) {
+        active.remove(playerId);
+        ranks.remove(playerId);
+        toolSessions.remove(playerId);
     }
 
     private void applyStaffState(Player player, StaffRank rank) {

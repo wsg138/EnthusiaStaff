@@ -74,6 +74,7 @@ Exact-sanction commands never accept an ambiguous multi-sanction case. Database 
 | `/fakebase` | `/fakebase <create\|extend\|clear\|teleport\|status> [player]` | Manage bounded virtual fake-base probes | `enthusiastaff.cheattester.fake-base` |
 | `/vanish` | `/vanish` or `/vanish tab <show\|hide>` | Toggle vanish or spectator tab presentation | `enthusiastaff.vanish` |
 | `/staffchat` | `/staffchat` | Toggle the configured RoseChat staff channel | `enthusiastaff.staffchat` |
+| `/staffwho` | `/staffwho` | Show online staff rank, staff-mode/vanish state, and pending punishment-request count | `enthusiastaff.staffwho` |
 | `/invsee` | `/invsee <player\|uuid>` | View/edit inventory as authorized | `enthusiastaff.inventory.view` |
 | `/endersee` | `/endersee <player\|uuid>` | View/edit Ender chest as authorized | `enthusiastaff.inventory.view` |
 | `/inspect` | `/inspect <player>` | Player inspector with active reports, freeze status and authorized shortcuts to investigation tools | `enthusiastaff.inspect`; report details and each shortcut also require their normal command permissions |
@@ -162,6 +163,7 @@ enthusiastaff.stafftools.random-exempt
 enthusiastaff.stafftools.spectate-exempt
 enthusiastaff.vanish
 enthusiastaff.staffchat
+enthusiastaff.staffwho
 enthusiastaff.client
 enthusiastaff.inventory.view
 enthusiastaff.inventory.edit
@@ -218,7 +220,7 @@ enthusiastaff.rank.founder
 
 Includes basic status/verification, punishment/read access, configured punishment
 workflow, reports, alerts, freeze, staff mode, staff-tool teleport/spectate/menu,
-vanish, staff chat, inventory view and inspection. Central policy still limits
+vanish, staff chat, staff presence status, inventory view and inspection. Central policy still limits
 direct punishment outcomes and inventory mutation.
 
 ### Mod

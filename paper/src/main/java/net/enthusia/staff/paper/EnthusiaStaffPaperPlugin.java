@@ -804,6 +804,7 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
                 lifecycle::storage,
                 new PaperCommandRegistrar.PlayerComponents(
                         runtimeComponents.freeze(),
+                        runtimeComponents.freezeNotices(),
                         runtimeComponents.staffMode(),
                         runtimeComponents.vanish(),
                         runtimeComponents.inventory()

@@ -25,7 +25,11 @@ import net.enthusia.staff.paper.economy.CurrencyGateway;
 import net.enthusia.staff.paper.economy.EconomyCoordinator;
 import net.enthusia.staff.paper.economy.EconomyCoordinatorRuntime;
 import net.enthusia.staff.paper.economy.EnthusiaCurrencyGateway;
+import net.enthusia.staff.paper.economy.InventoryOnlyCurrencyGateway;
+import net.enthusia.staff.paper.enforcement.MuteCommandFallbackListener;
 import net.enthusia.staff.paper.enforcement.MuteEnforcementListener;
+import net.enthusia.staff.paper.enforcement.PaperBanEnforcementListener;
+import net.enthusia.staff.paper.enforcement.PaperPunishmentCommitEffects;
 import net.enthusia.staff.paper.freeze.FreezeManager;
 import net.enthusia.staff.paper.integration.MarketIntegration;
 import net.enthusia.staff.paper.integration.ReputationIntegration;
@@ -58,6 +62,7 @@ final class PaperIntegrationManager {
     private MarketIntegration market;
     private ReputationIntegration reputation;
     private ReputationRestrictionSynchronizer reputationRestrictions;
+    private PaperPunishmentCommitEffects punishmentEffects;
     private DiscordStaffAuthorityEndpoint discordStaffAuthority;
 
     PaperIntegrationManager(Dependencies dependencies) {
@@ -67,25 +72,43 @@ final class PaperIntegrationManager {
 
     void initializeEconomy() {
         if (!plugin().getServer().getPluginManager().isPluginEnabled("EnthusiaCurrency")) {
-            issue(CURRENCY, "EnthusiaCurrency is absent; economy confiscation is unavailable");
+            issue(CURRENCY, "EnthusiaCurrency is absent; economy confiscation is unavailable; item confiscation remains available");
+            installConfiscation(new InventoryOnlyCurrencyGateway());
             return;
         }
         EnthusiaCurrencyGateway.Discovery discovery =
                 EnthusiaCurrencyGateway.discover(plugin().getServer().getServicesManager());
         if (discovery.gateway().isEmpty()) {
-            issue(CURRENCY, discovery.issue());
+            issue(CURRENCY, discovery.issue() + "; confiscation is disabled fail-safe while the provider is present but unavailable");
             return;
         }
+        CurrencyGateway gateway = discovery.gateway().orElseThrow();
+        installConfiscation(gateway);
         try {
-            installEconomy(discovery.gateway().orElseThrow(), configuredRemovalOrder());
+            installEconomy(gateway, configuredRemovalOrder());
             clearIssue(CURRENCY);
         } catch (IllegalArgumentException exception) {
-            issue(CURRENCY, "Economy removal order is invalid; economy confiscation is unavailable");
+            issue(CURRENCY, "Economy removal order is invalid; economy confiscation is unavailable; item confiscation remains available");
             plugin().getLogger().log(Level.SEVERE, "Economy integration configuration failed", exception);
         }
     }
 
     void initializeModerationProviders() {
+        plugin().getServer().getPluginManager().registerEvents(
+                new PaperBanEnforcementListener(
+                        plugin(),
+                        clock(),
+                        dependencies.policy().authoritativeMode(),
+                        dependencies.stores().punishmentService()
+                ),
+                plugin()
+        );
+        punishmentEffects = new PaperPunishmentCommitEffects(
+                plugin(),
+                dependencies.stores().punishmentService(),
+                dependencies.evidence().muteEnforcement()
+        );
+        punishmentEffects.start();
         market = MarketIntegration.discover(
                 plugin().getServer().getServicesManager(),
                 plugin().getServer().getPluginManager().isPluginEnabled("EnthusiaMarket")
@@ -134,7 +157,11 @@ final class PaperIntegrationManager {
 
     void initializeRoseChat() {
         if (!plugin().getServer().getPluginManager().isPluginEnabled("RoseChat")) {
-            issue(ROSECHAT, "RoseChat is absent; staff channel and chat bridge are unavailable");
+            plugin().getServer().getPluginManager().registerEvents(
+                    new MuteCommandFallbackListener(dependencies.evidence().muteEnforcement()),
+                    plugin()
+            );
+            issue(ROSECHAT, "RoseChat is absent; staff channel/chat bridge are unavailable; private-message mute fallback is active");
             return;
         }
         try {
@@ -185,6 +212,7 @@ final class PaperIntegrationManager {
     }
 
     void closeModerationProviders() {
+        resources.close("punishment commit effects", punishmentEffects);
         resources.close("Discord staff authority endpoint", discordStaffAuthority);
         resources.close("reputation restriction synchronizer", reputationRestrictions);
     }
@@ -206,16 +234,20 @@ final class PaperIntegrationManager {
                         workers()
                 ),
                 gateway,
-                removalOrder, dependencies.environment().json()
+                removalOrder,
+                dependencies.environment().json()
         );
+        plugin().getServer().getPluginManager().registerEvents(discoveredEconomy, plugin());
+        economy = discoveredEconomy;
+    }
+
+    private void installConfiscation(CurrencyGateway movementGateway) {
         ConfiscationCoordinator discoveredConfiscation = new ConfiscationCoordinator(
                 plugin(), dependencies.players().inventoryContext(), dependencies.policy().writeMode(),
                 dependencies.policy().authorization(), dependencies.stores().inventoryJournal(), workers(),
-                dependencies.players().inventory(), gateway
+                dependencies.players().inventory(), movementGateway
         );
-        plugin().getServer().getPluginManager().registerEvents(discoveredEconomy, plugin());
         plugin().getServer().getPluginManager().registerEvents(discoveredConfiscation, plugin());
-        economy = discoveredEconomy;
         confiscation = discoveredConfiscation;
     }
 
