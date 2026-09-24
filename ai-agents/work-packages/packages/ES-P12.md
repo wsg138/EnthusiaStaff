@@ -4,7 +4,7 @@
 `ES-P12`; Internal; primary `COMP-STAFF`; owner-directed feature package; priority 95.
 
 ## 2. Status
-`VALIDATING` — implementation and final code-level review repairs are complete through executable head `b26eca2cd18bbd4148a02e9307fd81ada21a6fd3` on `package/es-p12-staff-operational-hardening`; PR #246 is open/non-draft and normal-actor exact-head hosted validation, Codacy, external review, and final concurrent-path reconciliation remain.
+`COMPLETE` — PR #246 merged normally as `753ef35496c15abe361cad51704b610af540b0f0` from exact accepted head `e29bbab530f47473d9dbc9d7d60f57ec73dadea6`. Executable product head `b26eca2cd18bbd4148a02e9307fd81ada21a6fd3` is contained unchanged; terminal documentation publication is the only remaining bookkeeping step.
 
 ## 3. Objective
 Harden day-to-day staff operations so rank boundaries, freeze visibility, vanish privacy, mute fallback behavior, punishment escalation context, confiscation availability, staff-presence reporting, and bare-Paper presence tracking behave safely and predictably.
@@ -40,7 +40,7 @@ Current merged Staff runtime and migrations through the live `main` ceiling. Act
 `package/es-p12-staff-operational-hardening`, created from exact `main` `fd999968ed5ffbd2e47e041482dc9e936528d7a7`.
 
 ## 11. Required PR
-PR #246 targeting `main`, currently open/non-draft; normal merge only after exact-head evidence and review. No squash, rebase, force-push, auto-merge, or direct `main` push.
+PR #246 merged normally into `main` as `753ef35496c15abe361cad51704b610af540b0f0` from accepted head `e29bbab530f47473d9dbc9d7d60f57ec73dadea6`. No squash, rebase, force-push, auto-merge, or direct `main` push was used.
 
 ## 12. Implementation checklist
 - [x] Reconcile live `main`, repository rules, package state, and open PR path ownership.
@@ -57,8 +57,8 @@ PR #246 targeting `main`, currently open/non-draft; normal merge only after exac
 - [x] Add Paper-side presence disconnect tracking for bare-Paper/offline inventory use.
 - [x] Add focused authorization, rejection, fallback, retry/failure, conflict, and presentation tests.
 - [x] Perform final code-level review and repair scheduler/thread-ownership defects found in `/staffwho`, server-list vanish filtering, and freeze-alert fanout.
-- [ ] Run exact-head hosted clean build/tests/check/runtime-JAR, migration validation, static analysis, coverage, and Codacy after the latest executable repair; resolve all valid findings.
-- [ ] Reconcile concurrent PR changes and external review before final merge transition.
+- [x] Run exact-head hosted clean build/tests/check/runtime-JAR, migration validation, static analysis, coverage, and Codacy after the latest executable repair; resolve all valid findings.
+- [x] Reconcile concurrent PR changes and external review before final merge transition.
 
 ## 13. Acceptance criteria
 A lower/equal-rank staff member cannot freeze or punish protected staff; staff can accurately inspect live staff state; vanish does not leak through the covered broadcasts/ping surface; mute fallback blocks PM aliases without RoseChat; punishment review shows escalation context; freezes explain their state; normal staff-mode exit is not noisy; item confiscation does not require the currency plugin; standalone Paper disconnects clear authoritative presence; existing fail-closed safety remains intact.
@@ -91,7 +91,7 @@ LuckPerms is the authoritative staff-rank source where hierarchy protection requ
 All included behavior is implemented with focused tests; exact-head hosted validation and analyzers pass; zero new valid Codacy findings remain; concurrent branch ownership is reconciled; the PR is review-ready with no hidden production/cutover action.
 
 ## 23. Resume state
-Validation in progress. Resume only this package/branch/PR until it reaches a protocol-valid terminal state. Canonical current handoff: `ai-agents/reports/package-handoffs/2026-09-24-es-p12-staff-operational-hardening.md`.
+Terminal package state. Product implementation and acceptance are complete; do not resume ES-P12 implementation work. Canonical terminal handoff: `ai-agents/reports/package-handoffs/2026-09-24-es-p12-staff-operational-hardening.md`.
 
 ## 24. Exact-head evidence
 - Repository-native PMD 6.55 diagnostics run `35894852700` exposed 13 concrete findings across changed Java; no broad suppressions were introduced.
@@ -108,11 +108,14 @@ Validation in progress. Resume only this package/branch/PR until it reaches a pr
 - Live `main` remains `fd999968ed5ffbd2e47e041482dc9e936528d7a7`, matching the package base, so no mainline reconciliation is currently required.
 - Final executable product head `b26eca2cd18bbd4148a02e9307fd81ada21a6fd3` was authored by `github-actions[bot]` after gated validation. PR-triggered workflows on that bot-authored head are not counted as acceptance evidence when GitHub marks them `action_required`/non-running. The following normal-actor state/handoff commit intentionally retriggers Coverage, Sentinel artifact, Wiki validation, Codacy, review, and non-draft staging/supersession controls; only terminal exact-head results count.
 
+- Final normal-actor acceptance head `e29bbab530f47473d9dbc9d7d60f57ec73dadea6` passed Coverage `35938430400`, Validate Wiki `35938430413`, Sentinel Restart Artifact `35938430464`, Sentinel simulation 5/5, Pi staging supersession, and Codacy static with zero annotations; all visible review threads were resolved.
+- PR #246 merged normally as `753ef35496c15abe361cad51704b610af540b0f0`. The merge parents are `fd999968ed5ffbd2e47e041482dc9e936528d7a7` and `e29bbab530f47473d9dbc9d7d60f57ec73dadea6`, and both the accepted head and merge commit have tree `5471919009529ec675708d60d49de3cf2ec11bd5`, proving exact containment with no conflict-resolution drift.
+
 ## 25. Private acceptance boundary
 No live production deployment is authorized by this package. Staging/manual evidence may supplement but does not replace exact-head repository validation.
 
 ## 26. Merge and synchronization record
-Branch base and current live `main`: `fd999968ed5ffbd2e47e041482dc9e936528d7a7`. Active PR #220 has a file-level but hunk-disjoint overlap in `VanishManager`; its transaction-owned `persistState()` repair and this package's scheduler-safe online-count accessor must both survive final reconciliation. Final mergeability/review reconciliation and merge record remain pending.
+PR #246 merged normally as `753ef35496c15abe361cad51704b610af540b0f0` from accepted head `e29bbab530f47473d9dbc9d7d60f57ec73dadea6` after live `main` was re-read at `fd999968ed5ffbd2e47e041482dc9e936528d7a7`. The merge commit's second parent is the accepted head and both trees are `5471919009529ec675708d60d49de3cf2ec11bd5`. PR #220's `VanishManager.persistState()` work was rechecked as hunk-disjoint from ES-P12's visibility/online-count additions; PR #244 had no exact changed-file collision. No ES-P12 migration exists.
 
 ## 27. Remaining package work
-The canonical handoff `ai-agents/reports/package-handoffs/2026-09-24-es-p12-staff-operational-hardening.md` is published. Obtain green exact-head hosted Coverage/build/tests/runtime-JAR, Sentinel artifact, Wiki validation, Codacy zero-new-valid-finding evidence, and terminal external review on the current normal-actor head; re-read live main and active overlapping PRs; perform final mergeability/review reconciliation. No merge is authorized by this record alone.
+No implementation, validation, review, merge, or synchronization work remains. This terminal publication records completion only.
