@@ -157,6 +157,10 @@ public final class VanishManager implements Listener {
         return visibility.isVanished(playerId);
     }
 
+    public boolean canSee(UUID viewerId, UUID targetId) {
+        return visibility.canSee(viewerId, targetId);
+    }
+
     int vanishedOnlineCount() {
         return (int) audiences.playerIds().stream()
                 .filter(this::isVanished)

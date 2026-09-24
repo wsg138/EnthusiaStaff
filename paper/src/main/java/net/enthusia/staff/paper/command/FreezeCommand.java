@@ -12,6 +12,7 @@ import java.util.function.Supplier;
 import java.util.logging.Level;
 import net.enthusia.staff.domain.OperationalMode;
 import net.enthusia.staff.domain.auth.Actor;
+import net.enthusia.staff.domain.freeze.FreezeRecord;
 import net.enthusia.staff.domain.player.PlayerIdentity;
 import net.enthusia.staff.domain.ports.FreezeStore;
 import net.enthusia.staff.domain.ports.PlayerDirectory;
@@ -20,6 +21,7 @@ import net.enthusia.staff.paper.auth.PaperActorResolver;
 import net.enthusia.staff.paper.auth.StaffTargetGuard;
 import net.enthusia.staff.paper.freeze.FreezeAlertSink;
 import net.enthusia.staff.paper.freeze.FreezeManager;
+import net.enthusia.staff.paper.freeze.FreezeNoticeSink;
 import net.enthusia.staff.paper.freeze.FreezeStaffNotifier;
 import net.kyori.adventure.text.Component;
 import org.bukkit.command.Command;
@@ -45,6 +47,7 @@ public final class FreezeCommand implements CommandExecutor, TabCompleter {
     private final ExecutorService workers;
     private final StaffTargetGuard targetGuard;
     private final FreezeAlertSink alerts;
+    private final FreezeNoticeSink targetNotices;
     private final BiConsumer<CommandSender, List<Component>> responses;
     private final FreezeQueryHandler queries;
 
@@ -62,6 +65,28 @@ public final class FreezeCommand implements CommandExecutor, TabCompleter {
                 new RuntimeHooks(
                         LuckPermsStaffTargetGuard.discover(plugin),
                         new FreezeStaffNotifier(plugin),
+                        FreezeNoticeSink.noOp(),
+                        commandResponses(plugin)
+                )
+        );
+    }
+
+    public static FreezeCommand createRuntime(
+            JavaPlugin plugin,
+            Clock clock,
+            Supplier<OperationalMode> mode,
+            Supplier<PlayerDirectory> players,
+            Supplier<FreezeStore> freezes,
+            FreezeManager manager,
+            ExecutorService workers,
+            FreezeNoticeSink targetNotices
+    ) {
+        return new FreezeCommand(
+                plugin, clock, mode, players, freezes, manager, workers,
+                new RuntimeHooks(
+                        LuckPermsStaffTargetGuard.discover(plugin),
+                        new FreezeStaffNotifier(plugin),
+                        targetNotices,
                         commandResponses(plugin)
                 )
         );
@@ -82,6 +107,7 @@ public final class FreezeCommand implements CommandExecutor, TabCompleter {
                 new RuntimeHooks(
                         (actor, targetId, systemActor) -> StaffTargetGuard.Result.allow(),
                         FreezeAlertSink.noOp(),
+                        FreezeNoticeSink.noOp(),
                         responses
                 )
         );
@@ -106,6 +132,7 @@ public final class FreezeCommand implements CommandExecutor, TabCompleter {
         this.workers = workers;
         this.targetGuard = hooks.targetGuard();
         this.alerts = hooks.alerts();
+        this.targetNotices = hooks.targetNotices();
         this.responses = hooks.responses();
         this.queries = new FreezeQueryHandler(clock, players, freezes, this::respond);
     }
@@ -277,8 +304,9 @@ public final class FreezeCommand implements CommandExecutor, TabCompleter {
     }
 
     private void freeze(CommandSender sender, FreezeStore store, PlayerIdentity target, Actor actor, String reason) {
-        store.apply(target.playerId(), actor.id(), reason, clock.instant());
+        FreezeRecord record = store.apply(target.playerId(), actor.id(), reason, clock.instant());
         manager.applyOnline(target.playerId());
+        targetNotices.show(record, actor.displayName());
         alerts.frozen(target, actor, reason);
         respond(sender, "Player frozen and durable recovery state committed.");
     }
@@ -356,11 +384,13 @@ public final class FreezeCommand implements CommandExecutor, TabCompleter {
     record RuntimeHooks(
             StaffTargetGuard targetGuard,
             FreezeAlertSink alerts,
+            FreezeNoticeSink targetNotices,
             BiConsumer<CommandSender, List<Component>> responses
     ) {
         RuntimeHooks {
             java.util.Objects.requireNonNull(targetGuard, "targetGuard");
             java.util.Objects.requireNonNull(alerts, "alerts");
+            java.util.Objects.requireNonNull(targetNotices, "targetNotices");
             java.util.Objects.requireNonNull(responses, "responses");
         }
     }

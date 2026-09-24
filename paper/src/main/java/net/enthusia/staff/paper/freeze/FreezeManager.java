@@ -4,6 +4,8 @@ import io.papermc.paper.event.player.AsyncChatEvent;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.RejectedExecutionException;
@@ -49,6 +51,7 @@ import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.event.player.PlayerShearEntityEvent;
 import org.bukkit.event.player.PlayerSwapHandItemsEvent;
 import org.bukkit.event.player.PlayerTeleportEvent;
+import org.bukkit.plugin.Plugin;
 import org.bukkit.plugin.java.JavaPlugin;
 
 public final class FreezeManager implements Listener {
@@ -226,7 +229,10 @@ public final class FreezeManager implements Listener {
         if (to == null || (from.getX() == to.getX() && from.getY() == to.getY() && from.getZ() == to.getZ())) {
             return;
         }
-        event.setCancelled(true);
+        Location stationary = from.clone();
+        stationary.setYaw(to.getYaw());
+        stationary.setPitch(to.getPitch());
+        event.setTo(stationary);
     }
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
@@ -415,15 +421,16 @@ public final class FreezeManager implements Listener {
         UUID playerId = player.getUniqueId();
         String playerName = player.getName();
         Component rendered = Component.text("<" + playerName + "> ").append(body);
+        Component staffMessage = Component.text("[Frozen Chat] ").append(rendered);
         scheduleGlobal(() -> {
-            Player current = plugin.getServer().getPlayer(playerId);
-            if (current != null) {
-                current.sendMessage(rendered);
-            }
-            plugin.getServer().getOnlinePlayers().stream()
-                    .filter(staff -> !staff.getUniqueId().equals(playerId))
-                    .filter(staff -> staff.hasPermission("enthusiastaff.freeze.chat"))
-                    .forEach(staff -> staff.sendMessage(Component.text("[Frozen Chat] ").append(rendered)));
+            List<Player> online = new ArrayList<>(plugin.getServer().getOnlinePlayers());
+            online.forEach(recipient -> scheduleRecipient(plugin, recipient, () -> {
+                if (recipient.getUniqueId().equals(playerId)) {
+                    recipient.sendMessage(rendered);
+                } else if (recipient.hasPermission("enthusiastaff.freeze.chat")) {
+                    recipient.sendMessage(staffMessage);
+                }
+            }));
         });
     }
 
@@ -470,9 +477,21 @@ public final class FreezeManager implements Listener {
             staffAlertSink.accept(message);
             return;
         }
-        plugin.getServer().getOnlinePlayers().stream()
-                .filter(player -> player.hasPermission("enthusiastaff.freeze"))
-                .forEach(player -> player.sendMessage(Component.text(message)));
+        Component alert = Component.text(message);
+        List<Player> online = new ArrayList<>(plugin.getServer().getOnlinePlayers());
+        online.forEach(player -> scheduleRecipient(plugin, player, () -> {
+            if (player.hasPermission("enthusiastaff.freeze")) {
+                player.sendMessage(alert);
+            }
+        }));
+    }
+
+    static boolean scheduleRecipient(Plugin plugin, Player player, Runnable operation) {
+        try {
+            return player.getScheduler().execute(plugin, operation, null, 1L);
+        } catch (RuntimeException exception) {
+            return false;
+        }
     }
 
     private boolean submit(Runnable operation) {

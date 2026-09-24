@@ -1,12 +1,14 @@
 package net.enthusia.staff.paper.enforcement;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
 import net.enthusia.staff.common.CaseId;
+import net.enthusia.staff.domain.OperationalMode;
 import net.enthusia.staff.domain.sanction.ActiveSanction;
 import net.enthusia.staff.domain.sanction.SanctionType;
 import org.junit.jupiter.api.Test;
@@ -34,6 +36,16 @@ class PaperBanEnforcementListenerTest {
         assertTrue(decision.message().contains("PTA38TKYAGSY6M8F"));
         assertTrue(decision.message().contains("Repeated harassment"));
         assertTrue(decision.message().contains("2026-10-14T12:00:00Z"));
+    }
+
+    @Test
+    void loginEnforcementContinuesDuringReadOnlyFailure() {
+        assertTrue(PaperBanEnforcementListener.enforcesLogin(OperationalMode.ACTIVE));
+        assertTrue(PaperBanEnforcementListener.enforcesLogin(OperationalMode.READ_ONLY_FAILURE));
+        assertFalse(PaperBanEnforcementListener.enforcesLogin(OperationalMode.BOOTSTRAP));
+        assertFalse(PaperBanEnforcementListener.enforcesLogin(OperationalMode.DEGRADED));
+        assertFalse(PaperBanEnforcementListener.enforcesLogin(OperationalMode.SHADOW_MIGRATION));
+        assertFalse(PaperBanEnforcementListener.enforcesLogin(OperationalMode.MAINTENANCE));
     }
 
     @Test

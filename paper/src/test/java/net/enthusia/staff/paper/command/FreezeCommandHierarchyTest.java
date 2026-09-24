@@ -21,6 +21,7 @@ import net.enthusia.staff.domain.ports.FreezeStore;
 import net.enthusia.staff.domain.ports.PlayerDirectory;
 import net.enthusia.staff.paper.auth.StaffTargetGuard;
 import net.enthusia.staff.paper.freeze.FreezeAlertSink;
+import net.enthusia.staff.paper.freeze.FreezeNoticeSink;
 import net.kyori.adventure.text.Component;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
@@ -62,6 +63,7 @@ class FreezeCommandHierarchyTest {
                 new FreezeCommand.RuntimeHooks(
                         denied,
                         FreezeAlertSink.noOp(),
+                        FreezeNoticeSink.noOp(),
                         (sender, responses) -> messages.addAll(responses)
                 )
         );

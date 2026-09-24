@@ -47,6 +47,7 @@ import net.enthusia.staff.paper.config.ReportConfigurationSnapshot;
 import net.enthusia.staff.paper.config.reload.ConfigurationReloadAction;
 import net.enthusia.staff.paper.economy.EconomyCoordinator;
 import net.enthusia.staff.paper.freeze.FreezeManager;
+import net.enthusia.staff.paper.freeze.FreezeNoticeSink;
 import net.enthusia.staff.paper.integration.DiscordSrvLinkProviderAdapter;
 import net.enthusia.staff.paper.integration.MarketIntegration;
 import net.enthusia.staff.paper.integration.PlayTimeActivePlaytimeProvider;
@@ -223,9 +224,10 @@ final class PaperCommandRegistrar {
     }
 
     private void registerStaffCommands() {
-        FreezeCommand freezes = new FreezeCommand(
+        FreezeCommand freezes = FreezeCommand.createRuntime(
                 plugin(), clock(), writeMode(), storage(PaperStorageBindings::playerDirectory),
-                storage(PaperStorageBindings::freezeStore), dependencies.players().freeze(), workers()
+                storage(PaperStorageBindings::freezeStore), dependencies.players().freeze(), workers(),
+                dependencies.players().freezeNotices()
         );
         bindCompleting("freeze", freezes, freezes);
         bindCompleting("unfreeze", freezes, freezes);
@@ -371,6 +373,7 @@ final class PaperCommandRegistrar {
 
     record PlayerComponents(
             FreezeManager freeze,
+            FreezeNoticeSink freezeNotices,
             StaffModeManager staffMode,
             VanishManager vanish,
             InventoryCoordinator inventory

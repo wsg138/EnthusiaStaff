@@ -22,6 +22,7 @@ import net.enthusia.staff.paper.api.StaffSessionService;
 import net.enthusia.staff.paper.api.StaffVisibilityService;
 import net.enthusia.staff.paper.freeze.FreezeManager;
 import net.enthusia.staff.paper.freeze.FreezeNetworkReconciler;
+import net.enthusia.staff.paper.freeze.FreezeNoticeService;
 import net.enthusia.staff.paper.inventory.InventoryCoordinator;
 import net.enthusia.staff.paper.inventory.InventoryOperationContext;
 import net.enthusia.staff.paper.inventory.InventoryRecoveryGuard;
@@ -45,6 +46,7 @@ import org.bukkit.plugin.java.JavaPlugin;
 record PaperRuntimeComponents(
         ReportEvidenceMaintenance reportEvidenceMaintenance,
         FreezeManager freeze,
+        FreezeNoticeService freezeNotices,
         FreezeNetworkReconciler freezeNetworkReconciler,
         StaffModeManager staffMode,
         CheatTesterManager cheatTester,
@@ -63,6 +65,7 @@ record PaperRuntimeComponents(
                 dependencies.environment().plugin().getLogger()
         );
         FreezeManager freeze = createFreezeManager(dependencies);
+        FreezeNoticeService freezeNotices = createFreezeNoticeService(dependencies, freeze);
         FreezeNetworkReconciler freezeNetworkReconciler = new FreezeNetworkReconciler(
                 dependencies.environment().plugin(),
                 dependencies.environment().clock(),
@@ -100,6 +103,7 @@ record PaperRuntimeComponents(
         return new PaperRuntimeComponents(
                 evidence,
                 freeze,
+                freezeNotices,
                 freezeNetworkReconciler,
                 staffMode,
                 cheatTester,
@@ -154,6 +158,19 @@ record PaperRuntimeComponents(
         );
         registerListener(dependencies.environment().plugin(), freeze);
         return freeze;
+    }
+
+    private static FreezeNoticeService createFreezeNoticeService(
+            Dependencies dependencies,
+            FreezeManager freeze
+    ) {
+        JavaPlugin plugin = dependencies.environment().plugin();
+        FreezeNoticeService notices = new FreezeNoticeService(
+                plugin, dependencies.environment().clock(), dependencies.stores().freezeStore(),
+                dependencies.stores().playerDirectory(), dependencies.environment().workers(), freeze
+        );
+        registerListener(plugin, notices);
+        return notices;
     }
 
     private static StaffModeManager createStaffModeManager(Dependencies dependencies) {

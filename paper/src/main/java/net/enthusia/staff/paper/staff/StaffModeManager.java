@@ -627,7 +627,7 @@ public final class StaffModeManager implements Listener {
                 }
                 StaffStateCodec.Captured restored = codec.capture(player, session.serverId());
                 if (!submit(() -> completeRestoration(playerId, session, loaded, restored))) {
-                    completeRuntimeExit(playerId);
+                    retainRecoveryAfterRuntimeExit(playerId);
                     player.sendMessage(Component.text(
                             "State was restored, but durable verification is still pending; contact an administrator."
                     ));
@@ -666,29 +666,39 @@ public final class StaffModeManager implements Listener {
         try {
             closed = loaded.completeExit(session.sessionId(), restored.checksum(), clock.instant());
         } catch (RuntimeException exception) {
-            completeRuntimeExit(playerId);
+            retainRecoveryAfterRuntimeExit(playerId);
             plugin.getLogger().log(Level.SEVERE, "Staff session closure verification failed", exception);
             safeMessage(playerId, "State was restored, but durable closure verification failed; contact an administrator.");
             return;
         }
-        completeRuntimeExit(playerId);
         if (!closed) {
+            retainRecoveryAfterRuntimeExit(playerId);
             safeMessage(playerId, "State was restored, but checksum verification requires administrator review.");
             return;
         }
+        completeRuntimeExit(playerId);
         safeMessage(playerId, "Staff mode exited; your exact saved state was restored and verified.");
     }
 
+    private void retainRecoveryAfterRuntimeExit(UUID playerId) {
+        recoveryGate.retry(playerId);
+        removeRuntimeState(playerId);
+    }
+
     private void completeRuntimeExit(UUID playerId) {
-        active.remove(playerId);
-        ranks.remove(playerId);
-        toolSessions.remove(playerId);
+        removeRuntimeState(playerId);
         recoveryGate.clear(playerId);
         try {
             exitListener.accept(playerId);
         } catch (RuntimeException exception) {
             plugin.getLogger().log(Level.WARNING, "Post-exit staff-mode cleanup callback failed", exception);
         }
+    }
+
+    private void removeRuntimeState(UUID playerId) {
+        active.remove(playerId);
+        ranks.remove(playerId);
+        toolSessions.remove(playerId);
     }
 
     private void applyStaffState(Player player, StaffRank rank) {

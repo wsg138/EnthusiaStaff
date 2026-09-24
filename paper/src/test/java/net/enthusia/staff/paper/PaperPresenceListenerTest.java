@@ -1,15 +1,18 @@
 package net.enthusia.staff.paper;
 
-import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.logging.Logger;
 import net.enthusia.staff.domain.player.PlayerIdentity;
@@ -21,18 +24,15 @@ import org.junit.jupiter.api.Test;
 class PaperPresenceListenerTest {
     private static final Instant NOW = Instant.parse("2026-09-23T15:00:00Z");
     private static final UUID PLAYER_ID = UUID.fromString("11111111-1111-1111-1111-111111111111");
+    private static final int FIRST_ATTEMPT = 1;
+    private static final Logger LOGGER = Logger.getLogger(PaperPresenceListenerTest.class.getName());
 
     @Test
     void disconnectIsPersistedWithPaperBackendAndCapturedTime() {
         AtomicReference<Disconnect> recorded = new AtomicReference<>();
-        PlayerDirectory directory = directory(recorded);
-        PaperPresenceListener listener = new PaperPresenceListener(
-                Clock.fixed(NOW, ZoneOffset.UTC),
-                "smp-1",
-                () -> directory,
-                Runnable::run,
-                Logger.getLogger(PaperPresenceListenerTest.class.getName())
-        );
+        PaperPresenceListener listener = listener(directory(recorded), Runnable::run, ignored -> {
+            throw new AssertionError("retry not expected");
+        });
 
         listener.recordDisconnected(PLAYER_ID);
 
@@ -40,18 +40,53 @@ class PaperPresenceListenerTest {
     }
 
     @Test
-    void rejectedWorkerSubmissionDoesNotEscapeTheListener() {
-        PaperPresenceListener listener = new PaperPresenceListener(
-                Clock.fixed(NOW, ZoneOffset.UTC),
-                "smp-1",
-                () -> directory(new AtomicReference<>()),
-                ignored -> {
-                    throw new RejectedExecutionException("full");
-                },
-                Logger.getLogger(PaperPresenceListenerTest.class.getName())
-        );
+    void rejectedWorkerSubmissionRetriesCapturedDisconnect() {
+        AtomicReference<Disconnect> recorded = new AtomicReference<>();
+        AtomicReference<Runnable> retry = new AtomicReference<>();
+        AtomicInteger attempts = new AtomicInteger();
+        PaperPresenceListener listener = listener(directory(recorded), operation -> {
+            if (attempts.incrementAndGet() == FIRST_ATTEMPT) {
+                throw new RejectedExecutionException("full");
+            }
+            operation.run();
+        }, retry::set);
 
-        assertDoesNotThrow(() -> listener.recordDisconnected(PLAYER_ID));
+        listener.recordDisconnected(PLAYER_ID);
+
+        assertNull(recorded.get());
+        assertNotNull(retry.get());
+        retry.get().run();
+        assertEquals(2, attempts.get());
+        assertEquals(new Disconnect(PLAYER_ID, "smp-1", NOW), recorded.get());
+    }
+
+    @Test
+    void repeatedQueueRejectionStopsAfterBoundedAttempts() {
+        List<Runnable> retries = new ArrayList<>();
+        AtomicInteger attempts = new AtomicInteger();
+        PaperPresenceListener listener = listener(directory(new AtomicReference<>()), ignored -> {
+            attempts.incrementAndGet();
+            throw new RejectedExecutionException("full");
+        }, retries::add);
+
+        listener.recordDisconnected(PLAYER_ID);
+        while (!retries.isEmpty()) {
+            retries.removeFirst().run();
+        }
+
+        assertEquals(3, attempts.get());
+        assertEquals(0, retries.size());
+    }
+
+    private static PaperPresenceListener listener(
+            PlayerDirectory directory,
+            java.util.function.Consumer<Runnable> submitter,
+            java.util.function.Consumer<Runnable> retryScheduler
+    ) {
+        return new PaperPresenceListener(
+                Clock.fixed(NOW, ZoneOffset.UTC), "smp-1", () -> directory,
+                submitter, retryScheduler, LOGGER
+        );
     }
 
     private static PlayerDirectory directory(AtomicReference<Disconnect> recorded) {
@@ -73,11 +108,7 @@ class PaperPresenceListenerTest {
 
             @Override
             public void recordSeen(
-                    UUID playerId,
-                    String username,
-                    PlayerPlatform platform,
-                    String serverId,
-                    Instant seenAt
+                    UUID playerId, String username, PlayerPlatform platform, String serverId, Instant seenAt
             ) {
             }
 

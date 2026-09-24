@@ -46,7 +46,7 @@ public final class PaperBanEnforcementListener implements Listener {
 
     @EventHandler(priority = EventPriority.LOWEST)
     public void onPreLogin(AsyncPlayerPreLoginEvent event) {
-        if (mode.get() != OperationalMode.ACTIVE) {
+        if (!enforcesLogin(mode.get())) {
             return;
         }
         LoginDecision decision = decision(event.getUniqueId(), clock.instant());
@@ -66,6 +66,10 @@ public final class PaperBanEnforcementListener implements Listener {
                     Component.text("Moderation status could not be verified. Please retry shortly.")
             );
         }
+    }
+
+    static boolean enforcesLogin(OperationalMode current) {
+        return current == OperationalMode.ACTIVE || current == OperationalMode.READ_ONLY_FAILURE;
     }
 
     private LoginDecision decision(UUID playerId, Instant now) {

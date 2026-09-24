@@ -1,5 +1,6 @@
 package net.enthusia.staff.paper.freeze;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -13,6 +14,7 @@ import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import net.kyori.adventure.text.Component;
 import org.bukkit.Location;
+import org.bukkit.World;
 import org.bukkit.entity.Player;
 import org.bukkit.event.player.PlayerCommandPreprocessEvent;
 import org.bukkit.event.player.PlayerMoveEvent;
@@ -22,18 +24,23 @@ class FreezeMovementAndCommandTest {
     private static final UUID PLAYER_ID = UUID.fromString("51000000-0000-0000-0000-000000000001");
 
     @Test
-    void positionalMovementIsCancelledInsteadOfRewritten() {
+    void positionalMovementKeepsRequestedOrientationAtOriginalPosition() {
         FreezeManager manager = restrictedManager();
         Player player = player(new ArrayList<>());
         PlayerMoveEvent event = new PlayerMoveEvent(
                 player,
-                new Location(null, 10.0, 64.0, 10.0, 0.0f, 0.0f),
-                new Location(null, 10.5, 64.0, 10.0, 45.0f, 0.0f)
+                new Location(world(), 10.0, 64.0, 10.0, 0.0f, 0.0f),
+                new Location(world(), 10.5, 64.0, 10.0, 45.0f, 15.0f)
         );
 
         manager.onMove(event);
 
-        assertTrue(event.isCancelled());
+        assertFalse(event.isCancelled());
+        assertEquals(10.0, event.getTo().getX());
+        assertEquals(64.0, event.getTo().getY());
+        assertEquals(10.0, event.getTo().getZ());
+        assertEquals(45.0f, event.getTo().getYaw());
+        assertEquals(15.0f, event.getTo().getPitch());
     }
 
     @Test
@@ -42,8 +49,8 @@ class FreezeMovementAndCommandTest {
         Player player = player(new ArrayList<>());
         PlayerMoveEvent event = new PlayerMoveEvent(
                 player,
-                new Location(null, 10.0, 64.0, 10.0, 0.0f, 0.0f),
-                new Location(null, 10.0, 64.0, 10.0, 45.0f, 15.0f)
+                new Location(world(), 10.0, 64.0, 10.0, 0.0f, 0.0f),
+                new Location(world(), 10.0, 64.0, 10.0, 45.0f, 15.0f)
         );
 
         manager.onMove(event);
@@ -75,6 +82,10 @@ class FreezeMovementAndCommandTest {
         );
         manager.verify(PLAYER_ID, "FrozenPlayer");
         return manager;
+    }
+
+    private static World world() {
+        return proxy(World.class);
     }
 
     private static Player player(List<Component> messages) {

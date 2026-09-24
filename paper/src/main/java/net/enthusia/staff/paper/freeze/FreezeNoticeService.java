@@ -23,19 +23,22 @@ public final class FreezeNoticeService implements Listener, FreezeNoticeSink {
     private final Supplier<FreezeStore> freezes;
     private final Supplier<PlayerDirectory> players;
     private final ExecutorService workers;
+    private final FreezeManager manager;
 
     public FreezeNoticeService(
             JavaPlugin plugin,
             Clock clock,
             Supplier<FreezeStore> freezes,
             Supplier<PlayerDirectory> players,
-            ExecutorService workers
+            ExecutorService workers,
+            FreezeManager manager
     ) {
         this.plugin = java.util.Objects.requireNonNull(plugin, "plugin");
         this.clock = java.util.Objects.requireNonNull(clock, "clock");
         this.freezes = java.util.Objects.requireNonNull(freezes, "freezes");
         this.players = java.util.Objects.requireNonNull(players, "players");
         this.workers = java.util.Objects.requireNonNull(workers, "workers");
+        this.manager = java.util.Objects.requireNonNull(manager, "manager");
     }
 
     @Override
@@ -43,8 +46,19 @@ public final class FreezeNoticeService implements Listener, FreezeNoticeSink {
         if (record == null) {
             return;
         }
-        onEntity(record.playerId(), player -> FreezeNoticePresentation.render(record, actorName)
-                .forEach(player::sendMessage));
+        onEntity(record.playerId(), player -> deliverIfRestricted(manager, record, actorName, player));
+    }
+
+    static void deliverIfRestricted(
+            FreezeManager manager,
+            FreezeRecord record,
+            String actorName,
+            Player player
+    ) {
+        if (!manager.isRestricted(record.playerId())) {
+            return;
+        }
+        FreezeNoticePresentation.render(record, actorName).forEach(player::sendMessage);
     }
 
     @EventHandler(priority = EventPriority.MONITOR)

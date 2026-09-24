@@ -9,6 +9,7 @@ import io.papermc.paper.threadedregions.scheduler.EntityScheduler;
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
 import java.util.List;
+import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import net.enthusia.staff.domain.auth.StaffRank;
@@ -42,6 +43,16 @@ class StaffWhoCommandTest {
         assertEquals("499", StaffWhoCommand.pendingLabel(499));
         assertEquals("500+", StaffWhoCommand.pendingLabel(500));
         assertEquals("500+", StaffWhoCommand.pendingLabel(501));
+    }
+
+    @Test
+    void visibilityPolicyFiltersPlayerViewersButNotConsole() {
+        UUID viewer = UUID.fromString("20000000-0000-0000-0000-000000000001");
+        UUID target = UUID.fromString("20000000-0000-0000-0000-000000000002");
+
+        assertFalse(StaffWhoCommand.visibleTo(viewer, target, (ignoredViewer, ignoredTarget) -> false));
+        assertTrue(StaffWhoCommand.visibleTo(viewer, target, (ignoredViewer, ignoredTarget) -> true));
+        assertTrue(StaffWhoCommand.visibleTo(null, target, (ignoredViewer, ignoredTarget) -> false));
     }
 
     @Test

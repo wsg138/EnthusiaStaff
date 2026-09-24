@@ -9,6 +9,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.BiPredicate;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 import java.util.logging.Level;
@@ -63,24 +64,25 @@ public final class StaffWhoCommand implements CommandExecutor {
     }
 
     private void collectOnlineStaff(CommandSender sender) {
+        UUID viewerId = sender instanceof Player player ? player.getUniqueId() : null;
         plugin.getServer().getGlobalRegionScheduler().execute(plugin, () -> {
             List<Player> online = new ArrayList<>(plugin.getServer().getOnlinePlayers());
             if (online.isEmpty()) {
                 submit(sender, List.of());
                 return;
             }
-            collectOwnedSnapshots(sender, online);
+            collectOwnedSnapshots(sender, viewerId, online);
         });
     }
 
-    private void collectOwnedSnapshots(CommandSender sender, List<Player> online) {
+    private void collectOwnedSnapshots(CommandSender sender, UUID viewerId, List<Player> online) {
         ConcurrentLinkedQueue<Entry> entries = new ConcurrentLinkedQueue<>();
         AtomicInteger remaining = new AtomicInteger(online.size());
         for (Player player : online) {
             scheduleSnapshot(
                     plugin,
                     player,
-                    () -> safeSnapshot(player),
+                    () -> safeSnapshot(player, viewerId),
                     entries::add,
                     () -> completeSnapshot(sender, entries, remaining)
             );
@@ -99,22 +101,29 @@ public final class StaffWhoCommand implements CommandExecutor {
         }
     }
 
-    private Entry safeSnapshot(Player player) {
+    private Entry safeSnapshot(Player player, UUID viewerId) {
         try {
-            return snapshot(player);
+            return snapshot(player, viewerId);
         } catch (RuntimeException exception) {
             plugin.getLogger().log(Level.WARNING, "Staff presence snapshot failed", exception);
             return null;
         }
     }
 
-    private Entry snapshot(Player player) {
+    private Entry snapshot(Player player, UUID viewerId) {
         StaffRank rank = PaperStaffRankResolver.resolve(player::hasPermission).orElse(null);
         if (rank == null) {
             return null;
         }
         UUID playerId = player.getUniqueId();
+        if (!visibleTo(viewerId, playerId, vanish::canSee)) {
+            return null;
+        }
         return new Entry(player.getName(), rank, staffMode.active(playerId), vanish.isVanished(playerId));
+    }
+
+    static boolean visibleTo(UUID viewerId, UUID targetId, BiPredicate<UUID, UUID> visibility) {
+        return viewerId == null || visibility.test(viewerId, targetId);
     }
 
     static boolean scheduleSnapshot(
