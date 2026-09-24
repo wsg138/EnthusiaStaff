@@ -1,0 +1,44 @@
+name: Private staging GitHub App token
+description: Mint a short-lived token scoped to the private EnthusiaStaff staging repository.
+
+inputs:
+  client-id:
+    description: GitHub App client ID used only for the staging bridge.
+    required: true
+  private-key:
+    description: GitHub App private key used to mint an installation token.
+    required: true
+
+outputs:
+  token:
+    description: Short-lived installation token scoped to EnthusiaStaff-Staging Actions.
+    value: ${{ steps.app-token.outputs.token }}
+  installation-id:
+    description: GitHub App installation ID used for the token.
+    value: ${{ steps.app-token.outputs.installation-id }}
+
+runs:
+  using: composite
+  steps:
+    - name: Mint staging installation token
+      id: app-token
+      uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+      with:
+        client-id: ${{ inputs.client-id }}
+        private-key: ${{ inputs.private-key }}
+        owner: wsg138
+        repositories: EnthusiaStaff-Staging
+        permission-actions: write
+
+    - name: Export staging token for the current job
+      shell: bash
+      env:
+        TOKEN: ${{ steps.app-token.outputs.token }}
+      run: |
+        set -Eeuo pipefail
+        [[ -n "$TOKEN" ]] || {
+          echo '::error::GitHub App token minting returned an empty token.'
+          exit 1
+        }
+        echo "::add-mask::$TOKEN"
+        printf 'STAGING_TOKEN=%s\n' "$TOKEN" >> "$GITHUB_ENV"

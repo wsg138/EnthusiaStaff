@@ -2,30 +2,33 @@ package net.enthusia.staff.paper.staff;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentLinkedQueue;
-import java.util.concurrent.ThreadLocalRandom;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
+import java.util.function.Predicate;
 import net.enthusia.staff.paper.freeze.FreezeManager;
 import net.enthusia.staff.paper.visibility.VanishManager;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Location;
 import org.bukkit.entity.Player;
+import org.bukkit.plugin.Plugin;
 import org.bukkit.plugin.java.JavaPlugin;
 
 /** Executes scheduler-safe random staff teleport while preserving dispatcher authorization boundaries. */
 final class StaffToolRandomTeleportService {
     private static final String RANDOM_EXEMPT_PERMISSION = "enthusiastaff.stafftools.random-exempt";
 
-    private final JavaPlugin plugin;
+    private final Platform platform;
     private final String serverId;
-    private final StaffModeManager staffMode;
-    private final VanishManager vanish;
-    private final FreezeManager freeze;
-    private final StaffToolSettings settings;
+    private final Predicate<String> enabled;
+    private final CandidateEligibility candidateEligibility;
+    private final Predicate<Player> actorAuthorized;
+    private final Consumer<List<UUID>> shuffle;
 
     StaffToolRandomTeleportService(
             JavaPlugin plugin,
@@ -35,16 +38,35 @@ final class StaffToolRandomTeleportService {
             FreezeManager freeze,
             StaffToolSettings settings
     ) {
-        this.plugin = java.util.Objects.requireNonNull(plugin, "plugin");
+        this(
+                new BukkitPlatform(plugin),
+                serverId,
+                settings::randomTeleportEnabledOn,
+                (actorId, target) -> eligibleCandidate(actorId, target, staffMode, vanish, freeze, settings),
+                actor -> staffMode.authorizedForTool(actor, StaffToolDefinition.RANDOM_TELEPORT)
+                        && actor.hasPermission(StaffToolDefinition.RANDOM_TELEPORT.permission()),
+                Collections::shuffle
+        );
+    }
+
+    StaffToolRandomTeleportService(
+            Platform platform,
+            String serverId,
+            Predicate<String> enabled,
+            CandidateEligibility candidateEligibility,
+            Predicate<Player> actorAuthorized,
+            Consumer<List<UUID>> shuffle
+    ) {
+        this.platform = java.util.Objects.requireNonNull(platform, "platform");
         this.serverId = java.util.Objects.requireNonNull(serverId, "serverId");
-        this.staffMode = java.util.Objects.requireNonNull(staffMode, "staffMode");
-        this.vanish = java.util.Objects.requireNonNull(vanish, "vanish");
-        this.freeze = java.util.Objects.requireNonNull(freeze, "freeze");
-        this.settings = java.util.Objects.requireNonNull(settings, "settings");
+        this.enabled = java.util.Objects.requireNonNull(enabled, "enabled");
+        this.candidateEligibility = java.util.Objects.requireNonNull(candidateEligibility, "candidateEligibility");
+        this.actorAuthorized = java.util.Objects.requireNonNull(actorAuthorized, "actorAuthorized");
+        this.shuffle = java.util.Objects.requireNonNull(shuffle, "shuffle");
     }
 
     void begin(Player actor) {
-        if (!settings.randomTeleportEnabledOn(serverId)) {
+        if (!enabled.test(serverId)) {
             actor.sendMessage(Component.text(
                     "Random staff teleport is disabled on backend " + serverId + '.',
                     NamedTextColor.YELLOW
@@ -52,28 +74,36 @@ final class StaffToolRandomTeleportService {
             return;
         }
         UUID actorId = actor.getUniqueId();
-        plugin.getServer().getGlobalRegionScheduler().execute(plugin, () -> collectCandidates(actorId));
+        try {
+            platform.executeGlobal(() -> collectCandidates(actorId));
+        } catch (RuntimeException failure) {
+            actor.sendMessage(Component.text("Random staff teleport could not start safely.", NamedTextColor.RED));
+        }
     }
 
     private void collectCandidates(UUID actorId) {
-        List<UUID> candidates = plugin.getServer().getOnlinePlayers().stream()
-                .map(Player::getUniqueId)
-                .toList();
+        final List<Player> candidates;
+        try {
+            candidates = List.copyOf(platform.onlinePlayers());
+        } catch (RuntimeException failure) {
+            message(actorId, "Random staff teleport could not inspect online players safely.");
+            return;
+        }
         if (candidates.isEmpty()) {
             message(actorId, "No suitable random-teleport target is online.");
             return;
         }
-        ConcurrentLinkedQueue<TargetSnapshot> eligible = new ConcurrentLinkedQueue<>();
+        ConcurrentLinkedQueue<UUID> eligible = new ConcurrentLinkedQueue<>();
         AtomicInteger remaining = new AtomicInteger(candidates.size());
         Runnable finishedOne = () -> finishCandidateCollection(actorId, eligible, remaining);
-        for (UUID candidateId : candidates) {
-            snapshotCandidate(actorId, candidateId, eligible, finishedOne);
+        for (Player candidate : candidates) {
+            snapshotCandidate(actorId, candidate, eligible, finishedOne);
         }
     }
 
     private void finishCandidateCollection(
             UUID actorId,
-            Collection<TargetSnapshot> eligible,
+            Collection<UUID> eligible,
             AtomicInteger remaining
     ) {
         if (remaining.decrementAndGet() == 0) {
@@ -83,22 +113,58 @@ final class StaffToolRandomTeleportService {
 
     private void snapshotCandidate(
             UUID actorId,
-            UUID targetId,
-            Collection<TargetSnapshot> eligible,
+            Player target,
+            Collection<UUID> eligible,
             Runnable finished
     ) {
-        onEntity(targetId, target -> {
-            try {
-                if (eligibleCandidate(actorId, target)) {
-                    eligible.add(new TargetSnapshot(targetId, target.getName(), target.getLocation().clone()));
-                }
-            } finally {
-                finished.run();
+        AtomicBoolean settled = new AtomicBoolean();
+        Runnable retired = () -> settleCandidate(settled, finished);
+        Runnable inspect = () -> inspectCandidate(actorId, target, eligible, settled, finished);
+        try {
+            boolean scheduled = platform.executeEntity(target, inspect, retired);
+            if (!scheduled) {
+                retired.run();
             }
-        }, finished);
+        } catch (RuntimeException failure) {
+            retired.run();
+        }
     }
 
-    private boolean eligibleCandidate(UUID actorId, Player target) {
+    private void inspectCandidate(
+            UUID actorId,
+            Player target,
+            Collection<UUID> eligible,
+            AtomicBoolean settled,
+            Runnable finished
+    ) {
+        if (!settled.compareAndSet(false, true)) {
+            return;
+        }
+        try {
+            if (candidateEligibility.eligible(actorId, target)) {
+                eligible.add(target.getUniqueId());
+            }
+        } catch (RuntimeException ignored) {
+            // Fail closed: this target simply does not enter the eligible queue.
+        } finally {
+            finished.run();
+        }
+    }
+
+    private static void settleCandidate(AtomicBoolean settled, Runnable finished) {
+        if (settled.compareAndSet(false, true)) {
+            finished.run();
+        }
+    }
+
+    private static boolean eligibleCandidate(
+            UUID actorId,
+            Player target,
+            StaffModeManager staffMode,
+            VanishManager vanish,
+            FreezeManager freeze,
+            StaffToolSettings settings
+    ) {
         UUID targetId = target.getUniqueId();
         StaffToolTargetPolicy.Candidate candidate = new StaffToolTargetPolicy.Candidate(
                 new StaffToolTargetPolicy.Identity(actorId, targetId),
@@ -119,27 +185,58 @@ final class StaffToolRandomTeleportService {
         return StaffToolTargetPolicy.eligibleRandomTarget(candidate);
     }
 
-    private void finishTeleport(UUID actorId, Collection<TargetSnapshot> candidates) {
-        onEntity(actorId, actor -> {
-            if (!canContinue(actor)) {
-                return;
-            }
-            List<TargetSnapshot> shuffled = new ArrayList<>(candidates);
-            if (shuffled.isEmpty()) {
-                actor.sendMessage(Component.text("No suitable random-teleport target is online."));
-                return;
-            }
-            TargetSnapshot target = shuffled.get(ThreadLocalRandom.current().nextInt(shuffled.size()));
+    private void finishTeleport(UUID actorId, Collection<UUID> candidates) {
+        List<UUID> shuffled = new ArrayList<>(candidates);
+        shuffle.accept(shuffled);
+        attemptNextCandidate(actorId, new ConcurrentLinkedQueue<>(shuffled));
+    }
+
+    private void attemptNextCandidate(UUID actorId, ConcurrentLinkedQueue<UUID> candidates) {
+        UUID targetId = candidates.poll();
+        if (targetId == null) {
+            message(actorId, "No suitable random-teleport target is online.");
+            return;
+        }
+        onEntity(
+                targetId,
+                target -> revalidateCandidate(actorId, candidates, target),
+                () -> attemptNextCandidate(actorId, candidates)
+        );
+    }
+
+    private void revalidateCandidate(
+            UUID actorId,
+            ConcurrentLinkedQueue<UUID> candidates,
+            Player target
+    ) {
+        if (!candidateEligibility.eligible(actorId, target)) {
+            attemptNextCandidate(actorId, candidates);
+            return;
+        }
+        TargetSnapshot snapshot = new TargetSnapshot(target.getName(), target.getLocation().clone());
+        onEntity(actorId, actor -> teleportToSnapshot(actorId, actor, snapshot));
+    }
+
+    private void teleportToSnapshot(UUID actorId, Player actor, TargetSnapshot target) {
+        if (!canContinue(actor)) {
+            return;
+        }
+        try {
             actor.teleportAsync(target.location()).whenComplete(
                     (success, failure) -> finishTeleport(actorId, target, success, failure)
             );
-        });
+        } catch (RuntimeException failure) {
+            finishTeleport(actorId, target, false, failure);
+        }
     }
 
     private boolean canContinue(Player actor) {
-        if (staffMode.authorizedForTool(actor, StaffToolDefinition.RANDOM_TELEPORT)
-                && actor.hasPermission(StaffToolDefinition.RANDOM_TELEPORT.permission())) {
-            return true;
+        try {
+            if (actorAuthorized.test(actor)) {
+                return true;
+            }
+        } catch (RuntimeException ignored) {
+            // Authorization uncertainty fails closed.
         }
         actor.sendMessage(Component.text(
                 "Random teleport was cancelled because your staff session or permission changed.",
@@ -162,28 +259,111 @@ final class StaffToolRandomTeleportService {
     }
 
     private void onEntity(UUID playerId, Consumer<Player> operation, Runnable retired) {
-        plugin.getServer().getGlobalRegionScheduler().execute(plugin, () -> {
-            Player player = plugin.getServer().getPlayer(playerId);
-            if (player == null) {
+        AtomicBoolean settled = new AtomicBoolean();
+        Runnable retireOnce = () -> {
+            if (settled.compareAndSet(false, true)) {
                 retired.run();
-                return;
             }
-            boolean scheduled = player.getScheduler().execute(
-                    plugin,
-                    () -> operation.accept(player),
-                    retired,
-                    1L
-            );
+        };
+        try {
+            platform.executeGlobal(() -> resolvePlayer(playerId, operation, retired, settled, retireOnce));
+        } catch (RuntimeException failure) {
+            retireOnce.run();
+        }
+    }
+
+    private void resolvePlayer(
+            UUID playerId,
+            Consumer<Player> operation,
+            Runnable retired,
+            AtomicBoolean settled,
+            Runnable retireOnce
+    ) {
+        final Player player;
+        try {
+            player = platform.player(playerId);
+        } catch (RuntimeException failure) {
+            retireOnce.run();
+            return;
+        }
+        if (player == null) {
+            retireOnce.run();
+            return;
+        }
+        Runnable owned = () -> runOwned(settled, player, operation, retired);
+        try {
+            boolean scheduled = platform.executeEntity(player, owned, retireOnce);
             if (!scheduled) {
-                retired.run();
+                retireOnce.run();
             }
-        });
+        } catch (RuntimeException failure) {
+            retireOnce.run();
+        }
+    }
+
+    private static void runOwned(
+            AtomicBoolean settled,
+            Player player,
+            Consumer<Player> operation,
+            Runnable retired
+    ) {
+        if (!settled.compareAndSet(false, true)) {
+            return;
+        }
+        try {
+            operation.accept(player);
+        } catch (RuntimeException failure) {
+            retired.run();
+        }
     }
 
     private void message(UUID playerId, String text) {
         onEntity(playerId, player -> player.sendMessage(Component.text(text)));
     }
 
-    private record TargetSnapshot(UUID playerId, String name, Location location) {
+    @FunctionalInterface
+    interface CandidateEligibility {
+        boolean eligible(UUID actorId, Player target);
+    }
+
+    interface Platform {
+        Collection<? extends Player> onlinePlayers();
+
+        Player player(UUID playerId);
+
+        void executeGlobal(Runnable operation);
+
+        boolean executeEntity(Player player, Runnable operation, Runnable retired);
+    }
+
+    static final class BukkitPlatform implements Platform {
+        private final Plugin plugin;
+
+        BukkitPlatform(Plugin plugin) {
+            this.plugin = java.util.Objects.requireNonNull(plugin, "plugin");
+        }
+
+        @Override
+        public Collection<? extends Player> onlinePlayers() {
+            return plugin.getServer().getOnlinePlayers();
+        }
+
+        @Override
+        public Player player(UUID playerId) {
+            return plugin.getServer().getPlayer(playerId);
+        }
+
+        @Override
+        public void executeGlobal(Runnable operation) {
+            plugin.getServer().getGlobalRegionScheduler().execute(plugin, operation);
+        }
+
+        @Override
+        public boolean executeEntity(Player player, Runnable operation, Runnable retired) {
+            return player.getScheduler().execute(plugin, operation, retired, 1L);
+        }
+    }
+
+    private record TargetSnapshot(String name, Location location) {
     }
 }
