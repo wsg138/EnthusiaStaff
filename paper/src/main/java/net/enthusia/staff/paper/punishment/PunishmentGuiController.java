@@ -29,7 +29,9 @@ import net.enthusia.staff.domain.escalation.ReasonPolicy;
 import net.enthusia.staff.domain.player.PlayerIdentity;
 import net.enthusia.staff.domain.ports.PlayerDirectory;
 import net.enthusia.staff.domain.ports.ReasonPolicyRepository;
+import net.enthusia.staff.paper.auth.LuckPermsStaffTargetGuard;
 import net.enthusia.staff.paper.auth.PaperActorResolver;
+import net.enthusia.staff.paper.auth.StaffTargetGuard;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.event.ClickEvent;
 import net.kyori.adventure.text.event.HoverEvent;
@@ -54,6 +56,7 @@ public final class PunishmentGuiController implements Listener {
     private final AuthorizationPolicy authorization;
     private final ReasonPolicyRepository policies;
     private final ExecutorService workers;
+    private final StaffTargetGuard targetGuard;
     private final PunishmentGuiCatalog catalog;
     private final PunishmentGuiRenderer renderer;
     private final Set<UUID> suppressedClosures = ConcurrentHashMap.newKeySet();
@@ -69,18 +72,31 @@ public final class PunishmentGuiController implements Listener {
             ReasonPolicyRepository policies,
             ExecutorService workers
     ) {
-        if (plugin == null || mode == null || workflows == null || players == null
-                || authorization == null || policies == null || workers == null) {
-            throw new IllegalArgumentException("punishment GUI dependencies must be present");
-        }
-        this.plugin = plugin;
-        this.mode = mode;
-        this.workflows = workflows;
-        this.players = players;
-        this.authorization = authorization;
-        this.policies = policies;
-        this.workers = workers;
-        this.catalog = new PunishmentGuiCatalog(policies, authorization);
+        this(
+                new Dependencies(
+                        plugin,
+                        mode,
+                        workflows,
+                        players,
+                        authorization,
+                        policies,
+                        workers
+                ),
+                LuckPermsStaffTargetGuard.discover(plugin)
+        );
+    }
+
+    PunishmentGuiController(Dependencies dependencies, StaffTargetGuard targetGuard) {
+        Dependencies checked = java.util.Objects.requireNonNull(dependencies, "dependencies");
+        this.plugin = checked.plugin();
+        this.mode = checked.mode();
+        this.workflows = checked.workflows();
+        this.players = checked.players();
+        this.authorization = checked.authorization();
+        this.policies = checked.policies();
+        this.workers = checked.workers();
+        this.targetGuard = java.util.Objects.requireNonNull(targetGuard, "targetGuard");
+        this.catalog = new PunishmentGuiCatalog(this.policies, this.authorization);
         this.renderer = new PunishmentGuiRenderer(catalog);
     }
 
@@ -90,10 +106,13 @@ public final class PunishmentGuiController implements Listener {
             return;
         }
         String normalizedCommand = normalizeCommand(commandName);
-        resolveTarget(viewer, targetQuery, target -> openState(
-                viewer,
-                new PunishmentGuiState.Categories(viewer.getUniqueId(), target, normalizedCommand, 0)
-        ));
+        resolveTarget(viewer, targetQuery, target -> {
+            if (targetAllowed(viewer, actor, target.playerId())) {
+                openState(viewer, new PunishmentGuiState.Categories(
+                        viewer.getUniqueId(), target, normalizedCommand, 0
+                ));
+            }
+        });
     }
 
     public void resume(Player viewer, String targetQuery, String invokedCommand) {
@@ -102,6 +121,9 @@ public final class PunishmentGuiController implements Listener {
             return;
         }
         resolveTarget(viewer, targetQuery, target -> submit(viewer, () -> {
+            if (!targetAllowed(viewer, actor, target.playerId())) {
+                return;
+            }
             PunishmentDraftWorkflow workflow = workflows.get();
             if (workflow == null) {
                 message(viewer, "Moderation storage is not ready; no draft was opened.");
@@ -320,6 +342,9 @@ public final class PunishmentGuiController implements Listener {
             ReasonPolicy policy
     ) {
         submit(viewer, () -> {
+            if (!targetAllowed(viewer, actor, state.target().playerId())) {
+                return;
+            }
             PunishmentDraftWorkflow workflow = workflows.get();
             if (workflow == null) {
                 message(viewer, "Moderation storage is not ready; no draft was created.");
@@ -348,6 +373,9 @@ public final class PunishmentGuiController implements Listener {
             CaseVisibility visibility
     ) {
         submit(viewer, () -> {
+            if (!targetAllowed(viewer, actor, state.target().playerId())) {
+                return;
+            }
             PunishmentDraftWorkflow workflow = workflows.get();
             if (workflow == null) {
                 message(viewer, "Moderation storage is not ready; the existing draft remains saved.");
@@ -396,72 +424,108 @@ public final class PunishmentGuiController implements Listener {
     }
 
     private void confirm(Player viewer, Actor actor, PunishmentGuiState.Review state) {
-        if (!confirmations.add(viewer.getUniqueId())) {
+        UUID viewerId = viewer.getUniqueId();
+        if (!confirmations.add(viewerId)) {
             viewer.sendMessage(Component.text("That punishment confirmation is already in progress."));
             return;
         }
-        boolean submitted = submit(viewer, () -> {
-            try {
-                PunishmentDraftWorkflow workflow = workflows.get();
-                if (workflow == null) {
-                    message(viewer, "Moderation storage is not ready; no action was taken.");
-                    return;
-                }
-                PunishmentDraftConfirmation result;
-                try {
-                    result = workflow.confirmRouted(state.draft().draftId(), actor, mode.get());
-                } catch (PunishmentDraftCleanupException exception) {
-                    plugin.getLogger().log(
-                            Level.SEVERE,
-                            "Punishment GUI draft cleanup failed after case commit " + exception.accepted().caseId(),
-                            exception
-                    );
-                    finish(viewer, "Punishment committed as case " + exception.accepted().caseId()
-                            + ", but draft cleanup failed. Reconfirming is idempotent.");
-                    return;
-                } catch (PunishmentRequestDraftCleanupException exception) {
-                    plugin.getLogger().log(
-                            Level.SEVERE,
-                            "Punishment GUI draft cleanup failed after request submission "
-                                    + exception.submitted().request().requestId(),
-                            exception
-                    );
-                    finish(viewer, "Punishment request submitted, but draft cleanup failed. "
-                            + "Reconfirming is idempotent.");
-                    return;
-                }
-                if (result instanceof PunishmentDraftConfirmation.Applied applied) {
-                    finish(viewer, "Punishment committed as case " + applied.accepted().caseId()
-                            + (applied.accepted().replayed() ? " (idempotent replay)" : "") + '.');
-                    return;
-                }
-                if (result instanceof PunishmentDraftConfirmation.Requested requested) {
-                    finish(viewer, "Punishment request "
-                            + (requested.submitted().replayed() ? "replayed" : "submitted")
-                            + "; expires " + requested.submitted().request().expiresAt() + '.');
-                    return;
-                }
-                PunishmentDraftConfirmation.Rejected rejected = (PunishmentDraftConfirmation.Rejected) result;
-                if ("RECOMMENDATION_CHANGED".equals(rejected.code())) {
-                    message(viewer, "The recommendation changed. A fresh review is being opened; "
-                            + "no punishment or request was created.");
-                    reprepare(
-                            viewer,
-                            actor,
-                            state,
-                            state.draft().internalExplanation(),
-                            state.draft().visibility()
-                    );
-                    return;
-                }
-                message(viewer, rejected.code() + ": " + rejected.message());
-            } finally {
-                confirmations.remove(viewer.getUniqueId());
-            }
-        });
+        boolean submitted = submit(viewer, () -> runConfirmation(viewer, actor, state, viewerId));
         if (!submitted) {
-            confirmations.remove(viewer.getUniqueId());
+            confirmations.remove(viewerId);
         }
+    }
+
+    private void runConfirmation(
+            Player viewer,
+            Actor actor,
+            PunishmentGuiState.Review state,
+            UUID viewerId
+    ) {
+        try {
+            confirmOnce(viewer, actor, state);
+        } finally {
+            confirmations.remove(viewerId);
+        }
+    }
+
+    private void confirmOnce(Player viewer, Actor actor, PunishmentGuiState.Review state) {
+        if (!targetAllowed(viewer, actor, state.target().playerId())) {
+            return;
+        }
+        PunishmentDraftWorkflow workflow = workflows.get();
+        if (workflow == null) {
+            message(viewer, "Moderation storage is not ready; no action was taken.");
+            return;
+        }
+        Optional<PunishmentDraftConfirmation> result = confirmDraft(viewer, actor, state, workflow);
+        if (result.isPresent()) {
+            handleConfirmation(viewer, actor, state, result.orElseThrow());
+        }
+    }
+
+    private Optional<PunishmentDraftConfirmation> confirmDraft(
+            Player viewer,
+            Actor actor,
+            PunishmentGuiState.Review state,
+            PunishmentDraftWorkflow workflow
+    ) {
+        try {
+            return Optional.of(workflow.confirmRouted(state.draft().draftId(), actor, mode.get()));
+        } catch (PunishmentDraftCleanupException exception) {
+            plugin.getLogger().log(
+                    Level.SEVERE,
+                    "Punishment GUI draft cleanup failed after case commit " + exception.accepted().caseId(),
+                    exception
+            );
+            finish(viewer, "Punishment committed as case " + exception.accepted().caseId()
+                    + ", but draft cleanup failed. Reconfirming is idempotent.");
+        } catch (PunishmentRequestDraftCleanupException exception) {
+            plugin.getLogger().log(
+                    Level.SEVERE,
+                    "Punishment GUI draft cleanup failed after request submission "
+                            + exception.submitted().request().requestId(),
+                    exception
+            );
+            finish(viewer, "Punishment request submitted, but draft cleanup failed. Reconfirming is idempotent.");
+        }
+        return Optional.empty();
+    }
+
+    private void handleConfirmation(
+            Player viewer,
+            Actor actor,
+            PunishmentGuiState.Review state,
+            PunishmentDraftConfirmation result
+    ) {
+        if (result instanceof PunishmentDraftConfirmation.Applied applied) {
+            finish(viewer, "Punishment committed as case " + applied.accepted().caseId()
+                    + (applied.accepted().replayed() ? " (idempotent replay)" : "") + '.');
+            return;
+        }
+        if (result instanceof PunishmentDraftConfirmation.Requested requested) {
+            finish(viewer, "Punishment request "
+                    + (requested.submitted().replayed() ? "replayed" : "submitted")
+                    + "; expires " + requested.submitted().request().expiresAt() + '.');
+            return;
+        }
+        handleRejected(viewer, actor, state, (PunishmentDraftConfirmation.Rejected) result);
+    }
+
+    private void handleRejected(
+            Player viewer,
+            Actor actor,
+            PunishmentGuiState.Review state,
+            PunishmentDraftConfirmation.Rejected rejected
+    ) {
+        if ("RECOMMENDATION_CHANGED".equals(rejected.code())) {
+            message(viewer, "The recommendation changed. A fresh review is being opened; "
+                    + "no punishment or request was created.");
+            reprepare(
+                    viewer, actor, state, state.draft().internalExplanation(), state.draft().visibility()
+            );
+            return;
+        }
+        message(viewer, rejected.code() + ": " + rejected.message());
     }
 
     private void resolveTarget(
@@ -482,6 +546,15 @@ public final class PunishmentGuiController implements Listener {
             }
             continuation.accept(target);
         });
+    }
+
+    private boolean targetAllowed(Player viewer, Actor actor, UUID targetId) {
+        StaffTargetGuard.Result result = targetGuard.check(actor, targetId, false);
+        if (result.allowed()) {
+            return true;
+        }
+        message(viewer, result.message());
+        return false;
     }
 
     private void openState(Player viewer, PunishmentGuiState state) {
@@ -558,6 +631,26 @@ public final class PunishmentGuiController implements Listener {
 
     private static String targetName(PlayerIdentity target) {
         return target.currentUsername().orElse(target.playerId().toString());
+    }
+
+    record Dependencies(
+            JavaPlugin plugin,
+            Supplier<OperationalMode> mode,
+            Supplier<PunishmentDraftWorkflow> workflows,
+            Supplier<PlayerDirectory> players,
+            AuthorizationPolicy authorization,
+            ReasonPolicyRepository policies,
+            ExecutorService workers
+    ) {
+        Dependencies {
+            plugin = java.util.Objects.requireNonNull(plugin, "plugin");
+            mode = java.util.Objects.requireNonNull(mode, "mode");
+            workflows = java.util.Objects.requireNonNull(workflows, "workflows");
+            players = java.util.Objects.requireNonNull(players, "players");
+            authorization = java.util.Objects.requireNonNull(authorization, "authorization");
+            policies = java.util.Objects.requireNonNull(policies, "policies");
+            workers = java.util.Objects.requireNonNull(workers, "workers");
+        }
     }
 
     private record NoteCapture(PunishmentGuiState.Review review) {

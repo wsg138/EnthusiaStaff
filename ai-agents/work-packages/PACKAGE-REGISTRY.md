@@ -1,6 +1,6 @@
 # Package registry
 
-Last updated: 2026-09-22
+Last updated: 2026-09-24
 
 Live GitHub overrides stale text. Detailed historical evidence remains in package files and canonical handoffs; this registry is the current routing authority.
 
@@ -17,6 +17,8 @@ Live GitHub overrides stale text. Detailed historical evidence remains in packag
 ## Canonical current state
 
 `ES-P01`, `ES-P02`, `ES-P03`, `ES-P04`, `ES-P05`, `ES-P06`, `ES-P07`, `ES-P08`, `ES-P09`, `ES-P10`, `ES-P11`, `ES-X02`, `ES-X04`, `ES-X05`, `ES-R01`, `ES-R02`, and `ES-V01` are `COMPLETE`.
+
+`ES-P12 — Staff operational hardening` is `VALIDATING / ACTIONABLE_CONTINUATION` on `package/es-p12-staff-operational-hardening`, PR #246. Final executable head `b26eca2cd18bbd4148a02e9307fd81ada21a6fd3` includes the bounded CodeRabbit repair batch plus the exact freeze-generation notice fence; gated workflows `35936723820` and `35937174002` passed their applicable complexity, PMD, Paper test, runtime-JAR, and diff checks before publication. Normal-actor exact-head repository acceptance, Codacy, review reconciliation, and final concurrent-path reconciliation remain. Canonical handoff: `ai-agents/reports/package-handoffs/2026-09-24-es-p12-staff-operational-hardening.md`.
 
 `ES-P08 — Item confiscation and restoration` completed through implementation PR #128. Frozen executable-validation head `27b20bb56e540161f695e624916f91620261457d` passed the package's required executable gates. Final synchronized head `f398fd5bd8bbf4ec62f7f05313dd082948c2561b` differed from the frozen product head only in eight `ai-agents` Markdown process/state/handoff files, passed the applicable documentation/static/review gates, merged normally, is exactly contained with zero file delta, and its temporary implementation branch is deleted.
 
@@ -56,6 +58,7 @@ Canonical D07 terminal handoff: `ai-agents/reports/package-handoffs/2026-09-14-e
 Canonical D16 terminal handoff: `ai-agents/reports/package-handoffs/2026-09-13-es-d16-complete.md`.
 Canonical D13 blocker handoff: `ai-agents/reports/package-handoffs/2026-09-14-es-d13-role-sync-blocked.md`.
 Canonical D09 blocker handoff: `ai-agents/reports/package-handoffs/2026-09-19-es-d09-investigations-blocked.md`.
+Canonical ES-P12 current handoff: `ai-agents/reports/package-handoffs/2026-09-24-es-p12-staff-operational-hardening.md`.
 
 ## Canonical package index
 
@@ -75,6 +78,7 @@ Canonical D09 blocker handoff: `ai-agents/reports/package-handoffs/2026-09-19-es
 | `ES-P08` | Item confiscation and restoration | `COMPLETE` | — | 70 | `ES-P07` | frozen executable head `27b20bb56e540161f695e624916f91620261457d`; final synchronized head `f398fd5bd8bbf4ec62f7f05313dd082948c2561b`; PR #128 merged normally; contained; branch cleaned |
 | `ES-P10` | Cheat tester and fake-entity system | `COMPLETE` | — | 80 | `ES-P04` | merged PR #86 |
 | `ES-P11` | Fake-base generation and cleanup | `COMPLETE` | — | 90 | `ES-P10` | merged PR #88 |
+| `ES-P12` | Staff operational hardening | `VALIDATING` | `ACTIONABLE_CONTINUATION` | 95 | current merged Staff runtime | PR #246 on `package/es-p12-staff-operational-hardening`; executable head `b26eca2cd18bbd4148a02e9307fd81ada21a6fd3` gated green; normal-actor exact-head acceptance/review pending |
 | `ES-X01` | RoseChat provider and communication integration | `BLOCKED` | `PARKED_BLOCKED` | 100 | `ES-P03`, `ES-P04`, `ES-P05` | provider repo resolved to `wsg138/Enthusia-RoseChat:master` at `8fcca542...`; verified license/public-aggregate redistribution boundary blocks canonical import/parity; no implementation branches/PRs created; exact unblock is durable redistribution authorization/license change or explicitly authorized mirror-policy redesign |
 | `ES-X02` | EnthusiaCurrency destructive provider | `COMPLETE` | — | 110 | `ES-P08` | Currency PR #14 and Staff PR #137 merged; post-merge parity exact; branches cleaned |
 | ES-X03 | Market | PARTIAL | ACTIONABLE_CONTINUATION | 120 | P08/X02 | #7 `81b14c3` ↔ #139 `f673281` parity; Coverage/artifact/durable Sentinel pass; Codacy static and Pi non-passing. |

@@ -58,6 +58,7 @@ final class AllFeatureSurfaceContractTest {
             "fakebase",
             "vanish",
             "staffchat",
+            "staffwho",
             "client",
             "invsee",
             "endersee",
@@ -168,6 +169,7 @@ final class AllFeatureSurfaceContractTest {
         assertGranted(permissions, RANK_HELPER, "enthusiastaff.stafftools.teleport");
         assertGranted(permissions, RANK_HELPER, "enthusiastaff.stafftools.spectate");
         assertGranted(permissions, RANK_HELPER, "enthusiastaff.vanish");
+        assertGranted(permissions, RANK_HELPER, "enthusiastaff.staffwho");
         assertGranted(permissions, RANK_MOD, "enthusiastaff.remove");
         assertGranted(permissions, RANK_MOD, "enthusiastaff.inventory.edit");
         assertGranted(permissions, RANK_ADMIN, "enthusiastaff.cheattester.cancel-any");

@@ -157,6 +157,16 @@ public final class VanishManager implements Listener {
         return visibility.isVanished(playerId);
     }
 
+    public boolean canSee(UUID viewerId, UUID targetId) {
+        return visibility.canSee(viewerId, targetId);
+    }
+
+    int vanishedOnlineCount() {
+        return (int) audiences.playerIds().stream()
+                .filter(this::isVanished)
+                .count();
+    }
+
     public void toggle(Player player) {
         StaffRank rank = resolveAndPublishRank(player);
         if (rank == null) {

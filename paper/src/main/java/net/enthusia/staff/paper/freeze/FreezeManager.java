@@ -4,6 +4,8 @@ import io.papermc.paper.event.player.AsyncChatEvent;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.RejectedExecutionException;
@@ -11,6 +13,7 @@ import java.util.function.Consumer;
 import java.util.function.Supplier;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import net.enthusia.staff.domain.freeze.FreezeRecord;
 import net.enthusia.staff.domain.ports.FreezeStore;
 import net.kyori.adventure.text.Component;
 import org.bukkit.Location;
@@ -49,12 +52,16 @@ import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.event.player.PlayerShearEntityEvent;
 import org.bukkit.event.player.PlayerSwapHandItemsEvent;
 import org.bukkit.event.player.PlayerTeleportEvent;
+import org.bukkit.plugin.Plugin;
 import org.bukkit.plugin.java.JavaPlugin;
 
 public final class FreezeManager implements Listener {
     private static final Duration OFFLINE_EXPIRATION = Duration.ofMinutes(10);
     private static final String VERIFICATION_UNAVAILABLE_MESSAGE =
             "Your freeze status could not be verified. You remain restricted until staff review.";
+    private static final Component COMMAND_RESTRICTION_MESSAGE = Component.text(
+            "You are frozen; commands are unavailable until staff releases the freeze."
+    );
 
     private final JavaPlugin plugin;
     private final Clock clock;
@@ -65,6 +72,7 @@ public final class FreezeManager implements Listener {
     private final Logger logger;
     private final Consumer<String> staffAlertSink;
     private final FreezeRuntimeState runtimeState = new FreezeRuntimeState();
+    private volatile FreezeNoticeSink noticeSink = FreezeNoticeSink.noOp();
 
     public FreezeManager(
             JavaPlugin plugin,
@@ -114,7 +122,15 @@ public final class FreezeManager implements Listener {
         return runtimeState.isRestricted(playerId);
     }
 
-    public void applyOnline(UUID playerId) {
+    public boolean isCurrentFrozen(UUID playerId, long generation) {
+        return runtimeState.isCurrentFrozen(playerId, generation);
+    }
+
+    public void setNoticeSink(FreezeNoticeSink noticeSink) {
+        this.noticeSink = java.util.Objects.requireNonNull(noticeSink, "noticeSink");
+    }
+
+    public long applyOnline(UUID playerId) {
         long generation = runtimeState.apply(playerId);
         onEntity(playerId, player -> {
             if (!runtimeState.isCurrentFrozen(playerId, generation)) {
@@ -122,6 +138,7 @@ public final class FreezeManager implements Listener {
             }
             securePlayer(player);
         }, () -> runtimeState.retireIfCurrent(playerId, generation));
+        return generation;
     }
 
     public void releaseOnline(UUID playerId) {
@@ -175,10 +192,12 @@ public final class FreezeManager implements Listener {
                 }
                 return;
             }
-            boolean active = loaded.active(playerId, clock.instant()).isPresent();
+            FreezeRecord record = loaded.active(playerId, clock.instant()).orElse(null);
+            boolean active = record != null;
             if (!runtimeState.resolveVerification(playerId, verificationToken, active) || !active) {
                 return;
             }
+            noticeSink.show(record, null, verificationToken);
             onEntity(playerId, player -> {
                 if (!runtimeState.isCurrentFrozen(playerId, verificationToken)) {
                     return;
@@ -348,7 +367,12 @@ public final class FreezeManager implements Listener {
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     public void onCommand(PlayerCommandPreprocessEvent event) {
-        cancel(event.getPlayer(), event);
+        Player player = event.getPlayer();
+        if (!restricted(player)) {
+            return;
+        }
+        event.setCancelled(true);
+        player.sendMessage(COMMAND_RESTRICTION_MESSAGE);
     }
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
@@ -410,15 +434,16 @@ public final class FreezeManager implements Listener {
         UUID playerId = player.getUniqueId();
         String playerName = player.getName();
         Component rendered = Component.text("<" + playerName + "> ").append(body);
+        Component staffMessage = Component.text("[Frozen Chat] ").append(rendered);
         scheduleGlobal(() -> {
-            Player current = plugin.getServer().getPlayer(playerId);
-            if (current != null) {
-                current.sendMessage(rendered);
-            }
-            plugin.getServer().getOnlinePlayers().stream()
-                    .filter(staff -> !staff.getUniqueId().equals(playerId))
-                    .filter(staff -> staff.hasPermission("enthusiastaff.freeze.chat"))
-                    .forEach(staff -> staff.sendMessage(Component.text("[Frozen Chat] ").append(rendered)));
+            List<Player> online = new ArrayList<>(plugin.getServer().getOnlinePlayers());
+            online.forEach(recipient -> scheduleRecipient(plugin, recipient, () -> {
+                if (recipient.getUniqueId().equals(playerId)) {
+                    recipient.sendMessage(rendered);
+                } else if (recipient.hasPermission("enthusiastaff.freeze.chat")) {
+                    recipient.sendMessage(staffMessage);
+                }
+            }));
         });
     }
 
@@ -465,9 +490,21 @@ public final class FreezeManager implements Listener {
             staffAlertSink.accept(message);
             return;
         }
-        plugin.getServer().getOnlinePlayers().stream()
-                .filter(player -> player.hasPermission("enthusiastaff.freeze"))
-                .forEach(player -> player.sendMessage(Component.text(message)));
+        Component alert = Component.text(message);
+        List<Player> online = new ArrayList<>(plugin.getServer().getOnlinePlayers());
+        online.forEach(player -> scheduleRecipient(plugin, player, () -> {
+            if (player.hasPermission("enthusiastaff.freeze")) {
+                player.sendMessage(alert);
+            }
+        }));
+    }
+
+    static boolean scheduleRecipient(Plugin plugin, Player player, Runnable operation) {
+        try {
+            return player.getScheduler().execute(plugin, operation, null, 1L);
+        } catch (RuntimeException exception) {
+            return false;
+        }
     }
 
     private boolean submit(Runnable operation) {

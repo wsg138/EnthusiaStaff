@@ -5,17 +5,24 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
-import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.function.BiConsumer;
 import java.util.function.Supplier;
 import java.util.logging.Level;
 import net.enthusia.staff.domain.OperationalMode;
+import net.enthusia.staff.domain.auth.Actor;
+import net.enthusia.staff.domain.freeze.FreezeRecord;
 import net.enthusia.staff.domain.player.PlayerIdentity;
 import net.enthusia.staff.domain.ports.FreezeStore;
 import net.enthusia.staff.domain.ports.PlayerDirectory;
+import net.enthusia.staff.paper.auth.LuckPermsStaffTargetGuard;
+import net.enthusia.staff.paper.auth.PaperActorResolver;
+import net.enthusia.staff.paper.auth.StaffTargetGuard;
+import net.enthusia.staff.paper.freeze.FreezeAlertSink;
 import net.enthusia.staff.paper.freeze.FreezeManager;
+import net.enthusia.staff.paper.freeze.FreezeNoticeSink;
+import net.enthusia.staff.paper.freeze.FreezeStaffNotifier;
 import net.kyori.adventure.text.Component;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
@@ -38,6 +45,9 @@ public final class FreezeCommand implements CommandExecutor, TabCompleter {
     private final Supplier<FreezeStore> freezes;
     private final FreezeManager manager;
     private final ExecutorService workers;
+    private final StaffTargetGuard targetGuard;
+    private final FreezeAlertSink alerts;
+    private final FreezeNoticeSink targetNotices;
     private final BiConsumer<CommandSender, List<Component>> responses;
     private final FreezeQueryHandler queries;
 
@@ -50,7 +60,36 @@ public final class FreezeCommand implements CommandExecutor, TabCompleter {
             FreezeManager manager,
             ExecutorService workers
     ) {
-        this(plugin, clock, mode, players, freezes, manager, workers, commandResponses(plugin));
+        this(
+                plugin, clock, mode, players, freezes, manager, workers,
+                new RuntimeHooks(
+                        LuckPermsStaffTargetGuard.discover(plugin),
+                        new FreezeStaffNotifier(plugin),
+                        FreezeNoticeSink.noOp(),
+                        commandResponses(plugin)
+                )
+        );
+    }
+
+    public static FreezeCommand createRuntime(
+            JavaPlugin plugin,
+            Clock clock,
+            Supplier<OperationalMode> mode,
+            Supplier<PlayerDirectory> players,
+            Supplier<FreezeStore> freezes,
+            FreezeManager manager,
+            ExecutorService workers,
+            FreezeNoticeSink targetNotices
+    ) {
+        return new FreezeCommand(
+                plugin, clock, mode, players, freezes, manager, workers,
+                new RuntimeHooks(
+                        LuckPermsStaffTargetGuard.discover(plugin),
+                        new FreezeStaffNotifier(plugin),
+                        targetNotices,
+                        commandResponses(plugin)
+                )
+        );
     }
 
     FreezeCommand(
@@ -63,6 +102,27 @@ public final class FreezeCommand implements CommandExecutor, TabCompleter {
             ExecutorService workers,
             BiConsumer<CommandSender, List<Component>> responses
     ) {
+        this(
+                plugin, clock, mode, players, freezes, manager, workers,
+                new RuntimeHooks(
+                        (actor, targetId, systemActor) -> StaffTargetGuard.Result.allow(),
+                        FreezeAlertSink.noOp(),
+                        FreezeNoticeSink.noOp(),
+                        responses
+                )
+        );
+    }
+
+    FreezeCommand(
+            JavaPlugin plugin,
+            Clock clock,
+            Supplier<OperationalMode> mode,
+            Supplier<PlayerDirectory> players,
+            Supplier<FreezeStore> freezes,
+            FreezeManager manager,
+            ExecutorService workers,
+            RuntimeHooks hooks
+    ) {
         this.plugin = plugin;
         this.clock = clock;
         this.mode = mode;
@@ -70,7 +130,10 @@ public final class FreezeCommand implements CommandExecutor, TabCompleter {
         this.freezes = freezes;
         this.manager = manager;
         this.workers = workers;
-        this.responses = responses;
+        this.targetGuard = hooks.targetGuard();
+        this.alerts = hooks.alerts();
+        this.targetNotices = hooks.targetNotices();
+        this.responses = hooks.responses();
         this.queries = new FreezeQueryHandler(clock, players, freezes, this::respond);
     }
 
@@ -120,15 +183,13 @@ public final class FreezeCommand implements CommandExecutor, TabCompleter {
         if (parsed == null) {
             return true;
         }
-        UUID actorId = sender instanceof Player player ? player.getUniqueId() : new UUID(0L, 0L);
-        submit(sender, () -> change(
-                sender,
-                parsed.target(),
-                actorId,
-                parsed.reason(),
-                release,
-                parsed.keep()
-        ));
+        Actor actor = PaperActorResolver.resolve(sender).orElse(null);
+        if (actor == null) {
+            sender.sendMessage(Component.text("Staff rank verification is unavailable; no action was taken."));
+            return true;
+        }
+        boolean systemActor = !(sender instanceof Player);
+        submit(sender, () -> change(sender, parsed, actor, systemActor, release));
         return true;
     }
 
@@ -178,11 +239,10 @@ public final class FreezeCommand implements CommandExecutor, TabCompleter {
 
     private void change(
             CommandSender sender,
-            String targetInput,
-            UUID actorId,
-            String reason,
-            boolean release,
-            boolean keep
+            ChangeArguments change,
+            Actor actor,
+            boolean systemActor,
+            boolean release
     ) {
         PlayerDirectory directory = players.get();
         FreezeStore store = freezes.get();
@@ -190,27 +250,65 @@ public final class FreezeCommand implements CommandExecutor, TabCompleter {
             respond(sender, "Freeze storage is not ready; no change was made.");
             return;
         }
-        PlayerIdentity target = directory.find(targetInput).orElse(null);
+        PlayerIdentity target = directory.find(change.target()).orElse(null);
         if (target == null) {
             respond(sender, "That player has never joined the authoritative directory.");
             return;
         }
-        if (release) {
-            boolean changed = store.release(target.playerId(), actorId, reason, clock.instant());
-            if (changed) {
-                manager.releaseOnline(target.playerId());
-            }
-            respond(sender, changed ? "Player freeze released and audited." : "That player is not frozen.");
-        } else if (keep) {
-            boolean changed = store.keepActive(target.playerId(), actorId, reason, clock.instant());
-            respond(sender, changed
-                    ? "Freeze will remain active beyond the offline timeout."
-                    : "That player is not frozen.");
-        } else {
-            store.apply(target.playerId(), actorId, reason, clock.instant());
-            manager.applyOnline(target.playerId());
-            respond(sender, "Player frozen and durable recovery state committed.");
+        if (!release && !targetAllowed(sender, actor, target.playerId(), systemActor)) {
+            return;
         }
+        applyChange(sender, store, target, actor, change, release);
+    }
+
+    private boolean targetAllowed(CommandSender sender, Actor actor, java.util.UUID targetId, boolean systemActor) {
+        StaffTargetGuard.Result result = targetGuard.check(actor, targetId, systemActor);
+        if (result.allowed()) {
+            return true;
+        }
+        respond(sender, result.message());
+        return false;
+    }
+
+    private void applyChange(
+            CommandSender sender,
+            FreezeStore store,
+            PlayerIdentity target,
+            Actor actor,
+            ChangeArguments change,
+            boolean release
+    ) {
+        if (release) {
+            release(sender, store, target, actor, change.reason());
+        } else if (change.keep()) {
+            keep(sender, store, target, actor, change.reason());
+        } else {
+            freeze(sender, store, target, actor, change.reason());
+        }
+    }
+
+    private void release(CommandSender sender, FreezeStore store, PlayerIdentity target, Actor actor, String reason) {
+        boolean changed = store.release(target.playerId(), actor.id(), reason, clock.instant());
+        if (changed) {
+            manager.releaseOnline(target.playerId());
+            alerts.unfrozen(target, actor, reason);
+        }
+        respond(sender, changed ? "Player freeze released and audited." : "That player is not frozen.");
+    }
+
+    private void keep(CommandSender sender, FreezeStore store, PlayerIdentity target, Actor actor, String reason) {
+        boolean changed = store.keepActive(target.playerId(), actor.id(), reason, clock.instant());
+        respond(sender, changed
+                ? "Freeze will remain active beyond the offline timeout."
+                : "That player is not frozen.");
+    }
+
+    private void freeze(CommandSender sender, FreezeStore store, PlayerIdentity target, Actor actor, String reason) {
+        FreezeRecord record = store.apply(target.playerId(), actor.id(), reason, clock.instant());
+        long generation = manager.applyOnline(target.playerId());
+        targetNotices.show(record, actor.displayName(), generation);
+        alerts.frozen(target, actor, reason);
+        respond(sender, "Player frozen and durable recovery state committed.");
     }
 
     private void submit(CommandSender sender, Runnable operation) {
@@ -281,6 +379,20 @@ public final class FreezeCommand implements CommandExecutor, TabCompleter {
     private static BiConsumer<CommandSender, List<Component>> commandResponses(JavaPlugin plugin) {
         CommandResponseDispatcher dispatcher = new CommandResponseDispatcher(plugin);
         return dispatcher::send;
+    }
+
+    record RuntimeHooks(
+            StaffTargetGuard targetGuard,
+            FreezeAlertSink alerts,
+            FreezeNoticeSink targetNotices,
+            BiConsumer<CommandSender, List<Component>> responses
+    ) {
+        RuntimeHooks {
+            java.util.Objects.requireNonNull(targetGuard, "targetGuard");
+            java.util.Objects.requireNonNull(alerts, "alerts");
+            java.util.Objects.requireNonNull(targetNotices, "targetNotices");
+            java.util.Objects.requireNonNull(responses, "responses");
+        }
     }
 
     private record ChangeArguments(String target, String reason, boolean keep) {
