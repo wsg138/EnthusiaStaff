@@ -4,7 +4,7 @@
 `ES-P12`; Internal; primary `COMP-STAFF`; owner-directed feature package; priority 95.
 
 ## 2. Status
-`COMPLETE` — PR #246 merged normally as `753ef35496c15abe361cad51704b610af540b0f0` from exact accepted head `e29bbab530f47473d9dbc9d7d60f57ec73dadea6`. Executable product head `b26eca2cd18bbd4148a02e9307fd81ada21a6fd3` is contained unchanged; terminal documentation publication is the only remaining bookkeeping step.
+`COMPLETE` — PR #246 merged normally as `753ef35496c15abe361cad51704b610af540b0f0` from exact accepted head `e29bbab530f47473d9dbc9d7d60f57ec73dadea6`. Executable product head `b26eca2cd18bbd4148a02e9307fd81ada21a6fd3` is contained unchanged. Terminal documentation PR #247 merged normally as `1a29db11abaece89a301a6b403312f048336d7d1`; no ES-P12 implementation, validation, review, merge, or synchronization work remains.
 
 ## 3. Objective
 Harden day-to-day staff operations so rank boundaries, freeze visibility, vanish privacy, mute fallback behavior, punishment escalation context, confiscation availability, staff-presence reporting, and bare-Paper presence tracking behave safely and predictably.
