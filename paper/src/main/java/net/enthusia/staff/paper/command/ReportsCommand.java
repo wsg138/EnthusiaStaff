@@ -471,11 +471,16 @@ public final class ReportsCommand implements CommandExecutor, TabCompleter {
 
     @Override
     public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] arguments) {
+        if (!sender.hasPermission(MANAGE_PERMISSION)) {
+            return List.of();
+        }
         if (arguments.length == SINGLE_ARGUMENT) {
             return List.of("note", "cancel", "evidence", "open", "mine", "claimed", "review", "closed", "view",
                     "claim", "awaitreview", "close", "noviolation");
         }
-        if (arguments.length == EVIDENCE_KIND_TAB_ARGUMENTS && arguments[0].equalsIgnoreCase("evidence")) {
+        if (arguments.length == EVIDENCE_KIND_TAB_ARGUMENTS
+                && arguments[0].equalsIgnoreCase("evidence")
+                && sender.hasPermission(EVIDENCE_PERMISSION)) {
             return List.of("public", "private", "client");
         }
         return List.of();
