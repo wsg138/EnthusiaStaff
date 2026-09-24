@@ -1,5 +1,6 @@
 package net.enthusia.staff.discordbot;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -41,6 +42,16 @@ class JdaKickEnforcerTest {
         assertFalse(proves(observation(
                 ActionType.KICK, TARGET_ID, BOT_ID, reason, ISSUED_AT.minusSeconds(120)
         )));
+    }
+
+    @Test
+    void permanentJdaFailureRemainsNonRetryable() {
+        DiscordPunishmentGateway.EffectException classified = JdaKickEnforcer.classifyDispatchFailure(
+                new DiscordPunishmentGateway.EffectException("APPLY_DISCORD_MISSING_PERMISSIONS", false)
+        );
+
+        assertEquals("APPLY_DISCORD_MISSING_PERMISSIONS", classified.errorCode());
+        assertFalse(classified.retryable());
     }
 
     private static boolean proves(JdaKickEnforcer.Observation observation) {
