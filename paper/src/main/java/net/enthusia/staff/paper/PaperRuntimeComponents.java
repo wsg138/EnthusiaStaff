@@ -22,6 +22,7 @@ import net.enthusia.staff.paper.api.StaffSessionService;
 import net.enthusia.staff.paper.api.StaffVisibilityService;
 import net.enthusia.staff.paper.freeze.FreezeManager;
 import net.enthusia.staff.paper.freeze.FreezeNetworkReconciler;
+import net.enthusia.staff.paper.freeze.FreezeNoticeService;
 import net.enthusia.staff.paper.inventory.InventoryCoordinator;
 import net.enthusia.staff.paper.inventory.InventoryOperationContext;
 import net.enthusia.staff.paper.inventory.InventoryRecoveryGuard;
@@ -36,6 +37,7 @@ import net.enthusia.staff.paper.tester.CheatTesterSettings;
 import net.enthusia.staff.paper.tester.FakeBaseCommand;
 import net.enthusia.staff.paper.tester.FakeBaseManager;
 import net.enthusia.staff.paper.visibility.DefaultStaffVisibilityService;
+import net.enthusia.staff.paper.visibility.VanishBroadcastListener;
 import net.enthusia.staff.paper.visibility.VanishManager;
 import org.bukkit.event.Listener;
 import org.bukkit.plugin.ServicePriority;
@@ -44,6 +46,7 @@ import org.bukkit.plugin.java.JavaPlugin;
 record PaperRuntimeComponents(
         ReportEvidenceMaintenance reportEvidenceMaintenance,
         FreezeManager freeze,
+        FreezeNoticeService freezeNotices,
         FreezeNetworkReconciler freezeNetworkReconciler,
         StaffModeManager staffMode,
         CheatTesterManager cheatTester,
@@ -62,6 +65,7 @@ record PaperRuntimeComponents(
                 dependencies.environment().plugin().getLogger()
         );
         FreezeManager freeze = createFreezeManager(dependencies);
+        FreezeNoticeService freezeNotices = createFreezeNoticeService(dependencies, freeze);
         FreezeNetworkReconciler freezeNetworkReconciler = new FreezeNetworkReconciler(
                 dependencies.environment().plugin(),
                 dependencies.environment().clock(),
@@ -72,6 +76,7 @@ record PaperRuntimeComponents(
         StaffModeManager staffMode = createStaffModeManager(dependencies);
         DefaultStaffVisibilityService visibility = createVisibilityService(dependencies);
         VanishManager vanish = createVanishManager(dependencies, staffMode, visibility);
+        registerOperationalListeners(dependencies, vanish);
         InventoryOperationContext inventoryContext = new InventoryOperationContext(
                 dependencies.environment().clock(),
                 dependencies.environment().inventoryScopeId(),
@@ -98,6 +103,7 @@ record PaperRuntimeComponents(
         return new PaperRuntimeComponents(
                 evidence,
                 freeze,
+                freezeNotices,
                 freezeNetworkReconciler,
                 staffMode,
                 cheatTester,
@@ -154,6 +160,18 @@ record PaperRuntimeComponents(
         return freeze;
     }
 
+    private static FreezeNoticeService createFreezeNoticeService(
+            Dependencies dependencies,
+            FreezeManager freeze
+    ) {
+        JavaPlugin plugin = dependencies.environment().plugin();
+        FreezeNoticeService notices = new FreezeNoticeService(
+                plugin, dependencies.stores().playerDirectory(), dependencies.environment().workers(), freeze
+        );
+        freeze.setNoticeSink(notices);
+        return notices;
+    }
+
     private static StaffModeManager createStaffModeManager(Dependencies dependencies) {
         JavaPlugin plugin = dependencies.environment().plugin();
         StaffModeManager staffMode = new StaffModeManager(
@@ -205,6 +223,18 @@ record PaperRuntimeComponents(
         staffMode.setExitListener(vanish::staffModeExited);
         registerListener(dependencies.environment().plugin(), vanish);
         return vanish;
+    }
+
+    private static void registerOperationalListeners(Dependencies dependencies, VanishManager vanish) {
+        JavaPlugin plugin = dependencies.environment().plugin();
+        registerListener(plugin, new PaperPresenceListener(
+                plugin,
+                dependencies.environment().clock(),
+                dependencies.environment().serverId(),
+                dependencies.stores().playerDirectory(),
+                dependencies.environment().workers()
+        ));
+        registerListener(plugin, new VanishBroadcastListener(vanish));
     }
 
     private static FakeBaseManager createFakeBaseManager(

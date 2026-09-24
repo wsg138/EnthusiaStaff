@@ -38,6 +38,7 @@ import net.enthusia.staff.paper.command.SanctionChangeCommand;
 import net.enthusia.staff.paper.command.SanctionLifecycleCommand;
 import net.enthusia.staff.paper.command.StaffChatCommand;
 import net.enthusia.staff.paper.command.StaffModeCommand;
+import net.enthusia.staff.paper.command.StaffWhoCommand;
 import net.enthusia.staff.paper.command.VanishCommand;
 import net.enthusia.staff.paper.config.ModerationFeatureSettings;
 import net.enthusia.staff.paper.config.ReloadableModerationFeatureSettings;
@@ -46,6 +47,7 @@ import net.enthusia.staff.paper.config.ReportConfigurationSnapshot;
 import net.enthusia.staff.paper.config.reload.ConfigurationReloadAction;
 import net.enthusia.staff.paper.economy.EconomyCoordinator;
 import net.enthusia.staff.paper.freeze.FreezeManager;
+import net.enthusia.staff.paper.freeze.FreezeNoticeSink;
 import net.enthusia.staff.paper.integration.DiscordSrvLinkProviderAdapter;
 import net.enthusia.staff.paper.integration.MarketIntegration;
 import net.enthusia.staff.paper.integration.PlayTimeActivePlaytimeProvider;
@@ -87,7 +89,7 @@ final class PaperCommandRegistrar {
     }
 
     static void registerStatus(JavaPlugin plugin, RuntimeHealth health) {
-        registerStatus(plugin, health, new EstaffCommand(health));
+        registerStatus(plugin, health, new EstaffCommand(plugin, health));
     }
 
     static void registerStatus(
@@ -125,6 +127,7 @@ final class PaperCommandRegistrar {
         if (!(command.getExecutor() instanceof EstaffCommand estaff)) {
             throw new IllegalStateException("estaff command executor was not registered before feature commands");
         }
+        estaff.configureStorageAvailability(() -> dependencies.storage().get().isPresent());
         estaff.addSuccessfulReloadHook(() -> moderationSettings.reloadFrom(
                 dependencies.environment().moderationFeatures().get()
         ));
@@ -140,9 +143,6 @@ final class PaperCommandRegistrar {
     }
 
     private void registerAccountLinkCommands() {
-        // All Bukkit/provider discovery happens during command registration on the server thread.
-        // The command itself runs persistence work on the bounded executor and receives only
-        // thread-safe/provider-neutral adapters from this point forward.
         ActivePlaytimeProvider playtime = PlayTimeActivePlaytimeProvider.discover(plugin());
         Optional<DiscordSrvLinkProviderAdapter> discordSrv = DiscordSrvLinkProviderAdapter.discover(plugin());
         PaperOnlinePlayerVerifier online = PaperOnlinePlayerVerifier.register(plugin());
@@ -224,15 +224,23 @@ final class PaperCommandRegistrar {
     }
 
     private void registerStaffCommands() {
-        FreezeCommand freezes = new FreezeCommand(
+        FreezeCommand freezes = FreezeCommand.createRuntime(
                 plugin(), clock(), writeMode(), storage(PaperStorageBindings::playerDirectory),
-                storage(PaperStorageBindings::freezeStore), dependencies.players().freeze(), workers()
+                storage(PaperStorageBindings::freezeStore), dependencies.players().freeze(), workers(),
+                dependencies.players().freezeNotices()
         );
         bindCompleting("freeze", freezes, freezes);
         bindCompleting("unfreeze", freezes, freezes);
         bind("staff", new StaffModeCommand(writeMode(), dependencies.players().staffMode()));
         bind("vanish", new VanishCommand(writeMode(), dependencies.players().vanish()));
         bind("staffchat", new StaffChatCommand(dependencies.integrations().roseChat()));
+        bind("staffwho", new StaffWhoCommand(
+                plugin(),
+                storage(PaperStorageBindings::punishmentRequestService),
+                dependencies.players().staffMode(),
+                dependencies.players().vanish(),
+                workers()
+        ));
     }
 
     private void registerInventoryCommands() {
@@ -365,6 +373,7 @@ final class PaperCommandRegistrar {
 
     record PlayerComponents(
             FreezeManager freeze,
+            FreezeNoticeSink freezeNotices,
             StaffModeManager staffMode,
             VanishManager vanish,
             InventoryCoordinator inventory

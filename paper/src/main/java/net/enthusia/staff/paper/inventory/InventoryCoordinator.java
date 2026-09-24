@@ -67,6 +67,7 @@ public final class InventoryCoordinator implements Listener, InventoryLockServic
     private final Supplier<InventoryJournalStore> store;
     private final Supplier<PlayerDirectory> directory;
     private final ExecutorService workers;
+    private final InventoryEditAuthorityGate editAuthority;
     private final InventoryImageCodec codec = new InventoryImageCodec();
     private final Map<UUID, LiveSession> liveSessions = new ConcurrentHashMap<>();
     private final Map<UUID, InventoryPatch> preloadedPatches = new ConcurrentHashMap<>();
@@ -92,6 +93,7 @@ public final class InventoryCoordinator implements Listener, InventoryLockServic
         this.store = java.util.Objects.requireNonNull(store, "store");
         this.directory = java.util.Objects.requireNonNull(directory, "directory");
         this.workers = java.util.Objects.requireNonNull(workers, "workers");
+        this.editAuthority = new InventoryEditAuthorityGate(plugin);
         this.reconciliationTask = plugin.getServer().getGlobalRegionScheduler().runAtFixedRate(
                 plugin,
                 ignored -> reconcileViewedTargets(),
@@ -234,7 +236,7 @@ public final class InventoryCoordinator implements Listener, InventoryLockServic
                 || event.getRawSlot() >= event.getView().getTopInventory().getSize()) {
             return;
         }
-        if (!viewer.hasPermission("enthusiastaff.inventory.edit")) {
+        if (!viewer.hasPermission(InventoryEditAuthorityGate.EDIT_PERMISSION)) {
             viewer.sendMessage(Component.text("You may inspect this inventory but not edit it."));
             return;
         }
@@ -518,6 +520,15 @@ public final class InventoryCoordinator implements Listener, InventoryLockServic
             InventoryPrepareRequest request,
             InventoryImage replacement
     ) {
+        if (!editAuthority.current(viewer)) {
+            finishLiveFailure(
+                    viewer,
+                    session,
+                    request.playerId(),
+                    "Your inventory edit authority changed; no durable edit was prepared."
+            );
+            return;
+        }
         InventoryJournalStore loaded = store.get();
         if (loaded == null) {
             finishLiveFailure(viewer, session, request.playerId(), "Inventory storage became unavailable.");
@@ -719,6 +730,10 @@ public final class InventoryCoordinator implements Listener, InventoryLockServic
                 true
         );
         submit(() -> {
+            if (!editAuthority.current(viewer)) {
+                message(viewer, "Your inventory edit authority changed; no offline patch was queued.");
+                return;
+            }
             InventoryJournalStore loaded = store.get();
             if (loaded == null) {
                 message(viewer, "Offline inventory storage is unavailable; no patch was queued.");
