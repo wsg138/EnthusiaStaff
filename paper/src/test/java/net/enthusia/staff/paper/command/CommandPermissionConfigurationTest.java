@@ -39,7 +39,6 @@ class CommandPermissionConfigurationTest {
             Map.entry("staff", "enthusiastaff.staffmode"),
             Map.entry("fakebase", "enthusiastaff.cheattester.fake-base"),
             Map.entry("vanish", "enthusiastaff.vanish"),
-            Map.entry("staffchat", "enthusiastaff.staffchat"),
             Map.entry("staffwho", "enthusiastaff.staffwho"),
             Map.entry("client", "enthusiastaff.client"),
             Map.entry("invsee", INVENTORY_VIEW_PERMISSION),
@@ -58,6 +57,16 @@ class CommandPermissionConfigurationTest {
                     expected.getKey()
             );
         }
+    }
+
+    @Test
+    void staffChatDelegatesItsPermissionCheckToTheExecutorForFriendlyDenials() throws IOException {
+        JsonNode metadata = pluginMetadata();
+        assertTrue(metadata.path(COMMANDS_FIELD).path("staffchat").path(PERMISSION_FIELD).isMissingNode());
+
+        JsonNode permissions = metadata.path("permissions");
+        assertTrue(permissions.has("enthusiastaff.staffchat"));
+        assertFalse(permissions.path("enthusiastaff.staffchat").path("default").asBoolean());
     }
 
     @Test
