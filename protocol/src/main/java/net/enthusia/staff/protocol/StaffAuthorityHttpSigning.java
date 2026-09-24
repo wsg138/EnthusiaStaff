@@ -28,6 +28,7 @@ public final class StaffAuthorityHttpSigning {
     private static final Pattern NONCE = Pattern.compile("[A-Za-z0-9_-]{32,64}");
     private static final Pattern SIGNATURE = Pattern.compile("[A-Za-z0-9_-]{43}");
     private static final String REQUEST_DOMAIN = "enthusia-staff-authority-request-v1";
+    private static final String BODY_REQUEST_DOMAIN = "enthusia-staff-authority-body-request-v1";
     private static final String RESPONSE_DOMAIN = "enthusia-staff-authority-response-v1";
 
     private StaffAuthorityHttpSigning() {
@@ -43,6 +44,26 @@ public final class StaffAuthorityHttpSigning {
         validateInputs(credential, method, target, timestamp, nonce);
         String rawTimestamp = Long.toString(timestamp.getEpochSecond());
         String signature = encode(mac(credential, requestCanonical(method, target, rawTimestamp, nonce)));
+        return new RequestProof(rawTimestamp, nonce, signature);
+    }
+
+    public static RequestProof signBodyRequest(
+            String credential,
+            String method,
+            String target,
+            String body,
+            Instant timestamp,
+            String nonce
+    ) {
+        validateInputs(credential, method, target, timestamp, nonce);
+        if (body == null) {
+            throw new IllegalArgumentException("request body must be present");
+        }
+        String rawTimestamp = Long.toString(timestamp.getEpochSecond());
+        String signature = encode(mac(
+                credential,
+                bodyRequestCanonical(method, target, body, rawTimestamp, nonce)
+        ));
         return new RequestProof(rawTimestamp, nonce, signature);
     }
 
@@ -68,6 +89,37 @@ public final class StaffAuthorityHttpSigning {
             return Verification.MALFORMED;
         }
         byte[] expected = mac(credential, requestCanonical(method, target, rawTimestamp, nonce));
+        return MessageDigest.isEqual(expected, supplied.orElseThrow())
+                ? Verification.ACCEPTED
+                : Verification.INVALID_SIGNATURE;
+    }
+
+    public static Verification verifyBodyRequest(
+            String credential,
+            String method,
+            String target,
+            String body,
+            String rawTimestamp,
+            String nonce,
+            String signature,
+            Clock clock
+    ) {
+        Objects.requireNonNull(clock, "clock");
+        Instant timestamp = parseTimestamp(rawTimestamp);
+        if (body == null || timestamp == null || !validRequestText(method, target, nonce, signature)) {
+            return Verification.MALFORMED;
+        }
+        if (Duration.between(timestamp, clock.instant()).abs().compareTo(MAX_SKEW) > 0) {
+            return Verification.EXPIRED;
+        }
+        Optional<byte[]> supplied = decode(signature);
+        if (supplied.isEmpty()) {
+            return Verification.MALFORMED;
+        }
+        byte[] expected = mac(
+                credential,
+                bodyRequestCanonical(method, target, body, rawTimestamp, nonce)
+        );
         return MessageDigest.isEqual(expected, supplied.orElseThrow())
                 ? Verification.ACCEPTED
                 : Verification.INVALID_SIGNATURE;
@@ -145,6 +197,17 @@ public final class StaffAuthorityHttpSigning {
 
     private static String requestCanonical(String method, String target, String timestamp, String nonce) {
         return REQUEST_DOMAIN + "\n" + method + "\n" + target + "\n" + timestamp + "\n" + nonce;
+    }
+
+    private static String bodyRequestCanonical(
+            String method,
+            String target,
+            String body,
+            String timestamp,
+            String nonce
+    ) {
+        return BODY_REQUEST_DOMAIN + "\n" + method + "\n" + target + "\n"
+                + timestamp + "\n" + nonce + "\n" + sha256(body);
     }
 
     private static String responseCanonical(String nonce, int status, String body) {
