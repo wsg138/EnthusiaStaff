@@ -139,7 +139,9 @@ public final class PunishmentCommand implements CommandExecutor, TabCompleter {
     }
 
     private boolean openTargetOnlyGui(CommandSender sender, String route, String[] args) {
-        if (args.length != SINGLE_ARGUMENT_COUNT || !(sender instanceof Player player)) {
+        if (CENTRAL_COMMAND.equals(route)
+                || args.length != SINGLE_ARGUMENT_COUNT
+                || !(sender instanceof Player player)) {
             return false;
         }
         gui.open(player, args[0], route);
