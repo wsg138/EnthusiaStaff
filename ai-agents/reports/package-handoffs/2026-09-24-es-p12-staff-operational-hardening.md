@@ -6,6 +6,7 @@
 - Frozen executable product head: `b26eca2cd18bbd4148a02e9307fd81ada21a6fd3`
 - Final accepted PR head: `e29bbab530f47473d9dbc9d7d60f57ec73dadea6`
 - Implementation PR: #246, merged normally as `753ef35496c15abe361cad51704b610af540b0f0`
+- Terminal publication PR: #247, documentation only
 - Standalone PRs: `NOT_APPLICABLE`
 
 ## Completed work
