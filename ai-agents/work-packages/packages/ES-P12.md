@@ -4,7 +4,7 @@
 `ES-P12`; Internal; primary `COMP-STAFF`; owner-directed feature package; priority 95.
 
 ## 2. Status
-`VALIDATING` — implementation, focused tests, and repeated final code-level review are complete on `package/es-p12-staff-operational-hardening`; exact-head hosted validation, Codacy, external review, and final concurrent-path reconciliation remain after the latest executable repair.
+`VALIDATING` — implementation and final code-level review repairs are complete through executable head `b26eca2cd18bbd4148a02e9307fd81ada21a6fd3` on `package/es-p12-staff-operational-hardening`; normal-actor exact-head hosted validation, Codacy, external review, and final concurrent-path reconciliation remain.
 
 ## 3. Objective
 Harden day-to-day staff operations so rank boundaries, freeze visibility, vanish privacy, mute fallback behavior, punishment escalation context, confiscation availability, staff-presence reporting, and bare-Paper presence tracking behave safely and predictably.
@@ -91,7 +91,7 @@ LuckPerms is the authoritative staff-rank source where hierarchy protection requ
 All included behavior is implemented with focused tests; exact-head hosted validation and analyzers pass; zero new valid Codacy findings remain; concurrent branch ownership is reconciled; the PR is review-ready with no hidden production/cutover action.
 
 ## 23. Resume state
-Validation in progress. Resume only this package/branch/PR until it reaches a protocol-valid terminal state.
+Validation in progress. Resume only this package/branch/PR until it reaches a protocol-valid terminal state. Canonical current handoff: `ai-agents/reports/package-handoffs/2026-09-24-es-p12-staff-operational-hardening.md`.
 
 ## 24. Exact-head evidence
 - Repository-native PMD 6.55 diagnostics run `35894852700` exposed 13 concrete findings across changed Java; no broad suppressions were introduced.
@@ -102,9 +102,11 @@ Validation in progress. Resume only this package/branch/PR until it reaches a pr
 - Validated repair run `35930958715` replaced the deprecated iterator with `getListedPlayers()` for sample filtering plus a concurrency-safe online UUID snapshot already maintained by `VanishManager`; `:paper:test` and `-Werror` compilation passed before publishing repair commit `6ed79fdf1abc2e2868ab6b1f275413bc09359938` and deleting the temporary repair harness.
 - Exact head `91dccbe018484d055563278857b0bf6be0f8cae8` then passed Coverage `35931225668`, Sentinel artifact `35931225551`, Wiki `35931225621`, and Codacy static with zero new issues, but those results became historical when the later freeze-alert ownership defect was found and executable code changed.
 - Repeated review found `FreezeStaffNotifier` reading recipient permissions and sending messages from the global region after only moving roster traversal to the global scheduler. Repair workflow `35934026437` moved each staff check and delivery onto the recipient entity scheduler, added rejection/ownership regressions, passed Lizard 1.23 bounds, repository PMD 6.55 with zero findings, full `:paper:test`, and `git diff --check`, then published product repair commit `12397f91da774f61b4bd2f023eba8cf876afd23f` and removed its temporary repair harness.
+- Review-repair workflow `35936723820` then validated the broader CodeRabbit repair batch: `/staffwho` vanish visibility, read-only ban enforcement, movement orientation preservation, bounded presence retry, staff-mode recovery fencing, freeze notice wiring/race protection, and player-owned freeze chat/alert fanout. Lizard, repository PMD 6.55, full `:paper:test`, `runtimeJars`, and `git diff --check` passed before publishing `34faf6763ad6669c2242716d0714260b92b9edc0`.
+- A final freeze release→re-freeze race review tightened notice delivery to carry the exact runtime generation instead of a boolean frozen check. Workflow `35937174002` passed Lizard, repository PMD 6.55, full `:paper:test`, `runtimeJars`, and `git diff --check`, then published executable product head `b26eca2cd18bbd4148a02e9307fd81ada21a6fd3` and removed its temporary harness.
 - PR #220 currently also changes `VanishManager`, but only its `persistState()` transaction path around the later persistence section. ES-P12's added `vanishedOnlineCount()` sits beside `isVanished()` and does not overlap that hunk; final live-head reconciliation is still required before merge.
 - Live `main` remains `fd999968ed5ffbd2e47e041482dc9e936528d7a7`, matching the package base, so no mainline reconciliation is currently required.
-- Product repair commit `12397f91da774f61b4bd2f023eba8cf876afd23f` was authored by `github-actions[bot]`. This package-state commit intentionally retriggers the standard exact-head Coverage, Sentinel artifact, Wiki validation, Codacy, review, and non-draft staging/supersession controls under the normal repository actor; those results will supersede all earlier acceptance checks.
+- Final executable product head `b26eca2cd18bbd4148a02e9307fd81ada21a6fd3` was authored by `github-actions[bot]` after gated validation. PR-triggered workflows on that bot-authored head are not counted as acceptance evidence when GitHub marks them `action_required`/non-running. The following normal-actor state/handoff commit intentionally retriggers Coverage, Sentinel artifact, Wiki validation, Codacy, review, and non-draft staging/supersession controls; only terminal exact-head results count.
 
 ## 25. Private acceptance boundary
 No live production deployment is authorized by this package. Staging/manual evidence may supplement but does not replace exact-head repository validation.
@@ -113,4 +115,4 @@ No live production deployment is authorized by this package. Staging/manual evid
 Branch base and current live `main`: `fd999968ed5ffbd2e47e041482dc9e936528d7a7`. Active PR #220 has a file-level but hunk-disjoint overlap in `VanishManager`; its transaction-owned `persistState()` repair and this package's scheduler-safe online-count accessor must both survive final reconciliation. Final mergeability/review reconciliation and merge record remain pending.
 
 ## 27. Remaining package work
-Obtain green exact-head hosted Coverage/build/tests/runtime-JAR, Sentinel artifact, Wiki validation, Codacy zero-new-valid-finding evidence, and terminal external review on the normal-actor head that includes `12397f91da774f61b4bd2f023eba8cf876afd23f`; re-read live main and active overlapping PRs; perform final mergeability/review reconciliation. No merge is authorized by this record alone.
+Publish the canonical handoff `ai-agents/reports/package-handoffs/2026-09-24-es-p12-staff-operational-hardening.md` from executable product head `b26eca2cd18bbd4148a02e9307fd81ada21a6fd3` as the normal-actor state commit; obtain green exact-head hosted Coverage/build/tests/runtime-JAR, Sentinel artifact, Wiki validation, Codacy zero-new-valid-finding evidence, and terminal external review; re-read live main and active overlapping PRs; perform final mergeability/review reconciliation. No merge is authorized by this record alone.
