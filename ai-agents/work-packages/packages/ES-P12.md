@@ -4,7 +4,7 @@
 `ES-P12`; Internal; primary `COMP-STAFF`; owner-directed feature package; priority 95.
 
 ## 2. Status
-`VALIDATING` — implementation and final code-level review repairs are complete through executable head `b26eca2cd18bbd4148a02e9307fd81ada21a6fd3` on `package/es-p12-staff-operational-hardening`; normal-actor exact-head hosted validation, Codacy, external review, and final concurrent-path reconciliation remain.
+`VALIDATING` — implementation and final code-level review repairs are complete through executable head `b26eca2cd18bbd4148a02e9307fd81ada21a6fd3` on `package/es-p12-staff-operational-hardening`; PR #246 is open/non-draft and normal-actor exact-head hosted validation, Codacy, external review, and final concurrent-path reconciliation remain.
 
 ## 3. Objective
 Harden day-to-day staff operations so rank boundaries, freeze visibility, vanish privacy, mute fallback behavior, punishment escalation context, confiscation availability, staff-presence reporting, and bare-Paper presence tracking behave safely and predictably.
@@ -40,7 +40,7 @@ Current merged Staff runtime and migrations through the live `main` ceiling. Act
 `package/es-p12-staff-operational-hardening`, created from exact `main` `fd999968ed5ffbd2e47e041482dc9e936528d7a7`.
 
 ## 11. Required PR
-One draft implementation PR targeting `main`; normal merge only after exact-head evidence and review. No squash, rebase, force-push, auto-merge, or direct `main` push.
+PR #246 targeting `main`, currently open/non-draft; normal merge only after exact-head evidence and review. No squash, rebase, force-push, auto-merge, or direct `main` push.
 
 ## 12. Implementation checklist
 - [x] Reconcile live `main`, repository rules, package state, and open PR path ownership.
@@ -115,4 +115,4 @@ No live production deployment is authorized by this package. Staging/manual evid
 Branch base and current live `main`: `fd999968ed5ffbd2e47e041482dc9e936528d7a7`. Active PR #220 has a file-level but hunk-disjoint overlap in `VanishManager`; its transaction-owned `persistState()` repair and this package's scheduler-safe online-count accessor must both survive final reconciliation. Final mergeability/review reconciliation and merge record remain pending.
 
 ## 27. Remaining package work
-Publish the canonical handoff `ai-agents/reports/package-handoffs/2026-09-24-es-p12-staff-operational-hardening.md` from executable product head `b26eca2cd18bbd4148a02e9307fd81ada21a6fd3` as the normal-actor state commit; obtain green exact-head hosted Coverage/build/tests/runtime-JAR, Sentinel artifact, Wiki validation, Codacy zero-new-valid-finding evidence, and terminal external review; re-read live main and active overlapping PRs; perform final mergeability/review reconciliation. No merge is authorized by this record alone.
+The canonical handoff `ai-agents/reports/package-handoffs/2026-09-24-es-p12-staff-operational-hardening.md` is published. Obtain green exact-head hosted Coverage/build/tests/runtime-JAR, Sentinel artifact, Wiki validation, Codacy zero-new-valid-finding evidence, and terminal external review on the current normal-actor head; re-read live main and active overlapping PRs; perform final mergeability/review reconciliation. No merge is authorized by this record alone.
