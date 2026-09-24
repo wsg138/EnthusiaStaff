@@ -6,7 +6,6 @@ author: P2wn
 description: Enthusia Network staff and moderation runtime for Paper
 load: POSTWORLD
 softdepend:
-  - RoseChat
   - voicechat
   - ViaVersion
   - floodgate
