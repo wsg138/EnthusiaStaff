@@ -72,8 +72,8 @@ freeze.write_text(text[:start] + replacement + text[end:])
 
 registrar = Path("paper/src/main/java/net/enthusia/staff/paper/PaperCommandRegistrar.java")
 text = registrar.read_text()
-legacy = "FreezeCommand freezeCommand = new FreezeCommand("
-runtime = "FreezeCommand freezeCommand = FreezeCommand.createRuntime("
+legacy = "FreezeCommand freezes = new FreezeCommand("
+runtime = "FreezeCommand freezes = FreezeCommand.createRuntime("
 if text.count(legacy) == 1 and text.count(runtime) == 0:
     text = text.replace(legacy, runtime)
 elif text.count(legacy) == 0 and text.count(runtime) == 1:
