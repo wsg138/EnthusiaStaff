@@ -113,7 +113,6 @@ commands:
   staffchat:
     description: Toggle the configured RoseChat staff channel
     usage: /staffchat
-    permission: enthusiastaff.staffchat
   staffwho:
     description: Show online staff operational state and pending punishment-request count
     usage: /staffwho
