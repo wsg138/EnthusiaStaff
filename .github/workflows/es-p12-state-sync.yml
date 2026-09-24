@@ -1,0 +1,98 @@
+name: ES-P12 package state synchronization
+
+on:
+  push:
+    branches:
+      - "package/es-p12-staff-operational-hardening"
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    if: github.event.head_commit.message == '[ES-P12] Stage package state synchronization'
+    name: Synchronize ES-P12 package state
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out branch
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Patch package and registry state
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          PRODUCT_HEAD = "b26eca2cd18bbd4148a02e9307fd81ada21a6fd3"
+          HANDOFF = "ai-agents/reports/package-handoffs/2026-09-24-es-p12-staff-operational-hardening.md"
+
+          def replace_once(path: Path, old: str, new: str) -> None:
+              text = path.read_text()
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"expected exactly one match in {path}: {old!r}; found {count}")
+              path.write_text(text.replace(old, new))
+
+          package = Path("ai-agents/work-packages/packages/ES-P12.md")
+          replace_once(
+              package,
+              "`VALIDATING` — implementation, focused tests, and repeated final code-level review are complete on `package/es-p12-staff-operational-hardening`; exact-head hosted validation, Codacy, external review, and final concurrent-path reconciliation remain after the latest executable repair.",
+              f"`VALIDATING` — implementation and final code-level review repairs are complete through executable head `{PRODUCT_HEAD}` on `package/es-p12-staff-operational-hardening`; normal-actor exact-head hosted validation, Codacy, external review, and final concurrent-path reconciliation remain."
+          )
+          replace_once(
+              package,
+              "Validation in progress. Resume only this package/branch/PR until it reaches a protocol-valid terminal state.",
+              f"Validation in progress. Resume only this package/branch/PR until it reaches a protocol-valid terminal state. Canonical current handoff: `{HANDOFF}`."
+          )
+          anchor = "- Repeated review found `FreezeStaffNotifier` reading recipient permissions and sending messages from the global region after only moving roster traversal to the global scheduler. Repair workflow `35934026437` moved each staff check and delivery onto the recipient entity scheduler, added rejection/ownership regressions, passed Lizard 1.23 bounds, repository PMD 6.55 with zero findings, full `:paper:test`, and `git diff --check`, then published product repair commit `12397f91da774f61b4bd2f023eba8cf876afd23f` and removed its temporary repair harness."
+          expanded = anchor + "\n" + \
+              "- Review-repair workflow `35936723820` then validated the broader CodeRabbit repair batch: `/staffwho` vanish visibility, read-only ban enforcement, movement orientation preservation, bounded presence retry, staff-mode recovery fencing, freeze notice wiring/race protection, and player-owned freeze chat/alert fanout. Lizard, repository PMD 6.55, full `:paper:test`, `runtimeJars`, and `git diff --check` passed before publishing `34faf6763ad6669c2242716d0714260b92b9edc0`.\n" + \
+              f"- A final freeze release→re-freeze race review tightened notice delivery to carry the exact runtime generation instead of a boolean frozen check. Workflow `35937174002` passed Lizard, repository PMD 6.55, full `:paper:test`, `runtimeJars`, and `git diff --check`, then published executable product head `{PRODUCT_HEAD}` and removed its temporary harness."
+          replace_once(package, anchor, expanded)
+          replace_once(
+              package,
+              "- Product repair commit `12397f91da774f61b4bd2f023eba8cf876afd23f` was authored by `github-actions[bot]`. This package-state commit intentionally retriggers the standard exact-head Coverage, Sentinel artifact, Wiki validation, Codacy, review, and non-draft staging/supersession controls under the normal repository actor; those results will supersede all earlier acceptance checks.",
+              f"- Final executable product head `{PRODUCT_HEAD}` was authored by `github-actions[bot]` after gated validation. PR-triggered workflows on that bot-authored head are not counted as acceptance evidence when GitHub marks them `action_required`/non-running. The following normal-actor state/handoff commit intentionally retriggers Coverage, Sentinel artifact, Wiki validation, Codacy, review, and non-draft staging/supersession controls; only terminal exact-head results count."
+          )
+          replace_once(
+              package,
+              "Obtain green exact-head hosted Coverage/build/tests/runtime-JAR, Sentinel artifact, Wiki validation, Codacy zero-new-valid-finding evidence, and terminal external review on the normal-actor head that includes `12397f91da774f61b4bd2f023eba8cf876afd23f`; re-read live main and active overlapping PRs; perform final mergeability/review reconciliation. No merge is authorized by this record alone.",
+              f"Publish the canonical handoff `{HANDOFF}` from executable product head `{PRODUCT_HEAD}` as the normal-actor state commit; obtain green exact-head hosted Coverage/build/tests/runtime-JAR, Sentinel artifact, Wiki validation, Codacy zero-new-valid-finding evidence, and terminal external review; re-read live main and active overlapping PRs; perform final mergeability/review reconciliation. No merge is authorized by this record alone."
+          )
+
+          registry = Path("ai-agents/work-packages/PACKAGE-REGISTRY.md")
+          replace_once(registry, "Last updated: 2026-09-22", "Last updated: 2026-09-24")
+          complete_line = "`ES-P01`, `ES-P02`, `ES-P03`, `ES-P04`, `ES-P05`, `ES-P06`, `ES-P07`, `ES-P08`, `ES-P09`, `ES-P10`, `ES-P11`, `ES-X02`, `ES-X04`, `ES-X05`, `ES-R01`, `ES-R02`, and `ES-V01` are `COMPLETE`."
+          p12_record = complete_line + "\n\n" + \
+              f"`ES-P12 — Staff operational hardening` is `VALIDATING / ACTIONABLE_CONTINUATION` on `package/es-p12-staff-operational-hardening`, PR #246. Final executable head `{PRODUCT_HEAD}` includes the bounded CodeRabbit repair batch plus the exact freeze-generation notice fence; gated workflows `35936723820` and `35937174002` passed their applicable complexity, PMD, Paper test, runtime-JAR, and diff checks before publication. Normal-actor exact-head repository acceptance, Codacy, review reconciliation, and final concurrent-path reconciliation remain. Canonical handoff: `{HANDOFF}`."
+          replace_once(registry, complete_line, p12_record)
+          p11_row = "| `ES-P11` | Fake-base generation and cleanup | `COMPLETE` | — | 90 | `ES-P10` | merged PR #88 |"
+          p12_row = p11_row + "\n" + \
+              f"| `ES-P12` | Staff operational hardening | `VALIDATING` | `ACTIONABLE_CONTINUATION` | 95 | current merged Staff runtime | PR #246 on `package/es-p12-staff-operational-hardening`; executable head `{PRODUCT_HEAD}` gated green; normal-actor exact-head acceptance/review pending |"
+          replace_once(registry, p11_row, p12_row)
+          d09_handoff = "Canonical D09 blocker handoff: `ai-agents/reports/package-handoffs/2026-09-19-es-d09-investigations-blocked.md`."
+          replace_once(
+              registry,
+              d09_handoff,
+              d09_handoff + f"\nCanonical ES-P12 current handoff: `{HANDOFF}`."
+          )
+          PY
+
+          git diff --check
+          changed="$(git diff --name-only | sort)"
+          expected="$(printf '%s\n' ai-agents/work-packages/PACKAGE-REGISTRY.md ai-agents/work-packages/packages/ES-P12.md | sort)"
+          test "$changed" = "$expected"
+
+      - name: Publish synchronized state
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm .github/workflows/es-p12-state-sync.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add ai-agents/work-packages/PACKAGE-REGISTRY.md ai-agents/work-packages/packages/ES-P12.md .github/workflows/es-p12-state-sync.yml
+          git commit -m "ES-P12: synchronize package state after final review repair"
+          git push origin HEAD:package/es-p12-staff-operational-hardening
