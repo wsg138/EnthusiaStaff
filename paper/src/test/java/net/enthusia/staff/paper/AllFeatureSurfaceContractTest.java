@@ -73,7 +73,8 @@ final class AllFeatureSurfaceContractTest {
             "report",
             "case",
             "link",
-            "unlink"
+            "unlink",
+            "staffchat"
     );
 
     private static final Map<String, List<String>> FEATURE_TEST_MARKERS = featureTestMarkers();
