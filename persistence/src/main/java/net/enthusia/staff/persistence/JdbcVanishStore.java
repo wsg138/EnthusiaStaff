@@ -15,6 +15,8 @@ import net.enthusia.staff.domain.ports.VanishStore;
 import net.enthusia.staff.domain.staff.VanishRecord;
 
 public final class JdbcVanishStore implements VanishStore {
+    private static final int SINGLE_ROW_UPDATE = 1;
+
     private final DataSource dataSource;
 
     public JdbcVanishStore(DataSource dataSource) {
@@ -53,27 +55,27 @@ public final class JdbcVanishStore implements VanishStore {
     }
 
     @Override
-    public void set(UUID staffId, StaffRank rank, boolean vanished, UUID actorId, Instant now) {
-        if (staffId == null || rank == null || rank == StaffRank.SYSTEM || actorId == null || now == null) {
-            throw new IllegalArgumentException("valid vanish state fields are required");
-        }
+    public WriteResult set(
+            UUID staffId,
+            StaffRank rank,
+            boolean vanished,
+            UUID actorId,
+            Instant now,
+            boolean requireActiveStaffSession
+    ) {
+        validateWrite(staffId, rank, actorId, now);
         try (Connection connection = dataSource.getConnection()) {
             connection.setAutoCommit(false);
-            try (PreparedStatement state = connection.prepareStatement("""
-                    INSERT INTO staff_vanish_states(staff_id, active, staff_rank, updated_by, updated_at)
-                    VALUES (?, ?, ?, ?, ?)
-                    ON DUPLICATE KEY UPDATE active = VALUES(active), staff_rank = VALUES(staff_rank),
-                        updated_by = VALUES(updated_by), updated_at = VALUES(updated_at), revision = revision + 1
-                    """)) {
-                state.setBytes(1, UuidBytes.toBytes(staffId));
-                state.setBoolean(2, vanished);
-                state.setString(3, rank.name());
-                state.setBytes(4, UuidBytes.toBytes(actorId));
-                state.setTimestamp(5, Timestamp.from(now));
-                state.executeUpdate();
-                insertAudit(connection, staffId, actorId, rank, vanished, now);
-                insertDiscord(connection, staffId, actorId, rank, vanished, now);
-                connection.commit();
+            try {
+                return setTransaction(
+                        connection,
+                        staffId,
+                        rank,
+                        vanished,
+                        actorId,
+                        now,
+                        requireActiveStaffSession
+                );
             } catch (SQLException exception) {
                 rollback(connection, exception);
                 throw exception;
@@ -82,6 +84,160 @@ public final class JdbcVanishStore implements VanishStore {
             }
         } catch (SQLException exception) {
             throw new ModerationPersistenceException("Unable to persist vanish state", exception);
+        }
+    }
+
+    private static WriteResult setTransaction(
+            Connection connection,
+            UUID staffId,
+            StaffRank rank,
+            boolean vanished,
+            UUID actorId,
+            Instant now,
+            boolean requireActiveStaffSession
+    ) throws SQLException {
+        VanishState current = lockVanishState(connection, staffId);
+        SessionMirror session = lockActiveSession(connection, staffId);
+        if (requireActiveStaffSession && session == null) {
+            connection.rollback();
+            return WriteResult.STAFF_SESSION_NOT_ACTIVE;
+        }
+        ChangeSet changes = changes(current, session, rank, vanished);
+        if (!changes.changed()) {
+            connection.rollback();
+            return WriteResult.UNCHANGED;
+        }
+        persistChanges(connection, staffId, actorId, rank, vanished, now, session, changes);
+        connection.commit();
+        return WriteResult.COMMITTED;
+    }
+
+    private static ChangeSet changes(
+            VanishState current,
+            SessionMirror session,
+            StaffRank rank,
+            boolean vanished
+    ) {
+        return new ChangeSet(
+                !matches(current, rank, vanished),
+                session != null && session.vanished() != vanished
+        );
+    }
+
+    private static void persistChanges(
+            Connection connection,
+            UUID staffId,
+            UUID actorId,
+            StaffRank rank,
+            boolean vanished,
+            Instant now,
+            SessionMirror session,
+            ChangeSet changes
+    ) throws SQLException {
+        if (!changes.stateChanged()) {
+            updateSessionMirror(connection, session.sessionId(), vanished);
+            return;
+        }
+        writeState(connection, staffId, actorId, rank, vanished, now);
+        updateSessionMirrorIfChanged(connection, session, vanished);
+        insertAudit(connection, staffId, actorId, rank, vanished, now);
+        insertDiscord(connection, staffId, actorId, rank, vanished, now);
+    }
+
+    private static void updateSessionMirrorIfChanged(
+            Connection connection,
+            SessionMirror session,
+            boolean vanished
+    ) throws SQLException {
+        if (session != null && session.vanished() != vanished) {
+            updateSessionMirror(connection, session.sessionId(), vanished);
+        }
+    }
+
+    private static void validateWrite(UUID staffId, StaffRank rank, UUID actorId, Instant now) {
+        if (staffId == null || rank == null || rank == StaffRank.SYSTEM || actorId == null || now == null) {
+            throw new IllegalArgumentException("valid vanish state fields are required");
+        }
+    }
+
+    private static VanishState lockVanishState(Connection connection, UUID staffId) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement("""
+                SELECT active, staff_rank
+                FROM staff_vanish_states
+                WHERE staff_id = ?
+                FOR UPDATE
+                """)) {
+            statement.setBytes(1, UuidBytes.toBytes(staffId));
+            try (ResultSet result = statement.executeQuery()) {
+                return result.next()
+                        ? new VanishState(result.getBoolean("active"), StaffRank.valueOf(result.getString("staff_rank")))
+                        : null;
+            }
+        }
+    }
+
+    private static SessionMirror lockActiveSession(Connection connection, UUID staffId) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement("""
+                SELECT session_id, vanish_active
+                FROM staff_sessions
+                WHERE staff_id = ? AND state IN ('ACTIVE', 'RECOVERY_REQUIRED')
+                FOR UPDATE
+                """)) {
+            statement.setBytes(1, UuidBytes.toBytes(staffId));
+            try (ResultSet result = statement.executeQuery()) {
+                if (!result.next()) {
+                    return null;
+                }
+                SessionMirror mirror = new SessionMirror(
+                        UuidBytes.fromBytes(result.getBytes("session_id")),
+                        result.getBoolean("vanish_active")
+                );
+                if (result.next()) {
+                    throw new SQLException("multiple active staff sessions exist for vanish mirror");
+                }
+                return mirror;
+            }
+        }
+    }
+
+    private static boolean matches(VanishState current, StaffRank rank, boolean vanished) {
+        return current != null && current.vanished() == vanished && current.rank() == rank;
+    }
+
+    private static void writeState(
+            Connection connection,
+            UUID staffId,
+            UUID actorId,
+            StaffRank rank,
+            boolean vanished,
+            Instant now
+    ) throws SQLException {
+        try (PreparedStatement state = connection.prepareStatement("""
+                INSERT INTO staff_vanish_states(staff_id, active, staff_rank, updated_by, updated_at)
+                VALUES (?, ?, ?, ?, ?)
+                ON DUPLICATE KEY UPDATE active = VALUES(active), staff_rank = VALUES(staff_rank),
+                    updated_by = VALUES(updated_by), updated_at = VALUES(updated_at), revision = revision + 1
+                """)) {
+            state.setBytes(1, UuidBytes.toBytes(staffId));
+            state.setBoolean(2, vanished);
+            state.setString(3, rank.name());
+            state.setBytes(4, UuidBytes.toBytes(actorId));
+            state.setTimestamp(5, Timestamp.from(now));
+            state.executeUpdate();
+        }
+    }
+
+    private static void updateSessionMirror(Connection connection, UUID sessionId, boolean vanished) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement("""
+                UPDATE staff_sessions
+                SET vanish_active = ?, revision = revision + 1
+                WHERE session_id = ? AND state IN ('ACTIVE', 'RECOVERY_REQUIRED')
+                """)) {
+            statement.setBoolean(1, vanished);
+            statement.setBytes(2, UuidBytes.toBytes(sessionId));
+            if (statement.executeUpdate() != SINGLE_ROW_UPDATE) {
+                throw new SQLException("locked staff session left a mirrorable state before vanish commit");
+            }
         }
     }
 
@@ -145,6 +301,18 @@ public final class JdbcVanishStore implements VanishStore {
             connection.setAutoCommit(true);
         } catch (SQLException ignored) {
             // Closing returns the connection to the pool; the original failure remains authoritative.
+        }
+    }
+
+    private record VanishState(boolean vanished, StaffRank rank) {
+    }
+
+    private record SessionMirror(UUID sessionId, boolean vanished) {
+    }
+
+    private record ChangeSet(boolean stateChanged, boolean sessionChanged) {
+        private boolean changed() {
+            return stateChanged || sessionChanged;
         }
     }
 }
