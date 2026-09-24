@@ -51,6 +51,7 @@ final class PaperIntegrationManager implements Listener {
     private static final String AUTOMOD = "automod";
     private static final String CURRENCY = "currency";
     private static final String ROSECHAT = "rosechat";
+    private static final String ROSECHAT_COMMANDS = "rosechat-commands";
     private static final String MARKET = "market";
     private static final String REPUTATION = "reputation";
     private static final List<CurrencyAssetSource> DEFAULT_REMOVAL_ORDER = List.of(
@@ -64,6 +65,7 @@ final class PaperIntegrationManager implements Listener {
     private EconomyCoordinator economy;
     private ConfiscationCoordinator confiscation;
     private RoseChatIntegration roseChat;
+    private RoseChatCommandOwnershipCoordinator roseChatCommands;
     private MuteCommandFallbackListener muteFallback;
     private boolean roseChatLifecycleRegistered;
     private MarketIntegration market;
@@ -181,6 +183,7 @@ final class PaperIntegrationManager implements Listener {
         }
         closeRoseChatIntegration();
         activateMuteFallback();
+        clearIssue(ROSECHAT_COMMANDS);
         issue(ROSECHAT, "RoseChat is absent; staff channel/chat bridge are unavailable; private-message mute fallback is active");
     }
 
@@ -234,9 +237,11 @@ final class PaperIntegrationManager implements Listener {
     private void refreshRoseChatIntegration() {
         if (!plugin().getServer().getPluginManager().isPluginEnabled("RoseChat")) {
             activateMuteFallback();
+            clearIssue(ROSECHAT_COMMANDS);
             issue(ROSECHAT, "RoseChat is absent; staff channel/chat bridge are unavailable; private-message mute fallback is active");
             return;
         }
+        reconcileRoseChatCommands();
         try {
             RoseChatIntegration.Discovery discovery = RoseChatIntegration.discoverAndInstall(
                     plugin().getServer().getServicesManager(),
@@ -261,6 +266,18 @@ final class PaperIntegrationManager implements Listener {
             issue(ROSECHAT, "RoseChat channel configuration is invalid");
             plugin().getLogger().log(Level.SEVERE, "RoseChat integration configuration failed", exception);
         }
+    }
+
+    private void reconcileRoseChatCommands() {
+        if (roseChatCommands == null) {
+            roseChatCommands = RoseChatCommandOwnershipCoordinator.forPlugin(plugin());
+        }
+        List<String> conflicts = roseChatCommands.reconcile();
+        if (conflicts.isEmpty()) {
+            clearIssue(ROSECHAT_COMMANDS);
+            return;
+        }
+        issue(ROSECHAT_COMMANDS, "EnthusiaStaff command ownership conflict: " + String.join(", ", conflicts));
     }
 
     private void closeRoseChatIntegration() {
