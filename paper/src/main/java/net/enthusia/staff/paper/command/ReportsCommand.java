@@ -259,23 +259,12 @@ public final class ReportsCommand implements CommandExecutor, TabCompleter {
             send(sender, "Report storage is not ready.");
             return;
         }
-        List<ReportSummary> summaries;
-        try {
-            summaries = store.list(queue, actorId, 50);
-        } catch (RuntimeException exception) {
-            plugin.getLogger().warning("Failed to load report queue: " + exception.getClass().getSimpleName());
-            send(sender, "Reports are temporarily unavailable.");
-            return;
-        }
-        if (summaries.isEmpty()) {
-            send(sender, "No reports are currently in the " + queue.name().toLowerCase(Locale.ROOT) + " queue.");
-            return;
-        }
-        send(sender, queue.name() + " reports:");
+        List<ReportSummary> summaries = store.list(queue, actorId, 50);
+        send(sender, queue + " reports: " + summaries.size());
         for (ReportSummary summary : summaries) {
-            send(sender, "- " + summary.reportId() + " | " + summary.reporterName()
-                    + " -> " + summary.targetName() + " | " + summary.category()
-                    + " | rev " + summary.revision());
+            send(sender, summary.reportId() + " rev=" + summary.revision() + " " + summary.state()
+                    + " target=" + summary.targetId() + " reason=" + summary.reasonId()
+                    + " server=" + summary.serverId());
         }
     }
 
@@ -285,91 +274,136 @@ public final class ReportsCommand implements CommandExecutor, TabCompleter {
             send(sender, "Report storage is not ready.");
             return;
         }
-        ReportDetails details;
-        try {
-            details = store.details(reportId).orElse(null);
-        } catch (RuntimeException exception) {
-            plugin.getLogger().warning("Failed to load report details: " + exception.getClass().getSimpleName());
-            send(sender, "Reports are temporarily unavailable.");
-            return;
-        }
+        ReportDetails details = store.details(reportId).orElse(null);
         if (details == null) {
             send(sender, "That report does not exist.");
             return;
         }
-        send(sender, "Report " + details.reportId() + " | " + details.reporterName()
-                + " -> " + details.targetName() + " | " + details.category()
-                + " | state " + details.state() + " | rev " + details.revision());
-        send(sender, "Reason: " + details.reason());
+        ReportSummary summary = details.summary();
+        send(sender, "Report " + summary.reportId() + " rev=" + summary.revision() + " state=" + summary.state());
+        send(sender, "Reporter=" + summary.reporterId() + " target=" + summary.targetId()
+                + " assigned=" + summary.assignedTo().map(UUID::toString).orElse("none"));
+        send(sender, "Reason=" + summary.reasonId() + " description=" + details.description());
+        sendEvidenceAware(
+                sender,
+                () -> "Server=" + summary.serverId() + " world=" + details.worldId().orElse(UNAVAILABLE)
+                        + " reporter-coordinates=" + details.reporterCoordinates().orElse(UNAVAILABLE)
+                        + " target-coordinates=" + details.targetCoordinates().orElse(UNAVAILABLE),
+                "Server=" + summary.serverId() + " world=" + details.worldId().orElse(UNAVAILABLE)
+                        + " reporter-coordinates=restricted target-coordinates=restricted"
+        );
+        send(sender, "Evidence snapshots: public-chat=" + details.publicChatSnapshots().size()
+                + ", private-message=" + details.privateMessageSnapshots().size()
+                + ", client=" + details.clientEvidenceSnapshots().size());
+        sendEvidenceAware(
+                sender,
+                () -> "Inspect retained contents with /reports evidence <report-id> <public|private|client> [snapshot] [page].",
+                "Sensitive evidence contents and exact coordinates require " + EVIDENCE_PERMISSION + '.'
+        );
     }
 
     private void renderEvidence(
             CommandSender sender,
             UUID reportId,
             EvidenceKind kind,
-            int snapshot,
-            int page
+            int requestedSnapshot,
+            int requestedPage
     ) {
         ReportStore store = reports.get();
         if (store == null) {
             send(sender, "Report storage is not ready.");
             return;
         }
-        ReportDetails details;
-        try {
-            details = store.details(reportId).orElse(null);
-        } catch (RuntimeException exception) {
-            plugin.getLogger().warning("Failed to load report evidence: " + exception.getClass().getSimpleName());
-            send(sender, "Reports are temporarily unavailable.");
-            return;
-        }
+        ReportDetails details = store.details(reportId).orElse(null);
         if (details == null) {
             send(sender, "That report does not exist.");
             return;
         }
-        EvidencePage evidence = evidenceFormatter.page(details.evidence(), kind, snapshot, page);
-        send(sender, evidence.title());
-        for (String line : evidence.lines()) {
-            send(sender, line);
+        try {
+            EvidencePage page = evidenceFormatter.render(details, kind, requestedSnapshot, requestedPage);
+            List<String> messages = new ArrayList<>();
+            if (page.totalSnapshots() == 0) {
+                messages.add("Report " + reportId + " has no retained " + kind.commandName() + " evidence.");
+            } else {
+                messages.add("Report " + reportId + " " + kind.commandName() + " evidence: snapshot "
+                        + page.snapshot() + '/' + page.totalSnapshots() + ", page " + page.page() + '/'
+                        + page.totalPages());
+                messages.addAll(page.lines());
+                if (page.page() < page.totalPages()) {
+                    messages.add("Next: /reports evidence " + reportId + ' ' + kind.commandName() + ' '
+                            + page.snapshot() + ' ' + (page.page() + 1));
+                }
+            }
+            sendSensitive(sender, messages);
+        } catch (IllegalArgumentException exception) {
+            sendSensitive(sender, List.of("Invalid evidence page: " + exception.getMessage()));
         }
     }
 
     private void change(CommandSender sender, ReportStateChangeRequest request) {
         ReportStore store = reports.get();
         if (store == null) {
-            send(sender, "Report storage is not ready.");
+            send(sender, "Report storage is not ready; no change was made.");
             return;
         }
-        ReportStateChangeResult result;
-        try {
-            result = store.changeState(request);
-        } catch (RuntimeException exception) {
-            plugin.getLogger().warning("Failed to change report state: " + exception.getClass().getSimpleName());
-            send(sender, "Reports are temporarily unavailable.");
-            return;
+        ReportStateChangeResult result = store.changeState(request);
+        if (result instanceof ReportStateChangeResult.Applied applied) {
+            send(sender, "Report is now " + applied.state() + " at revision " + applied.revision()
+                    + (applied.replayed() ? " (idempotent replay)" : "") + '.');
+        } else {
+            ReportStateChangeResult.Rejected rejected = (ReportStateChangeResult.Rejected) result;
+            send(sender, rejected.code() + ": " + rejected.message());
         }
-        send(sender, switch (result.status()) {
-            case APPLIED -> "Report updated to " + result.state() + " (rev " + result.revision() + ").";
-            case CONFLICT -> "Report changed before your action could be saved. Refresh and retry.";
-            case NOT_FOUND -> "That report no longer exists.";
-            case REJECTED -> "That report action is not allowed from its current state.";
-        });
     }
 
     private void submit(CommandSender sender, Runnable work) {
         try {
-            workers.execute(work);
+            workers.execute(() -> {
+                try {
+                    work.run();
+                } catch (RuntimeException exception) {
+                    plugin.getLogger().log(java.util.logging.Level.SEVERE, "Report management operation failed", exception);
+                    send(sender, "Report operation failed; inspect the sanitized server log.");
+                }
+            });
         } catch (RejectedExecutionException exception) {
-            send(sender, "Reports are temporarily unavailable.");
+            sender.sendMessage(Component.text("The bounded work queue is full; no report operation started."));
         }
     }
 
+    private void send(CommandSender sender, String message) {
+        plugin.getServer().getGlobalRegionScheduler().execute(plugin, () -> sender.sendMessage(Component.text(message)));
+    }
+
+    private void sendEvidenceAware(CommandSender sender, Supplier<String> authorizedMessage, String deniedMessage) {
+        plugin.getServer().getGlobalRegionScheduler().execute(plugin, () -> {
+            String message = sender.hasPermission(EVIDENCE_PERMISSION) ? authorizedMessage.get() : deniedMessage;
+            sender.sendMessage(Component.text(message));
+        });
+    }
+
+    private void sendSensitive(CommandSender sender, List<String> messages) {
+        List<String> output = List.copyOf(messages);
+        plugin.getServer().getGlobalRegionScheduler().execute(plugin, () -> {
+            if (!sender.hasPermission(EVIDENCE_PERMISSION)) {
+                sender.sendMessage(Component.text("Sensitive report evidence access is no longer permitted."));
+                return;
+            }
+            for (String message : output) {
+                sender.sendMessage(Component.text(message));
+            }
+        });
+    }
+
     private static ReportQueue parseQueue(String input) {
-        try {
-            return ReportQueue.valueOf(input.toUpperCase(Locale.ROOT));
-        } catch (IllegalArgumentException exception) {
-            return null;
-        }
+        return switch (input.toLowerCase(Locale.ROOT)) {
+            case "open" -> ReportQueue.OPEN;
+            case "mine" -> ReportQueue.CLAIMED_BY_ME;
+            case "claimed" -> ReportQueue.ALL_CLAIMED;
+            case "review" -> ReportQueue.AWAITING_REVIEW;
+            case "closed" -> ReportQueue.RECENTLY_CLOSED;
+            default -> null;
+        };
     }
 
     private static ReportAction parseAction(String input) {
@@ -380,10 +414,6 @@ public final class ReportsCommand implements CommandExecutor, TabCompleter {
             case "noviolation" -> ReportAction.NO_VIOLATION;
             default -> null;
         };
-    }
-
-    private static void send(CommandSender sender, String message) {
-        sender.sendMessage(Component.text(message));
     }
 
     private static UUID actorId(CommandSender sender) {
