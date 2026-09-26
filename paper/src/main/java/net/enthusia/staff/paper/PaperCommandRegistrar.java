@@ -112,6 +112,7 @@ final class PaperCommandRegistrar {
     }
 
     void register() {
+        ConsoleCommandAuthority.install(plugin());
         configureEstaff();
         registerAccountLinkCommands();
         registerPunishmentCommands();
