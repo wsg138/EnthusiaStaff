@@ -166,7 +166,12 @@ final class CheatTesterProbeEngine {
 
     static void recordArmorSample(CheatTesterSession session, ItemStack[] armor) {
         int slot = session.probe.armorSlot();
-        if (slot >= 0 && slot < armor.length && armor[slot] != null && !armor[slot].isEmpty()) {
+        boolean occupied = slot >= 0 && slot < armor.length && armor[slot] != null && !armor[slot].isEmpty();
+        recordArmorOccupancy(session, occupied);
+    }
+
+    static void recordArmorOccupancy(CheatTesterSession session, boolean occupied) {
+        if (occupied) {
             session.armorReequippedObserved.set(true);
         }
     }
