@@ -18,6 +18,7 @@ final class CheatTesterSession {
     final Instant startedAt;
     final AtomicBoolean finishing = new AtomicBoolean();
     final AtomicBoolean startedMutation = new AtomicBoolean();
+    final AtomicBoolean armorReequippedObserved = new AtomicBoolean();
     final AtomicInteger airborneFallResets = new AtomicInteger();
     final AtomicInteger fakeInteractions = new AtomicInteger();
     final AtomicInteger fakeAttacks = new AtomicInteger();
@@ -36,6 +37,7 @@ final class CheatTesterSession {
     volatile ScheduledTask sampleTask;
     volatile float previousFallDistance;
     volatile float maxFallDistance;
+    volatile double maximumDisplacement;
     volatile double minimumAimAngleDegrees = 180.0D;
 
     CheatTesterSession(
