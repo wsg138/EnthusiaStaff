@@ -11,9 +11,7 @@ import java.time.ZoneOffset;
 import java.util.UUID;
 import net.enthusia.staff.domain.tester.CheatTesterType;
 import org.bukkit.Location;
-import org.bukkit.Material;
 import org.bukkit.World;
-import org.bukkit.inventory.ItemStack;
 import org.junit.jupiter.api.Test;
 
 class CheatTesterEvidenceTest {
@@ -53,13 +51,10 @@ class CheatTesterEvidenceTest {
     void armorSamplingRecordsReequipBeforeRestoration() {
         CheatTesterSession session = session(CheatTesterType.AUTO_ARMOR);
         session.probe = new CheatTesterSession.PreparedProbe(-1, 1, 0);
-        ItemStack[] empty = new ItemStack[4];
-        CheatTesterProbeEngine.recordArmorSample(session, empty);
+        CheatTesterProbeEngine.recordArmorOccupancy(session, false);
         assertFalse(session.armorReequippedObserved.get());
 
-        ItemStack[] equipped = new ItemStack[4];
-        equipped[1] = ItemStack.of(Material.IRON_CHESTPLATE);
-        CheatTesterProbeEngine.recordArmorSample(session, equipped);
+        CheatTesterProbeEngine.recordArmorOccupancy(session, true);
         assertTrue(session.armorReequippedObserved.get());
     }
 
