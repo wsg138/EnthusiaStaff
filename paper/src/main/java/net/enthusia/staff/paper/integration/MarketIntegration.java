@@ -104,15 +104,15 @@ public final class MarketIntegration {
                     api,
                     apiClass.getMethod("findStalls", UUID.class),
                     apiClass.getMethod("getStallBlacklist", UUID.class),
-                    stallClass.getMethod("getId"),
-                    stallClass.getMethod("getWorld"),
-                    stallClass.getMethod("getState"),
-                    stallClass.getMethod("getOwnership"),
-                    ownershipClass.getMethod("getType"),
-                    ownershipClass.getMethod("getId"),
-                    blacklistClass.getMethod("getStatus"),
-                    blacklistClass.getMethod("getExpiresAt"),
-                    blacklistClass.getMethod("getCaseId")
+                    modelAccessor(stallClass, "getId", "id"),
+                    modelAccessor(stallClass, "getWorld", "world"),
+                    modelAccessor(stallClass, "getState", "state"),
+                    modelAccessor(stallClass, "getOwnership", "ownership"),
+                    modelAccessor(ownershipClass, "getType", "type"),
+                    modelAccessor(ownershipClass, "getId", "id"),
+                    modelAccessor(blacklistClass, "getStatus", "status"),
+                    modelAccessor(blacklistClass, "getExpiresAt", "expiresAt"),
+                    modelAccessor(blacklistClass, "getCaseId", "caseId")
             );
         } catch (ClassNotFoundException | IllegalAccessException | InvocationTargetException
                 | NoSuchMethodException | LinkageError | RuntimeException exception) {
@@ -120,6 +120,19 @@ public final class MarketIntegration {
                     IntegrationAvailability.INCOMPATIBLE,
                     "Market API could not be linked: " + exception.getClass().getSimpleName()
             );
+        }
+    }
+
+    static Method modelAccessor(Class<?> type, String beanName, String recordName) throws NoSuchMethodException {
+        try {
+            return type.getMethod(beanName);
+        } catch (NoSuchMethodException missingBeanAccessor) {
+            try {
+                return type.getMethod(recordName);
+            } catch (NoSuchMethodException missingRecordAccessor) {
+                missingRecordAccessor.addSuppressed(missingBeanAccessor);
+                throw missingRecordAccessor;
+            }
         }
     }
 
