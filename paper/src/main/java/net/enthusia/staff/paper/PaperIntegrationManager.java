@@ -40,12 +40,18 @@ import net.enthusia.staff.paper.inventory.InventoryCoordinator;
 import net.enthusia.staff.paper.inventory.InventoryOperationContext;
 import net.enthusia.staff.paper.report.ChatContextBuffer;
 import net.enthusia.staff.paper.visibility.DefaultStaffVisibilityService;
+import org.bukkit.event.EventHandler;
+import org.bukkit.event.HandlerList;
+import org.bukkit.event.Listener;
+import org.bukkit.event.server.PluginDisableEvent;
+import org.bukkit.event.server.PluginEnableEvent;
 import org.bukkit.plugin.java.JavaPlugin;
 
-final class PaperIntegrationManager {
+final class PaperIntegrationManager implements Listener {
     private static final String AUTOMOD = "automod";
     private static final String CURRENCY = "currency";
     private static final String ROSECHAT = "rosechat";
+    private static final String ROSECHAT_COMMANDS = "rosechat-commands";
     private static final String MARKET = "market";
     private static final String REPUTATION = "reputation";
     private static final List<CurrencyAssetSource> DEFAULT_REMOVAL_ORDER = List.of(
@@ -59,6 +65,9 @@ final class PaperIntegrationManager {
     private EconomyCoordinator economy;
     private ConfiscationCoordinator confiscation;
     private RoseChatIntegration roseChat;
+    private RoseChatCommandOwnershipCoordinator roseChatCommands;
+    private MuteCommandFallbackListener muteFallback;
+    private boolean roseChatLifecycleRegistered;
     private MarketIntegration market;
     private ReputationIntegration reputation;
     private ReputationRestrictionSynchronizer reputationRestrictions;
@@ -156,34 +165,26 @@ final class PaperIntegrationManager {
     }
 
     void initializeRoseChat() {
-        if (!plugin().getServer().getPluginManager().isPluginEnabled("RoseChat")) {
-            plugin().getServer().getPluginManager().registerEvents(
-                    new MuteCommandFallbackListener(dependencies.evidence().muteEnforcement()),
-                    plugin()
-            );
-            issue(ROSECHAT, "RoseChat is absent; staff channel/chat bridge are unavailable; private-message mute fallback is active");
+        registerRoseChatLifecycle();
+        refreshRoseChatIntegration();
+    }
+
+    @EventHandler
+    public void onPluginEnable(PluginEnableEvent event) {
+        if (isRoseChat(event.getPlugin().getName())) {
+            refreshRoseChatIntegration();
+        }
+    }
+
+    @EventHandler
+    public void onPluginDisable(PluginDisableEvent event) {
+        if (!isRoseChat(event.getPlugin().getName())) {
             return;
         }
-        try {
-            RoseChatIntegration.Discovery discovery = RoseChatIntegration.discoverAndInstall(
-                    plugin().getServer().getServicesManager(),
-                    configuredStaffChannels(),
-                    dependencies.policy().authoritativeMode(),
-                    dependencies.evidence().muteEnforcement(),
-                    dependencies.players().freeze(),
-                    dependencies.players().visibility(),
-                    dependencies.evidence().chatContext().get()
-            );
-            if (discovery.integration().isEmpty()) {
-                issue(ROSECHAT, discovery.issue());
-                return;
-            }
-            roseChat = discovery.integration().orElseThrow();
-            clearIssue(ROSECHAT);
-        } catch (IllegalArgumentException exception) {
-            issue(ROSECHAT, "RoseChat channel configuration is invalid");
-            plugin().getLogger().log(Level.SEVERE, "RoseChat integration configuration failed", exception);
-        }
+        closeRoseChatIntegration();
+        activateMuteFallback();
+        clearIssue(ROSECHAT_COMMANDS);
+        issue(ROSECHAT, "RoseChat is absent; staff channel/chat bridge are unavailable; private-message mute fallback is active");
     }
 
     EconomyCoordinator economy() {
@@ -207,7 +208,10 @@ final class PaperIntegrationManager {
     }
 
     void closeChatBridge() {
-        resources.close("RoseChat bridge", roseChat);
+        HandlerList.unregisterAll(this);
+        roseChatLifecycleRegistered = false;
+        closeRoseChatIntegration();
+        deactivateMuteFallback();
         closeModerationProviders();
     }
 
@@ -220,6 +224,85 @@ final class PaperIntegrationManager {
     void closeEconomyResources() {
         resources.close("economy coordinator", economy);
         resources.close("confiscation coordinator", confiscation);
+    }
+
+    private void registerRoseChatLifecycle() {
+        if (roseChatLifecycleRegistered) {
+            return;
+        }
+        plugin().getServer().getPluginManager().registerEvents(this, plugin());
+        roseChatLifecycleRegistered = true;
+    }
+
+    private void refreshRoseChatIntegration() {
+        if (!plugin().getServer().getPluginManager().isPluginEnabled("RoseChat")) {
+            activateMuteFallback();
+            clearIssue(ROSECHAT_COMMANDS);
+            issue(ROSECHAT, "RoseChat is absent; staff channel/chat bridge are unavailable; private-message mute fallback is active");
+            return;
+        }
+        reconcileRoseChatCommands();
+        try {
+            RoseChatIntegration.Discovery discovery = RoseChatIntegration.discoverAndInstall(
+                    plugin().getServer().getServicesManager(),
+                    configuredStaffChannels(),
+                    dependencies.policy().authoritativeMode(),
+                    dependencies.evidence().muteEnforcement(),
+                    dependencies.players().freeze(),
+                    dependencies.players().visibility(),
+                    dependencies.evidence().chatContext().get()
+            );
+            if (discovery.integration().isEmpty()) {
+                activateMuteFallback();
+                issue(ROSECHAT, discovery.issue());
+                return;
+            }
+            closeRoseChatIntegration();
+            roseChat = discovery.integration().orElseThrow();
+            deactivateMuteFallback();
+            clearIssue(ROSECHAT);
+        } catch (IllegalArgumentException exception) {
+            activateMuteFallback();
+            issue(ROSECHAT, "RoseChat channel configuration is invalid");
+            plugin().getLogger().log(Level.SEVERE, "RoseChat integration configuration failed", exception);
+        }
+    }
+
+    private void reconcileRoseChatCommands() {
+        if (roseChatCommands == null) {
+            roseChatCommands = RoseChatCommandOwnershipCoordinator.forPlugin(plugin());
+        }
+        List<String> conflicts = roseChatCommands.reconcile();
+        if (conflicts.isEmpty()) {
+            clearIssue(ROSECHAT_COMMANDS);
+            return;
+        }
+        issue(ROSECHAT_COMMANDS, "EnthusiaStaff command ownership conflict: " + String.join(", ", conflicts));
+    }
+
+    private void closeRoseChatIntegration() {
+        resources.close("RoseChat bridge", roseChat);
+        roseChat = null;
+    }
+
+    private void activateMuteFallback() {
+        if (muteFallback != null) {
+            return;
+        }
+        muteFallback = new MuteCommandFallbackListener(dependencies.evidence().muteEnforcement());
+        plugin().getServer().getPluginManager().registerEvents(muteFallback, plugin());
+    }
+
+    private void deactivateMuteFallback() {
+        if (muteFallback == null) {
+            return;
+        }
+        HandlerList.unregisterAll(muteFallback);
+        muteFallback = null;
+    }
+
+    static boolean isRoseChat(String pluginName) {
+        return "RoseChat".equals(pluginName);
     }
 
     private void installEconomy(CurrencyGateway gateway, List<CurrencyAssetSource> removalOrder) {

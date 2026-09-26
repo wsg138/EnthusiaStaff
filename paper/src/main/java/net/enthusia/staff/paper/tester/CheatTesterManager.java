@@ -17,7 +17,6 @@ import net.enthusia.staff.domain.tester.CheatTesterType;
 import net.enthusia.staff.paper.inventory.InventoryCoordinator;
 import net.enthusia.staff.paper.staff.StaffModeManager;
 import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.event.ClickEvent;
 import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.entity.Player;
 import org.bukkit.event.Listener;
@@ -44,6 +43,7 @@ public final class CheatTesterManager implements Listener, AutoCloseable {
     private final FakeEntityAdapter fakeEntities;
     private final CheatTesterProbeEngine probes;
     private final CheatTesterControlState controls;
+    private final CheatTesterConfigurationMenu configurationMenu;
     private final CheatTesterRuntimeSupport runtime;
 
     public CheatTesterManager(
@@ -70,6 +70,12 @@ public final class CheatTesterManager implements Listener, AutoCloseable {
         this.fakeEntitySupport = new CheatTesterFakeEntitySupport(plugin, fakeEntityState, this::fakeAdapterFailed);
         this.fakeEntities = fakeEntitySupport.install();
         this.controls = new CheatTesterControlState(clock, staffMode::active, settings, activeByTarget);
+        this.configurationMenu = new CheatTesterConfigurationMenu(
+                controls,
+                settings,
+                fakeEntities::available,
+                activeByTarget::size
+        );
         this.probes = new CheatTesterProbeEngine(
                 plugin,
                 settings,
@@ -78,6 +84,7 @@ public final class CheatTesterManager implements Listener, AutoCloseable {
                 this::sampleActive,
                 this::retireForRecovery
         );
+        plugin.getServer().getPluginManager().registerEvents(configurationMenu, plugin);
         plugin.getServer().getPluginManager().registerEvents(new CheatTesterMutationGuard(this), plugin);
         plugin.getServer().getPluginManager().registerEvents(new CheatTesterLifecycleListener(plugin, this), plugin);
     }
@@ -99,19 +106,7 @@ public final class CheatTesterManager implements Listener, AutoCloseable {
     }
 
     public void showConfiguration(Player staff) {
-        if (!controls.authorized(staff)) {
-            return;
-        }
-        CheatTesterType selected = selected(staff.getUniqueId());
-        Component message = Component.text("Cheat Tester: ", NamedTextColor.GRAY)
-                .append(Component.text(selected.displayName(), NamedTextColor.AQUA))
-                .append(Component.text(" | timeout " + settings.sessionTimeout().toMillis() + " ms", NamedTextColor.GRAY))
-                .append(Component.text(" | active " + activeByTarget.size() + "/" + settings.maximumActiveGlobal(), NamedTextColor.GRAY))
-                .append(Component.newline())
-                .append(Component.text("Use /cheattester select <type>, then left-click a player to run. ", NamedTextColor.GRAY))
-                .append(Component.text("[Status]", NamedTextColor.YELLOW)
-                        .clickEvent(ClickEvent.runCommand("/cheattester status")));
-        staff.sendMessage(message);
+        configurationMenu.open(staff);
     }
 
     public void runSelected(Player staff, Player target) {

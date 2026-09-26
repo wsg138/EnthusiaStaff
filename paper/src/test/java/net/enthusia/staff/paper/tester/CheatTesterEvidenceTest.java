@@ -1,6 +1,7 @@
 package net.enthusia.staff.paper.tester;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.lang.reflect.Proxy;
@@ -38,17 +39,43 @@ class CheatTesterEvidenceTest {
     }
 
     @Test
+    void velocitySamplingRetainsMaximumObservedDisplacement() {
+        CheatTesterSession session = session(CheatTesterType.VELOCITY);
+        session.startPoint = new CheatTesterSession.StartPoint(WORLD_ID, 0.0D, 64.0D, 0.0D);
+        CheatTesterProbeEngine.recordVelocitySample(session, new Location(world(WORLD_ID), 3.0D, 68.0D, 0.0D));
+        CheatTesterProbeEngine.recordVelocitySample(session, new Location(world(WORLD_ID), 1.0D, 64.0D, 0.0D));
+        assertEquals(5.0D, session.maximumDisplacement);
+    }
+
+    @Test
+    void armorSamplingRecordsReequipBeforeRestoration() {
+        CheatTesterSession session = session(CheatTesterType.AUTO_ARMOR);
+        session.probe = new CheatTesterSession.PreparedProbe(-1, 1, 0);
+        CheatTesterProbeEngine.recordArmorOccupancy(session, false);
+        assertFalse(session.armorReequippedObserved.get());
+
+        CheatTesterProbeEngine.recordArmorOccupancy(session, true);
+        assertTrue(session.armorReequippedObserved.get());
+    }
+
+    @Test
     void summaryFormatsEveryTesterType() {
         assertTrue(evidence.summary(session(CheatTesterType.TOTEM_REFILL),
                 "{\"offhandTotemObserved\":true}").contains("true"));
         assertTrue(evidence.summary(session(CheatTesterType.AUTO_ARMOR),
                 "{\"armorReequippedObserved\":false}").contains("false"));
         assertTrue(evidence.summary(session(CheatTesterType.VELOCITY),
-                "{\"displacement\":2.5}").contains("2.50"));
+                "{\"maximumDisplacement\":2.5,\"finalDisplacement\":0.5}").contains("2.50"));
         assertTrue(evidence.summary(session(CheatTesterType.NO_FALL),
                 "{\"airborneFallResets\":2,\"maximumFallDistance\":4.25}").contains("4.25"));
         assertTrue(evidence.summary(session(CheatTesterType.FAKE_ENTITY),
                 "{\"interactions\":3,\"attacks\":1,\"minimumAimAngleDegrees\":6.5}").contains("6.5°"));
+    }
+
+    @Test
+    void velocitySummaryRemainsCompatibleWithLegacyEvidence() {
+        assertTrue(evidence.summary(session(CheatTesterType.VELOCITY),
+                "{\"displacement\":1.75}").contains("1.75"));
     }
 
     @Test

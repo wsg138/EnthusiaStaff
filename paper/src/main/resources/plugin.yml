@@ -6,7 +6,6 @@ author: P2wn
 description: Enthusia Network staff and moderation runtime for Paper
 load: POSTWORLD
 softdepend:
-  - RoseChat
   - voicechat
   - ViaVersion
   - floodgate
@@ -113,7 +112,6 @@ commands:
   staffchat:
     description: Toggle the configured RoseChat staff channel
     usage: /staffchat
-    permission: enthusiastaff.staffchat
   staffwho:
     description: Show online staff operational state and pending punishment-request count
     usage: /staffwho

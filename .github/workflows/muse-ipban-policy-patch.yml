@@ -1,0 +1,53 @@
+name: Temporary Muse ipban policy patch
+
+on:
+  push:
+    branches:
+      - fix/muse-test-run-remaining-staff
+    paths:
+      - .github/workflows/muse-ipban-policy-patch.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch-policy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: fix/muse-test-run-remaining-staff
+      - name: Add network identity ban policy
+        shell: python
+        run: |
+          from pathlib import Path
+
+          path = Path("paper/src/main/resources/reason-policies.yml")
+          text = path.read_text(encoding="utf-8")
+          if "id: evasion.network-identity-ban" in text:
+              raise SystemExit("policy already present")
+
+          marker = '''  - id: evasion.helping-another
+'''
+          policy = '''  - id: evasion.network-identity-ban
+    family: evasion
+    display-name: Ban evasion requiring a network identity ban
+    severity: 80
+    required-rank: FOUNDER
+    ladder:
+      - { label: "30 day network identity ban", sanctions: [{ type: NETWORK_IDENTITY_BAN, duration: 30d }] }
+      - { label: "60 day network identity ban", sanctions: [{ type: NETWORK_IDENTITY_BAN, duration: 60d }] }
+      - { label: "90 day network identity ban", sanctions: [{ type: NETWORK_IDENTITY_BAN, duration: 90d }] }
+      - { label: "Permanent network identity ban", sanctions: [{ type: NETWORK_IDENTITY_BAN, duration: permanent }] }
+
+'''
+          if text.count(marker) != 1:
+              raise SystemExit("evasion policy insertion marker was not unique")
+          path.write_text(text.replace(marker, policy + marker), encoding="utf-8")
+      - name: Commit policy patch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add paper/src/main/resources/reason-policies.yml
+          git diff --cached --quiet || git commit -m "fix: add Founder network identity ban policy"
+          git push origin HEAD:fix/muse-test-run-remaining-staff

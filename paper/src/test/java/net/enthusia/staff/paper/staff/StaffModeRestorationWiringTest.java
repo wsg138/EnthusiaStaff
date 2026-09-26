@@ -48,12 +48,13 @@ class StaffModeRestorationWiringTest {
     }
 
     @Test
-    void failedClosureDoesNotInvokeVerifiedExitListener() throws IOException {
+    void failedClosureRetainsRecoveryAndInvokesRuntimeExitCleanup() throws IOException {
         String retained = method("private void retainRecoveryAfterRuntimeExit", "private void completeRuntimeExit");
         String completed = method("private void completeRuntimeExit", "private void removeRuntimeState");
 
         assertTrue(retained.contains("recoveryGate.retry(playerId)"));
-        assertTrue(!retained.contains("exitListener.accept"));
+        assertTrue(retained.contains("removeRuntimeState(playerId)"));
+        assertTrue(retained.contains("exitListener.accept(playerId)"));
         assertTrue(completed.contains("recoveryGate.clear(playerId)"));
         assertTrue(completed.contains("exitListener.accept(playerId)"));
     }

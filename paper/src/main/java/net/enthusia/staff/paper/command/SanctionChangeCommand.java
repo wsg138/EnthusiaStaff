@@ -73,7 +73,7 @@ public final class SanctionChangeCommand implements CommandExecutor, TabComplete
         }
         String route = CommandRoute.canonicalName(command);
         boolean central = route.equals("removepunishment");
-        if (arguments.length == 1 && sender instanceof Player player) {
+        if (!central && arguments.length == 1 && sender instanceof Player player) {
             gui.open(player, arguments[0], route);
             return true;
         }

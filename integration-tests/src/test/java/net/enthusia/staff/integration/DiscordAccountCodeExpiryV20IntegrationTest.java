@@ -9,11 +9,11 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.time.Instant;
 import java.util.UUID;
+import net.enthusia.staff.domain.application.AccountLinkCodeException;
 import net.enthusia.staff.domain.moderation.DiscordUserId;
 import net.enthusia.staff.persistence.JdbcAccountLinkingStore;
 import net.enthusia.staff.persistence.JdbcDiscordModerationPersistenceStore;
 import net.enthusia.staff.persistence.MariaDb;
-import net.enthusia.staff.persistence.ModerationPersistenceException;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.testcontainers.containers.MariaDBContainer;
@@ -39,7 +39,7 @@ class DiscordAccountCodeExpiryV20IntegrationTest {
     }
 
     @Test
-    void elapsedCodeCommitsExpiredStateBeforeFailureAndSurvivesRestart() throws Exception {
+    void elapsedCodeCommitsExpiredStateBeforeTypedFailureAndSurvivesRestart() throws Exception {
         DiscordUserId discordUserId = new DiscordUserId("18446744073709550121");
         UUID completingPlayer = UUID.randomUUID();
 
@@ -49,27 +49,46 @@ class DiscordAccountCodeExpiryV20IntegrationTest {
             JdbcAccountLinkingStore codes = new JdbcAccountLinkingStore(dataSource);
             codes.issueFromDiscord(discordUserId, CODE_HASH, CREATED_AT, CREATED_AT.plusSeconds(300));
 
-            assertThrows(ModerationPersistenceException.class, () -> codes.completeFromMinecraft(
-                    CODE_HASH,
-                    completingPlayer,
-                    "d04-expired-code",
-                    CREATED_AT.plusSeconds(301)
-            ));
+            AccountLinkCodeException expired = assertThrows(AccountLinkCodeException.class, () ->
+                    codes.completeFromMinecraft(
+                            CODE_HASH,
+                            completingPlayer,
+                            "d04-expired-code",
+                            CREATED_AT.plusSeconds(301)
+                    ));
+            assertEquals(AccountLinkCodeException.Reason.EXPIRED, expired.reason());
         }
 
         assertCodeState("EXPIRED", 1L);
 
         try (HikariDataSource dataSource = MariaDb.open(MariaDbIntegrationSupport.databaseConfig(DATABASE))) {
             JdbcAccountLinkingStore restarted = new JdbcAccountLinkingStore(dataSource);
-            assertThrows(ModerationPersistenceException.class, () -> restarted.completeFromMinecraft(
-                    CODE_HASH,
-                    completingPlayer,
-                    "d04-expired-code",
-                    CREATED_AT.plusSeconds(600)
-            ));
+            AccountLinkCodeException expired = assertThrows(AccountLinkCodeException.class, () ->
+                    restarted.completeFromMinecraft(
+                            CODE_HASH,
+                            completingPlayer,
+                            "d04-expired-code",
+                            CREATED_AT.plusSeconds(600)
+                    ));
+            assertEquals(AccountLinkCodeException.Reason.EXPIRED, expired.reason());
         }
 
         assertCodeState("EXPIRED", 1L);
+    }
+
+    @Test
+    void unknownCodeIsTypedAsInvalidInsteadOfPersistenceFailure() {
+        try (HikariDataSource dataSource = MariaDb.open(MariaDbIntegrationSupport.databaseConfig(DATABASE))) {
+            JdbcAccountLinkingStore codes = new JdbcAccountLinkingStore(dataSource);
+            AccountLinkCodeException invalid = assertThrows(AccountLinkCodeException.class, () ->
+                    codes.completeFromMinecraft(
+                            "b".repeat(64),
+                            UUID.randomUUID(),
+                            "d04-invalid-code",
+                            CREATED_AT
+                    ));
+            assertEquals(AccountLinkCodeException.Reason.INVALID, invalid.reason());
+        }
     }
 
     private static void assertCodeState(String expectedState, long expectedRevision) throws Exception {

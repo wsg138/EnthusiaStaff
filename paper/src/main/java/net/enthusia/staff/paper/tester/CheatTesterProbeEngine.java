@@ -90,7 +90,7 @@ final class CheatTesterProbeEngine {
         EnumMap<CheatTesterType, ProbeStarter> configured = new EnumMap<>(CheatTesterType.class);
         configured.put(CheatTesterType.TOTEM_REFILL, this::beginTotem);
         configured.put(CheatTesterType.AUTO_ARMOR, this::beginArmor);
-        configured.put(CheatTesterType.VELOCITY, (target, ignored) -> beginVelocity(target));
+        configured.put(CheatTesterType.VELOCITY, this::beginVelocity);
         configured.put(CheatTesterType.NO_FALL, this::beginNoFall);
         configured.put(CheatTesterType.FAKE_ENTITY, this::beginFake);
         return Map.copyOf(configured);
@@ -144,6 +144,36 @@ final class CheatTesterProbeEngine {
         inventory.setStorageContents(storage);
         inventory.setArmorContents(armor);
         target.updateInventory();
+        session.sampleTask = target.getScheduler().runAtFixedRate(
+                plugin,
+                ignored -> sampleArmor(target, session),
+                () -> retirement.accept(session, "Target retired during auto-armor sampling"),
+                1L,
+                1L
+        );
+    }
+
+    private void sampleArmor(Player target, CheatTesterSession session) {
+        if (!sampleActive.test(session)) {
+            cancel(session.sampleTask);
+            return;
+        }
+        recordArmorSample(session, target.getInventory().getArmorContents());
+        if (session.armorReequippedObserved.get()) {
+            cancel(session.sampleTask);
+        }
+    }
+
+    static void recordArmorSample(CheatTesterSession session, ItemStack[] armor) {
+        int slot = session.probe.armorSlot();
+        boolean occupied = slot >= 0 && slot < armor.length && armor[slot] != null && !armor[slot].isEmpty();
+        recordArmorOccupancy(session, occupied);
+    }
+
+    static void recordArmorOccupancy(CheatTesterSession session, boolean occupied) {
+        if (occupied) {
+            session.armorReequippedObserved.set(true);
+        }
     }
 
     private static void validateArmorIndices(ItemStack[] armor, ItemStack[] storage, int armorSlot, int storageSlot) {
@@ -161,7 +191,7 @@ final class CheatTesterProbeEngine {
         }
     }
 
-    private void beginVelocity(Player target) {
+    private void beginVelocity(Player target, CheatTesterSession session) {
         Vector horizontal = target.getLocation().getDirection().setY(0.0D);
         if (horizontal.lengthSquared() < MIN_DIRECTION_LENGTH_SQUARED) {
             horizontal = new Vector(1.0D, 0.0D, 0.0D);
@@ -169,6 +199,28 @@ final class CheatTesterProbeEngine {
             horizontal.normalize();
         }
         target.setVelocity(horizontal.multiply(settings.velocityHorizontal()).setY(settings.velocityVertical()));
+        session.sampleTask = target.getScheduler().runAtFixedRate(
+                plugin,
+                ignored -> sampleVelocity(target, session),
+                () -> retirement.accept(session, "Target retired during velocity sampling"),
+                1L,
+                1L
+        );
+    }
+
+    private void sampleVelocity(Player target, CheatTesterSession session) {
+        if (!sampleActive.test(session)) {
+            cancel(session.sampleTask);
+            return;
+        }
+        recordVelocitySample(session, target.getLocation());
+    }
+
+    static void recordVelocitySample(CheatTesterSession session, Location current) {
+        double displacement = CheatTesterEvidence.displacement(current, session.startPoint);
+        if (displacement >= 0.0D && Double.isFinite(displacement)) {
+            session.maximumDisplacement = Math.max(session.maximumDisplacement, displacement);
+        }
     }
 
     private void beginNoFall(Player target, CheatTesterSession session) {

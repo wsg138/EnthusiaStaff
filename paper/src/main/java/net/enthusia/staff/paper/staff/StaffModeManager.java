@@ -683,6 +683,11 @@ public final class StaffModeManager implements Listener {
     private void retainRecoveryAfterRuntimeExit(UUID playerId) {
         recoveryGate.retry(playerId);
         removeRuntimeState(playerId);
+        try {
+            exitListener.accept(playerId);
+        } catch (RuntimeException exception) {
+            plugin.getLogger().log(Level.WARNING, "Post-exit staff-mode cleanup callback failed", exception);
+        }
     }
 
     private void completeRuntimeExit(UUID playerId) {

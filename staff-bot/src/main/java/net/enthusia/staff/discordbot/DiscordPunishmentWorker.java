@@ -309,16 +309,17 @@ final class DiscordPunishmentWorker {
             StoredPunishment stored,
             DiscordPunishmentGateway.EffectException failure
     ) {
-        boolean retry = failure.retryable();
+        DiscordPunishment punishment = stored.punishment();
+        boolean retry = failure.retryable() || DiscordKickRetryPolicy.retryAmbiguityOnce(punishment, failure);
         DiscordPunishmentState state = retry
                 ? DiscordPunishmentState.RETRY_APPLY
                 : DiscordPunishmentState.FAILED_APPLY;
-        DiscordPunishment replacement = stored.punishment().withProcessingResult(
+        DiscordPunishment replacement = punishment.withProcessingResult(
                 state,
-                stored.punishment().dmOutcome(),
-                stored.punishment().externalApplied(),
-                stored.punishment().previousRestriction(),
-                Optional.of(failure.errorCode()),
+                punishment.dmOutcome(),
+                punishment.externalApplied(),
+                punishment.previousRestriction(),
+                Optional.of(DiscordKickRetryPolicy.durableFailureCode(punishment, failure)),
                 operationKey(work)
         );
         settle(work, stored, replacement, retry ? List.of(retry(work, WorkType.APPLY)) : List.of());

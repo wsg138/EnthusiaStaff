@@ -286,10 +286,16 @@ public final class VanishManager implements Listener {
 
     private void persistState(VanishStore loaded, UUID playerId, StaffRank rank, boolean vanished) {
         Instant now = clock.instant();
-        loaded.set(playerId, rank, vanished, playerId, now);
-        StaffSessionStore sessionStore = sessions.get();
-        if (sessionStore != null && staffMode.active(playerId)) {
-            sessionStore.setVanish(playerId, vanished, now);
+        VanishStore.WriteResult result = loaded.set(
+                playerId,
+                rank,
+                vanished,
+                playerId,
+                now,
+                staffMode.active(playerId)
+        );
+        if (result == VanishStore.WriteResult.STAFF_SESSION_NOT_ACTIVE) {
+            throw new IllegalStateException("active staff session ended before vanish state commit");
         }
     }
 

@@ -10,6 +10,7 @@ import org.bukkit.entity.Player;
 
 public final class StaffChatCommand implements CommandExecutor {
     private static final String PERMISSION = "enthusiastaff.staffchat";
+    private static final String ROSECHAT_STAFF_PERMISSION = "rosechat.channel.staff";
 
     private final Supplier<RoseChatIntegration> integration;
 
@@ -33,6 +34,13 @@ public final class StaffChatCommand implements CommandExecutor {
         }
         if (arguments.length != 0) {
             player.sendMessage(Component.text("Usage: /" + label));
+            return true;
+        }
+        if (!CommandPermissionGate.require(
+                player,
+                ROSECHAT_STAFF_PERMISSION,
+                "You do not have permission to use the RoseChat staff channel."
+        )) {
             return true;
         }
         RoseChatIntegration loaded = integration.get();

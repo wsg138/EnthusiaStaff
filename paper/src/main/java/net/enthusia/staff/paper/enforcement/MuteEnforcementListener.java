@@ -6,12 +6,14 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Consumer;
 import java.util.function.Supplier;
 import java.util.logging.Level;
 import net.enthusia.staff.domain.OperationalMode;
@@ -20,6 +22,7 @@ import net.enthusia.staff.domain.ports.PlayerDirectory;
 import net.enthusia.staff.domain.ports.SanctionLookup;
 import net.enthusia.staff.domain.sanction.ActiveSanction;
 import net.enthusia.staff.domain.sanction.SanctionType;
+import net.enthusia.staff.paper.PlayerMessageDispatcher;
 import net.enthusia.staff.paper.client.PaperPlayerPlatformResolver;
 import net.kyori.adventure.text.Component;
 import org.bukkit.entity.Player;
@@ -29,11 +32,13 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.player.AsyncPlayerChatEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
+import org.bukkit.plugin.Plugin;
 import org.bukkit.plugin.java.JavaPlugin;
 
 public final class MuteEnforcementListener implements Listener, AutoCloseable {
     private static final Duration CACHE_TTL = Duration.ofSeconds(45);
     private static final Set<SanctionType> MUTE_TYPES = Set.of(SanctionType.MUTE);
+    private static final long NEXT_TICK = 1L;
 
     private final JavaPlugin plugin;
     private final Clock clock;
@@ -43,6 +48,7 @@ public final class MuteEnforcementListener implements Listener, AutoCloseable {
     private final Supplier<PlayerDirectory> players;
     private final ExecutorService workers;
     private final PaperPlayerPlatformResolver platforms;
+    private final PlayerMessageDispatcher messages;
     private final ConcurrentHashMap<UUID, Entry> cache = new ConcurrentHashMap<>();
     private ScheduledTask refreshTask;
 
@@ -63,16 +69,57 @@ public final class MuteEnforcementListener implements Listener, AutoCloseable {
         this.players = players;
         this.workers = workers;
         this.platforms = PaperPlayerPlatformResolver.discover(plugin);
+        this.messages = new PlayerMessageDispatcher(plugin);
     }
 
     public void start() {
         refreshTask = plugin.getServer().getAsyncScheduler().runAtFixedRate(
                 plugin,
-                ignored -> plugin.getServer().getOnlinePlayers().forEach(this::refresh),
+                ignored -> queueOnlineRefresh(),
                 5,
                 15,
                 TimeUnit.SECONDS
         );
+    }
+
+    private void queueOnlineRefresh() {
+        try {
+            plugin.getServer().getGlobalRegionScheduler().execute(
+                    plugin,
+                    () -> scheduleRefreshes(
+                            plugin,
+                            plugin.getServer().getOnlinePlayers(),
+                            this::refresh
+                    )
+            );
+        } catch (RuntimeException exception) {
+            plugin.getLogger().log(Level.FINE, "Mute refresh dispatch was skipped", exception);
+        }
+    }
+
+    static void scheduleRefreshes(
+            Plugin plugin,
+            Iterable<? extends Player> onlinePlayers,
+            Consumer<UUID> refresh
+    ) {
+        Objects.requireNonNull(plugin, "plugin");
+        Objects.requireNonNull(onlinePlayers, "onlinePlayers");
+        Objects.requireNonNull(refresh, "refresh");
+        for (Player player : onlinePlayers) {
+            try {
+                boolean scheduled = player.getScheduler().execute(
+                        plugin,
+                        () -> refresh.accept(player.getUniqueId()),
+                        () -> { },
+                        NEXT_TICK
+                );
+                if (!scheduled) {
+                    plugin.getLogger().fine("Mute refresh player is no longer schedulable");
+                }
+            } catch (RuntimeException exception) {
+                plugin.getLogger().log(Level.FINE, "Mute refresh player dispatch was skipped", exception);
+            }
+        }
     }
 
     @EventHandler(priority = EventPriority.MONITOR)
@@ -177,7 +224,7 @@ public final class MuteEnforcementListener implements Listener, AutoCloseable {
     }
 
     private void notifyPlayer(Player player, String message) {
-        plugin.getServer().getGlobalRegionScheduler().execute(plugin, () -> player.sendMessage(Component.text(message)));
+        messages.send(player, Component.text(message));
     }
 
     @Override

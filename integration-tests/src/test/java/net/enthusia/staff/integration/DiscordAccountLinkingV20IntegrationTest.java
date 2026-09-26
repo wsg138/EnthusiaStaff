@@ -22,6 +22,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicInteger;
+import net.enthusia.staff.domain.application.AccountLinkCodeException;
 import net.enthusia.staff.domain.application.AccountLinkRecoveryService;
 import net.enthusia.staff.domain.application.AccountLinkingService;
 import net.enthusia.staff.domain.application.ActivePlaytimeProvider;
@@ -87,8 +88,11 @@ class DiscordAccountLinkingV20IntegrationTest {
             String firstCode = service.issueFromDiscord(discord).code();
             String secondCode = service.issueFromDiscord(discord).code();
             assertNotEquals(firstCode, secondCode);
-            assertThrows(ModerationPersistenceException.class,
-                    () -> service.completeFromMinecraft(firstCode, player));
+            AccountLinkCodeException replaced = assertThrows(
+                    AccountLinkCodeException.class,
+                    () -> service.completeFromMinecraft(firstCode, player)
+            );
+            assertEquals(AccountLinkCodeException.Reason.REPLACED, replaced.reason());
 
             var linked = service.completeFromMinecraft(secondCode, player);
             assertEquals(discord, linked.link().discordUserId());
@@ -117,8 +121,11 @@ class DiscordAccountLinkingV20IntegrationTest {
 
             String expired = restarted.issueFromDiscord(discord).code();
             clock.advanceSeconds(301);
-            assertThrows(ModerationPersistenceException.class,
-                    () -> restarted.completeFromMinecraft(expired, player));
+            AccountLinkCodeException expiredCode = assertThrows(
+                    AccountLinkCodeException.class,
+                    () -> restarted.completeFromMinecraft(expired, player)
+            );
+            assertEquals(AccountLinkCodeException.Reason.EXPIRED, expiredCode.reason());
         }
     }
 
@@ -467,8 +474,8 @@ class DiscordAccountLinkingV20IntegrationTest {
             start.await();
             service.completeFromMinecraft(code, playerId);
             successes.incrementAndGet();
-        } catch (ModerationPersistenceException expectedRaceLoss) {
-            return;
+        } catch (AccountLinkCodeException expectedRaceLoss) {
+            assertEquals(AccountLinkCodeException.Reason.ALREADY_USED, expectedRaceLoss.reason());
         } catch (InterruptedException interrupted) {
             Thread.currentThread().interrupt();
             throw new IllegalStateException(interrupted);
