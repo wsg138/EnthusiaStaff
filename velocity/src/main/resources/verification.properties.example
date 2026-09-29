@@ -1,0 +1,11 @@
+# Optional external readiness probes used only by /estaff verify full on Velocity.
+# Keep these on private/internal endpoints where possible. Do not include credentials in URLs.
+
+# Staff Bot exposes GET /ready. Point this at the Bloom-private address reachable from Velocity.
+staff-bot.ready-url=
+
+# Optional public/staging website health endpoint. Leave blank until the site exposes a safe readiness route.
+website.ready-url=
+
+# Bounded per-request timeout. Allowed range: 250-5000 ms.
+timeout-millis=1500
