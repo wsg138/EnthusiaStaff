@@ -1,7 +1,6 @@
 package net.enthusia.staff.velocity;
 
 import java.io.IOException;
-import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
@@ -16,13 +15,13 @@ final class ExternalReadinessProbe {
     private ExternalReadinessProbe() {
     }
 
-    static Result probe(URI endpoint, int timeoutMillis) {
+    static Result probe(PrivateReadinessEndpoint endpoint, int timeoutMillis) {
         if (endpoint == null) {
             return new Result(State.DISABLED, "readiness URL is not configured");
         }
         Duration timeout = Duration.ofMillis(timeoutMillis);
         HttpClient client = HttpClient.newBuilder().connectTimeout(timeout).build();
-        HttpRequest request = HttpRequest.newBuilder(endpoint).GET().timeout(timeout).build();
+        HttpRequest request = HttpRequest.newBuilder(endpoint.uri()).GET().timeout(timeout).build();
         try {
             HttpResponse<Void> response = client.send(request, HttpResponse.BodyHandlers.discarding());
             if (response.statusCode() >= 200 && response.statusCode() < 300) {
