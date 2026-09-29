@@ -1,0 +1,6 @@
+# Copy to plugins/EnthusiaStaff/discord-staff-authority.properties on the chosen Paper authority backend.
+# Do not commit the real secret.
+
+authority.secret=<same-value-as-ENTHUSIA_STAFF_DISCORD_AUTHORITY_SECRET>
+authority.bind=bloom-private-split
+authority.port=8771
