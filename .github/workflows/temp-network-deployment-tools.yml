@@ -1,0 +1,30 @@
+name: Temp network deployment tools
+
+on:
+  push:
+    branches:
+      - deploy/temp-network-sftp-staging
+  pull_request:
+    paths:
+      - 'deploy/temp-network/**'
+      - '.github/workflows/temp-network-deployment-tools.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  python-tools:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - name: Install deployment dependency
+        run: python -m pip install --disable-pip-version-check 'paramiko==4.0.0'
+      - name: Compile deployment helpers
+        run: python -m py_compile deploy/temp-network/*.py
+      - name: Run deployment helper tests
+        run: python -m unittest -v deploy/temp-network/test_provider_sftp_upload.py
