@@ -1,10 +1,12 @@
 # Optional external readiness probes used only by /estaff verify full on Velocity.
-# Keep these on private/internal endpoints where possible. Do not include credentials in URLs.
+# Security boundary: endpoints must use numeric loopback/RFC1918/private IPv6 addresses.
+# Hostnames, public addresses, link-local/metadata addresses, credentials, queries, and fragments are rejected.
 
-# Staff Bot exposes GET /ready. Point this at the Bloom-private address reachable from Velocity.
+# Staff Bot exposes GET /ready. Use its Bloom-private IP address reachable from Velocity.
 staff-bot.ready-url=
 
-# Optional public/staging website health endpoint. Leave blank until the site exposes a safe readiness route.
+# Optional website-process health probe. Use only a private/internal IP endpoint.
+# The built-in private Staff website bridge is checked separately even when this remains blank.
 website.ready-url=
 
 # Bounded per-request timeout. Allowed range: 250-5000 ms.
