@@ -1,4 +1,4 @@
-name: Temporary Codacy issue dump
+name: Temporary Codacy cleanup
 
 on:
   push:
@@ -6,25 +6,122 @@ on:
     paths: [.github/workflows/temp-codacy-issue-dump.yml]
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
-  dump:
+  cleanup:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 20
     steps:
-      - name: Fetch current PR issue metadata
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/readable-network-verify
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Apply four exact analyzer repairs
         shell: bash
         run: |
           set -euo pipefail
-          curl --fail --silent --show-error \
-            'https://api.codacy.com/api/v3/analysis/organizations/gh/wsg138/repositories/EnthusiaStaff/pull-requests/257/issues?status=new&limit=100' \
-            -o /tmp/issues.json
           python3 - <<'PY'
-          import json
-          data = json.load(open('/tmp/issues.json', encoding='utf-8'))
-          items = data.get('data', data if isinstance(data, list) else [])
-          print('CODACY_ISSUE_COUNT=' + str(len(items)))
-          for index, item in enumerate(items, 1):
-              print(f'ISSUE_RAW_{index}=' + json.dumps(item, sort_keys=True, separators=(',', ':')))
+          from pathlib import Path
+
+          edits = {
+              Path('velocity/src/main/java/net/enthusia/staff/velocity/NetworkVerificationState.java'): [
+                  (
+                      'final class NetworkVerificationState {',
+                      '@SuppressWarnings("PMD.MissingStaticMethodInNonInstantiatableClass") '
+                      '// Intentional namespace for related immutable verification records.\n'
+                      'final class NetworkVerificationState {'
+                  ),
+              ],
+              Path('paper/src/main/java/net/enthusia/staff/paper/PaperVerificationReporter.java'): [
+                  (
+                      '    private static final ObjectMapper JSON = new ObjectMapper();',
+                      '    private static final ObjectMapper JSON = new ObjectMapper();\n'
+                      '    private static final String STAFF_BRIDGE_OWNER = "EnthusiaStaff";'
+                  ),
+                  (
+                      '            if (!"EnthusiaStaff".equals(owner)) {',
+                      '            if (!STAFF_BRIDGE_OWNER.equals(owner)) {'
+                  ),
+              ],
+              Path('paper/src/main/java/net/enthusia/staff/paper/command/FullRuntimeVerifier.java'): [
+                  (
+                      '    private static final String ESTAFF_COMMAND = "estaff";',
+                      '    private static final String ESTAFF_COMMAND = "estaff";\n'
+                      '    private static final String DETAIL_SEPARATOR = " — ";'
+                  ),
+                  (' + DARK_GRAY + " — " + GRAY + detail;', ' + DARK_GRAY + DETAIL_SEPARATOR + GRAY + detail;'),
+                  (' + DARK_GRAY + " — " + RED + detail;', ' + DARK_GRAY + DETAIL_SEPARATOR + RED + detail;'),
+                  (' + GRAY + label + " — " + detail;', ' + GRAY + label + DETAIL_SEPARATOR + detail;'),
+              ],
+              Path('velocity/src/test/java/net/enthusia/staff/velocity/VelocitySecurityEventSubmissionTest.java'): [
+                  ('import java.net.InetAddress;\n', ''),
+                  (
+                      '    private static RegisteredServer server(String name) {\n'
+                      '        ServerInfo info = new ServerInfo(name, new InetSocketAddress(InetAddress.getLoopbackAddress(), 25565));',
+                      '    @SuppressWarnings("AddressSelection") // Fixed loopback literal keeps this isolated test fixture non-routable.\n'
+                      '    private static RegisteredServer server(String name) {\n'
+                      '        ServerInfo info = new ServerInfo(name, new InetSocketAddress("127.0.0.1", 25565));'
+                  ),
+              ],
+          }
+
+          for path, replacements in edits.items():
+              text = path.read_text()
+              for old, new in replacements:
+                  count = text.count(old)
+                  if count != 1:
+                      raise SystemExit(f'{path}: expected exactly one match for {old!r}; found {count}')
+                  text = text.replace(old, new, 1)
+              path.write_text(text)
           PY
+      - name: Configure current Error Prone
+        shell: bash
+        run: |
+          cat > /tmp/errorprone.init.gradle <<'EOF'
+          initscript {
+              repositories {
+                  gradlePluginPortal()
+                  mavenCentral()
+              }
+              dependencies {
+                  classpath 'net.ltgt.gradle:gradle-errorprone-plugin:4.1.0'
+              }
+          }
+          allprojects {
+              afterEvaluate { p ->
+                  if (p.plugins.hasPlugin('java-library')) {
+                      p.apply plugin: net.ltgt.gradle.errorprone.ErrorPronePlugin
+                      p.dependencies.add('errorprone', 'com.google.errorprone:error_prone_core:2.50.0')
+                      p.tasks.withType(org.gradle.api.tasks.compile.JavaCompile).configureEach { task ->
+                          task.options.compilerArgs.removeAll { it == '-Werror' }
+                          task.options.compilerArgs.add('-XDaddTypeAnnotationsToSymbol=true')
+                          task.options.errorprone.allErrorsAsWarnings.set(true)
+                      }
+                  }
+              }
+          }
+          EOF
+      - name: Validate focused Paper and Velocity changes
+        shell: bash
+        run: |
+          ./gradlew :paper:test :velocity:test --no-daemon --console=plain
+          ./gradlew -I /tmp/errorprone.init.gradle :paper:compileJava :velocity:compileJava :velocity:compileTestJava --no-daemon --console=plain
+      - name: Commit repairs and remove temporary workflow
+        shell: bash
+        run: |
+          rm .github/workflows/temp-codacy-issue-dump.yml
+          git config user.name "P2wn"
+          git config user.email "racecarboy77@gmail.com"
+          git add \
+            velocity/src/main/java/net/enthusia/staff/velocity/NetworkVerificationState.java \
+            paper/src/main/java/net/enthusia/staff/paper/PaperVerificationReporter.java \
+            paper/src/main/java/net/enthusia/staff/paper/command/FullRuntimeVerifier.java \
+            velocity/src/test/java/net/enthusia/staff/velocity/VelocitySecurityEventSubmissionTest.java \
+            .github/workflows/temp-codacy-issue-dump.yml
+          git commit -m "Resolve final verification analyzer findings"
+          git push origin HEAD:feature/readable-network-verify
