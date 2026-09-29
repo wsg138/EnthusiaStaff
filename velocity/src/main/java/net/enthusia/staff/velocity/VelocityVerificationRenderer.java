@@ -20,8 +20,6 @@ final class VelocityVerificationRenderer {
     List<Component> render(
             NetworkVerificationState.Snapshot snapshot,
             Map<String, BackendVerificationReport> backendReports,
-            ExternalReadinessProbe.Result staffBot,
-            ExternalReadinessProbe.Result website,
             NetworkVerificationState.Cutover cutover
     ) {
         List<Component> lines = new ArrayList<>();
@@ -30,9 +28,9 @@ final class VelocityVerificationRenderer {
         appendCore(lines, snapshot);
         appendBackends(lines, snapshot, backendReports);
         appendProviders(lines, snapshot.expectedBackends(), backendReports);
-        appendExternal(lines, snapshot, staffBot, website);
+        appendDiscordAndWebsite(lines, snapshot);
         appendCutover(lines, cutover);
-        appendConclusion(lines, snapshot, backendReports, staffBot, website, cutover);
+        appendConclusion(lines, snapshot, backendReports, cutover);
         return List.copyOf(lines);
     }
 
@@ -139,14 +137,11 @@ final class VelocityVerificationRenderer {
         return new ProviderSummary(present, pass, List.copyOf(problems));
     }
 
-    private static void appendExternal(
+    private static void appendDiscordAndWebsite(
             List<Component> lines,
-            NetworkVerificationState.Snapshot snapshot,
-            ExternalReadinessProbe.Result staffBot,
-            ExternalReadinessProbe.Result website
+            NetworkVerificationState.Snapshot snapshot
     ) {
         lines.add(section("Discord & Website"));
-        lines.add(external("Staff Bot", staffBot));
         lines.add(status(
                 snapshot.discordWebhookReady(),
                 "Discord webhooks",
@@ -159,15 +154,7 @@ final class VelocityVerificationRenderer {
                 "private bridge listening",
                 "private bridge unavailable"
         ));
-        lines.add(external("Public website", website));
-    }
-
-    private static Component external(String label, ExternalReadinessProbe.Result result) {
-        return switch (result.state()) {
-            case PASS -> pass(label, result.detail());
-            case WARNING -> warning(label, result.detail());
-            case DISABLED -> disabled(label, result.detail());
-        };
+        lines.add(note("External services", "no outbound probes; verify Staff Bot/site from their own readiness checks"));
     }
 
     private static void appendCutover(List<Component> lines, NetworkVerificationState.Cutover cutover) {
@@ -184,11 +171,9 @@ final class VelocityVerificationRenderer {
             List<Component> lines,
             NetworkVerificationState.Snapshot snapshot,
             Map<String, BackendVerificationReport> reports,
-            ExternalReadinessProbe.Result staffBot,
-            ExternalReadinessProbe.Result website,
             NetworkVerificationState.Cutover cutover
     ) {
-        List<String> blockers = blockers(snapshot, reports, staffBot, website, cutover);
+        List<String> blockers = blockers(snapshot, reports, cutover);
         appendBlockers(lines, blockers);
         lines.add(Component.text("────────────────────────", NamedTextColor.DARK_GRAY));
         lines.add(verdict(snapshot.mode(), blockers));
@@ -225,13 +210,11 @@ final class VelocityVerificationRenderer {
     private static List<String> blockers(
             NetworkVerificationState.Snapshot snapshot,
             Map<String, BackendVerificationReport> reports,
-            ExternalReadinessProbe.Result staffBot,
-            ExternalReadinessProbe.Result website,
             NetworkVerificationState.Cutover cutover
     ) {
         LinkedHashSet<String> blockers = new LinkedHashSet<>();
         appendCoreBlockers(blockers, snapshot, reports);
-        appendIntegrationBlockers(blockers, snapshot, reports, staffBot, website);
+        appendIntegrationBlockers(blockers, snapshot, reports);
         cutover.blockers().stream().filter(value -> value != null && !value.isBlank()).forEach(blockers::add);
         return blockers.stream().sorted(Comparator.naturalOrder()).toList();
     }
@@ -253,21 +236,13 @@ final class VelocityVerificationRenderer {
     private static void appendIntegrationBlockers(
             Set<String> blockers,
             NetworkVerificationState.Snapshot snapshot,
-            Map<String, BackendVerificationReport> reports,
-            ExternalReadinessProbe.Result staffBot,
-            ExternalReadinessProbe.Result website
+            Map<String, BackendVerificationReport> reports
     ) {
-        if (staffBot.state() != ExternalReadinessProbe.State.PASS) {
-            blockers.add("Staff Bot: " + staffBot.detail());
-        }
         if (!snapshot.discordWebhookReady()) {
             blockers.add("Discord webhook delivery worker is unavailable");
         }
         if (!snapshot.websiteBridgeReady()) {
             blockers.add("Private website bridge is unavailable");
-        }
-        if (website.state() != ExternalReadinessProbe.State.PASS) {
-            blockers.add("Public website: " + website.detail());
         }
         appendProviderProblems(blockers, snapshot.expectedBackends(), reports);
     }
