@@ -61,10 +61,7 @@ final class VelocityNetworkVerifier {
     List<Component> verify() {
         NetworkVerificationState.Snapshot snapshot = snapshot();
         Map<String, BackendVerificationReport> backendReports = collectBackendReports(snapshot, clock.instant());
-        VerificationProbeConfiguration probes = probeConfiguration();
-        ExternalReadinessProbe.Result staffBot = probe(probes.staffBotReadyUrl(), probes.timeoutMillis());
-        ExternalReadinessProbe.Result website = probe(probes.websiteReadyUrl(), probes.timeoutMillis());
-        return renderer.render(snapshot, backendReports, staffBot, website, cutoverView(snapshot.runtime()));
+        return renderer.render(snapshot, backendReports, cutoverView(snapshot.runtime()));
     }
 
     private NetworkVerificationState.Snapshot snapshot() {
@@ -149,21 +146,6 @@ final class VelocityNetworkVerifier {
         return report != null && !report.receivedAt().isBefore(started);
     }
 
-    private VerificationProbeConfiguration probeConfiguration() {
-        try {
-            return VerificationProbeConfiguration.load(dependencies.dataDirectory());
-        } catch (RuntimeException ignored) {
-            return new VerificationProbeConfiguration(Optional.empty(), Optional.empty(), 1_500);
-        }
-    }
-
-    private static ExternalReadinessProbe.Result probe(
-            Optional<PrivateReadinessEndpoint> endpoint,
-            int timeoutMillis
-    ) {
-        return ExternalReadinessProbe.probe(endpoint.orElse(null), timeoutMillis);
-    }
-
     private static NetworkVerificationState.Cutover cutoverView(MariaDbRuntime runtime) {
         if (runtime == null) {
             return new NetworkVerificationState.Cutover(false, false, List.of("MariaDB runtime is unavailable"));
@@ -192,8 +174,7 @@ final class VelocityNetworkVerifier {
             Supplier<PersistentChannelServer> channel,
             BooleanSupplier networkIdentityReady,
             BooleanSupplier discordWebhookReady,
-            BooleanSupplier websiteBridgeReady,
-            java.nio.file.Path dataDirectory
+            BooleanSupplier websiteBridgeReady
     ) {
         Dependencies {
             java.util.Objects.requireNonNull(mode, "mode");
@@ -203,7 +184,6 @@ final class VelocityNetworkVerifier {
             java.util.Objects.requireNonNull(networkIdentityReady, "networkIdentityReady");
             java.util.Objects.requireNonNull(discordWebhookReady, "discordWebhookReady");
             java.util.Objects.requireNonNull(websiteBridgeReady, "websiteBridgeReady");
-            java.util.Objects.requireNonNull(dataDirectory, "dataDirectory");
         }
     }
 
