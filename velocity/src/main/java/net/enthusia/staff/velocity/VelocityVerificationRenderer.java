@@ -32,7 +32,7 @@ final class VelocityVerificationRenderer {
         appendProviders(lines, snapshot.expectedBackends(), backendReports);
         appendExternal(lines, snapshot, staffBot, website);
         appendCutover(lines, cutover);
-        appendConclusion(lines, snapshot, backendReports, cutover);
+        appendConclusion(lines, snapshot, backendReports, staffBot, website, cutover);
         return List.copyOf(lines);
     }
 
@@ -99,15 +99,15 @@ final class VelocityVerificationRenderer {
             Map<String, BackendVerificationReport> reports
     ) {
         ProviderSummary summary = providerSummary(provider, expected, reports);
-        if (summary.passCount() == expected.size() && !expected.isEmpty()) {
-            return pass(provider, summary.passCount() + "/" + expected.size() + " healthy");
+        if (summary.presentCount() == 0 && summary.problems().isEmpty()) {
+            return disabled(provider, "optional / not installed on connected backends");
         }
         if (summary.problems().isEmpty()) {
-            return disabled(provider, "optional / not installed on required backends");
+            return pass(provider, summary.passCount() + " backend(s) healthy");
         }
         return warning(
                 provider,
-                summary.passCount() + "/" + expected.size() + " healthy; " + summary.problems().getFirst()
+                summary.passCount() + "/" + summary.presentCount() + " healthy; " + summary.problems().getFirst()
         );
     }
 
@@ -116,20 +116,27 @@ final class VelocityVerificationRenderer {
             Set<String> expected,
             Map<String, BackendVerificationReport> reports
     ) {
+        int present = 0;
         int pass = 0;
         List<String> problems = new ArrayList<>();
         for (String backend : expected) {
             BackendVerificationReport report = reports.get(backend);
-            BackendVerificationReport.Check check = report == null ? null : report.integrations().get(provider);
-            if (check == null) {
+            if (report == null) {
                 problems.add(backend + ": unverified");
-            } else if (check.state() == BackendVerificationReport.State.PASS) {
+                continue;
+            }
+            BackendVerificationReport.Check check = report.integrations().get(provider);
+            if (check == null || check.state() == BackendVerificationReport.State.DISABLED) {
+                continue;
+            }
+            present++;
+            if (check.state() == BackendVerificationReport.State.PASS) {
                 pass++;
-            } else if (check.state() != BackendVerificationReport.State.DISABLED) {
+            } else {
                 problems.add(backend + ": " + shorten(check.detail()));
             }
         }
-        return new ProviderSummary(pass, List.copyOf(problems));
+        return new ProviderSummary(present, pass, List.copyOf(problems));
     }
 
     private static void appendExternal(
@@ -177,9 +184,11 @@ final class VelocityVerificationRenderer {
             List<Component> lines,
             NetworkVerificationState.Snapshot snapshot,
             Map<String, BackendVerificationReport> reports,
+            ExternalReadinessProbe.Result staffBot,
+            ExternalReadinessProbe.Result website,
             NetworkVerificationState.Cutover cutover
     ) {
-        List<String> blockers = blockers(snapshot, reports, cutover);
+        List<String> blockers = blockers(snapshot, reports, staffBot, website, cutover);
         appendBlockers(lines, blockers);
         lines.add(Component.text("────────────────────────", NamedTextColor.DARK_GRAY));
         lines.add(verdict(snapshot.mode(), blockers));
@@ -216,9 +225,22 @@ final class VelocityVerificationRenderer {
     private static List<String> blockers(
             NetworkVerificationState.Snapshot snapshot,
             Map<String, BackendVerificationReport> reports,
+            ExternalReadinessProbe.Result staffBot,
+            ExternalReadinessProbe.Result website,
             NetworkVerificationState.Cutover cutover
     ) {
         LinkedHashSet<String> blockers = new LinkedHashSet<>();
+        appendCoreBlockers(blockers, snapshot, reports);
+        appendIntegrationBlockers(blockers, snapshot, reports, staffBot, website);
+        cutover.blockers().stream().filter(value -> value != null && !value.isBlank()).forEach(blockers::add);
+        return blockers.stream().sorted(Comparator.naturalOrder()).toList();
+    }
+
+    private static void appendCoreBlockers(
+            Set<String> blockers,
+            NetworkVerificationState.Snapshot snapshot,
+            Map<String, BackendVerificationReport> reports
+    ) {
         if (snapshot.runtime() == null) {
             blockers.add("MariaDB runtime is unavailable");
         }
@@ -226,8 +248,41 @@ final class VelocityVerificationRenderer {
         if (!snapshot.networkIdentityReady()) {
             blockers.add("Protected network identity support is not ready");
         }
-        cutover.blockers().stream().filter(value -> value != null && !value.isBlank()).forEach(blockers::add);
-        return blockers.stream().sorted(Comparator.naturalOrder()).toList();
+    }
+
+    private static void appendIntegrationBlockers(
+            Set<String> blockers,
+            NetworkVerificationState.Snapshot snapshot,
+            Map<String, BackendVerificationReport> reports,
+            ExternalReadinessProbe.Result staffBot,
+            ExternalReadinessProbe.Result website
+    ) {
+        if (staffBot.state() != ExternalReadinessProbe.State.PASS) {
+            blockers.add("Staff Bot: " + staffBot.detail());
+        }
+        if (!snapshot.discordWebhookReady()) {
+            blockers.add("Discord webhook delivery worker is unavailable");
+        }
+        if (!snapshot.websiteBridgeReady()) {
+            blockers.add("Private website bridge is unavailable");
+        }
+        if (website.state() != ExternalReadinessProbe.State.PASS) {
+            blockers.add("Public website: " + website.detail());
+        }
+        appendProviderProblems(blockers, snapshot.expectedBackends(), reports);
+    }
+
+    private static void appendProviderProblems(
+            Set<String> blockers,
+            Set<String> expectedBackends,
+            Map<String, BackendVerificationReport> reports
+    ) {
+        for (String provider : IMPORTANT_PROVIDERS) {
+            ProviderSummary summary = providerSummary(provider, expectedBackends, reports);
+            if (summary.presentCount() > 0 && !summary.problems().isEmpty()) {
+                blockers.add(provider + " API: " + summary.problems().getFirst());
+            }
+        }
     }
 
     private static void appendBackendBlockers(
@@ -311,6 +366,6 @@ final class VelocityVerificationRenderer {
         return singleLine.length() <= 96 ? singleLine : singleLine.substring(0, 93) + "...";
     }
 
-    private record ProviderSummary(int passCount, List<String> problems) {
+    private record ProviderSummary(int presentCount, int passCount, List<String> problems) {
     }
 }
