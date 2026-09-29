@@ -157,7 +157,10 @@ final class VelocityNetworkVerifier {
         }
     }
 
-    private static ExternalReadinessProbe.Result probe(Optional<java.net.URI> endpoint, int timeoutMillis) {
+    private static ExternalReadinessProbe.Result probe(
+            Optional<PrivateReadinessEndpoint> endpoint,
+            int timeoutMillis
+    ) {
         return ExternalReadinessProbe.probe(endpoint.orElse(null), timeoutMillis);
     }
 
