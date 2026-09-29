@@ -2,15 +2,31 @@
 
 Core Staff/LiteBans shadow validation must be healthy first. Keep LiteBans authoritative and EnthusiaStaff in `SHADOW_MIGRATION` throughout provider testing.
 
+The Staff-side Currency and Reputation provider contracts are already complete on current Staff `main`:
+
+- Currency `ES-X02` — merged/synchronized; terminal state published through Staff PR #138 after correction PR #137.
+- Reputation/Commend `ES-X04` — merged/synchronized; terminal state published through Staff PR #162 after implementation PR #152 and standalone Commend PR #12.
+
+Do not rebuild those Staff packages merely for Temp testing. Test the exact current standalone provider runtimes against the already-merged Staff APIs.
+
 ## Reputation / EnthusiaCommend
 
-Use exact source `wsg138/EnthusiaCommend:main` at `7078510031a4eebbd913b91adc8a2f793faade74`.
+Use exact source `wsg138/EnthusiaCommend:main` at:
+
+`7078510031a4eebbd913b91adc8a2f793faade74`
 
 Evidence:
-- main push workflow `35564594778` completed successfully on that exact SHA;
-- retained artifact `EnthusiaCommend`, artifact id `10623242863`, archive digest `sha256:d8437f155964ce15825d55fc41d1e8e2bbf03a62a28aaeaf9b62acd1d59d7c9b`.
+- exact main push workflow `35564594778` completed successfully;
+- retained artifact `EnthusiaCommend`, artifact id `10623242863`;
+- artifact archive digest `sha256:d8437f155964ce15825d55fc41d1e8e2bbf03a62a28aaeaf9b62acd1d59d7c9b`.
 
-Preferred path: download that exact workflow artifact, extract the plugin JAR, record its JAR SHA-256 locally, back up the existing Temp SMP JAR if present, upload the exact JAR, and restart only Temp SMP.
+Preferred path:
+1. download workflow artifact `10623242863`;
+2. extract the plugin JAR;
+3. record the actual JAR SHA-256 locally;
+4. back up an existing Temp SMP Commend JAR if present;
+5. upload that exact JAR;
+6. restart only Temp SMP.
 
 If the artifact cannot be downloaded, rebuild exact source on Java 21 with:
 
@@ -18,11 +34,12 @@ If the artifact cannot be downloaded, rebuild exact source on Java 21 with:
 mvn --batch-mode --no-transfer-progress clean verify
 ```
 
-Do not use open PR #23 as a runtime candidate; it is test/documentation-only.
+Do not substitute an open feature/test PR for this baseline unless that PR is explicitly selected and revalidated.
 
 Acceptance after restart:
 - plugin enables without exception;
 - ordinary rep give/view/remove/history flows work on approved test accounts;
+- Staff discovers the already-merged ES-X04 reputation provider without API-version/degraded errors;
 - Staff remains `SHADOW_MIGRATION`;
 - `/estaff verify full` does not gain a new provider/runtime failure;
 - restart preserves reputation state;
@@ -30,46 +47,56 @@ Acceptance after restart:
 
 ## Currency / EnthusiaCurrency
 
-Use exact source `wsg138/EnthusiaCurrency:main` at `f010380239c171bb883c2925b712cc07a63a8f48`.
+Use exact source `wsg138/EnthusiaCurrency:main` at:
+
+`f010380239c171bb883c2925b712cc07a63a8f48`
 
 Evidence:
-- main CI run `35564584157` completed successfully on that exact SHA;
-- that workflow retained no JAR artifact, so build from exact source rather than using an unknown binary.
+- exact main CI run `35564584157` completed successfully on that SHA;
+- current normal CI does not retain the runtime JAR, so build from exact source rather than using an unknown binary.
 
 Build on Java 21:
 
 ```text
-mvn -B -ntp verify
+mvn -B -ntp clean verify
 ```
 
-Record the built JAR SHA-256, back up any existing Temp SMP Currency JAR, upload the exact built JAR, and restart only Temp SMP.
-
-Do not include open PR #18 in the runtime candidate; it is test/documentation-only. Do not include stale draft PR #2 unless separately reconciled and revalidated.
+Then:
+1. locate the non-`original-*` shaded `enthusia-currency-*.jar` under `target/`;
+2. record its SHA-256;
+3. back up any existing Temp SMP Currency JAR;
+4. upload the exact built JAR;
+5. restart only Temp SMP.
 
 Acceptance after restart:
-- plugin enables cleanly;
+- plugin enables cleanly with Vault present;
 - deposit/withdraw/pay/balance flows work on approved test accounts;
+- Staff discovers the already-merged ES-X02 provider without API-version/degraded errors;
 - moderation/provider read paths do not mutate balances unexpectedly;
+- representative rejection/authorization paths do not alter balances;
 - restart preserves balances/state;
 - Staff remains `SHADOW_MIGRATION` and `/estaff verify full` gains no new provider/runtime failure.
+
+Do not deploy the separate Badgers-upstream candidate `upstream/fix-vault-startup-lifecycle` as the network runtime. That branch is only for contributing the generic missing-Vault lifecycle fix back upstream; our network baseline remains current `main` above.
 
 ## Market
 
 Do not deploy an arbitrary Market branch yet.
 
-Current boundaries:
-- `wsg138/EnthusiaMarket#8` contains the Muse Staff-integration compatibility repair and remains unmerged;
-- `BadgersMC/EnthusiaMarket#194` is the existing upstream provider PR;
-- `wsg138/EnthusiaStaff#139` is the Staff aggregate Market provider and remains separately gated.
+Live boundaries at this handoff update:
+- Badgers upstream Market PR #194 has already merged; do not create another upstream Market PR;
+- Staff aggregate Market provider PR `wsg138/EnthusiaStaff#139` remains open and mergeable;
+- #139 exact current head `5ef56b8c6a1f07ff5201005e99a93c7ed2900ef4` has successful Coverage/full build and Sentinel artifact runs, but hosted Codacy still reports 1,124 new issues because the complete mirrored Market source tree is new relative to Staff `main`;
+- do not bypass that with a broad path exclusion. The validation boundary must be resolved before X03 is merged or used as a final candidate.
 
-Before Market is added to Temp SMP, reconcile one exact standalone Market candidate that contains current main plus the required Staff compatibility fixes, run full tests/analyzers, record its JAR SHA, then deploy Market last.
+Market therefore remains last in the Temp provider sequence.
 
 ## Order
 
 1. Core Staff/LiteBans shadow healthy.
-2. Commend only; validate.
-3. Currency added; validate.
-4. Market last after its candidate is explicitly frozen/validated.
+2. Commend exact current-main candidate alone; validate.
+3. Currency exact current-main candidate; validate.
+4. Market only after X03 has a legitimate zero-new-valid-finding validation result or another explicitly reviewed validation design.
 5. Run `/estaff status` and `/estaff verify full` after every provider addition.
 
-Do not activate Staff cutover, disable LiteBans, or mutate production provider data as part of this staging sequence.
+Do not activate Staff cutover, disable LiteBans, enable destructive Discord enforcement, or mutate production provider data as part of this staging sequence.
