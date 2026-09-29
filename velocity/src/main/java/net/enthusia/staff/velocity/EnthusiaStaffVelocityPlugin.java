@@ -174,8 +174,7 @@ public final class EnthusiaStaffVelocityPlugin {
                 () -> channelServer,
                 () -> networkIdentityStore != null && networkIdentityProtector != null,
                 () -> discordOutboxWorker != null,
-                () -> websiteApiServer != null && websiteModerationStore != null,
-                dataDirectory
+                () -> websiteApiServer != null && websiteModerationStore != null
         ));
     }
 
@@ -1150,7 +1149,7 @@ public final class EnthusiaStaffVelocityPlugin {
                     : previous.handle((value, failure) -> null);
             return start.thenRunAsync(update, executor);
         });
-        next.whenComplete((ignored, failure) -> {
+        var unused = next.whenComplete((ignored, failure) -> {
             presenceUpdates.remove(playerId, next);
             if (failure != null) {
                 logger.error("Unable to persist an ordered player-presence update", failure);

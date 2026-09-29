@@ -83,7 +83,7 @@ final class DiscordEventRenderer {
     }
 
     private static String safeValue(JsonNode value) {
-        if (value == null || value.isNull() || value.isContainerNode() && !value.isArray()) {
+        if (value == null || value.isNull() || (value.isContainerNode() && !value.isArray())) {
             return null;
         }
         if (value.isArray()) {
