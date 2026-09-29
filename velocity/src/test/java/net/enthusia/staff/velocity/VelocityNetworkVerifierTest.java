@@ -3,7 +3,6 @@ package net.enthusia.staff.velocity;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import java.nio.file.Path;
 import java.time.Clock;
 import java.util.List;
 import java.util.UUID;
@@ -12,12 +11,8 @@ import net.enthusia.staff.protocol.ProtocolEnvelope;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
 
 class VelocityNetworkVerifierTest {
-    @TempDir
-    Path directory;
-
     @Test
     void missingCoreDependenciesProduceShortReadableBlockers() {
         VelocityNetworkVerifier verifier = verifier();
@@ -68,7 +63,7 @@ class VelocityNetworkVerifierTest {
         assertFalse(verifier.acceptReport(envelope));
     }
 
-    private VelocityNetworkVerifier verifier() {
+    private static VelocityNetworkVerifier verifier() {
         return new VelocityNetworkVerifier(new VelocityNetworkVerifier.Dependencies(
                 () -> OperationalMode.SHADOW_MIGRATION,
                 () -> null,
@@ -76,8 +71,7 @@ class VelocityNetworkVerifierTest {
                 () -> null,
                 () -> false,
                 () -> false,
-                () -> false,
-                directory
+                () -> false
         ));
     }
 
