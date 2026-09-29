@@ -1,52 +1,9 @@
-# Immediate correction: Temp SMP + Velocity
+# Temp SMP and Velocity database setup
 
-Current observed state:
+The actual Temp server has the verified EnthusiaStaff Paper JAR and an owner-provided Staff database file in `plugins/EnthusiaStaff/database.properties`. Its LiteBans JAR and `plugins/LiteBans/config.yml` were copied unchanged from main SMP. The four remote uploads passed SHA-256 checks.
 
-- Velocity has the EnthusiaStaff Velocity jar loaded, but `/estaff status` reports `DEGRADED` because storage startup is unavailable after bounded retries.
-- Temp SMP does not have the EnthusiaStaff Paper jar installed.
+Bloom hosting did not provide usable proxy process environment variables. The Velocity plugin now accepts a private `plugins/enthusiastaff/database.properties` file for the Staff and LiteBans database groups when each complete environment group is absent. The file is outside Git and has server-user-only permissions. An incomplete environment group or incomplete file fails closed. The updated proxy JAR and private file passed remote SHA-256 checks; the prior JAR was backed up locally.
 
-## Temp SMP
+The owner-triggered network restart at about 05:16 UTC loaded the staged files. Fresh SFTP logs show `SHADOW_MIGRATION` on Velocity and the actual Temp server, with LiteBans connected on Temp. Staff remains out of `ACTIVE` mode. See `LIVE-RECOVERY-NOW.md` for the other backend results and remaining validation.
 
-Upload the already-verified Paper artifact:
-
-- local/source artifact: `EnthusiaStaff-Paper.jar`
-- expected SHA-256: `eb42779b06fd2f40084e7dc7b65bd6525df16a5ba7a14d0da75fefb92e0a0057`
-- remote path: `/plugins/EnthusiaStaff-Paper.jar`
-
-Also ensure the owner-provided Staff DB credential file is present at:
-
-- `/plugins/EnthusiaStaff/database.properties`
-
-Do not print its contents.
-
-Temp SMP must remain unavailable to normal testing until its latest startup log proves:
-
-1. LiteBans enabled and connected to the authoritative shared LiteBans DB;
-2. EnthusiaStaff storage verified;
-3. EnthusiaStaff mode is `SHADOW_MIGRATION`;
-4. no fresh `Freeze storage is unavailable` errors after storage verification.
-
-If MariaDB still reports `Network is unreachable`, do not alter credentials as a workaround. Diagnose host resolution/TCP reachability or DB-side/Bloom routing/allowlist.
-
-## Velocity
-
-The currently deployed Velocity build reads these six database values from process environment:
-
-- `ES_DATABASE_URL`
-- `ES_DATABASE_USER`
-- `ES_DATABASE_PASSWORD`
-- `ES_LITEBANS_DATABASE_URL`
-- `ES_LITEBANS_DATABASE_USER`
-- `ES_LITEBANS_DATABASE_PASSWORD`
-
-The first group targets the EnthusiaStaff DB. The second group targets the existing authoritative LiteBans DB.
-
-Do not guess or expose values. The Staff values must match the owner-provided Staff DB credentials; the LiteBans values must match the authoritative LiteBans connection already used by the network.
-
-Because these are process environment values, changing them normally requires the proxy process to be restarted before `System.getenv()` can see them. Do not claim Velocity is healthy until a startup after those variables are present shows storage verified and `/estaff status` no longer reports `DEGRADED`.
-
-## Testing boundary
-
-Paper-only feature testing may begin on a backend that is already storage-healthy in `SHADOW_MIGRATION`, but do not treat proxy login/server-switch punishment behavior or full network acceptance as tested while Velocity remains degraded.
-
-Keep LiteBans authoritative. Do not run final migration or cutover activation.
+Do not print credentials, replace the authoritative LiteBans database, remove legacy moderation plugins, or activate cutover. No additional restart was triggered by the executor.
