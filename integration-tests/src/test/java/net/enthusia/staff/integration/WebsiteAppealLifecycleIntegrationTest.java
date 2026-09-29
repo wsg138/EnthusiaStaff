@@ -206,13 +206,17 @@ class WebsiteAppealLifecycleIntegrationTest {
         try (MariaDbRuntime runtime = MariaDb.initialize(databaseConfig(DATABASE))) {
             WebsiteModerationStore store = submittedStore(runtime, fixture, ACCOUNT_ONE);
             UUID appealId = latestSubmission(store, fixture, ACCOUNT_ONE).appeal().appealId();
+            WebsiteAppealMutation claim = store.claimAppeal(
+                    appealId, 1, MODERATOR, "MOD", "claim-before-rank-check", NOW.plusSeconds(1)
+            );
             store.prepareAppealDecision(
-                    appealId, 1, "DENY", "The appeal does not justify removal.",
-                    MODERATOR, "MOD", "deny-before-rank-check", NOW.plusSeconds(1)
+                    appealId, claim.appeal().version(), "DENY",
+                    "The appeal does not justify removal.", MODERATOR, "MOD",
+                    "deny-before-rank-check", NOW.plusSeconds(2)
             );
             assertError("INVALID_APPEAL_REVIEW_ACTION", () -> store.reopenAppeal(
-                    appealId, 2, MODERATOR, "MOD", "Moderator cannot reopen this appeal.",
-                    "mod-reopen-forbidden", NOW.plusSeconds(2)
+                    appealId, 3, MODERATOR, "MOD", "Moderator cannot reopen this appeal.",
+                    "mod-reopen-forbidden", NOW.plusSeconds(3)
             ));
         }
     }

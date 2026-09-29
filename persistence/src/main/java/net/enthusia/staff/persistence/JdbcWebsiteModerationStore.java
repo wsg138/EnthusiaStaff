@@ -35,6 +35,7 @@ public final class JdbcWebsiteModerationStore implements WebsiteModerationStore 
     private final JdbcWebsiteAppealStore appeals;
     private final JdbcWebsiteAppealWorkflowStore appealWorkflow;
     private final JdbcWebsiteAppealLifecycleStore appealLifecycle;
+    private final JdbcWebsiteAppealClaimGuard appealClaimGuard;
 
     public JdbcWebsiteModerationStore(
             DataSource dataSource,
@@ -65,6 +66,7 @@ public final class JdbcWebsiteModerationStore implements WebsiteModerationStore 
                 new JdbcWebsiteAppealRateLimiter(codeProtector)
         );
         this.appealLifecycle = new JdbcWebsiteAppealLifecycleStore(dataSource, codeProtector, json);
+        this.appealClaimGuard = new JdbcWebsiteAppealClaimGuard(dataSource);
     }
 
     @Override
@@ -281,6 +283,7 @@ public final class JdbcWebsiteModerationStore implements WebsiteModerationStore 
             String idempotencyKey,
             Instant now
     ) {
+        appealClaimGuard.requireOwnedClaim(appealId, reviewerAccountId);
         return appealWorkflow.prepareDecision(
                 appealId,
                 expectedVersion,

@@ -22,6 +22,7 @@ import net.enthusia.staff.common.CaseId;
 import net.enthusia.staff.common.security.PunishmentCodeProtector;
 import net.enthusia.staff.domain.ports.WebsiteModerationStore;
 import net.enthusia.staff.domain.website.WebsiteAppealDecisionPreparation;
+import net.enthusia.staff.domain.website.WebsiteAppealMutation;
 import net.enthusia.staff.domain.website.WebsiteAppealPage;
 import net.enthusia.staff.domain.website.WebsiteAppealSubmission;
 import net.enthusia.staff.domain.website.WebsiteModerationException;
@@ -42,6 +43,7 @@ class WebsiteAppealWorkflowIntegrationTest {
     private static final String PLAYER_NAME = "AppealPlayer";
     private static final String ACCOUNT_ID = uuid(801).toString();
     private static final UUID REVIEWER_ID = uuid(901);
+    private static final UUID OTHER_REVIEWER_ID = uuid(902);
     private static final String REVIEWER_RANK = "MOD";
     private static final PunishmentCodeProtector CODE_PROTECTOR = testProtector();
 
@@ -100,15 +102,16 @@ class WebsiteAppealWorkflowIntegrationTest {
         assertTrue(replay.replayed());
         assertEquals(appealId, replay.appeal().appealId());
 
+        WebsiteAppealMutation claimed = claim(store, appealId, 1, "claim-information-1", 3);
         WebsiteAppealDecisionPreparation information = store.prepareAppealDecision(
-                appealId, 1, "request_information",
+                appealId, claimed.appeal().version(), "request_information",
                 "Please provide the missing event context.",
-                REVIEWER_ID, REVIEWER_RANK, "decision-information-1", NOW.plusSeconds(3)
+                REVIEWER_ID, REVIEWER_RANK, "decision-information-1", NOW.plusSeconds(4)
         );
         assertFalse(information.requiresAcceptance());
         assertEquals("INFORMATION_REQUESTED", information.appeal().state());
-        assertEquals(2, information.appeal().version());
-        assertEquals(1, store.eligibleAppeals(ACCOUNT_ID, 100, NOW.plusSeconds(4)).size());
+        assertEquals(3, information.appeal().version());
+        assertEquals(1, store.eligibleAppeals(ACCOUNT_ID, 100, NOW.plusSeconds(5)).size());
         return appealId;
     }
 
@@ -120,31 +123,32 @@ class WebsiteAppealWorkflowIntegrationTest {
         WebsiteAppealSubmission resubmitted = store.submitAppeal(
                 fixture.sanctionId(), ACCOUNT_ID, PLAYER_NAME,
                 "Additional event context requested by the reviewer is included.",
-                "submission-workflow-2", NOW.plusSeconds(5)
+                "submission-workflow-2", NOW.plusSeconds(6)
         );
         assertFalse(resubmitted.replayed());
         assertEquals(OPEN_STATE, resubmitted.appeal().state());
-        assertEquals(3, resubmitted.appeal().version());
+        assertEquals(4, resubmitted.appeal().version());
 
+        WebsiteAppealMutation claimed = claim(store, appealId, 4, "claim-approve-1", 7);
         WebsiteModerationException stale = assertThrows(
                 WebsiteModerationException.class,
                 () -> store.prepareAppealDecision(
                         appealId, 1, "deny",
                         "This stale decision must not be accepted.",
-                        REVIEWER_ID, REVIEWER_RANK, "decision-stale-1", NOW.plusSeconds(6)
+                        REVIEWER_ID, REVIEWER_RANK, "decision-stale-1", NOW.plusSeconds(8)
                 )
         );
         assertEquals("STALE_APPEAL_STATE", stale.code());
 
         WebsiteAppealDecisionPreparation approved = store.prepareAppealDecision(
-                appealId, 3, "approve",
+                appealId, claimed.appeal().version(), "approve",
                 "The appeal is supported by the reviewed evidence.",
-                REVIEWER_ID, REVIEWER_RANK, "decision-approve-1", NOW.plusSeconds(7)
+                REVIEWER_ID, REVIEWER_RANK, "decision-approve-1", NOW.plusSeconds(9)
         );
         assertTrue(approved.requiresAcceptance());
         assertEquals(ACCOUNT_ID, approved.playerAccountId());
         assertEquals("APPROVAL_PENDING", approved.appeal().state());
-        assertEquals(4, approved.appeal().version());
+        assertEquals(6, approved.appeal().version());
     }
 
     private static void assertApprovalReplayAfterRestart(UUID appealId) {
@@ -152,17 +156,49 @@ class WebsiteAppealWorkflowIntegrationTest {
             WebsiteAppealDecisionPreparation replay = runtime.websiteModerationStore(CODE_PROTECTOR)
                     .prepareAppealDecision(
                             appealId,
-                            3,
+                            5,
                             "approve",
                             "The appeal is supported by the reviewed evidence.",
                             REVIEWER_ID,
                             REVIEWER_RANK,
                             "decision-approve-1",
-                            NOW.plusSeconds(8)
+                            NOW.plusSeconds(10)
                     );
             assertTrue(replay.replayed());
             assertTrue(replay.requiresAcceptance());
             assertEquals("APPROVAL_PENDING", replay.appeal().state());
+        }
+    }
+
+    @Test
+    void decisionsRequireTheCurrentReviewerClaim() throws SQLException {
+        AppealFixture fixture = seedEligiblePunishment(8);
+        try (MariaDbRuntime runtime = MariaDb.initialize(databaseConfig(DATABASE))) {
+            WebsiteModerationStore store = claimedStore(runtime, fixture, ACCOUNT_ID);
+            UUID appealId = store.submitAppeal(
+                    fixture.sanctionId(), ACCOUNT_ID, PLAYER_NAME,
+                    "The appeal must be claimed before a reviewer can decide it.",
+                    "submission-claim-guard", NOW.plusSeconds(1)
+            ).appeal().appealId();
+
+            assertError("APPEAL_NOT_CLAIMED", () -> store.prepareAppealDecision(
+                    appealId, 1, "deny", "Decision without a claim is forbidden.",
+                    REVIEWER_ID, REVIEWER_RANK, "decision-no-claim", NOW.plusSeconds(2)
+            ));
+
+            WebsiteAppealMutation claimed = claim(store, appealId, 1, "claim-guard-owner", 3);
+            assertError("APPEAL_CLAIM_OWNED_BY_OTHER", () -> store.prepareAppealDecision(
+                    appealId, claimed.appeal().version(), "deny",
+                    "Another reviewer cannot decide an owned claim.",
+                    OTHER_REVIEWER_ID, REVIEWER_RANK, "decision-other-reviewer", NOW.plusSeconds(4)
+            ));
+
+            WebsiteAppealDecisionPreparation decided = store.prepareAppealDecision(
+                    appealId, claimed.appeal().version(), "deny",
+                    "The claiming reviewer can record the outcome.",
+                    REVIEWER_ID, REVIEWER_RANK, "decision-claim-owner", NOW.plusSeconds(5)
+            );
+            assertEquals("DENIED", decided.appeal().state());
         }
     }
 
@@ -194,22 +230,16 @@ class WebsiteAppealWorkflowIntegrationTest {
         try (MariaDbRuntime runtime = MariaDb.initialize(databaseConfig(DATABASE))) {
             WebsiteModerationStore store = claimedStore(runtime, fixture, ACCOUNT_ID);
             store.submitAppeal(
-                    fixture.sanctionId(),
-                    ACCOUNT_ID,
-                    PLAYER_NAME,
+                    fixture.sanctionId(), ACCOUNT_ID, PLAYER_NAME,
                     "The first durable appeal submission is valid.",
-                    "submission-first-open",
-                    NOW.plusSeconds(1)
+                    "submission-first-open", NOW.plusSeconds(1)
             );
             WebsiteModerationException conflict = assertThrows(
                     WebsiteModerationException.class,
                     () -> store.submitAppeal(
-                            fixture.sanctionId(),
-                            ACCOUNT_ID,
-                            PLAYER_NAME,
+                            fixture.sanctionId(), ACCOUNT_ID, PLAYER_NAME,
                             "A second open appeal must not replace the first one.",
-                            "submission-second-open",
-                            NOW.plusSeconds(2)
+                            "submission-second-open", NOW.plusSeconds(2)
                     )
             );
             assertEquals("APPEAL_ALREADY_EXISTS", conflict.code());
@@ -225,20 +255,14 @@ class WebsiteAppealWorkflowIntegrationTest {
             WebsiteModerationStore store = claimedStore(runtime, older, ACCOUNT_ID);
             claimedStore(runtime, newer, ACCOUNT_ID);
             UUID olderAppeal = store.submitAppeal(
-                    older.sanctionId(),
-                    ACCOUNT_ID,
-                    PLAYER_NAME,
+                    older.sanctionId(), ACCOUNT_ID, PLAYER_NAME,
                     "The older appeal should appear on the second page.",
-                    "submission-pagination-older",
-                    NOW.plusSeconds(1)
+                    "submission-pagination-older", NOW.plusSeconds(1)
             ).appeal().appealId();
             UUID newerAppeal = store.submitAppeal(
-                    newer.sanctionId(),
-                    ACCOUNT_ID,
-                    PLAYER_NAME,
+                    newer.sanctionId(), ACCOUNT_ID, PLAYER_NAME,
                     "The newer appeal should appear on the first page.",
-                    "submission-pagination-newer",
-                    NOW.plusSeconds(2)
+                    "submission-pagination-newer", NOW.plusSeconds(2)
             ).appeal().appealId();
 
             WebsiteAppealPage first = store.listAppeals(OPEN_STATE, Optional.empty(), 1, NOW.plusSeconds(3));
@@ -247,10 +271,7 @@ class WebsiteAppealWorkflowIntegrationTest {
             assertTrue(first.nextCursor().isPresent());
 
             WebsiteAppealPage second = store.listAppeals(
-                    OPEN_STATE,
-                    first.nextCursor(),
-                    1,
-                    NOW.plusSeconds(3)
+                    OPEN_STATE, first.nextCursor(), 1, NOW.plusSeconds(3)
             );
             assertEquals(1, second.items().size());
             assertEquals(olderAppeal, second.items().getFirst().appealId());
@@ -266,45 +287,51 @@ class WebsiteAppealWorkflowIntegrationTest {
             WebsiteModerationStore store = claimedStore(runtime, first, ACCOUNT_ID);
             claimedStore(runtime, second, ACCOUNT_ID);
             UUID firstAppeal = store.submitAppeal(
-                    first.sanctionId(),
-                    ACCOUNT_ID,
-                    PLAYER_NAME,
+                    first.sanctionId(), ACCOUNT_ID, PLAYER_NAME,
                     "The first appeal is ready for an independent decision.",
-                    "submission-decision-scope-1",
-                    NOW.plusSeconds(1)
+                    "submission-decision-scope-1", NOW.plusSeconds(1)
             ).appeal().appealId();
             UUID secondAppeal = store.submitAppeal(
-                    second.sanctionId(),
-                    ACCOUNT_ID,
-                    PLAYER_NAME,
+                    second.sanctionId(), ACCOUNT_ID, PLAYER_NAME,
                     "The second appeal is ready for an independent decision.",
-                    "submission-decision-scope-2",
-                    NOW.plusSeconds(2)
+                    "submission-decision-scope-2", NOW.plusSeconds(2)
             ).appeal().appealId();
 
+            WebsiteAppealMutation firstClaim = claim(store, firstAppeal, 1, "claim-scope-1", 3);
+            WebsiteAppealMutation secondClaim = claim(store, secondAppeal, 1, "claim-scope-2", 4);
             WebsiteAppealDecisionPreparation firstDecision = store.prepareAppealDecision(
-                    firstAppeal,
-                    1,
-                    "deny",
+                    firstAppeal, firstClaim.appeal().version(), "deny",
                     "The first exact appeal is denied after review.",
-                    REVIEWER_ID,
-                    REVIEWER_RANK,
-                    "shared-reviewer-decision-key",
-                    NOW.plusSeconds(3)
+                    REVIEWER_ID, REVIEWER_RANK, "shared-reviewer-decision-key",
+                    NOW.plusSeconds(5)
             );
             WebsiteAppealDecisionPreparation secondDecision = store.prepareAppealDecision(
-                    secondAppeal,
-                    1,
-                    "deny",
+                    secondAppeal, secondClaim.appeal().version(), "deny",
                     "The second exact appeal is denied independently.",
-                    REVIEWER_ID,
-                    REVIEWER_RANK,
-                    "shared-reviewer-decision-key",
-                    NOW.plusSeconds(4)
+                    REVIEWER_ID, REVIEWER_RANK, "shared-reviewer-decision-key",
+                    NOW.plusSeconds(6)
             );
             assertEquals("DENIED", firstDecision.appeal().state());
             assertEquals("DENIED", secondDecision.appeal().state());
         }
+    }
+
+    private static WebsiteAppealMutation claim(
+            WebsiteModerationStore store,
+            UUID appealId,
+            long version,
+            String idempotencyKey,
+            long secondOffset
+    ) {
+        return store.claimAppeal(
+                appealId, version, REVIEWER_ID, REVIEWER_RANK,
+                idempotencyKey, NOW.plusSeconds(secondOffset)
+        );
+    }
+
+    private static void assertError(String expectedCode, org.junit.jupiter.api.function.Executable operation) {
+        WebsiteModerationException error = assertThrows(WebsiteModerationException.class, operation);
+        assertEquals(expectedCode, error.code());
     }
 
     private static WebsiteModerationStore claimedStore(
@@ -326,14 +353,8 @@ class WebsiteAppealWorkflowIntegrationTest {
         insertPlayer(DATABASE, playerId, PLAYER_NAME, issuedAt);
         insertCase(DATABASE, caseId.value(), playerId, uuid(700L + suffix), "PUBLIC", issuedAt);
         insertSanction(
-                DATABASE,
-                sanctionId,
-                caseId.value(),
-                playerId,
-                "BAN",
-                "ACTIVE",
-                issuedAt,
-                NOW.plusSeconds(3_600)
+                DATABASE, sanctionId, caseId.value(), playerId, "BAN", "ACTIVE",
+                issuedAt, NOW.plusSeconds(3_600)
         );
         return new AppealFixture(caseId, sanctionId);
     }
@@ -341,10 +362,7 @@ class WebsiteAppealWorkflowIntegrationTest {
     private static PunishmentCodeProtector testProtector() {
         byte[] key = new byte[32];
         new SecureRandom().nextBytes(key);
-        return new PunishmentCodeProtector(
-                1,
-                new SecretKeySpec(key, "HmacSHA256")
-        );
+        return new PunishmentCodeProtector(1, new SecretKeySpec(key, "HmacSHA256"));
     }
 
     private static UUID uuid(long suffix) {
