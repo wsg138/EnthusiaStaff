@@ -54,9 +54,22 @@ jobs:
                       '    private static final String ESTAFF_COMMAND = "estaff";\n'
                       '    private static final String DETAIL_SEPARATOR = " — ";'
                   ),
-                  (' + DARK_GRAY + " — " + GRAY + detail;', ' + DARK_GRAY + DETAIL_SEPARATOR + GRAY + detail;'),
-                  (' + DARK_GRAY + " — " + RED + detail;', ' + DARK_GRAY + DETAIL_SEPARATOR + RED + detail;'),
-                  (' + GRAY + label + " — " + detail;', ' + GRAY + label + DETAIL_SEPARATOR + detail;'),
+                  (
+                      '        return GREEN + "  ✔ " + WHITE + label + DARK_GRAY + " — " + GRAY + detail;',
+                      '        return GREEN + "  ✔ " + WHITE + label + DARK_GRAY + DETAIL_SEPARATOR + GRAY + detail;'
+                  ),
+                  (
+                      '        return YELLOW + "  ⚠ " + WHITE + label + DARK_GRAY + " — " + GRAY + detail;',
+                      '        return YELLOW + "  ⚠ " + WHITE + label + DARK_GRAY + DETAIL_SEPARATOR + GRAY + detail;'
+                  ),
+                  (
+                      '        return DARK_GRAY + "  ○ " + GRAY + label + " — " + detail;',
+                      '        return DARK_GRAY + "  ○ " + GRAY + label + DETAIL_SEPARATOR + detail;'
+                  ),
+                  (
+                      '        return RED + "  ✖ " + WHITE + label + DARK_GRAY + " — " + RED + detail;',
+                      '        return RED + "  ✖ " + WHITE + label + DARK_GRAY + DETAIL_SEPARATOR + RED + detail;'
+                  ),
               ],
               Path('velocity/src/test/java/net/enthusia/staff/velocity/VelocitySecurityEventSubmissionTest.java'): [
                   ('import java.net.InetAddress;\n', ''),
