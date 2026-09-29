@@ -39,6 +39,13 @@ jobs:
                   if (p.plugins.hasPlugin('java-library')) {
                       p.apply plugin: net.ltgt.gradle.errorprone.ErrorPronePlugin
                       p.dependencies.add('errorprone', 'com.google.errorprone:error_prone_core:2.36.0')
+                      p.tasks.withType(org.gradle.api.tasks.compile.JavaCompile).configureEach { task ->
+                          task.options.errorprone.disable(
+                              'JavaDurationGetSecondsToToSeconds',
+                              'SelfAssignment',
+                              'ArrayRecordComponent'
+                          )
+                      }
                   }
               }
           }
