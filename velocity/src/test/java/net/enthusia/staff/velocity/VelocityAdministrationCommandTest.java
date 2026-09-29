@@ -183,6 +183,7 @@ class VelocityAdministrationCommandTest {
         return 0.0D;
     }
 
+    @SuppressWarnings("ArrayRecordComponent") // Velocity Invocation requires String[] arguments.
     private record TestInvocation(CommandSource source, String alias, String[] arguments)
             implements SimpleCommand.Invocation {
     }

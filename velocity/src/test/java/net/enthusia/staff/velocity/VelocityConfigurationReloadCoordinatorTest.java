@@ -81,7 +81,7 @@ class VelocityConfigurationReloadCoordinatorTest {
                 initial,
                 () -> candidate,
                 value -> {
-                    if (value == candidate && rejectCandidate.getAndSet(false)) {
+                    if (candidate.equals(value) && rejectCandidate.getAndSet(false)) {
                         published.set(value);
                         throw new IllegalStateException("candidate publication failed");
                     }
