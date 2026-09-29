@@ -4,7 +4,6 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import com.sun.net.httpserver.HttpServer;
 import java.net.InetSocketAddress;
-import java.net.URI;
 import org.junit.jupiter.api.Test;
 
 class ExternalReadinessProbeTest {
@@ -18,7 +17,7 @@ class ExternalReadinessProbeTest {
     @Test
     void successfulEndpointPasses() throws Exception {
         try (ServerFixture fixture = new ServerFixture(204)) {
-            ExternalReadinessProbe.Result result = ExternalReadinessProbe.probe(fixture.uri(), 1_000);
+            ExternalReadinessProbe.Result result = ExternalReadinessProbe.probe(fixture.endpoint(), 1_000);
 
             assertEquals(ExternalReadinessProbe.State.PASS, result.state());
         }
@@ -27,7 +26,7 @@ class ExternalReadinessProbeTest {
     @Test
     void nonSuccessEndpointWarns() throws Exception {
         try (ServerFixture fixture = new ServerFixture(503)) {
-            ExternalReadinessProbe.Result result = ExternalReadinessProbe.probe(fixture.uri(), 1_000);
+            ExternalReadinessProbe.Result result = ExternalReadinessProbe.probe(fixture.endpoint(), 1_000);
 
             assertEquals(ExternalReadinessProbe.State.WARNING, result.state());
         }
@@ -35,10 +34,10 @@ class ExternalReadinessProbeTest {
 
     @Test
     void unreachableEndpointWarnsWithoutLeakingAddress() {
-        ExternalReadinessProbe.Result result = ExternalReadinessProbe.probe(
-                URI.create("http://127.0.0.1:1/ready"),
-                250
-        );
+        PrivateReadinessEndpoint endpoint = PrivateReadinessEndpoint.parseOptional(
+                "http://127.0.0.1:1/ready"
+        ).orElseThrow();
+        ExternalReadinessProbe.Result result = ExternalReadinessProbe.probe(endpoint, 250);
 
         assertEquals(ExternalReadinessProbe.State.WARNING, result.state());
         assertEquals("readiness endpoint is unreachable", result.detail());
@@ -56,8 +55,10 @@ class ExternalReadinessProbeTest {
             server.start();
         }
 
-        private URI uri() {
-            return URI.create("http://127.0.0.1:" + server.getAddress().getPort() + "/ready");
+        private PrivateReadinessEndpoint endpoint() {
+            return PrivateReadinessEndpoint.parseOptional(
+                    "http://127.0.0.1:" + server.getAddress().getPort() + "/ready"
+            ).orElseThrow();
         }
 
         @Override
