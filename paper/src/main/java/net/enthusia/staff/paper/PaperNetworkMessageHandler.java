@@ -14,6 +14,7 @@ import net.enthusia.staff.protocol.ProtocolEnvelope;
 import org.bukkit.Bukkit;
 
 final class PaperNetworkMessageHandler {
+    static final String VERIFY_REQUEST = "VERIFY_REQUEST";
     private static final Set<String> SANCTION_EVENTS = Set.of(
             "PUNISHMENT_CREATED",
             "SANCTION_CHANGED",
@@ -25,9 +26,10 @@ final class PaperNetworkMessageHandler {
     private final Clock clock;
     private final Consumer<UUID> invalidateSanctionCache;
     private final Function<UUID, Boolean> reconcileFreeze;
+    private final Runnable verificationRequest;
 
     PaperNetworkMessageHandler(ObjectMapper json, Clock clock, Consumer<UUID> invalidateSanctionCache) {
-        this(json, clock, invalidateSanctionCache, PaperNetworkMessageHandler::reconcileFreeze);
+        this(json, clock, invalidateSanctionCache, PaperNetworkMessageHandler::reconcileFreeze, () -> { });
     }
 
     PaperNetworkMessageHandler(
@@ -36,6 +38,16 @@ final class PaperNetworkMessageHandler {
             Consumer<UUID> invalidateSanctionCache,
             Function<UUID, Boolean> reconcileFreeze
     ) {
+        this(json, clock, invalidateSanctionCache, reconcileFreeze, () -> { });
+    }
+
+    PaperNetworkMessageHandler(
+            ObjectMapper json,
+            Clock clock,
+            Consumer<UUID> invalidateSanctionCache,
+            Function<UUID, Boolean> reconcileFreeze,
+            Runnable verificationRequest
+    ) {
         this.json = java.util.Objects.requireNonNull(json, "json");
         this.clock = java.util.Objects.requireNonNull(clock, "clock");
         this.invalidateSanctionCache = java.util.Objects.requireNonNull(
@@ -43,9 +55,14 @@ final class PaperNetworkMessageHandler {
                 "invalidateSanctionCache"
         );
         this.reconcileFreeze = java.util.Objects.requireNonNull(reconcileFreeze, "reconcileFreeze");
+        this.verificationRequest = java.util.Objects.requireNonNull(verificationRequest, "verificationRequest");
     }
 
     boolean handle(NetworkOutboxStore inbox, String backendId, ProtocolEnvelope envelope) {
+        if (VERIFY_REQUEST.equals(envelope.messageType())) {
+            verificationRequest.run();
+            return true;
+        }
         UUID sanctionTarget = sanctionTarget(envelope);
         if (sanctionTarget != null) {
             invalidateSanctionCache.accept(sanctionTarget);
