@@ -11,11 +11,21 @@ Expected SHA-256: `57eb30dee5d302d0cc05827d4581e528c628c493fe3099c9110979ee676d3
 
 Bring up the merged base EnthusiaStaff Discord bot in non-destructive staging mode. Do not merge parked Discord feature PRs and do not enable destructive Discord punishment enforcement.
 
+## Fixed staging Discord identity
+
+The token used for staging MUST belong to this exact application and guild setup:
+
+- application ID: `1541279616881397772`
+- allowed guild ID: `1410303324745371709`
+- required staging test channel ID: `1541286004298752091`
+
+The runtime intentionally fails readiness if the application/guild/channel identity fence does not match. Do not substitute the production bot token or another Discord application merely to make startup succeed.
+
 ## Inputs Codex may use
 
 - existing authorized Bloom/Pterodactyl access;
 - existing Staff MariaDB credentials already used by EnthusiaStaff Paper;
-- an owner-provisioned Discord bot token entered directly in Bloom secrets/environment;
+- the owner-provisioned token for staging application `1541279616881397772`, entered directly in Bloom secrets/environment;
 - a newly generated authority secret and a different newly generated component secret.
 
 Never print, commit, screenshot, or return any secret value.
@@ -56,7 +66,7 @@ Do not change it during this task.
 2. Verify the selected Paper authority endpoint is listening privately and its log has no authority configuration/bind failure.
 3. Start Staff Bot and require the process to remain up.
 4. From inside the bot container require `GET http://127.0.0.1:8765/health` success.
-5. Require `GET http://127.0.0.1:8765/ready` to return 200 after Discord identity/guild validation.
+5. Require `GET http://127.0.0.1:8765/ready` to return 200 after exact application/guild/channel validation.
 6. Stop the normal bot process cleanly, run the exact same JAR once with `--smoke-test` using the same environment, require exit code 0, then restart the normal bot process.
 7. Validate only non-destructive reads/account-link/staff-rank behavior.
 8. Confirm no destructive Discord punishment mutation ran and enforcement remains false.
@@ -65,7 +75,7 @@ Do not change it during this task.
 
 Stop and report rather than weakening security if any of these occur:
 
-- Discord token/application/guild identity mismatch;
+- Discord token/application/guild/test-channel identity mismatch;
 - Staff MariaDB unavailable;
 - authority endpoint unreachable on the private route;
 - HMAC/signature validation failure;
