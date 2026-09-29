@@ -211,7 +211,7 @@ def main() -> int:
         print("artifact_sha_ok=yes")
         print("jar_uploaded=yes")
         print("rollback_backup=" + (posixpath.basename(backup) if backup else "none"))
-        print("next_panel_app_flags=--environment=staging --token-file=t --moderation-config-file=m")
+        print("next_panel_app_flags=--token-file=t --moderation-config-file=m")
         return 0
     finally:
         if sftp is not None:
