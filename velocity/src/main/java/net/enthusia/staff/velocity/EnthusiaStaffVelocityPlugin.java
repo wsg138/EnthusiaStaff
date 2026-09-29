@@ -358,7 +358,7 @@ public final class EnthusiaStaffVelocityPlugin {
         VelocityConfiguration loaded = loadStorageConfiguration();
         MariaDbRuntime opened = null;
         try {
-            opened = MariaDb.initialize(loaded.databaseFromEnvironment());
+            opened = MariaDb.initialize(loaded.database(dataDirectory));
             OperationalStateSnapshot state = validateStorageState(opened);
             StorageBindings bindings = storageBindings(opened);
             initializeStorageResources(loaded, opened);
@@ -613,7 +613,7 @@ public final class EnthusiaStaffVelocityPlugin {
             workers.execute(() -> {
                 try {
                     MigrationExecutionReport report = migrationService(runtime, MigrationMode.SHADOW).execute(
-                            loaded.liteBansDatabaseFromEnvironment(),
+                            loaded.liteBansDatabase(dataDirectory),
                             loaded.liteBansTablePrefix(),
                             loaded.liteBansBatchSize(),
                             MigrationMode.SHADOW
@@ -1765,7 +1765,7 @@ public final class EnthusiaStaffVelocityPlugin {
         ) {
             try {
                 MigrationExecutionReport report = migrationService(runtime, migrationMode).execute(
-                        loaded.liteBansDatabaseFromEnvironment(),
+                        loaded.liteBansDatabase(dataDirectory),
                         loaded.liteBansTablePrefix(),
                         loaded.liteBansBatchSize(),
                         migrationMode

@@ -4,16 +4,18 @@ This handoff is for the temporary SMP maintenance window. Codex is the remote ex
 
 ## Exact EnthusiaStaff artifact
 
-Use the current validated staging release from source SHA:
+The Paper artifact remains the validated staging release from source SHA:
 
 `6a2db9f9cfb2516cff57b323f1956ccc98cff5c8`
 
-Expected hashes:
+Expected deployed hashes:
 
 - `EnthusiaStaff-Paper.jar` — `eb42779b06fd2f40084e7dc7b65bd6525df16a5ba7a14d0da75fefb92e0a0057`
-- `EnthusiaStaff-Velocity.jar` — `6dc73e57ea12be142b2f0d8b7214a1b9810b4d2545aab7da586196a8cf8c8965`
+- `EnthusiaStaff-Velocity.jar` — `07a532b8dfa1ab206dc8b3c36de2618bdefd793fdbce0440b75321d8e5b815ad`
 
-Run `deploy/temp-network/prepare-staging-bundle.ps1` first and refuse upload if either hash differs.
+The Velocity artifact includes the focused private database file fallback requested for Bloom hosting. Its source is the deployment branch after that change. The earlier release Velocity artifact hash was `6dc73e57ea12be142b2f0d8b7214a1b9810b4d2545aab7da586196a8cf8c8965`; keep it only as a rollback reference.
+
+Run `deploy/temp-network/prepare-staging-bundle.ps1` to verify the original release and Paper artifact. It still downloads the earlier Velocity release for rollback. Build the updated Velocity artifact with `gradlew.bat :velocity:test :velocity:shadowJar`, then verify the deployed Velocity hash above before uploading. Refuse upload if a hash differs.
 
 ## URGENT: proxy-first step
 
@@ -32,7 +34,7 @@ Do this first, before any Paper/LiteBans work:
    - record any database/configuration blocker exactly;
    - do not print secrets from configuration or environment.
 
-Important current limitation: the current Velocity build expects the shared EnthusiaStaff DB and LiteBans source DB through environment variables (`ES_DATABASE_*` and `ES_LITEBANS_DATABASE_*`). SFTP cannot create process environment variables. If they are already configured on the proxy, validate them by runtime behavior only. If they are missing, leave the JAR installed, report the exact sanitized startup blocker, and do not invent credentials or weaken fail-closed behavior.
+Velocity reads complete `ES_DATABASE_*` and `ES_LITEBANS_DATABASE_*` groups when they are available. On Bloom hosting, when a group is unavailable, place a private `database.properties` file in the Velocity plugin data directory (`plugins/enthusiastaff/`) with `db.jdbc-url`, `db.username`, `db.password`, `litebans.jdbc-url`, `litebans.username`, and `litebans.password`. Source the Staff values from the owner's existing Staff database file and the LiteBans values from the authoritative normal SMP LiteBans config. Keep this file out of Git, restrict it to the server user, and never print its contents. A partial environment group or incomplete file fails closed. The current proxy JAR and private file are staged; a later proxy restart is needed to validate startup. Do not trigger one during this handoff.
 
 ## LiteBans on Temp SMP
 
@@ -54,7 +56,7 @@ LiteBans remains authoritative. Do not disable it, remove it, or perform Enthusi
 
 ## EnthusiaStaff Paper deployment
 
-Install the verified `EnthusiaStaff-Paper.jar` on every real Paper backend participating in this maintenance test. Current network inventory includes the normal SMP, HUB, test/test2 backends, and the temporary SMP may be separate; do not install onto Sentinel/build containers. Confirm each target before writing.
+Install the verified `EnthusiaStaff-Paper.jar` on every real Paper backend participating in this maintenance test. Current network inventory includes the normal SMP, HUB, test/test2 backends, and a separate entry named `Temp server`; do not install onto Sentinel/build containers. Confirm each target before writing.
 
 For each Paper target:
 
