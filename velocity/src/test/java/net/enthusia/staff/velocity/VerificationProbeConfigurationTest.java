@@ -23,17 +23,17 @@ class VerificationProbeConfigurationTest {
     }
 
     @Test
-    void validFileLoadsBoundedHttpEndpoints() throws Exception {
+    void validFileLoadsPrivateBoundedHttpEndpoints() throws Exception {
         Files.writeString(directory.resolve("verification.properties"), """
                 staff-bot.ready-url=http://10.0.0.20:8765/ready
-                website.ready-url=https://staff-staging.example.test/health
+                website.ready-url=https://192.168.10.50:8443/health
                 timeout-millis=900
                 """);
 
         VerificationProbeConfiguration configuration = VerificationProbeConfiguration.load(directory);
 
-        assertEquals("10.0.0.20", configuration.staffBotReadyUrl().orElseThrow().getHost());
-        assertEquals("staff-staging.example.test", configuration.websiteReadyUrl().orElseThrow().getHost());
+        assertEquals("10.0.0.20", configuration.staffBotReadyUrl().orElseThrow().uri().getHost());
+        assertEquals("192.168.10.50", configuration.websiteReadyUrl().orElseThrow().uri().getHost());
         assertEquals(900, configuration.timeoutMillis());
     }
 
@@ -41,6 +41,25 @@ class VerificationProbeConfigurationTest {
     void credentialsInReadinessUrlAreRejected() throws Exception {
         Files.writeString(directory.resolve("verification.properties"),
                 "staff-bot.ready-url=http://user:secret@127.0.0.1:8765/ready\n");
+
+        assertThrows(IllegalArgumentException.class, () -> VerificationProbeConfiguration.load(directory));
+    }
+
+    @Test
+    void hostnamesAndPublicAddressesAreRejected() throws Exception {
+        Files.writeString(directory.resolve("verification.properties"),
+                "staff-bot.ready-url=https://example.com/ready\n");
+        assertThrows(IllegalArgumentException.class, () -> VerificationProbeConfiguration.load(directory));
+
+        Files.writeString(directory.resolve("verification.properties"),
+                "staff-bot.ready-url=https://8.8.8.8/ready\n");
+        assertThrows(IllegalArgumentException.class, () -> VerificationProbeConfiguration.load(directory));
+    }
+
+    @Test
+    void linkLocalMetadataAddressIsRejected() throws Exception {
+        Files.writeString(directory.resolve("verification.properties"),
+                "staff-bot.ready-url=http://169.254.169.254/latest/meta-data\n");
 
         assertThrows(IllegalArgumentException.class, () -> VerificationProbeConfiguration.load(directory));
     }
