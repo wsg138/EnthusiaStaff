@@ -4,13 +4,11 @@ import java.net.URISyntaxException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.function.BooleanSupplier;
 import net.enthusia.staff.paper.RuntimeHealth;
-import org.bukkit.ChatColor;
 import org.bukkit.command.PluginCommand;
 import org.bukkit.plugin.Plugin;
 import org.bukkit.plugin.PluginManager;
@@ -20,6 +18,16 @@ import org.bukkit.plugin.java.JavaPlugin;
 final class FullRuntimeVerifier {
     private static final String ESTAFF_COMMAND = "estaff";
     private static final int MAX_ISSUES_SHOWN = 5;
+    private static final String RESET = "§r";
+    private static final String RED = "§c";
+    private static final String GREEN = "§a";
+    private static final String YELLOW = "§e";
+    private static final String GOLD = "§6";
+    private static final String AQUA = "§b";
+    private static final String WHITE = "§f";
+    private static final String GRAY = "§7";
+    private static final String DARK_GRAY = "§8";
+    private static final String BOLD = "§l";
     private static final Map<String, String> PROVIDERS = Map.of(
             "RoseChat", "rosechat",
             "EnthusiaCurrency", "currency",
@@ -48,11 +56,8 @@ final class FullRuntimeVerifier {
         appendIssues(lines, snapshot.issues());
         boolean blocked = isBlocked(snapshot.issues());
         lines.add(separator());
-        lines.add(blocked
-                ? ChatColor.RED + "✖ LOCAL BACKEND HAS BLOCKERS"
-                : ChatColor.GREEN + "✔ LOCAL BACKEND HEALTHY");
-        lines.add(ChatColor.DARK_GRAY + "Network-wide: run " + ChatColor.AQUA
-                + "/estaff verify full" + ChatColor.DARK_GRAY + " on Velocity.");
+        lines.add(blocked ? RED + "✖ LOCAL BACKEND HAS BLOCKERS" : GREEN + "✔ LOCAL BACKEND HEALTHY");
+        lines.add(DARK_GRAY + "Network-wide: run " + AQUA + "/estaff verify full" + DARK_GRAY + " on Velocity.");
         return List.copyOf(lines);
     }
 
@@ -90,8 +95,8 @@ final class FullRuntimeVerifier {
     private String clientProviderSummary(PluginManager manager) {
         List<String> names = List.of("ViaVersion", "floodgate", "Geyser-Spigot", "EnthusiaServerAutoClicker");
         long enabled = names.stream().filter(manager::isPluginEnabled).count();
-        return ChatColor.GRAY + "  • Client APIs: " + ChatColor.WHITE + enabled + "/" + names.size()
-                + ChatColor.DARK_GRAY + " optional providers enabled";
+        return GRAY + "  • Client APIs: " + WHITE + enabled + "/" + names.size()
+                + DARK_GRAY + " optional providers enabled";
     }
 
     private void appendIssues(List<String> lines, Map<String, String> issues) {
@@ -103,7 +108,7 @@ final class FullRuntimeVerifier {
                 lines.add(warning(issue.getKey(), shortText(issue.getValue()))));
         int hidden = issues.size() - MAX_ISSUES_SHOWN;
         if (hidden > 0) {
-            lines.add(ChatColor.DARK_GRAY + "  … " + hidden + " more; see sanitized server log.");
+            lines.add(DARK_GRAY + "  … " + hidden + " more; see sanitized server log.");
         }
     }
 
@@ -137,44 +142,43 @@ final class FullRuntimeVerifier {
     }
 
     private static String header(String title) {
-        return ChatColor.DARK_GRAY + "──────── " + ChatColor.AQUA + ChatColor.BOLD + title
-                + ChatColor.RESET + ChatColor.DARK_GRAY + " ────────";
+        return DARK_GRAY + "──────── " + AQUA + BOLD + title + RESET + DARK_GRAY + " ────────";
     }
 
     private static String separator() {
-        return ChatColor.DARK_GRAY + "────────────────────────";
+        return DARK_GRAY + "────────────────────────";
     }
 
     private static String section(String title) {
-        return ChatColor.GOLD + "▸ " + ChatColor.YELLOW + ChatColor.BOLD + title;
+        return GOLD + "▸ " + YELLOW + BOLD + title;
     }
 
     private static String label(String label, String value) {
-        return ChatColor.GRAY + label + ": " + value;
+        return GRAY + label + ": " + value;
     }
 
     private static String pass(String label, String detail) {
-        return ChatColor.GREEN + "  ✔ " + ChatColor.WHITE + label + ChatColor.DARK_GRAY + " — " + ChatColor.GRAY + detail;
+        return GREEN + "  ✔ " + WHITE + label + DARK_GRAY + " — " + GRAY + detail;
     }
 
     private static String warning(String label, String detail) {
-        return ChatColor.YELLOW + "  ⚠ " + ChatColor.WHITE + label + ChatColor.DARK_GRAY + " — " + ChatColor.GRAY + detail;
+        return YELLOW + "  ⚠ " + WHITE + label + DARK_GRAY + " — " + GRAY + detail;
     }
 
     private static String disabled(String label, String detail) {
-        return ChatColor.DARK_GRAY + "  ○ " + ChatColor.GRAY + label + " — " + detail;
+        return DARK_GRAY + "  ○ " + GRAY + label + " — " + detail;
     }
 
     private static String critical(String label, String detail) {
-        return ChatColor.RED + "  ✖ " + ChatColor.WHITE + label + ChatColor.DARK_GRAY + " — " + ChatColor.RED + detail;
+        return RED + "  ✖ " + WHITE + label + DARK_GRAY + " — " + RED + detail;
     }
 
     private static String modeColor(String mode) {
         return switch (mode) {
-            case "ACTIVE" -> ChatColor.GREEN.toString();
-            case "SHADOW_MIGRATION" -> ChatColor.YELLOW.toString();
-            case "DEGRADED", "READ_ONLY_FAILURE" -> ChatColor.RED.toString();
-            default -> ChatColor.GOLD.toString();
+            case "ACTIVE" -> GREEN;
+            case "SHADOW_MIGRATION" -> YELLOW;
+            case "DEGRADED", "READ_ONLY_FAILURE" -> RED;
+            default -> GOLD;
         };
     }
 
