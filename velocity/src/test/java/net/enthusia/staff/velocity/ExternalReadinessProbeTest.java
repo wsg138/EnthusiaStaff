@@ -3,6 +3,7 @@ package net.enthusia.staff.velocity;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import com.sun.net.httpserver.HttpServer;
+import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import org.junit.jupiter.api.Test;
 
@@ -47,7 +48,7 @@ class ExternalReadinessProbeTest {
         private final HttpServer server;
 
         private ServerFixture(int status) throws Exception {
-            server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+            server = HttpServer.create(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0), 0);
             server.createContext("/ready", exchange -> {
                 exchange.sendResponseHeaders(status, -1);
                 exchange.close();
