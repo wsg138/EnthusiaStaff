@@ -1,0 +1,6 @@
+# Copy this file locally only. Do not commit a filled copy.
+# Upload it to plugins/EnthusiaStaff/database.properties on a Paper backend.
+
+db.jdbc-url=jdbc:mariadb://REPLACE_HOST:3306/REPLACE_DATABASE
+db.username=REPLACE_USERNAME
+db.password=REPLACE_PASSWORD
