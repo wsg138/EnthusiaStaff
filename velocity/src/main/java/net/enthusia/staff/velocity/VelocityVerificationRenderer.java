@@ -87,6 +87,10 @@ final class VelocityVerificationRenderer {
             Map<String, BackendVerificationReport> reports
     ) {
         lines.add(section("Provider APIs"));
+        if (expectedBackends.isEmpty()) {
+            lines.add(warning("Provider APIs", "unavailable until a backend is configured"));
+            return;
+        }
         IMPORTANT_PROVIDERS.forEach(provider -> lines.add(providerLine(provider, expectedBackends, reports)));
         lines.add(note("Optional extras", reports.size() + " backend report(s); details stay local"));
     }
@@ -154,7 +158,6 @@ final class VelocityVerificationRenderer {
                 "private bridge listening",
                 "private bridge unavailable"
         ));
-        lines.add(note("External services", "no outbound probes; verify Staff Bot/site from their own readiness checks"));
     }
 
     private static void appendCutover(List<Component> lines, NetworkVerificationState.Cutover cutover) {
