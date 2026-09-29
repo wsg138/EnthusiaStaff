@@ -110,8 +110,7 @@ final class PaperPersistentChannelFactory {
             return false;
         }
         String payload = PaperVerificationReporter.payload(backendId);
-        client.send(UUID.randomUUID(), VERIFY_REPORT, payload, VERIFY_RESPONSE_TIMEOUT);
-        return true;
+        return client.send(UUID.randomUUID(), VERIFY_REPORT, payload, VERIFY_RESPONSE_TIMEOUT).getNow(true);
     }
 
     private static ChannelConfiguration loadConfiguration(Settings settings) {
