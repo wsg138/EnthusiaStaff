@@ -18,7 +18,6 @@ import com.velocitypowered.api.proxy.server.ServerInfo;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.VarHandle;
 import java.lang.reflect.Proxy;
-import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -341,8 +340,9 @@ final class VelocitySecurityEventSubmissionTest {
         ));
     }
 
+    @SuppressWarnings("AddressSelection") // Fixed loopback literal keeps this isolated test fixture non-routable.
     private static RegisteredServer server(String name) {
-        ServerInfo info = new ServerInfo(name, new InetSocketAddress(InetAddress.getLoopbackAddress(), 25565));
+        ServerInfo info = new ServerInfo(name, new InetSocketAddress("127.0.0.1", 25565));
         return RegisteredServer.class.cast(Proxy.newProxyInstance(
                 Thread.currentThread().getContextClassLoader(),
                 new Class<?>[]{RegisteredServer.class},

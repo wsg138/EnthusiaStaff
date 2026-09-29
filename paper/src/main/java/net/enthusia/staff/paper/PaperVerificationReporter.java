@@ -20,6 +20,7 @@ import org.bukkit.plugin.ServicesManager;
 
 final class PaperVerificationReporter {
     private static final ObjectMapper JSON = new ObjectMapper();
+    private static final String STAFF_BRIDGE_OWNER = "EnthusiaStaff";
 
     private PaperVerificationReporter() {
     }
@@ -104,7 +105,7 @@ final class PaperVerificationReporter {
                 return warning("staff API version is incompatible");
             }
             String owner = service.getBridgeOwner().orElse("");
-            if (!"EnthusiaStaff".equals(owner)) {
+            if (!STAFF_BRIDGE_OWNER.equals(owner)) {
                 return warning(owner.isBlank() ? "Staff moderation bridge is not installed" : "bridge owned by " + owner);
             }
             return pass("staff API and EnthusiaStaff bridge available");

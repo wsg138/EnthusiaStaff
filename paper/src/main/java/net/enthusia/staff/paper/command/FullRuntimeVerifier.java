@@ -17,6 +17,7 @@ import org.bukkit.plugin.java.JavaPlugin;
 /** Produces a compact, non-destructive local Paper runtime diagnostic. */
 final class FullRuntimeVerifier {
     private static final String ESTAFF_COMMAND = "estaff";
+    private static final String DETAIL_SEPARATOR = " — ";
     private static final int MAX_ISSUES_SHOWN = 5;
     private static final String RESET = "§r";
     private static final String RED = "§c";
@@ -158,19 +159,19 @@ final class FullRuntimeVerifier {
     }
 
     private static String pass(String label, String detail) {
-        return GREEN + "  ✔ " + WHITE + label + DARK_GRAY + " — " + GRAY + detail;
+        return GREEN + "  ✔ " + WHITE + label + DARK_GRAY + DETAIL_SEPARATOR + GRAY + detail;
     }
 
     private static String warning(String label, String detail) {
-        return YELLOW + "  ⚠ " + WHITE + label + DARK_GRAY + " — " + GRAY + detail;
+        return YELLOW + "  ⚠ " + WHITE + label + DARK_GRAY + DETAIL_SEPARATOR + GRAY + detail;
     }
 
     private static String disabled(String label, String detail) {
-        return DARK_GRAY + "  ○ " + GRAY + label + " — " + detail;
+        return DARK_GRAY + "  ○ " + GRAY + label + DETAIL_SEPARATOR + detail;
     }
 
     private static String critical(String label, String detail) {
-        return RED + "  ✖ " + WHITE + label + DARK_GRAY + " — " + RED + detail;
+        return RED + "  ✖ " + WHITE + label + DARK_GRAY + DETAIL_SEPARATOR + RED + detail;
     }
 
     private static String modeColor(String mode) {

@@ -6,6 +6,7 @@ import net.enthusia.staff.domain.OperationalMode;
 import net.enthusia.staff.persistence.MariaDbRuntime;
 import net.enthusia.staff.protocol.PersistentChannelServer;
 
+@SuppressWarnings("PMD.MissingStaticMethodInNonInstantiatableClass") // Intentional namespace for related immutable verification records.
 final class NetworkVerificationState {
     private NetworkVerificationState() {
     }
