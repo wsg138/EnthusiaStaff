@@ -41,6 +41,7 @@ jobs:
                       p.dependencies.add('errorprone', 'com.google.errorprone:error_prone_core:2.50.0')
                       p.tasks.withType(org.gradle.api.tasks.compile.JavaCompile).configureEach { task ->
                           task.options.compilerArgs.removeAll { it == '-Werror' }
+                          task.options.compilerArgs.add('-XDaddTypeAnnotationsToSymbol=true')
                           task.options.errorprone.allErrorsAsWarnings.set(true)
                       }
                   }
