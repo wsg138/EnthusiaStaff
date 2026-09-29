@@ -1,0 +1,129 @@
+name: Temporary network verify wiring patch
+
+on:
+  push:
+    branches: [feature/readable-network-verify]
+    paths: [.github/workflows/temp-network-verify-patch.yml]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/readable-network-verify
+          fetch-depth: 0
+      - name: Apply narrow Velocity wiring
+        shell: python
+        run: |
+          from pathlib import Path
+
+          path = Path('velocity/src/main/java/net/enthusia/staff/velocity/EnthusiaStaffVelocityPlugin.java')
+          text = path.read_text()
+
+          def replace_once(old, new):
+              global text
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'Expected exactly one match, found {count}: {old[:80]!r}')
+              text = text.replace(old, new, 1)
+
+          replace_once(
+              '    private final VelocitySecurityEventDispatcher securityEventDispatcher;\n',
+              '    private final VelocitySecurityEventDispatcher securityEventDispatcher;\n'
+              '    private final VelocityNetworkVerifier networkVerifier;\n'
+          )
+          replace_once(
+              '        this.securityEventDispatcher = new VelocitySecurityEventDispatcher(() -> workers, shuttingDown::get);\n'
+              '    }\n',
+              '        this.securityEventDispatcher = new VelocitySecurityEventDispatcher(() -> workers, shuttingDown::get);\n'
+              '        this.networkVerifier = new VelocityNetworkVerifier(new VelocityNetworkVerifier.Dependencies(\n'
+              '                authorityMode::get,\n'
+              '                () -> databaseRuntime,\n'
+              '                () -> configuration,\n'
+              '                () -> channelServer,\n'
+              '                () -> networkIdentityStore != null && networkIdentityProtector != null,\n'
+              '                () -> discordOutboxWorker != null,\n'
+              '                () -> websiteApiServer != null && websiteModerationStore != null,\n'
+              '                dataDirectory\n'
+              '        ));\n'
+              '    }\n'
+          )
+          replace_once(
+              '                envelope -> {\n'
+              '                    outbox.recordInboxOnce(\n',
+              '                envelope -> {\n'
+              '                    if (networkVerifier.acceptReport(envelope)) {\n'
+              '                        return true;\n'
+              '                    }\n'
+              '                    outbox.recordInboxOnce(\n'
+          )
+          replace_once(
+              '                case "reload" -> executeReload(source, arguments);\n'
+              '                case "migration" -> executeMigration(source, arguments);\n',
+              '                case "reload" -> executeReload(source, arguments);\n'
+              '                case "verify" -> executeVerify(source, arguments);\n'
+              '                case "migration" -> executeMigration(source, arguments);\n'
+          )
+          replace_once(
+              '        private void showStatus(CommandSource source) {\n',
+              '        private void executeVerify(CommandSource source, String[] arguments) {\n'
+              '            if (arguments.length != 2 || !"full".equals(normalizedArgument(arguments, SUB_OPERATION_INDEX))) {\n'
+              '                source.sendMessage(Component.text("Usage: /estaff verify full"));\n'
+              '                return;\n'
+              '            }\n'
+              '            if (!source.hasPermission("enthusiastaff.verify")\n'
+              '                    || !source.hasPermission("enthusiastaff.diagnostics")) {\n'
+              '                source.sendMessage(Component.text("You do not have permission to run full EnthusiaStaff diagnostics."));\n'
+              '                return;\n'
+              '            }\n'
+              '            submitVerification(source);\n'
+              '        }\n\n'
+              '        private void submitVerification(CommandSource source) {\n'
+              '            try {\n'
+              '                workers.execute(() -> networkVerifier.verify().forEach(source::sendMessage));\n'
+              '            } catch (RejectedExecutionException exception) {\n'
+              '                source.sendMessage(Component.text("The bounded work queue is full; verification did not start."));\n'
+              '            }\n'
+              '        }\n\n'
+              '        private void showStatus(CommandSource source) {\n'
+          )
+          replace_once(
+              '            if (normalizedArgument(arguments, ROOT_OPERATION_INDEX).equals("reload")) {\n'
+              '                return invocation.source().hasPermission("enthusiastaff.reload");\n'
+              '            }\n'
+              '            return invocation.source().hasPermission("enthusiastaff.status");\n',
+              '            String operation = normalizedArgument(arguments, ROOT_OPERATION_INDEX);\n'
+              '            if (operation.equals("reload")) {\n'
+              '                return invocation.source().hasPermission("enthusiastaff.reload");\n'
+              '            }\n'
+              '            if (operation.equals("verify")) {\n'
+              '                return invocation.source().hasPermission("enthusiastaff.verify");\n'
+              '            }\n'
+              '            return invocation.source().hasPermission("enthusiastaff.status");\n'
+          )
+
+          path.write_text(text)
+
+          suggestions = Path('velocity/src/main/java/net/enthusia/staff/velocity/VelocityStatusSuggestions.java')
+          text = suggestions.read_text()
+          old = '            case "migration" -> permitted(MIGRATION_OPERATIONS, "enthusiastaff.migration", hasPermission);\n'
+          new = ('            case "verify" -> hasPermission.test("enthusiastaff.verify")\n'
+                 '                    && hasPermission.test("enthusiastaff.diagnostics")\n'
+                 '                    ? List.of("full") : List.of();\n'
+                 '            case "migration" -> permitted(MIGRATION_OPERATIONS, "enthusiastaff.migration", hasPermission);\n')
+          if text.count(old) != 1:
+              raise SystemExit('VelocityStatusSuggestions insertion point changed')
+          suggestions.write_text(text.replace(old, new, 1))
+      - name: Commit wiring
+        run: |
+          git config user.name 'enthusia-sentinel[bot]'
+          git config user.email 'enthusia-sentinel[bot]@users.noreply.github.com'
+          git add velocity/src/main/java/net/enthusia/staff/velocity/EnthusiaStaffVelocityPlugin.java \
+                  velocity/src/main/java/net/enthusia/staff/velocity/VelocityStatusSuggestions.java
+          git diff --cached --check
+          git commit -m 'Wire readable network verification'
+          git push origin HEAD:feature/readable-network-verify
