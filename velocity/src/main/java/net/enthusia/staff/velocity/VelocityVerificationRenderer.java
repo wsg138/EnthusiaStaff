@@ -16,6 +16,8 @@ final class VelocityVerificationRenderer {
     private static final int MAX_BLOCKERS_SHOWN = 5;
     private static final List<String> IMPORTANT_PROVIDERS =
             List.of("Currency", "Market", "Reputation", "RoseChat", "Enthusia AutoClicker");
+    private static final List<String> CLIENT_PROVIDERS =
+            List.of("ViaVersion", "Floodgate", "Geyser", "Polar");
 
     List<Component> render(
             NetworkVerificationState.Snapshot snapshot,
@@ -90,6 +92,7 @@ final class VelocityVerificationRenderer {
     ) {
         lines.add(section("Provider APIs"));
         IMPORTANT_PROVIDERS.forEach(provider -> lines.add(providerLine(provider, expectedBackends, reports)));
+        lines.add(providerGroupLine("Client stack", CLIENT_PROVIDERS, expectedBackends, reports));
         lines.add(note("Optional extras", reports.size() + " backend report(s); details stay local"));
     }
 
@@ -109,6 +112,42 @@ final class VelocityVerificationRenderer {
                 provider,
                 summary.passCount() + "/" + summary.presentCount() + " healthy; " + summary.problems().getFirst()
         );
+    }
+
+    private static Component providerGroupLine(
+            String label,
+            List<String> providers,
+            Set<String> expected,
+            Map<String, BackendVerificationReport> reports
+    ) {
+        ProviderSummary summary = providerGroupSummary(providers, expected, reports);
+        if (summary.presentCount() == 0 && summary.problems().isEmpty()) {
+            return disabled(label, "optional integrations are not installed");
+        }
+        if (summary.problems().isEmpty()) {
+            return pass(label, summary.passCount() + " integration check(s) healthy");
+        }
+        return warning(
+                label,
+                summary.passCount() + "/" + summary.presentCount() + " healthy; " + summary.problems().getFirst()
+        );
+    }
+
+    private static ProviderSummary providerGroupSummary(
+            List<String> providers,
+            Set<String> expected,
+            Map<String, BackendVerificationReport> reports
+    ) {
+        int present = 0;
+        int pass = 0;
+        LinkedHashSet<String> problems = new LinkedHashSet<>();
+        for (String provider : providers) {
+            ProviderSummary summary = providerSummary(provider, expected, reports);
+            present += summary.presentCount();
+            pass += summary.passCount();
+            problems.addAll(summary.problems());
+        }
+        return new ProviderSummary(present, pass, List.copyOf(problems));
     }
 
     private static ProviderSummary providerSummary(
@@ -159,7 +198,7 @@ final class VelocityVerificationRenderer {
                 "private bridge listening",
                 "private bridge unavailable"
         ));
-        lines.add(external("Public website", website));
+        lines.add(external("Website app", website));
     }
 
     private static Component external(String label, ExternalReadinessProbe.Result result) {
@@ -267,7 +306,7 @@ final class VelocityVerificationRenderer {
             blockers.add("Private website bridge is unavailable");
         }
         if (website.state() != ExternalReadinessProbe.State.PASS) {
-            blockers.add("Public website: " + website.detail());
+            blockers.add("Website app: " + website.detail());
         }
         appendProviderProblems(blockers, snapshot.expectedBackends(), reports);
     }
@@ -282,6 +321,10 @@ final class VelocityVerificationRenderer {
             if (summary.presentCount() > 0 && !summary.problems().isEmpty()) {
                 blockers.add(provider + " API: " + summary.problems().getFirst());
             }
+        }
+        ProviderSummary clients = providerGroupSummary(CLIENT_PROVIDERS, expectedBackends, reports);
+        if (clients.presentCount() > 0 && !clients.problems().isEmpty()) {
+            blockers.add("Client stack: " + clients.problems().getFirst());
         }
     }
 
