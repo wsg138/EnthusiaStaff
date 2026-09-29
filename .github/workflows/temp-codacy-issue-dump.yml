@@ -26,16 +26,5 @@ jobs:
           items = data.get('data', data if isinstance(data, list) else [])
           print('CODACY_ISSUE_COUNT=' + str(len(items)))
           for index, item in enumerate(items, 1):
-              ci = item.get('commitIssue') or item
-              pattern = ci.get('patternInfo') or {}
-              tool = pattern.get('toolInfo') or {}
-              location = ci.get('location') or {}
-              print(f'ISSUE {index}')
-              print(' file=' + str(ci.get('filePath') or item.get('filePath')))
-              print(' line=' + str(location.get('startLine') or ci.get('line') or item.get('line')))
-              print(' pattern=' + str(pattern.get('id') or ci.get('patternId') or item.get('patternId')))
-              print(' title=' + str(pattern.get('title') or ci.get('message') or item.get('message')))
-              print(' level=' + str(pattern.get('level') or ci.get('level') or item.get('level')))
-              print(' category=' + str(pattern.get('category') or ci.get('category') or item.get('category')))
-              print(' tool=' + str(tool.get('name') or ci.get('tool') or item.get('tool')))
+              print(f'ISSUE_RAW_{index}=' + json.dumps(item, sort_keys=True, separators=(',', ':')))
           PY
