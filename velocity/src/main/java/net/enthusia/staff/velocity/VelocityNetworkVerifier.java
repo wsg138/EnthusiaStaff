@@ -105,7 +105,9 @@ final class VelocityNetworkVerifier {
                     "{}",
                     BACKEND_TIMEOUT
             );
-            delivery.exceptionally(failure -> PersistentChannelServer.DeliveryStatus.REJECTED);
+            if (delivery.getNow(null) == PersistentChannelServer.DeliveryStatus.NOT_CONNECTED) {
+                reports.remove(backend);
+            }
         }
     }
 
