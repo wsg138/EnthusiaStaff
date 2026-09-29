@@ -76,6 +76,10 @@ final class PaperRuntimeLifecycle<S, T, C> {
         }
     }
 
+    <R> Optional<R> channelValue(Function<C, R> selector) {
+        return channel.get().map(selector);
+    }
+
     Optional<C> removeChannel() {
         return channel.getAndSet(Optional.empty());
     }
