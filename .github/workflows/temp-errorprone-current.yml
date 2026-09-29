@@ -48,5 +48,5 @@ jobs:
               }
           }
           EOF
-      - name: Analyze changed Java modules
-        run: ./gradlew -I /tmp/errorprone.init.gradle :protocol:compileJava :paper:compileJava :velocity:compileJava --no-daemon --console=plain
+      - name: Analyze changed production and test Java
+        run: ./gradlew -I /tmp/errorprone.init.gradle :protocol:compileJava :paper:compileJava :velocity:compileJava :velocity:compileTestJava --no-daemon --console=plain
