@@ -8,11 +8,11 @@ Staff Bot file-backed runtime PR: `wsg138/EnthusiaStaff#256`
 
 Exact candidate head:
 
-`c1f735818b24479afb4bd8d83535e8c8535d85e9`
+`19089dfe101c6c544e1d26ca5b85b7bac5ce164b`
 
-PR artifact workflow run: `36578965033`
-Artifact ID: `11039440567`
-Artifact name: `staff-bot-pr-256-c1f735818b24479afb4bd8d83535e8c8535d85e9`
+PR artifact workflow run: `36580574610`
+Artifact ID: `11039513278`
+Artifact name: `staff-bot-pr-256-19089dfe101c6c544e1d26ca5b85b7bac5ce164b`
 
 Candidate JAR:
 
@@ -20,11 +20,13 @@ Candidate JAR:
 
 Candidate JAR SHA-256:
 
-`183ab2f0b10de57ae181b90f244a731ac054538185ed0148649e2fb5ac7329e4`
+`90f980b7cee7ee15ac2770cf5228619b6f88985a926682aa43b8f252be13e775`
+
+The artifact's own checksum file reports the same JAR hash and `source.txt` reports this exact source SHA.
 
 Do not substitute the older September 14 JAR currently present on the split.
 
-Before deployment, require PR #256 exact-head Coverage/full build to be terminal green and require no new valid hosted static-analysis finding. Staff Bot PR Artifact, Staff Bot Configuration Cache, Sentinel Restart Artifact and CodeRabbit are already green on this exact head at handoff creation.
+Before deployment require PR #256 exact-head Coverage/full build to be terminal green and require no new valid hosted static-analysis finding. Codacy is green with zero new issues on this exact head; Staff Bot Configuration Cache, Staff Bot PR Artifact, and Sentinel Restart Artifact are green. If Coverage is not green yet, wait rather than deploying a partially validated candidate.
 
 ## Existing Bloom split
 
@@ -51,16 +53,16 @@ Replace APP FLAGS completely. Do not append to the old preview flags.
 Normal staging APP FLAGS:
 
 ```text
---environment=staging --token-file=t --moderation-config-file=m
+--token-file=t --moderation-config-file=m
 ```
 
 Smoke-test APP FLAGS:
 
 ```text
---environment=staging --token-file=t --moderation-config-file=m --smoke-test
+--token-file=t --moderation-config-file=m --smoke-test
 ```
 
-The old `--staging-ui-preview`, tunnel, preview-public-url and preview-web flags must not remain in the normal startup.
+The old `--staging-ui-preview`, tunnel, preview-public-url and preview-web flags must not remain in normal startup. Do not add `--environment=staging`; PR #256 intentionally makes this file-backed path staging-only.
 
 ## `t` token file
 
@@ -76,7 +78,7 @@ Do not switch the runtime to production.
 
 ## `m` moderation runtime file
 
-The existing parser accepts only an allowlisted property set. For this deployment require these keys:
+The existing parser accepts only an allowlisted property set. Require these keys:
 
 ```properties
 db.jdbc-url=<Staff MariaDB JDBC URL>
@@ -136,7 +138,7 @@ Example invocation after downloading the exact PR artifact JAR:
 ```text
 python deploy/temp-network/staff-bot-sftp-upload.py \
   --jar /safe/local/path/EnthusiaStaff-StaffBot.jar \
-  --expected-sha256 183ab2f0b10de57ae181b90f244a731ac054538185ed0148649e2fb5ac7329e4
+  --expected-sha256 90f980b7cee7ee15ac2770cf5228619b6f88985a926682aa43b8f252be13e775
 ```
 
 The helper:
@@ -149,24 +151,26 @@ The helper:
 - uploads to a temporary remote name;
 - downloads the temporary remote JAR and SHA-verifies it;
 - backs up the previous remote JAR;
-- atomically installs the candidate.
+- atomically installs the candidate;
+- prints the correct next APP FLAGS (`--token-file=t --moderation-config-file=m`).
 
 If a trusted host-key fingerprint is not already available from the existing authorized SFTP setup, stop and obtain/verify it. Do not add an insecure accept-all-host-key path.
 
 ## Start/validate without shell access
 
-Because this Pterodactyl split may expose only process console rather than a shell, use the built-in smoke mode instead of relying on `curl` inside the container.
+Because this Pterodactyl split may expose only process console rather than a shell, use built-in smoke mode instead of relying on `curl` inside the container.
 
-1. Make sure HUB authority is already running.
-2. Set smoke-test APP FLAGS shown above.
-3. Start Staff Bot.
-4. Require clean identity/database/authority initialization and `staff_bot_smoke_ready environment=staging`.
-5. Smoke process should exit zero normally after readiness; it sends no Discord test message/moderation action.
-6. If smoke fails, leave the normal bot stopped and report the sanitized failure category.
-7. Remove only `--smoke-test` from APP FLAGS.
-8. Start Staff Bot normally.
-9. Require it to remain running and show no terminal failure/reconnect loop.
-10. Leave destructive enforcement disabled.
+1. Require PR #256 exact-head validation green.
+2. Make sure HUB authority is already running.
+3. Set smoke-test APP FLAGS shown above.
+4. Start Staff Bot.
+5. Require clean identity/database/authority initialization and `staff_bot_smoke_ready environment=staging`.
+6. Smoke process should exit zero normally after readiness; it sends no Discord test message/moderation action.
+7. If smoke fails, leave normal bot stopped and report the sanitized failure category.
+8. Remove only `--smoke-test` from APP FLAGS.
+9. Start Staff Bot normally.
+10. Require it to remain running and show no terminal failure/reconnect loop.
+11. Leave destructive enforcement disabled.
 
 ## Stop conditions
 
