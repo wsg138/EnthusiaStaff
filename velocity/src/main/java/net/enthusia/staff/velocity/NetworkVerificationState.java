@@ -20,15 +20,32 @@ final class NetworkVerificationState {
             boolean discordWebhookReady,
             boolean websiteBridgeReady
     ) {
-        Snapshot {
-            expectedBackends = expectedBackends == null ? Set.of() : Set.copyOf(expectedBackends);
-            connectedBackends = connectedBackends == null ? Set.of() : Set.copyOf(connectedBackends);
+        Snapshot(
+                OperationalMode mode,
+                MariaDbRuntime runtime,
+                PersistentChannelServer channel,
+                Set<String> expectedBackends,
+                Set<String> connectedBackends,
+                boolean networkIdentityReady,
+                boolean discordWebhookReady,
+                boolean websiteBridgeReady
+        ) {
+            this.mode = mode;
+            this.runtime = runtime;
+            this.channel = channel;
+            this.expectedBackends = expectedBackends == null ? Set.of() : Set.copyOf(expectedBackends);
+            this.connectedBackends = connectedBackends == null ? Set.of() : Set.copyOf(connectedBackends);
+            this.networkIdentityReady = networkIdentityReady;
+            this.discordWebhookReady = discordWebhookReady;
+            this.websiteBridgeReady = websiteBridgeReady;
         }
     }
 
     record Cutover(boolean allowed, boolean evidencePresent, List<String> blockers) {
-        Cutover {
-            blockers = blockers == null ? List.of() : List.copyOf(blockers);
+        Cutover(boolean allowed, boolean evidencePresent, List<String> blockers) {
+            this.allowed = allowed;
+            this.evidencePresent = evidencePresent;
+            this.blockers = blockers == null ? List.of() : List.copyOf(blockers);
         }
     }
 }
