@@ -8,6 +8,7 @@ on:
 permissions:
   contents: read
 
+# Temporary branch-only diagnostic; delete before PR #257 is finalized.
 jobs:
   analyze:
     runs-on: ubuntu-latest
