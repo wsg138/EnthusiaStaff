@@ -1,0 +1,79 @@
+name: Appeal lifecycle PMD diagnostic
+
+on:
+  push:
+    branches:
+      - feature/website-appeal-lifecycle
+    paths:
+      - '.github/workflows/appeal-lifecycle-pmd-diagnostic.yml'
+      - 'domain/src/main/java/net/enthusia/staff/domain/ports/WebsiteModerationStore.java'
+      - 'domain/src/main/java/net/enthusia/staff/domain/website/WebsiteAppealMutation.java'
+      - 'integration-tests/src/test/java/net/enthusia/staff/integration/WebsiteAppealLifecycleIntegrationTest.java'
+      - 'integration-tests/src/test/java/net/enthusia/staff/integration/WebsiteAppealWorkflowIntegrationTest.java'
+      - 'persistence/src/main/java/net/enthusia/staff/persistence/JdbcWebsiteAppealClaimGuard.java'
+      - 'persistence/src/main/java/net/enthusia/staff/persistence/JdbcWebsiteAppealLifecycleAudit.java'
+      - 'persistence/src/main/java/net/enthusia/staff/persistence/JdbcWebsiteAppealLifecycleStore.java'
+      - 'persistence/src/main/java/net/enthusia/staff/persistence/JdbcWebsiteModerationStore.java'
+      - 'velocity/src/main/java/net/enthusia/staff/velocity/WebsiteApiRouter.java'
+      - 'velocity/src/main/java/net/enthusia/staff/velocity/WebsiteAppealWorkflowEndpoint.java'
+      - 'velocity/src/test/java/net/enthusia/staff/velocity/WebsiteAppealLifecycleRouterTest.java'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  pmd:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out tested commit
+        uses: actions/checkout@v5
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Run PMD 6.55 on lifecycle diff
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsSL -o /tmp/pmd.zip \
+            'https://github.com/pmd/pmd/releases/download/pmd_releases/6.55.0/pmd-bin-6.55.0.zip'
+          unzip -q /tmp/pmd.zip -d /tmp/pmd
+          mkdir -p /tmp/pmd-input
+          files=(
+            domain/src/main/java/net/enthusia/staff/domain/ports/WebsiteModerationStore.java
+            domain/src/main/java/net/enthusia/staff/domain/website/WebsiteAppealMutation.java
+            integration-tests/src/test/java/net/enthusia/staff/integration/WebsiteAppealLifecycleIntegrationTest.java
+            integration-tests/src/test/java/net/enthusia/staff/integration/WebsiteAppealWorkflowIntegrationTest.java
+            persistence/src/main/java/net/enthusia/staff/persistence/JdbcWebsiteAppealClaimGuard.java
+            persistence/src/main/java/net/enthusia/staff/persistence/JdbcWebsiteAppealLifecycleAudit.java
+            persistence/src/main/java/net/enthusia/staff/persistence/JdbcWebsiteAppealLifecycleStore.java
+            persistence/src/main/java/net/enthusia/staff/persistence/JdbcWebsiteModerationStore.java
+            velocity/src/main/java/net/enthusia/staff/velocity/WebsiteApiRouter.java
+            velocity/src/main/java/net/enthusia/staff/velocity/WebsiteAppealWorkflowEndpoint.java
+            velocity/src/test/java/net/enthusia/staff/velocity/WebsiteAppealLifecycleRouterTest.java
+          )
+          for file in "${files[@]}"; do
+            mkdir -p "/tmp/pmd-input/$(dirname "$file")"
+            cp "$file" "/tmp/pmd-input/$file"
+          done
+          set +e
+          /tmp/pmd/pmd-bin-6.55.0/bin/run.sh pmd \
+            -d /tmp/pmd-input \
+            -R ruleset.xml \
+            -f text \
+            -r pmd-report.txt
+          status=$?
+          set -e
+          cat pmd-report.txt || true
+          echo "PMD exit code: $status"
+
+      - name: Upload PMD report
+        uses: actions/upload-artifact@v4
+        with:
+          name: appeal-lifecycle-pmd
+          path: pmd-report.txt
+          if-no-files-found: error
