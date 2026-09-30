@@ -26,4 +26,4 @@ jobs:
       - name: Compile deployment helpers
         run: python -m py_compile deploy/temp-network/*.py
       - name: Run deployment helper tests
-        run: python -m unittest -v deploy/temp-network/test_provider_sftp_upload.py
+        run: python -m unittest discover -s deploy/temp-network -p 'test_*_sftp_upload.py' -v

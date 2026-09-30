@@ -8,7 +8,8 @@ from types import SimpleNamespace
 
 MODULE_PATH = Path(__file__).with_name("provider-sftp-upload.py")
 SPEC = importlib.util.spec_from_file_location("provider_sftp_upload", MODULE_PATH)
-assert SPEC is not None and SPEC.loader is not None
+if SPEC is None or SPEC.loader is None:
+    raise RuntimeError("provider uploader module could not be loaded")
 uploader = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(uploader)
 
@@ -31,7 +32,11 @@ class FakeSftp:
 
     def listdir(self, path: str) -> list[str]:
         prefix = path.rstrip("/") + "/"
-        return [name[len(prefix):] for name in self.files if name.startswith(prefix) and "/" not in name[len(prefix):]]
+        return [
+            name[len(prefix):]
+            for name in self.files
+            if name.startswith(prefix) and "/" not in name[len(prefix):]
+        ]
 
     def rename(self, source: str, destination: str) -> None:
         if source not in self.files:
@@ -73,14 +78,8 @@ class ProviderUploaderTest(unittest.TestCase):
             candidate = Path(directory) / "candidate.jar"
             candidate.write_bytes(b"candidate")
             expected = uploader.file_sha256(candidate)
-
             replaced, backup_dir = uploader.stage_provider(
-                sftp,
-                "plugins",
-                candidate,
-                expected,
-                "EnthusiaCommend.jar",
-                "EnthusiaCommend",
+                sftp, "plugins", candidate, expected, "EnthusiaCommend.jar", "EnthusiaCommend"
             )
 
         self.assertEqual(["EnthusiaCommend-old.jar"], replaced)
@@ -95,27 +94,29 @@ class ProviderUploaderTest(unittest.TestCase):
             candidate = Path(directory) / "candidate.jar"
             candidate.write_bytes(b"candidate")
             expected = uploader.file_sha256(candidate)
-
-            with self.assertRaises(SystemExit):
+            with self.assertRaises(uploader.DeploymentError):
                 uploader.stage_provider(
-                    sftp,
-                    "plugins",
-                    candidate,
-                    expected,
-                    "EnthusiaCommend.jar",
-                    "EnthusiaCommend",
+                    sftp, "plugins", candidate, expected, "EnthusiaCommend.jar", "EnthusiaCommend"
                 )
 
         self.assertEqual(b"old", sftp.files["plugins/EnthusiaCommend-old.jar"])
         self.assertNotIn("plugins/EnthusiaCommend.jar", sftp.files)
         self.assertFalse(any(".uploading-" in path for path in sftp.files))
 
-    def test_filename_and_sha_validation_reject_unsafe_input(self) -> None:
-        with self.assertRaises(SystemExit):
-            uploader.validate_filename("../plugin.jar", "remote name")
-        with self.assertRaises(SystemExit):
-            uploader.validate_filename("plugins/plugin.jar", "remote name")
-        with self.assertRaises(SystemExit):
+    def test_validation_rejects_unsafe_names_paths_and_hashes(self) -> None:
+        unsafe_names = ["../plugin.jar", "plugins/plugin.jar", ".", ".."]
+        for value in unsafe_names:
+            with self.subTest(value=value):
+                with self.assertRaises(uploader.DeploymentError):
+                    uploader.validate_filename(value, "remote name")
+
+        unsafe_directories = ["../plugins", "/plugins", "plugins/../other", "plugins\\..\\other"]
+        for value in unsafe_directories:
+            with self.subTest(value=value):
+                with self.assertRaises(uploader.DeploymentError):
+                    uploader.validate_remote_directory(value, "plugins directory")
+
+        with self.assertRaises(uploader.DeploymentError):
             uploader.validate_sha256("not-a-sha")
 
 
