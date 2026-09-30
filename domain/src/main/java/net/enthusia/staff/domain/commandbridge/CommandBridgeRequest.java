@@ -2,12 +2,14 @@ package net.enthusia.staff.domain.commandbridge;
 
 import java.time.Instant;
 import java.util.UUID;
+import net.enthusia.staff.domain.moderation.DiscordUserId;
 import net.enthusia.staff.domain.moderation.ModerationSubjectId;
 
 /** Authenticated command request after the Discord actor has been resolved through canonical linking. */
 public record CommandBridgeRequest(
         UUID requestId,
         ModerationSubjectId subjectId,
+        DiscordUserId discordUserId,
         UUID actorPlayerId,
         String targetServer,
         String command,
@@ -17,7 +19,8 @@ public record CommandBridgeRequest(
     private static final int MAX_COMMAND_LENGTH = 512;
 
     public CommandBridgeRequest {
-        if (requestId == null || subjectId == null || actorPlayerId == null || requestedAt == null) {
+        if (requestId == null || subjectId == null || discordUserId == null
+                || actorPlayerId == null || requestedAt == null) {
             throw new IllegalArgumentException("command bridge identity fields are required");
         }
         targetServer = bounded(targetServer, "targetServer", MAX_TARGET_LENGTH);

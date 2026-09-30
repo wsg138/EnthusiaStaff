@@ -38,6 +38,7 @@ class DiscordCommandBridgeCoordinatorTest {
                     sends.incrementAndGet();
                     assertEquals(REQUEST_ID, request.requestId());
                     assertEquals(new ModerationSubjectId(SUBJECT_ID), request.subjectId());
+                    assertEquals(DISCORD_ID, request.discordUserId());
                     assertEquals(PLAYER_ID, request.actorPlayerId());
                     assertEquals(NOW, request.requestedAt());
                     return received(CommandBridgeResponse.withoutOutput(

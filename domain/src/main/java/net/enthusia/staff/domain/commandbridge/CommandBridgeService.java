@@ -61,7 +61,7 @@ public final class CommandBridgeService {
             return finish(request, rejection(decision), false);
         }
         try {
-            if (!links.isCurrentLink(request.subjectId(), request.actorPlayerId())) {
+            if (!links.isCurrentLink(request.subjectId(), request.discordUserId(), request.actorPlayerId())) {
                 return finish(request, response(
                         CommandBridgeOutcome.UNLINKED_ACTOR,
                         "Linked actor is no longer valid."
@@ -157,24 +157,26 @@ public final class CommandBridgeService {
         };
     }
 
-    private static CommandBridgeAuditStore.RequestAudit auditRequest(
+    private CommandBridgeAuditStore.RequestAudit auditRequest(
             CommandBridgeRequest request,
             Decision decision
     ) {
         return new CommandBridgeAuditStore.RequestAudit(
                 request.requestId(),
                 request.subjectId(),
+                request.discordUserId(),
                 request.actorPlayerId(),
                 request.targetServer(),
                 decision.commandName(),
                 fingerprint(request),
-                request.requestedAt()
+                clock.instant()
         );
     }
 
     private static String fingerprint(CommandBridgeRequest request) {
-        String canonical = request.requestId() + "\n" + request.subjectId() + "\n" + request.actorPlayerId()
-                + "\n" + request.targetServer() + "\n" + request.command() + "\n" + request.requestedAt();
+        String canonical = request.requestId() + "\n" + request.subjectId() + "\n" + request.discordUserId()
+                + "\n" + request.actorPlayerId() + "\n" + request.targetServer()
+                + "\n" + request.command() + "\n" + request.requestedAt();
         try {
             byte[] digest = MessageDigest.getInstance("SHA-256")
                     .digest(canonical.getBytes(StandardCharsets.UTF_8));

@@ -51,6 +51,7 @@ public final class DiscordCommandBridgeCoordinator {
         CommandBridgeRequest request = new CommandBridgeRequest(
                 requestId,
                 resolved.subjectId(),
+                discordUserId,
                 resolved.actorPlayerId(),
                 targetServer,
                 command,

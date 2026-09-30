@@ -8,12 +8,14 @@ import java.util.UUID;
 import net.enthusia.staff.domain.commandbridge.CommandBridgeOutcome;
 import net.enthusia.staff.domain.commandbridge.CommandBridgeRequest;
 import net.enthusia.staff.domain.commandbridge.CommandBridgeResponse;
+import net.enthusia.staff.domain.moderation.DiscordUserId;
 import net.enthusia.staff.domain.moderation.ModerationSubjectId;
 import org.junit.jupiter.api.Test;
 
 class CommandBridgeWireCodecTest {
     private static final UUID REQUEST_ID = UUID.fromString("11111111-1111-1111-1111-111111111111");
     private static final UUID SUBJECT_ID = UUID.fromString("22222222-2222-2222-2222-222222222222");
+    private static final DiscordUserId DISCORD_ID = new DiscordUserId("123456789012345678");
     private static final UUID ACTOR_ID = UUID.fromString("33333333-3333-3333-3333-333333333333");
     private static final Instant NOW = Instant.parse("2026-09-30T19:00:00Z");
     private final CommandBridgeWireCodec codec = new CommandBridgeWireCodec();
@@ -21,7 +23,9 @@ class CommandBridgeWireCodecTest {
     @Test
     void roundTripsOnlyTheExplicitRequestShape() {
         CommandBridgeRequest request = request();
-        assertEquals(request, codec.decodeRequest(codec.encodeRequest(request)).orElseThrow());
+        String encoded = codec.encodeRequest(request);
+        assertTrue(encoded.contains("\"discordUserId\":\"" + DISCORD_ID + "\""));
+        assertEquals(request, codec.decodeRequest(encoded).orElseThrow());
     }
 
     @Test
@@ -51,6 +55,7 @@ class CommandBridgeWireCodecTest {
         return new CommandBridgeRequest(
                 REQUEST_ID,
                 new ModerationSubjectId(SUBJECT_ID),
+                DISCORD_ID,
                 ACTOR_ID,
                 "smp",
                 "list",

@@ -21,25 +21,39 @@ class CanonicalCommandBridgeLinkVerifierTest {
     private static final UUID ACTOR_ID = UUID.fromString("22222222-2222-2222-2222-222222222222");
     private static final UUID OTHER_ID = UUID.fromString("33333333-3333-3333-3333-333333333333");
     private static final DiscordUserId DISCORD_ID = new DiscordUserId("123456789012345678");
+    private static final DiscordUserId OTHER_DISCORD_ID = new DiscordUserId("223456789012345678");
 
     @Test
     void acceptsOnlyCurrentCanonicalMainOnTheSameLinkedSubject() {
         CanonicalCommandBridgeLinkVerifier verifier = verifier(subject(ACTOR_ID, SUBJECT_ID));
-        assertTrue(verifier.isCurrentLink(new ModerationSubjectId(SUBJECT_ID), ACTOR_ID));
-        assertFalse(verifier.isCurrentLink(new ModerationSubjectId(OTHER_ID), ACTOR_ID));
+        assertTrue(verifier.isCurrentLink(new ModerationSubjectId(SUBJECT_ID), DISCORD_ID, ACTOR_ID));
+        assertFalse(verifier.isCurrentLink(new ModerationSubjectId(OTHER_ID), DISCORD_ID, ACTOR_ID));
     }
 
     @Test
     void rejectsWhenMainAccountChangedOrDiscordLinkDisappeared() {
         CanonicalCommandBridgeLinkVerifier changedMain = verifier(subject(OTHER_ID, SUBJECT_ID));
-        assertFalse(changedMain.isCurrentLink(new ModerationSubjectId(SUBJECT_ID), ACTOR_ID));
+        assertFalse(changedMain.isCurrentLink(new ModerationSubjectId(SUBJECT_ID), DISCORD_ID, ACTOR_ID));
 
         ModerationSubject minecraftOnly = new ModerationSubject(
                 new ModerationSubjectId(SUBJECT_ID),
                 Set.of(new MinecraftIdentityRef(ACTOR_ID)),
                 Optional.of(new MainMinecraftAccount(ACTOR_ID, MainAccountSelectionSource.AUTOMATIC))
         );
-        assertFalse(verifier(minecraftOnly).isCurrentLink(new ModerationSubjectId(SUBJECT_ID), ACTOR_ID));
+        assertFalse(verifier(minecraftOnly).isCurrentLink(
+                new ModerationSubjectId(SUBJECT_ID), DISCORD_ID, ACTOR_ID));
+    }
+
+    @Test
+    void rejectsWhenOriginatingDiscordIdentityWasRemovedButAnotherRemains() {
+        ModerationSubject relinked = new ModerationSubject(
+                new ModerationSubjectId(SUBJECT_ID),
+                Set.of(new DiscordIdentityRef(OTHER_DISCORD_ID), new MinecraftIdentityRef(ACTOR_ID)),
+                Optional.of(new MainMinecraftAccount(ACTOR_ID, MainAccountSelectionSource.AUTOMATIC))
+        );
+
+        assertFalse(verifier(relinked).isCurrentLink(
+                new ModerationSubjectId(SUBJECT_ID), DISCORD_ID, ACTOR_ID));
     }
 
     @Test
@@ -47,7 +61,7 @@ class CanonicalCommandBridgeLinkVerifierTest {
         CanonicalCommandBridgeLinkVerifier verifier = new CanonicalCommandBridgeLinkVerifier(
                 playerId -> Optional.empty()
         );
-        assertFalse(verifier.isCurrentLink(new ModerationSubjectId(SUBJECT_ID), ACTOR_ID));
+        assertFalse(verifier.isCurrentLink(new ModerationSubjectId(SUBJECT_ID), DISCORD_ID, ACTOR_ID));
     }
 
     private static CanonicalCommandBridgeLinkVerifier verifier(ModerationSubject subject) {

@@ -18,6 +18,7 @@ import java.util.UUID;
 import java.util.logging.Logger;
 import javax.sql.DataSource;
 import net.enthusia.staff.domain.commandbridge.CommandBridgeOutcome;
+import net.enthusia.staff.domain.moderation.DiscordUserId;
 import net.enthusia.staff.domain.moderation.ModerationSubjectId;
 import net.enthusia.staff.domain.ports.CommandBridgeAuditStore;
 import net.enthusia.staff.persistence.JdbcCommandBridgeAuditStore;
@@ -34,6 +35,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 class CommandBridgeAuditIntegrationTest {
     private static final UUID REQUEST_ID = UUID.fromString("11111111-1111-1111-1111-111111111111");
     private static final UUID SUBJECT_ID = UUID.fromString("22222222-2222-2222-2222-222222222222");
+    private static final DiscordUserId DISCORD_ID = new DiscordUserId("123456789012345678");
     private static final UUID ACTOR_ID = UUID.fromString("33333333-3333-3333-3333-333333333333");
     private static final Instant NOW = Instant.parse("2026-09-30T19:00:00Z");
     private static final String FINGERPRINT = "a".repeat(64);
@@ -87,6 +89,7 @@ class CommandBridgeAuditIntegrationTest {
 
         String payload = requestPayload();
         assertTrue(payload.contains("\"commandName\":\"list\""));
+        assertTrue(payload.contains("\"discordUserId\":\"" + DISCORD_ID + "\""));
         assertFalse(payload.contains("password"));
         assertFalse(payload.contains("secret-value"));
     }
@@ -95,6 +98,7 @@ class CommandBridgeAuditIntegrationTest {
         return new CommandBridgeAuditStore.RequestAudit(
                 REQUEST_ID,
                 new ModerationSubjectId(SUBJECT_ID),
+                DISCORD_ID,
                 ACTOR_ID,
                 "smp",
                 "list",

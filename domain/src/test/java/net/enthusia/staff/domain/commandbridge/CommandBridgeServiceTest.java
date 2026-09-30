@@ -18,6 +18,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import net.enthusia.staff.domain.auth.StaffRank;
+import net.enthusia.staff.domain.moderation.DiscordUserId;
 import net.enthusia.staff.domain.moderation.ModerationSubjectId;
 import net.enthusia.staff.domain.ports.CommandBridgeAuditStore;
 import net.enthusia.staff.domain.ports.CommandBridgeAuthorityResolver;
@@ -27,6 +28,7 @@ import org.junit.jupiter.api.Test;
 class CommandBridgeServiceTest {
     private static final UUID REQUEST_ID = UUID.fromString("11111111-1111-1111-1111-111111111111");
     private static final UUID SUBJECT_ID = UUID.fromString("22222222-2222-2222-2222-222222222222");
+    private static final DiscordUserId DISCORD_ID = new DiscordUserId("123456789012345678");
     private static final UUID ACTOR_ID = UUID.fromString("33333333-3333-3333-3333-333333333333");
     private static final Instant NOW = Instant.parse("2026-09-30T19:00:00Z");
     private static final Clock CLOCK = Clock.fixed(NOW.plusSeconds(1), ZoneOffset.UTC);
@@ -162,6 +164,7 @@ class CommandBridgeServiceTest {
         CommandBridgeRequest changed = new CommandBridgeRequest(
                 REQUEST_ID,
                 new ModerationSubjectId(SUBJECT_ID),
+                DISCORD_ID,
                 ACTOR_ID,
                 "smp",
                 "LIST ",
@@ -178,7 +181,7 @@ class CommandBridgeServiceTest {
     ) {
         return new CommandBridgeService(
                 new CommandBridgePolicy(Set.of("smp"), List.of(LIST_RULE)),
-                (subject, actor) -> linked,
+                (subject, discord, actor) -> linked,
                 authority,
                 audit,
                 executor,
@@ -203,6 +206,7 @@ class CommandBridgeServiceTest {
         return new CommandBridgeRequest(
                 REQUEST_ID,
                 new ModerationSubjectId(SUBJECT_ID),
+                DISCORD_ID,
                 ACTOR_ID,
                 server,
                 command,

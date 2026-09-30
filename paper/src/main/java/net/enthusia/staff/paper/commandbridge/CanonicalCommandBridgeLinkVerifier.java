@@ -2,6 +2,7 @@ package net.enthusia.staff.paper.commandbridge;
 
 import java.util.Optional;
 import java.util.UUID;
+import net.enthusia.staff.domain.moderation.DiscordUserId;
 import net.enthusia.staff.domain.moderation.MainMinecraftAccount;
 import net.enthusia.staff.domain.moderation.ModerationSubject;
 import net.enthusia.staff.domain.moderation.ModerationSubjectId;
@@ -27,13 +28,18 @@ public final class CanonicalCommandBridgeLinkVerifier implements CommandBridgeLi
     }
 
     @Override
-    public boolean isCurrentLink(ModerationSubjectId subjectId, UUID actorPlayerId) {
-        if (subjectId == null || actorPlayerId == null) {
+    public boolean isCurrentLink(
+            ModerationSubjectId subjectId,
+            DiscordUserId discordUserId,
+            UUID actorPlayerId
+    ) {
+        if (subjectId == null || discordUserId == null || actorPlayerId == null) {
             return false;
         }
         return subjects.subjectForMinecraft(actorPlayerId)
                 .map(DiscordModerationPersistenceStore.VersionedSubject::subject)
                 .filter(subject -> subject.subjectId().equals(subjectId))
+                .filter(subject -> subject.discordUserIds().contains(discordUserId))
                 .filter(ModerationSubject::linkedAcrossPlatforms)
                 .flatMap(ModerationSubject::mainMinecraftAccount)
                 .map(MainMinecraftAccount::playerId)

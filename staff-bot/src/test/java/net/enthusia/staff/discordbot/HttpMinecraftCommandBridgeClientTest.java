@@ -17,6 +17,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import net.enthusia.staff.domain.commandbridge.CommandBridgeOutcome;
 import net.enthusia.staff.domain.commandbridge.CommandBridgeRequest;
 import net.enthusia.staff.domain.commandbridge.CommandBridgeResponse;
+import net.enthusia.staff.domain.moderation.DiscordUserId;
 import net.enthusia.staff.domain.moderation.ModerationSubjectId;
 import net.enthusia.staff.protocol.CommandBridgeHttpSigning;
 import net.enthusia.staff.protocol.CommandBridgeWireCodec;
@@ -26,6 +27,7 @@ class HttpMinecraftCommandBridgeClientTest {
     private static final String CREDENTIAL = "command-bridge-test-secret";
     private static final String NONCE = "0123456789abcdef0123456789abcdef";
     private static final Instant NOW = Instant.parse("2026-09-30T19:00:00Z");
+    private static final DiscordUserId DISCORD_ID = new DiscordUserId("123456789012345678");
     private static final URI ENDPOINT = URI.create("http://127.0.0.1:8772/v1/discord-command");
     private static final CommandBridgeWireCodec CODEC = new CommandBridgeWireCodec();
 
@@ -120,6 +122,7 @@ class HttpMinecraftCommandBridgeClientTest {
         return new CommandBridgeRequest(
                 UUID.fromString("11111111-1111-1111-1111-111111111111"),
                 new ModerationSubjectId(UUID.fromString("22222222-2222-2222-2222-222222222222")),
+                DISCORD_ID,
                 UUID.fromString("33333333-3333-3333-3333-333333333333"),
                 server,
                 "list",

@@ -14,6 +14,7 @@ import java.util.UUID;
 import net.enthusia.staff.domain.commandbridge.CommandBridgeOutcome;
 import net.enthusia.staff.domain.commandbridge.CommandBridgeRequest;
 import net.enthusia.staff.domain.commandbridge.CommandBridgeResponse;
+import net.enthusia.staff.domain.moderation.DiscordUserId;
 import net.enthusia.staff.domain.moderation.ModerationSubjectId;
 
 /** Strict versioned JSON wire codec for signed command requests and safe responses. */
@@ -23,7 +24,8 @@ public final class CommandBridgeWireCodec {
     private static final int MAX_RESPONSE_BYTES = 8_192;
     private static final ObjectMapper JSON = new ObjectMapper();
     private static final Set<String> REQUEST_FIELDS = Set.of(
-            "version", "requestId", "subjectId", "actorPlayerId", "targetServer", "command", "requestedAt"
+            "version", "requestId", "subjectId", "discordUserId", "actorPlayerId",
+            "targetServer", "command", "requestedAt"
     );
     private static final Set<String> RESPONSE_FIELDS = Set.of(
             "version", "outcome", "message", "output", "truncated", "redacted"
@@ -37,6 +39,7 @@ public final class CommandBridgeWireCodec {
         body.put("version", VERSION);
         body.put("requestId", request.requestId().toString());
         body.put("subjectId", request.subjectId().toString());
+        body.put("discordUserId", request.discordUserId().toString());
         body.put("actorPlayerId", request.actorPlayerId().toString());
         body.put("targetServer", request.targetServer());
         body.put("command", request.command());
@@ -56,6 +59,7 @@ public final class CommandBridgeWireCodec {
             return Optional.of(new CommandBridgeRequest(
                     UUID.fromString(text(root, "requestId")),
                     new ModerationSubjectId(UUID.fromString(text(root, "subjectId"))),
+                    new DiscordUserId(text(root, "discordUserId")),
                     UUID.fromString(text(root, "actorPlayerId")),
                     text(root, "targetServer"),
                     text(root, "command"),

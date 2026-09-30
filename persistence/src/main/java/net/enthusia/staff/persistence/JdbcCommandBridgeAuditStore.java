@@ -163,6 +163,7 @@ public final class JdbcCommandBridgeAuditStore implements CommandBridgeAuditStor
         ObjectNode payload = json.createObjectNode();
         payload.put("requestId", request.requestId().toString());
         payload.put("subjectId", request.subjectId().toString());
+        payload.put("discordUserId", request.discordUserId().toString());
         payload.put("actorPlayerId", request.actorPlayerId().toString());
         payload.put("targetServer", request.targetServer());
         payload.put("commandName", request.commandName());
