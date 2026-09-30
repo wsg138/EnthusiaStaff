@@ -21,6 +21,7 @@ import net.enthusia.staff.domain.website.WebsiteAppealView;
 import net.enthusia.staff.domain.website.WebsiteModerationException;
 
 final class JdbcWebsiteAppealLifecycleStore {
+    private static final int EXPECTED_UPDATE_COUNT = 1;
     private static final String OPEN = "OPEN";
     private static final String EDIT = "EDIT";
     private static final String CLAIM = "CLAIM";
@@ -476,7 +477,7 @@ final class JdbcWebsiteAppealLifecycleStore {
     }
 
     private static void requireSingleUpdate(int updated, String message) throws SQLException {
-        if (updated != 1) throw new SQLException(message);
+        if (updated != EXPECTED_UPDATE_COUNT) throw new SQLException(message);
     }
 
     private static void rollback(Connection connection, Exception exception) {
