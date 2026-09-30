@@ -29,6 +29,7 @@ import net.enthusia.staff.paper.inventory.InventoryRecoveryGuard;
 import net.enthusia.staff.paper.report.ReportEvidenceMaintenance;
 import net.enthusia.staff.paper.staff.StaffModeManager;
 import net.enthusia.staff.paper.staff.StaffModeWorldInteractionListener;
+import net.enthusia.staff.paper.staff.StaffStatePresentation;
 import net.enthusia.staff.paper.staff.StaffToolDispatcher;
 import net.enthusia.staff.paper.staff.StaffToolTransferListener;
 import net.enthusia.staff.paper.tester.CheatTesterCommand;
@@ -76,6 +77,11 @@ record PaperRuntimeComponents(
         StaffModeManager staffMode = createStaffModeManager(dependencies);
         DefaultStaffVisibilityService visibility = createVisibilityService(dependencies);
         VanishManager vanish = createVanishManager(dependencies, staffMode, visibility);
+        StaffStatePresentation statePresentation = new StaffStatePresentation(
+                dependencies.environment().plugin(), staffMode, vanish
+        );
+        registerListener(dependencies.environment().plugin(), statePresentation);
+        statePresentation.start();
         registerOperationalListeners(dependencies, vanish);
         InventoryOperationContext inventoryContext = new InventoryOperationContext(
                 dependencies.environment().clock(),
@@ -255,6 +261,7 @@ record PaperRuntimeComponents(
                 dependencies.environment().workers()
         );
         registerListener(plugin, manager);
+        FakeBaseCommand fakeBaseHandler = new FakeBaseCommand(plugin, fakeBases);
         return manager;
     }
 
