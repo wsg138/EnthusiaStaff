@@ -1,3 +1,4 @@
+import org.gradle.api.plugins.quality.PmdExtension
 import org.gradle.api.tasks.SourceSetContainer
 import org.gradle.testing.jacoco.tasks.JacocoReport
 
@@ -22,10 +23,19 @@ allprojects {
 subprojects {
     apply(plugin = "java-library")
     apply(plugin = "jacoco")
+    apply(plugin = "pmd")
 
     extensions.configure<JavaPluginExtension> {
         toolchain.languageVersion.set(JavaLanguageVersion.of(21))
         withSourcesJar()
+    }
+
+    extensions.configure<PmdExtension> {
+        toolVersion = "6.55.0"
+        ruleSetFiles = rootProject.files("ruleset.xml")
+        ruleSets = emptyList()
+        isConsoleOutput = true
+        isIgnoreFailures = false
     }
 
     tasks.withType<JavaCompile>().configureEach {
