@@ -24,6 +24,8 @@ final class WebsiteAppealWorkflowEndpoint {
     private static final int MAX_APPEAL_REASON_LENGTH = 1_000;
     private static final int MIN_DECISION_NOTE_LENGTH = 3;
     private static final int MAX_DECISION_NOTE_LENGTH = 1_000;
+    private static final String EXPECTED_VERSION = "expectedVersion";
+    private static final String IDEMPOTENCY_KEY = "idempotencyKey";
     private static final Set<String> REVIEWER_STATES = Set.of(
             "ALL",
             "OPEN",
@@ -75,7 +77,7 @@ final class WebsiteAppealWorkflowEndpoint {
         String accountId = decoder.uuidText(input, "accountId");
         String username = decoder.minecraftUsername(input, "username");
         String reason = appealReason(input);
-        String idempotencyKey = decoder.text(input, "idempotencyKey", 128);
+        String idempotencyKey = decoder.text(input, IDEMPOTENCY_KEY, 128);
         WebsiteAppealSubmission submission = store.submitAppeal(
                 punishmentId,
                 accountId,
@@ -93,13 +95,13 @@ final class WebsiteAppealWorkflowEndpoint {
 
     Object edit(UUID appealId, ObjectNode input) {
         String accountId = decoder.uuidText(input, "accountId");
-        int expectedVersion = decoder.integer(input, "expectedVersion", 1, Integer.MAX_VALUE);
+        int expectedVersion = decoder.integer(input, EXPECTED_VERSION, 1, Integer.MAX_VALUE);
         WebsiteAppealMutation mutation = store.editAppeal(
                 appealId,
                 expectedVersion,
                 accountId,
                 appealReason(input),
-                decoder.text(input, "idempotencyKey", 128),
+                decoder.text(input, IDEMPOTENCY_KEY, 128),
                 clock.instant()
         );
         return mutationResponse(mutation);
@@ -110,10 +112,10 @@ final class WebsiteAppealWorkflowEndpoint {
         requireReviewAccess(reviewer);
         WebsiteAppealMutation mutation = store.claimAppeal(
                 appealId,
-                decoder.integer(input, "expectedVersion", 1, Integer.MAX_VALUE),
+                decoder.integer(input, EXPECTED_VERSION, 1, Integer.MAX_VALUE),
                 reviewer.id(),
                 reviewer.rank().name(),
-                decoder.text(input, "idempotencyKey", 128),
+                decoder.text(input, IDEMPOTENCY_KEY, 128),
                 clock.instant()
         );
         return mutationResponse(mutation);
@@ -128,11 +130,11 @@ final class WebsiteAppealWorkflowEndpoint {
         }
         WebsiteAppealMutation mutation = store.reopenAppeal(
                 appealId,
-                decoder.integer(input, "expectedVersion", 1, Integer.MAX_VALUE),
+                decoder.integer(input, EXPECTED_VERSION, 1, Integer.MAX_VALUE),
                 reviewer.id(),
                 reviewer.rank().name(),
                 note,
-                decoder.text(input, "idempotencyKey", 128),
+                decoder.text(input, IDEMPOTENCY_KEY, 128),
                 clock.instant()
         );
         return mutationResponse(mutation);
@@ -163,12 +165,12 @@ final class WebsiteAppealWorkflowEndpoint {
         Actor reviewer = reviewer(input);
         requireReviewAccess(reviewer);
         String decision = decoder.text(input, "decision", 32);
-        int expectedVersion = decoder.integer(input, "expectedVersion", 1, Integer.MAX_VALUE);
+        int expectedVersion = decoder.integer(input, EXPECTED_VERSION, 1, Integer.MAX_VALUE);
         String note = decoder.text(input, "note", MAX_DECISION_NOTE_LENGTH).trim();
         if (note.length() < MIN_DECISION_NOTE_LENGTH) {
             throw badRequest("INVALID_DECISION_NOTE", "The appeal decision note is too short");
         }
-        String idempotencyKey = decoder.text(input, "idempotencyKey", 128);
+        String idempotencyKey = decoder.text(input, IDEMPOTENCY_KEY, 128);
         WebsiteAppealDecisionPreparation preparation = store.prepareAppealDecision(
                 appealId,
                 expectedVersion,
