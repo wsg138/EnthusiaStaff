@@ -40,6 +40,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 class WebsiteAppealWorkflowIntegrationTest {
     private static final Instant NOW = Instant.parse("2026-08-06T12:00:00Z");
     private static final String OPEN_STATE = "OPEN";
+    private static final String DENY_DECISION = "deny";
     private static final String PLAYER_NAME = "AppealPlayer";
     private static final String ACCOUNT_ID = uuid(801).toString();
     private static final UUID REVIEWER_ID = uuid(901);
@@ -133,7 +134,7 @@ class WebsiteAppealWorkflowIntegrationTest {
         WebsiteModerationException stale = assertThrows(
                 WebsiteModerationException.class,
                 () -> store.prepareAppealDecision(
-                        appealId, 1, "deny",
+                        appealId, 1, DENY_DECISION,
                         "This stale decision must not be accepted.",
                         REVIEWER_ID, REVIEWER_RANK, "decision-stale-1", NOW.plusSeconds(8)
                 )
@@ -182,19 +183,19 @@ class WebsiteAppealWorkflowIntegrationTest {
             ).appeal().appealId();
 
             assertError("APPEAL_NOT_CLAIMED", () -> store.prepareAppealDecision(
-                    appealId, 1, "deny", "Decision without a claim is forbidden.",
+                    appealId, 1, DENY_DECISION, "Decision without a claim is forbidden.",
                     REVIEWER_ID, REVIEWER_RANK, "decision-no-claim", NOW.plusSeconds(2)
             ));
 
             WebsiteAppealMutation claimed = claim(store, appealId, 1, "claim-guard-owner", 3);
             assertError("APPEAL_CLAIM_OWNED_BY_OTHER", () -> store.prepareAppealDecision(
-                    appealId, claimed.appeal().version(), "deny",
+                    appealId, claimed.appeal().version(), DENY_DECISION,
                     "Another reviewer cannot decide an owned claim.",
                     OTHER_REVIEWER_ID, REVIEWER_RANK, "decision-other-reviewer", NOW.plusSeconds(4)
             ));
 
             WebsiteAppealDecisionPreparation decided = store.prepareAppealDecision(
-                    appealId, claimed.appeal().version(), "deny",
+                    appealId, claimed.appeal().version(), DENY_DECISION,
                     "The claiming reviewer can record the outcome.",
                     REVIEWER_ID, REVIEWER_RANK, "decision-claim-owner", NOW.plusSeconds(5)
             );
@@ -300,13 +301,13 @@ class WebsiteAppealWorkflowIntegrationTest {
             WebsiteAppealMutation firstClaim = claim(store, firstAppeal, 1, "claim-scope-1", 3);
             WebsiteAppealMutation secondClaim = claim(store, secondAppeal, 1, "claim-scope-2", 4);
             WebsiteAppealDecisionPreparation firstDecision = store.prepareAppealDecision(
-                    firstAppeal, firstClaim.appeal().version(), "deny",
+                    firstAppeal, firstClaim.appeal().version(), DENY_DECISION,
                     "The first exact appeal is denied after review.",
                     REVIEWER_ID, REVIEWER_RANK, "shared-reviewer-decision-key",
                     NOW.plusSeconds(5)
             );
             WebsiteAppealDecisionPreparation secondDecision = store.prepareAppealDecision(
-                    secondAppeal, secondClaim.appeal().version(), "deny",
+                    secondAppeal, secondClaim.appeal().version(), DENY_DECISION,
                     "The second exact appeal is denied independently.",
                     REVIEWER_ID, REVIEWER_RANK, "shared-reviewer-decision-key",
                     NOW.plusSeconds(6)
