@@ -3,6 +3,9 @@ package net.enthusia.staff.paper.command;
 import java.util.function.Supplier;
 import net.enthusia.staff.paper.integration.RoseChatIntegration;
 import net.enthusia.staff.paper.presentation.StaffMessageStyle;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.format.NamedTextColor;
+import net.kyori.adventure.text.format.TextDecoration;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
@@ -55,7 +58,17 @@ public final class StaffChatCommand implements CommandExecutor {
             return true;
         }
         String channel = loaded.currentChannel(player.getUniqueId()).orElse("unknown");
-        player.sendMessage(StaffMessageStyle.success("RoseChat channel switched to " + channel + '.'));
+        player.sendMessage(channelChanged(channel));
         return true;
+    }
+
+    private static Component channelChanged(String channel) {
+        return Component.text("STAFF CHAT", NamedTextColor.AQUA, TextDecoration.BOLD)
+                .append(Component.text("  •  ", NamedTextColor.DARK_GRAY))
+                .append(Component.text("Now speaking in ", NamedTextColor.GRAY))
+                .append(Component.text(channel, NamedTextColor.GREEN, TextDecoration.BOLD))
+                .append(Component.text("  •  ", NamedTextColor.DARK_GRAY))
+                .append(Component.text("/staffchat", NamedTextColor.AQUA))
+                .append(Component.text(" to switch again", NamedTextColor.GRAY));
     }
 }
