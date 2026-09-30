@@ -147,7 +147,7 @@ def stage_provider(
         sftp.put(str(local_jar), incoming)
         verify_remote_sha(sftp, incoming, expected_sha)
         sftp.rename(incoming, target)
-    except Exception:
+    except (Exception, SystemExit):
         try:
             sftp.remove(incoming)
         except (FileNotFoundError, OSError):
