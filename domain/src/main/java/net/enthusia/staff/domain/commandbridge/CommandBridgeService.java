@@ -53,23 +53,32 @@ public final class CommandBridgeService {
             return internalError();
         }
         CommandBridgeResponse repeated = repeated(claim);
-        if (repeated != null) {
-            return repeated;
-        }
-        return processClaimed(request, decision);
+        return repeated == null ? processClaimed(request, decision) : repeated;
     }
 
     private CommandBridgeResponse processClaimed(CommandBridgeRequest request, Decision decision) {
         if (!decision.accepted()) {
             return finish(request, rejection(decision), false);
         }
-        if (!links.isCurrentLink(request.subjectId(), request.actorPlayerId())) {
-            return finish(request, response(CommandBridgeOutcome.UNLINKED_ACTOR, "Linked actor is no longer valid."), false);
-        }
-        Optional<CommandBridgeAuthorityResolver.Snapshot> current = authority.current(
-                request.actorPlayerId(), decision.rule().requiredPermission());
-        if (current.isEmpty() || !authorized(current.orElseThrow(), decision.rule())) {
-            return finish(request, response(CommandBridgeOutcome.UNAUTHORIZED_ACTOR, "Current Minecraft authority rejected the request."), false);
+        try {
+            if (!links.isCurrentLink(request.subjectId(), request.actorPlayerId())) {
+                return finish(request, response(
+                        CommandBridgeOutcome.UNLINKED_ACTOR,
+                        "Linked actor is no longer valid."
+                ), false);
+            }
+            Optional<CommandBridgeAuthorityResolver.Snapshot> current = authority.current(
+                    request.actorPlayerId(),
+                    decision.rule().requiredPermission()
+            );
+            if (current.isEmpty() || !authorized(current.orElseThrow(), decision.rule())) {
+                return finish(request, response(
+                        CommandBridgeOutcome.UNAUTHORIZED_ACTOR,
+                        "Current Minecraft authority rejected the request."
+                ), false);
+            }
+        } catch (RuntimeException failure) {
+            return finish(request, internalError(), false);
         }
         return execute(request, decision.normalizedCommand());
     }
@@ -79,21 +88,25 @@ public final class CommandBridgeService {
         try {
             execution = executor.execute(normalizedCommand);
         } catch (RuntimeException failure) {
-            return finish(request, response(CommandBridgeOutcome.EXECUTION_UNKNOWN,
-                    "Execution outcome is unknown; the command was not retried."), true);
+            return finish(request, response(
+                    CommandBridgeOutcome.EXECUTION_UNKNOWN,
+                    "Execution outcome is unknown; the command was not retried."
+            ), true);
         }
         if (!execution.accepted()) {
-            return finish(request, response(CommandBridgeOutcome.EXECUTION_REJECTED, "Minecraft rejected command execution."), true);
+            return finish(request, response(
+                    CommandBridgeOutcome.EXECUTION_REJECTED,
+                    "Minecraft rejected command execution."
+            ), true);
         }
         CommandBridgeOutputSanitizer.Sanitized output = sanitizer.sanitize(execution.output());
-        CommandBridgeResponse success = new CommandBridgeResponse(
+        return finish(request, new CommandBridgeResponse(
                 CommandBridgeOutcome.SUCCESS,
                 "Command executed.",
                 output.text(),
                 output.truncated(),
                 output.redacted()
-        );
-        return finish(request, success, true);
+        ), true);
     }
 
     private CommandBridgeResponse finish(
@@ -123,7 +136,10 @@ public final class CommandBridgeService {
         return switch (decision.status()) {
             case MALFORMED_COMMAND -> response(CommandBridgeOutcome.MALFORMED_COMMAND, "Command format is invalid.");
             case UNSUPPORTED_COMMAND -> response(CommandBridgeOutcome.UNSUPPORTED_COMMAND, "Command is not allowlisted.");
-            case COMMAND_POLICY_REJECTED -> response(CommandBridgeOutcome.COMMAND_POLICY_REJECTED, "Command arguments exceed policy.");
+            case COMMAND_POLICY_REJECTED -> response(
+                    CommandBridgeOutcome.COMMAND_POLICY_REJECTED,
+                    "Command arguments exceed policy."
+            );
             case INVALID_SERVER -> response(CommandBridgeOutcome.INVALID_SERVER, "Target server is not allowlisted.");
             case ACCEPTED -> throw new IllegalStateException("accepted request is not a rejection");
         };
