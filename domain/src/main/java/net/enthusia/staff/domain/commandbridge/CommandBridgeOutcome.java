@@ -1,0 +1,16 @@
+package net.enthusia.staff.domain.commandbridge;
+
+public enum CommandBridgeOutcome {
+    SUCCESS,
+    MALFORMED_COMMAND,
+    UNSUPPORTED_COMMAND,
+    COMMAND_POLICY_REJECTED,
+    INVALID_SERVER,
+    UNLINKED_ACTOR,
+    UNAUTHORIZED_ACTOR,
+    EXECUTION_REJECTED,
+    EXECUTION_UNKNOWN,
+    DUPLICATE_REQUEST,
+    REQUEST_ID_CONFLICT,
+    INTERNAL_ERROR
+}
