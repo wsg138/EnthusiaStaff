@@ -23,7 +23,7 @@ final class VelocityVerificationRenderer {
             NetworkVerificationState.Cutover cutover
     ) {
         List<Component> lines = new ArrayList<>();
-        lines.add(header("EnthusiaStaff • Network Verify"));
+        lines.add(VelocityMessageStyle.header("EnthusiaStaff • Network Verify"));
         lines.add(modeLine(snapshot.mode()));
         appendCore(lines, snapshot);
         appendBackends(lines, snapshot, backendReports);
@@ -35,18 +35,18 @@ final class VelocityVerificationRenderer {
     }
 
     private static void appendCore(List<Component> lines, NetworkVerificationState.Snapshot snapshot) {
-        lines.add(section("Core"));
-        lines.add(status(snapshot.runtime() != null, "MariaDB", "connected", "runtime unavailable"));
+        lines.add(VelocityMessageStyle.section("Core"));
+        lines.add(status(snapshot.runtime() != null, "MariaDB", "Connected", "Runtime unavailable"));
         int expected = snapshot.expectedBackends().size();
         int connected = snapshot.connectedBackends().size();
         boolean allConnected = expected > 0 && snapshot.connectedBackends().containsAll(snapshot.expectedBackends());
         lines.add(status(
                 allConnected,
                 "Velocity channel",
-                connected + "/" + expected + " backends",
+                connected + "/" + expected + " connected",
                 connected + "/" + expected + " backends connected"
         ));
-        lines.add(status(snapshot.networkIdentityReady(), "Protected identity", "enabled", "not ready"));
+        lines.add(status(snapshot.networkIdentityReady(), "Protected identity", "Enabled", "Not ready"));
     }
 
     private static void appendBackends(
@@ -54,9 +54,9 @@ final class VelocityVerificationRenderer {
             NetworkVerificationState.Snapshot snapshot,
             Map<String, BackendVerificationReport> reports
     ) {
-        lines.add(section("Backends"));
+        lines.add(VelocityMessageStyle.section("Backends"));
         if (snapshot.expectedBackends().isEmpty()) {
-            lines.add(warning("Backends", "none configured"));
+            lines.add(warning("Backends", "Disabled", "None configured"));
             return;
         }
         snapshot.expectedBackends().stream().sorted().forEach(backend ->
@@ -69,16 +69,16 @@ final class VelocityVerificationRenderer {
             Map<String, BackendVerificationReport> reports
     ) {
         if (!connected.contains(backend)) {
-            return critical(backend, "not authenticated / connected");
+            return critical(backend, "Offline", "Not authenticated / connected");
         }
         BackendVerificationReport report = reports.get(backend);
         if (report == null) {
-            return warning(backend, "connected, but no fresh verification report");
+            return warning(backend, "Unverified", "Connected, but no fresh verification report");
         }
         if (!report.storageReady()) {
-            return critical(backend, "Staff storage is not ready");
+            return critical(backend, "Failed", "Staff storage is not ready");
         }
-        return pass(backend, report.operationalMode() + " / report fresh");
+        return pass(backend, "Healthy", report.operationalMode() + " / report fresh");
     }
 
     private static void appendProviders(
@@ -86,9 +86,9 @@ final class VelocityVerificationRenderer {
             Set<String> expectedBackends,
             Map<String, BackendVerificationReport> reports
     ) {
-        lines.add(section("Provider APIs"));
+        lines.add(VelocityMessageStyle.section("Provider APIs"));
         if (expectedBackends.isEmpty()) {
-            lines.add(warning("Provider APIs", "unavailable until a backend is configured"));
+            lines.add(warning("Provider APIs", "Unavailable", "No backend configured"));
             return;
         }
         IMPORTANT_PROVIDERS.forEach(provider -> lines.add(providerLine(provider, expectedBackends, reports)));
@@ -102,13 +102,14 @@ final class VelocityVerificationRenderer {
     ) {
         ProviderSummary summary = providerSummary(provider, expected, reports);
         if (summary.presentCount() == 0 && summary.problems().isEmpty()) {
-            return disabled(provider, "optional / not installed on connected backends");
+            return disabled(provider, "Optional / not installed on connected backends");
         }
         if (summary.problems().isEmpty()) {
-            return pass(provider, summary.passCount() + " backend(s) healthy");
+            return pass(provider, "Healthy", summary.passCount() + " backend(s) healthy");
         }
         return warning(
                 provider,
+                "Warning",
                 summary.passCount() + "/" + summary.presentCount() + " healthy; " + summary.problems().getFirst()
         );
     }
@@ -145,29 +146,23 @@ final class VelocityVerificationRenderer {
             List<Component> lines,
             NetworkVerificationState.Snapshot snapshot
     ) {
-        lines.add(section("Discord & Website"));
-        lines.add(status(
-                snapshot.discordWebhookReady(),
-                "Discord webhooks",
-                "delivery worker running",
-                "delivery worker unavailable"
-        ));
-        lines.add(status(
-                snapshot.websiteBridgeReady(),
-                "Website bridge",
-                "private bridge listening",
-                "private bridge unavailable"
-        ));
+        lines.add(VelocityMessageStyle.section("Discord & Website"));
+        lines.add(snapshot.discordWebhookReady()
+                ? pass("Discord webhooks", "Enabled", "Durable delivery worker running")
+                : warning("Discord webhooks", "Disabled", "Durable delivery worker unavailable"));
+        lines.add(snapshot.websiteBridgeReady()
+                ? pass("Website bridge", "Enabled", "Private bridge listening")
+                : warning("Website bridge", "Disabled", "Private bridge unavailable"));
     }
 
     private static void appendCutover(List<Component> lines, NetworkVerificationState.Cutover cutover) {
-        lines.add(section("Migration / Cutover"));
+        lines.add(VelocityMessageStyle.section("Migration / Cutover"));
         lines.add(cutover.evidencePresent()
-                ? pass("Shadow evidence", "durable comparison evidence found")
-                : warning("Shadow evidence", "no complete evidence available"));
+                ? pass("Shadow evidence", "Ready", "Durable comparison evidence found")
+                : warning("Shadow evidence", "Pending", "No complete evidence available"));
         lines.add(cutover.allowed()
-                ? pass("Cutover gate", "all current blockers cleared")
-                : warning("Cutover gate", cutover.blockers().size() + " blocker(s)"));
+                ? pass("Cutover gate", "Ready", "All current blockers cleared")
+                : warning("Cutover gate", "Gated", cutover.blockers().size() + " blocker(s)"));
     }
 
     private static void appendConclusion(
@@ -186,7 +181,7 @@ final class VelocityVerificationRenderer {
         if (blockers.isEmpty()) {
             return;
         }
-        lines.add(section("Why not ACTIVE"));
+        lines.add(VelocityMessageStyle.section("Why not ACTIVE"));
         int shown = Math.min(MAX_BLOCKERS_SHOWN, blockers.size());
         for (int index = 0; index < shown; index++) {
             lines.add(Component.text("  " + (index + 1) + ". ", NamedTextColor.RED)
@@ -278,62 +273,44 @@ final class VelocityVerificationRenderer {
     }
 
     private static Component modeLine(OperationalMode mode) {
-        NamedTextColor color = switch (mode) {
-            case ACTIVE -> NamedTextColor.GREEN;
-            case SHADOW_MIGRATION -> NamedTextColor.YELLOW;
-            case DEGRADED, READ_ONLY_FAILURE -> NamedTextColor.RED;
-            default -> NamedTextColor.GOLD;
+        VelocityMessageStyle.Tone tone = switch (mode) {
+            case ACTIVE -> VelocityMessageStyle.Tone.SUCCESS;
+            case SHADOW_MIGRATION -> VelocityMessageStyle.Tone.WARNING;
+            case DEGRADED, READ_ONLY_FAILURE -> VelocityMessageStyle.Tone.ERROR;
+            default -> VelocityMessageStyle.Tone.WARNING;
         };
-        return Component.text("Mode: ", NamedTextColor.GRAY)
-                .append(Component.text(mode.name(), color, TextDecoration.BOLD));
-    }
-
-    private static Component header(String value) {
-        return Component.text("──────── ", NamedTextColor.DARK_GRAY)
-                .append(Component.text(value, NamedTextColor.AQUA, TextDecoration.BOLD))
-                .append(Component.text(" ────────", NamedTextColor.DARK_GRAY));
-    }
-
-    private static Component section(String value) {
-        return Component.text("▸ ", NamedTextColor.GOLD)
-                .append(Component.text(value, NamedTextColor.YELLOW, TextDecoration.BOLD));
+        return VelocityMessageStyle.statusRow(
+                "Mode",
+                VelocityMessageStyle.displayMode(mode),
+                "Velocity authority",
+                tone
+        );
     }
 
     private static Component status(boolean healthy, String label, String passDetail, String failDetail) {
-        return healthy ? pass(label, passDetail) : critical(label, failDetail);
+        return healthy
+                ? pass(label, "Healthy", passDetail)
+                : critical(label, "Failed", failDetail);
     }
 
-    private static Component pass(String label, String detail) {
-        return line("✔", NamedTextColor.GREEN, label, detail, NamedTextColor.GRAY);
+    private static Component pass(String label, String status, String detail) {
+        return VelocityMessageStyle.statusRow(label, status, detail, VelocityMessageStyle.Tone.SUCCESS);
     }
 
-    private static Component warning(String label, String detail) {
-        return line("⚠", NamedTextColor.YELLOW, label, detail, NamedTextColor.GRAY);
+    private static Component warning(String label, String status, String detail) {
+        return VelocityMessageStyle.statusRow(label, status, detail, VelocityMessageStyle.Tone.WARNING);
     }
 
     private static Component disabled(String label, String detail) {
-        return line("○", NamedTextColor.DARK_GRAY, label, detail, NamedTextColor.DARK_GRAY);
+        return VelocityMessageStyle.statusRow(label, "Optional", detail, VelocityMessageStyle.Tone.MUTED);
     }
 
-    private static Component critical(String label, String detail) {
-        return line("✖", NamedTextColor.RED, label, detail, NamedTextColor.RED);
+    private static Component critical(String label, String status, String detail) {
+        return VelocityMessageStyle.statusRow(label, status, detail, VelocityMessageStyle.Tone.ERROR);
     }
 
     private static Component note(String label, String detail) {
-        return line("•", NamedTextColor.GRAY, label, detail, NamedTextColor.DARK_GRAY);
-    }
-
-    private static Component line(
-            String symbol,
-            NamedTextColor symbolColor,
-            String label,
-            String detail,
-            NamedTextColor detailColor
-    ) {
-        return Component.text("  " + symbol + " ", symbolColor)
-                .append(Component.text(label, NamedTextColor.WHITE))
-                .append(Component.text(" — ", NamedTextColor.DARK_GRAY))
-                .append(Component.text(shorten(detail), detailColor));
+        return VelocityMessageStyle.statusRow(label, "Info", detail, VelocityMessageStyle.Tone.MUTED);
     }
 
     private static String shorten(String value) {

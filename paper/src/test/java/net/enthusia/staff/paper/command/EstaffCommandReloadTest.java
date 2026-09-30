@@ -13,6 +13,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import net.enthusia.staff.domain.OperationalMode;
 import net.enthusia.staff.paper.RuntimeHealth;
 import net.enthusia.staff.paper.config.reload.ConfigurationReloadResult;
+import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.TextComponent;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
@@ -148,11 +149,11 @@ class EstaffCommandReloadTest {
 
         assertEquals(List.of(
                 "Rejected",
-                "- one",
-                "- two",
-                "- three",
-                "- four",
-                "- five",
+                "  • one",
+                "  • two",
+                "  • three",
+                "  • four",
+                "  • five",
                 "Additional sanitized reload details were written to the server log."
         ), messages);
     }
@@ -194,7 +195,10 @@ class EstaffCommandReloadTest {
 
         command.onCommand(sender(Map.of("enthusiastaff.verify", true), messages), COMMAND, "estaff", new String[]{"verify"});
 
-        assertEquals(List.of("EnthusiaStaff mode: DEGRADED", "DISABLED alerts: waiting"), messages);
+        assertEquals(List.of(
+                "EnthusiaStaff • DEGRADED",
+                "  Alerts  Disabled — waiting"
+        ), messages);
     }
 
     @Test
@@ -207,7 +211,7 @@ class EstaffCommandReloadTest {
                 EstaffCommand.ReloadDispatcher.immediate(),
                 () -> {
                     verified.set(true);
-                    return List.of("PASS full verification");
+                    return List.of(Component.text("PASS full verification"));
                 }
         );
 
@@ -229,7 +233,10 @@ class EstaffCommandReloadTest {
                 health(),
                 () -> result(ConfigurationReloadResult.Outcome.NO_CHANGES, "unused", List.of(), false),
                 EstaffCommand.ReloadDispatcher.immediate(),
-                () -> List.of("PASS command registration", "WARNING staged provider checks remain required")
+                () -> List.of(
+                        Component.text("PASS command registration"),
+                        Component.text("WARNING staged provider checks remain required")
+                )
         );
 
         command.onCommand(
@@ -354,7 +361,14 @@ class EstaffCommandReloadTest {
 
     private static String messageText(Object value) {
         if (value instanceof TextComponent component) {
-            return component.content();
+            StringBuilder text = new StringBuilder(component.content());
+            component.children().forEach(child -> text.append(messageText(child)));
+            return text.toString();
+        }
+        if (value instanceof Component component) {
+            StringBuilder text = new StringBuilder();
+            component.children().forEach(child -> text.append(messageText(child)));
+            return text.toString();
         }
         return String.valueOf(value);
     }

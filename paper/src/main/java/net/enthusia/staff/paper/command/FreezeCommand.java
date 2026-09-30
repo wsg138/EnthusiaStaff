@@ -1,5 +1,6 @@
 package net.enthusia.staff.paper.command;
 
+import net.enthusia.staff.paper.presentation.StaffMessageStyle;
 import java.time.Clock;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -148,7 +149,7 @@ public final class FreezeCommand implements CommandExecutor, TabCompleter {
         }
         OperationalMode currentMode = mode.get();
         if (currentMode != OperationalMode.ACTIVE) {
-            sender.sendMessage(Component.text("Freeze changes are disabled while moderation is " + currentMode + '.'));
+            sender.sendMessage(StaffMessageStyle.style(Component.text("Freeze changes are disabled while moderation is " + currentMode + '.')));
             return true;
         }
         return routeChange(sender, release, arguments);
@@ -160,7 +161,7 @@ public final class FreezeCommand implements CommandExecutor, TabCompleter {
         }
         if (arguments[0].equalsIgnoreCase("status")) {
             if (arguments.length != STATUS_ARGUMENT_COUNT) {
-                sender.sendMessage(Component.text("Usage: /freeze status <player|uuid>"));
+                sender.sendMessage(StaffMessageStyle.style(Component.text("Usage: /freeze status <player|uuid>")));
             } else {
                 submit(sender, () -> queries.status(sender, arguments[SECOND_ARGUMENT_INDEX]));
             }
@@ -168,7 +169,7 @@ public final class FreezeCommand implements CommandExecutor, TabCompleter {
         }
         if (arguments[0].equalsIgnoreCase("list")) {
             if (arguments.length != LIST_ARGUMENT_COUNT) {
-                sender.sendMessage(Component.text("Usage: /freeze list"));
+                sender.sendMessage(StaffMessageStyle.style(Component.text("Usage: /freeze list")));
             } else {
                 submit(sender, () -> queries.list(sender));
             }
@@ -185,7 +186,7 @@ public final class FreezeCommand implements CommandExecutor, TabCompleter {
         }
         Actor actor = PaperActorResolver.resolve(sender).orElse(null);
         if (actor == null) {
-            sender.sendMessage(Component.text("Staff rank verification is unavailable; no action was taken."));
+            sender.sendMessage(StaffMessageStyle.style(Component.text("Staff rank verification is unavailable; no action was taken.")));
             return true;
         }
         boolean systemActor = !(sender instanceof Player);
@@ -202,20 +203,20 @@ public final class FreezeCommand implements CommandExecutor, TabCompleter {
         int targetIndex = keep ? SECOND_ARGUMENT_INDEX : 0;
         int reasonStart = targetIndex + 1;
         if (arguments.length <= reasonStart) {
-            sender.sendMessage(Component.text(changeUsage(release)));
+            sender.sendMessage(StaffMessageStyle.style(Component.text(changeUsage(release))));
             return null;
         }
         boolean confirmed = arguments[arguments.length - 1].equals("CONFIRM");
         if (confirmationMissing(release, keep, confirmed)) {
-            sender.sendMessage(Component.text("No change was made. Append the exact word CONFIRM to commit."));
+            sender.sendMessage(StaffMessageStyle.style(Component.text("No change was made. Append the exact word CONFIRM to commit.")));
             return null;
         }
         int reasonEnd = confirmed ? arguments.length - 1 : arguments.length;
         String reason = String.join(" ", Arrays.copyOfRange(arguments, reasonStart, reasonEnd)).trim();
         if (invalidReason(reason)) {
-            sender.sendMessage(Component.text(
+            sender.sendMessage(StaffMessageStyle.style(Component.text(
                     "A written reason of at most " + MAX_REASON_LENGTH + " characters is required."
-            ));
+            )));
             return null;
         }
         return new ChangeArguments(arguments[targetIndex], reason, keep);
@@ -322,7 +323,7 @@ public final class FreezeCommand implements CommandExecutor, TabCompleter {
                 }
             });
         } catch (RejectedExecutionException exception) {
-            sender.sendMessage(Component.text("The bounded work queue is full; no freeze operation started."));
+            sender.sendMessage(StaffMessageStyle.style(Component.text("The bounded work queue is full; no freeze operation started.")));
         }
     }
 

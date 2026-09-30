@@ -1,5 +1,6 @@
 package net.enthusia.staff.paper.staff;
 
+import net.enthusia.staff.paper.presentation.StaffMessageStyle;
 import java.time.Clock;
 import java.util.EnumMap;
 import java.util.List;
@@ -156,7 +157,7 @@ public final class StaffToolDispatcher implements Listener, CommandExecutor, Tab
         }
         event.setCancelled(true);
         if (!resolution.valid()) {
-            player.sendMessage(Component.text(resolution.status().message(), NamedTextColor.RED));
+            player.sendMessage(StaffMessageStyle.style(Component.text(resolution.status().message(), NamedTextColor.RED)));
             return;
         }
         if (resolution.tool() != StaffToolDefinition.CHEAT_TESTER) {
@@ -201,7 +202,7 @@ public final class StaffToolDispatcher implements Listener, CommandExecutor, Tab
 
     private void dispatchResolved(Player player, StaffToolResolution resolution, Player target) {
         if (!resolution.valid()) {
-            player.sendMessage(Component.text(resolution.status().message(), NamedTextColor.RED));
+            player.sendMessage(StaffMessageStyle.style(Component.text(resolution.status().message(), NamedTextColor.RED)));
             return;
         }
         dispatch(player, resolution.tool(), target == null ? null : target.getUniqueId());
@@ -216,7 +217,7 @@ public final class StaffToolDispatcher implements Listener, CommandExecutor, Tab
         }
         ToolAction action = actions.get(tool);
         if (action == null) {
-            player.sendMessage(Component.text("That staff tool is unavailable on this runtime.", NamedTextColor.RED));
+            player.sendMessage(StaffMessageStyle.style(Component.text("That staff tool is unavailable on this runtime.", NamedTextColor.RED)));
             return;
         }
         action.execute(player, targetId);
@@ -267,7 +268,7 @@ public final class StaffToolDispatcher implements Listener, CommandExecutor, Tab
             return;
         }
         if (target.getUniqueId().equals(player.getUniqueId())) {
-            player.sendMessage(Component.text("Cheat Tester cannot target yourself.", NamedTextColor.RED));
+            player.sendMessage(StaffMessageStyle.style(Component.text("Cheat Tester cannot target yourself.", NamedTextColor.RED)));
             return;
         }
         if (!acquireCooldown(player, tool)) {
@@ -278,19 +279,19 @@ public final class StaffToolDispatcher implements Listener, CommandExecutor, Tab
 
     private boolean hasToolAuthority(Player player, StaffToolDefinition tool) {
         if (!staffMode.authorizedForTool(player, tool)) {
-            player.sendMessage(Component.text(
+            player.sendMessage(StaffMessageStyle.style(Component.text(
                     "That staff tool is no longer authorized for your active staff session.",
                     NamedTextColor.RED
-            ));
+            )));
             return false;
         }
         if (player.hasPermission(tool.permission())) {
             return true;
         }
-        player.sendMessage(Component.text(
+        player.sendMessage(StaffMessageStyle.style(Component.text(
                 "You do not have permission to use " + tool.displayName() + '.',
                 NamedTextColor.RED
-        ));
+        )));
         return false;
     }
 
@@ -299,16 +300,16 @@ public final class StaffToolDispatcher implements Listener, CommandExecutor, Tab
             return true;
         }
         if (targetId == null) {
-            player.sendMessage(Component.text(
+            player.sendMessage(StaffMessageStyle.style(Component.text(
                     "Right-click a player with " + tool.displayName() + " or use the documented command fallback.",
                     NamedTextColor.YELLOW
-            ));
+            )));
             return false;
         }
         if (!targetId.equals(player.getUniqueId())) {
             return true;
         }
-        player.sendMessage(Component.text("That staff tool cannot target yourself.", NamedTextColor.RED));
+        player.sendMessage(StaffMessageStyle.style(Component.text("That staff tool cannot target yourself.", NamedTextColor.RED)));
         return false;
     }
 
@@ -321,10 +322,10 @@ public final class StaffToolDispatcher implements Listener, CommandExecutor, Tab
         if (result.allowed()) {
             return true;
         }
-        player.sendMessage(Component.text(
+        player.sendMessage(StaffMessageStyle.style(Component.text(
                 "That staff tool is cooling down for about " + result.remainingMillis() + " ms.",
                 NamedTextColor.YELLOW
-        ));
+        )));
         return false;
     }
 
@@ -345,10 +346,10 @@ public final class StaffToolDispatcher implements Listener, CommandExecutor, Tab
 
     private void runCommand(Player player, String commandLine) {
         if (!player.performCommand(commandLine)) {
-            player.sendMessage(Component.text(
+            player.sendMessage(StaffMessageStyle.style(Component.text(
                     "That staff action is unavailable on this backend. Use /estaff verify and the command fallback.",
                     NamedTextColor.RED
-            ));
+            )));
         }
     }
 
@@ -378,7 +379,7 @@ public final class StaffToolDispatcher implements Listener, CommandExecutor, Tab
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] arguments) {
         if (!(sender instanceof Player player)) {
-            sender.sendMessage("Staff tools require an in-game staff session.");
+            sender.sendMessage(StaffMessageStyle.style("Staff tools require an in-game staff session."));
             return true;
         }
         handlePlayerCommand(player, label, arguments);
@@ -387,7 +388,7 @@ public final class StaffToolDispatcher implements Listener, CommandExecutor, Tab
 
     private void handlePlayerCommand(Player player, String label, String[] arguments) {
         if (!staffMode.active(player.getUniqueId())) {
-            player.sendMessage(Component.text("Enter staff mode before using /" + label + '.'));
+            player.sendMessage(StaffMessageStyle.style(Component.text("Enter staff mode before using /" + label + '.')));
             return;
         }
         if (arguments.length == NO_ARGUMENTS) {
@@ -402,9 +403,9 @@ public final class StaffToolDispatcher implements Listener, CommandExecutor, Tab
             beginNamedFollowOrSpectate(player.getUniqueId(), arguments[1]);
             return;
         }
-        player.sendMessage(Component.text(
+        player.sendMessage(StaffMessageStyle.style(Component.text(
                 "Usage: /" + label + " | /" + label + " random | /" + label + " spectate <player>"
-        ));
+        )));
     }
 
     private static boolean isRandomCommand(String[] arguments) {
@@ -463,7 +464,7 @@ public final class StaffToolDispatcher implements Listener, CommandExecutor, Tab
     }
 
     private void message(UUID playerId, String text) {
-        onEntity(playerId, player -> player.sendMessage(Component.text(text)));
+        onEntity(playerId, player -> player.sendMessage(StaffMessageStyle.style(Component.text(text))));
     }
 
     @FunctionalInterface

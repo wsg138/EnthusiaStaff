@@ -1,5 +1,6 @@
 package net.enthusia.staff.paper.sanction;
 
+import net.enthusia.staff.paper.presentation.StaffMessageStyle;
 import io.papermc.paper.event.player.AsyncChatEvent;
 import java.time.Clock;
 import java.time.Instant;
@@ -291,9 +292,9 @@ public final class SanctionChangeGuiController implements Listener {
                 Optional.empty()
         ));
         close(viewer);
-        viewer.sendMessage(Component.text(expiration
+        viewer.sendMessage(StaffMessageStyle.style(Component.text(expiration
                 ? "Type the new ISO-8601 expiration in chat (for example 2026-08-01T00:00:00Z), or cancel."
-                : "Type the private audit reason in chat, or cancel. It will not be broadcast."));
+                : "Type the private audit reason in chat, or cancel. It will not be broadcast.")));
     }
 
     private void handleInput(Player viewer, InputCapture capture, String input) {
@@ -306,25 +307,25 @@ public final class SanctionChangeGuiController implements Listener {
             try {
                 expiration = Instant.parse(input);
             } catch (DateTimeParseException exception) {
-                viewer.sendMessage(Component.text("That expiration is invalid; the change was cancelled."));
+                viewer.sendMessage(StaffMessageStyle.style(Component.text("That expiration is invalid; the change was cancelled.")));
                 openState(viewer, capture.state());
                 return;
             }
             if (!expiration.isAfter(clock.instant())) {
-                viewer.sendMessage(Component.text("The expiration must be in the future; the change was cancelled."));
+                viewer.sendMessage(StaffMessageStyle.style(Component.text("The expiration must be in the future; the change was cancelled.")));
                 openState(viewer, capture.state());
                 return;
             }
             inputCaptures.put(viewer.getUniqueId(), new InputCapture(
                     capture.state(), capture.action(), InputStage.REASON, Optional.of(expiration)
             ));
-            viewer.sendMessage(Component.text(
+            viewer.sendMessage(StaffMessageStyle.style(Component.text(
                     "Now type the private audit reason in chat, or cancel. It will not be broadcast."
-            ));
+            )));
             return;
         }
         if (input.isBlank() || input.length() > 2_000) {
-            viewer.sendMessage(Component.text("The audit reason must contain 1 to 2000 characters."));
+            viewer.sendMessage(StaffMessageStyle.style(Component.text("The audit reason must contain 1 to 2000 characters.")));
             openState(viewer, capture.state());
             return;
         }
@@ -343,7 +344,7 @@ public final class SanctionChangeGuiController implements Listener {
 
     private void confirm(Player viewer, Actor actor, SanctionChangeGuiState.Review state) {
         if (!confirmations.add(viewer.getUniqueId())) {
-            viewer.sendMessage(Component.text("That sanction change is already being confirmed."));
+            viewer.sendMessage(StaffMessageStyle.style(Component.text("That sanction change is already being confirmed.")));
             return;
         }
         boolean submitted = submit(viewer, () -> {
@@ -394,7 +395,7 @@ public final class SanctionChangeGuiController implements Listener {
         Actor actor = PaperActorResolver.resolve(viewer).orElse(null);
         if (actor == null || !actor.id().equals(viewer.getUniqueId())
                 || !SanctionChangeAccess.canChangeAnything(authorization, actor)) {
-            viewer.sendMessage(Component.text("You do not have punishment modification authority."));
+            viewer.sendMessage(StaffMessageStyle.style(Component.text("You do not have punishment modification authority.")));
             return null;
         }
         return actor;
@@ -412,7 +413,7 @@ public final class SanctionChangeGuiController implements Listener {
     private void finish(Player viewer, String result) {
         onEntity(viewer, () -> {
             close(viewer);
-            viewer.sendMessage(Component.text(result));
+            viewer.sendMessage(StaffMessageStyle.style(Component.text(result)));
         });
     }
 
@@ -428,13 +429,13 @@ public final class SanctionChangeGuiController implements Listener {
             });
             return true;
         } catch (RejectedExecutionException exception) {
-            viewer.sendMessage(Component.text("The moderation work queue is full; no change was made."));
+            viewer.sendMessage(StaffMessageStyle.style(Component.text("The moderation work queue is full; no change was made.")));
             return false;
         }
     }
 
     private void message(Player viewer, String body) {
-        onEntity(viewer, () -> viewer.sendMessage(Component.text(body)));
+        onEntity(viewer, () -> viewer.sendMessage(StaffMessageStyle.style(Component.text(body))));
     }
 
     private void onEntity(Player viewer, Runnable task) {

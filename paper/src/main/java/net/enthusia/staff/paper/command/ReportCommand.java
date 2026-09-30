@@ -1,5 +1,6 @@
 package net.enthusia.staff.paper.command;
 
+import net.enthusia.staff.paper.presentation.StaffMessageStyle;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.Arrays;
@@ -59,7 +60,7 @@ public final class ReportCommand implements CommandExecutor, TabCompleter {
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] arguments) {
         if (!(sender instanceof Player reporter)) {
-            sender.sendMessage(Component.text("Only a player can submit a player report."));
+            sender.sendMessage(StaffMessageStyle.style(Component.text("Only a player can submit a player report.")));
             return true;
         }
         SubmissionContext submission = prepareSubmission(sender, reporter, arguments);
@@ -71,24 +72,24 @@ public final class ReportCommand implements CommandExecutor, TabCompleter {
 
     private SubmissionContext prepareSubmission(CommandSender sender, Player reporter, String[] arguments) {
         if (arguments.length < REQUIRED_ARGUMENTS) {
-            sender.sendMessage(Component.text("Usage: /report <player|uuid> <reason-id> <description>"));
+            sender.sendMessage(StaffMessageStyle.style(Component.text("Usage: /report <player|uuid> <reason-id> <description>")));
             return null;
         }
         ReasonPolicy policy = dependencies.policies().find(arguments[REASON_ARGUMENT]).orElse(null);
         if (policy == null || !policy.reportable()) {
-            sender.sendMessage(Component.text("That reason is not available for player reports."));
+            sender.sendMessage(StaffMessageStyle.style(Component.text("That reason is not available for player reports.")));
             return null;
         }
         OperationalMode currentMode = dependencies.mode().get();
         if (currentMode != OperationalMode.ACTIVE) {
-            sender.sendMessage(Component.text(
+            sender.sendMessage(StaffMessageStyle.style(Component.text(
                     "Reports are temporarily unavailable while moderation is " + currentMode + '.'
-            ));
+            )));
             return null;
         }
         String description = description(arguments);
         if (description.length() > MAX_DESCRIPTION_LENGTH) {
-            sender.sendMessage(Component.text("The report description exceeds 4000 characters."));
+            sender.sendMessage(StaffMessageStyle.style(Component.text("The report description exceeds 4000 characters.")));
             return null;
         }
         return captureSubmission(reporter, arguments[TARGET_ARGUMENT], policy.id(), description);
@@ -199,7 +200,7 @@ public final class ReportCommand implements CommandExecutor, TabCompleter {
         try {
             workers.execute(() -> execute(sender, action));
         } catch (RejectedExecutionException exception) {
-            sender.sendMessage(Component.text("The report queue is full; no report was created."));
+            sender.sendMessage(StaffMessageStyle.style(Component.text("The report queue is full; no report was created.")));
         }
     }
 
@@ -219,7 +220,7 @@ public final class ReportCommand implements CommandExecutor, TabCompleter {
         JavaPlugin plugin = dependencies.plugin();
         plugin.getServer().getGlobalRegionScheduler().execute(
                 plugin,
-                () -> sender.sendMessage(Component.text(message))
+                () -> sender.sendMessage(StaffMessageStyle.style(Component.text(message)))
         );
     }
 

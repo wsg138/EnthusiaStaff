@@ -8,7 +8,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
-import net.kyori.adventure.text.Component;
+import net.enthusia.staff.paper.presentation.StaffMessageStyle;
 import org.bukkit.entity.Player;
 import org.junit.jupiter.api.Test;
 
@@ -37,7 +37,9 @@ class StaffChatRosePermissionTest {
         assertTrue(command.onCommand(player, null, "staffchat", new String[0]));
         assertEquals(0, lookups.get());
         assertEquals(
-                List.of(Component.text("You do not have permission to use the RoseChat staff channel.")),
+                List.of(StaffMessageStyle.error(
+                        "You do not have permission to use the RoseChat staff channel."
+                )),
                 messages
         );
     }

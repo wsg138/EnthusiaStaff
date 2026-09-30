@@ -1,5 +1,6 @@
 package net.enthusia.staff.paper.command;
 
+import net.enthusia.staff.paper.presentation.StaffMessageStyle;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -76,7 +77,7 @@ public final class SanctionLifecycleCommand {
         }
         Optional<Operation> operation = Operation.parse(args[1]);
         if (operation.isEmpty()) {
-            sender.sendMessage(Component.text(usage(label)));
+            sender.sendMessage(StaffMessageStyle.style(Component.text(usage(label))));
             return true;
         }
         Operation selected = operation.orElseThrow();
@@ -85,7 +86,7 @@ public final class SanctionLifecycleCommand {
         }
         Parsed parsed = parse(selected, args);
         if (parsed.error != null) {
-            sender.sendMessage(Component.text(parsed.error + " Usage: " + selected.usage(label)));
+            sender.sendMessage(StaffMessageStyle.style(Component.text(parsed.error + " Usage: " + selected.usage(label))));
             return true;
         }
         if (parsed.appealId.isPresent()
@@ -98,7 +99,7 @@ public final class SanctionLifecycleCommand {
         }
         Optional<Actor> actor = PaperActorResolver.resolve(sender);
         if (actor.isEmpty()) {
-            sender.sendMessage(Component.text("Your staff identity could not be resolved."));
+            sender.sendMessage(StaffMessageStyle.style(Component.text("Your staff identity could not be resolved.")));
             return true;
         }
         PendingChange pending = new PendingChange(

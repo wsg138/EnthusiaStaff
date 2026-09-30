@@ -1,5 +1,6 @@
 package net.enthusia.staff.paper.tester;
 
+import net.enthusia.staff.paper.presentation.StaffMessageStyle;
 import io.papermc.paper.threadedregions.scheduler.ScheduledTask;
 import java.time.Clock;
 import java.time.Duration;
@@ -79,7 +80,7 @@ public final class FakeBaseManager implements Listener, AutoCloseable {
                 1L
         );
         if (!scheduled) {
-            staff.sendMessage(Component.text("Target could not be scheduled for fake-base preparation.", NamedTextColor.RED));
+            staff.sendMessage(StaffMessageStyle.style(Component.text("Target could not be scheduled for fake-base preparation.", NamedTextColor.RED)));
         }
     }
 
@@ -89,15 +90,15 @@ public final class FakeBaseManager implements Listener, AutoCloseable {
 
     private boolean creationAvailable(Player staff, UUID targetId) {
         if (audits.loadedStore() == null) {
-            staff.sendMessage(Component.text("Fake-base audit storage is unavailable; nothing was shown.", NamedTextColor.RED));
+            staff.sendMessage(StaffMessageStyle.style(Component.text("Fake-base audit storage is unavailable; nothing was shown.", NamedTextColor.RED)));
             return false;
         }
         if (activeByTarget.containsKey(targetId)) {
-            staff.sendMessage(Component.text("That player already has an active fake base.", NamedTextColor.RED));
+            staff.sendMessage(StaffMessageStyle.style(Component.text("That player already has an active fake base.", NamedTextColor.RED)));
             return false;
         }
         if (atConcurrencyLimit(staff.getUniqueId())) {
-            staff.sendMessage(Component.text("The bounded fake-base concurrency limit is reached.", NamedTextColor.RED));
+            staff.sendMessage(StaffMessageStyle.style(Component.text("The bounded fake-base concurrency limit is reached.", NamedTextColor.RED)));
             return false;
         }
         return true;
@@ -336,7 +337,7 @@ public final class FakeBaseManager implements Listener, AutoCloseable {
         }
         World world = plugin.getServer().getWorld(operation.worldId);
         if (world == null) {
-            staff.sendMessage(Component.text("The fake-base world is no longer available.", NamedTextColor.RED));
+            staff.sendMessage(StaffMessageStyle.style(Component.text("The fake-base world is no longer available.", NamedTextColor.RED)));
             return;
         }
         Location destination = new Location(
@@ -352,7 +353,7 @@ public final class FakeBaseManager implements Listener, AutoCloseable {
 
     private void completeViewerTeleport(Player staff, FakeBaseOperation operation, Boolean moved, Throwable failure) {
         if (!successfulViewerTeleport(staff, operation, moved, failure)) {
-            staff.sendMessage(Component.text("Fake-base teleport failed safely.", NamedTextColor.RED));
+            staff.sendMessage(StaffMessageStyle.style(Component.text("Fake-base teleport failed safely.", NamedTextColor.RED)));
             return;
         }
         UUID viewerId = staff.getUniqueId();
@@ -362,7 +363,7 @@ public final class FakeBaseManager implements Listener, AutoCloseable {
         if (!renderer.show(staff, operation.worldId, operation.anchor)) {
             operation.removeViewer(viewerId);
             renderer.clear(staff, operation.worldId, operation.anchor);
-            staff.sendMessage(Component.text("Fake-base viewer render failed safely.", NamedTextColor.RED));
+            staff.sendMessage(StaffMessageStyle.style(Component.text("Fake-base viewer render failed safely.", NamedTextColor.RED)));
             return;
         }
         if (!operation.retainViewerAfterRender(viewerId)) {
@@ -371,7 +372,7 @@ public final class FakeBaseManager implements Listener, AutoCloseable {
         }
         audits.recordBestEffort(audits.event(operation.operationId, staff.getUniqueId(), operation.targetId,
                 FakeBaseAuditAction.TELEPORTED, "COMMITTED", "STAFF_TELEPORT"));
-        staff.sendMessage(Component.text("Viewing the target's client-only fake base.", NamedTextColor.AQUA));
+        staff.sendMessage(StaffMessageStyle.style(Component.text("Viewing the target's client-only fake base.", NamedTextColor.AQUA)));
     }
 
     private boolean successfulViewerTeleport(Player staff, FakeBaseOperation operation, Boolean moved, Throwable failure) {
@@ -385,11 +386,11 @@ public final class FakeBaseManager implements Listener, AutoCloseable {
         }
         FakeBaseOperation operation = activeByTarget.get(target.getUniqueId());
         if (operation == null || !operation.open()) {
-            staff.sendMessage(Component.text("That player has no active fake base.", NamedTextColor.RED));
+            staff.sendMessage(StaffMessageStyle.style(Component.text("That player has no active fake base.", NamedTextColor.RED)));
             return null;
         }
         if (!canControl(staff, operation)) {
-            staff.sendMessage(Component.text("You do not control that fake-base operation.", NamedTextColor.RED));
+            staff.sendMessage(StaffMessageStyle.style(Component.text("You do not control that fake-base operation.", NamedTextColor.RED)));
             return null;
         }
         return operation;

@@ -1,5 +1,6 @@
 package net.enthusia.staff.paper.staff;
 
+import net.enthusia.staff.paper.presentation.StaffMessageStyle;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
@@ -88,7 +89,7 @@ final class StaffToolSpectateFlow {
                     (success, failure) -> finishTeleport(actorId, target, success, failure)
             );
         } catch (RuntimeException exception) {
-            actor.sendMessage(Component.text("Follow/Spectate teleport failed safely.", NamedTextColor.RED));
+            actor.sendMessage(StaffMessageStyle.style(Component.text("Follow/Spectate teleport failed safely.", NamedTextColor.RED)));
         }
     }
 
@@ -105,11 +106,11 @@ final class StaffToolSpectateFlow {
             return;
         }
         if (actor.getGameMode() != GameMode.SPECTATOR) {
-            actor.sendMessage(Component.text(
+            actor.sendMessage(StaffMessageStyle.style(Component.text(
                     "Teleported to " + target.name()
                             + ". Direct spectating requires spectator mode; your game mode was not changed.",
                     NamedTextColor.GREEN
-            ));
+            )));
             return;
         }
         UUID actorId = actor.getUniqueId();
@@ -138,17 +139,17 @@ final class StaffToolSpectateFlow {
         }
         Player currentTarget = plugin.getServer().getPlayer(snapshot.playerId());
         if (currentTarget == null || connectionChanged(snapshot, currentTarget)) {
-            actor.sendMessage(Component.text(
+            actor.sendMessage(StaffMessageStyle.style(Component.text(
                     "Direct spectating was cancelled because the target connection changed.",
                     NamedTextColor.YELLOW
-            ));
+            )));
             return;
         }
         if (vanished.test(snapshot.playerId())) {
-            actor.sendMessage(Component.text(
+            actor.sendMessage(StaffMessageStyle.style(Component.text(
                     "Direct spectating was cancelled because that target entered vanish.",
                     NamedTextColor.YELLOW
-            ));
+            )));
             return;
         }
         try {
@@ -156,12 +157,12 @@ final class StaffToolSpectateFlow {
             if (!monitorAttachment(actor, snapshot)) {
                 return;
             }
-            actor.sendMessage(Component.text("Now spectating " + snapshot.name() + '.', NamedTextColor.GREEN));
+            actor.sendMessage(StaffMessageStyle.style(Component.text("Now spectating " + snapshot.name() + '.', NamedTextColor.GREEN)));
         } catch (IllegalArgumentException | IllegalStateException exception) {
-            actor.sendMessage(Component.text(
+            actor.sendMessage(StaffMessageStyle.style(Component.text(
                     "Teleported to " + snapshot.name() + "; direct spectator attachment was unavailable.",
                     NamedTextColor.YELLOW
-            ));
+            )));
         }
     }
 
@@ -178,10 +179,10 @@ final class StaffToolSpectateFlow {
             return true;
         } catch (RuntimeException exception) {
             detach(actor);
-            actor.sendMessage(Component.text(
+            actor.sendMessage(StaffMessageStyle.style(Component.text(
                     "Direct spectating was cancelled because its safety monitor could not start.",
                     NamedTextColor.RED
-            ));
+            )));
             return false;
         }
     }
@@ -194,19 +195,19 @@ final class StaffToolSpectateFlow {
         }
         if (!actorAuthorized.test(actor)) {
             detach(actor);
-            actor.sendMessage(Component.text(
+            actor.sendMessage(StaffMessageStyle.style(Component.text(
                     "Follow/Spectate was cancelled because your staff session or permission changed.",
                     NamedTextColor.RED
-            ));
+            )));
             cancelTask.run();
             return;
         }
         if (vanished.test(snapshot.playerId())) {
             detach(actor);
-            actor.sendMessage(Component.text(
+            actor.sendMessage(StaffMessageStyle.style(Component.text(
                     "Spectating stopped because that target entered vanish.",
                     NamedTextColor.YELLOW
-            ));
+            )));
             cancelTask.run();
         }
     }
@@ -223,10 +224,10 @@ final class StaffToolSpectateFlow {
         if (actorAuthorized.test(actor)) {
             return true;
         }
-        actor.sendMessage(Component.text(
+        actor.sendMessage(StaffMessageStyle.style(Component.text(
                 "Follow/Spectate was cancelled because your staff session or permission changed.",
                 NamedTextColor.RED
-        ));
+        )));
         return false;
     }
 
@@ -314,7 +315,7 @@ final class StaffToolSpectateFlow {
     }
 
     private void message(UUID playerId, String text) {
-        onEntity(playerId, player -> player.sendMessage(Component.text(text)));
+        onEntity(playerId, player -> player.sendMessage(StaffMessageStyle.style(Component.text(text))));
     }
 
     private record TargetSnapshot(UUID playerId, String name, Location location, Player connection) {

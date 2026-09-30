@@ -1,5 +1,6 @@
 package net.enthusia.staff.paper.tester;
 
+import net.enthusia.staff.paper.presentation.StaffMessageStyle;
 import java.util.List;
 import java.util.Locale;
 import net.kyori.adventure.text.Component;
@@ -33,8 +34,8 @@ final class FakeBaseCommandRouter {
 
     boolean handle(Player staff, String[] args) {
         if (!manager.authorized(staff)) {
-            staff.sendMessage(Component.text(
-                    "Fake-base controls require authorized active staff mode.", NamedTextColor.RED));
+            staff.sendMessage(StaffMessageStyle.style(Component.text(
+                    "Fake-base controls require authorized active staff mode.", NamedTextColor.RED)));
             return true;
         }
         if (args.length < ACTION_ARGUMENT_COUNT) {
@@ -53,7 +54,7 @@ final class FakeBaseCommandRouter {
         }
         Player target = plugin.getServer().getPlayerExact(args[2]);
         if (target == null || !target.isOnline()) {
-            staff.sendMessage(Component.text("That player is not online on this backend.", NamedTextColor.RED));
+            staff.sendMessage(StaffMessageStyle.style(Component.text("That player is not online on this backend.", NamedTextColor.RED)));
             return true;
         }
         return dispatch(staff, target, action);
@@ -92,21 +93,21 @@ final class FakeBaseCommandRouter {
         }
         List<String> lines = manager.statusLines(staff);
         if (lines.isEmpty()) {
-            staff.sendMessage(Component.text("No controllable fake-base operations are active.", NamedTextColor.GRAY));
+            staff.sendMessage(StaffMessageStyle.style(Component.text("No controllable fake-base operations are active.", NamedTextColor.GRAY)));
             return true;
         }
-        staff.sendMessage(Component.text("Active fake-base operations:", NamedTextColor.GOLD));
+        staff.sendMessage(StaffMessageStyle.style(Component.text("Active fake-base operations:", NamedTextColor.GOLD)));
         for (String line : lines) {
-            staff.sendMessage(Component.text("• " + line, NamedTextColor.GRAY));
+            staff.sendMessage(StaffMessageStyle.style(Component.text("• " + line, NamedTextColor.GRAY)));
         }
         return true;
     }
 
     private boolean usage(Player staff) {
-        staff.sendMessage(Component.text(
+        staff.sendMessage(StaffMessageStyle.style(Component.text(
                 "Usage: " + commandPrefix + " <create|extend|clear|teleport|status> [player]",
                 NamedTextColor.YELLOW
-        ));
+        )));
         return true;
     }
 }

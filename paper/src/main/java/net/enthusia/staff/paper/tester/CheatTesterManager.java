@@ -1,5 +1,6 @@
 package net.enthusia.staff.paper.tester;
 
+import net.enthusia.staff.paper.presentation.StaffMessageStyle;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
@@ -119,7 +120,7 @@ public final class CheatTesterManager implements Listener, AutoCloseable {
         }
         boolean assetLock = type.mutatesTargetState();
         if (assetLock && !inventory.acquireExternalAssetLock(target.getUniqueId())) {
-            staff.sendMessage(Component.text("The target inventory is busy with another durable moderation operation."));
+            staff.sendMessage(StaffMessageStyle.style(Component.text("The target inventory is busy with another durable moderation operation.")));
             return;
         }
         CheatTesterSession session = new CheatTesterSession(
@@ -141,7 +142,7 @@ public final class CheatTesterManager implements Listener, AutoCloseable {
             return true;
         }
         releaseAssetLock(session);
-        staff.sendMessage(Component.text("That target already has an active cheat-tester session."));
+        staff.sendMessage(StaffMessageStyle.style(Component.text("That target already has an active cheat-tester session.")));
         return false;
     }
 
@@ -154,7 +155,7 @@ public final class CheatTesterManager implements Listener, AutoCloseable {
         );
         if (!scheduled) {
             retireWithoutJournal(session);
-            staff.sendMessage(Component.text("The target could not be scheduled for safe tester preparation."));
+            staff.sendMessage(StaffMessageStyle.style(Component.text("The target could not be scheduled for safe tester preparation.")));
         }
     }
 
@@ -164,7 +165,7 @@ public final class CheatTesterManager implements Listener, AutoCloseable {
         }
         CheatTesterSession session = activeByTarget.get(targetId);
         if (!controls.controllable(staff, session)) {
-            staff.sendMessage(Component.text("No controllable active tester exists for that target."));
+            staff.sendMessage(StaffMessageStyle.style(Component.text("No controllable active tester exists for that target.")));
             return;
         }
         finish(session, CheatTesterSessionState.CANCELLED, "cancelled by staff");

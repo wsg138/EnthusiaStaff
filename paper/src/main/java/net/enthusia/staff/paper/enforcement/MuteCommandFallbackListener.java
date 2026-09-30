@@ -1,5 +1,6 @@
 package net.enthusia.staff.paper.enforcement;
 
+import net.enthusia.staff.paper.presentation.StaffMessageStyle;
 import java.util.Locale;
 import java.util.Set;
 import java.util.function.Supplier;
@@ -73,7 +74,7 @@ public final class MuteCommandFallbackListener implements Listener {
     private static void block(PlayerCommandPreprocessEvent event, String message) {
         event.setCancelled(true);
         Player player = event.getPlayer();
-        player.sendMessage(Component.text(message));
+        player.sendMessage(StaffMessageStyle.style(Component.text(message)));
     }
 
     enum Decision {

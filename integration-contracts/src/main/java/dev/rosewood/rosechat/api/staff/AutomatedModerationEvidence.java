@@ -15,23 +15,44 @@ public record AutomatedModerationEvidence(
     public AutomatedModerationEvidence {
         Objects.requireNonNull(moderationEventId, "moderationEventId");
         Objects.requireNonNull(occurredAt, "occurredAt");
-        message = bounded(message, "message", 1_024, false);
-        category = bounded(category, "category", 96, true);
-        if (!Double.isFinite(confidence) || confidence < 0.0D || confidence > 1.0D) {
-            throw new IllegalArgumentException("confidence must be in [0, 1]");
+        message = validatedText(message, "message", 1_024, false);
+        category = validatedText(category, "category", 96, true);
+        validateConfidence(confidence);
+        validateSeverity(severity);
+    }
+
+    private static String validatedText(String value, String field, int maximum, boolean trim) {
+        if (value == null) {
+            throw new IllegalArgumentException(field + " is invalid");
         }
-        if (severity < 0 || severity > 100) {
-            throw new IllegalArgumentException("severity must be in [0, 100]");
+        String normalized = trim ? value.trim() : value;
+        if (normalized.isBlank() || normalized.length() > maximum || containsControlCharacter(normalized)) {
+            throw new IllegalArgumentException(field + " is invalid");
+        }
+        return normalized;
+    }
+
+    private static boolean containsControlCharacter(String value) {
+        for (int index = 0; index < value.length(); index++) {
+            if (Character.isISOControl(value.charAt(index))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static void validateConfidence(double confidence) {
+        if (!Double.isFinite(confidence)) {
+            throw new IllegalArgumentException("confidence must be finite");
+        }
+        if (confidence < 0.0D || confidence > 1.0D) {
+            throw new IllegalArgumentException("confidence must be in [0, 1]");
         }
     }
 
-    private static String bounded(String value, String field, int maximum, boolean trim) {
-        if (value == null || value.isBlank() || value.length() > maximum) {
-            throw new IllegalArgumentException(field + " is invalid");
+    private static void validateSeverity(int severity) {
+        if (severity < 0 || severity > 100) {
+            throw new IllegalArgumentException("severity must be in [0, 100]");
         }
-        if (value.chars().anyMatch(character -> character == '\r' || character == '\n' || character == '\0')) {
-            throw new IllegalArgumentException(field + " contains unsupported control characters");
-        }
-        return trim ? value.trim() : value;
     }
 }

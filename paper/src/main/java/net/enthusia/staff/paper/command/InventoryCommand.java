@@ -1,5 +1,6 @@
 package net.enthusia.staff.paper.command;
 
+import net.enthusia.staff.paper.presentation.StaffMessageStyle;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -55,16 +56,16 @@ public final class InventoryCommand implements CommandExecutor, TabCompleter {
             return true;
         }
         if (!(sender instanceof Player viewer)) {
-            sender.sendMessage("This inventory viewer requires an in-game staff viewer.");
+            sender.sendMessage(StaffMessageStyle.style("This inventory viewer requires an in-game staff viewer."));
             return true;
         }
         if (arguments.length != TARGET_ARGUMENT_COUNT) {
-            viewer.sendMessage(Component.text("Usage: /" + label + " <player|uuid>"));
+            viewer.sendMessage(StaffMessageStyle.style(Component.text("Usage: /" + label + " <player|uuid>")));
             return true;
         }
         boolean enderChest = CommandRoute.canonicalName(command).equals("endersee");
         if (!submit(() -> resolveAndOpen(viewer, arguments[0], enderChest))) {
-            viewer.sendMessage(Component.text("The moderation work queue is full; no inventory was opened."));
+            viewer.sendMessage(StaffMessageStyle.style(Component.text("The moderation work queue is full; no inventory was opened.")));
         }
         return true;
     }
@@ -159,7 +160,7 @@ public final class InventoryCommand implements CommandExecutor, TabCompleter {
     }
 
     private void message(Player player, String body) {
-        player.getScheduler().execute(plugin, () -> player.sendMessage(Component.text(body)), null, 1L);
+        player.getScheduler().execute(plugin, () -> player.sendMessage(StaffMessageStyle.style(Component.text(body))), null, 1L);
     }
 
     private record CachedSuggestions(List<String> values, Instant expiresAt) {

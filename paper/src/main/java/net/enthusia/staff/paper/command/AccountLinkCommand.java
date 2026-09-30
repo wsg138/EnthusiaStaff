@@ -1,5 +1,6 @@
 package net.enthusia.staff.paper.command;
 
+import net.enthusia.staff.paper.presentation.StaffMessageStyle;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.RejectedExecutionException;
@@ -38,7 +39,7 @@ public final class AccountLinkCommand implements CommandExecutor {
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] arguments) {
         if (!(sender instanceof Player player)) {
-            sender.sendMessage(Component.text("Account linking must be completed by the Minecraft player in-game."));
+            sender.sendMessage(StaffMessageStyle.style(Component.text("Account linking must be completed by the Minecraft player in-game.")));
             return true;
         }
         UUID playerId = player.getUniqueId();
@@ -52,19 +53,19 @@ public final class AccountLinkCommand implements CommandExecutor {
         if (arguments.length == ONE_ARGUMENT) {
             String code = arguments[0];
             if (!validLinkCodeInput(code)) {
-                player.sendMessage(Component.text(linkCodeFailureMessage(AccountLinkCodeException.Reason.INVALID)));
+                player.sendMessage(StaffMessageStyle.style(Component.text(linkCodeFailureMessage(AccountLinkCodeException.Reason.INVALID))));
                 return true;
             }
             submit(player, () -> complete(player, playerId, code), "Account-link completion");
             return true;
         }
-        player.sendMessage(Component.text("Usage: /link [code]"));
+        player.sendMessage(StaffMessageStyle.style(Component.text("Usage: /link [code]")));
         return true;
     }
 
     private boolean unlink(Player player, UUID playerId, String[] arguments) {
         if (arguments.length != ONE_ARGUMENT || !arguments[0].equals("CONFIRM")) {
-            player.sendMessage(Component.text("No link was changed. Use /unlink CONFIRM to remove your current Discord link."));
+            player.sendMessage(StaffMessageStyle.style(Component.text("No link was changed. Use /unlink CONFIRM to remove your current Discord link.")));
             return true;
         }
         submit(player, () -> unlink(player, playerId), "Account unlink");
@@ -135,14 +136,14 @@ public final class AccountLinkCommand implements CommandExecutor {
                 }
             });
         } catch (RejectedExecutionException exception) {
-            player.sendMessage(Component.text("The bounded work queue is full; no account-link operation started."));
+            player.sendMessage(StaffMessageStyle.style(Component.text("The bounded work queue is full; no account-link operation started.")));
         }
     }
 
     private void send(Player player, String message) {
         player.getScheduler().execute(
                 plugin,
-                () -> player.sendMessage(Component.text(message)),
+                () -> player.sendMessage(StaffMessageStyle.style(Component.text(message))),
                 null,
                 1L
         );

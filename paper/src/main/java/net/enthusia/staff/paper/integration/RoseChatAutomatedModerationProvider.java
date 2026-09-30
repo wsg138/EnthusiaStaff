@@ -1,6 +1,5 @@
 package net.enthusia.staff.paper.integration;
 
-import dev.rosewood.rosechat.api.staff.AutomatedModerationEvidence;
 import dev.rosewood.rosechat.api.staff.AutomatedModerationResult;
 import dev.rosewood.rosechat.api.staff.AutomatedPublicMuteRequest;
 import dev.rosewood.rosechat.api.staff.RoseChatAutomatedModerationService;
@@ -8,7 +7,6 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
@@ -101,8 +99,8 @@ final class RoseChatAutomatedModerationProvider implements RoseChatAutomatedMode
         if (request.strikeCount() < 2) {
             return AutomatedModerationResult.rejected("At least two enforcement strikes are required");
         }
-        if (request.evidence().size() < request.strikeCount()) {
-            return AutomatedModerationResult.rejected("Every AI enforcement strike must include reviewable evidence");
+        if (request.evidence().size() != request.strikeCount()) {
+            return AutomatedModerationResult.rejected("Evidence count must equal the enforcement strike count");
         }
         if (!REQUIRED_MUTE.equals(request.muteDuration())) {
             return AutomatedModerationResult.rejected("Only the fixed 30-day public mute is supported");
@@ -131,7 +129,7 @@ final class RoseChatAutomatedModerationProvider implements RoseChatAutomatedMode
                             request.targetId(),
                             SYSTEM_ACTOR,
                             REASON_ID,
-                            evidenceExplanation(request),
+                            AutomatedModerationEvidenceFormatter.format(request),
                             CaseVisibility.PUBLIC,
                             List.of()
                     ),
@@ -154,34 +152,6 @@ final class RoseChatAutomatedModerationProvider implements RoseChatAutomatedMode
             );
             return AutomatedModerationResult.unavailable("EnthusiaStaff could not apply the mute");
         }
-    }
-
-    private static String evidenceExplanation(AutomatedPublicMuteRequest request) {
-        StringBuilder explanation = new StringBuilder(512)
-                .append("RoseChat AI moderation automatic public mute")
-                .append("; trigger_event=").append(request.moderationEventId())
-                .append("; strikes=").append(request.strikeCount())
-                .append("; trigger_category=").append(request.category())
-                .append("; trigger_severity=").append(request.severity())
-                .append('\n');
-
-        int index = 1;
-        for (AutomatedModerationEvidence evidence : request.evidence()) {
-            String record = "Strike " + index
-                    + ": at=" + evidence.occurredAt()
-                    + ", event=" + evidence.moderationEventId()
-                    + ", category=" + evidence.category()
-                    + ", confidence=" + String.format(Locale.ROOT, "%.6f", evidence.confidence())
-                    + ", severity=" + evidence.severity()
-                    + "/100\nExact message: " + evidence.message() + "\n";
-            if (explanation.length() + record.length() > 3_950) {
-                explanation.append("Additional evidence omitted from this summary due to the case-note size limit.");
-                break;
-            }
-            explanation.append(record);
-            index++;
-        }
-        return explanation.toString();
     }
 
     private void ensurePolicy() {

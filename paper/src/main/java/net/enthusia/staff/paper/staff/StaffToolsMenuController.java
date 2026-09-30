@@ -1,5 +1,6 @@
 package net.enthusia.staff.paper.staff;
 
+import net.enthusia.staff.paper.presentation.StaffMessageStyle;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -203,8 +204,8 @@ final class StaffToolsMenuController implements Listener {
             return;
         }
         if (vanish.isVanished(target.playerId())) {
-            viewer.sendMessage(Component.text("That player is no longer available in the staff-tools menu.",
-                    NamedTextColor.YELLOW));
+            viewer.sendMessage(StaffMessageStyle.style(Component.text("That player is no longer available in the staff-tools menu.",
+                    NamedTextColor.YELLOW)));
             requestTargetPicker(viewer, picker.tool());
             return;
         }
@@ -222,8 +223,8 @@ final class StaffToolsMenuController implements Listener {
         List<StaffToolDefinition> tools = dispatcher.availableMenuTools(viewer);
         if (tools.isEmpty()) {
             viewer.closeInventory();
-            viewer.sendMessage(Component.text("No staff tools are currently available for this session.",
-                    NamedTextColor.YELLOW));
+            viewer.sendMessage(StaffMessageStyle.style(Component.text("No staff tools are currently available for this session.",
+                    NamedTextColor.YELLOW)));
             return;
         }
         viewer.openInventory(renderer.render(StaffToolsMenuView.root(viewerId, tools)));

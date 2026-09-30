@@ -1,5 +1,6 @@
 package net.enthusia.staff.paper.inventory;
 
+import net.enthusia.staff.paper.presentation.StaffMessageStyle;
 import io.papermc.paper.threadedregions.scheduler.ScheduledTask;
 import java.time.Clock;
 import java.time.Duration;
@@ -107,7 +108,7 @@ public final class InventoryCoordinator implements Listener, InventoryLockServic
             throw new IllegalArgumentException("viewer and target must be present");
         }
         if (mode.get() != OperationalMode.ACTIVE) {
-            viewer.sendMessage(Component.text("Inventory editing is available only while moderation is ACTIVE."));
+            viewer.sendMessage(StaffMessageStyle.style(Component.text("Inventory editing is available only while moderation is ACTIVE.")));
             return;
         }
         Player online = plugin.getServer().getPlayer(target.playerId());
@@ -237,7 +238,7 @@ public final class InventoryCoordinator implements Listener, InventoryLockServic
             return;
         }
         if (!viewer.hasPermission(InventoryEditAuthorityGate.EDIT_PERMISSION)) {
-            viewer.sendMessage(Component.text("You may inspect this inventory but not edit it."));
+            viewer.sendMessage(StaffMessageStyle.style(Component.text("You may inspect this inventory but not edit it.")));
             return;
         }
         int logicalSlot = holder.logicalSlot(event.getRawSlot());
@@ -245,7 +246,7 @@ public final class InventoryCoordinator implements Listener, InventoryLockServic
             return;
         }
         if (event.isShiftClick()) {
-            viewer.sendMessage(Component.text("Shift-click selection is reserved for the confiscation workflow."));
+            viewer.sendMessage(StaffMessageStyle.style(Component.text("Shift-click selection is reserved for the confiscation workflow.")));
             return;
         }
         applyClickedEdit(event, viewer, holder, logicalSlot);
@@ -264,9 +265,9 @@ public final class InventoryCoordinator implements Listener, InventoryLockServic
                 event.isRightClick()
         );
         if (replacement == EditRejected.ITEM) {
-            viewer.sendMessage(Component.text(
+            viewer.sendMessage(StaffMessageStyle.style(Component.text(
                     "Use left click to replace/remove a stack or right click to add/remove one item."
-            ));
+            )));
             return;
         }
         InventoryImage next = holder.image().withItem(logicalSlot, replacement);
@@ -459,9 +460,9 @@ public final class InventoryCoordinator implements Listener, InventoryLockServic
             }
             render(holder);
             viewer.openInventory(inventory);
-            viewer.sendMessage(Component.text(
+            viewer.sendMessage(StaffMessageStyle.style(Component.text(
                     "Editor: held cursor + left click replaces; empty cursor + left click removes; right click adjusts one."
-            ));
+            )));
         });
     }
 
@@ -473,13 +474,13 @@ public final class InventoryCoordinator implements Listener, InventoryLockServic
     ) {
         LiveSession session = liveSessions.get(holder.targetId());
         if (session == null || !session.beginEdit()) {
-            viewer.sendMessage(Component.text("That inventory is synchronizing; retry the edit."));
+            viewer.sendMessage(StaffMessageStyle.style(Component.text("That inventory is synchronizing; retry the edit.")));
             return;
         }
         Player target = plugin.getServer().getPlayer(holder.targetId());
         if (target == null) {
             session.finishWork();
-            viewer.sendMessage(Component.text("The target left; reopen the offline view after its snapshot is recorded."));
+            viewer.sendMessage(StaffMessageStyle.style(Component.text("The target left; reopen the offline view after its snapshot is recorded.")));
             return;
         }
         InventoryObservation before = session.observation();
@@ -504,7 +505,7 @@ public final class InventoryCoordinator implements Listener, InventoryLockServic
         );
         if (!assetLocks.add(holder.targetId())) {
             session.finishWork();
-            viewer.sendMessage(Component.text("Another asset operation already owns this player."));
+            viewer.sendMessage(StaffMessageStyle.style(Component.text("Another asset operation already owns this player.")));
             return;
         }
         if (!submit(() -> prepareAndApplyLive(viewer, target, session, request, replacement))) {
@@ -1041,7 +1042,7 @@ public final class InventoryCoordinator implements Listener, InventoryLockServic
                 onEntity(viewer, () -> {
                     if (viewer.getOpenInventory().getTopInventory().getHolder(false) == holder) {
                         viewer.closeInventory();
-                        viewer.sendMessage(Component.text(reason));
+                        viewer.sendMessage(StaffMessageStyle.style(Component.text(reason)));
                     }
                 });
             }
@@ -1067,14 +1068,14 @@ public final class InventoryCoordinator implements Listener, InventoryLockServic
     }
 
     private void message(Player player, String body) {
-        onEntity(player, () -> player.sendMessage(Component.text(body)));
+        onEntity(player, () -> player.sendMessage(StaffMessageStyle.style(Component.text(body))));
     }
 
     private void alertStaff(String body) {
         plugin.getServer().getGlobalRegionScheduler().execute(plugin, () ->
                 plugin.getServer().getOnlinePlayers().stream()
                         .filter(player -> player.hasPermission("enthusiastaff.alerts"))
-                        .forEach(player -> player.sendMessage(Component.text(body))));
+                        .forEach(player -> player.sendMessage(StaffMessageStyle.style(Component.text(body)))));
     }
 
     @Override

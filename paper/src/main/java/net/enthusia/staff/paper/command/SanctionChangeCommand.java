@@ -1,5 +1,6 @@
 package net.enthusia.staff.paper.command;
 
+import net.enthusia.staff.paper.presentation.StaffMessageStyle;
 import java.time.Instant;
 import java.util.Arrays;
 import java.util.List;
@@ -90,8 +91,8 @@ public final class SanctionChangeCommand implements CommandExecutor, TabComplete
             return true;
         }
         if (!input.confirmed()) {
-            sender.sendMessage(Component.text("Review only: " + action + " for " + arguments[0] + "."));
-            sender.sendMessage(Component.text("No change was made. Append the exact word CONFIRM to commit."));
+            sender.sendMessage(StaffMessageStyle.style(Component.text("Review only: " + action + " for " + arguments[0] + ".")));
+            sender.sendMessage(StaffMessageStyle.style(Component.text("No change was made. Append the exact word CONFIRM to commit.")));
             return true;
         }
         submit(sender, () -> apply(
@@ -105,7 +106,7 @@ public final class SanctionChangeCommand implements CommandExecutor, TabComplete
         if (actor != null && SanctionChangeAccess.canChangeAnything(authorization, actor)) {
             return actor;
         }
-        sender.sendMessage(Component.text("You do not have punishment modification authority."));
+        sender.sendMessage(StaffMessageStyle.style(Component.text("You do not have punishment modification authority.")));
         return null;
     }
 
@@ -127,9 +128,9 @@ public final class SanctionChangeCommand implements CommandExecutor, TabComplete
         if (arguments.length >= minimum) {
             return true;
         }
-        sender.sendMessage(Component.text(central
+        sender.sendMessage(StaffMessageStyle.style(Component.text(central
                 ? "Usage: /removepunishment <player|case> <action> [expiration] <reason> [CONFIRM]"
-                : "Usage: /" + label + " <player|case> <reason> [CONFIRM]"));
+                : "Usage: /" + label + " <player|case> <reason> [CONFIRM]")));
         return false;
     }
 
@@ -144,15 +145,15 @@ public final class SanctionChangeCommand implements CommandExecutor, TabComplete
                 ? SanctionChangeAccess.parseAction(arguments[1])
                 : SanctionChangeAccess.aliasAction(route);
         if (action == null) {
-            sender.sendMessage(Component.text("Unknown sanction change action."));
+            sender.sendMessage(StaffMessageStyle.style(Component.text("Unknown sanction change action.")));
             return null;
         }
         if (!authorization.permits(actor, action.requiredModerationAction())) {
-            sender.sendMessage(Component.text("You are not permitted to perform that punishment change."));
+            sender.sendMessage(StaffMessageStyle.style(Component.text("You are not permitted to perform that punishment change.")));
             return null;
         }
         if (!sender.hasPermission(SanctionChangeAccess.permissionFor(action))) {
-            sender.sendMessage(Component.text("You do not have permission for that punishment change."));
+            sender.sendMessage(StaffMessageStyle.style(Component.text("You do not have permission for that punishment change.")));
             return null;
         }
         return action;
@@ -168,9 +169,9 @@ public final class SanctionChangeCommand implements CommandExecutor, TabComplete
         Optional<Instant> expiration = Optional.empty();
         if (requiresExpiration(action)) {
             if (arguments.length <= reasonStart + 1) {
-                sender.sendMessage(Component.text(
+                sender.sendMessage(StaffMessageStyle.style(Component.text(
                         "This action requires an ISO-8601 expiration and a written reason."
-                ));
+                )));
                 return null;
             }
             expiration = expiration(sender, arguments[reasonStart]);
@@ -183,7 +184,7 @@ public final class SanctionChangeCommand implements CommandExecutor, TabComplete
         int reasonEnd = confirmed ? arguments.length - 1 : arguments.length;
         String reason = String.join(" ", Arrays.copyOfRange(arguments, reasonStart, reasonEnd)).trim();
         if (reason.isBlank()) {
-            sender.sendMessage(Component.text("A written reason is required."));
+            sender.sendMessage(StaffMessageStyle.style(Component.text("A written reason is required.")));
             return null;
         }
         return new ChangeInput(expiration, reason, confirmed);
@@ -198,9 +199,9 @@ public final class SanctionChangeCommand implements CommandExecutor, TabComplete
         try {
             return Optional.of(Instant.parse(input));
         } catch (java.time.format.DateTimeParseException exception) {
-            sender.sendMessage(Component.text(
+            sender.sendMessage(StaffMessageStyle.style(Component.text(
                     "Expiration must be an ISO-8601 instant such as 2026-08-01T00:00:00Z."
-            ));
+            )));
             return Optional.empty();
         }
     }
@@ -270,12 +271,12 @@ public final class SanctionChangeCommand implements CommandExecutor, TabComplete
         try {
             workers.execute(action);
         } catch (RejectedExecutionException exception) {
-            sender.sendMessage(Component.text("The moderation work queue is full; no change was made."));
+            sender.sendMessage(StaffMessageStyle.style(Component.text("The moderation work queue is full; no change was made.")));
         }
     }
 
     private void send(CommandSender sender, String message) {
-        plugin.getServer().getGlobalRegionScheduler().execute(plugin, () -> sender.sendMessage(Component.text(message)));
+        plugin.getServer().getGlobalRegionScheduler().execute(plugin, () -> sender.sendMessage(StaffMessageStyle.style(Component.text(message))));
     }
 
     @Override

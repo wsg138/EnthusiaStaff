@@ -25,21 +25,49 @@ public record AutomatedPublicMuteRequest(
         category = bounded(category, "category", 96);
         idempotencyKey = bounded(idempotencyKey, "idempotencyKey", 128);
         evidence = List.copyOf(evidence);
-        if (severity < 0 || severity > 100 || strikeCount < 1) {
-            throw new IllegalArgumentException("invalid automated moderation severity/strike count");
+        validateSeverityAndStrikeCount(severity, strikeCount);
+        validateDuration(muteDuration);
+        validateEvidenceCount(evidence, strikeCount);
+    }
+
+    private static void validateSeverityAndStrikeCount(int severity, int strikeCount) {
+        if (severity < 0 || severity > 100) {
+            throw new IllegalArgumentException("invalid automated moderation severity");
         }
+        if (strikeCount < 1) {
+            throw new IllegalArgumentException("invalid automated moderation strike count");
+        }
+    }
+
+    private static void validateDuration(Duration muteDuration) {
         if (muteDuration.isZero() || muteDuration.isNegative()) {
             throw new IllegalArgumentException("muteDuration must be positive");
         }
-        if (evidence.size() < strikeCount) {
-            throw new IllegalArgumentException("evidence must contain every enforcement strike");
+    }
+
+    private static void validateEvidenceCount(List<AutomatedModerationEvidence> evidence, int strikeCount) {
+        if (evidence.size() != strikeCount) {
+            throw new IllegalArgumentException("evidence count must equal the enforcement strike count");
         }
     }
 
     private static String bounded(String value, String field, int maximum) {
-        if (value == null || value.isBlank() || value.length() > maximum || value.chars().anyMatch(Character::isISOControl)) {
+        if (value == null) {
             throw new IllegalArgumentException(field + " is invalid");
         }
-        return value.trim();
+        String normalized = value.trim();
+        if (normalized.isEmpty() || normalized.length() > maximum || containsControlCharacter(normalized)) {
+            throw new IllegalArgumentException(field + " is invalid");
+        }
+        return normalized;
+    }
+
+    private static boolean containsControlCharacter(String value) {
+        for (int index = 0; index < value.length(); index++) {
+            if (Character.isISOControl(value.charAt(index))) {
+                return true;
+            }
+        }
+        return false;
     }
 }

@@ -57,7 +57,9 @@ final class PlayerInfoTabMasker {
         }
         StaffRank rank = rankLookup.apply(targetId);
         boolean listed = entry.isListed() && !hiddenFromTab.test(targetId);
-        EnumWrappers.NativeGameMode gameMode = maskedGameMode(rank, entry.getGameMode());
+        EnumWrappers.NativeGameMode gameMode = viewerId.equals(targetId)
+                ? entry.getGameMode()
+                : maskedGameMode(rank, entry.getGameMode());
         if (listed == entry.isListed() && gameMode == entry.getGameMode()) {
             return EntryRewrite.unchanged(entry);
         }

@@ -3,6 +3,7 @@ package net.enthusia.staff.paper.command;
 import java.util.List;
 import java.util.Objects;
 import java.util.logging.Level;
+import net.enthusia.staff.paper.presentation.StaffMessageBlockStyle;
 import net.kyori.adventure.text.Component;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
@@ -20,7 +21,7 @@ final class CommandResponseDispatcher {
     }
 
     void send(CommandSender sender, List<Component> messages) {
-        List<Component> immutable = List.copyOf(messages);
+        List<Component> immutable = StaffMessageBlockStyle.style(List.copyOf(messages));
         Runnable delivery = () -> immutable.forEach(sender::sendMessage);
         try {
             if (sender instanceof Player player) {

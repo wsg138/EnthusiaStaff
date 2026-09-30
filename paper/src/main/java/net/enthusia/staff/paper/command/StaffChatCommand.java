@@ -2,7 +2,7 @@ package net.enthusia.staff.paper.command;
 
 import java.util.function.Supplier;
 import net.enthusia.staff.paper.integration.RoseChatIntegration;
-import net.kyori.adventure.text.Component;
+import net.enthusia.staff.paper.presentation.StaffMessageStyle;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
@@ -29,11 +29,11 @@ public final class StaffChatCommand implements CommandExecutor {
             return true;
         }
         if (!(sender instanceof Player player)) {
-            sender.sendMessage("RoseChat channel state belongs to an online player.");
+            sender.sendMessage(StaffMessageStyle.warning("RoseChat channel state belongs to an online player."));
             return true;
         }
         if (arguments.length != 0) {
-            player.sendMessage(Component.text("Usage: /" + label));
+            player.sendMessage(StaffMessageStyle.usage("Usage: /" + label));
             return true;
         }
         if (!CommandPermissionGate.require(
@@ -45,15 +45,17 @@ public final class StaffChatCommand implements CommandExecutor {
         }
         RoseChatIntegration loaded = integration.get();
         if (loaded == null || !loaded.bridgeActive()) {
-            player.sendMessage(Component.text("RoseChat staff-channel integration is unavailable."));
+            player.sendMessage(StaffMessageStyle.warning(
+                    "RoseChat staff-channel integration is unavailable."
+            ));
             return true;
         }
         if (!loaded.toggleStaffChannel(player.getUniqueId())) {
-            player.sendMessage(Component.text("RoseChat has no configured staff channel."));
+            player.sendMessage(StaffMessageStyle.warning("RoseChat has no configured staff channel."));
             return true;
         }
         String channel = loaded.currentChannel(player.getUniqueId()).orElse("unknown");
-        player.sendMessage(Component.text("RoseChat channel switched to " + channel + '.'));
+        player.sendMessage(StaffMessageStyle.success("RoseChat channel switched to " + channel + '.'));
         return true;
     }
 }

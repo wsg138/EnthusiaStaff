@@ -2,6 +2,7 @@ package net.enthusia.staff.paper.command;
 
 import java.util.function.Supplier;
 import net.enthusia.staff.domain.OperationalMode;
+import net.enthusia.staff.paper.presentation.StaffMessageStyle;
 import net.enthusia.staff.paper.visibility.VanishManager;
 import net.kyori.adventure.text.Component;
 import org.bukkit.command.Command;
@@ -44,11 +45,17 @@ public final class VanishCommand implements CommandExecutor {
             }
         }
         if (arguments.length != 0) {
-            player.sendMessage(Component.text("Usage: /" + label + " | /" + label + " tab <show|hide>"));
+            player.sendMessage(StaffMessageStyle.usage(
+                    "Usage: /" + label + " | /" + label + " tab <show|hide>"
+            ));
             return true;
         }
-        if (mode.get() != OperationalMode.ACTIVE) {
-            player.sendMessage(Component.text("Vanish changes are disabled while moderation is " + mode.get() + '.'));
+        OperationalMode currentMode = mode.get();
+        boolean currentlyVanished = vanish.isVanished(player.getUniqueId());
+        if (!StaffOperationalModeGate.vanishChangeAllowed(currentMode, currentlyVanished)) {
+            player.sendMessage(StaffMessageStyle.style(
+                    "Vanish enable is disabled while moderation is " + currentMode + '.'
+            ));
             return true;
         }
         vanish.toggle(player);

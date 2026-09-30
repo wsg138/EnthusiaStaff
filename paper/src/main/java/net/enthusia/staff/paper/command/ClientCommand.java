@@ -1,5 +1,6 @@
 package net.enthusia.staff.paper.command;
 
+import net.enthusia.staff.paper.presentation.StaffMessageStyle;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -61,9 +62,9 @@ public final class ClientCommand implements CommandExecutor, TabCompleter {
         }
         Player target = onlinePlayer(arguments[0]);
         if (target == null) {
-            sender.sendMessage(Component.text(
+            sender.sendMessage(StaffMessageStyle.style(Component.text(
                     "Client evidence is live-only; that player is not online on this server."
-            ));
+            )));
             return true;
         }
         ClientEvidenceSnapshot snapshot = collector.capture(target);
@@ -76,9 +77,9 @@ public final class ClientCommand implements CommandExecutor, TabCompleter {
             return true;
         }
         if (arguments.length != 3 || !arguments[2].equals("CONFIRM")) {
-            sender.sendMessage(Component.text(
+            sender.sendMessage(StaffMessageStyle.style(Component.text(
                     "Review only: no evidence was saved. Append the exact word CONFIRM to save it."
-            ));
+            )));
             return true;
         }
         submitSave(sender, snapshot);
@@ -86,50 +87,50 @@ public final class ClientCommand implements CommandExecutor, TabCompleter {
     }
 
     private void display(CommandSender sender, String targetName, ClientEvidenceSnapshot snapshot) {
-        sender.sendMessage(Component.text("Client evidence for " + targetName + ':'));
-        sender.sendMessage(Component.text(
+        sender.sendMessage(StaffMessageStyle.style(Component.text("Client evidence for " + targetName + ':')));
+        sender.sendMessage(StaffMessageStyle.style(Component.text(
                 "Platform=" + snapshot.platform()
                         + " version=" + snapshot.minecraftVersion().orElse(UNAVAILABLE_VALUE)
                         + " protocol=" + snapshot.protocolVersion()
                                 .map(String::valueOf).orElse(UNAVAILABLE_VALUE)
-        ));
-        sender.sendMessage(Component.text(
+        )));
+        sender.sendMessage(StaffMessageStyle.style(Component.text(
                 "Reported brand=" + snapshot.reportedBrand().orElse(UNAVAILABLE_VALUE)
-        ));
-        sender.sendMessage(Component.text(
+        )));
+        sender.sendMessage(StaffMessageStyle.style(Component.text(
                 "ViaVersion=" + snapshot.viaVersion()
                         + " plugin-version="
                         + snapshot.viaVersionPluginVersion().orElse(UNAVAILABLE_VALUE)
-        ));
-        sender.sendMessage(Component.text(
+        )));
+        sender.sendMessage(StaffMessageStyle.style(Component.text(
                 "Floodgate=" + snapshot.floodgate()
                         + " player=" + snapshot.floodgatePlayer()
                         + " Bedrock-version=" + snapshot.bedrockVersion().orElse(UNAVAILABLE_VALUE)
                         + " device=" + snapshot.bedrockDevice().orElse(UNAVAILABLE_VALUE)
-        ));
-        sender.sendMessage(Component.text("Geyser=" + snapshot.geyser()));
+        )));
+        sender.sendMessage(StaffMessageStyle.style(Component.text("Geyser=" + snapshot.geyser())));
         AutoClickerHandshakeEvidence handshake = snapshot.autoClickerHandshake().orElse(null);
         if (handshake == null) {
-            sender.sendMessage(Component.text(
+            sender.sendMessage(StaffMessageStyle.style(Component.text(
                     "Enthusia AutoClicker=" + snapshot.autoClicker() + " handshake=not detected"
-            ));
+            )));
         } else {
-            sender.sendMessage(Component.text(
+            sender.sendMessage(StaffMessageStyle.style(Component.text(
                     "Enthusia AutoClicker=" + snapshot.autoClicker()
                             + " handshake=reported mod=" + handshake.modVersion()
                             + " loader=" + handshake.loader()
                             + " minecraft=" + handshake.minecraftVersion()
                             + " received=" + handshake.receivedAt()
-            ));
-            sender.sendMessage(Component.text(
+            )));
+            sender.sendMessage(StaffMessageStyle.style(Component.text(
                     "The AutoClicker handshake is a convenience signal, not cryptographic proof."
-            ));
+            )));
         }
-        sender.sendMessage(Component.text(
+        sender.sendMessage(StaffMessageStyle.style(Component.text(
                 "Polar=" + snapshot.polar()
                         + " metadata=" + snapshot.polarMetadata().orElse(UNAVAILABLE_VALUE)
                         + " captured=" + snapshot.capturedAt()
-        ));
+        )));
     }
 
     private void submitSave(CommandSender sender, ClientEvidenceSnapshot snapshot) {
@@ -153,9 +154,9 @@ public final class ClientCommand implements CommandExecutor, TabCompleter {
                 }
             });
         } catch (RejectedExecutionException exception) {
-            sender.sendMessage(Component.text(
+            sender.sendMessage(StaffMessageStyle.style(Component.text(
                     "The bounded work queue is full; no client evidence was saved."
-            ));
+            )));
         }
     }
 
@@ -174,12 +175,12 @@ public final class ClientCommand implements CommandExecutor, TabCompleter {
     private void send(CommandSender sender, String message) {
         plugin.getServer().getGlobalRegionScheduler().execute(
                 plugin,
-                () -> sender.sendMessage(Component.text(message))
+                () -> sender.sendMessage(StaffMessageStyle.style(Component.text(message)))
         );
     }
 
     private static void usage(CommandSender sender, String label) {
-        sender.sendMessage(Component.text("Usage: /" + label + " <player|uuid> [save CONFIRM]"));
+        sender.sendMessage(StaffMessageStyle.style(Component.text("Usage: /" + label + " <player|uuid> [save CONFIRM]")));
     }
 
     @Override

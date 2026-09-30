@@ -12,6 +12,9 @@ import java.util.logging.Level;
 import net.enthusia.staff.paper.RuntimeHealth;
 import net.enthusia.staff.paper.config.reload.ConfigurationReloadAction;
 import net.enthusia.staff.paper.config.reload.ConfigurationReloadResult;
+import net.enthusia.staff.paper.presentation.StaffMessageStyle;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
@@ -59,7 +62,9 @@ public final class EstaffCommand implements CommandExecutor, TabCompleter {
                 ),
                 ReloadDispatcher.immediate(),
                 null,
-                () -> List.of("WARNING full verification is unavailable without the Paper runtime.")
+                () -> List.of(StaffMessageStyle.warning(
+                        "Full verification is unavailable without the Paper runtime."
+                ))
         );
     }
 
@@ -69,7 +74,9 @@ public final class EstaffCommand implements CommandExecutor, TabCompleter {
                 reloadAction,
                 ReloadDispatcher.immediate(),
                 null,
-                () -> List.of("WARNING full verification is unavailable without the Paper runtime.")
+                () -> List.of(StaffMessageStyle.warning(
+                        "Full verification is unavailable without the Paper runtime."
+                ))
         );
     }
 
@@ -104,7 +111,9 @@ public final class EstaffCommand implements CommandExecutor, TabCompleter {
                 reloadAction,
                 reloadDispatcher,
                 null,
-                () -> List.of("WARNING full verification is unavailable without the Paper runtime.")
+                () -> List.of(StaffMessageStyle.warning(
+                        "Full verification is unavailable without the Paper runtime."
+                ))
         );
     }
 
@@ -252,63 +261,95 @@ public final class EstaffCommand implements CommandExecutor, TabCompleter {
                 result -> reportReload(sender, result)
         );
         if (dispatch == ReloadDispatch.SCHEDULED) {
-            sender.sendMessage("EnthusiaStaff reload scheduled on the global region thread.");
+            sender.sendMessage(StaffMessageStyle.warning(
+                    "EnthusiaStaff reload scheduled on the global region thread."
+            ));
         } else if (dispatch == ReloadDispatch.REJECTED) {
-            sender.sendMessage("EnthusiaStaff reload could not be scheduled; no configuration was changed.");
+            sender.sendMessage(StaffMessageStyle.error(
+                    "EnthusiaStaff reload could not be scheduled; no configuration was changed."
+            ));
         }
     }
 
     private void reportStatus(CommandSender sender) {
         RuntimeHealth.Snapshot snapshot = health.snapshot();
-        sender.sendMessage("EnthusiaStaff mode: " + snapshot.mode());
+        sender.sendMessage(StaffMessageStyle.modeHeader("EnthusiaStaff", snapshot.mode()));
         if (snapshot.issues().isEmpty()) {
-            sender.sendMessage("PASS: no active runtime health issues");
+            sender.sendMessage(StaffMessageStyle.statusRow(
+                    "Runtime",
+                    "Healthy",
+                    "No active runtime health issues",
+                    StaffMessageStyle.Tone.SUCCESS
+            ));
             return;
         }
         for (Map.Entry<String, String> issue : snapshot.issues().entrySet()) {
-            sender.sendMessage("DISABLED " + issue.getKey() + ": " + issue.getValue());
+            StaffMessageStyle.Tone tone = StaffMessageStyle.issueTone(
+                    issue.getKey(),
+                    issue.getValue(),
+                    snapshot.mode()
+            );
+            sender.sendMessage(StaffMessageStyle.statusRow(
+                    humanLabel(issue.getKey()),
+                    tone == StaffMessageStyle.Tone.ERROR ? "Blocked" : "Disabled",
+                    issue.getValue(),
+                    tone
+            ));
         }
     }
 
     private void reportFullVerification(CommandSender sender) {
         try {
-            List<String> messages = runtimePlugin == null
+            List<Component> messages = runtimePlugin == null
                     ? fallbackFullVerification.verify()
                     : new FullRuntimeVerifier(runtimePlugin, health, storagePublished).verify();
             messages.forEach(sender::sendMessage);
         } catch (RuntimeException exception) {
             LOGGER.log(Level.WARNING, "Full EnthusiaStaff verification failed", exception);
-            sender.sendMessage("CRITICAL full verification failed; see the sanitized server log.");
+            sender.sendMessage(StaffMessageStyle.error(
+                    "Full verification failed; see the sanitized server log."
+            ));
         }
     }
 
     private static void reportUsage(CommandSender sender, String label) {
-        sender.sendMessage("Usage: /" + label + " <status|verify [full]|reload|sanction>");
+        sender.sendMessage(StaffMessageStyle.usage(
+                "Usage: /" + label + " <status|verify [full]|reload|sanction>"
+        ));
     }
 
     private void reportReload(CommandSender sender, ConfigurationReloadResult result) {
         if (result.successful()) {
-            for (Runnable hook : successfulReloadHooks) {
-                try {
-                    hook.run();
-                } catch (RuntimeException exception) {
-                    LOGGER.log(Level.WARNING, "Successful reload hook failed", exception);
-                    sender.sendMessage(
-                            "Reload applied, but a presentation-settings hook failed; previous values remain active."
-                    );
-                }
-            }
+            runSuccessfulReloadHooks(sender);
         }
-        sender.sendMessage(result.message());
+        sender.sendMessage(result.successful()
+                ? StaffMessageStyle.success(result.message())
+                : StaffMessageStyle.error(result.message()));
         int shown = Math.min(result.details().size(), MAX_RELOAD_DETAILS);
         for (int index = 0; index < shown; index++) {
-            sender.sendMessage("- " + result.details().get(index));
+            sender.sendMessage(Component.text("  • ", NamedTextColor.DARK_GRAY)
+                    .append(Component.text(result.details().get(index), NamedTextColor.GRAY)));
         }
         if (result.details().size() > shown) {
-            sender.sendMessage("Additional sanitized reload details were written to the server log.");
+            sender.sendMessage(StaffMessageStyle.info(
+                    "Additional sanitized reload details were written to the server log."
+            ));
         }
         if (result.reasonPoliciesReloaded()) {
-            sender.sendMessage("Reason policies were replaced atomically.");
+            sender.sendMessage(StaffMessageStyle.success("Reason policies were replaced atomically."));
+        }
+    }
+
+    private void runSuccessfulReloadHooks(CommandSender sender) {
+        for (Runnable hook : successfulReloadHooks) {
+            try {
+                hook.run();
+            } catch (RuntimeException exception) {
+                LOGGER.log(Level.WARNING, "Successful reload hook failed", exception);
+                sender.sendMessage(StaffMessageStyle.warning(
+                        "Reload applied, but a presentation-settings hook failed; previous values remain active."
+                ));
+            }
         }
     }
 
@@ -351,6 +392,14 @@ public final class EstaffCommand implements CommandExecutor, TabCompleter {
             case RELOAD_OPERATION -> "You do not have permission to reload EnthusiaStaff configuration.";
             default -> "You do not have permission to view EnthusiaStaff status.";
         };
+    }
+
+    private static String humanLabel(String value) {
+        String normalized = value == null ? "" : value.trim().replace('-', ' ').replace('_', ' ');
+        if (normalized.isBlank()) {
+            return "Runtime";
+        }
+        return Character.toUpperCase(normalized.charAt(0)) + normalized.substring(1);
     }
 
     enum ReloadDispatch {
@@ -450,6 +499,6 @@ public final class EstaffCommand implements CommandExecutor, TabCompleter {
 
     @FunctionalInterface
     interface FullVerificationAction {
-        List<String> verify();
+        List<Component> verify();
     }
 }

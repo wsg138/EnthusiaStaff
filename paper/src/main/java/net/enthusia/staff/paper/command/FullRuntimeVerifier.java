@@ -8,7 +8,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.function.BooleanSupplier;
+import net.enthusia.staff.domain.OperationalMode;
 import net.enthusia.staff.paper.RuntimeHealth;
+import net.enthusia.staff.paper.presentation.StaffMessageStyle;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.command.PluginCommand;
 import org.bukkit.plugin.Plugin;
 import org.bukkit.plugin.PluginManager;
@@ -17,18 +21,7 @@ import org.bukkit.plugin.java.JavaPlugin;
 /** Produces a compact, non-destructive local Paper runtime diagnostic. */
 final class FullRuntimeVerifier {
     private static final String ESTAFF_COMMAND = "estaff";
-    private static final String DETAIL_SEPARATOR = " — ";
     private static final int MAX_ISSUES_SHOWN = 5;
-    private static final String RESET = "§r";
-    private static final String RED = "§c";
-    private static final String GREEN = "§a";
-    private static final String YELLOW = "§e";
-    private static final String GOLD = "§6";
-    private static final String AQUA = "§b";
-    private static final String WHITE = "§f";
-    private static final String GRAY = "§7";
-    private static final String DARK_GRAY = "§8";
-    private static final String BOLD = "§l";
     private static final Map<String, String> PROVIDERS = Map.of(
             "RoseChat", "rosechat",
             "EnthusiaCurrency", "currency",
@@ -47,36 +40,38 @@ final class FullRuntimeVerifier {
         this.storagePublished = Objects.requireNonNull(storagePublished, "storagePublished");
     }
 
-    List<String> verify() {
+    List<Component> verify() {
         RuntimeHealth.Snapshot snapshot = health.snapshot();
-        List<String> lines = new ArrayList<>();
-        lines.add(header("EnthusiaStaff • Local Verify"));
-        lines.add(label("Mode", modeColor(snapshot.mode().name()) + snapshot.mode().name()));
+        List<Component> lines = new ArrayList<>();
+        lines.add(StaffMessageStyle.header("EnthusiaStaff • Local Verify"));
+        lines.add(StaffMessageStyle.statusRow(
+                "Mode",
+                StaffMessageStyle.displayMode(snapshot.mode()),
+                "local Paper runtime",
+                modeTone(snapshot.mode())
+        ));
         appendCore(lines);
         appendProviders(lines, snapshot.issues());
-        appendIssues(lines, snapshot.issues());
-        boolean blocked = isBlocked(snapshot.issues());
-        lines.add(separator());
-        lines.add(blocked ? RED + "✖ LOCAL BACKEND HAS BLOCKERS" : GREEN + "✔ LOCAL BACKEND HEALTHY");
-        lines.add(DARK_GRAY + "Network-wide: run " + AQUA + "/estaff verify full" + DARK_GRAY + " on Velocity.");
+        appendIssues(lines, snapshot);
+        appendConclusion(lines, snapshot.issues());
         return List.copyOf(lines);
     }
 
-    private void appendCore(List<String> lines) {
-        lines.add(section("Core"));
-        lines.add(check(storagePublished.getAsBoolean(), "Storage", "connected", "not published"));
-        lines.add(check(commandRegistered(), "Command", "/estaff owned", "/estaff ownership is wrong"));
-        lines.add(check(artifactReadable(), "Artifact", "JAR readable", "loaded JAR cannot be read"));
+    private void appendCore(List<Component> lines) {
+        lines.add(StaffMessageStyle.section("Core"));
+        lines.add(check(storagePublished.getAsBoolean(), "Storage", "Connected", "Not ready"));
+        lines.add(check(commandRegistered(), "Command", "Owned", "/estaff ownership is wrong"));
+        lines.add(check(artifactReadable(), "Artifact", "Readable", "Loaded JAR cannot be read"));
     }
 
-    private void appendProviders(List<String> lines, Map<String, String> issues) {
-        lines.add(section("Provider APIs"));
+    private void appendProviders(List<Component> lines, Map<String, String> issues) {
+        lines.add(StaffMessageStyle.section("Provider APIs"));
         PluginManager manager = plugin.getServer().getPluginManager();
         PROVIDERS.forEach((provider, issueKey) -> lines.add(providerLine(manager, issues, provider, issueKey)));
         lines.add(clientProviderSummary(manager));
     }
 
-    private String providerLine(
+    private Component providerLine(
             PluginManager manager,
             Map<String, String> issues,
             String providerName,
@@ -84,33 +79,56 @@ final class FullRuntimeVerifier {
     ) {
         Plugin provider = manager.getPlugin(providerName);
         if (provider == null) {
-            return disabled(providerName, "not installed");
+            return disabled(providerName, "Not installed");
         }
         if (!provider.isEnabled()) {
-            return warning(providerName, "installed but disabled");
+            return warning(providerName, "Disabled", "Installed but disabled");
         }
         String issue = issues.get(issueKey);
-        return issue == null ? pass(providerName, "enabled / API healthy") : warning(providerName, shortText(issue));
+        return issue == null
+                ? pass(providerName, "Healthy", "Enabled / API healthy")
+                : warning(providerName, "Warning", shortText(issue));
     }
 
-    private String clientProviderSummary(PluginManager manager) {
+    private Component clientProviderSummary(PluginManager manager) {
         List<String> names = List.of("ViaVersion", "floodgate", "Geyser-Spigot", "EnthusiaServerAutoClicker");
         long enabled = names.stream().filter(manager::isPluginEnabled).count();
-        return GRAY + "  • Client APIs: " + WHITE + enabled + "/" + names.size()
-                + DARK_GRAY + " optional providers enabled";
+        return StaffMessageStyle.statusRow(
+                "Client APIs",
+                enabled + "/" + names.size(),
+                "optional providers enabled",
+                StaffMessageStyle.Tone.MUTED
+        );
     }
 
-    private void appendIssues(List<String> lines, Map<String, String> issues) {
-        if (issues.isEmpty()) {
+    private void appendIssues(List<Component> lines, RuntimeHealth.Snapshot snapshot) {
+        if (snapshot.issues().isEmpty()) {
             return;
         }
-        lines.add(section("Active Issues"));
-        issues.entrySet().stream().limit(MAX_ISSUES_SHOWN).forEach(issue ->
-                lines.add(warning(issue.getKey(), shortText(issue.getValue()))));
-        int hidden = issues.size() - MAX_ISSUES_SHOWN;
+        lines.add(StaffMessageStyle.section("Active Issues"));
+        snapshot.issues().entrySet().stream().limit(MAX_ISSUES_SHOWN).forEach(issue -> lines.add(
+                StaffMessageStyle.statusRow(
+                        issue.getKey(),
+                        "Disabled",
+                        shortText(issue.getValue()),
+                        StaffMessageStyle.issueTone(issue.getKey(), issue.getValue(), snapshot.mode())
+                )
+        ));
+        int hidden = snapshot.issues().size() - MAX_ISSUES_SHOWN;
         if (hidden > 0) {
-            lines.add(DARK_GRAY + "  … " + hidden + " more; see sanitized server log.");
+            lines.add(Component.text("  … " + hidden + " more; see sanitized server log.", NamedTextColor.DARK_GRAY));
         }
+    }
+
+    private void appendConclusion(List<Component> lines, Map<String, String> issues) {
+        boolean blocked = isBlocked(issues);
+        lines.add(Component.text("────────────────────────", NamedTextColor.DARK_GRAY));
+        lines.add(blocked
+                ? StaffMessageStyle.error("✖ LOCAL BACKEND HAS BLOCKERS")
+                : StaffMessageStyle.success("✔ LOCAL BACKEND HEALTHY"));
+        lines.add(Component.text("Network-wide: run ", NamedTextColor.DARK_GRAY)
+                .append(StaffMessageStyle.command("/estaff verify full"))
+                .append(Component.text(" on Velocity.", NamedTextColor.DARK_GRAY)));
     }
 
     private boolean commandRegistered() {
@@ -138,48 +156,32 @@ final class FullRuntimeVerifier {
                         || key.equals("operational-state") || key.equals("cutover"));
     }
 
-    private static String check(boolean passed, String label, String passDetail, String failDetail) {
-        return passed ? pass(label, passDetail) : critical(label, failDetail);
+    private static Component check(boolean passed, String label, String passDetail, String failDetail) {
+        return passed ? pass(label, passDetail, "") : critical(label, failDetail);
     }
 
-    private static String header(String title) {
-        return DARK_GRAY + "──────── " + AQUA + BOLD + title + RESET + DARK_GRAY + " ────────";
+    private static Component pass(String label, String status, String detail) {
+        return StaffMessageStyle.statusRow(label, status, detail, StaffMessageStyle.Tone.SUCCESS);
     }
 
-    private static String separator() {
-        return DARK_GRAY + "────────────────────────";
+    private static Component warning(String label, String status, String detail) {
+        return StaffMessageStyle.statusRow(label, status, detail, StaffMessageStyle.Tone.WARNING);
     }
 
-    private static String section(String title) {
-        return GOLD + "▸ " + YELLOW + BOLD + title;
+    private static Component disabled(String label, String detail) {
+        return StaffMessageStyle.statusRow(label, "Optional", detail, StaffMessageStyle.Tone.MUTED);
     }
 
-    private static String label(String label, String value) {
-        return GRAY + label + ": " + value;
+    private static Component critical(String label, String detail) {
+        return StaffMessageStyle.statusRow(label, "Failed", detail, StaffMessageStyle.Tone.ERROR);
     }
 
-    private static String pass(String label, String detail) {
-        return GREEN + "  ✔ " + WHITE + label + DARK_GRAY + DETAIL_SEPARATOR + GRAY + detail;
-    }
-
-    private static String warning(String label, String detail) {
-        return YELLOW + "  ⚠ " + WHITE + label + DARK_GRAY + DETAIL_SEPARATOR + GRAY + detail;
-    }
-
-    private static String disabled(String label, String detail) {
-        return DARK_GRAY + "  ○ " + GRAY + label + DETAIL_SEPARATOR + detail;
-    }
-
-    private static String critical(String label, String detail) {
-        return RED + "  ✖ " + WHITE + label + DARK_GRAY + DETAIL_SEPARATOR + RED + detail;
-    }
-
-    private static String modeColor(String mode) {
+    private static StaffMessageStyle.Tone modeTone(OperationalMode mode) {
         return switch (mode) {
-            case "ACTIVE" -> GREEN;
-            case "SHADOW_MIGRATION" -> YELLOW;
-            case "DEGRADED", "READ_ONLY_FAILURE" -> RED;
-            default -> GOLD;
+            case ACTIVE -> StaffMessageStyle.Tone.SUCCESS;
+            case SHADOW_MIGRATION -> StaffMessageStyle.Tone.WARNING;
+            case DEGRADED, READ_ONLY_FAILURE -> StaffMessageStyle.Tone.ERROR;
+            default -> StaffMessageStyle.Tone.WARNING;
         };
     }
 

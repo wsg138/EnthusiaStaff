@@ -39,6 +39,36 @@ class PlayerInfoTabMaskerTest {
     }
 
     @Test
+    void ownSpectatorEntryKeepsRealGameModeForClientPhysics() {
+        PlayerInfoData source = entry(VIEWER_ID, true, EnumWrappers.NativeGameMode.SPECTATOR);
+        PlayerInfoTabMasker masker = new PlayerInfoTabMasker(
+                (viewer, target) -> true,
+                target -> StaffRank.DEVELOPER,
+                target -> false
+        );
+
+        List<PlayerInfoData> rewritten = masker.rewrite(VIEWER_ID, List.of(source));
+
+        assertSame(source, rewritten.getFirst());
+        assertEquals(EnumWrappers.NativeGameMode.SPECTATOR, rewritten.getFirst().getGameMode());
+    }
+
+    @Test
+    void hiddenOwnSpectatorEntryStaysSpectatorWhileBeingUnlisted() {
+        PlayerInfoData source = entry(VIEWER_ID, true, EnumWrappers.NativeGameMode.SPECTATOR);
+        PlayerInfoTabMasker masker = new PlayerInfoTabMasker(
+                (viewer, target) -> true,
+                target -> StaffRank.ADMIN,
+                target -> true
+        );
+
+        PlayerInfoData masked = masker.rewrite(VIEWER_ID, List.of(source)).getFirst();
+
+        assertFalse(masked.isListed());
+        assertEquals(EnumWrappers.NativeGameMode.SPECTATOR, masked.getGameMode());
+    }
+
+    @Test
     void hiddenSpectatorCannotBeRelistedByAPlayerInfoUpdate() {
         PlayerInfoTabMasker masker = new PlayerInfoTabMasker(
                 (viewer, target) -> true,
@@ -82,8 +112,12 @@ class PlayerInfoTabMaskerTest {
     }
 
     private static PlayerInfoData entry(boolean listed, EnumWrappers.NativeGameMode gameMode) {
+        return entry(TARGET_ID, listed, gameMode);
+    }
+
+    private static PlayerInfoData entry(UUID playerId, boolean listed, EnumWrappers.NativeGameMode gameMode) {
         return new PlayerInfoData(
-                TARGET_ID,
+                playerId,
                 47,
                 listed,
                 gameMode,

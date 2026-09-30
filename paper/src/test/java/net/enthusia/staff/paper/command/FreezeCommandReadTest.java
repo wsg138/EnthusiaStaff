@@ -19,6 +19,7 @@ import net.enthusia.staff.domain.player.PlayerPlatform;
 import net.enthusia.staff.domain.player.PlayerResolution;
 import net.enthusia.staff.domain.ports.FreezeStore;
 import net.enthusia.staff.domain.ports.PlayerDirectory;
+import net.enthusia.staff.paper.presentation.StaffMessageStyle;
 import net.kyori.adventure.text.Component;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
@@ -70,7 +71,7 @@ final class FreezeCommandReadTest {
                 new String[]{"FrozenPlayer", "Investigation"}
         );
 
-        assertEquals(List.of(Component.text(
+        assertEquals(List.of(StaffMessageStyle.error(
                 "Freeze changes are disabled while moderation is READ_ONLY_FAILURE."
         )), messages);
     }
