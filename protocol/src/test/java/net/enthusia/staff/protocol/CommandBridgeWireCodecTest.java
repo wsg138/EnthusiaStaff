@@ -5,7 +5,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.time.Instant;
 import java.util.UUID;
+import net.enthusia.staff.domain.commandbridge.CommandBridgeOutcome;
 import net.enthusia.staff.domain.commandbridge.CommandBridgeRequest;
+import net.enthusia.staff.domain.commandbridge.CommandBridgeResponse;
 import net.enthusia.staff.domain.moderation.ModerationSubjectId;
 import org.junit.jupiter.api.Test;
 
@@ -18,7 +20,35 @@ class CommandBridgeWireCodecTest {
 
     @Test
     void roundTripsOnlyTheExplicitRequestShape() {
-        CommandBridgeRequest request = new CommandBridgeRequest(
+        CommandBridgeRequest request = request();
+        assertEquals(request, codec.decodeRequest(codec.encodeRequest(request)).orElseThrow());
+    }
+
+    @Test
+    void rejectsUnknownRequestFieldsVersionsAndOversizedBodies() {
+        String valid = codec.encodeRequest(request());
+        assertTrue(codec.decodeRequest(valid.substring(0, valid.length() - 1) + ",\"role\":\"admin\"}").isEmpty());
+        assertTrue(codec.decodeRequest(valid.replace("\"version\":1", "\"version\":2")).isEmpty());
+        assertTrue(codec.decodeRequest("x".repeat(4_097)).isEmpty());
+    }
+
+    @Test
+    void responseShapeIsStrictAndBounded() {
+        CommandBridgeResponse response = new CommandBridgeResponse(
+                CommandBridgeOutcome.SUCCESS,
+                "Command executed.",
+                "online=2",
+                false,
+                false
+        );
+        String encoded = codec.encodeResponse(response);
+        assertEquals(response, codec.decodeResponse(encoded).orElseThrow());
+        assertTrue(codec.decodeResponse(encoded.substring(0, encoded.length() - 1) + ",\"db\":\"secret\"}").isEmpty());
+        assertTrue(codec.decodeResponse("x".repeat(8_193)).isEmpty());
+    }
+
+    private static CommandBridgeRequest request() {
+        return new CommandBridgeRequest(
                 REQUEST_ID,
                 new ModerationSubjectId(SUBJECT_ID),
                 ACTOR_ID,
@@ -26,22 +56,5 @@ class CommandBridgeWireCodecTest {
                 "list",
                 NOW
         );
-
-        assertEquals(request, codec.decodeRequest(codec.encodeRequest(request)).orElseThrow());
-    }
-
-    @Test
-    void rejectsUnknownFieldsVersionsAndOversizedBodies() {
-        String valid = codec.encodeRequest(new CommandBridgeRequest(
-                REQUEST_ID,
-                new ModerationSubjectId(SUBJECT_ID),
-                ACTOR_ID,
-                "smp",
-                "list",
-                NOW
-        ));
-        assertTrue(codec.decodeRequest(valid.substring(0, valid.length() - 1) + ",\"role\":\"admin\"}").isEmpty());
-        assertTrue(codec.decodeRequest(valid.replace("\"version\":1", "\"version\":2")).isEmpty());
-        assertTrue(codec.decodeRequest("x".repeat(4_097)).isEmpty());
     }
 }

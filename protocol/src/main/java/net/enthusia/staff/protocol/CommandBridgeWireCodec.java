@@ -7,25 +7,26 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import java.nio.charset.StandardCharsets;
 import java.time.DateTimeException;
 import java.time.Instant;
+import java.util.Iterator;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import net.enthusia.staff.domain.commandbridge.CommandBridgeOutcome;
 import net.enthusia.staff.domain.commandbridge.CommandBridgeRequest;
+import net.enthusia.staff.domain.commandbridge.CommandBridgeResponse;
 import net.enthusia.staff.domain.moderation.ModerationSubjectId;
 
-/** Strict versioned JSON wire codec for signed command requests. */
+/** Strict versioned JSON wire codec for signed command requests and safe responses. */
 public final class CommandBridgeWireCodec {
     private static final int VERSION = 1;
-    private static final int MAX_BODY_BYTES = 4_096;
+    private static final int MAX_REQUEST_BYTES = 4_096;
+    private static final int MAX_RESPONSE_BYTES = 8_192;
     private static final ObjectMapper JSON = new ObjectMapper();
     private static final Set<String> REQUEST_FIELDS = Set.of(
-            "version",
-            "requestId",
-            "subjectId",
-            "actorPlayerId",
-            "targetServer",
-            "command",
-            "requestedAt"
+            "version", "requestId", "subjectId", "actorPlayerId", "targetServer", "command", "requestedAt"
+    );
+    private static final Set<String> RESPONSE_FIELDS = Set.of(
+            "version", "outcome", "message", "output", "truncated", "redacted"
     );
 
     public String encodeRequest(CommandBridgeRequest request) {
@@ -40,20 +41,16 @@ public final class CommandBridgeWireCodec {
         body.put("targetServer", request.targetServer());
         body.put("command", request.command());
         body.put("requestedAt", request.requestedAt().toString());
-        try {
-            return JSON.writeValueAsString(body);
-        } catch (JsonProcessingException failure) {
-            throw new IllegalStateException("command request JSON encoding failed", failure);
-        }
+        return encode(body, "command request");
     }
 
     public Optional<CommandBridgeRequest> decodeRequest(String body) {
-        if (body == null || body.getBytes(StandardCharsets.UTF_8).length > MAX_BODY_BYTES) {
+        if (tooLarge(body, MAX_REQUEST_BYTES)) {
             return Optional.empty();
         }
         try {
             JsonNode root = JSON.readTree(body);
-            if (!validRoot(root)) {
+            if (!validRoot(root, REQUEST_FIELDS) || !requestFieldTypes(root)) {
                 return Optional.empty();
             }
             return Optional.of(new CommandBridgeRequest(
@@ -69,21 +66,80 @@ public final class CommandBridgeWireCodec {
         }
     }
 
-    private static boolean validRoot(JsonNode root) {
-        if (root == null || !root.isObject() || root.size() != REQUEST_FIELDS.size()) {
+    public String encodeResponse(CommandBridgeResponse response) {
+        if (response == null) {
+            throw new IllegalArgumentException("command bridge response is required");
+        }
+        ObjectNode body = JSON.createObjectNode();
+        body.put("version", VERSION);
+        body.put("outcome", response.outcome().name());
+        body.put("message", response.message());
+        body.put("output", response.output());
+        body.put("truncated", response.truncated());
+        body.put("redacted", response.redacted());
+        return encode(body, "command response");
+    }
+
+    public Optional<CommandBridgeResponse> decodeResponse(String body) {
+        if (tooLarge(body, MAX_RESPONSE_BYTES)) {
+            return Optional.empty();
+        }
+        try {
+            JsonNode root = JSON.readTree(body);
+            if (!validRoot(root, RESPONSE_FIELDS) || !responseFieldTypes(root)) {
+                return Optional.empty();
+            }
+            return Optional.of(new CommandBridgeResponse(
+                    CommandBridgeOutcome.valueOf(text(root, "outcome")),
+                    text(root, "message"),
+                    text(root, "output"),
+                    root.path("truncated").booleanValue(),
+                    root.path("redacted").booleanValue()
+            ));
+        } catch (JsonProcessingException | IllegalArgumentException failure) {
+            return Optional.empty();
+        }
+    }
+
+    private static String encode(ObjectNode body, String label) {
+        try {
+            return JSON.writeValueAsString(body);
+        } catch (JsonProcessingException failure) {
+            throw new IllegalStateException(label + " JSON encoding failed", failure);
+        }
+    }
+
+    private static boolean validRoot(JsonNode root, Set<String> fields) {
+        if (root == null || !root.isObject() || root.size() != fields.size()) {
             return false;
         }
         if (!root.path("version").isInt() || root.path("version").intValue() != VERSION) {
             return false;
         }
-        java.util.Iterator<String> names = root.fieldNames();
+        Iterator<String> names = root.fieldNames();
         while (names.hasNext()) {
-            if (!REQUEST_FIELDS.contains(names.next())) {
+            if (!fields.contains(names.next())) {
                 return false;
             }
         }
+        return true;
+    }
+
+    private static boolean requestFieldTypes(JsonNode root) {
         return REQUEST_FIELDS.stream().filter(field -> !"version".equals(field))
                 .allMatch(field -> root.path(field).isTextual());
+    }
+
+    private static boolean responseFieldTypes(JsonNode root) {
+        return root.path("outcome").isTextual()
+                && root.path("message").isTextual()
+                && root.path("output").isTextual()
+                && root.path("truncated").isBoolean()
+                && root.path("redacted").isBoolean();
+    }
+
+    private static boolean tooLarge(String body, int maximumBytes) {
+        return body == null || body.getBytes(StandardCharsets.UTF_8).length > maximumBytes;
     }
 
     private static String text(JsonNode root, String field) {
