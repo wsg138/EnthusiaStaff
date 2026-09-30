@@ -7,7 +7,6 @@ import net.enthusia.staff.paper.visibility.VanishManager;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.format.TextDecoration;
-import org.bukkit.NamespacedKey;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
@@ -16,28 +15,24 @@ import org.bukkit.event.entity.PlayerDeathEvent;
 import org.bukkit.event.player.PlayerGameModeChangeEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.event.player.PlayerRespawnEvent;
-import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.plugin.java.JavaPlugin;
 
 /** Keeps staff/vanish state visible and closes unsafe staff-mode death sessions. */
 public final class StaffStatePresentation implements Listener {
     private static final long REFRESH_TICKS = 10L;
     private static final long DEATH_EXIT_RETRY_TICKS = 40L;
-    private static final byte DEATH_EXIT_PENDING = 1;
-    private static final byte DEATH_EXIT_REQUESTED = 2;
 
     private final JavaPlugin plugin;
     private final StaffModeManager staffMode;
     private final VanishManager vanish;
-    private final NamespacedKey deathExitKey;
     private final Set<UUID> indicatorVisible = ConcurrentHashMap.newKeySet();
+    private final Set<UUID> pendingDeathExit = ConcurrentHashMap.newKeySet();
     private final Set<UUID> deathExitRequested = ConcurrentHashMap.newKeySet();
 
     public StaffStatePresentation(JavaPlugin plugin, StaffModeManager staffMode, VanishManager vanish) {
         this.plugin = java.util.Objects.requireNonNull(plugin, "plugin");
         this.staffMode = java.util.Objects.requireNonNull(staffMode, "staffMode");
         this.vanish = java.util.Objects.requireNonNull(vanish, "vanish");
-        this.deathExitKey = new NamespacedKey(plugin, "staff_death_exit");
     }
 
     public void start() {
@@ -56,8 +51,7 @@ public final class StaffStatePresentation implements Listener {
         return staffMode.active(playerId)
                 || vanish.isVanished(playerId)
                 || indicatorVisible.contains(playerId)
-                || deathExitRequested.contains(playerId)
-                || deathExitState(player) != null;
+                || pendingDeathExit.contains(playerId);
     }
 
     private void refresh(Player player) {
@@ -84,46 +78,25 @@ public final class StaffStatePresentation implements Listener {
 
     private void reconcileDeathExit(Player player, boolean staffActive) {
         UUID playerId = player.getUniqueId();
-        Byte state = deathExitState(player);
-        if (state == null) {
+        if (!pendingDeathExit.contains(playerId)) {
             deathExitRequested.remove(playerId);
             return;
         }
         if (!staffActive) {
-            if (state == DEATH_EXIT_REQUESTED) {
-                clearDeathExitMarker(player);
-                deathExitRequested.remove(playerId);
+            if (deathExitRequested.remove(playerId)) {
+                pendingDeathExit.remove(playerId);
             }
             return;
         }
         if (!deathExitRequested.add(playerId)) {
             return;
         }
-        setDeathExitState(player, DEATH_EXIT_REQUESTED);
         staffMode.exit(player);
         player.getScheduler().runDelayed(plugin, ignored -> {
-            if (staffMode.active(playerId) && deathExitState(player) != null) {
-                setDeathExitState(player, DEATH_EXIT_PENDING);
+            if (staffMode.active(playerId) && pendingDeathExit.contains(playerId)) {
                 deathExitRequested.remove(playerId);
             }
         }, null, DEATH_EXIT_RETRY_TICKS);
-    }
-
-    private Byte deathExitState(Player player) {
-        return player.getPersistentDataContainer().get(deathExitKey, PersistentDataType.BYTE);
-    }
-
-    private void setDeathExitState(Player player, byte state) {
-        player.getPersistentDataContainer().set(deathExitKey, PersistentDataType.BYTE, state);
-    }
-
-    private void markDeathExit(Player player) {
-        setDeathExitState(player, DEATH_EXIT_PENDING);
-        deathExitRequested.remove(player.getUniqueId());
-    }
-
-    private void clearDeathExitMarker(Player player) {
-        player.getPersistentDataContainer().remove(deathExitKey);
     }
 
     private static void unlistSelf(Player player) {
@@ -153,20 +126,22 @@ public final class StaffStatePresentation implements Listener {
     @EventHandler(priority = EventPriority.HIGHEST)
     public void onDeath(PlayerDeathEvent event) {
         Player player = event.getEntity();
-        if (!staffMode.active(player.getUniqueId())) {
+        UUID playerId = player.getUniqueId();
+        if (!staffMode.active(playerId)) {
             return;
         }
         event.setKeepInventory(true);
         event.getDrops().clear();
         event.setKeepLevel(true);
         event.setDroppedExp(0);
-        markDeathExit(player);
+        pendingDeathExit.add(playerId);
+        deathExitRequested.remove(playerId);
     }
 
     @EventHandler(priority = EventPriority.MONITOR)
     public void onRespawn(PlayerRespawnEvent event) {
         Player player = event.getPlayer();
-        if (deathExitState(player) != null) {
+        if (pendingDeathExit.contains(player.getUniqueId())) {
             player.getScheduler().run(plugin, ignored -> refresh(player), null);
         }
     }
