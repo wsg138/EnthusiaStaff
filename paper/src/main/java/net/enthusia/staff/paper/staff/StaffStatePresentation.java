@@ -23,6 +23,8 @@ import org.bukkit.plugin.java.JavaPlugin;
 public final class StaffStatePresentation implements Listener {
     private static final long REFRESH_TICKS = 10L;
     private static final long DEATH_EXIT_RETRY_TICKS = 40L;
+    private static final byte DEATH_EXIT_PENDING = 1;
+    private static final byte DEATH_EXIT_REQUESTED = 2;
 
     private final JavaPlugin plugin;
     private final StaffModeManager staffMode;
@@ -55,7 +57,7 @@ public final class StaffStatePresentation implements Listener {
                 || vanish.isVanished(playerId)
                 || indicatorVisible.contains(playerId)
                 || deathExitRequested.contains(playerId)
-                || hasDeathExitMarker(player);
+                || deathExitState(player) != null;
     }
 
     private void refresh(Player player) {
@@ -79,33 +81,41 @@ public final class StaffStatePresentation implements Listener {
 
     private void reconcileDeathExit(Player player, boolean staffActive) {
         UUID playerId = player.getUniqueId();
-        if (!hasDeathExitMarker(player)) {
+        Byte state = deathExitState(player);
+        if (state == null) {
             deathExitRequested.remove(playerId);
             return;
         }
         if (!staffActive) {
-            if (deathExitRequested.remove(playerId)) {
+            if (state == DEATH_EXIT_REQUESTED) {
                 clearDeathExitMarker(player);
+                deathExitRequested.remove(playerId);
             }
             return;
         }
         if (!deathExitRequested.add(playerId)) {
             return;
         }
+        setDeathExitState(player, DEATH_EXIT_REQUESTED);
         staffMode.exit(player);
         player.getScheduler().runDelayed(plugin, ignored -> {
-            if (staffMode.active(playerId) && hasDeathExitMarker(player)) {
+            if (staffMode.active(playerId) && deathExitState(player) != null) {
+                setDeathExitState(player, DEATH_EXIT_PENDING);
                 deathExitRequested.remove(playerId);
             }
         }, null, DEATH_EXIT_RETRY_TICKS);
     }
 
-    private boolean hasDeathExitMarker(Player player) {
-        return player.getPersistentDataContainer().has(deathExitKey, PersistentDataType.BYTE);
+    private Byte deathExitState(Player player) {
+        return player.getPersistentDataContainer().get(deathExitKey, PersistentDataType.BYTE);
+    }
+
+    private void setDeathExitState(Player player, byte state) {
+        player.getPersistentDataContainer().set(deathExitKey, PersistentDataType.BYTE, state);
     }
 
     private void markDeathExit(Player player) {
-        player.getPersistentDataContainer().set(deathExitKey, PersistentDataType.BYTE, (byte) 1);
+        setDeathExitState(player, DEATH_EXIT_PENDING);
         deathExitRequested.remove(player.getUniqueId());
     }
 
@@ -153,7 +163,7 @@ public final class StaffStatePresentation implements Listener {
     @EventHandler(priority = EventPriority.MONITOR)
     public void onRespawn(PlayerRespawnEvent event) {
         Player player = event.getPlayer();
-        if (hasDeathExitMarker(player)) {
+        if (deathExitState(player) != null) {
             player.getScheduler().run(plugin, ignored -> refresh(player), null);
         }
     }
