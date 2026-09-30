@@ -2,6 +2,7 @@ package net.enthusia.staff.domain.commandbridge;
 
 public enum CommandBridgeOutcome {
     SUCCESS,
+    INVALID_REQUEST,
     MALFORMED_COMMAND,
     UNSUPPORTED_COMMAND,
     COMMAND_POLICY_REJECTED,

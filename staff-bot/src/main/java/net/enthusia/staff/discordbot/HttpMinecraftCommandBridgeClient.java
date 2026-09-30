@@ -22,7 +22,7 @@ import net.enthusia.staff.protocol.CommandBridgeWireCodec;
 
 /** Single-attempt StaffBot-to-Paper command transport. No failure path loops or retries a request. */
 public final class HttpMinecraftCommandBridgeClient {
-    public static final String ENDPOINT_PATH = "/v1/discord-command";
+    public static final String ENDPOINT_PATH = CommandBridgeHttpSigning.REQUEST_PATH;
     private static final SecureRandom RANDOM = new SecureRandom();
 
     private final Map<String, URI> endpoints;
@@ -80,8 +80,7 @@ public final class HttpMinecraftCommandBridgeClient {
                 clock.instant(),
                 nonce
         );
-        HttpRequest httpRequest = request(endpoint, body, proof);
-        return sendOnce(httpRequest, proof.nonce());
+        return sendOnce(request(endpoint, body, proof), proof.nonce());
     }
 
     private Result sendOnce(HttpRequest request, String nonce) {

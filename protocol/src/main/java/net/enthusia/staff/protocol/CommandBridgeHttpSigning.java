@@ -16,6 +16,7 @@ import javax.crypto.spec.SecretKeySpec;
 
 /** Body-bound HMAC framing dedicated to Discord-to-Minecraft command requests. */
 public final class CommandBridgeHttpSigning {
+    public static final String REQUEST_PATH = "/v1/discord-command";
     public static final String TIMESTAMP_HEADER = "X-Enthusia-Command-Timestamp";
     public static final String NONCE_HEADER = "X-Enthusia-Command-Nonce";
     public static final String SIGNATURE_HEADER = "X-Enthusia-Command-Signature";
