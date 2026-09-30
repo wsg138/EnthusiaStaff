@@ -15,10 +15,17 @@ SPEC.loader.exec_module(uploader)
 
 
 class FakeSftp:
-    def __init__(self, *, corrupt_download: bool = False) -> None:
+    def __init__(
+        self,
+        *,
+        corrupt_download: bool = False,
+        fail_rename_source: str | None = None,
+    ) -> None:
         self.files: dict[str, bytes] = {}
         self.directories = {"plugins"}
         self.corrupt_download = corrupt_download
+        self.fail_rename_source = fail_rename_source
+        self.rename_failure_injected = False
 
     def stat(self, path: str):
         if path in self.directories:
@@ -39,6 +46,9 @@ class FakeSftp:
         ]
 
     def rename(self, source: str, destination: str) -> None:
+        if source == self.fail_rename_source and not self.rename_failure_injected:
+            self.rename_failure_injected = True
+            raise OSError("injected rename failure")
         if source not in self.files:
             raise FileNotFoundError(source)
         self.files[destination] = self.files.pop(source)
@@ -102,6 +112,19 @@ class ProviderUploaderTest(unittest.TestCase):
         self.assertEqual(b"old", sftp.files["plugins/EnthusiaCommend-old.jar"])
         self.assertNotIn("plugins/EnthusiaCommend.jar", sftp.files)
         self.assertFalse(any(".uploading-" in path for path in sftp.files))
+
+    def test_partial_backup_failure_restores_already_moved_plugins(self) -> None:
+        sftp = FakeSftp(fail_rename_source="plugins/EnthusiaCommend-b.jar")
+        sftp.files["plugins/EnthusiaCommend-a.jar"] = b"old-a"
+        sftp.files["plugins/EnthusiaCommend-b.jar"] = b"old-b"
+        backup_dir = "plugins/.enthusia-deploy-backups/test"
+
+        with self.assertRaises(uploader.DeploymentError):
+            uploader.backup_existing_plugins(sftp, "plugins", backup_dir, "EnthusiaCommend")
+
+        self.assertEqual(b"old-a", sftp.files["plugins/EnthusiaCommend-a.jar"])
+        self.assertEqual(b"old-b", sftp.files["plugins/EnthusiaCommend-b.jar"])
+        self.assertFalse(any(path.startswith(backup_dir + "/") for path in sftp.files))
 
     def test_validation_rejects_unsafe_names_paths_and_hashes(self) -> None:
         unsafe_names = ["../plugin.jar", "plugins/plugin.jar", ".", ".."]

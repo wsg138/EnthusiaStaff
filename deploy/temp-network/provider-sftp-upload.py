@@ -130,6 +130,25 @@ def verify_remote_sha(sftp: paramiko.SFTPClient, remote_path: str, expected: str
         local_copy.unlink(missing_ok=True)
 
 
+def restore_backups(
+    sftp: paramiko.SFTPClient,
+    plugins_dir: str,
+    backup_dir: str,
+    names: list[str],
+) -> None:
+    first_error: OSError | paramiko.SSHException | None = None
+    for name in reversed(names):
+        backup = posixpath.join(backup_dir, name)
+        original = posixpath.join(plugins_dir, name)
+        try:
+            sftp.rename(backup, original)
+        except (OSError, paramiko.SSHException) as exc:
+            if first_error is None:
+                first_error = exc
+    if first_error is not None:
+        raise first_error
+
+
 def backup_existing_plugins(
     sftp: paramiko.SFTPClient,
     plugins_dir: str,
@@ -137,8 +156,17 @@ def backup_existing_plugins(
     match_prefix: str,
 ) -> list[str]:
     existing = matching_plugin_names(sftp.listdir(plugins_dir), match_prefix)
-    for name in existing:
-        sftp.rename(posixpath.join(plugins_dir, name), posixpath.join(backup_dir, name))
+    moved: list[str] = []
+    try:
+        for name in existing:
+            sftp.rename(posixpath.join(plugins_dir, name), posixpath.join(backup_dir, name))
+            moved.append(name)
+    except (OSError, paramiko.SSHException) as backup_error:
+        try:
+            restore_backups(sftp, plugins_dir, backup_dir, moved)
+        except (OSError, paramiko.SSHException) as rollback_error:
+            raise DeploymentError("provider backup failed and partial-backup rollback could not complete") from rollback_error
+        raise DeploymentError("provider backup failed; already moved plugin JARs were restored") from backup_error
     return existing
 
 
@@ -149,14 +177,16 @@ def rollback_provider(
     incoming: str,
     existing: list[str],
 ) -> None:
+    remove_error: OSError | paramiko.SSHException | None = None
     try:
         sftp.remove(incoming)
     except FileNotFoundError:
         pass
-    for name in existing:
-        backup = posixpath.join(backup_dir, name)
-        original = posixpath.join(plugins_dir, name)
-        sftp.rename(backup, original)
+    except (OSError, paramiko.SSHException) as exc:
+        remove_error = exc
+    restore_backups(sftp, plugins_dir, backup_dir, existing)
+    if remove_error is not None:
+        raise remove_error
 
 
 def install_candidate(
