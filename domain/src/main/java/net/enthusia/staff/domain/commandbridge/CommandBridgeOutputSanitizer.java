@@ -7,8 +7,9 @@ public final class CommandBridgeOutputSanitizer {
     static final int MAX_OUTPUT_CHARACTERS = 2_000;
     static final int MAX_OUTPUT_LINES = 20;
 
+    private static final Pattern WHOLE_SECRET_LINE = Pattern.compile("(?i)\\b(?:authorization|cookie)\\b");
     private static final Pattern SECRET = Pattern.compile(
-            "(?i)(authorization|cookie|password|passwd|secret|token|api[_-]?key|jdbc(?:url)?)[\\s:=]+\\S+"
+            "(?i)(password|passwd|secret|token|api[_-]?key|jdbc(?:url)?)[\\s:=]+\\S+"
     );
     private static final Pattern PRIVATE_PATH = Pattern.compile(
             "(?i)(?:[A-Z]:\\\\|/(?:home|root|mnt|srv|opt|var/lib)/)\\S+"
@@ -38,6 +39,9 @@ public final class CommandBridgeOutputSanitizer {
     }
 
     private static String redactLine(String line) {
+        if (WHOLE_SECRET_LINE.matcher(line).find()) {
+            return "[redacted-secret-output]";
+        }
         if (SENSITIVE_EVIDENCE.matcher(line).find()) {
             return "[redacted-sensitive-output]";
         }
