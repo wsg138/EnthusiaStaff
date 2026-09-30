@@ -21,6 +21,9 @@ import net.enthusia.staff.paper.freeze.FreezeManager;
 import net.enthusia.staff.paper.integration.RoseChatIntegration;
 import net.enthusia.staff.paper.presentation.StaffMessageStyle;
 import net.enthusia.staff.paper.report.ChatContextBuffer;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.format.NamedTextColor;
+import net.kyori.adventure.text.format.TextDecoration;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.ServicesManager;
@@ -138,9 +141,15 @@ class StaffChatCommandTest {
 
         assertTrue(command.onCommand(player(true, messages), null, STAFF_CHAT_LABEL, new String[0]));
         assertEquals(PLAYER_ID, toggledPlayer.get());
-        assertEquals(List.of(StaffMessageStyle.success(
-                "RoseChat channel switched to staff."
-        )), messages);
+        assertEquals(List.of(
+                Component.text("STAFF CHAT", NamedTextColor.AQUA, TextDecoration.BOLD)
+                        .append(Component.text("  •  ", NamedTextColor.DARK_GRAY))
+                        .append(Component.text("Now speaking in ", NamedTextColor.GRAY))
+                        .append(Component.text(STAFF_CHANNEL, NamedTextColor.GREEN, TextDecoration.BOLD))
+                        .append(Component.text("  •  ", NamedTextColor.DARK_GRAY))
+                        .append(Component.text("/staffchat", NamedTextColor.AQUA))
+                        .append(Component.text(" to switch again", NamedTextColor.GRAY))
+        ), messages);
     }
 
     private static RoseChatIntegration integration(
