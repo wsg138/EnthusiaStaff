@@ -4,6 +4,7 @@ import static net.enthusia.staff.integration.MariaDbIntegrationSupport.connectio
 import static net.enthusia.staff.integration.MariaDbIntegrationSupport.databaseConfig;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.PrintWriter;
@@ -47,8 +48,8 @@ class CommandBridgeAuditIntegrationTest {
 
     @BeforeAll
     static void migrateSchema() {
-        try (MariaDbRuntime ignored = MariaDb.initialize(databaseConfig(DATABASE))) {
-            // Flyway migration is the assertion prerequisite.
+        try (MariaDbRuntime runtime = MariaDb.initialize(databaseConfig(DATABASE))) {
+            assertNotNull(runtime);
         }
     }
 
