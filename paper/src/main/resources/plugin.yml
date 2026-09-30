@@ -92,6 +92,7 @@ commands:
   staff:
     description: Enter or exit durable staff mode
     usage: /staff
+    aliases: [sm, staffmode]
     permission: enthusiastaff.staffmode
   stafftools:
     description: Use the staff-mode operational tool menu and text fallbacks
