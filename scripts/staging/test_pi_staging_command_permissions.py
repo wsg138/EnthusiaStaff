@@ -11,6 +11,14 @@ class PiStagingCommandPermissionTests(unittest.TestCase):
         self.assertIn("statuses: write", workflow)
         self.assertIn("pi_staging_control.py command", workflow)
 
+    def test_supersession_skips_draft_synchronize_but_keeps_closed_cleanup(self):
+        workflow = (Path(__file__).parents[2] / ".github/workflows/pi-staging-supersede.yml").read_text(encoding="utf-8")
+        expected_guard = (
+            "github.event.pull_request.head.repo.full_name == github.repository && "
+            "(github.event.action == 'closed' || github.event.pull_request.draft == false)"
+        )
+        self.assertIn(expected_guard, workflow)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
