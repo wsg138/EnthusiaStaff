@@ -16,6 +16,8 @@ public record AutomatedPublicMuteRequest(
         String idempotencyKey,
         List<AutomatedModerationEvidence> evidence
 ) {
+    private static final int MIN_STRIKE_COUNT = 1;
+
     public AutomatedPublicMuteRequest {
         Objects.requireNonNull(targetId, "targetId");
         Objects.requireNonNull(moderationEventId, "moderationEventId");
@@ -34,7 +36,7 @@ public record AutomatedPublicMuteRequest(
         if (severity < 0 || severity > 100) {
             throw new IllegalArgumentException("invalid automated moderation severity");
         }
-        if (strikeCount < 1) {
+        if (strikeCount < MIN_STRIKE_COUNT) {
             throw new IllegalArgumentException("invalid automated moderation strike count");
         }
     }

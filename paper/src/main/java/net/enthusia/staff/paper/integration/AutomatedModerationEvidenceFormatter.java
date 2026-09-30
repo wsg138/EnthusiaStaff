@@ -25,8 +25,8 @@ final class AutomatedModerationEvidenceFormatter {
 
     private static StringBuilder header(AutomatedPublicMuteRequest request) {
         return new StringBuilder(MAX_EXPLANATION_LENGTH)
-                .append("RoseChat AI moderation automatic public mute")
-                .append("; trigger_event=").append(request.moderationEventId())
+                .append("RoseChat AI moderation automatic public mute; trigger_event=")
+                .append(request.moderationEventId())
                 .append("; strikes=").append(request.strikeCount())
                 .append("; trigger_category=").append(request.category())
                 .append("; trigger_severity=").append(request.severity())
@@ -57,7 +57,7 @@ final class AutomatedModerationEvidenceFormatter {
                 .append(", event=").append(evidence.moderationEventId())
                 .append(", category=").append(evidence.category())
                 .append(", confidence=").append(evidence.confidence())
-                .append(", severity=").append(evidence.severity()).append("/100\n")
-                .append("Exact message: ").append(evidence.message()).append('\n');
+                .append(", severity=").append(evidence.severity())
+                .append("/100\nExact message: ").append(evidence.message()).append('\n');
     }
 }

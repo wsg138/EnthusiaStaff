@@ -15,6 +15,8 @@ class AutomatedModerationContractTest {
     private static final UUID FIRST_EVENT = UUID.fromString("22222222-2222-2222-2222-222222222222");
     private static final UUID SECOND_EVENT = UUID.fromString("33333333-3333-3333-3333-333333333333");
     private static final Instant FIRST_AT = Instant.parse("2026-09-30T12:00:00Z");
+    private static final String CATEGORY = "harassment";
+    private static final String MESSAGE = "message";
 
     @Test
     void evidencePreservesExactMessageAndNormalizesCategory() {
@@ -28,7 +30,7 @@ class AutomatedModerationContractTest {
         );
 
         assertEquals("  exact message spacing  ", evidence.message());
-        assertEquals("harassment", evidence.category());
+        assertEquals(CATEGORY, evidence.category());
         assertEquals(0.875D, evidence.confidence());
         assertEquals(82, evidence.severity());
     }
@@ -36,11 +38,11 @@ class AutomatedModerationContractTest {
     @Test
     void evidenceRejectsControlCharactersAndInvalidScores() {
         assertThrows(IllegalArgumentException.class, () -> evidence("bad\nmessage", 0.5D, 50));
-        assertThrows(IllegalArgumentException.class, () -> evidence("message", Double.NaN, 50));
-        assertThrows(IllegalArgumentException.class, () -> evidence("message", 1.01D, 50));
-        assertThrows(IllegalArgumentException.class, () -> evidence("message", 0.5D, 101));
+        assertThrows(IllegalArgumentException.class, () -> evidence(MESSAGE, Double.NaN, 50));
+        assertThrows(IllegalArgumentException.class, () -> evidence(MESSAGE, 1.01D, 50));
+        assertThrows(IllegalArgumentException.class, () -> evidence(MESSAGE, 0.5D, 101));
         assertThrows(IllegalArgumentException.class, () -> new AutomatedModerationEvidence(
-                FIRST_EVENT, FIRST_AT, "message", "bad\tcategory", 0.5D, 50));
+                FIRST_EVENT, FIRST_AT, MESSAGE, "bad\tcategory", 0.5D, 50));
     }
 
     @Test
@@ -48,7 +50,7 @@ class AutomatedModerationContractTest {
         List<AutomatedModerationEvidence> mutable = new ArrayList<>(List.of(
                 evidence("first", 0.75D, 70),
                 new AutomatedModerationEvidence(
-                        SECOND_EVENT, FIRST_AT.plusSeconds(30), "second", "harassment", 0.9D, 90)
+                        SECOND_EVENT, FIRST_AT.plusSeconds(30), "second", CATEGORY, 0.9D, 90)
         ));
 
         AutomatedPublicMuteRequest request = request(2, mutable);
@@ -64,7 +66,7 @@ class AutomatedModerationContractTest {
                 FIRST_EVENT,
                 FIRST_AT,
                 message,
-                "harassment",
+                CATEGORY,
                 confidence,
                 severity
         );
@@ -78,7 +80,7 @@ class AutomatedModerationContractTest {
                 TARGET_ID,
                 "Player",
                 SECOND_EVENT,
-                "harassment",
+                CATEGORY,
                 90,
                 strikeCount,
                 Duration.ofDays(30),
