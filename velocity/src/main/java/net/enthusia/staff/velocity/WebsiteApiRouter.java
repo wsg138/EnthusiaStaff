@@ -25,8 +25,12 @@ import net.enthusia.staff.domain.website.PunishmentCodeBinding;
 
 final class WebsiteApiRouter {
     private static final String ACCOUNT_ID = "accountId";
+    private static final String ACTOR_ACCOUNT_ID = "actorAccountId";
+    private static final String ACTOR_RANK = "actorRank";
     private static final String CASE_ID = "caseId";
+    private static final String EXPECTED_VERSION = "expectedVersion";
     private static final String GET = "GET";
+    private static final String IDEMPOTENCY_KEY = "idempotencyKey";
     private static final String POST = "POST";
     private static final String PUNISHMENT_ID = "punishmentId";
     private static final String PUBLIC_LIST_PATH = "/v1/public/punishments";
@@ -51,27 +55,27 @@ final class WebsiteApiRouter {
             Set.of(ACCOUNT_ID, PUNISHMENT_ID, "codeGeneration");
     private static final Set<String> ACCEPT_FIELDS = Set.of(
             "appealId", PUNISHMENT_ID, CASE_ID, "playerAccountId",
-            "actorAccountId", "actorRank", "reason"
+            ACTOR_ACCOUNT_ID, ACTOR_RANK, "reason"
     );
     private static final Set<String> ELIGIBLE_FIELDS = Set.of(ACCOUNT_ID);
     private static final Set<String> SUBMIT_FIELDS = Set.of(
-            PUNISHMENT_ID, ACCOUNT_ID, "username", "reason", "idempotencyKey"
+            PUNISHMENT_ID, ACCOUNT_ID, "username", "reason", IDEMPOTENCY_KEY
     );
     private static final Set<String> EDIT_FIELDS = Set.of(
-            ACCOUNT_ID, "expectedVersion", "reason", "idempotencyKey"
+            ACCOUNT_ID, EXPECTED_VERSION, "reason", IDEMPOTENCY_KEY
     );
     private static final Set<String> REVIEW_LIST_FIELDS = Set.of(
-            "actorAccountId", "actorRank", "status", "cursor", "limit"
+            ACTOR_ACCOUNT_ID, ACTOR_RANK, "status", "cursor", "limit"
     );
     private static final Set<String> REVIEW_CLAIM_FIELDS = Set.of(
-            "actorAccountId", "actorRank", "expectedVersion", "idempotencyKey"
+            ACTOR_ACCOUNT_ID, ACTOR_RANK, EXPECTED_VERSION, IDEMPOTENCY_KEY
     );
     private static final Set<String> REVIEW_DECISION_FIELDS = Set.of(
-            "actorAccountId", "actorRank", "decision", "expectedVersion",
-            "note", "idempotencyKey"
+            ACTOR_ACCOUNT_ID, ACTOR_RANK, "decision", EXPECTED_VERSION,
+            "note", IDEMPOTENCY_KEY
     );
     private static final Set<String> REVIEW_REOPEN_FIELDS = Set.of(
-            "actorAccountId", "actorRank", "expectedVersion", "note", "idempotencyKey"
+            ACTOR_ACCOUNT_ID, ACTOR_RANK, EXPECTED_VERSION, "note", IDEMPOTENCY_KEY
     );
 
     private final WebsiteModerationStore store;
