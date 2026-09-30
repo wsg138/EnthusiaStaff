@@ -33,12 +33,7 @@ public record AutomatedModerationEvidence(
     }
 
     private static boolean containsControlCharacter(String value) {
-        for (int index = 0; index < value.length(); index++) {
-            if (Character.isISOControl(value.charAt(index))) {
-                return true;
-            }
-        }
-        return false;
+        return value.chars().anyMatch(Character::isISOControl);
     }
 
     private static void validateConfidence(double confidence) {

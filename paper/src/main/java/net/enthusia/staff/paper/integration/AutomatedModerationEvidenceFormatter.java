@@ -13,19 +13,18 @@ final class AutomatedModerationEvidenceFormatter {
 
     static String format(AutomatedPublicMuteRequest request) {
         StringBuilder explanation = header(request);
-        int index = 1;
-        for (AutomatedModerationEvidence evidence : request.evidence()) {
-            if (!appendWithinLimit(explanation, index, evidence)) {
-                explanation.append(OMITTED_NOTICE);
-                break;
-            }
-            index++;
+        boolean complete = true;
+        for (int index = 0; index < request.evidence().size() && complete; index++) {
+            complete = appendWithinLimit(explanation, index + 1, request.evidence().get(index));
+        }
+        if (!complete) {
+            explanation.append(OMITTED_NOTICE);
         }
         return explanation.toString();
     }
 
     private static StringBuilder header(AutomatedPublicMuteRequest request) {
-        return new StringBuilder(512)
+        return new StringBuilder(MAX_EXPLANATION_LENGTH)
                 .append("RoseChat AI moderation automatic public mute")
                 .append("; trigger_event=").append(request.moderationEventId())
                 .append("; strikes=").append(request.strikeCount())
