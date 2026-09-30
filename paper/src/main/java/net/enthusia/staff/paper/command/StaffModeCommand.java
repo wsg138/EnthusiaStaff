@@ -36,6 +36,13 @@ public final class StaffModeCommand implements CommandExecutor {
             sender.sendMessage(Component.text("Only a player can enter staff mode."));
             return true;
         }
+        if (recoveryRequested(arguments)) {
+            player.sendMessage(StaffMessageStyle.style(
+                    "Checking your durable staff-mode snapshot and repairing local state..."
+            ));
+            manager.recover(player);
+            return true;
+        }
         boolean activeSession = manager.active(player.getUniqueId());
         OperationalMode currentMode = mode.get();
         if (!StaffOperationalModeGate.staffModeTransitionAllowed(currentMode, activeSession)) {
@@ -57,5 +64,9 @@ public final class StaffModeCommand implements CommandExecutor {
         }
         manager.enter(player, rank);
         return true;
+    }
+
+    private static boolean recoveryRequested(String[] arguments) {
+        return arguments.length == 1 && "recover".equalsIgnoreCase(arguments[0]);
     }
 }
