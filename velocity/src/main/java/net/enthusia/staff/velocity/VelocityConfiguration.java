@@ -225,17 +225,16 @@ public record VelocityConfiguration(
     }
 
     public DatabaseConfig database(Path dataDirectory) {
-        return databaseFromPrivateFileOrEnvironment(
-                dataDirectory,
+        DatabaseCredentialSource source = new DatabaseCredentialSource(
                 jdbcUrlEnvironment,
                 usernameEnvironment,
                 passwordEnvironment,
                 "db.jdbc-url",
                 "db.username",
-                "db.password",
-                maximumPoolSize,
-                connectionTimeoutMillis,
-                "MariaDB"
+                "db.password"
+        );
+        return databaseFromPrivateFileOrEnvironment(
+                dataDirectory, source, maximumPoolSize, connectionTimeoutMillis, "MariaDB"
         );
     }
 
@@ -257,35 +256,29 @@ public record VelocityConfiguration(
     }
 
     public DatabaseConfig liteBansDatabase(Path dataDirectory) {
-        return databaseFromPrivateFileOrEnvironment(
-                dataDirectory,
+        DatabaseCredentialSource source = new DatabaseCredentialSource(
                 liteBansJdbcUrlEnvironment,
                 liteBansUsernameEnvironment,
                 liteBansPasswordEnvironment,
                 "litebans.jdbc-url",
                 "litebans.username",
-                "litebans.password",
-                liteBansMaximumPoolSize,
-                liteBansConnectionTimeoutMillis,
-                "LiteBans database"
+                "litebans.password"
+        );
+        return databaseFromPrivateFileOrEnvironment(
+                dataDirectory, source, liteBansMaximumPoolSize, liteBansConnectionTimeoutMillis, "LiteBans database"
         );
     }
 
     private static DatabaseConfig databaseFromPrivateFileOrEnvironment(
             Path dataDirectory,
-            String urlEnvironment,
-            String usernameEnvironment,
-            String passwordEnvironment,
-            String urlKey,
-            String usernameKey,
-            String passwordKey,
+            DatabaseCredentialSource source,
             int poolSize,
             long timeoutMillis,
             String label
     ) {
-        String url = System.getenv(urlEnvironment);
-        String username = System.getenv(usernameEnvironment);
-        String password = System.getenv(passwordEnvironment);
+        String url = System.getenv(source.urlEnvironment());
+        String username = System.getenv(source.usernameEnvironment());
+        String password = System.getenv(source.passwordEnvironment());
         if (present(url) || present(username) || present(password)) {
             if (!present(url) || !present(username) || !present(password)) {
                 throw new IllegalStateException("Incomplete " + label + " environment configuration");
@@ -308,9 +301,9 @@ public record VelocityConfiguration(
         } catch (IOException exception) {
             throw new IllegalStateException("Private database.properties file cannot be read", exception);
         }
-        url = secrets.getProperty(urlKey);
-        username = secrets.getProperty(usernameKey);
-        password = secrets.getProperty(passwordKey);
+        url = secrets.getProperty(source.urlKey());
+        username = secrets.getProperty(source.usernameKey());
+        password = secrets.getProperty(source.passwordKey());
         if (!present(url) || !present(username) || !present(password)) {
             throw new IllegalStateException("Private " + label + " database.properties entries are incomplete");
         }
@@ -319,6 +312,16 @@ public record VelocityConfiguration(
 
     private static boolean present(String value) {
         return value != null && !value.isBlank();
+    }
+
+    private record DatabaseCredentialSource(
+            String urlEnvironment,
+            String usernameEnvironment,
+            String passwordEnvironment,
+            String urlKey,
+            String usernameKey,
+            String passwordKey
+    ) {
     }
 
     public String websiteApiBearerTokenFromEnvironment() {
