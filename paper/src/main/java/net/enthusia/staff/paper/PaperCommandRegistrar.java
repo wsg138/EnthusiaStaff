@@ -20,6 +20,7 @@ import net.enthusia.staff.domain.ports.ModerationHistoryStore;
 import net.enthusia.staff.domain.ports.PlayerDirectory;
 import net.enthusia.staff.domain.ports.ReportStore;
 import net.enthusia.staff.paper.account.PaperOnlinePlayerVerifier;
+import net.enthusia.staff.paper.auth.ActiveDutyAuthorizationPolicy;
 import net.enthusia.staff.paper.client.ClientEvidenceCollector;
 import net.enthusia.staff.paper.command.AccountLinkCommand;
 import net.enthusia.staff.paper.command.CaseCommand;
@@ -161,19 +162,20 @@ final class PaperCommandRegistrar {
         Supplier<PunishmentDraftWorkflow> drafts = storage(PaperStorageBindings::punishmentDraftWorkflow);
         Supplier<PunishmentRequestService> requests = storage(PaperStorageBindings::punishmentRequestService);
         Supplier<PlayerDirectory> players = storage(PaperStorageBindings::playerDirectory);
+        AuthorizationPolicy activeAuthorization = activeAuthorization();
         PunishmentGuiController punishmentGui = new PunishmentGuiController(
-                plugin(), writeMode(), drafts, players, authorization(), reasons(), workers()
+                plugin(), writeMode(), drafts, players, activeAuthorization, reasons(), workers()
         );
         plugin().getServer().getPluginManager().registerEvents(punishmentGui, plugin());
         PunishmentRequestGuiController requestGui = new PunishmentRequestGuiController(
-                plugin(), requests, players, authorization(), workers()
+                plugin(), requests, players, activeAuthorization, workers()
         );
         requestGui.register();
         PunishmentRequestCommandHandler requestHandler = new PunishmentRequestCommandHandler(
-                plugin(), requests, authorization(), requestGui, workers()
+                plugin(), requests, activeAuthorization, requestGui, workers()
         );
         PunishmentCommand command = new PunishmentCommand(
-                plugin(), writeMode(), drafts, players, authorization(), punishmentGui, requestHandler, workers()
+                plugin(), writeMode(), drafts, players, activeAuthorization, punishmentGui, requestHandler, workers()
         );
         PUNISHMENT_COMMANDS.forEach(name -> bindCompleting(name, command, command));
     }
@@ -182,13 +184,14 @@ final class PaperCommandRegistrar {
         Supplier<SanctionChangeService> changes = storage(PaperStorageBindings::sanctionChangeService);
         Supplier<PlayerDirectory> players = storage(PaperStorageBindings::playerDirectory);
         Supplier<CaseLookup> cases = storage(PaperStorageBindings::caseLookup);
+        AuthorizationPolicy activeAuthorization = activeAuthorization();
         SanctionChangeGuiController changeGui = new SanctionChangeGuiController(
                 plugin(), clock(), writeMode(), changes, players, cases,
-                storage(PaperStorageBindings::caseReviewStore), authorization(), workers()
+                storage(PaperStorageBindings::caseReviewStore), activeAuthorization, workers()
         );
         plugin().getServer().getPluginManager().registerEvents(changeGui, plugin());
         SanctionChangeCommand command = new SanctionChangeCommand(
-                plugin(), writeMode(), changes, players, cases, authorization(), workers(), changeGui
+                plugin(), writeMode(), changes, players, cases, activeAuthorization, workers(), changeGui
         );
         SANCTION_CHANGE_COMMANDS.forEach(name -> bindCompleting(name, command, command));
     }
@@ -258,10 +261,11 @@ final class PaperCommandRegistrar {
         Supplier<FreezeStore> freezes = storage(PaperStorageBindings::freezeStore);
         Supplier<ReportStore> reports = storage(PaperStorageBindings::reportStore);
         Supplier<ModerationHistoryStore> histories = storage(PaperStorageBindings::moderationHistoryStore);
+        AuthorizationPolicy activeAuthorization = activeAuthorization();
         InspectCommand inspect = new InspectCommand(
                 plugin(), clock(), players, cases, freezes, reports,
                 dependencies.integrations().economy(), dependencies.integrations().confiscation(),
-                dependencies.players().inventory(), authorization(), dependencies.integrations().market(),
+                dependencies.players().inventory(), activeAuthorization, dependencies.integrations().market(),
                 dependencies.integrations().reputation(), workers()
         );
         bindCompleting("inspect", inspect, inspect);
@@ -271,10 +275,10 @@ final class PaperCommandRegistrar {
         bindCompleting("history", history, history);
         CaseCommand caseCommand = new CaseCommand(
                 plugin(), cases, dependencies.integrations().confiscation(), histories,
-                moderationSettings::current, authorization(), workers()
+                moderationSettings::current, activeAuthorization, workers()
         );
         InventoryRecoveryCoordinator recovery = new InventoryRecoveryCoordinator(
-                clock(), storage(PaperStorageBindings::inventoryRecoveryStore), authorization()
+                clock(), storage(PaperStorageBindings::inventoryRecoveryStore), activeAuthorization
         );
         bind("case", new CaseRecoveryCommand(plugin(), caseCommand, recovery, workers()));
     }
@@ -322,6 +326,13 @@ final class PaperCommandRegistrar {
 
     private AuthorizationPolicy authorization() {
         return dependencies.policy().authorization();
+    }
+
+    private AuthorizationPolicy activeAuthorization() {
+        return new ActiveDutyAuthorizationPolicy(
+                authorization(),
+                dependencies.players().staffMode()::authorityActive
+        );
     }
 
     private AtomicReasonPolicyRepository reasons() {
