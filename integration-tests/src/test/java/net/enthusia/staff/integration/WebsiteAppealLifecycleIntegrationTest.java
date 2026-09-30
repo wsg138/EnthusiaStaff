@@ -48,6 +48,8 @@ class WebsiteAppealLifecycleIntegrationTest {
     private static final String ACCOUNT_ONE = uuid(901).toString();
     private static final String ACCOUNT_TWO = uuid(902).toString();
     private static final String PLAYER_NAME = "AppealPlayer";
+    private static final String MODERATOR_RANK = "MOD";
+    private static final String ADMIN_RANK = "ADMIN";
     private static final UUID MODERATOR = uuid(950);
     private static final UUID ADMIN = uuid(951);
     private static final String TEST_USERNAME = "website_appeal_lifecycle";
@@ -103,7 +105,7 @@ class WebsiteAppealLifecycleIntegrationTest {
             assertEquals(2, editReplay.appeal().version());
 
             WebsiteAppealMutation claimed = store.claimAppeal(
-                    submission.appeal().appealId(), 2, MODERATOR, "MOD",
+                    submission.appeal().appealId(), 2, MODERATOR, MODERATOR_RANK,
                     "appeal-claim-0001", NOW.plusSeconds(3)
             );
             assertFalse(claimed.replayed());
@@ -111,7 +113,7 @@ class WebsiteAppealLifecycleIntegrationTest {
             assertEquals(3, claimed.appeal().version());
 
             WebsiteAppealMutation claimReplay = store.claimAppeal(
-                    submission.appeal().appealId(), 2, MODERATOR, "MOD",
+                    submission.appeal().appealId(), 2, MODERATOR, MODERATOR_RANK,
                     "appeal-claim-0001", NOW.plusSeconds(4)
             );
             assertTrue(claimReplay.replayed());
@@ -141,15 +143,18 @@ class WebsiteAppealLifecycleIntegrationTest {
                     "wrong-account-edit", NOW.plusSeconds(1)
             ));
             assertError("STALE_APPEAL_STATE", () -> store.claimAppeal(
-                    appealId, 9, MODERATOR, "MOD", "stale-claim-0002", NOW.plusSeconds(2)
+                    appealId, 9, MODERATOR, MODERATOR_RANK, "stale-claim-0002", NOW.plusSeconds(2)
             ));
 
-            store.claimAppeal(appealId, 1, MODERATOR, "MOD", "first-claim-0002", NOW.plusSeconds(3));
+            store.claimAppeal(
+                    appealId, 1, MODERATOR, MODERATOR_RANK,
+                    "first-claim-0002", NOW.plusSeconds(3)
+            );
             assertError("APPEAL_IDEMPOTENCY_CONFLICT", () -> store.claimAppeal(
-                    appealId, 1, ADMIN, "ADMIN", "first-claim-0002", NOW.plusSeconds(4)
+                    appealId, 1, ADMIN, ADMIN_RANK, "first-claim-0002", NOW.plusSeconds(4)
             ));
             assertError("APPEAL_ALREADY_CLAIMED", () -> store.claimAppeal(
-                    appealId, 2, ADMIN, "ADMIN", "second-claim-0002", NOW.plusSeconds(5)
+                    appealId, 2, ADMIN, ADMIN_RANK, "second-claim-0002", NOW.plusSeconds(5)
             ));
         }
     }
@@ -163,16 +168,17 @@ class WebsiteAppealLifecycleIntegrationTest {
             appealId = latestSubmission(store, fixture, ACCOUNT_ONE).appeal().appealId();
 
             WebsiteAppealMutation claim = store.claimAppeal(
-                    appealId, 1, MODERATOR, "MOD", "claim-before-deny", NOW.plusSeconds(1)
+                    appealId, 1, MODERATOR, MODERATOR_RANK,
+                    "claim-before-deny", NOW.plusSeconds(1)
             );
             store.prepareAppealDecision(
                     appealId, claim.appeal().version(), "DENY",
-                    "The appeal does not justify removal.", MODERATOR, "MOD",
+                    "The appeal does not justify removal.", MODERATOR, MODERATOR_RANK,
                     "deny-before-reopen", NOW.plusSeconds(2)
             );
 
             WebsiteAppealMutation reopened = store.reopenAppeal(
-                    appealId, 3, ADMIN, "ADMIN", "Senior review found new information.",
+                    appealId, 3, ADMIN, ADMIN_RANK, "Senior review found new information.",
                     "admin-reopen-0003", NOW.plusSeconds(3)
             );
             assertFalse(reopened.replayed());
@@ -183,7 +189,7 @@ class WebsiteAppealLifecycleIntegrationTest {
             assertNull(reopened.appeal().decisionNote());
 
             WebsiteAppealMutation replay = store.reopenAppeal(
-                    appealId, 3, ADMIN, "ADMIN", "Senior review found new information.",
+                    appealId, 3, ADMIN, ADMIN_RANK, "Senior review found new information.",
                     "admin-reopen-0003", NOW.plusSeconds(4)
             );
             assertTrue(replay.replayed());
@@ -192,7 +198,7 @@ class WebsiteAppealLifecycleIntegrationTest {
         try (MariaDbRuntime runtime = MariaDb.initialize(databaseConfig(DATABASE))) {
             WebsiteModerationStore store = runtime.websiteModerationStore(CODE_PROTECTOR);
             WebsiteAppealMutation claimed = store.claimAppeal(
-                    appealId, 4, ADMIN, "ADMIN", "post-restart-claim", NOW.plusSeconds(5)
+                    appealId, 4, ADMIN, ADMIN_RANK, "post-restart-claim", NOW.plusSeconds(5)
             );
             assertTrue(claimed.claimed());
             assertEquals(5, claimed.appeal().version());
@@ -207,15 +213,16 @@ class WebsiteAppealLifecycleIntegrationTest {
             WebsiteModerationStore store = submittedStore(runtime, fixture, ACCOUNT_ONE);
             UUID appealId = latestSubmission(store, fixture, ACCOUNT_ONE).appeal().appealId();
             WebsiteAppealMutation claim = store.claimAppeal(
-                    appealId, 1, MODERATOR, "MOD", "claim-before-rank-check", NOW.plusSeconds(1)
+                    appealId, 1, MODERATOR, MODERATOR_RANK,
+                    "claim-before-rank-check", NOW.plusSeconds(1)
             );
             store.prepareAppealDecision(
                     appealId, claim.appeal().version(), "DENY",
-                    "The appeal does not justify removal.", MODERATOR, "MOD",
+                    "The appeal does not justify removal.", MODERATOR, MODERATOR_RANK,
                     "deny-before-rank-check", NOW.plusSeconds(2)
             );
             assertError("INVALID_APPEAL_REVIEW_ACTION", () -> store.reopenAppeal(
-                    appealId, 3, MODERATOR, "MOD", "Moderator cannot reopen this appeal.",
+                    appealId, 3, MODERATOR, MODERATOR_RANK, "Moderator cannot reopen this appeal.",
                     "mod-reopen-forbidden", NOW.plusSeconds(3)
             ));
         }
@@ -231,7 +238,8 @@ class WebsiteAppealLifecycleIntegrationTest {
             createAuditFailureTrigger();
             try {
                 assertThrows(RuntimeException.class, () -> store.claimAppeal(
-                        appealId, 1, MODERATOR, "MOD", "rollback-claim-0005", NOW.plusSeconds(1)
+                        appealId, 1, MODERATOR, MODERATOR_RANK,
+                        "rollback-claim-0005", NOW.plusSeconds(1)
                 ));
             } finally {
                 dropAuditFailureTrigger();
@@ -284,9 +292,10 @@ class WebsiteAppealLifecycleIntegrationTest {
                      SELECT event_type FROM audit_events
                      WHERE event_type LIKE 'WEBSITE_APPEAL_%'
                      ORDER BY sequence_id
-                     """);
-             ResultSet result = statement.executeQuery()) {
-            while (result.next()) events.add(result.getString(1));
+                     """)) {
+            try (ResultSet result = statement.executeQuery()) {
+                while (result.next()) events.add(result.getString(1));
+            }
         }
         return List.copyOf(events);
     }
