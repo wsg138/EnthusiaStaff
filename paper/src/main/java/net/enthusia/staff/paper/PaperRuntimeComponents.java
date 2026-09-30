@@ -261,7 +261,6 @@ record PaperRuntimeComponents(
                 dependencies.environment().workers()
         );
         registerListener(plugin, manager);
-        FakeBaseCommand fakeBaseHandler = new FakeBaseCommand(plugin, fakeBases);
         return manager;
     }
 
