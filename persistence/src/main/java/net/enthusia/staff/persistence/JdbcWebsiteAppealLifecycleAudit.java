@@ -20,6 +20,7 @@ import java.util.UUID;
 import net.enthusia.staff.common.CaseId;
 
 final class JdbcWebsiteAppealLifecycleAudit {
+    private static final int EXPECTED_UPDATE_COUNT = 1;
     private static final String KEY_PREFIX = "website-appeal:";
     private final ObjectMapper json;
 
@@ -117,7 +118,7 @@ final class JdbcWebsiteAppealLifecycleAudit {
     }
 
     private static void requireSingleUpdate(int updated) throws SQLException {
-        if (updated != 1) {
+        if (updated != EXPECTED_UPDATE_COUNT) {
             throw new SQLException("Website appeal lifecycle audit was not inserted");
         }
     }
