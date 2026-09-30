@@ -200,7 +200,7 @@ public record VelocityConfiguration(
             throw new IllegalStateException("The Discord staging approved-host environment variable is missing");
         }
         Set<String> hosts = new LinkedHashSet<>();
-        for (String candidate : raw.split(",")) {
+        for (String candidate : raw.split(",", -1)) {
             String host = candidate.trim();
             if (!host.isEmpty()) {
                 hosts.add(host);
@@ -336,6 +336,6 @@ public record VelocityConfiguration(
 
     private static boolean bool(Properties properties, String key, boolean defaultValue) {
         String configured = properties.getProperty(key);
-        return configured == null || configured.isBlank() ? defaultValue : bool(properties, key);
+        return (configured == null || configured.isBlank()) ? defaultValue : bool(properties, key);
     }
 }

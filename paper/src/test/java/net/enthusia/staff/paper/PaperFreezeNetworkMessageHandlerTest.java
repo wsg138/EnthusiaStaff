@@ -200,7 +200,17 @@ class PaperFreezeNetworkMessageHandlerTest {
         }
 
         @Override
-        public void disconnected(UUID playerId, Instant offlineExpiration, Instant now) {
+        public Optional<FreezeRecord> disconnected(
+                UUID playerId,
+                long expectedRevision,
+                Instant offlineExpiration,
+                Instant now
+        ) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public Optional<FreezeRecord> connected(UUID playerId, long expectedRevision, Instant now) {
             throw new UnsupportedOperationException();
         }
 

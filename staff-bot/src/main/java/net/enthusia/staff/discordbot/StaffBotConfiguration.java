@@ -106,10 +106,19 @@ public final class StaffBotConfiguration {
     static StaffBotConfiguration fromStartup(StaffBotCommandLine commandLine, Map<String, String> values) {
         Objects.requireNonNull(commandLine, "commandLine");
         Objects.requireNonNull(values, "values");
-        if (!commandLine.stagingUiPreview()) {
-            return fromEnvironment(values);
+        if (commandLine.stagingUiPreview()) {
+            return fromPreviewStartup(commandLine, values);
         }
+        if (commandLine.fileBackedStaging()) {
+            return fromFileBackedStaging(commandLine, values);
+        }
+        return fromEnvironment(values);
+    }
 
+    private static StaffBotConfiguration fromPreviewStartup(
+            StaffBotCommandLine commandLine,
+            Map<String, String> values
+    ) {
         rejectProductionPreviewEnvironment(values);
         Map<String, String> effectiveValues = new HashMap<>(values);
         effectiveValues.put(ENVIRONMENT_KEY, StaffBotEnvironment.STAGING.label());
@@ -118,6 +127,19 @@ public final class StaffBotConfiguration {
                 () -> new IllegalArgumentException("staging UI preview requires a token file"))));
         commandLine.previewWebBind().ifPresent(value -> effectiveValues.put(ModerationPreviewWebConfig.BIND_ENV, value));
         commandLine.previewPublicUrl().ifPresent(value -> effectiveValues.put(ModerationPreviewWebConfig.PUBLIC_URL_ENV, value));
+        return fromEnvironment(effectiveValues);
+    }
+
+    private static StaffBotConfiguration fromFileBackedStaging(
+            StaffBotCommandLine commandLine,
+            Map<String, String> values
+    ) {
+        rejectEnvironmentConflict(values, StaffBotEnvironment.STAGING);
+        Map<String, String> effectiveValues = new HashMap<>(values);
+        effectiveValues.put(ENVIRONMENT_KEY, StaffBotEnvironment.STAGING.label());
+        effectiveValues.put(UI_PREVIEW_KEY, Boolean.FALSE.toString());
+        effectiveValues.put(TOKEN_KEY, StaffBotTokenFile.read(commandLine.tokenFile().orElseThrow(
+                () -> new IllegalArgumentException("file-backed startup requires a token file"))));
         return fromEnvironment(effectiveValues);
     }
 
@@ -231,6 +253,19 @@ public final class StaffBotConfiguration {
         }
         if (StaffBotEnvironment.parse(configuredEnvironment) == StaffBotEnvironment.PRODUCTION) {
             throw new IllegalArgumentException("staging UI preview rejects production environment configuration");
+        }
+    }
+
+    private static void rejectEnvironmentConflict(
+            Map<String, String> values,
+            StaffBotEnvironment requested
+    ) {
+        String configuredEnvironment = values.get(ENVIRONMENT_KEY);
+        if (configuredEnvironment == null || configuredEnvironment.isBlank()) {
+            return;
+        }
+        if (StaffBotEnvironment.parse(configuredEnvironment) != requested) {
+            throw new IllegalArgumentException("file-backed startup environment conflicts with process configuration");
         }
     }
 

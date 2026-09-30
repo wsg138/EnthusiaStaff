@@ -24,6 +24,7 @@ import net.enthusia.staff.domain.sanction.ActiveSanction;
 import net.enthusia.staff.domain.sanction.SanctionType;
 import net.enthusia.staff.paper.PlayerMessageDispatcher;
 import net.enthusia.staff.paper.client.PaperPlayerPlatformResolver;
+import net.enthusia.staff.paper.presentation.StaffMessageStyle;
 import net.kyori.adventure.text.Component;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -239,7 +240,7 @@ public final class MuteEnforcementListener implements Listener, AutoCloseable {
     }
 
     private void notifyPlayer(Player player, String message) {
-        messages.send(player, Component.text(message));
+        messages.send(player, StaffMessageStyle.style(Component.text(message)));
     }
 
     @Override

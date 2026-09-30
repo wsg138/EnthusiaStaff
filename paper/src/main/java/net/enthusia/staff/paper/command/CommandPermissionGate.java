@@ -2,7 +2,7 @@ package net.enthusia.staff.paper.command;
 
 import java.util.Objects;
 import java.util.function.Predicate;
-import net.kyori.adventure.text.Component;
+import net.enthusia.staff.paper.presentation.StaffMessageStyle;
 import org.bukkit.command.CommandSender;
 
 final class CommandPermissionGate {
@@ -14,7 +14,7 @@ final class CommandPermissionGate {
         if (allows(sender::hasPermission, permission)) {
             return true;
         }
-        sender.sendMessage(Component.text(denialMessage));
+        sender.sendMessage(StaffMessageStyle.error(denialMessage));
         return false;
     }
 

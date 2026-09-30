@@ -1,5 +1,6 @@
 package net.enthusia.staff.paper.command;
 
+import net.enthusia.staff.paper.presentation.StaffMessageStyle;
 import java.time.Clock;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -83,7 +84,7 @@ public final class ReportsCommand implements CommandExecutor, TabCompleter {
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] arguments) {
         if (!sender.hasPermission(MANAGE_PERMISSION)) {
-            sender.sendMessage(Component.text("You do not have permission to manage reports."));
+            sender.sendMessage(StaffMessageStyle.style(Component.text("You do not have permission to manage reports.")));
             return true;
         }
         if (arguments.length == 0) {
@@ -118,7 +119,7 @@ public final class ReportsCommand implements CommandExecutor, TabCompleter {
         if (sender instanceof Player player) {
             gui.cancelNote(player);
         } else {
-            sender.sendMessage(Component.text("Only a player can cancel a GUI report note."));
+            sender.sendMessage(StaffMessageStyle.style(Component.text("Only a player can cancel a GUI report note.")));
         }
         return true;
     }
@@ -146,11 +147,11 @@ public final class ReportsCommand implements CommandExecutor, TabCompleter {
 
     private boolean note(CommandSender sender, String[] arguments) {
         if (!(sender instanceof Player player)) {
-            sender.sendMessage(Component.text("Only a player can complete a GUI report note."));
+            sender.sendMessage(StaffMessageStyle.style(Component.text("Only a player can complete a GUI report note.")));
             return true;
         }
         if (arguments.length < MIN_NOTE_ARGUMENTS) {
-            sender.sendMessage(Component.text("Usage: /reports note <private action note>"));
+            sender.sendMessage(StaffMessageStyle.style(Component.text("Usage: /reports note <private action note>")));
             return true;
         }
         gui.acceptNote(player, String.join(" ", Arrays.copyOfRange(arguments, 1, arguments.length)));
@@ -159,7 +160,7 @@ public final class ReportsCommand implements CommandExecutor, TabCompleter {
 
     private boolean evidence(CommandSender sender, String[] arguments) {
         if (!sender.hasPermission(EVIDENCE_PERMISSION)) {
-            sender.sendMessage(Component.text("You do not have permission to inspect sensitive report evidence."));
+            sender.sendMessage(StaffMessageStyle.style(Component.text("You do not have permission to inspect sensitive report evidence.")));
             return true;
         }
         EvidenceRequest request = evidenceRequest(sender, arguments);
@@ -177,9 +178,9 @@ public final class ReportsCommand implements CommandExecutor, TabCompleter {
 
     private EvidenceRequest evidenceRequest(CommandSender sender, String[] arguments) {
         if (arguments.length < MIN_EVIDENCE_ARGUMENTS || arguments.length > MAX_EVIDENCE_ARGUMENTS) {
-            sender.sendMessage(Component.text(
+            sender.sendMessage(StaffMessageStyle.style(Component.text(
                     "Usage: /reports evidence <report-id> <public|private|client> [snapshot] [page]"
-            ));
+            )));
             return null;
         }
         UUID reportId = uuid(sender, arguments[1]);
@@ -188,7 +189,7 @@ public final class ReportsCommand implements CommandExecutor, TabCompleter {
         }
         EvidenceKind kind = evidenceFormatter.parseKind(arguments[2]).orElse(null);
         if (kind == null) {
-            sender.sendMessage(Component.text("Evidence kind must be public, private, or client."));
+            sender.sendMessage(StaffMessageStyle.style(Component.text("Evidence kind must be public, private, or client.")));
             return null;
         }
         Integer snapshot = optionalPositiveInteger(sender, arguments, 3, "snapshot", 0);
@@ -213,8 +214,8 @@ public final class ReportsCommand implements CommandExecutor, TabCompleter {
             return true;
         }
         if (input.reviewOnly()) {
-            sender.sendMessage(Component.text("Review only: " + action + " report " + input.reportId() + '.'));
-            sender.sendMessage(Component.text("No change was made. Append the exact word CONFIRM to commit."));
+            sender.sendMessage(StaffMessageStyle.style(Component.text("Review only: " + action + " report " + input.reportId() + '.')));
+            sender.sendMessage(StaffMessageStyle.style(Component.text("No change was made. Append the exact word CONFIRM to commit.")));
             return true;
         }
         UUID actorId = actorId(sender);
@@ -247,7 +248,7 @@ public final class ReportsCommand implements CommandExecutor, TabCompleter {
         boolean confirmed = arguments[arguments.length - 1].equals("CONFIRM");
         String note = stateChangeNote(arguments, claim, confirmed);
         if (note.isBlank()) {
-            sender.sendMessage(Component.text("A written action note is required."));
+            sender.sendMessage(StaffMessageStyle.style(Component.text("A written action note is required.")));
             return null;
         }
         return new StateChangeInput(reportId, revision, note, claim, confirmed);
@@ -257,12 +258,12 @@ public final class ReportsCommand implements CommandExecutor, TabCompleter {
         try {
             long revision = Long.parseLong(input);
             if (revision < 0) {
-                sender.sendMessage(Component.text("The expected report revision must be a non-negative number."));
+                sender.sendMessage(StaffMessageStyle.style(Component.text("The expected report revision must be a non-negative number.")));
                 return null;
             }
             return revision;
         } catch (NumberFormatException exception) {
-            sender.sendMessage(Component.text("The expected report revision must be a non-negative number."));
+            sender.sendMessage(StaffMessageStyle.style(Component.text("The expected report revision must be a non-negative number.")));
             return null;
         }
     }
@@ -390,18 +391,18 @@ public final class ReportsCommand implements CommandExecutor, TabCompleter {
                 }
             });
         } catch (RejectedExecutionException exception) {
-            sender.sendMessage(Component.text("The bounded work queue is full; no report operation started."));
+            sender.sendMessage(StaffMessageStyle.style(Component.text("The bounded work queue is full; no report operation started.")));
         }
     }
 
     private void send(CommandSender sender, String message) {
-        plugin.getServer().getGlobalRegionScheduler().execute(plugin, () -> sender.sendMessage(Component.text(message)));
+        plugin.getServer().getGlobalRegionScheduler().execute(plugin, () -> sender.sendMessage(StaffMessageStyle.style(Component.text(message))));
     }
 
     private void sendEvidenceAware(CommandSender sender, Supplier<String> authorizedMessage, String deniedMessage) {
         plugin.getServer().getGlobalRegionScheduler().execute(plugin, () -> {
             String message = sender.hasPermission(EVIDENCE_PERMISSION) ? authorizedMessage.get() : deniedMessage;
-            sender.sendMessage(Component.text(message));
+            sender.sendMessage(StaffMessageStyle.style(Component.text(message)));
         });
     }
 
@@ -409,11 +410,11 @@ public final class ReportsCommand implements CommandExecutor, TabCompleter {
         List<String> output = List.copyOf(messages);
         plugin.getServer().getGlobalRegionScheduler().execute(plugin, () -> {
             if (!sender.hasPermission(EVIDENCE_PERMISSION)) {
-                sender.sendMessage(Component.text("Sensitive report evidence access is no longer permitted."));
+                sender.sendMessage(StaffMessageStyle.style(Component.text("Sensitive report evidence access is no longer permitted.")));
                 return;
             }
             for (String message : output) {
-                sender.sendMessage(Component.text(message));
+                sender.sendMessage(StaffMessageStyle.style(Component.text(message)));
             }
         });
     }
@@ -451,7 +452,7 @@ public final class ReportsCommand implements CommandExecutor, TabCompleter {
         try {
             return UUID.fromString(input);
         } catch (IllegalArgumentException exception) {
-            sender.sendMessage(Component.text("Report IDs use UUID format."));
+            sender.sendMessage(StaffMessageStyle.style(Component.text("Report IDs use UUID format.")));
             return null;
         }
     }
@@ -474,22 +475,22 @@ public final class ReportsCommand implements CommandExecutor, TabCompleter {
             }
             return value;
         } catch (NumberFormatException exception) {
-            sender.sendMessage(Component.text("Evidence " + name + " must be a positive number."));
+            sender.sendMessage(StaffMessageStyle.style(Component.text("Evidence " + name + " must be a positive number.")));
             return null;
         }
     }
 
     private static void usage(CommandSender sender) {
-        sender.sendMessage(Component.text("Usage: /reports (opens the staff report GUI for players)"));
-        sender.sendMessage(Component.text("       /reports note <private action note> | /reports cancel"));
-        sender.sendMessage(Component.text("       /reports <open|mine|claimed|review|closed>"));
-        sender.sendMessage(Component.text("       /reports view <report-id>"));
-        sender.sendMessage(Component.text(
+        sender.sendMessage(StaffMessageStyle.style(Component.text("Usage: /reports (opens the staff report GUI for players)")));
+        sender.sendMessage(StaffMessageStyle.style(Component.text("       /reports note <private action note> | /reports cancel")));
+        sender.sendMessage(StaffMessageStyle.style(Component.text("       /reports <open|mine|claimed|review|closed>")));
+        sender.sendMessage(StaffMessageStyle.style(Component.text("       /reports view <report-id>")));
+        sender.sendMessage(StaffMessageStyle.style(Component.text(
                 "       /reports evidence <report-id> <public|private|client> [snapshot] [page]"
-        ));
-        sender.sendMessage(Component.text(
+        )));
+        sender.sendMessage(StaffMessageStyle.style(Component.text(
                 "       /reports <claim|awaitreview|close|noviolation> <report-id> <revision> <note> [CONFIRM]"
-        ));
+        )));
     }
 
     @Override

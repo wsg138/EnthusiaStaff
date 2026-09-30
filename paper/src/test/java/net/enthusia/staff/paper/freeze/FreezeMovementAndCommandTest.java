@@ -12,6 +12,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
+import net.enthusia.staff.paper.presentation.StaffMessageStyle;
 import net.kyori.adventure.text.Component;
 import org.bukkit.Location;
 import org.bukkit.World;
@@ -68,9 +69,9 @@ class FreezeMovementAndCommandTest {
         manager.onCommand(event);
 
         assertTrue(event.isCancelled());
-        assertTrue(messages.stream().anyMatch(message -> message.equals(Component.text(
+        assertTrue(messages.contains(StaffMessageStyle.error(
                 "You are frozen; commands are unavailable until staff releases the freeze."
-        ))));
+        )));
     }
 
     private static FreezeManager restrictedManager() {

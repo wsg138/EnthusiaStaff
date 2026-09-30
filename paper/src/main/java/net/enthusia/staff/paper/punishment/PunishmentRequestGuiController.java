@@ -1,5 +1,6 @@
 package net.enthusia.staff.paper.punishment;
 
+import net.enthusia.staff.paper.presentation.StaffMessageStyle;
 import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
@@ -315,9 +316,9 @@ public final class PunishmentRequestGuiController implements Listener {
     private static void prepareCustomDenial(Player player, PunishmentRequestGuiState.Denial denial) {
         player.closeInventory();
         String command = "/punish deny " + denial.lease().request().requestId() + " ";
-        player.sendMessage(Component.text("Custom denial reason required. ", NamedTextColor.YELLOW)
+        player.sendMessage(StaffMessageStyle.style(Component.text("Custom denial reason required. ", NamedTextColor.YELLOW)
                 .append(Component.text("Click to prepare the command", NamedTextColor.AQUA)
-                        .clickEvent(ClickEvent.suggestCommand(command))));
+                        .clickEvent(ClickEvent.suggestCommand(command)))));
     }
 
     private void denyWithPreset(Player player, PunishmentRequestGuiState.Denial denial, int slot) {
@@ -417,17 +418,17 @@ public final class PunishmentRequestGuiController implements Listener {
 
     private Actor authorizedActor(Player player) {
         if (!player.hasPermission(REVIEW_PERMISSION)) {
-            player.sendMessage(Component.text("You do not have permission to review requests.", NamedTextColor.RED));
+            player.sendMessage(StaffMessageStyle.style(Component.text("You do not have permission to review requests.", NamedTextColor.RED)));
             return null;
         }
         Actor actor = PaperActorResolver.resolve(player).orElse(null);
         if (actor == null
                 || !authorization.permits(actor, ModerationAction.APPROVE_POLICY_SANCTION)
                 || !actor.rank().canApprovePunishmentRequests()) {
-            player.sendMessage(Component.text(
+            player.sendMessage(StaffMessageStyle.style(Component.text(
                     "Only Mod, Admin, or Founder may review punishment requests.",
                     NamedTextColor.RED
-            ));
+            )));
             return null;
         }
         return actor;
@@ -446,10 +447,10 @@ public final class PunishmentRequestGuiController implements Listener {
             workers.submit(() -> runOperation(player, operation));
         } catch (RejectedExecutionException exception) {
             plugin.getLogger().log(Level.WARNING, "Punishment request GUI worker rejected operation", exception);
-            player.sendMessage(Component.text(
+            player.sendMessage(StaffMessageStyle.style(Component.text(
                     "Punishment request storage is unavailable; try again shortly.",
                     NamedTextColor.RED
-            ));
+            )));
         }
     }
 
@@ -463,7 +464,7 @@ public final class PunishmentRequestGuiController implements Listener {
     }
 
     private void message(Player player, String text) {
-        onEntity(player, () -> player.sendMessage(Component.text(text, NamedTextColor.RED)));
+        onEntity(player, () -> player.sendMessage(StaffMessageStyle.style(Component.text(text, NamedTextColor.RED))));
     }
 
     private void onEntity(Player player, Runnable action) {
@@ -500,25 +501,25 @@ public final class PunishmentRequestGuiController implements Listener {
 
     private static void decisionMessage(Player player, PunishmentRequestResult result) {
         if (result instanceof PunishmentRequestResult.Approved approved) {
-            player.sendMessage(Component.text(
+            player.sendMessage(StaffMessageStyle.style(Component.text(
                     "Punishment request approved as case " + approved.caseId().value()
                             + (approved.replayed() ? " (idempotent replay)." : "."),
                     NamedTextColor.GREEN
-            ));
+            )));
         } else if (result instanceof PunishmentRequestResult.Denied denied) {
-            player.sendMessage(Component.text(
+            player.sendMessage(StaffMessageStyle.style(Component.text(
                     denied.replayed()
                             ? "Punishment request denial replayed safely."
                             : "Punishment request was denied.",
                     NamedTextColor.YELLOW
-            ));
+            )));
         } else if (result instanceof PunishmentRequestResult.Rejected rejected) {
             rejection(player, rejected);
         }
     }
 
     private static void rejection(Player player, PunishmentRequestResult.Rejected rejected) {
-        player.sendMessage(Component.text(rejected.code() + ": " + rejected.message(), NamedTextColor.RED));
+        player.sendMessage(StaffMessageStyle.style(Component.text(rejected.code() + ": " + rejected.message(), NamedTextColor.RED)));
     }
 
     private static PunishmentRequestResult.Rejected rejected(String code, String message) {

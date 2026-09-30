@@ -1,5 +1,6 @@
 package net.enthusia.staff.paper.punishment;
 
+import net.enthusia.staff.paper.presentation.StaffMessageStyle;
 import io.papermc.paper.event.player.AsyncChatEvent;
 import java.util.List;
 import java.util.Locale;
@@ -216,9 +217,9 @@ public final class PunishmentGuiController implements Listener {
                 return;
             }
             if (note.isBlank() || note.length() > 4_000) {
-                viewer.sendMessage(Component.text(
+                viewer.sendMessage(StaffMessageStyle.style(Component.text(
                         "The internal explanation must contain 1 to 4000 characters; the prior draft remains saved."
-                ));
+                )));
                 openState(viewer, capture.review());
                 return;
             }
@@ -325,9 +326,9 @@ public final class PunishmentGuiController implements Listener {
             noteCaptures.put(viewer.getUniqueId(), new NoteCapture(state));
             suppressedClosures.add(viewer.getUniqueId());
             viewer.closeInventory();
-            viewer.sendMessage(Component.text(
+            viewer.sendMessage(StaffMessageStyle.style(Component.text(
                     "Type the private internal explanation in chat, or type cancel. It will not be broadcast."
-            ));
+            )));
             return;
         }
         if (slot == PunishmentGuiRenderer.CONFIRM_SLOT) {
@@ -426,7 +427,7 @@ public final class PunishmentGuiController implements Listener {
     private void confirm(Player viewer, Actor actor, PunishmentGuiState.Review state) {
         UUID viewerId = viewer.getUniqueId();
         if (!confirmations.add(viewerId)) {
-            viewer.sendMessage(Component.text("That punishment confirmation is already in progress."));
+            viewer.sendMessage(StaffMessageStyle.style(Component.text("That punishment confirmation is already in progress.")));
             return;
         }
         boolean submitted = submit(viewer, () -> runConfirmation(viewer, actor, state, viewerId));
@@ -577,7 +578,7 @@ public final class PunishmentGuiController implements Listener {
                 || (!authorization.permits(actor, ModerationAction.ISSUE_POLICY_SANCTION)
                 && !authorization.permits(actor, ModerationAction.REQUEST_POLICY_SANCTION))
                 || !viewer.hasPermission("enthusiastaff.punish.configured")) {
-            viewer.sendMessage(Component.text("You do not have punishment authority."));
+            viewer.sendMessage(StaffMessageStyle.style(Component.text("You do not have punishment authority.")));
             return null;
         }
         return actor;
@@ -593,7 +594,7 @@ public final class PunishmentGuiController implements Listener {
     private void finish(Player viewer, String result) {
         onEntity(viewer, () -> {
             closeWithoutResume(viewer);
-            viewer.sendMessage(Component.text(result));
+            viewer.sendMessage(StaffMessageStyle.style(Component.text(result)));
         });
     }
 
@@ -609,13 +610,13 @@ public final class PunishmentGuiController implements Listener {
             });
             return true;
         } catch (RejectedExecutionException exception) {
-            viewer.sendMessage(Component.text("The moderation work queue is full; no action was taken."));
+            viewer.sendMessage(StaffMessageStyle.style(Component.text("The moderation work queue is full; no action was taken.")));
             return false;
         }
     }
 
     private void message(Player viewer, String body) {
-        onEntity(viewer, () -> viewer.sendMessage(Component.text(body)));
+        onEntity(viewer, () -> viewer.sendMessage(StaffMessageStyle.style(Component.text(body))));
     }
 
     private void onEntity(Player player, Runnable task) {

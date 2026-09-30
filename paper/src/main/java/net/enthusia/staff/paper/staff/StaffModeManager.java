@@ -1,5 +1,6 @@
 package net.enthusia.staff.paper.staff;
 
+import net.enthusia.staff.paper.presentation.StaffMessageStyle;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.Map;
@@ -136,15 +137,15 @@ public final class StaffModeManager implements Listener {
         java.util.Objects.requireNonNull(rank, "rank");
         UUID playerId = player.getUniqueId();
         if (!transitions.add(playerId)) {
-            player.sendMessage(Component.text("A staff-mode transition is already in progress."));
+            player.sendMessage(StaffMessageStyle.style(Component.text("A staff-mode transition is already in progress.")));
             return;
         }
         CombatStatusAdapter.Status combatStatus = combat.status(player);
         if (combatStatus != CombatStatusAdapter.Status.CLEAR) {
             transitions.remove(playerId);
-            player.sendMessage(Component.text(combatStatus == CombatStatusAdapter.Status.TAGGED
+            player.sendMessage(StaffMessageStyle.style(Component.text(combatStatus == CombatStatusAdapter.Status.TAGGED
                     ? "You cannot enter staff mode while combat tagged."
-                    : "Combat state could not be verified; staff mode entry failed safely."));
+                    : "Combat state could not be verified; staff mode entry failed safely.")));
             return;
         }
         StaffStateCodec.Captured captured;
@@ -153,7 +154,7 @@ public final class StaffModeManager implements Listener {
         } catch (RuntimeException exception) {
             transitions.remove(playerId);
             plugin.getLogger().log(Level.SEVERE, "Staff state snapshot capture failed", exception);
-            player.sendMessage(Component.text("Your state could not be snapshotted; staff mode was not entered."));
+            player.sendMessage(StaffMessageStyle.style(Component.text("Your state could not be snapshotted; staff mode was not entered.")));
             return;
         }
         if (!submit(() -> {
@@ -184,14 +185,14 @@ public final class StaffModeManager implements Listener {
             }
         })) {
             transitions.remove(playerId);
-            player.sendMessage(Component.text("The bounded work queue is full; staff mode was not entered."));
+            player.sendMessage(StaffMessageStyle.style(Component.text("The bounded work queue is full; staff mode was not entered.")));
         }
     }
 
     public void exit(Player player) {
         UUID playerId = player.getUniqueId();
         if (!transitions.add(playerId)) {
-            player.sendMessage(Component.text("A staff-mode transition is already in progress."));
+            player.sendMessage(StaffMessageStyle.style(Component.text("A staff-mode transition is already in progress.")));
             return;
         }
         beginDurableExit(playerId, "Staff mode exit");
@@ -297,9 +298,9 @@ public final class StaffModeManager implements Listener {
         StaffRank currentRank = PaperStaffRankResolver.resolve(player::hasPermission).orElse(null);
         if (StaffModeRankReconciliationPolicy.decide(null, currentRank)
                 == StaffModeRankReconciliationPolicy.Action.EXIT_SESSION) {
-            player.sendMessage(Component.text(
+            player.sendMessage(StaffMessageStyle.style(Component.text(
                     RANK_REMOVED_MESSAGE
-            ));
+            )));
             if (!submit(() -> {
                 try {
                     StaffSessionSnapshot exiting = loaded.beginExit(playerId, clock.instant()).orElseThrow(() ->
@@ -312,9 +313,9 @@ public final class StaffModeManager implements Listener {
                 }
             })) {
                 recoveryGate.retry(playerId);
-                player.sendMessage(Component.text(
+                player.sendMessage(StaffMessageStyle.style(Component.text(
                         "The bounded work queue is full; staff session recovery did not continue."
-                ));
+                )));
             }
             return;
         }
@@ -350,7 +351,7 @@ public final class StaffModeManager implements Listener {
                             new IllegalStateException("staff session disappeared during activation rollback"));
                     restoreAndVerify(playerId, exiting, loaded);
                 },
-                message -> player.sendMessage(Component.text(message)),
+                message -> player.sendMessage(StaffMessageStyle.style(Component.text(message))),
                 successMessage
         );
         if (!activated) {
@@ -380,9 +381,9 @@ public final class StaffModeManager implements Listener {
         if (rank == null || event.getNewGameMode() != StaffModeAccessPolicy.requiredGameMode(rank)) {
             event.setCancelled(true);
             if (!transitions.contains(playerId)) {
-                player.sendMessage(Component.text(
+                player.sendMessage(StaffMessageStyle.style(Component.text(
                         "Your staff rank cannot use that game mode while staff mode is active."
-                ));
+                )));
             }
         }
     }
@@ -461,9 +462,9 @@ public final class StaffModeManager implements Listener {
         if (rank == null || StaffModeAccessPolicy.blocksEnderChestOpen(rank)) {
             event.setCancelled(true);
             if (rank != null) {
-                player.sendMessage(Component.text(
+                player.sendMessage(StaffMessageStyle.style(Component.text(
                         "Ender chest access is unavailable at your staff rank while in staff mode."
-                ));
+                )));
             }
         }
     }
@@ -578,7 +579,7 @@ public final class StaffModeManager implements Listener {
             applyStaffState(player, liveRank);
             ranks.put(playerId, liveRank);
             transitions.remove(playerId);
-            player.sendMessage(Component.text("Your active staff-mode profile was updated for your current rank."));
+            player.sendMessage(StaffMessageStyle.style(Component.text("Your active staff-mode profile was updated for your current rank.")));
         } catch (RuntimeException exception) {
             plugin.getLogger().log(Level.SEVERE, "Staff rank profile reconciliation failed", exception);
             message(playerId, "Your staff rank changed, but the new profile could not be applied; restoring your saved state.");
@@ -622,22 +623,22 @@ public final class StaffModeManager implements Listener {
                     submit(() -> loaded.recoveryRequired(
                             session.sessionId(), "Original location could not be restored", clock.instant()
                     ));
-                    player.sendMessage(Component.text("Restoration could not complete; recovery remains pending."));
+                    player.sendMessage(StaffMessageStyle.style(Component.text("Restoration could not complete; recovery remains pending.")));
                     return;
                 }
                 StaffStateCodec.Captured restored = codec.capture(player, session.serverId());
                 if (!submit(() -> completeRestoration(playerId, session, loaded, restored))) {
                     retainRecoveryAfterRuntimeExit(playerId);
-                    player.sendMessage(Component.text(
+                    player.sendMessage(StaffMessageStyle.style(Component.text(
                             "State was restored, but durable verification is still pending; contact an administrator."
-                    ));
+                    )));
                 }
             } catch (RuntimeException exception) {
                 submit(() -> loaded.recoveryRequired(
                         session.sessionId(), "Runtime restoration failure", clock.instant()
                 ));
                 plugin.getLogger().log(Level.SEVERE, "Staff state restoration failed", exception);
-                player.sendMessage(Component.text("Restoration failed safely; your original snapshot remains durable."));
+                player.sendMessage(StaffMessageStyle.style(Component.text("Restoration failed safely; your original snapshot remains durable.")));
             }
         });
     }
@@ -794,7 +795,7 @@ public final class StaffModeManager implements Listener {
     }
 
     private void message(UUID playerId, String message) {
-        onEntity(playerId, player -> player.sendMessage(Component.text(message)));
+        onEntity(playerId, player -> player.sendMessage(StaffMessageStyle.style(Component.text(message))));
     }
 
     private void safeMessage(UUID playerId, String message) {

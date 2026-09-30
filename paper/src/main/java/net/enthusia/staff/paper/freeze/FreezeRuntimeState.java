@@ -54,7 +54,7 @@ final class FreezeRuntimeState {
 
     boolean retire(UUID playerId) {
         Entry retired = states.remove(Objects.requireNonNull(playerId, PLAYER_ID_ARGUMENT));
-        return retired != null && retired.status() == Status.FROZEN;
+        return retired != null && retired.status() != Status.RELEASED;
     }
 
     boolean retireIfCurrent(UUID playerId, long generation) {

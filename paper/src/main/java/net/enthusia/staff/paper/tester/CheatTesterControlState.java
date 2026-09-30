@@ -1,5 +1,6 @@
 package net.enthusia.staff.paper.tester;
 
+import net.enthusia.staff.paper.presentation.StaffMessageStyle;
 import java.time.Clock;
 import java.util.ArrayList;
 import java.util.List;
@@ -50,7 +51,7 @@ final class CheatTesterControlState {
             return false;
         }
         selections.put(staff.getUniqueId(), type);
-        staff.sendMessage(Component.text("Cheat Tester selected: " + type.displayName(), NamedTextColor.AQUA));
+        staff.sendMessage(StaffMessageStyle.style(Component.text("Cheat Tester selected: " + type.displayName(), NamedTextColor.AQUA)));
         return true;
     }
 
@@ -96,12 +97,12 @@ final class CheatTesterControlState {
     boolean authorized(Player staff) {
         if (staff == null || !staff.hasPermission(PERMISSION)) {
             if (staff != null) {
-                staff.sendMessage(Component.text("You do not have permission to use Cheat Tester."));
+                staff.sendMessage(StaffMessageStyle.style(Component.text("You do not have permission to use Cheat Tester.")));
             }
             return false;
         }
         if (!staffModeActive.test(staff.getUniqueId())) {
-            staff.sendMessage(Component.text("Enter staff mode before using Cheat Tester."));
+            staff.sendMessage(StaffMessageStyle.style(Component.text("Enter staff mode before using Cheat Tester.")));
             return false;
         }
         return true;
@@ -120,11 +121,11 @@ final class CheatTesterControlState {
             return false;
         }
         if (staff.getUniqueId().equals(target.getUniqueId())) {
-            staff.sendMessage(Component.text("Cheat Tester cannot target the controlling staff member."));
+            staff.sendMessage(StaffMessageStyle.style(Component.text("Cheat Tester cannot target the controlling staff member.")));
             return false;
         }
         if (!target.isOnline()) {
-            staff.sendMessage(Component.text("The target must be online on this backend."));
+            staff.sendMessage(StaffMessageStyle.style(Component.text("The target must be online on this backend.")));
             return false;
         }
         return true;
@@ -134,23 +135,23 @@ final class CheatTesterControlState {
         if (type != CheatTesterType.FAKE_ENTITY || fakeAvailable) {
             return true;
         }
-        staff.sendMessage(Component.text(
+        staff.sendMessage(StaffMessageStyle.style(Component.text(
                 "Fake-entity testing is unavailable; ProtocolLib packet support failed closed.",
                 NamedTextColor.RED
-        ));
+        )));
         return false;
     }
 
     private boolean capacityAvailable(Player staff) {
         if (activeByTarget.size() >= settings.maximumActiveGlobal()) {
-            staff.sendMessage(Component.text("The global cheat-tester session limit is active."));
+            staff.sendMessage(StaffMessageStyle.style(Component.text("The global cheat-tester session limit is active.")));
             return false;
         }
         long activeForStaff = activeByTarget.values().stream()
                 .filter(session -> session.staffId.equals(staff.getUniqueId()))
                 .count();
         if (activeForStaff >= settings.maximumActivePerStaff()) {
-            staff.sendMessage(Component.text("You already control the maximum number of cheat-tester sessions."));
+            staff.sendMessage(StaffMessageStyle.style(Component.text("You already control the maximum number of cheat-tester sessions.")));
             return false;
         }
         return true;

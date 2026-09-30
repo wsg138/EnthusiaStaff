@@ -1,5 +1,6 @@
 package net.enthusia.staff.paper.visibility;
 
+import net.enthusia.staff.paper.presentation.StaffMessageStyle;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.Map;
@@ -170,11 +171,11 @@ public final class VanishManager implements Listener {
     public void toggle(Player player) {
         StaffRank rank = resolveAndPublishRank(player);
         if (rank == null) {
-            player.sendMessage(Component.text("An explicit EnthusiaStaff rank is required before using vanish."));
+            player.sendMessage(StaffMessageStyle.style(Component.text("An explicit EnthusiaStaff rank is required before using vanish.")));
             return;
         }
         if (requiresStaffMode(rank) && !staffMode.active(player.getUniqueId())) {
-            player.sendMessage(Component.text("Your rank requires active staff mode before vanishing."));
+            player.sendMessage(StaffMessageStyle.style(Component.text("Your rank requires active staff mode before vanishing.")));
             return;
         }
         boolean next = !visibility.isVanished(player.getUniqueId());
@@ -184,11 +185,11 @@ public final class VanishManager implements Listener {
     public void configureSpectatorTab(Player player, boolean appearNormally) {
         StaffRank rank = resolveAndPublishRank(player);
         if (!SpectatorTabPolicy.offersVisibilityChoice(rank)) {
-            player.sendMessage(Component.text("Your staff rank cannot change spectator tab presentation."));
+            player.sendMessage(StaffMessageStyle.style(Component.text("Your staff rank cannot change spectator tab presentation.")));
             return;
         }
         if (player.getGameMode() != GameMode.SPECTATOR) {
-            player.sendMessage(Component.text("Spectator tab presentation is only available while spectating."));
+            player.sendMessage(StaffMessageStyle.style(Component.text("Spectator tab presentation is only available while spectating.")));
             return;
         }
         if (appearNormally) {
@@ -198,27 +199,27 @@ public final class VanishManager implements Listener {
                     visibility.isVanished(player.getUniqueId()),
                     spectatorTabPackets.available()
             )) {
-                player.sendMessage(Component.text(
+                player.sendMessage(StaffMessageStyle.style(Component.text(
                         visibility.isVanished(player.getUniqueId())
                                 ? "Disable full vanish before appearing on the tab list."
                                 : "ProtocolLib spectator masking is unavailable; you remain hidden from tab."
-                ));
+                )));
                 hiddenSpectators.add(player.getUniqueId());
                 audiences.refreshTarget(player.getUniqueId());
                 return;
             }
             hiddenSpectators.remove(player.getUniqueId());
             audiences.refreshTarget(player.getUniqueId());
-            player.sendMessage(Component.text("You now appear normally on tab while remaining in spectator. ",
+            player.sendMessage(StaffMessageStyle.style(Component.text("You now appear normally on tab while remaining in spectator. ",
                             NamedTextColor.GREEN)
                     .append(Component.text("[Hide again]", NamedTextColor.YELLOW)
                             .clickEvent(ClickEvent.runCommand("/vanish tab hide"))
-                            .hoverEvent(HoverEvent.showText(Component.text("Remove yourself from tab")))));
+                            .hoverEvent(HoverEvent.showText(Component.text("Remove yourself from tab"))))));
             return;
         }
         hiddenSpectators.add(player.getUniqueId());
         audiences.refreshTarget(player.getUniqueId());
-        player.sendMessage(Component.text("You are hidden from the tab list while spectating."));
+        player.sendMessage(StaffMessageStyle.style(Component.text("You are hidden from the tab list while spectating.")));
     }
 
     public void staffModeExited(UUID playerId) {
@@ -247,7 +248,7 @@ public final class VanishManager implements Listener {
     private void set(Player player, StaffRank rank, boolean vanished) {
         UUID playerId = player.getUniqueId();
         if (!stateWrites.add(playerId)) {
-            player.sendMessage(Component.text("A vanish state change is already being saved."));
+            player.sendMessage(StaffMessageStyle.style(Component.text("A vanish state change is already being saved.")));
             return;
         }
         if (!submit(() -> {
@@ -280,7 +281,7 @@ public final class VanishManager implements Listener {
             }
         })) {
             stateWrites.remove(playerId);
-            player.sendMessage(Component.text("The bounded work queue is full; vanish was not changed."));
+            player.sendMessage(StaffMessageStyle.style(Component.text("The bounded work queue is full; vanish was not changed.")));
         }
     }
 
@@ -309,7 +310,7 @@ public final class VanishManager implements Listener {
             audiences.refreshViewer(playerId);
         }
         audiences.refreshTarget(playerId);
-        player.sendMessage(Component.text(vanished ? "Vanish enabled." : "Vanish disabled."));
+        player.sendMessage(StaffMessageStyle.style(Component.text(vanished ? "Vanish enabled." : "Vanish disabled.")));
     }
 
     private void reconcileLiveRank(Player player) {
@@ -840,7 +841,7 @@ public final class VanishManager implements Listener {
     }
 
     private void message(UUID playerId, String message) {
-        audiences.onOwner(playerId, player -> player.sendMessage(Component.text(message)));
+        audiences.onOwner(playerId, player -> player.sendMessage(StaffMessageStyle.style(Component.text(message))));
     }
 
     private boolean onEntity(Player player, Runnable operation) {

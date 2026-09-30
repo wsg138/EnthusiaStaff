@@ -126,22 +126,76 @@ public final class JdbcFreezeStore implements FreezeStore {
     }
 
     @Override
-    public void disconnected(UUID playerId, Instant offlineExpiration, Instant now) {
-        if (playerId == null || offlineExpiration == null || now == null || !offlineExpiration.isAfter(now)) {
+    public Optional<FreezeRecord> disconnected(
+            UUID playerId,
+            long expectedRevision,
+            Instant offlineExpiration,
+            Instant now
+    ) {
+        if (playerId == null || expectedRevision < 0 || offlineExpiration == null || now == null
+                || !offlineExpiration.isAfter(now)) {
             throw new IllegalArgumentException("valid freeze disconnect fields are required");
         }
-        try (Connection connection = dataSource.getConnection();
-             PreparedStatement statement = connection.prepareStatement("""
-                     UPDATE player_freezes
-                     SET offline_expires_at = CASE WHEN keep_active THEN NULL ELSE ? END,
-                         revision = revision + 1
-                     WHERE player_id = ? AND state = 'ACTIVE'
-                     """)) {
-            statement.setTimestamp(1, Timestamp.from(offlineExpiration));
-            statement.setBytes(2, UuidBytes.toBytes(playerId));
-            statement.executeUpdate();
+        try (Connection connection = dataSource.getConnection()) {
+            connection.setAutoCommit(false);
+            try (PreparedStatement statement = connection.prepareStatement("""
+                    UPDATE player_freezes
+                    SET offline_expires_at = CASE WHEN keep_active THEN NULL ELSE ? END,
+                        revision = revision + 1
+                    WHERE player_id = ? AND state = 'ACTIVE' AND revision = ?
+                    """)) {
+                statement.setTimestamp(1, Timestamp.from(offlineExpiration));
+                statement.setBytes(2, UuidBytes.toBytes(playerId));
+                statement.setLong(3, expectedRevision);
+                if (statement.executeUpdate() != 1) {
+                    connection.rollback();
+                    return Optional.empty();
+                }
+                FreezeRecord record = lockAndRead(connection, playerId);
+                connection.commit();
+                return Optional.ofNullable(record);
+            } catch (SQLException exception) {
+                rollback(connection, exception);
+                throw exception;
+            } finally {
+                restoreAutoCommit(connection);
+            }
         } catch (SQLException exception) {
             throw new ModerationPersistenceException("Unable to persist frozen-player disconnect", exception);
+        }
+    }
+
+    @Override
+    public Optional<FreezeRecord> connected(UUID playerId, long expectedRevision, Instant now) {
+        if (playerId == null || expectedRevision < 0 || now == null) {
+            throw new IllegalArgumentException("valid freeze reconnect fields are required");
+        }
+        try (Connection connection = dataSource.getConnection()) {
+            connection.setAutoCommit(false);
+            try (PreparedStatement statement = connection.prepareStatement("""
+                    UPDATE player_freezes
+                    SET offline_expires_at = NULL, revision = revision + 1
+                    WHERE player_id = ? AND state = 'ACTIVE' AND revision = ?
+                        AND (keep_active = TRUE OR offline_expires_at IS NULL OR offline_expires_at > ?)
+                    """)) {
+                statement.setBytes(1, UuidBytes.toBytes(playerId));
+                statement.setLong(2, expectedRevision);
+                statement.setTimestamp(3, Timestamp.from(now));
+                if (statement.executeUpdate() != 1) {
+                    connection.rollback();
+                    return Optional.empty();
+                }
+                FreezeRecord record = lockAndRead(connection, playerId);
+                connection.commit();
+                return Optional.ofNullable(record);
+            } catch (SQLException exception) {
+                rollback(connection, exception);
+                throw exception;
+            } finally {
+                restoreAutoCommit(connection);
+            }
+        } catch (SQLException exception) {
+            throw new ModerationPersistenceException("Unable to persist frozen-player reconnect", exception);
         }
     }
 

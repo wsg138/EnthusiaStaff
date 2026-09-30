@@ -340,6 +340,7 @@ final class VelocitySecurityEventSubmissionTest {
         ));
     }
 
+    @SuppressWarnings("AddressSelection") // Fixed loopback literal keeps this isolated test fixture non-routable.
     private static RegisteredServer server(String name) {
         ServerInfo info = new ServerInfo(name, new InetSocketAddress("127.0.0.1", 25565));
         return RegisteredServer.class.cast(Proxy.newProxyInstance(

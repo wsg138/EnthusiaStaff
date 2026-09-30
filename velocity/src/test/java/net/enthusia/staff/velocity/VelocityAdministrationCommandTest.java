@@ -11,6 +11,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
+import net.enthusia.staff.domain.OperationalMode;
 import net.kyori.adventure.text.Component;
 import org.junit.jupiter.api.Test;
 import org.slf4j.Logger;
@@ -26,11 +27,17 @@ class VelocityAdministrationCommandTest {
         SimpleCommand command = plugin.new StatusCommand();
 
         command.execute(invocation(source));
-        assertEquals(Component.text("EnthusiaStaff mode: BOOTSTRAP"), source.messages().getFirst());
+        assertEquals(
+                VelocityMessageStyle.modeHeader("EnthusiaStaff", OperationalMode.BOOTSTRAP),
+                source.messages().getFirst()
+        );
 
         source.clear();
         command.execute(invocation(source, "unknown"));
-        assertEquals(Component.text("EnthusiaStaff mode: BOOTSTRAP"), source.messages().getFirst());
+        assertEquals(
+                VelocityMessageStyle.modeHeader("EnthusiaStaff", OperationalMode.BOOTSTRAP),
+                source.messages().getFirst()
+        );
     }
 
     @Test
@@ -41,35 +48,35 @@ class VelocityAdministrationCommandTest {
 
         command.execute(invocation(source, "reload"));
         assertEquals(
-                List.of(Component.text("You do not have permission to reload EnthusiaStaff.")),
+                List.of(styled("You do not have permission to reload EnthusiaStaff.")),
                 source.messages()
         );
 
         source.clear();
         command.execute(invocation(source, "migration", "inspect"));
         assertEquals(
-                List.of(Component.text("You do not have permission to run migration operations.")),
+                List.of(styled("You do not have permission to run migration operations.")),
                 source.messages()
         );
 
         source.clear();
         command.execute(invocation(source, "cutover", STATUS));
         assertEquals(
-                List.of(Component.text("You do not have permission to manage cutover.")),
+                List.of(styled("You do not have permission to manage cutover.")),
                 source.messages()
         );
 
         source.clear();
         command.execute(invocation(source, "discord", STATUS));
         assertEquals(
-                List.of(Component.text("You do not have permission to manage Discord delivery.")),
+                List.of(styled("You do not have permission to manage Discord delivery.")),
                 source.messages()
         );
 
         source.clear();
         command.execute(invocation(source, "website", STATUS));
         assertEquals(
-                List.of(Component.text("You do not have permission to manage website bindings.")),
+                List.of(styled("You do not have permission to manage website bindings.")),
                 source.messages()
         );
     }
@@ -87,23 +94,23 @@ class VelocityAdministrationCommandTest {
         SimpleCommand command = plugin.new StatusCommand();
 
         command.execute(invocation(source, "migration", "inspect"));
-        assertEquals(Component.text("MariaDB is not ready; no migration action was taken."), source.onlyMessage());
+        assertEquals(styled("MariaDB is not ready; no migration action was taken."), source.onlyMessage());
 
         source.clear();
         command.execute(invocation(source, "cutover", STATUS));
-        assertEquals(Component.text("MariaDB is not ready; no cutover action was taken."), source.onlyMessage());
+        assertEquals(styled("MariaDB is not ready; no cutover action was taken."), source.onlyMessage());
 
         source.clear();
         command.execute(invocation(source, "discord", STATUS));
-        assertEquals(Component.text("MariaDB is not ready; Discord status is unavailable."), source.onlyMessage());
+        assertEquals(styled("MariaDB is not ready; Discord status is unavailable."), source.onlyMessage());
 
         source.clear();
         command.execute(invocation(source, "website", STATUS));
-        assertEquals(Component.text("Website API: DISABLED or unavailable"), source.onlyMessage());
+        assertEquals(styled("Website API: DISABLED or unavailable"), source.onlyMessage());
 
         source.clear();
         command.execute(invocation(source, "website", "code", "show", "ES-1"));
-        assertEquals(Component.text("The website API store is not available."), source.onlyMessage());
+        assertEquals(styled("The website API store is not available."), source.onlyMessage());
     }
 
     @Test
@@ -114,21 +121,25 @@ class VelocityAdministrationCommandTest {
 
         command.execute(invocation(source, "link"));
         assertEquals(
-                Component.text("Usage: /alt <link|approve|household|notrelated|unlink|reopen> "
+                styled("Usage: /alt <link|approve|household|notrelated|unlink|reopen> "
                         + "<player1> <player2> <reason>"),
                 source.onlyMessage()
         );
 
         source.clear();
         command.execute(invocation(source, "unknown", "first", "second", "reason"));
-        assertEquals(Component.text("Unknown alt operation."), source.onlyMessage());
+        assertEquals(styled("Unknown alt operation."), source.onlyMessage());
 
         source.clear();
         command.execute(invocation(source, "reopen", "first", "second", "reason"));
         assertEquals(
-                Component.text("Admin permission is required to reopen a not-related decision."),
+                styled("Admin permission is required to reopen a not-related decision."),
                 source.onlyMessage()
         );
+    }
+
+    private static Component styled(String text) {
+        return VelocityMessageStyle.style(Component.text(text));
     }
 
     private static EnthusiaStaffVelocityPlugin plugin() {
@@ -183,6 +194,7 @@ class VelocityAdministrationCommandTest {
         return 0.0D;
     }
 
+    @SuppressWarnings("ArrayRecordComponent") // Velocity Invocation requires String[] arguments.
     private record TestInvocation(CommandSource source, String alias, String[] arguments)
             implements SimpleCommand.Invocation {
     }

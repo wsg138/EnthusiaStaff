@@ -1,5 +1,6 @@
 package net.enthusia.staff.paper.command;
 
+import net.enthusia.staff.paper.presentation.StaffMessageStyle;
 import java.time.Duration;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -104,14 +105,14 @@ public final class CaseCommand implements CommandExecutor {
         } else if (arguments.length == 2 && arguments[0].equalsIgnoreCase("view")) {
             rawCaseId = arguments[1];
         } else {
-            sender.sendMessage(Component.text("Usage: /" + label + " [view] <case-id>"));
+            sender.sendMessage(StaffMessageStyle.style(Component.text("Usage: /" + label + " [view] <case-id>")));
             return true;
         }
         CaseId caseId;
         try {
             caseId = new CaseId(rawCaseId);
         } catch (IllegalArgumentException exception) {
-            sender.sendMessage(Component.text("Invalid case ID: " + sanitized(exception.getMessage())));
+            sender.sendMessage(StaffMessageStyle.style(Component.text("Invalid case ID: " + sanitized(exception.getMessage()))));
             return true;
         }
         boolean sensitive = sender instanceof ConsoleCommandSender
@@ -325,23 +326,23 @@ public final class CaseCommand implements CommandExecutor {
             return true;
         }
         if (!(sender instanceof Player viewer)) {
-            sender.sendMessage("Confiscated-item restoration requires an in-game staff actor.");
+            sender.sendMessage(StaffMessageStyle.style("Confiscated-item restoration requires an in-game staff actor."));
             return true;
         }
         Actor actor = PaperActorResolver.resolve(viewer).orElse(null);
         if (actor == null || !authorization.permits(actor, ModerationAction.RESTORE_ASSETS)) {
-            viewer.sendMessage(Component.text("Only the Founder may restore confiscated assets."));
+            viewer.sendMessage(StaffMessageStyle.style(Component.text("Only the Founder may restore confiscated assets.")));
             return true;
         }
         if (arguments.length != 2) {
-            viewer.sendMessage(Component.text("Usage: /" + label + " restoreitems <case-id>"));
+            viewer.sendMessage(StaffMessageStyle.style(Component.text("Usage: /" + label + " restoreitems <case-id>")));
             return true;
         }
         CaseId caseId;
         try {
             caseId = new CaseId(arguments[1]);
         } catch (IllegalArgumentException exception) {
-            viewer.sendMessage(Component.text("Invalid case ID: " + sanitized(exception.getMessage())));
+            viewer.sendMessage(StaffMessageStyle.style(Component.text("Invalid case ID: " + sanitized(exception.getMessage()))));
             return true;
         }
         submit(viewer, () -> resolveAndRestore(viewer, caseId));
@@ -368,9 +369,9 @@ public final class CaseCommand implements CommandExecutor {
             viewer.getScheduler().execute(plugin, () -> {
                 Player target = plugin.getServer().getPlayer(targetId);
                 if (target == null) {
-                    viewer.sendMessage(Component.text(
+                    viewer.sendMessage(StaffMessageStyle.style(Component.text(
                             "Confiscated-item restoration requires the case target on this backend."
-                    ));
+                    )));
                     return;
                 }
                 coordinator.restore(viewer, target, caseId);
@@ -385,14 +386,14 @@ public final class CaseCommand implements CommandExecutor {
         try {
             workers.execute(task);
         } catch (RejectedExecutionException exception) {
-            sender.sendMessage(Component.text("The moderation work queue is full; nothing changed."));
+            sender.sendMessage(StaffMessageStyle.style(Component.text("The moderation work queue is full; nothing changed.")));
         }
     }
 
     private void message(Player viewer, String body) {
         viewer.getScheduler().execute(
                 plugin,
-                () -> viewer.sendMessage(Component.text(body)),
+                () -> viewer.sendMessage(StaffMessageStyle.style(Component.text(body))),
                 null,
                 1L
         );

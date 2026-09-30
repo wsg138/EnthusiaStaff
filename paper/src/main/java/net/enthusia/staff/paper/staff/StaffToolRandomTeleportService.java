@@ -1,5 +1,6 @@
 package net.enthusia.staff.paper.staff;
 
+import net.enthusia.staff.paper.presentation.StaffMessageStyle;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
@@ -45,10 +46,10 @@ final class StaffToolRandomTeleportService {
 
     void begin(Player actor) {
         if (!settings.randomTeleportEnabledOn(serverId)) {
-            actor.sendMessage(Component.text(
+            actor.sendMessage(StaffMessageStyle.style(Component.text(
                     "Random staff teleport is disabled on backend " + serverId + '.',
                     NamedTextColor.YELLOW
-            ));
+            )));
             return;
         }
         UUID actorId = actor.getUniqueId();
@@ -126,7 +127,7 @@ final class StaffToolRandomTeleportService {
             }
             List<TargetSnapshot> shuffled = new ArrayList<>(candidates);
             if (shuffled.isEmpty()) {
-                actor.sendMessage(Component.text("No suitable random-teleport target is online."));
+                actor.sendMessage(StaffMessageStyle.style(Component.text("No suitable random-teleport target is online.")));
                 return;
             }
             TargetSnapshot target = shuffled.get(ThreadLocalRandom.current().nextInt(shuffled.size()));
@@ -141,10 +142,10 @@ final class StaffToolRandomTeleportService {
                 && actor.hasPermission(StaffToolDefinition.RANDOM_TELEPORT.permission())) {
             return true;
         }
-        actor.sendMessage(Component.text(
+        actor.sendMessage(StaffMessageStyle.style(Component.text(
                 "Random teleport was cancelled because your staff session or permission changed.",
                 NamedTextColor.RED
-        ));
+        )));
         return false;
     }
 
@@ -181,7 +182,7 @@ final class StaffToolRandomTeleportService {
     }
 
     private void message(UUID playerId, String text) {
-        onEntity(playerId, player -> player.sendMessage(Component.text(text)));
+        onEntity(playerId, player -> player.sendMessage(StaffMessageStyle.style(Component.text(text))));
     }
 
     private record TargetSnapshot(UUID playerId, String name, Location location) {

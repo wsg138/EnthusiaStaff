@@ -1,5 +1,6 @@
 package net.enthusia.staff.paper.command;
 
+import net.enthusia.staff.paper.presentation.StaffMessageStyle;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -56,7 +57,7 @@ public final class StaffWhoCommand implements CommandExecutor {
             return true;
         }
         if (args.length != 0) {
-            sender.sendMessage(Component.text("Usage: /staffwho"));
+            sender.sendMessage(StaffMessageStyle.style(Component.text("Usage: /staffwho")));
             return true;
         }
         collectOnlineStaff(sender);
@@ -170,9 +171,9 @@ public final class StaffWhoCommand implements CommandExecutor {
         try {
             workers.execute(() -> respond(sender, online, loadPendingLabel()));
         } catch (RejectedExecutionException exception) {
-            deliver(sender, () -> sender.sendMessage(Component.text(
+            deliver(sender, () -> sender.sendMessage(StaffMessageStyle.style(Component.text(
                     "The staff status work queue is full; try again shortly."
-            )));
+            ))));
         }
     }
 
@@ -188,7 +189,7 @@ public final class StaffWhoCommand implements CommandExecutor {
 
     private void respond(CommandSender sender, List<Entry> online, String pending) {
         List<String> lines = render(online, pending);
-        deliver(sender, () -> lines.forEach(line -> sender.sendMessage(Component.text(line))));
+        deliver(sender, () -> lines.forEach(line -> sender.sendMessage(StaffMessageStyle.style(Component.text(line)))));
     }
 
     private void deliver(CommandSender sender, Runnable delivery) {

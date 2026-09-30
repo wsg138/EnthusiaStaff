@@ -1,5 +1,6 @@
 package net.enthusia.staff.paper.command;
 
+import net.enthusia.staff.paper.presentation.StaffMessageStyle;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -90,10 +91,10 @@ public final class PunishmentRequestCommandHandler {
                 || actor == null
                 || !authorization.permits(actor, ModerationAction.APPROVE_POLICY_SANCTION)
                 || !actor.rank().canApprovePunishmentRequests()) {
-            sender.sendMessage(Component.text(
+            sender.sendMessage(StaffMessageStyle.style(Component.text(
                     "Only Mod, Admin, or Founder may review punishment requests.",
                     NamedTextColor.RED
-            ));
+            )));
             return false;
         }
         return true;
@@ -139,10 +140,10 @@ public final class PunishmentRequestCommandHandler {
         RequestView view = request != null && service.mayReview(actor, request) ? view(request) : null;
         onMain(() -> {
             if (view == null) {
-                sender.sendMessage(Component.text(
+                sender.sendMessage(StaffMessageStyle.style(Component.text(
                         "The request does not exist or you are not authorized to review it.",
                         NamedTextColor.RED
-                ));
+                )));
             } else {
                 sendDetails(sender, view);
             }
@@ -194,7 +195,7 @@ public final class PunishmentRequestCommandHandler {
     private PunishmentRequestService readyService(CommandSender sender) {
         PunishmentRequestService service = services.get();
         if (service == null) {
-            onMain(() -> sender.sendMessage(Component.text(NOT_READY_MESSAGE, NamedTextColor.RED)));
+            onMain(() -> sender.sendMessage(StaffMessageStyle.style(Component.text(NOT_READY_MESSAGE, NamedTextColor.RED))));
         }
         return service;
     }
@@ -204,10 +205,10 @@ public final class PunishmentRequestCommandHandler {
             workers.submit(() -> runOperation(sender, operation));
         } catch (RejectedExecutionException exception) {
             plugin.getLogger().log(Level.WARNING, "Punishment request worker rejected command", exception);
-            sender.sendMessage(Component.text(
+            sender.sendMessage(StaffMessageStyle.style(Component.text(
                     "Punishment request storage is unavailable; try again shortly.",
                     NamedTextColor.RED
-            ));
+            )));
         }
     }
 
@@ -216,10 +217,10 @@ public final class PunishmentRequestCommandHandler {
             operation.run();
         } catch (RuntimeException exception) {
             plugin.getLogger().log(Level.SEVERE, "Punishment request command failed", exception);
-            onMain(() -> sender.sendMessage(Component.text(
+            onMain(() -> sender.sendMessage(StaffMessageStyle.style(Component.text(
                     "Punishment request storage is unavailable; no decision was made.",
                     NamedTextColor.RED
-            )));
+            ))));
         }
     }
 
@@ -228,12 +229,12 @@ public final class PunishmentRequestCommandHandler {
     }
 
     private static void sendQueue(CommandSender sender, List<RequestView> pending) {
-        sender.sendMessage(Component.text(
+        sender.sendMessage(StaffMessageStyle.style(Component.text(
                 "Reviewable punishment requests: " + pending.size(),
                 NamedTextColor.GOLD
-        ));
+        )));
         if (pending.isEmpty()) {
-            sender.sendMessage(Component.text("No punishment requests are currently available.", NamedTextColor.GRAY));
+            sender.sendMessage(StaffMessageStyle.style(Component.text("No punishment requests are currently available.", NamedTextColor.GRAY)));
             return;
         }
         pending.forEach(request -> sender.sendMessage(summary(request)));
@@ -299,26 +300,26 @@ public final class PunishmentRequestCommandHandler {
 
     private static UUID requestId(CommandSender sender, String[] args, int index) {
         if (args.length <= index) {
-            sender.sendMessage(Component.text(
+            sender.sendMessage(StaffMessageStyle.style(Component.text(
                     "Usage: /punish review|approve <request-id> or /punish deny <request-id> <reason>",
                     NamedTextColor.RED
-            ));
+            )));
             return null;
         }
         try {
             return UUID.fromString(args[index]);
         } catch (IllegalArgumentException exception) {
-            sender.sendMessage(Component.text("Invalid punishment request ID.", NamedTextColor.RED));
+            sender.sendMessage(StaffMessageStyle.style(Component.text("Invalid punishment request ID.", NamedTextColor.RED)));
             return null;
         }
     }
 
     private static String denialNote(CommandSender sender, String[] args) {
         if (args.length < DENIAL_MINIMUM_ARGUMENT_COUNT) {
-            sender.sendMessage(Component.text(
+            sender.sendMessage(StaffMessageStyle.style(Component.text(
                     "Usage: /punish deny <request-id> <reason>",
                     NamedTextColor.RED
-            ));
+            )));
             return null;
         }
         String note = String.join(
@@ -326,7 +327,7 @@ public final class PunishmentRequestCommandHandler {
                 Arrays.copyOfRange(args, DENIAL_NOTE_START_INDEX, args.length)
         ).trim();
         if (note.isBlank()) {
-            sender.sendMessage(Component.text("A denial reason is required.", NamedTextColor.RED));
+            sender.sendMessage(StaffMessageStyle.style(Component.text("A denial reason is required.", NamedTextColor.RED)));
             return null;
         }
         return note;
@@ -334,20 +335,20 @@ public final class PunishmentRequestCommandHandler {
 
     private static void sendDecision(CommandSender sender, PunishmentRequestResult result) {
         if (result instanceof PunishmentRequestResult.Approved approved) {
-            sender.sendMessage(Component.text(
+            sender.sendMessage(StaffMessageStyle.style(Component.text(
                     "Approved punishment request as case " + approved.caseId().value()
                             + (approved.replayed() ? " (idempotent replay)." : "."),
                     NamedTextColor.GREEN
-            ));
+            )));
         } else if (result instanceof PunishmentRequestResult.Denied denied) {
-            sender.sendMessage(Component.text(
+            sender.sendMessage(StaffMessageStyle.style(Component.text(
                     denied.replayed()
                             ? "Punishment request denial replayed safely."
                             : "Punishment request denied.",
                     NamedTextColor.YELLOW
-            ));
+            )));
         } else if (result instanceof PunishmentRequestResult.Rejected rejected) {
-            sender.sendMessage(Component.text(rejected.code() + ": " + rejected.message(), NamedTextColor.RED));
+            sender.sendMessage(StaffMessageStyle.style(Component.text(rejected.code() + ": " + rejected.message(), NamedTextColor.RED)));
         }
     }
 

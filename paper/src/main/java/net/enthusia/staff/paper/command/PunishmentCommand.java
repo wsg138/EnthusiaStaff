@@ -1,5 +1,6 @@
 package net.enthusia.staff.paper.command;
 
+import net.enthusia.staff.paper.presentation.StaffMessageStyle;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -121,10 +122,10 @@ public final class PunishmentCommand implements CommandExecutor, TabCompleter {
             return true;
         }
         if (!sender.hasPermission(PERMISSION) || !permitsPunishmentDraft(actor)) {
-            sender.sendMessage(Component.text(
+            sender.sendMessage(StaffMessageStyle.style(Component.text(
                     "You are not allowed to prepare configured punishments or requests.",
                     NamedTextColor.RED
-            ));
+            )));
             return true;
         }
         if (args.length == NO_ARGUMENTS) {
@@ -226,7 +227,7 @@ public final class PunishmentCommand implements CommandExecutor, TabCompleter {
 
     private void confirm(CommandSender sender, Actor actor, String[] args) {
         if (args.length != SUBCOMMAND_ARGUMENT_COUNT) {
-            sender.sendMessage(Component.text("Usage: /punish confirm <draft-id>", NamedTextColor.RED));
+            sender.sendMessage(StaffMessageStyle.style(Component.text("Usage: /punish confirm <draft-id>", NamedTextColor.RED)));
             return;
         }
         UUID draftId = parseUuid(sender, args[1]);
@@ -283,7 +284,7 @@ public final class PunishmentCommand implements CommandExecutor, TabCompleter {
 
     private void resume(CommandSender sender, Actor actor, String route, String[] args) {
         if (args.length != SUBCOMMAND_ARGUMENT_COUNT) {
-            sender.sendMessage(Component.text("Usage: /punish resume <target>", NamedTextColor.RED));
+            sender.sendMessage(StaffMessageStyle.style(Component.text("Usage: /punish resume <target>", NamedTextColor.RED)));
             return;
         }
         if (sender instanceof Player player) {
@@ -338,10 +339,10 @@ public final class PunishmentCommand implements CommandExecutor, TabCompleter {
             workers.submit(() -> runOperation(sender, operation));
         } catch (RejectedExecutionException exception) {
             plugin.getLogger().log(Level.WARNING, "Punishment worker rejected command", exception);
-            sender.sendMessage(Component.text(
+            sender.sendMessage(StaffMessageStyle.style(Component.text(
                     "Punishment storage is unavailable; try again shortly.",
                     NamedTextColor.RED
-            ));
+            )));
         }
     }
 
@@ -437,7 +438,7 @@ public final class PunishmentCommand implements CommandExecutor, TabCompleter {
         try {
             return UUID.fromString(input);
         } catch (IllegalArgumentException exception) {
-            sender.sendMessage(Component.text("Invalid draft ID.", NamedTextColor.RED));
+            sender.sendMessage(StaffMessageStyle.style(Component.text("Invalid draft ID.", NamedTextColor.RED)));
             return null;
         }
     }
@@ -459,16 +460,16 @@ public final class PunishmentCommand implements CommandExecutor, TabCompleter {
     }
 
     private static void legacyTimedMuteUsage(CommandSender sender, String label) {
-        sender.sendMessage(Component.text(
+        sender.sendMessage(StaffMessageStyle.style(Component.text(
                 "Legacy RoseChat timed /mute syntax is no longer accepted. EnthusiaStaff /mute uses configured "
                         + "reason IDs so mutes are recorded and enforced by the central punishment system.",
                 NamedTextColor.RED
-        ));
-        sender.sendMessage(Component.text(
+        )));
+        sender.sendMessage(StaffMessageStyle.style(Component.text(
                 "Use /" + label + " <target> <reason-id> [internal explanation], or use "
                         + "/punish <target> <reason-id> to prepare the central punishment directly.",
                 NamedTextColor.YELLOW
-        ));
+        )));
     }
 
     private static boolean containsIgnoreCase(String[] args, String value) {
@@ -488,19 +489,19 @@ public final class PunishmentCommand implements CommandExecutor, TabCompleter {
     }
 
     private static void usage(CommandSender sender, String label, String route) {
-        sender.sendMessage(Component.text(
+        sender.sendMessage(StaffMessageStyle.style(Component.text(
                 "Usage: /" + label + " <target> [reason-id] [--private] [internal explanation]",
                 NamedTextColor.YELLOW
-        ));
-        sender.sendMessage(Component.text(
+        )));
+        sender.sendMessage(StaffMessageStyle.style(Component.text(
                 "Draft controls: /punish resume <target> | /punish confirm <draft-id>",
                 NamedTextColor.GRAY
-        ));
+        )));
         if (CENTRAL_COMMAND.equals(route)) {
-            sender.sendMessage(Component.text(
+            sender.sendMessage(StaffMessageStyle.style(Component.text(
                     "Request review: /punish requests | review | approve | deny",
                     NamedTextColor.GRAY
-            ));
+            )));
         }
     }
 

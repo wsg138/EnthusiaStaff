@@ -46,6 +46,9 @@ final class VelocityStatusSuggestions {
 
     private static List<String> secondLevel(String first, Predicate<String> hasPermission) {
         return switch (normalize(first)) {
+            case "verify" -> hasPermission.test("enthusiastaff.verify")
+                    && hasPermission.test("enthusiastaff.diagnostics")
+                    ? List.of("full") : List.of();
             case "migration" -> permitted(MIGRATION_OPERATIONS, "enthusiastaff.migration", hasPermission);
             case "cutover" -> cutoverOperations(hasPermission);
             case "discord" -> permitted(DISCORD_OPERATIONS, "enthusiastaff.discord.manage", hasPermission);

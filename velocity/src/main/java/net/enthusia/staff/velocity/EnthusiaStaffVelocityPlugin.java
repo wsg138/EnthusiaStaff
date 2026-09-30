@@ -133,6 +133,7 @@ public final class EnthusiaStaffVelocityPlugin {
     private final AtomicBoolean reloadRunning = new AtomicBoolean();
     private final AtomicBoolean migrationRunning = new AtomicBoolean();
     private final VelocitySecurityEventDispatcher securityEventDispatcher;
+    private final VelocityNetworkVerifier networkVerifier;
     private final java.util.concurrent.ConcurrentHashMap<UUID, CompletableFuture<Void>> presenceUpdates =
             new java.util.concurrent.ConcurrentHashMap<>();
 
@@ -166,6 +167,15 @@ public final class EnthusiaStaffVelocityPlugin {
         this.logger = logger;
         this.dataDirectory = dataDirectory;
         this.securityEventDispatcher = new VelocitySecurityEventDispatcher(() -> workers, shuttingDown::get);
+        this.networkVerifier = new VelocityNetworkVerifier(new VelocityNetworkVerifier.Dependencies(
+                authorityMode::get,
+                () -> databaseRuntime,
+                () -> configuration,
+                () -> channelServer,
+                () -> networkIdentityStore != null && networkIdentityProtector != null,
+                () -> discordOutboxWorker != null,
+                () -> websiteApiServer != null && websiteModerationStore != null
+        ));
     }
 
     @Subscribe
@@ -716,6 +726,9 @@ public final class EnthusiaStaffVelocityPlugin {
                 ),
                 Clock.systemUTC(),
                 envelope -> {
+                    if (networkVerifier.acceptReport(envelope)) {
+                        return true;
+                    }
                     outbox.recordInboxOnce(
                             loaded.serverId(),
                             envelope.messageId(),
@@ -1122,7 +1135,7 @@ public final class EnthusiaStaffVelocityPlugin {
 
     private static void denyServerSwitch(ServerPreConnectEvent event, String message) {
         event.setResult(ServerPreConnectEvent.ServerResult.denied());
-        event.getPlayer().sendMessage(Component.text(message));
+        event.getPlayer().sendMessage(VelocityMessageStyle.style(Component.text(message)));
     }
 
     private void enqueuePresence(UUID playerId, Runnable update) {
@@ -1136,7 +1149,7 @@ public final class EnthusiaStaffVelocityPlugin {
                     : previous.handle((value, failure) -> null);
             return start.thenRunAsync(update, executor);
         });
-        next.whenComplete((ignored, failure) -> {
+        var unused = next.whenComplete((ignored, failure) -> {
             presenceUpdates.remove(playerId, next);
             if (failure != null) {
                 logger.error("Unable to persist an ordered player-presence update", failure);
@@ -1189,15 +1202,15 @@ public final class EnthusiaStaffVelocityPlugin {
 
     private void executeReload(CommandSource source, String[] arguments) {
         if (!source.hasPermission("enthusiastaff.reload")) {
-            source.sendMessage(Component.text("You do not have permission to reload EnthusiaStaff."));
+            source.sendMessage(VelocityMessageStyle.style(Component.text("You do not have permission to reload EnthusiaStaff.")));
             return;
         }
         if (arguments.length != SINGLE_OPERATION_ARGUMENT) {
-            source.sendMessage(Component.text("Usage: /estaff reload"));
+            source.sendMessage(VelocityMessageStyle.style(Component.text("Usage: /estaff reload")));
             return;
         }
         if (!reloadRunning.compareAndSet(false, true)) {
-            source.sendMessage(Component.text("Another Velocity configuration reload is already running."));
+            source.sendMessage(VelocityMessageStyle.style(Component.text("Another Velocity configuration reload is already running.")));
             return;
         }
         if (!submitWorker(() -> {
@@ -1209,14 +1222,14 @@ public final class EnthusiaStaffVelocityPlugin {
                 }
                 VelocityConfigurationReloadResult result = coordinator.reload();
                 publishReloadHealth(result);
-                source.sendMessage(Component.text(result.message()));
-                result.details().forEach(detail -> source.sendMessage(Component.text("- " + detail)));
+                source.sendMessage(VelocityMessageStyle.style(Component.text(result.message())));
+                result.details().forEach(detail -> source.sendMessage(VelocityMessageStyle.style(Component.text("- " + detail))));
             } finally {
                 reloadRunning.set(false);
             }
         })) {
             reloadRunning.set(false);
-            source.sendMessage(Component.text("The bounded work queue is full; reload did not start."));
+            source.sendMessage(VelocityMessageStyle.style(Component.text("The bounded work queue is full; reload did not start.")));
         }
     }
 
@@ -1228,21 +1241,21 @@ public final class EnthusiaStaffVelocityPlugin {
                     CONFIGURATION_RELOAD_ISSUE,
                     "The Velocity configuration candidate is invalid; the previous unavailable state is unchanged"
             );
-            source.sendMessage(Component.text(
+            source.sendMessage(VelocityMessageStyle.style(Component.text(
                     "Velocity configuration validation failed; storage retry was not started."
-            ));
+            )));
             return;
         }
         VelocityBootstrapCoordinator coordinator = bootstrapCoordinator;
         if (coordinator != null && coordinator.requestImmediateRetry()) {
             updateHealthIssue(CONFIGURATION_RELOAD_ISSUE, null);
-            source.sendMessage(Component.text(
+            source.sendMessage(VelocityMessageStyle.style(Component.text(
                     "Velocity configuration is valid; an immediate bounded storage retry was started."
-            ));
+            )));
         } else {
-            source.sendMessage(Component.text(
+            source.sendMessage(VelocityMessageStyle.style(Component.text(
                     "Storage is already active, retrying, or shutting down; no duplicate attempt was started."
-            ));
+            )));
         }
     }
 
@@ -1288,19 +1301,19 @@ public final class EnthusiaStaffVelocityPlugin {
             CommandSource source = invocation.source();
             String[] arguments = invocation.arguments();
             if (arguments.length != SINGLE_OPERATION_ARGUMENT) {
-                source.sendMessage(Component.text("Usage: /alts <player>"));
+                source.sendMessage(VelocityMessageStyle.style(Component.text("Usage: /alts <player>")));
                 return;
             }
             submitAltTask(source, () -> {
                 PlayerDirectory directory = playerDirectory;
                 NetworkIdentityStore store = networkIdentityStore;
                 if (directory == null || store == null) {
-                    source.sendMessage(Component.text("The player directory or alt store is not ready."));
+                    source.sendMessage(VelocityMessageStyle.style(Component.text("The player directory or alt store is not ready.")));
                     return;
                 }
                 net.enthusia.staff.domain.player.PlayerIdentity target = directory.find(arguments[0]).orElse(null);
                 if (target == null) {
-                    source.sendMessage(Component.text("That player has never joined the network."));
+                    source.sendMessage(VelocityMessageStyle.style(Component.text("That player has never joined the network.")));
                     return;
                 }
                 Optional<List<CurrentLinkedMinecraftAccount>> linkedAccounts = currentLinkedAccounts(target.playerId());
@@ -1341,19 +1354,19 @@ public final class EnthusiaStaffVelocityPlugin {
             CommandSource source = invocation.source();
             String[] arguments = invocation.arguments();
             if (arguments.length < MINIMUM_ALT_ARGUMENTS) {
-                source.sendMessage(Component.text(
+                source.sendMessage(VelocityMessageStyle.style(Component.text(
                         "Usage: /alt <link|approve|household|notrelated|unlink|reopen> <player1> <player2> <reason>"
-                ));
+                )));
                 return;
             }
             Optional<AltOperation> parsed = AltOperation.parse(normalizedArgument(arguments, ROOT_OPERATION_INDEX));
             if (parsed.isEmpty()) {
-                source.sendMessage(Component.text("Unknown alt operation."));
+                source.sendMessage(VelocityMessageStyle.style(Component.text("Unknown alt operation.")));
                 return;
             }
             AltOperation operation = parsed.orElseThrow();
             if (operation == AltOperation.REOPEN && !source.hasPermission("enthusiastaff.alts.reopen")) {
-                source.sendMessage(Component.text("Admin permission is required to reopen a not-related decision."));
+                source.sendMessage(VelocityMessageStyle.style(Component.text("Admin permission is required to reopen a not-related decision.")));
                 return;
             }
             String reason = String.join(" ", java.util.Arrays.copyOfRange(arguments, 3, arguments.length));
@@ -1385,13 +1398,13 @@ public final class EnthusiaStaffVelocityPlugin {
         PlayerDirectory directory = playerDirectory;
         NetworkIdentityStore store = networkIdentityStore;
         if (directory == null || store == null) {
-            source.sendMessage(Component.text("The player directory or alt store is not ready."));
+            source.sendMessage(VelocityMessageStyle.style(Component.text("The player directory or alt store is not ready.")));
             return;
         }
         net.enthusia.staff.domain.player.PlayerIdentity first = directory.find(firstInput).orElse(null);
         net.enthusia.staff.domain.player.PlayerIdentity second = directory.find(secondInput).orElse(null);
         if (first == null || second == null) {
-            source.sendMessage(Component.text("Both players must have joined the network previously."));
+            source.sendMessage(VelocityMessageStyle.style(Component.text("Both players must have joined the network previously.")));
             return;
         }
         UUID actorId = source instanceof Player player ? player.getUniqueId() : new UUID(0L, 0L);
@@ -1401,9 +1414,9 @@ public final class EnthusiaStaffVelocityPlugin {
                         first.playerId(), second.playerId(), operation.relationshipState(),
                         actorId, Clock.systemUTC().instant(), reason
                 );
-        source.sendMessage(Component.text(changed
+        source.sendMessage(VelocityMessageStyle.style(Component.text(changed
                 ? "Alt relationship change committed and audited."
-                : "No change was made; a locked not-related decision may require explicit reopen."));
+                : "No change was made; a locked not-related decision may require explicit reopen.")));
     }
 
     private void submitAltTask(CommandSource source, Runnable operation) {
@@ -1413,11 +1426,11 @@ public final class EnthusiaStaffVelocityPlugin {
                     operation.run();
                 } catch (RuntimeException exception) {
                     logger.error("Alt command failed", exception);
-                    source.sendMessage(Component.text("Alt operation failed; inspect the sanitized proxy log."));
+                    source.sendMessage(VelocityMessageStyle.style(Component.text("Alt operation failed; inspect the sanitized proxy log.")));
                 }
             });
         } catch (RejectedExecutionException exception) {
-            source.sendMessage(Component.text("The bounded work queue is full; alt operation did not start."));
+            source.sendMessage(VelocityMessageStyle.style(Component.text("The bounded work queue is full; alt operation did not start.")));
         }
     }
 
@@ -1428,6 +1441,7 @@ public final class EnthusiaStaffVelocityPlugin {
             String[] arguments = invocation.arguments();
             switch (normalizedArgument(arguments, ROOT_OPERATION_INDEX)) {
                 case "reload" -> executeReload(source, arguments);
+                case "verify" -> executeVerify(source, arguments);
                 case "migration" -> executeMigration(source, arguments);
                 case "cutover" -> executeCutover(source, arguments);
                 case "discord" -> executeDiscord(source, arguments);
@@ -1436,19 +1450,65 @@ public final class EnthusiaStaffVelocityPlugin {
             }
         }
 
+        private void executeVerify(CommandSource source, String[] arguments) {
+            if (arguments.length != 2 || !"full".equals(normalizedArgument(arguments, SUB_OPERATION_INDEX))) {
+                source.sendMessage(VelocityMessageStyle.style(Component.text("Usage: /estaff verify full")));
+                return;
+            }
+            if (!source.hasPermission("enthusiastaff.verify")
+                    || !source.hasPermission("enthusiastaff.diagnostics")) {
+                source.sendMessage(VelocityMessageStyle.style(Component.text("You do not have permission to run full EnthusiaStaff diagnostics.")));
+                return;
+            }
+            submitVerification(source);
+        }
+
+        private void submitVerification(CommandSource source) {
+            try {
+                workers.execute(() -> networkVerifier.verify().forEach(source::sendMessage));
+            } catch (RejectedExecutionException exception) {
+                source.sendMessage(VelocityMessageStyle.style(Component.text("The bounded work queue is full; verification did not start.")));
+            }
+        }
+
         private void showStatus(CommandSource source) {
             VelocityRuntimeHealth.Snapshot snapshot = health.snapshot();
-            source.sendMessage(Component.text("EnthusiaStaff mode: " + snapshot.mode()));
+            source.sendMessage(VelocityMessageStyle.modeHeader("EnthusiaStaff", snapshot.mode()));
             VelocityBootstrapCoordinator bootstrap = bootstrapCoordinator;
             if (bootstrap != null && !bootstrap.completed()) {
-                source.sendMessage(Component.text(
-                        "Storage bootstrap: attempts=" + bootstrap.attempts()
-                                + ", retry-scheduled=" + bootstrap.retryScheduled()
-                                + ", exhausted=" + bootstrap.exhausted()
+                VelocityMessageStyle.Tone tone = bootstrap.exhausted()
+                        ? VelocityMessageStyle.Tone.ERROR
+                        : VelocityMessageStyle.Tone.WARNING;
+                source.sendMessage(VelocityMessageStyle.statusRow(
+                        "Storage",
+                        bootstrap.exhausted() ? "Failed" : "Starting",
+                        "attempts " + bootstrap.attempts()
+                                + " • retry scheduled " + bootstrap.retryScheduled(),
+                        tone
                 ));
             }
-            snapshot.issues().forEach((component, reason) ->
-                    source.sendMessage(Component.text("DISABLED " + component + ": " + reason)));
+            if (snapshot.issues().isEmpty()) {
+                source.sendMessage(VelocityMessageStyle.statusRow(
+                        "Runtime",
+                        "Healthy",
+                        "No active runtime health issues",
+                        VelocityMessageStyle.Tone.SUCCESS
+                ));
+                return;
+            }
+            snapshot.issues().forEach((component, reason) -> {
+                VelocityMessageStyle.Tone tone = VelocityMessageStyle.issueTone(
+                        component,
+                        reason,
+                        snapshot.mode()
+                );
+                source.sendMessage(VelocityMessageStyle.statusRow(
+                        VelocityMessageStyle.label(component),
+                        tone == VelocityMessageStyle.Tone.ERROR ? "Blocked" : "Disabled",
+                        reason,
+                        tone
+                ));
+            });
         }
 
         @Override
@@ -1462,15 +1522,19 @@ public final class EnthusiaStaffVelocityPlugin {
         @Override
         public boolean hasPermission(Invocation invocation) {
             String[] arguments = invocation.arguments();
-            if (normalizedArgument(arguments, ROOT_OPERATION_INDEX).equals("reload")) {
+            String operation = normalizedArgument(arguments, ROOT_OPERATION_INDEX);
+            if (operation.equals("reload")) {
                 return invocation.source().hasPermission("enthusiastaff.reload");
+            }
+            if (operation.equals("verify")) {
+                return invocation.source().hasPermission("enthusiastaff.verify");
             }
             return invocation.source().hasPermission("enthusiastaff.status");
         }
 
         private void executeWebsite(CommandSource source, String[] arguments) {
             if (!source.hasPermission("enthusiastaff.website.manage")) {
-                source.sendMessage(Component.text("You do not have permission to manage website bindings."));
+                source.sendMessage(VelocityMessageStyle.style(Component.text("You do not have permission to manage website bindings.")));
                 return;
             }
             if (showWebsiteStatusWhenRequested(source, arguments)) {
@@ -1478,20 +1542,20 @@ public final class EnthusiaStaffVelocityPlugin {
             }
             WebsiteModerationStore store = websiteModerationStore;
             if (store == null) {
-                source.sendMessage(Component.text("The website API store is not available."));
+                source.sendMessage(VelocityMessageStyle.style(Component.text("The website API store is not available.")));
                 return;
             }
             if (!isWebsiteCodeCommand(arguments)) {
-                source.sendMessage(Component.text(
+                source.sendMessage(VelocityMessageStyle.style(Component.text(
                         "Usage: /estaff website status | /estaff website code "
                                 + "<show|rotate|revoke> <case|punishment-id> [confirmation]"
-                ));
+                )));
                 return;
             }
             if (!(source instanceof Player staff)) {
-                source.sendMessage(Component.text(
+                source.sendMessage(VelocityMessageStyle.style(Component.text(
                         "Punishment codes are only shown or changed in a verified in-game staff session."
-                ));
+                )));
                 return;
             }
             executeWebsiteCodeOperation(source, staff, store, arguments);
@@ -1504,10 +1568,10 @@ public final class EnthusiaStaffVelocityPlugin {
             }
             VelocityConfiguration loaded = configuration;
             boolean listening = loaded != null && loaded.websiteApiEnabled() && websiteApiServer != null;
-            source.sendMessage(Component.text(listening
+            source.sendMessage(VelocityMessageStyle.style(Component.text(listening
                     ? "Website API: LISTENING on loopback "
                     + loaded.websiteApiBindAddress() + ':' + loaded.websiteApiPort()
-                    : "Website API: DISABLED or unavailable"));
+                    : "Website API: DISABLED or unavailable")));
             return true;
         }
 
@@ -1555,7 +1619,7 @@ public final class EnthusiaStaffVelocityPlugin {
             }
             UUID punishmentId = parseUuid(arguments[TARGET_INDEX]);
             if (punishmentId == null) {
-                source.sendMessage(Component.text("Rotation requires a punishment UUID."));
+                source.sendMessage(VelocityMessageStyle.style(Component.text("Rotation requires a punishment UUID.")));
                 return;
             }
             submitWebsiteTask(source, () -> rotatePunishmentCode(source, staff, store, punishmentId));
@@ -1572,9 +1636,9 @@ public final class EnthusiaStaffVelocityPlugin {
                     staff.getUniqueId(),
                     Clock.systemUTC().instant()
             );
-            source.sendMessage(Component.text(
+            source.sendMessage(VelocityMessageStyle.style(Component.text(
                     "Rotated code for punishment " + code.punishmentId() + ": " + code.code()
-            ));
+            )));
         }
 
         private void executeWebsiteRevoke(
@@ -1589,7 +1653,7 @@ public final class EnthusiaStaffVelocityPlugin {
             }
             UUID punishmentId = parseUuid(arguments[TARGET_INDEX]);
             if (punishmentId == null) {
-                source.sendMessage(Component.text("Revocation requires a punishment UUID."));
+                source.sendMessage(VelocityMessageStyle.style(Component.text("Revocation requires a punishment UUID.")));
                 return;
             }
             submitWebsiteTask(source, () -> revokePunishmentCode(source, staff, store, punishmentId));
@@ -1606,9 +1670,9 @@ public final class EnthusiaStaffVelocityPlugin {
                     staff.getUniqueId(),
                     Clock.systemUTC().instant()
             );
-            source.sendMessage(Component.text(changed
+            source.sendMessage(VelocityMessageStyle.style(Component.text(changed
                     ? "The punishment code was revoked and its binding is now ineligible."
-                    : "No active punishment code changed."));
+                    : "No active punishment code changed.")));
         }
 
         private static boolean hasConfirmation(String[] arguments, String confirmation) {
@@ -1617,9 +1681,9 @@ public final class EnthusiaStaffVelocityPlugin {
         }
 
         private static void showWebsiteConfirmationUsage(CommandSource source) {
-            source.sendMessage(Component.text(
+            source.sendMessage(VelocityMessageStyle.style(Component.text(
                     "Use show without confirmation, or append CONFIRM-CODE-ROTATE / CONFIRM-CODE-REVOKE."
-            ));
+            )));
         }
 
         private void showPunishmentCodes(
@@ -1638,20 +1702,20 @@ public final class EnthusiaStaffVelocityPlugin {
                 try {
                     caseId = new CaseId(target);
                 } catch (IllegalArgumentException exception) {
-                    source.sendMessage(Component.text("Enter a case ID or punishment UUID."));
+                    source.sendMessage(VelocityMessageStyle.style(Component.text("Enter a case ID or punishment UUID.")));
                     return;
                 }
                 codes = store.codesForCase(caseId, Clock.systemUTC().instant());
             }
             if (codes.isEmpty()) {
-                source.sendMessage(Component.text("No active appeal-eligible punishment code exists."));
+                source.sendMessage(VelocityMessageStyle.style(Component.text("No active appeal-eligible punishment code exists.")));
                 return;
             }
             for (PunishmentCodeDisplay code : codes) {
-                source.sendMessage(Component.text(
+                source.sendMessage(VelocityMessageStyle.style(Component.text(
                         code.punishmentType() + " case " + code.caseId()
                                 + " punishment " + code.punishmentId() + ": " + code.code()
-                ));
+                )));
             }
         }
 
@@ -1662,15 +1726,15 @@ public final class EnthusiaStaffVelocityPlugin {
                         task.run();
                     } catch (RuntimeException exception) {
                         logger.error("Website administration command failed", exception);
-                        source.sendMessage(Component.text(
+                        source.sendMessage(VelocityMessageStyle.style(Component.text(
                                 "Website operation failed; inspect the sanitized proxy log."
-                        ));
+                        )));
                     }
                 });
             } catch (RejectedExecutionException exception) {
-                source.sendMessage(Component.text(
+                source.sendMessage(VelocityMessageStyle.style(Component.text(
                         "The bounded work queue is full; the website operation did not start."
-                ));
+                )));
             }
         }
 
@@ -1685,28 +1749,28 @@ public final class EnthusiaStaffVelocityPlugin {
 
         private void executeMigration(CommandSource source, String[] arguments) {
             if (!source.hasPermission("enthusiastaff.migration")) {
-                source.sendMessage(Component.text("You do not have permission to run migration operations."));
+                source.sendMessage(VelocityMessageStyle.style(Component.text("You do not have permission to run migration operations.")));
                 return;
             }
             if (arguments.length != MIGRATION_ARGUMENTS) {
-                source.sendMessage(Component.text("Usage: /estaff migration <inspect|dry-run|import|shadow|final>"));
+                source.sendMessage(VelocityMessageStyle.style(Component.text("Usage: /estaff migration <inspect|dry-run|import|shadow|final>")));
                 return;
             }
             MariaDbRuntime runtime = databaseRuntime;
             VelocityConfiguration loaded = configuration;
             if (runtime == null || loaded == null) {
-                source.sendMessage(Component.text("MariaDB is not ready; no migration action was taken."));
+                source.sendMessage(VelocityMessageStyle.style(Component.text("MariaDB is not ready; no migration action was taken.")));
                 return;
             }
             Optional<MigrationMode> parsed = parseMigrationMode(arguments[SUB_OPERATION_INDEX]);
             if (parsed.isEmpty()) {
-                source.sendMessage(Component.text("Unknown migration operation."));
+                source.sendMessage(VelocityMessageStyle.style(Component.text("Unknown migration operation.")));
                 return;
             }
             MigrationMode migrationMode = parsed.orElseThrow();
             Optional<String> blocker = migrationModeBlocker(migrationMode, authorityMode.get());
             if (blocker.isPresent()) {
-                source.sendMessage(Component.text(blocker.orElseThrow()));
+                source.sendMessage(VelocityMessageStyle.style(Component.text(blocker.orElseThrow())));
                 return;
             }
             startMigration(source, runtime, loaded, migrationMode);
@@ -1745,15 +1809,15 @@ public final class EnthusiaStaffVelocityPlugin {
                 MigrationMode migrationMode
         ) {
             if (!migrationRunning.compareAndSet(false, true)) {
-                source.sendMessage(Component.text("Another migration operation is already running."));
+                source.sendMessage(VelocityMessageStyle.style(Component.text("Another migration operation is already running.")));
                 return;
             }
-            source.sendMessage(Component.text("Migration operation accepted; results will be reported when durable."));
+            source.sendMessage(VelocityMessageStyle.style(Component.text("Migration operation accepted; results will be reported when durable.")));
             try {
                 workers.execute(() -> runMigration(source, runtime, loaded, migrationMode));
             } catch (RejectedExecutionException exception) {
                 migrationRunning.set(false);
-                source.sendMessage(Component.text("The bounded work queue is full; migration did not start."));
+                source.sendMessage(VelocityMessageStyle.style(Component.text("The bounded work queue is full; migration did not start.")));
             }
         }
 
@@ -1773,16 +1837,16 @@ public final class EnthusiaStaffVelocityPlugin {
                 showMigrationReport(source, report);
             } catch (RuntimeException exception) {
                 logger.error("Migration command failed", exception);
-                source.sendMessage(Component.text(
+                source.sendMessage(VelocityMessageStyle.style(Component.text(
                         "Migration failed; inspect the sanitized proxy log and durable run record."
-                ));
+                )));
             } finally {
                 migrationRunning.set(false);
             }
         }
 
         private void showMigrationReport(CommandSource source, MigrationExecutionReport report) {
-            source.sendMessage(Component.text(
+            source.sendMessage(VelocityMessageStyle.style(Component.text(
                     "Migration " + report.mode() + " run " + report.runId() + ": source="
                             + report.sourceRecords() + ", imported=" + report.importedRecords()
                             + ", reconciled=" + report.reconciledRecords()
@@ -1790,7 +1854,7 @@ public final class EnthusiaStaffVelocityPlugin {
                             + report.rejectedRows().size() + ", schema-blockers="
                             + report.schema().blockers().size() + ", protected-identities="
                             + report.protectedIdentityRecords() + '/' + report.networkIdentityRecords()
-            ));
+            )));
             report.shadowSummary().ifPresent(summary -> showShadowComparison(source, summary));
             showRejectedRows(source, report);
         }
@@ -1799,7 +1863,7 @@ public final class EnthusiaStaffVelocityPlugin {
                 CommandSource source,
                 net.enthusia.staff.persistence.migration.ShadowSummary summary
         ) {
-            source.sendMessage(Component.text(
+            source.sendMessage(VelocityMessageStyle.style(Component.text(
                     "Comparison: mismatches=" + summary.mismatchCount()
                             + ", counts=" + summary.countsMatch()
                             + ", checksums=" + summary.checksumsMatch()
@@ -1809,36 +1873,36 @@ public final class EnthusiaStaffVelocityPlugin {
                             + ", login=" + comparison(summary.loginDecisions())
                             + ", mute=" + comparison(summary.muteDecisions())
                             + ", IP-ban=" + comparison(summary.ipBanDecisions())
-            ));
+            )));
         }
 
         private void showRejectedRows(CommandSource source, MigrationExecutionReport report) {
             report.rejectedRows().stream().limit(MAX_REJECTED_ROWS_SHOWN).forEach(row ->
-                    source.sendMessage(Component.text(
+                    source.sendMessage(VelocityMessageStyle.style(Component.text(
                             "Rejected " + row.tableName() + '#' + row.externalId() + ": " + row.reasonCode()
-                    )));
+                    ))));
             int hiddenRows = report.rejectedRows().size() - MAX_REJECTED_ROWS_SHOWN;
             if (hiddenRows > 0) {
-                source.sendMessage(Component.text(
+                source.sendMessage(VelocityMessageStyle.style(Component.text(
                         hiddenRows + " additional rejected rows are recorded in the durable migration report."
-                ));
+                )));
             }
         }
 
         private void executeCutover(CommandSource source, String[] arguments) {
             if (!source.hasPermission("enthusiastaff.cutover")) {
-                source.sendMessage(Component.text("You do not have permission to manage cutover."));
+                source.sendMessage(VelocityMessageStyle.style(Component.text("You do not have permission to manage cutover.")));
                 return;
             }
             if (arguments.length < CUTOVER_MINIMUM_ARGUMENTS) {
-                source.sendMessage(Component.text(
+                source.sendMessage(VelocityMessageStyle.style(Component.text(
                         "Usage: /estaff cutover <status|maintenance|abort|freeze|activate|override>"
-                ));
+                )));
                 return;
             }
             MariaDbRuntime runtime = databaseRuntime;
             if (runtime == null) {
-                source.sendMessage(Component.text("MariaDB is not ready; no cutover action was taken."));
+                source.sendMessage(VelocityMessageStyle.style(Component.text("MariaDB is not ready; no cutover action was taken.")));
                 return;
             }
             UUID actorId = actorId(source);
@@ -1858,7 +1922,7 @@ public final class EnthusiaStaffVelocityPlugin {
                 case "freeze" -> executeAuthorityFreeze(source, runtime, actorId, arguments);
                 case "activate" -> executeCutoverActivation(source, actorId, arguments);
                 case "override" -> executeCutoverOverride(source, actorId, arguments);
-                default -> source.sendMessage(Component.text("Unknown cutover operation."));
+                default -> source.sendMessage(VelocityMessageStyle.style(Component.text("Unknown cutover operation.")));
             }
         }
 
@@ -1870,23 +1934,23 @@ public final class EnthusiaStaffVelocityPlugin {
             net.enthusia.staff.persistence.migration.CutoverCoordinator coordinator = runtime.cutoverCoordinator();
             coordinator.latestEvidence().ifPresentOrElse(
                     evidence -> showCutoverEvidence(source, evidence),
-                    () -> source.sendMessage(Component.text("No complete shadow evidence is available."))
+                    () -> source.sendMessage(VelocityMessageStyle.style(Component.text("No complete shadow evidence is available.")))
             );
             CutoverAssessment assessment = coordinator.assess(Optional.empty());
-            source.sendMessage(Component.text("Cutover allowed: " + assessment.allowed()
-                    + "; blockers: " + String.join(", ", assessment.blockers())));
+            source.sendMessage(VelocityMessageStyle.style(Component.text("Cutover allowed: " + assessment.allowed()
+                    + "; blockers: " + String.join(", ", assessment.blockers()))));
         }
 
         private void showCutoverEvidence(CommandSource source, CutoverEvidence evidence) {
             long observedHours = Duration.between(evidence.shadowStartedAt(), evidence.shadowEndedAt()).toHours();
-            source.sendMessage(Component.text(
+            source.sendMessage(VelocityMessageStyle.style(Component.text(
                     "Shadow evidence: observed=" + observedHours + "h, summaries="
                             + evidence.successfulShadowSummaries().size() + ", unresolved="
                             + evidence.unresolvedOperations() + ", migration-idle="
                             + evidence.migrationIdle() + ", writes-frozen=" + evidence.writesFrozen()
                             + ", final-import=" + evidence.finalIncrementalImportComplete()
-            ));
-            source.sendMessage(Component.text(
+            )));
+            source.sendMessage(VelocityMessageStyle.style(Component.text(
                     "Checks: counts=" + evidence.countsMatch()
                             + ", checksums=" + evidence.checksumsMatch()
                             + ", active=" + evidence.activeSanctionsMatch()
@@ -1895,7 +1959,7 @@ public final class EnthusiaStaffVelocityPlugin {
                             + ", login=" + comparison(evidence.loginDecisions())
                             + ", mute=" + comparison(evidence.muteDecisions())
                             + ", IP-ban=" + comparison(evidence.ipBanDecisions())
-            ));
+            )));
         }
 
         private void executeMaintenance(CommandSource source, MariaDbRuntime runtime, UUID actorId) {
@@ -1903,9 +1967,9 @@ public final class EnthusiaStaffVelocityPlugin {
                 boolean changed = runtime.cutoverCoordinator().enterMaintenance(
                         actorId, "Cutover preparation requested through Velocity"
                 );
-                source.sendMessage(Component.text(changed
+                source.sendMessage(VelocityMessageStyle.style(Component.text(changed
                         ? "Maintenance committed. Run the final incremental import, then reassess cutover."
-                        : "Maintenance was not entered; the current mode is not SHADOW_MIGRATION or changed concurrently."));
+                        : "Maintenance was not entered; the current mode is not SHADOW_MIGRATION or changed concurrently.")));
             });
         }
 
@@ -1920,14 +1984,14 @@ public final class EnthusiaStaffVelocityPlugin {
             }
             Optional<String> reason = confirmedReason(arguments, "CONFIRM-ABORT-MAINTENANCE");
             if (reason.isEmpty()) {
-                source.sendMessage(Component.text("Abort requires the exact acknowledgement and a written reason."));
+                source.sendMessage(VelocityMessageStyle.style(Component.text("Abort requires the exact acknowledgement and a written reason.")));
                 return;
             }
             submitCutover(source, () -> {
                 boolean changed = runtime.cutoverCoordinator().abortMaintenance(actorId, reason.orElseThrow());
-                source.sendMessage(Component.text(changed
+                source.sendMessage(VelocityMessageStyle.style(Component.text(changed
                         ? "Maintenance aborted; LiteBans remains authoritative and the shadow gate must be reassessed."
-                        : "Maintenance was not aborted because the current mode is not MAINTENANCE."));
+                        : "Maintenance was not aborted because the current mode is not MAINTENANCE.")));
             });
         }
 
@@ -1942,25 +2006,25 @@ public final class EnthusiaStaffVelocityPlugin {
             }
             Optional<String> reason = confirmedReason(arguments, "CONFIRM-READ-ONLY-FAILURE");
             if (reason.isEmpty()) {
-                source.sendMessage(Component.text(
+                source.sendMessage(VelocityMessageStyle.style(Component.text(
                         "Emergency freeze requires the exact acknowledgement and a written reason."
-                ));
+                )));
                 return;
             }
             submitCutover(source, () -> {
                 boolean changed = runtime.cutoverCoordinator().freezeActiveAuthority(actorId, reason.orElseThrow());
-                source.sendMessage(Component.text(changed
+                source.sendMessage(VelocityMessageStyle.style(Component.text(changed
                         ? "ACTIVE authority is now READ_ONLY_FAILURE; destructive writes are disabled and logins fail closed."
-                        : "Authority was not frozen because the current mode is not ACTIVE."));
+                        : "Authority was not frozen because the current mode is not ACTIVE.")));
             });
         }
 
         private void executeCutoverActivation(CommandSource source, UUID actorId, String[] arguments) {
             if (arguments.length != CUTOVER_ACTIVATION_ARGUMENTS
                     || !arguments[DETAIL_OPERATION_INDEX].equals("CONFIRM-ACTIVE-CUTOVER")) {
-                source.sendMessage(Component.text(
+                source.sendMessage(VelocityMessageStyle.style(Component.text(
                         "Activation requires: /estaff cutover activate CONFIRM-ACTIVE-CUTOVER"
-                ));
+                )));
                 return;
             }
             submitCutover(source, () -> activateCutover(source, actorId, Optional.empty()));
@@ -1975,9 +2039,9 @@ public final class EnthusiaStaffVelocityPlugin {
             }
             Optional<String> reason = confirmedReason(arguments, FounderOverride.REQUIRED_ACKNOWLEDGEMENT);
             if (reason.isEmpty()) {
-                source.sendMessage(Component.text(
+                source.sendMessage(VelocityMessageStyle.style(Component.text(
                         "Override requires the exact acknowledgement and a written reason."
-                ));
+                )));
                 return;
             }
             FounderOverride founderOverride = new FounderOverride(
@@ -1992,7 +2056,7 @@ public final class EnthusiaStaffVelocityPlugin {
             if (source.hasPermission("enthusiastaff.cutover.founder")) {
                 return true;
             }
-            source.sendMessage(Component.text(failureMessage));
+            source.sendMessage(VelocityMessageStyle.style(Component.text(failureMessage)));
             return false;
         }
 
@@ -2017,12 +2081,12 @@ public final class EnthusiaStaffVelocityPlugin {
 
         private void executeDiscord(CommandSource source, String[] arguments) {
             if (!source.hasPermission("enthusiastaff.discord.manage")) {
-                source.sendMessage(Component.text("You do not have permission to manage Discord delivery."));
+                source.sendMessage(VelocityMessageStyle.style(Component.text("You do not have permission to manage Discord delivery.")));
                 return;
             }
             MariaDbRuntime runtime = databaseRuntime;
             if (runtime == null) {
-                source.sendMessage(Component.text("MariaDB is not ready; Discord status is unavailable."));
+                source.sendMessage(VelocityMessageStyle.style(Component.text("MariaDB is not ready; Discord status is unavailable.")));
                 return;
             }
             switch (normalizedArgument(arguments, SUB_OPERATION_INDEX)) {
@@ -2044,7 +2108,7 @@ public final class EnthusiaStaffVelocityPlugin {
             try {
                 workers.execute(() -> showDiscordStatus(source, runtime));
             } catch (RejectedExecutionException exception) {
-                source.sendMessage(Component.text("The bounded work queue is full; status was not read."));
+                source.sendMessage(VelocityMessageStyle.style(Component.text("The bounded work queue is full; status was not read.")));
             }
         }
 
@@ -2053,15 +2117,15 @@ public final class EnthusiaStaffVelocityPlugin {
                 Instant now = Clock.systemUTC().instant();
                 for (net.enthusia.staff.domain.discord.DiscordChannelStatus status
                         : runtime.discordOutboxStore().channelStatuses()) {
-                    source.sendMessage(Component.text(status.destination()
+                    source.sendMessage(VelocityMessageStyle.style(Component.text(status.destination()
                             + ": pending=" + status.pendingMessages()
                             + ", dead=" + status.deadLetterMessages()
                             + ", failures=" + status.consecutiveFailures()
-                            + ", circuit=" + (status.circuitOpen(now) ? "OPEN" : "CLOSED")));
+                            + ", circuit=" + (status.circuitOpen(now) ? "OPEN" : "CLOSED"))));
                 }
             } catch (RuntimeException exception) {
                 logger.error("Discord status command failed", exception);
-                source.sendMessage(Component.text("Discord status failed; inspect the sanitized proxy log."));
+                source.sendMessage(VelocityMessageStyle.style(Component.text("Discord status failed; inspect the sanitized proxy log.")));
             }
         }
 
@@ -2077,13 +2141,13 @@ public final class EnthusiaStaffVelocityPlugin {
             }
             String destination = normalizedArgument(arguments, DETAIL_OPERATION_INDEX);
             if (!DISCORD_DESTINATIONS.contains(destination)) {
-                source.sendMessage(Component.text("Unknown Discord destination."));
+                source.sendMessage(VelocityMessageStyle.style(Component.text("Unknown Discord destination.")));
                 return;
             }
             try {
                 workers.execute(() -> retryDiscordDestination(source, runtime, destination));
             } catch (RejectedExecutionException exception) {
-                source.sendMessage(Component.text("The bounded work queue is full; retry did not start."));
+                source.sendMessage(VelocityMessageStyle.style(Component.text("The bounded work queue is full; retry did not start.")));
             }
         }
 
@@ -2098,23 +2162,23 @@ public final class EnthusiaStaffVelocityPlugin {
                         Clock.systemUTC().instant(),
                         DISCORD_RETRY_LIMIT
                 );
-                source.sendMessage(Component.text("Discord circuit reset; queued " + retried
-                        + " dead-letter events for another bounded attempt."));
+                source.sendMessage(VelocityMessageStyle.style(Component.text("Discord circuit reset; queued " + retried
+                        + " dead-letter events for another bounded attempt.")));
             } catch (RuntimeException exception) {
                 logger.error("Discord retry command failed", exception);
-                source.sendMessage(Component.text("Discord retry failed; inspect the sanitized proxy log."));
+                source.sendMessage(VelocityMessageStyle.style(Component.text("Discord retry failed; inspect the sanitized proxy log.")));
             }
         }
 
         private static void showDiscordUsage(CommandSource source) {
-            source.sendMessage(Component.text(
+            source.sendMessage(VelocityMessageStyle.style(Component.text(
                     "Usage: /estaff discord status | /estaff discord retry <destination> CONFIRM-DISCORD-RETRY"
-            ));
+            )));
         }
 
         private void submitCutover(CommandSource source, Runnable action) {
             if (!migrationRunning.compareAndSet(false, true)) {
-                source.sendMessage(Component.text("Another migration or cutover operation is already running."));
+                source.sendMessage(VelocityMessageStyle.style(Component.text("Another migration or cutover operation is already running.")));
                 return;
             }
             try {
@@ -2123,14 +2187,14 @@ public final class EnthusiaStaffVelocityPlugin {
                         action.run();
                     } catch (RuntimeException exception) {
                         logger.error("Cutover command failed", exception);
-                        source.sendMessage(Component.text("Cutover operation failed; inspect the sanitized proxy log."));
+                        source.sendMessage(VelocityMessageStyle.style(Component.text("Cutover operation failed; inspect the sanitized proxy log.")));
                     } finally {
                         migrationRunning.set(false);
                     }
                 });
             } catch (RejectedExecutionException exception) {
                 migrationRunning.set(false);
-                source.sendMessage(Component.text("The bounded work queue is full; cutover operation did not start."));
+                source.sendMessage(VelocityMessageStyle.style(Component.text("The bounded work queue is full; cutover operation did not start.")));
             }
         }
 
@@ -2143,16 +2207,16 @@ public final class EnthusiaStaffVelocityPlugin {
             PersistentChannelServer channel = channelServer;
             if (loaded == null || channel == null
                     || !channel.connectedServers().containsAll(loaded.backendSecretEnvironments().keySet())) {
-                source.sendMessage(Component.text(
+                source.sendMessage(VelocityMessageStyle.style(Component.text(
                         "Cutover blocked: every configured Paper backend must have an authenticated persistent connection."
-                ));
+                )));
                 return;
             }
             CutoverOutcome outcome = databaseRuntime.cutoverCoordinator().activate(actorId, override);
             if (outcome.activated()) {
-                source.sendMessage(Component.text("ACTIVE cutover committed as " + outcome.cutoverId().orElseThrow() + '.'));
+                source.sendMessage(VelocityMessageStyle.style(Component.text("ACTIVE cutover committed as " + outcome.cutoverId().orElseThrow() + '.')));
             } else {
-                source.sendMessage(Component.text("Cutover blocked: " + String.join(", ", outcome.assessment().blockers())));
+                source.sendMessage(VelocityMessageStyle.style(Component.text("Cutover blocked: " + String.join(", ", outcome.assessment().blockers()))));
             }
         }
     }
