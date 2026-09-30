@@ -61,6 +61,9 @@ public final class StaffStatePresentation implements Listener {
     }
 
     private void refresh(Player player) {
+        if (player.isDead()) {
+            return;
+        }
         UUID playerId = player.getUniqueId();
         boolean staffActive = staffMode.active(playerId);
         boolean vanished = vanish.isVanished(playerId);
