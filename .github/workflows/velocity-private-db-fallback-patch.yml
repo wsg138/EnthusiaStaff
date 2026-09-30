@@ -1,0 +1,96 @@
+name: Temporary Velocity DB fallback patch
+
+on:
+  push:
+    branches:
+      - fix/velocity-private-db-file-fallback
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: ${{ github.actor != 'github-actions[bot]' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: fix/velocity-private-db-file-fallback
+          fetch-depth: 0
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Apply isolated product patch
+        shell: python
+        run: |
+          from pathlib import Path
+
+          config_path = Path('velocity/src/main/java/net/enthusia/staff/velocity/VelocityConfiguration.java')
+          config = config_path.read_text(encoding='utf-8')
+          if 'import java.nio.file.LinkOption;' not in config:
+              config = config.replace(
+                  'import java.nio.file.Files;\nimport java.nio.file.Path;',
+                  'import java.nio.file.Files;\nimport java.nio.file.LinkOption;\nimport java.nio.file.Path;',
+                  1,
+              )
+
+          staff_anchor = '''    public DatabaseConfig liteBansDatabaseFromEnvironment() {\n'''
+          staff_methods = '''    public DatabaseConfig database(Path dataDirectory) {\n        return databaseFromPrivateFileOrEnvironment(\n                dataDirectory,\n                jdbcUrlEnvironment,\n                usernameEnvironment,\n                passwordEnvironment,\n                "db.jdbc-url",\n                "db.username",\n                "db.password",\n                maximumPoolSize,\n                connectionTimeoutMillis,\n                "MariaDB"\n        );\n    }\n\n'''
+          if 'public DatabaseConfig database(Path dataDirectory)' not in config:
+              if config.count(staff_anchor) != 1:
+                  raise SystemExit('Staff DB insertion anchor not unique')
+              config = config.replace(staff_anchor, staff_methods + staff_anchor, 1)
+
+          website_anchor = '''    public String websiteApiBearerTokenFromEnvironment() {\n'''
+          fallback_methods = '''    public DatabaseConfig liteBansDatabase(Path dataDirectory) {\n        return databaseFromPrivateFileOrEnvironment(\n                dataDirectory,\n                liteBansJdbcUrlEnvironment,\n                liteBansUsernameEnvironment,\n                liteBansPasswordEnvironment,\n                "litebans.jdbc-url",\n                "litebans.username",\n                "litebans.password",\n                liteBansMaximumPoolSize,\n                liteBansConnectionTimeoutMillis,\n                "LiteBans database"\n        );\n    }\n\n    private static DatabaseConfig databaseFromPrivateFileOrEnvironment(\n            Path dataDirectory,\n            String urlEnvironment,\n            String usernameEnvironment,\n            String passwordEnvironment,\n            String urlKey,\n            String usernameKey,\n            String passwordKey,\n            int poolSize,\n            long timeoutMillis,\n            String label\n    ) {\n        String url = System.getenv(urlEnvironment);\n        String username = System.getenv(usernameEnvironment);\n        String password = System.getenv(passwordEnvironment);\n        if (present(url) || present(username) || present(password)) {\n            if (!present(url) || !present(username) || !present(password)) {\n                throw new IllegalStateException("Incomplete " + label + " environment configuration");\n            }\n            return new DatabaseConfig(url, username, password, poolSize, timeoutMillis);\n        }\n\n        Path file = dataDirectory.resolve("database.properties");\n        if (!Files.isRegularFile(file, LinkOption.NOFOLLOW_LINKS)) {\n            throw new IllegalStateException("Private " + label + " database.properties file is missing");\n        }\n        Properties secrets = new Properties();\n        try {\n            if (Files.size(file) > 16_384) {\n                throw new IllegalStateException("Private database.properties file is too large");\n            }\n            try (InputStream input = Files.newInputStream(file)) {\n                secrets.load(input);\n            }\n        } catch (IOException exception) {\n            throw new IllegalStateException("Private database.properties file cannot be read", exception);\n        }\n        url = secrets.getProperty(urlKey);\n        username = secrets.getProperty(usernameKey);\n        password = secrets.getProperty(passwordKey);\n        if (!present(url) || !present(username) || !present(password)) {\n            throw new IllegalStateException("Private " + label + " database.properties entries are incomplete");\n        }\n        return new DatabaseConfig(url.trim(), username.trim(), password, poolSize, timeoutMillis);\n    }\n\n    private static boolean present(String value) {\n        return value != null && !value.isBlank();\n    }\n\n'''
+          if 'public DatabaseConfig liteBansDatabase(Path dataDirectory)' not in config:
+              if config.count(website_anchor) != 1:
+                  raise SystemExit('LiteBans DB insertion anchor not unique')
+              config = config.replace(website_anchor, fallback_methods + website_anchor, 1)
+          config_path.write_text(config, encoding='utf-8')
+
+          plugin_path = Path('velocity/src/main/java/net/enthusia/staff/velocity/EnthusiaStaffVelocityPlugin.java')
+          plugin = plugin_path.read_text(encoding='utf-8')
+          replacements = {
+              'MariaDb.initialize(loaded.databaseFromEnvironment())': 'MariaDb.initialize(loaded.database(dataDirectory))',
+              'loaded.liteBansDatabaseFromEnvironment()': 'loaded.liteBansDatabase(dataDirectory)',
+          }
+          if plugin.count('MariaDb.initialize(loaded.databaseFromEnvironment())') != 1:
+              raise SystemExit('Unexpected Staff DB call count')
+          if plugin.count('loaded.liteBansDatabaseFromEnvironment()') != 2:
+              raise SystemExit('Unexpected LiteBans DB call count')
+          for old, new in replacements.items():
+              plugin = plugin.replace(old, new)
+          plugin_path.write_text(plugin, encoding='utf-8')
+
+          test_path = Path('velocity/src/test/java/net/enthusia/staff/velocity/VelocityConfigurationTest.java')
+          tests = test_path.read_text(encoding='utf-8')
+          test_anchor = '''    @Test\n    void bundledDefaultsLoadAndResolveInsideDataDirectory(@TempDir Path directory) throws IOException {\n'''
+          new_tests = '''    @Test\n    void privateDatabaseFileSuppliesBothStoresWhenEnvironmentIsUnavailable(@TempDir Path directory)\n            throws IOException {\n        VelocityConfiguration configuration = VelocityConfiguration.load(directory);\n        Properties secrets = new Properties();\n        secrets.setProperty("db.jdbc-url", "jdbc:mariadb://example.invalid:3306/staff");\n        secrets.setProperty("db.username", "staff-user");\n        secrets.setProperty("db.password", "staff-secret");\n        secrets.setProperty("litebans.jdbc-url", "jdbc:mariadb://example.invalid:3306/litebans");\n        secrets.setProperty("litebans.username", "litebans-user");\n        secrets.setProperty("litebans.password", "litebans-secret");\n        storeSecrets(directory, secrets);\n\n        assertEquals("staff-user", configuration.database(directory).username());\n        assertEquals(\n                "jdbc:mariadb://example.invalid:3306/litebans",\n                configuration.liteBansDatabase(directory).jdbcUrl()\n        );\n    }\n\n    @Test\n    void privateDatabaseFileRejectsMissingCredentials(@TempDir Path directory) throws IOException {\n        VelocityConfiguration configuration = VelocityConfiguration.load(directory);\n        assertThrows(IllegalStateException.class, () -> configuration.database(directory));\n\n        Properties incomplete = new Properties();\n        incomplete.setProperty("db.jdbc-url", "jdbc:mariadb://example.invalid:3306/staff");\n        incomplete.setProperty("db.username", "staff-user");\n        storeSecrets(directory, incomplete);\n\n        assertThrows(IllegalStateException.class, () -> configuration.database(directory));\n        assertThrows(IllegalStateException.class, () -> configuration.liteBansDatabase(directory));\n    }\n\n    @Test\n    void privateDatabaseFileRejectsOversizedContent(@TempDir Path directory) throws IOException {\n        VelocityConfiguration configuration = VelocityConfiguration.load(directory);\n        Files.writeString(directory.resolve("database.properties"), "x".repeat(16_385));\n\n        assertThrows(IllegalStateException.class, () -> configuration.database(directory));\n    }\n\n'''
+          if 'privateDatabaseFileSuppliesBothStoresWhenEnvironmentIsUnavailable' not in tests:
+              if tests.count(test_anchor) != 1:
+                  raise SystemExit('Test insertion anchor not unique')
+              tests = tests.replace(test_anchor, new_tests + test_anchor, 1)
+          helper_anchor = '''    private static void store(Path directory, Properties properties) throws IOException {\n'''
+          helper = '''    private static void storeSecrets(Path directory, Properties properties) throws IOException {\n        try (OutputStream output = Files.newOutputStream(directory.resolve("database.properties"))) {\n            properties.store(output, "private test credentials");\n        }\n    }\n\n'''
+          if 'private static void storeSecrets' not in tests:
+              if tests.count(helper_anchor) != 1:
+                  raise SystemExit('Test helper anchor not unique')
+              tests = tests.replace(helper_anchor, helper + helper_anchor, 1)
+          test_path.write_text(tests, encoding='utf-8')
+
+          Path('.github/workflows/velocity-private-db-fallback-patch.yml').unlink()
+      - name: Validate focused Velocity configuration path
+        run: ./gradlew :velocity:test --tests net.enthusia.staff.velocity.VelocityConfigurationTest --no-daemon --console=plain
+      - name: Commit product change and remove temporary workflow
+        run: |
+          git config user.name "wsg138"
+          git config user.email "208424056+wsg138@users.noreply.github.com"
+          git add velocity/src/main/java/net/enthusia/staff/velocity/VelocityConfiguration.java \
+                  velocity/src/main/java/net/enthusia/staff/velocity/EnthusiaStaffVelocityPlugin.java \
+                  velocity/src/test/java/net/enthusia/staff/velocity/VelocityConfigurationTest.java \
+                  .github/workflows/velocity-private-db-fallback-patch.yml
+          git diff --cached --check
+          git commit -m "Support private Velocity database credentials file"
+          git push origin HEAD:fix/velocity-private-db-file-fallback
