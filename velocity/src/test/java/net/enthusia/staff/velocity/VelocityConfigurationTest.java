@@ -24,6 +24,48 @@ final class VelocityConfigurationTest {
     private static final String TLS_KEY_STORE = "channel.tls-key-store";
 
     @Test
+    void privateDatabaseFileSuppliesBothStoresWhenEnvironmentIsUnavailable(@TempDir Path directory)
+            throws IOException {
+        VelocityConfiguration configuration = VelocityConfiguration.load(directory);
+        Properties secrets = new Properties();
+        secrets.setProperty("db.jdbc-url", "jdbc:mariadb://example.invalid:3306/staff");
+        secrets.setProperty("db.username", "staff-user");
+        secrets.setProperty("db.password", "staff-secret");
+        secrets.setProperty("litebans.jdbc-url", "jdbc:mariadb://example.invalid:3306/litebans");
+        secrets.setProperty("litebans.username", "litebans-user");
+        secrets.setProperty("litebans.password", "litebans-secret");
+        storeSecrets(directory, secrets);
+
+        assertEquals("staff-user", configuration.database(directory).username());
+        assertEquals(
+                "jdbc:mariadb://example.invalid:3306/litebans",
+                configuration.liteBansDatabase(directory).jdbcUrl()
+        );
+    }
+
+    @Test
+    void privateDatabaseFileRejectsMissingCredentials(@TempDir Path directory) throws IOException {
+        VelocityConfiguration configuration = VelocityConfiguration.load(directory);
+        assertThrows(IllegalStateException.class, () -> configuration.database(directory));
+
+        Properties incomplete = new Properties();
+        incomplete.setProperty("db.jdbc-url", "jdbc:mariadb://example.invalid:3306/staff");
+        incomplete.setProperty("db.username", "staff-user");
+        storeSecrets(directory, incomplete);
+
+        assertThrows(IllegalStateException.class, () -> configuration.database(directory));
+        assertThrows(IllegalStateException.class, () -> configuration.liteBansDatabase(directory));
+    }
+
+    @Test
+    void privateDatabaseFileRejectsOversizedContent(@TempDir Path directory) throws IOException {
+        VelocityConfiguration configuration = VelocityConfiguration.load(directory);
+        Files.writeString(directory.resolve("database.properties"), "x".repeat(16_385));
+
+        assertThrows(IllegalStateException.class, () -> configuration.database(directory));
+    }
+
+    @Test
     void bundledDefaultsLoadAndResolveInsideDataDirectory(@TempDir Path directory) throws IOException {
         VelocityConfiguration configuration = VelocityConfiguration.load(directory);
 
@@ -238,6 +280,12 @@ final class VelocityConfigurationTest {
         store(directory, candidate);
 
         assertThrows(IllegalArgumentException.class, () -> VelocityConfiguration.load(directory));
+    }
+
+    private static void storeSecrets(Path directory, Properties properties) throws IOException {
+        try (OutputStream output = Files.newOutputStream(directory.resolve("database.properties"))) {
+            properties.store(output, "private test credentials");
+        }
     }
 
     private static void store(Path directory, Properties properties) throws IOException {

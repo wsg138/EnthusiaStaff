@@ -6,6 +6,7 @@ import java.io.OutputStream;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -223,6 +224,21 @@ public record VelocityConfiguration(
         return new DatabaseConfig(url, username, password, maximumPoolSize, connectionTimeoutMillis);
     }
 
+    public DatabaseConfig database(Path dataDirectory) {
+        return databaseFromPrivateFileOrEnvironment(
+                dataDirectory,
+                jdbcUrlEnvironment,
+                usernameEnvironment,
+                passwordEnvironment,
+                "db.jdbc-url",
+                "db.username",
+                "db.password",
+                maximumPoolSize,
+                connectionTimeoutMillis,
+                "MariaDB"
+        );
+    }
+
     public DatabaseConfig liteBansDatabaseFromEnvironment() {
         String url = System.getenv(liteBansJdbcUrlEnvironment);
         String username = System.getenv(liteBansUsernameEnvironment);
@@ -238,6 +254,71 @@ public record VelocityConfiguration(
                 liteBansMaximumPoolSize,
                 liteBansConnectionTimeoutMillis
         );
+    }
+
+    public DatabaseConfig liteBansDatabase(Path dataDirectory) {
+        return databaseFromPrivateFileOrEnvironment(
+                dataDirectory,
+                liteBansJdbcUrlEnvironment,
+                liteBansUsernameEnvironment,
+                liteBansPasswordEnvironment,
+                "litebans.jdbc-url",
+                "litebans.username",
+                "litebans.password",
+                liteBansMaximumPoolSize,
+                liteBansConnectionTimeoutMillis,
+                "LiteBans database"
+        );
+    }
+
+    private static DatabaseConfig databaseFromPrivateFileOrEnvironment(
+            Path dataDirectory,
+            String urlEnvironment,
+            String usernameEnvironment,
+            String passwordEnvironment,
+            String urlKey,
+            String usernameKey,
+            String passwordKey,
+            int poolSize,
+            long timeoutMillis,
+            String label
+    ) {
+        String url = System.getenv(urlEnvironment);
+        String username = System.getenv(usernameEnvironment);
+        String password = System.getenv(passwordEnvironment);
+        if (present(url) || present(username) || present(password)) {
+            if (!present(url) || !present(username) || !present(password)) {
+                throw new IllegalStateException("Incomplete " + label + " environment configuration");
+            }
+            return new DatabaseConfig(url, username, password, poolSize, timeoutMillis);
+        }
+
+        Path file = dataDirectory.resolve("database.properties");
+        if (!Files.isRegularFile(file, LinkOption.NOFOLLOW_LINKS)) {
+            throw new IllegalStateException("Private " + label + " database.properties file is missing");
+        }
+        Properties secrets = new Properties();
+        try {
+            if (Files.size(file) > 16_384) {
+                throw new IllegalStateException("Private database.properties file is too large");
+            }
+            try (InputStream input = Files.newInputStream(file)) {
+                secrets.load(input);
+            }
+        } catch (IOException exception) {
+            throw new IllegalStateException("Private database.properties file cannot be read", exception);
+        }
+        url = secrets.getProperty(urlKey);
+        username = secrets.getProperty(usernameKey);
+        password = secrets.getProperty(passwordKey);
+        if (!present(url) || !present(username) || !present(password)) {
+            throw new IllegalStateException("Private " + label + " database.properties entries are incomplete");
+        }
+        return new DatabaseConfig(url.trim(), username.trim(), password, poolSize, timeoutMillis);
+    }
+
+    private static boolean present(String value) {
+        return value != null && !value.isBlank();
     }
 
     public String websiteApiBearerTokenFromEnvironment() {
