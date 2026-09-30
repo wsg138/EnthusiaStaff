@@ -5,20 +5,17 @@ import dev.rosewood.rosechat.api.staff.AutomatedPublicMuteRequest;
 
 final class AutomatedModerationEvidenceFormatter {
     private static final int MAX_EXPLANATION_LENGTH = 4_000;
-    private static final String OMITTED_NOTICE =
-            "Additional evidence omitted from this summary due to the case-note size limit.";
 
     private AutomatedModerationEvidenceFormatter() {
     }
 
     static String format(AutomatedPublicMuteRequest request) {
         StringBuilder explanation = header(request);
-        boolean complete = true;
-        for (int index = 0; index < request.evidence().size() && complete; index++) {
-            complete = appendWithinLimit(explanation, index + 1, request.evidence().get(index));
+        for (int index = 0; index < request.evidence().size(); index++) {
+            appendEvidence(explanation, index + 1, request.evidence().get(index));
         }
-        if (!complete) {
-            explanation.append(OMITTED_NOTICE);
+        if (explanation.length() > MAX_EXPLANATION_LENGTH) {
+            throw new IllegalArgumentException("AI moderation evidence exceeds the durable case-note limit");
         }
         return explanation.toString();
     }
@@ -31,20 +28,6 @@ final class AutomatedModerationEvidenceFormatter {
                 .append("; trigger_category=").append(request.category())
                 .append("; trigger_severity=").append(request.severity())
                 .append('\n');
-    }
-
-    private static boolean appendWithinLimit(
-            StringBuilder explanation,
-            int index,
-            AutomatedModerationEvidence evidence
-    ) {
-        int start = explanation.length();
-        appendEvidence(explanation, index, evidence);
-        if (explanation.length() <= MAX_EXPLANATION_LENGTH - OMITTED_NOTICE.length()) {
-            return true;
-        }
-        explanation.setLength(start);
-        return false;
     }
 
     private static void appendEvidence(

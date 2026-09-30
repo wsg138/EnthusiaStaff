@@ -96,14 +96,9 @@ final class RoseChatAutomatedModerationProvider implements RoseChatAutomatedMode
         if (closed) {
             return AutomatedModerationResult.unavailable("EnthusiaStaff AI moderation provider is closed");
         }
-        if (request.strikeCount() < 2) {
-            return AutomatedModerationResult.rejected("At least two enforcement strikes are required");
-        }
-        if (request.evidence().size() != request.strikeCount()) {
-            return AutomatedModerationResult.rejected("Evidence count must equal the enforcement strike count");
-        }
-        if (!REQUIRED_MUTE.equals(request.muteDuration())) {
-            return AutomatedModerationResult.rejected("Only the fixed 30-day public mute is supported");
+        String rejection = AutomatedModerationRequestPolicy.rejectionReason(request);
+        if (rejection != null) {
+            return AutomatedModerationResult.rejected(rejection);
         }
         PunishmentService punishmentService = punishments.get();
         OperationalMode currentMode = mode.get();

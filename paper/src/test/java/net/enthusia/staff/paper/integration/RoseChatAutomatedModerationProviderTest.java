@@ -1,6 +1,8 @@
 package net.enthusia.staff.paper.integration;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.rosewood.rosechat.api.staff.AutomatedModerationEvidence;
@@ -40,6 +42,25 @@ class RoseChatAutomatedModerationProviderTest {
     }
 
     @Test
+    void exactlyTwoStrikesAreRequiredByProviderPolicy() {
+        AutomatedPublicMuteRequest accepted = request(List.of(
+                evidence(FIRST_EVENT, FIRST_AT, "first", 0.75D, 70),
+                evidence(SECOND_EVENT, FIRST_AT.plusSeconds(30), "second", 0.9D, 90)
+        ));
+        AutomatedPublicMuteRequest tooMany = request(List.of(
+                evidence(UUID.randomUUID(), FIRST_AT, "one", 0.75D, 70),
+                evidence(UUID.randomUUID(), FIRST_AT, "two", 0.8D, 80),
+                evidence(UUID.randomUUID(), FIRST_AT, "three", 0.9D, 90)
+        ));
+
+        assertNull(AutomatedModerationRequestPolicy.rejectionReason(accepted));
+        assertEquals(
+                "Exactly two enforcement strikes are required",
+                AutomatedModerationRequestPolicy.rejectionReason(tooMany)
+        );
+    }
+
+    @Test
     void evidenceExplanationContainsEveryReviewableStrike() {
         AutomatedPublicMuteRequest request = request(List.of(
                 evidence(FIRST_EVENT, FIRST_AT, "first exact message", 0.75D, 70),
@@ -56,7 +77,23 @@ class RoseChatAutomatedModerationProviderTest {
     }
 
     @Test
-    void evidenceExplanationStaysInsideCaseNoteLimit() {
+    void maximumTwoStrikeEvidenceIsStoredWithoutTruncation() {
+        String firstMessage = "a".repeat(1_024);
+        String secondMessage = "b".repeat(1_024);
+        AutomatedPublicMuteRequest request = request(List.of(
+                evidence(FIRST_EVENT, FIRST_AT, firstMessage, 0.8D, 80),
+                evidence(SECOND_EVENT, FIRST_AT.plusSeconds(30), secondMessage, 0.9D, 90)
+        ));
+
+        String explanation = AutomatedModerationEvidenceFormatter.format(request);
+
+        assertTrue(explanation.length() <= 4_000);
+        assertTrue(explanation.contains("Exact message: " + firstMessage));
+        assertTrue(explanation.contains("Exact message: " + secondMessage));
+    }
+
+    @Test
+    void nonPolicyOversizedEvidenceFailsInsteadOfDroppingRecords() {
         String longMessage = "x".repeat(1_024);
         AutomatedPublicMuteRequest request = request(List.of(
                 evidence(UUID.fromString("40000000-0000-0000-0000-000000000001"), FIRST_AT, longMessage, 0.8D, 80),
@@ -65,10 +102,7 @@ class RoseChatAutomatedModerationProviderTest {
                 evidence(UUID.fromString("40000000-0000-0000-0000-000000000004"), FIRST_AT, longMessage, 0.8D, 80)
         ));
 
-        String explanation = AutomatedModerationEvidenceFormatter.format(request);
-
-        assertTrue(explanation.length() <= 4_000);
-        assertTrue(explanation.contains("Additional evidence omitted"));
+        assertThrows(IllegalArgumentException.class, () -> AutomatedModerationEvidenceFormatter.format(request));
     }
 
     private static AutomatedModerationEvidence evidence(
