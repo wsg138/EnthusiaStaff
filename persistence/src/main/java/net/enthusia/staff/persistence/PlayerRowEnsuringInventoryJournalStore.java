@@ -13,7 +13,6 @@ import java.sql.Timestamp;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -39,7 +38,6 @@ import net.enthusia.staff.domain.ports.InventoryJournalStore;
 public final class PlayerRowEnsuringInventoryJournalStore implements InventoryJournalStore {
     private static final String CURSOR_TRANSFER_FIELD = "cursorTransfer";
     private static final String CURSOR_PHASE_FIELD = "cursorPhase";
-    private static final String ONLINE_CURSOR_PREFIX = "ONLINE_CURSOR_";
     private static final int MAX_CURSOR_QUERY = 32;
 
     private final DataSource dataSource;
@@ -150,23 +148,22 @@ public final class PlayerRowEnsuringInventoryJournalStore implements InventoryJo
     @Override
     public List<InventoryCursorJournal> pendingCursorTransfersByActor(
             UUID actorId,
-            String owningServerId,
+            String requestingServerId,
             int limit
     ) {
-        if (actorId == null || owningServerId == null || owningServerId.isBlank()
+        if (actorId == null || requestingServerId == null || requestingServerId.isBlank()
                 || limit < 1 || limit > MAX_CURSOR_QUERY) {
             throw new IllegalArgumentException("cursor transfer actor query is invalid");
         }
         return queryCursorJournals("""
-                WHERE o.actor_id = ? AND p.owning_server_id = ?
+                WHERE o.actor_id = ?
                     AND o.operation_type LIKE 'ONLINE_CURSOR_%'
                     AND q.state IN ('PENDING', 'APPLYING', 'QUARANTINED')
                 ORDER BY q.created_at
                 LIMIT ?
                 """, statement -> {
             statement.setBytes(1, UuidBytes.toBytes(actorId));
-            statement.setString(2, owningServerId);
-            statement.setInt(3, limit);
+            statement.setInt(2, limit);
         });
     }
 
@@ -372,7 +369,7 @@ public final class PlayerRowEnsuringInventoryJournalStore implements InventoryJo
             try (ResultSet result = statement.executeQuery()) {
                 List<InventoryCursorJournal> journals = new ArrayList<>();
                 while (result.next()) {
-                    journals.add(readCursorJournal(result));
+                    readCursorJournal(result).ifPresent(journals::add);
                 }
                 return List.copyOf(journals);
             }
@@ -381,9 +378,13 @@ public final class PlayerRowEnsuringInventoryJournalStore implements InventoryJo
         }
     }
 
-    private InventoryCursorJournal readCursorJournal(ResultSet result) throws SQLException {
+    private Optional<InventoryCursorJournal> readCursorJournal(ResultSet result) throws SQLException {
         ObjectNode operation = objectNode(result.getString("operation_json"));
-        InventoryCursorTransfer transfer = readCursorTransfer(operation.path(CURSOR_TRANSFER_FIELD));
+        JsonNode cursorNode = operation.get(CURSOR_TRANSFER_FIELD);
+        if (cursorNode == null || cursorNode.isNull()) {
+            return Optional.empty();
+        }
+        InventoryCursorTransfer transfer = readCursorTransfer(cursorNode);
         List<Integer> changedSlots = readChangedSlots(result.getString("patch_json"));
         InventoryPatch patch = new InventoryPatch(
                 UuidBytes.fromBytes(result.getBytes("patch_id")),
@@ -404,12 +405,12 @@ public final class PlayerRowEnsuringInventoryJournalStore implements InventoryJo
                 changedSlots,
                 result.getTimestamp("created_at").toInstant()
         );
-        return new InventoryCursorJournal(
+        return Optional.of(new InventoryCursorJournal(
                 patch,
                 result.getBytes("before_snapshot"),
                 transfer,
                 readPhase(operation)
-        );
+        ));
     }
 
     private List<Integer> readChangedSlots(String patchJson) throws SQLException {
