@@ -36,6 +36,29 @@ final class StaffModeBackendHandoffCoordinator {
     private final Function<UUID, Optional<StaffSessionSnapshot>> sessions;
     private final Supplier<UUID> transferIds;
 
+    static Transport channelTransport(PersistentChannelServer channel) {
+        if (channel == null) {
+            return null;
+        }
+        return new Transport() {
+            @Override
+            public Set<String> connectedServers() {
+                return channel.connectedServers();
+            }
+
+            @Override
+            public PersistentChannelServer.DeliveryStatus send(
+                    String backendId,
+                    UUID messageId,
+                    String messageType,
+                    String payload,
+                    Duration timeout
+            ) {
+                return channel.send(backendId, messageId, messageType, payload, timeout).join();
+            }
+        };
+    }
+
     StaffModeBackendHandoffCoordinator(
             Supplier<Transport> transport,
             Function<UUID, Optional<StaffSessionSnapshot>> sessions,
@@ -75,11 +98,7 @@ final class StaffModeBackendHandoffCoordinator {
         var status = channel.send(current, UUID.randomUUID(), EXIT_REQUEST,
                 exitPayload(playerId, session, transferId), CHANNEL_TIMEOUT);
         Optional<StaffSessionSnapshot> remaining = sessions.apply(playerId);
-        if (remaining.isEmpty()) {
-            return true;
-        }
-        return status == PersistentChannelServer.DeliveryStatus.ACKNOWLEDGED
-                && !sameSession(remaining.orElseThrow(), session);
+        return remaining.isEmpty();
     }
 
     private boolean prepareDestination(Transport channel, UUID playerId, UUID transferId, String requested) {
@@ -108,10 +127,6 @@ final class StaffModeBackendHandoffCoordinator {
 
     private static boolean containsIgnoreCase(Set<String> values, String expected) {
         return values.stream().anyMatch(value -> value.equalsIgnoreCase(expected));
-    }
-
-    private static boolean sameSession(StaffSessionSnapshot left, StaffSessionSnapshot right) {
-        return left.sessionId().equals(right.sessionId());
     }
 
     private static String exitPayload(
