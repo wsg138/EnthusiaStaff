@@ -197,8 +197,14 @@ final class PaperCommandRegistrar {
     }
 
     private void registerReportCommands() {
-        Supplier<net.enthusia.staff.domain.ports.ReportStore> reportStore =
-                storage(PaperStorageBindings::reportStore);
+        Supplier<ReportStore> reportStore = storage(PaperStorageBindings::reportStore);
+        Supplier<ReportStore> activeReportStore = () -> {
+            ReportStore loaded = reportStore.get();
+            return loaded == null ? null : new net.enthusia.staff.paper.report.ActiveDutyReportStore(
+                    loaded,
+                    dependencies.players().staffMode()::authorityActive
+            );
+        };
         ReportCommand report = new ReportCommand(
                 new ReportCommand.Dependencies(
                         plugin(), clock(), dependencies.environment().serverId(), authoritativeMode(),
@@ -218,7 +224,7 @@ final class PaperCommandRegistrar {
         ReportGuiController reportGui = new ReportGuiController(
                 plugin(),
                 clock(),
-                reportStore,
+                activeReportStore,
                 dependencies.environment().reportConfiguration(),
                 workers()
         );
