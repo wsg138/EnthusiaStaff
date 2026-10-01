@@ -95,7 +95,7 @@ final class StaffModeBackendHandoffCoordinator {
             UUID transferId,
             String current
     ) {
-        var status = channel.send(current, UUID.randomUUID(), EXIT_REQUEST,
+        channel.send(current, UUID.randomUUID(), EXIT_REQUEST,
                 exitPayload(playerId, session, transferId), CHANNEL_TIMEOUT);
         Optional<StaffSessionSnapshot> remaining = sessions.apply(playerId);
         return remaining.isEmpty();
