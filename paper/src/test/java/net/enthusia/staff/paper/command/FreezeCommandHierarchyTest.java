@@ -62,6 +62,7 @@ class FreezeCommandHierarchyTest {
                 new DirectExecutorService(),
                 new FreezeCommand.RuntimeHooks(
                         denied,
+                        ignored -> true,
                         FreezeAlertSink.noOp(),
                         FreezeNoticeSink.noOp(),
                         (sender, responses) -> messages.addAll(responses)
@@ -77,6 +78,44 @@ class FreezeCommandHierarchyTest {
 
         assertEquals(0, writes.get());
         assertEquals(List.of(Component.text("protected target")), messages);
+    }
+
+    @Test
+    void inactiveDutyIsRejectedBeforeFreezePersistence() {
+        AtomicInteger writes = new AtomicInteger();
+        List<Component> messages = new ArrayList<>();
+        PlayerDirectory directory = proxy(PlayerDirectory.class, (method, arguments) -> Optional.empty());
+        FreezeStore store = proxy(FreezeStore.class, (method, arguments) -> {
+            if ("apply".equals(method.getName())) {
+                writes.incrementAndGet();
+            }
+            return defaultValue(method.getReturnType());
+        });
+        FreezeCommand command = new FreezeCommand(
+                null,
+                Clock.fixed(NOW, ZoneOffset.UTC),
+                () -> OperationalMode.ACTIVE,
+                () -> directory,
+                () -> store,
+                null,
+                new DirectExecutorService(),
+                new FreezeCommand.RuntimeHooks(
+                        (actor, targetId, systemActor) -> StaffTargetGuard.Result.allow(),
+                        ignored -> false,
+                        FreezeAlertSink.noOp(),
+                        FreezeNoticeSink.noOp(),
+                        (sender, responses) -> messages.addAll(responses)
+                )
+        );
+
+        command.onCommand(
+                playerSender(),
+                command("freeze"),
+                "freeze",
+                new String[]{"Target", "screenshare"}
+        );
+
+        assertEquals(0, writes.get());
     }
 
     private static Player playerSender() {
