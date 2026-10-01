@@ -101,6 +101,12 @@ public final class StaffModeManager implements Listener {
         return active.containsKey(playerId);
     }
 
+    public boolean authorityActive(UUID playerId) {
+        return playerId != null
+                && active.containsKey(playerId)
+                && !transitions.contains(playerId);
+    }
+
     public CombatStatusAdapter combat() {
         return combat;
     }
