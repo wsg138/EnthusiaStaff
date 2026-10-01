@@ -6,9 +6,11 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
+import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.function.BiConsumer;
+import java.util.function.Predicate;
 import java.util.function.Supplier;
 import java.util.logging.Level;
 import net.enthusia.staff.domain.OperationalMode;
@@ -17,6 +19,7 @@ import net.enthusia.staff.domain.freeze.FreezeRecord;
 import net.enthusia.staff.domain.player.PlayerIdentity;
 import net.enthusia.staff.domain.ports.FreezeStore;
 import net.enthusia.staff.domain.ports.PlayerDirectory;
+import net.enthusia.staff.paper.api.StaffSessionService;
 import net.enthusia.staff.paper.auth.LuckPermsStaffTargetGuard;
 import net.enthusia.staff.paper.auth.PaperActorResolver;
 import net.enthusia.staff.paper.auth.StaffTargetGuard;
@@ -47,6 +50,7 @@ public final class FreezeCommand implements CommandExecutor, TabCompleter {
     private final FreezeManager manager;
     private final ExecutorService workers;
     private final StaffTargetGuard targetGuard;
+    private final Predicate<UUID> activeDuty;
     private final FreezeAlertSink alerts;
     private final FreezeNoticeSink targetNotices;
     private final BiConsumer<CommandSender, List<Component>> responses;
@@ -65,6 +69,7 @@ public final class FreezeCommand implements CommandExecutor, TabCompleter {
                 plugin, clock, mode, players, freezes, manager, workers,
                 new RuntimeHooks(
                         LuckPermsStaffTargetGuard.discover(plugin),
+                        ignored -> true,
                         new FreezeStaffNotifier(plugin),
                         FreezeNoticeSink.noOp(),
                         commandResponses(plugin)
@@ -86,6 +91,7 @@ public final class FreezeCommand implements CommandExecutor, TabCompleter {
                 plugin, clock, mode, players, freezes, manager, workers,
                 new RuntimeHooks(
                         LuckPermsStaffTargetGuard.discover(plugin),
+                        runtimeActiveDuty(plugin),
                         new FreezeStaffNotifier(plugin),
                         targetNotices,
                         commandResponses(plugin)
@@ -107,6 +113,7 @@ public final class FreezeCommand implements CommandExecutor, TabCompleter {
                 plugin, clock, mode, players, freezes, manager, workers,
                 new RuntimeHooks(
                         (actor, targetId, systemActor) -> StaffTargetGuard.Result.allow(),
+                        ignored -> true,
                         FreezeAlertSink.noOp(),
                         FreezeNoticeSink.noOp(),
                         responses
@@ -132,6 +139,7 @@ public final class FreezeCommand implements CommandExecutor, TabCompleter {
         this.manager = manager;
         this.workers = workers;
         this.targetGuard = hooks.targetGuard();
+        this.activeDuty = hooks.activeDuty();
         this.alerts = hooks.alerts();
         this.targetNotices = hooks.targetNotices();
         this.responses = hooks.responses();
@@ -190,6 +198,12 @@ public final class FreezeCommand implements CommandExecutor, TabCompleter {
             return true;
         }
         boolean systemActor = !(sender instanceof Player);
+        if (!systemActor && !activeDuty.test(actor.id())) {
+            sender.sendMessage(StaffMessageStyle.style(Component.text(
+                    "Enter Staff Mode before changing a player freeze."
+            )));
+            return true;
+        }
         submit(sender, () -> change(sender, parsed, actor, systemActor, release));
         return true;
     }
@@ -245,6 +259,10 @@ public final class FreezeCommand implements CommandExecutor, TabCompleter {
             boolean systemActor,
             boolean release
     ) {
+        if (!systemActor && !activeDuty.test(actor.id())) {
+            respond(sender, "Your active staff authority expired before the freeze change was committed.");
+            return;
+        }
         PlayerDirectory directory = players.get();
         FreezeStore store = freezes.get();
         if (directory == null || store == null) {
@@ -256,13 +274,13 @@ public final class FreezeCommand implements CommandExecutor, TabCompleter {
             respond(sender, "That player has never joined the authoritative directory.");
             return;
         }
-        if (!release && !targetAllowed(sender, actor, target.playerId(), systemActor)) {
+        if (!targetAllowed(sender, actor, target.playerId(), systemActor)) {
             return;
         }
         applyChange(sender, store, target, actor, change, release);
     }
 
-    private boolean targetAllowed(CommandSender sender, Actor actor, java.util.UUID targetId, boolean systemActor) {
+    private boolean targetAllowed(CommandSender sender, Actor actor, UUID targetId, boolean systemActor) {
         StaffTargetGuard.Result result = targetGuard.check(actor, targetId, systemActor);
         if (result.allowed()) {
             return true;
@@ -377,6 +395,13 @@ public final class FreezeCommand implements CommandExecutor, TabCompleter {
         responses.accept(sender, List.copyOf(messages));
     }
 
+    private static Predicate<UUID> runtimeActiveDuty(JavaPlugin plugin) {
+        return playerId -> {
+            StaffSessionService sessions = plugin.getServer().getServicesManager().load(StaffSessionService.class);
+            return sessions != null && sessions.hasActiveSession(playerId);
+        };
+    }
+
     private static BiConsumer<CommandSender, List<Component>> commandResponses(JavaPlugin plugin) {
         CommandResponseDispatcher dispatcher = new CommandResponseDispatcher(plugin);
         return dispatcher::send;
@@ -384,12 +409,14 @@ public final class FreezeCommand implements CommandExecutor, TabCompleter {
 
     record RuntimeHooks(
             StaffTargetGuard targetGuard,
+            Predicate<UUID> activeDuty,
             FreezeAlertSink alerts,
             FreezeNoticeSink targetNotices,
             BiConsumer<CommandSender, List<Component>> responses
     ) {
         RuntimeHooks {
             java.util.Objects.requireNonNull(targetGuard, "targetGuard");
+            java.util.Objects.requireNonNull(activeDuty, "activeDuty");
             java.util.Objects.requireNonNull(alerts, "alerts");
             java.util.Objects.requireNonNull(targetNotices, "targetNotices");
             java.util.Objects.requireNonNull(responses, "responses");
