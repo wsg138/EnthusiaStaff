@@ -22,6 +22,7 @@ import net.enthusia.staff.domain.ports.PlayerDirectory;
 import net.enthusia.staff.paper.auth.StaffTargetGuard;
 import net.enthusia.staff.paper.freeze.FreezeAlertSink;
 import net.enthusia.staff.paper.freeze.FreezeNoticeSink;
+import net.enthusia.staff.paper.presentation.StaffMessageStyle;
 import net.kyori.adventure.text.Component;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
@@ -127,7 +128,9 @@ class FreezeCommandHierarchyTest {
 
         assertEquals(0, writes.get());
         assertEquals(
-                List.of(Component.text("Enter Staff Mode before changing a player freeze.")),
+                List.of(StaffMessageStyle.style(Component.text(
+                        "Enter Staff Mode before changing a player freeze."
+                ))),
                 messages
         );
         assertEquals(0, lookups.get());
