@@ -1,5 +1,6 @@
 package net.enthusia.staff.paper.visibility;
 
+import com.destroystokyo.paper.event.entity.EntityAddToWorldEvent;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Objects;
@@ -65,6 +66,11 @@ public final class VanishTargetingGuard implements Listener {
     }
 
     @EventHandler(priority = EventPriority.MONITOR)
+    public void onEntityAdded(EntityAddToWorldEvent event) {
+        scheduleReconcileAddedEntity(event.getEntity());
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR)
     public void onEntityRemoved(EntityRemoveEvent event) {
         trackedTargets.remove(event.getEntity().getUniqueId());
     }
@@ -93,6 +99,38 @@ public final class VanishTargetingGuard implements Listener {
                 RECONCILIATION_RADIUS, RECONCILIATION_RADIUS, RECONCILIATION_RADIUS)) {
             scheduleClear(entity, targetId, scheduled);
         }
+    }
+
+    private void scheduleReconcileAddedEntity(Entity entity) {
+        if (!targetCapable(entity)) {
+            return;
+        }
+        UUID entityId = entity.getUniqueId();
+        entity.getScheduler().execute(
+                plugin,
+                () -> reconcileCurrentTarget(entity),
+                () -> trackedTargets.remove(entityId),
+                1L
+        );
+    }
+
+    private void reconcileCurrentTarget(Entity entity) {
+        Entity target = currentTarget(entity);
+        if (isVanishedPlayer(target)) {
+            clearTarget(entity, ((Player) target).getUniqueId());
+        } else {
+            track(entity, target);
+        }
+    }
+
+    private static Entity currentTarget(Entity entity) {
+        if (entity instanceof Mob mob) {
+            return mob.getTarget();
+        }
+        if (entity instanceof ShulkerBullet bullet) {
+            return bullet.getTarget();
+        }
+        return null;
     }
 
     private void scheduleClear(Entity entity, UUID targetId, Set<UUID> scheduled) {
