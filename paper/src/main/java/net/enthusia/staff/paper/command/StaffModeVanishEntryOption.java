@@ -8,6 +8,8 @@ enum StaffModeVanishEntryOption {
     VANISHED(Boolean.TRUE, true),
     VISIBLE(Boolean.FALSE, true);
 
+    private static final int SINGLE_ARGUMENT = 1;
+
     private final Boolean override;
     private final boolean explicit;
 
@@ -28,7 +30,7 @@ enum StaffModeVanishEntryOption {
         if (arguments.length == 0) {
             return Optional.of(REMEMBERED);
         }
-        if (arguments.length != 1) {
+        if (arguments.length != SINGLE_ARGUMENT) {
             return Optional.empty();
         }
         return switch (arguments[0].toLowerCase(java.util.Locale.ROOT)) {
