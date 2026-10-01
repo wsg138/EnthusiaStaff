@@ -29,12 +29,16 @@ final class LiveCursorEscrow {
             return false;
         }
         ItemStack expected = transfer.expectedCursor();
-        if (expected != null) {
-            viewer.setItemOnCursor(marker.mark(expected, transfer.operationId(), LiveCursorEscrowMarker.Role.SOURCE));
-            viewer.updateInventory();
-            return sourceMatches(viewer.getItemOnCursor(), transfer);
+        if (expected == null) {
+            return empty(current);
         }
-        return empty(current);
+        viewer.setItemOnCursor(marker.mark(
+                expected,
+                transfer.operationId(),
+                LiveCursorEscrowMarker.Role.SOURCE
+        ));
+        viewer.updateInventory();
+        return sourceMatches(viewer.getItemOnCursor(), transfer);
     }
 
     boolean applyResult(Player viewer, LiveInventoryTransferExecution transfer) {
@@ -42,9 +46,7 @@ final class LiveCursorEscrow {
             return false;
         }
         ItemStack result = transfer.resultingCursor();
-        viewer.setItemOnCursor(result == null
-                ? null
-                : marker.mark(result, transfer.operationId(), LiveCursorEscrowMarker.Role.RESULT));
+        viewer.setItemOnCursor(markResult(result, transfer.operationId()));
         viewer.updateInventory();
         return resultMatches(viewer.getItemOnCursor(), transfer);
     }
@@ -69,34 +71,74 @@ final class LiveCursorEscrow {
                 && marker.read(viewer.getItemOnCursor()).isEmpty();
     }
 
-    RecoveryResult recover(Player viewer, InventoryCursorJournal journal, boolean targetApplied) {
+    RecoveryResult recoverSource(Player viewer, InventoryCursorJournal journal) {
         List<LocatedMarker> markers = locate(viewer, journal.patch().operationId());
-        if (markers.size() > 1 || hasUnmarkedCursorConflict(viewer, markers)) {
+        if (markers.size() > 1) {
             return RecoveryResult.CONFLICT;
         }
-        ItemStack desired = codec.decode(targetApplied
-                ? journal.cursorTransfer().replacementSnapshot()
-                : journal.cursorTransfer().expectedSnapshot());
-        LocatedMarker located = markers.isEmpty() ? null : markers.getFirst();
-        ItemStack removed = located == null ? null : located.item();
-        try {
-            if (located != null) {
-                write(viewer, located.location(), null);
-            }
-            viewer.setItemOnCursor(desired);
-            viewer.updateInventory();
-            String expectedChecksum = targetApplied
-                    ? journal.cursorTransfer().replacementChecksum()
-                    : journal.cursorTransfer().expectedChecksum();
-            if (!codec.matches(viewer.getItemOnCursor(), expectedChecksum)) {
-                rollbackRecovery(viewer, located, removed);
-                return RecoveryResult.CONFLICT;
-            }
-            return RecoveryResult.APPLIED;
-        } catch (RuntimeException exception) {
-            rollbackRecovery(viewer, located, removed);
+        if (markers.isEmpty()) {
+            return codec.matches(
+                    viewer.getItemOnCursor(),
+                    journal.cursorTransfer().expectedChecksum()
+            ) ? RecoveryResult.SOURCE_RESTORED : RecoveryResult.CONFLICT;
+        }
+        return replaceLocatedMarker(
+                viewer,
+                journal,
+                markers.getFirst(),
+                codec.decode(journal.cursorTransfer().expectedSnapshot()),
+                journal.cursorTransfer().expectedChecksum(),
+                false
+        ) ? RecoveryResult.SOURCE_RESTORED : RecoveryResult.CONFLICT;
+    }
+
+    RecoveryResult recoverResult(Player viewer, InventoryCursorJournal journal) {
+        List<LocatedMarker> markers = locate(viewer, journal.patch().operationId());
+        if (markers.size() > 1) {
             return RecoveryResult.CONFLICT;
         }
+        if (markers.isEmpty()) {
+            return recoverUnmarkedResult(viewer, journal);
+        }
+        ItemStack desired = codec.decode(journal.cursorTransfer().replacementSnapshot());
+        boolean replaced = replaceLocatedMarker(
+                viewer,
+                journal,
+                markers.getFirst(),
+                markResult(desired, journal.patch().operationId()),
+                journal.cursorTransfer().replacementChecksum(),
+                true
+        );
+        return replaced ? RecoveryResult.RESULT_MARKED : RecoveryResult.CONFLICT;
+    }
+
+    boolean settleRecoveredResult(Player viewer, InventoryCursorJournal journal) {
+        UUID operationId = journal.patch().operationId();
+        List<LocatedMarker> markers = locate(viewer, operationId);
+        if (markers.isEmpty()) {
+            return codec.matches(
+                    viewer.getItemOnCursor(),
+                    journal.cursorTransfer().replacementChecksum()
+            );
+        }
+        if (markers.size() != 1) {
+            return false;
+        }
+        LocatedMarker located = markers.getFirst();
+        if (located.location().kind() != SlotKind.CURSOR
+                || located.role() != LiveCursorEscrowMarker.Role.RESULT
+                || !underlyingChecksumMatches(
+                        located.item(),
+                        journal.cursorTransfer().replacementChecksum()
+                )) {
+            return false;
+        }
+        viewer.setItemOnCursor(marker.clear(located.item(), operationId));
+        viewer.updateInventory();
+        return codec.matches(
+                viewer.getItemOnCursor(),
+                journal.cursorTransfer().replacementChecksum()
+        );
     }
 
     List<LocatedMarker> locate(Player viewer, UUID operationId) {
@@ -115,13 +157,86 @@ final class LiveCursorEscrow {
         return List.copyOf(found);
     }
 
+    private RecoveryResult recoverUnmarkedResult(Player viewer, InventoryCursorJournal journal) {
+        InventoryCursorTransfer transfer = journal.cursorTransfer();
+        ItemStack cursor = viewer.getItemOnCursor();
+        if (codec.matches(cursor, transfer.replacementChecksum())) {
+            return RecoveryResult.RESULT_ALREADY_SETTLED;
+        }
+        if (!codec.matches(cursor, transfer.expectedChecksum())) {
+            return RecoveryResult.CONFLICT;
+        }
+        ItemStack desired = codec.decode(transfer.replacementSnapshot());
+        viewer.setItemOnCursor(markResult(desired, journal.patch().operationId()));
+        viewer.updateInventory();
+        return underlyingChecksumMatches(
+                viewer.getItemOnCursor(),
+                transfer.replacementChecksum()
+        ) && marker.matches(
+                viewer.getItemOnCursor(),
+                journal.patch().operationId(),
+                LiveCursorEscrowMarker.Role.RESULT
+        ) ? RecoveryResult.RESULT_MARKED : RecoveryResult.CONFLICT;
+    }
+
+    private boolean replaceLocatedMarker(
+            Player viewer,
+            InventoryCursorJournal journal,
+            LocatedMarker located,
+            ItemStack desired,
+            String desiredChecksum,
+            boolean preserveResultMarker
+    ) {
+        ItemStack originalCursor = copy(viewer.getItemOnCursor());
+        if (located.location().kind() != SlotKind.CURSOR && !empty(originalCursor)) {
+            return false;
+        }
+        try {
+            write(viewer, located.location(), null);
+            viewer.setItemOnCursor(desired);
+            viewer.updateInventory();
+            boolean checksumMatches = preserveResultMarker
+                    ? underlyingChecksumMatches(viewer.getItemOnCursor(), desiredChecksum)
+                    : codec.matches(viewer.getItemOnCursor(), desiredChecksum);
+            boolean markerStateMatches = preserveResultMarker
+                    ? marker.matches(
+                            viewer.getItemOnCursor(),
+                            journal.patch().operationId(),
+                            LiveCursorEscrowMarker.Role.RESULT
+                    )
+                    : locate(viewer, journal.patch().operationId()).isEmpty();
+            if (checksumMatches && markerStateMatches) {
+                return true;
+            }
+        } catch (RuntimeException exception) {
+            // The exact before-state is restored below; the caller will fail closed.
+        }
+        restoreRecoveryBeforeState(viewer, located, originalCursor);
+        return false;
+    }
+
+    private void restoreRecoveryBeforeState(
+            Player viewer,
+            LocatedMarker located,
+            ItemStack originalCursor
+    ) {
+        viewer.setItemOnCursor(originalCursor);
+        if (located.location().kind() != SlotKind.CURSOR) {
+            write(viewer, located.location(), located.item());
+        }
+        viewer.updateInventory();
+    }
+
     private boolean sourceMatches(ItemStack current, LiveInventoryTransferExecution transfer) {
         ItemStack expected = transfer.expectedCursor();
         if (expected == null) {
             return empty(current);
         }
-        return marker.matches(current, transfer.operationId(), LiveCursorEscrowMarker.Role.SOURCE)
-                && underlyingMatches(current, expected);
+        return marker.matches(
+                current,
+                transfer.operationId(),
+                LiveCursorEscrowMarker.Role.SOURCE
+        ) && underlyingMatches(current, expected);
     }
 
     private boolean resultMatches(ItemStack current, LiveInventoryTransferExecution transfer) {
@@ -129,21 +244,23 @@ final class LiveCursorEscrow {
         if (result == null) {
             return empty(current);
         }
-        return marker.matches(current, transfer.operationId(), LiveCursorEscrowMarker.Role.RESULT)
-                && underlyingMatches(current, result);
+        return marker.matches(
+                current,
+                transfer.operationId(),
+                LiveCursorEscrowMarker.Role.RESULT
+        ) && underlyingMatches(current, result);
+    }
+
+    private ItemStack markResult(ItemStack item, UUID operationId) {
+        return item == null ? null : marker.mark(item, operationId, LiveCursorEscrowMarker.Role.RESULT);
     }
 
     private boolean underlyingMatches(ItemStack marked, ItemStack expected) {
-        ItemStack cleared = marker.clearAny(marked);
-        return LiveInventoryTransferDecision.same(cleared, expected);
+        return LiveInventoryTransferDecision.same(marker.clearAny(marked), expected);
     }
 
-    private boolean hasUnmarkedCursorConflict(Player viewer, List<LocatedMarker> markers) {
-        ItemStack cursor = viewer.getItemOnCursor();
-        if (empty(cursor)) {
-            return false;
-        }
-        return markers.stream().noneMatch(value -> value.location().kind() == SlotKind.CURSOR);
+    private boolean underlyingChecksumMatches(ItemStack marked, String checksum) {
+        return codec.matches(marker.clearAny(marked), checksum);
     }
 
     private void addIfMatch(
@@ -171,11 +288,8 @@ final class LiveCursorEscrow {
         }
     }
 
-    private static void rollbackRecovery(Player viewer, LocatedMarker located, ItemStack removed) {
-        if (located != null) {
-            write(viewer, located.location(), removed);
-        }
-        viewer.updateInventory();
+    private static ItemStack copy(ItemStack item) {
+        return empty(item) ? null : item.clone();
     }
 
     private static boolean empty(ItemStack item) {
@@ -183,7 +297,9 @@ final class LiveCursorEscrow {
     }
 
     enum RecoveryResult {
-        APPLIED,
+        SOURCE_RESTORED,
+        RESULT_MARKED,
+        RESULT_ALREADY_SETTLED,
         CONFLICT
     }
 
