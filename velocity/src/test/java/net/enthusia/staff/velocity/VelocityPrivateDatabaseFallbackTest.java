@@ -16,7 +16,7 @@ final class VelocityPrivateDatabaseFallbackTest {
     private static final String CONFIG_FILE = "config.properties";
     private static final String PRESENT_ENVIRONMENT = "PATH";
     private static final String MISSING_USER_ENVIRONMENT = "ENTHUSIA_TEST_MISSING_DB_USER_276";
-    private static final String MISSING_PASSWORD_ENVIRONMENT = "ENTHUSIA_TEST_MISSING_DB_PASSWORD_276";
+    private static final String MISSING_SECRET_ENVIRONMENT = "ENTHUSIA_TEST_MISSING_DB_SECRET_276";
 
     @Test
     void rejectsSymlinkedPrivateDatabaseFile(@TempDir Path directory) throws IOException {
@@ -37,13 +37,13 @@ final class VelocityPrivateDatabaseFallbackTest {
     void partialEnvironmentConfigurationDoesNotFallBackToPrivateFile(@TempDir Path directory) throws IOException {
         assumeTrue(System.getenv(PRESENT_ENVIRONMENT) != null, "PATH must be available for this test");
         assumeTrue(System.getenv(MISSING_USER_ENVIRONMENT) == null, "test username environment must be absent");
-        assumeTrue(System.getenv(MISSING_PASSWORD_ENVIRONMENT) == null, "test password environment must be absent");
+        assumeTrue(System.getenv(MISSING_SECRET_ENVIRONMENT) == null, "test secret environment must be absent");
 
         VelocityConfiguration.load(directory);
         Properties config = load(directory.resolve(CONFIG_FILE));
         config.setProperty("storage.jdbc-url-environment", PRESENT_ENVIRONMENT);
         config.setProperty("storage.username-environment", MISSING_USER_ENVIRONMENT);
-        config.setProperty("storage.password-environment", MISSING_PASSWORD_ENVIRONMENT);
+        config.setProperty("storage.password-environment", MISSING_SECRET_ENVIRONMENT);
         store(directory.resolve(CONFIG_FILE), config);
         storeDatabase(directory.resolve(DATABASE_FILE));
 
