@@ -277,6 +277,10 @@ public final class FreezeCommand implements CommandExecutor, TabCompleter {
         if (!targetAllowed(sender, actor, target.playerId(), systemActor)) {
             return;
         }
+        if (!systemActor && !activeDuty.test(actor.id())) {
+            respond(sender, "Your active staff authority expired before the freeze change was committed.");
+            return;
+        }
         applyChange(sender, store, target, actor, change, release);
     }
 
