@@ -18,6 +18,8 @@ import net.enthusia.staff.domain.report.ReportSummary;
 
 /** Preserves report reads/submission while requiring active Staff Mode for staff state mutations. */
 public final class ActiveDutyReportStore implements ReportStore {
+    private static final UUID CONSOLE_ACTOR_ID = new UUID(0L, 0L);
+
     private final ReportStore delegate;
     private final Predicate<UUID> activeDuty;
 
@@ -49,7 +51,7 @@ public final class ActiveDutyReportStore implements ReportStore {
     @Override
     public ReportStateChangeResult changeState(ReportStateChangeRequest request) {
         Objects.requireNonNull(request, "request");
-        if (!activeDuty.test(request.actorId())) {
+        if (!CONSOLE_ACTOR_ID.equals(request.actorId()) && !activeDuty.test(request.actorId())) {
             return new ReportStateChangeResult.Rejected(
                     "ACTIVE_DUTY_REQUIRED",
                     "Enter Staff Mode before changing report state."
