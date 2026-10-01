@@ -1,0 +1,61 @@
+name: Temporary PR 276 analyzer repair
+
+on:
+  push:
+    branches:
+      - fix/velocity-private-db-file-fallback
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    if: ${{ github.actor != 'github-actions[bot]' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: fix/velocity-private-db-file-fallback
+          fetch-depth: 0
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Split database credential resolution boundaries
+        shell: python
+        run: |
+          from pathlib import Path
+
+          path = Path('velocity/src/main/java/net/enthusia/staff/velocity/VelocityConfiguration.java')
+          text = path.read_text(encoding='utf-8')
+          constant_anchor = '''    private static final String ROUTE_CLASS_VARIABLE = discordVariable("ROUTE_ENVIRONMENT");\n    private static final String STAGING_HOSTS_VARIABLE = discordVariable("STAGING_ALLOWED_HOSTS");\n'''
+          constant_replacement = constant_anchor + '''    private static final long MAX_PRIVATE_DATABASE_PROPERTIES_BYTES = 16_384L;\n'''
+          if text.count(constant_anchor) != 1:
+              raise SystemExit('constant anchor not found exactly once')
+          text = text.replace(constant_anchor, constant_replacement, 1)
+
+          start = text.index('    private static DatabaseConfig databaseFromPrivateFileOrEnvironment(')
+          end = text.index('    private static boolean present(String value) {', start)
+          replacement = '''    private static DatabaseConfig databaseFromPrivateFileOrEnvironment(\n            Path dataDirectory,\n            DatabaseCredentialSource source,\n            int poolSize,\n            long timeoutMillis,\n            String label\n    ) {\n        DatabaseCredentials environment = environmentCredentials(source);\n        if (environment.anyPresent()) {\n            return environmentDatabaseConfig(environment, poolSize, timeoutMillis, label);\n        }\n        return privateFileDatabaseConfig(dataDirectory, source, poolSize, timeoutMillis, label);\n    }\n\n    private static DatabaseCredentials environmentCredentials(DatabaseCredentialSource source) {\n        return new DatabaseCredentials(\n                System.getenv(source.urlEnvironment()),\n                System.getenv(source.usernameEnvironment()),\n                System.getenv(source.passwordEnvironment())\n        );\n    }\n\n    private static DatabaseConfig environmentDatabaseConfig(\n            DatabaseCredentials credentials,\n            int poolSize,\n            long timeoutMillis,\n            String label\n    ) {\n        if (!credentials.complete()) {\n            throw new IllegalStateException("Incomplete " + label + " environment configuration");\n        }\n        return new DatabaseConfig(\n                credentials.url(), credentials.username(), credentials.password(), poolSize, timeoutMillis\n        );\n    }\n\n    private static DatabaseConfig privateFileDatabaseConfig(\n            Path dataDirectory,\n            DatabaseCredentialSource source,\n            int poolSize,\n            long timeoutMillis,\n            String label\n    ) {\n        Properties secrets = privateDatabaseProperties(dataDirectory, label);\n        DatabaseCredentials credentials = new DatabaseCredentials(\n                secrets.getProperty(source.urlKey()),\n                secrets.getProperty(source.usernameKey()),\n                secrets.getProperty(source.passwordKey())\n        );\n        if (!credentials.complete()) {\n            throw new IllegalStateException("Private " + label + " database.properties entries are incomplete");\n        }\n        return new DatabaseConfig(\n                credentials.url().trim(), credentials.username().trim(), credentials.password(), poolSize, timeoutMillis\n        );\n    }\n\n    private static Properties privateDatabaseProperties(Path dataDirectory, String label) {\n        Path file = dataDirectory.resolve("database.properties");\n        if (!Files.isRegularFile(file, LinkOption.NOFOLLOW_LINKS)) {\n            throw new IllegalStateException("Private " + label + " database.properties file is missing");\n        }\n        try {\n            if (Files.size(file) > MAX_PRIVATE_DATABASE_PROPERTIES_BYTES) {\n                throw new IllegalStateException("Private database.properties file is too large");\n            }\n            Properties secrets = new Properties();\n            try (InputStream input = Files.newInputStream(file)) {\n                secrets.load(input);\n            }\n            return secrets;\n        } catch (IOException exception) {\n            throw new IllegalStateException("Private database.properties file cannot be read", exception);\n        }\n    }\n\n'''
+          text = text[:start] + replacement + text[end:]
+
+          record_anchor = '''    private record DatabaseCredentialSource(\n            String urlEnvironment,\n            String usernameEnvironment,\n            String passwordEnvironment,\n            String urlKey,\n            String usernameKey,\n            String passwordKey\n    ) {\n    }\n'''
+          record_replacement = '''    private record DatabaseCredentials(String url, String username, String password) {\n        private boolean anyPresent() {\n            return present(url) || present(username) || present(password);\n        }\n\n        private boolean complete() {\n            return present(url) && present(username) && present(password);\n        }\n    }\n\n''' + record_anchor
+          if text.count(record_anchor) != 1:
+              raise SystemExit('record anchor not found exactly once')
+          text = text.replace(record_anchor, record_replacement, 1)
+          path.write_text(text, encoding='utf-8')
+          Path('.github/workflows/pr276-codacy-fix.yml').unlink()
+      - name: Validate focused and Velocity module tests
+        run: |
+          ./gradlew :velocity:test --tests net.enthusia.staff.velocity.VelocityConfigurationTest --no-daemon --console=plain
+          ./gradlew :velocity:check --no-daemon --console=plain
+      - name: Commit analyzer repair and remove temporary workflow
+        run: |
+          git config user.name "wsg138"
+          git config user.email "208424056+wsg138@users.noreply.github.com"
+          git add velocity/src/main/java/net/enthusia/staff/velocity/VelocityConfiguration.java \
+                  .github/workflows/pr276-codacy-fix.yml
+          git diff --cached --check
+          git commit -m "Separate Velocity database credential resolution"
+          git push origin HEAD:fix/velocity-private-db-file-fallback
