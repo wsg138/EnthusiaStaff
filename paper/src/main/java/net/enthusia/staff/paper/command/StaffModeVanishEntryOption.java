@@ -4,26 +4,22 @@ import java.util.Optional;
 
 /** Parsed vanish behavior requested for a Staff Mode entry. */
 enum StaffModeVanishEntryOption {
-    REMEMBERED(null, false),
-    VANISHED(Boolean.TRUE, true),
-    VISIBLE(Boolean.FALSE, true);
+    REMEMBERED,
+    VANISHED,
+    VISIBLE;
 
     private static final int SINGLE_ARGUMENT = 1;
 
-    private final Boolean override;
-    private final boolean explicit;
-
-    StaffModeVanishEntryOption(Boolean override, boolean explicit) {
-        this.override = override;
-        this.explicit = explicit;
-    }
-
     Optional<Boolean> override() {
-        return Optional.ofNullable(override);
+        return switch (this) {
+            case REMEMBERED -> Optional.empty();
+            case VANISHED -> Optional.of(true);
+            case VISIBLE -> Optional.of(false);
+        };
     }
 
     boolean explicit() {
-        return explicit;
+        return this != REMEMBERED;
     }
 
     static Optional<StaffModeVanishEntryOption> parse(String[] arguments) {
