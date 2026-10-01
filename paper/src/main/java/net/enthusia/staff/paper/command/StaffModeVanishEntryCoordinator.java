@@ -70,18 +70,24 @@ public final class StaffModeVanishEntryCoordinator {
         }
     }
 
+    static EntryChoice resolveChoice(
+            StaffModeVanishEntryOption option,
+            Optional<Boolean> remembered
+    ) {
+        boolean desired = option.override().orElseGet(() -> remembered.orElse(FIRST_ENTRY_VANISHED));
+        return new EntryChoice(desired, option.explicit() || remembered.isEmpty());
+    }
+
     private void resolvePreference(UUID playerId, StaffModeVanishEntryOption option) {
         try {
             VanishStore loaded = store.get();
             if (loaded == null) {
                 throw new IllegalStateException("vanish storage is not ready");
             }
-            Optional<Boolean> remembered = loaded.preferred(playerId);
-            boolean desired = option.override().orElseGet(() -> remembered.orElse(FIRST_ENTRY_VANISHED));
-            boolean persistIfUnchanged = option.explicit() || remembered.isEmpty();
+            EntryChoice choice = resolveChoice(option, loaded.preferred(playerId));
             onEntity(
                     playerId,
-                    player -> beginEntry(player, desired, persistIfUnchanged),
+                    player -> beginEntry(player, choice.desired(), choice.persistIfUnchanged()),
                     () -> pendingEntries.remove(playerId)
             );
         } catch (RuntimeException exception) {
@@ -239,5 +245,8 @@ public final class StaffModeVanishEntryCoordinator {
                 retired.run();
             }
         });
+    }
+
+    record EntryChoice(boolean desired, boolean persistIfUnchanged) {
     }
 }
