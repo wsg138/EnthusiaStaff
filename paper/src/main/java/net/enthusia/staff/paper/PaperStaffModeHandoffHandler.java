@@ -7,6 +7,7 @@ import java.time.Duration;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
+import net.enthusia.staff.paper.staff.StaffModeManager;
 import net.enthusia.staff.protocol.ProtocolEnvelope;
 
 final class PaperStaffModeHandoffHandler {
@@ -30,6 +31,26 @@ final class PaperStaffModeHandoffHandler {
     PaperStaffModeHandoffHandler(ObjectMapper json, Operations operations) {
         this.json = java.util.Objects.requireNonNull(json, "json");
         this.operations = java.util.Objects.requireNonNull(operations, "operations");
+    }
+
+    static PaperStaffModeHandoffHandler forManager(ObjectMapper json, StaffModeManager manager) {
+        java.util.Objects.requireNonNull(manager, "manager");
+        return new PaperStaffModeHandoffHandler(json, new Operations() {
+            @Override
+            public CompletableFuture<Boolean> close(UUID playerId, UUID sessionId, long revision) {
+                return manager.closeForBackendHandoff(playerId, sessionId, revision);
+            }
+
+            @Override
+            public boolean prepare(UUID playerId, UUID transferId) {
+                return manager.prepareBackendHandoffResume(playerId, transferId);
+            }
+
+            @Override
+            public CompletableFuture<Boolean> rollback(UUID playerId, UUID transferId) {
+                return manager.rollbackBackendHandoff(playerId, transferId);
+            }
+        });
     }
 
     boolean handles(ProtocolEnvelope envelope) {
