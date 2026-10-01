@@ -81,7 +81,7 @@ public final class StaffModeVanishEntryCoordinator {
             boolean persistIfUnchanged = option.explicit() || remembered.isEmpty();
             onEntity(
                     playerId,
-                    player -> beginEntry(player, option, desired, persistIfUnchanged),
+                    player -> beginEntry(player, desired, persistIfUnchanged),
                     () -> pendingEntries.remove(playerId)
             );
         } catch (RuntimeException exception) {
@@ -91,12 +91,7 @@ public final class StaffModeVanishEntryCoordinator {
         }
     }
 
-    private void beginEntry(
-            Player player,
-            StaffModeVanishEntryOption option,
-            boolean desired,
-            boolean persistIfUnchanged
-    ) {
+    private void beginEntry(Player player, boolean desired, boolean persistIfUnchanged) {
         UUID playerId = player.getUniqueId();
         if (staffMode.active(playerId)) {
             pendingEntries.remove(playerId);
@@ -122,12 +117,11 @@ public final class StaffModeVanishEntryCoordinator {
             return;
         }
         staffMode.enter(player, rank);
-        scheduleActivationCheck(player, option, desired, persistIfUnchanged, ACTIVATION_CHECKS);
+        scheduleActivationCheck(player, desired, persistIfUnchanged, ACTIVATION_CHECKS);
     }
 
     private void scheduleActivationCheck(
             Player player,
-            StaffModeVanishEntryOption option,
             boolean desired,
             boolean persistIfUnchanged,
             int checksRemaining
@@ -135,7 +129,7 @@ public final class StaffModeVanishEntryCoordinator {
         UUID playerId = player.getUniqueId();
         if (staffMode.authorityActive(playerId)) {
             pendingEntries.remove(playerId);
-            applyDesiredState(player, option, desired, persistIfUnchanged);
+            applyDesiredState(player, desired, persistIfUnchanged);
             return;
         }
         if (checksRemaining == 0) {
@@ -151,7 +145,6 @@ public final class StaffModeVanishEntryCoordinator {
                 plugin,
                 () -> scheduleActivationCheck(
                         player,
-                        option,
                         desired,
                         persistIfUnchanged,
                         checksRemaining - 1
@@ -164,12 +157,7 @@ public final class StaffModeVanishEntryCoordinator {
         }
     }
 
-    private void applyDesiredState(
-            Player player,
-            StaffModeVanishEntryOption option,
-            boolean desired,
-            boolean persistIfUnchanged
-    ) {
+    private void applyDesiredState(Player player, boolean desired, boolean persistIfUnchanged) {
         UUID playerId = player.getUniqueId();
         if (vanish.isVanished(playerId) != desired) {
             vanish.toggle(player);
