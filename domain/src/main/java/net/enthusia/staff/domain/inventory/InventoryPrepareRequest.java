@@ -20,7 +20,8 @@ public record InventoryPrepareRequest(
         String replacementChecksum,
         byte[] replacementSnapshot,
         List<Integer> changedSlots,
-        boolean requireNetworkOffline
+        boolean requireNetworkOffline,
+        Optional<InventoryCursorTransfer> cursorTransfer
 ) {
     public InventoryPrepareRequest {
         Objects.requireNonNull(operationId, "operationId");
@@ -49,6 +50,44 @@ public record InventoryPrepareRequest(
         if (changedSlots.isEmpty() || changedSlots.stream().anyMatch(slot -> slot == null || slot < 0 || slot > 127)) {
             throw new IllegalArgumentException("changedSlots must contain valid slots");
         }
+        cursorTransfer = Objects.requireNonNull(cursorTransfer, "cursorTransfer");
+    }
+
+    public InventoryPrepareRequest(
+            UUID operationId,
+            String idempotencyKey,
+            UUID playerId,
+            String scopeId,
+            String owningServerId,
+            UUID actorId,
+            Optional<String> caseId,
+            String operationType,
+            long expectedRevision,
+            String expectedChecksum,
+            byte[] beforeSnapshot,
+            String replacementChecksum,
+            byte[] replacementSnapshot,
+            List<Integer> changedSlots,
+            boolean requireNetworkOffline
+    ) {
+        this(
+                operationId,
+                idempotencyKey,
+                playerId,
+                scopeId,
+                owningServerId,
+                actorId,
+                caseId,
+                operationType,
+                expectedRevision,
+                expectedChecksum,
+                beforeSnapshot,
+                replacementChecksum,
+                replacementSnapshot,
+                changedSlots,
+                requireNetworkOffline,
+                Optional.empty()
+        );
     }
 
     @Override
