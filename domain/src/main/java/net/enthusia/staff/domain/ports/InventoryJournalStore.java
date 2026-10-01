@@ -121,6 +121,15 @@ public interface InventoryJournalStore {
         throw new UnsupportedOperationException("cursor escrow transitions are not supported by this store");
     }
 
+    default boolean resolveCursorRollback(
+            UUID patchId,
+            UUID operationId,
+            long fencingToken,
+            Instant now
+    ) {
+        throw new UnsupportedOperationException("cursor rollback resolution is not supported by this store");
+    }
+
     InventoryFinalizeResult finalizeApplied(
             UUID patchId,
             UUID operationId,
