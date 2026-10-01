@@ -68,6 +68,7 @@ public record VelocityConfiguration(
 ) {
     private static final String ROUTE_CLASS_VARIABLE = discordVariable("ROUTE_ENVIRONMENT");
     private static final String STAGING_HOSTS_VARIABLE = discordVariable("STAGING_ALLOWED_HOSTS");
+    private static final long MAX_PRIVATE_DATABASE_PROPERTIES_BYTES = 16_384L;
 
     public VelocityConfiguration {
         backendSecretEnvironments = Map.copyOf(backendSecretEnvironments);
@@ -276,42 +277,87 @@ public record VelocityConfiguration(
             long timeoutMillis,
             String label
     ) {
-        String url = System.getenv(source.urlEnvironment());
-        String username = System.getenv(source.usernameEnvironment());
-        String password = System.getenv(source.passwordEnvironment());
-        if (present(url) || present(username) || present(password)) {
-            if (!present(url) || !present(username) || !present(password)) {
-                throw new IllegalStateException("Incomplete " + label + " environment configuration");
-            }
-            return new DatabaseConfig(url, username, password, poolSize, timeoutMillis);
+        DatabaseCredentials environment = environmentCredentials(source);
+        if (environment.anyPresent()) {
+            return environmentDatabaseConfig(environment, poolSize, timeoutMillis, label);
         }
+        return privateFileDatabaseConfig(dataDirectory, source, poolSize, timeoutMillis, label);
+    }
 
+    private static DatabaseCredentials environmentCredentials(DatabaseCredentialSource source) {
+        return new DatabaseCredentials(
+                System.getenv(source.urlEnvironment()),
+                System.getenv(source.usernameEnvironment()),
+                System.getenv(source.passwordEnvironment())
+        );
+    }
+
+    private static DatabaseConfig environmentDatabaseConfig(
+            DatabaseCredentials credentials,
+            int poolSize,
+            long timeoutMillis,
+            String label
+    ) {
+        if (!credentials.complete()) {
+            throw new IllegalStateException("Incomplete " + label + " environment configuration");
+        }
+        return new DatabaseConfig(
+                credentials.url(), credentials.username(), credentials.password(), poolSize, timeoutMillis
+        );
+    }
+
+    private static DatabaseConfig privateFileDatabaseConfig(
+            Path dataDirectory,
+            DatabaseCredentialSource source,
+            int poolSize,
+            long timeoutMillis,
+            String label
+    ) {
+        Properties secrets = privateDatabaseProperties(dataDirectory, label);
+        DatabaseCredentials credentials = new DatabaseCredentials(
+                secrets.getProperty(source.urlKey()),
+                secrets.getProperty(source.usernameKey()),
+                secrets.getProperty(source.passwordKey())
+        );
+        if (!credentials.complete()) {
+            throw new IllegalStateException("Private " + label + " database.properties entries are incomplete");
+        }
+        return new DatabaseConfig(
+                credentials.url().trim(), credentials.username().trim(), credentials.password(), poolSize, timeoutMillis
+        );
+    }
+
+    private static Properties privateDatabaseProperties(Path dataDirectory, String label) {
         Path file = dataDirectory.resolve("database.properties");
         if (!Files.isRegularFile(file, LinkOption.NOFOLLOW_LINKS)) {
             throw new IllegalStateException("Private " + label + " database.properties file is missing");
         }
-        Properties secrets = new Properties();
         try {
-            if (Files.size(file) > 16_384) {
+            if (Files.size(file) > MAX_PRIVATE_DATABASE_PROPERTIES_BYTES) {
                 throw new IllegalStateException("Private database.properties file is too large");
             }
+            Properties secrets = new Properties();
             try (InputStream input = Files.newInputStream(file)) {
                 secrets.load(input);
             }
+            return secrets;
         } catch (IOException exception) {
             throw new IllegalStateException("Private database.properties file cannot be read", exception);
         }
-        url = secrets.getProperty(source.urlKey());
-        username = secrets.getProperty(source.usernameKey());
-        password = secrets.getProperty(source.passwordKey());
-        if (!present(url) || !present(username) || !present(password)) {
-            throw new IllegalStateException("Private " + label + " database.properties entries are incomplete");
-        }
-        return new DatabaseConfig(url.trim(), username.trim(), password, poolSize, timeoutMillis);
     }
 
     private static boolean present(String value) {
         return value != null && !value.isBlank();
+    }
+
+    private record DatabaseCredentials(String url, String username, String password) {
+        private boolean anyPresent() {
+            return present(url) || present(username) || present(password);
+        }
+
+        private boolean complete() {
+            return present(url) && present(username) && present(password);
+        }
     }
 
     private record DatabaseCredentialSource(
