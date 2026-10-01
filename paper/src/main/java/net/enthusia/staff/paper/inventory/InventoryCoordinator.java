@@ -1,13 +1,13 @@
 package net.enthusia.staff.paper.inventory;
 
-import net.enthusia.staff.paper.presentation.StaffMessageStyle;
 import io.papermc.paper.threadedregions.scheduler.ScheduledTask;
 import java.time.Clock;
 import java.time.Duration;
-import java.util.ArrayList;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
@@ -17,6 +17,9 @@ import java.util.function.Supplier;
 import java.util.logging.Level;
 import net.enthusia.staff.common.IdempotencyKey;
 import net.enthusia.staff.domain.OperationalMode;
+import net.enthusia.staff.domain.inventory.InventoryCursorJournal;
+import net.enthusia.staff.domain.inventory.InventoryCursorPhase;
+import net.enthusia.staff.domain.inventory.InventoryCursorTransfer;
 import net.enthusia.staff.domain.inventory.InventoryFinalizeResult;
 import net.enthusia.staff.domain.inventory.InventoryObservation;
 import net.enthusia.staff.domain.inventory.InventoryOperationState;
@@ -29,6 +32,7 @@ import net.enthusia.staff.domain.player.PlayerPresence;
 import net.enthusia.staff.domain.ports.InventoryJournalStore;
 import net.enthusia.staff.domain.ports.PlayerDirectory;
 import net.enthusia.staff.paper.api.InventoryLockService;
+import net.enthusia.staff.paper.presentation.StaffMessageStyle;
 import net.kyori.adventure.text.Component;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
@@ -37,10 +41,13 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.entity.EntityPickupItemEvent;
+import org.bukkit.event.inventory.ClickType;
+import org.bukkit.event.inventory.InventoryAction;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryCloseEvent;
 import org.bukkit.event.inventory.InventoryDragEvent;
 import org.bukkit.event.inventory.InventoryOpenEvent;
+import org.bukkit.event.inventory.InventoryType;
 import org.bukkit.event.player.AsyncPlayerPreLoginEvent;
 import org.bukkit.event.player.PlayerAttemptPickupItemEvent;
 import org.bukkit.event.player.PlayerDropItemEvent;
@@ -51,7 +58,6 @@ import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.event.player.PlayerSwapHandItemsEvent;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
-import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.plugin.java.JavaPlugin;
 
 public final class InventoryCoordinator implements Listener, InventoryLockService, AutoCloseable {
@@ -59,6 +65,7 @@ public final class InventoryCoordinator implements Listener, InventoryLockServic
     private static final int MAX_LOGIN_APPLY_ATTEMPTS = 5;
     private static final int MAX_PENDING_PATCHES_PER_PLAYER = 1;
     private static final int PENDING_PATCH_LOOKAHEAD = 2;
+    private static final String LIVE_CURSOR_PREFIX = "ONLINE_CURSOR_";
 
     private final JavaPlugin plugin;
     private final Clock clock;
@@ -70,10 +77,15 @@ public final class InventoryCoordinator implements Listener, InventoryLockServic
     private final ExecutorService workers;
     private final InventoryEditAuthorityGate editAuthority;
     private final InventoryImageCodec codec = new InventoryImageCodec();
+    private final LiveCursorEscrow cursorEscrow;
     private final Map<UUID, LiveSession> liveSessions = new ConcurrentHashMap<>();
+    private final Map<UUID, LiveInventoryTransferExecution> viewerTransfers = new ConcurrentHashMap<>();
     private final Map<UUID, InventoryPatch> preloadedPatches = new ConcurrentHashMap<>();
-    private final java.util.Set<UUID> assetLocks = ConcurrentHashMap.newKeySet();
-    private final java.util.Set<UUID> loginBlocks = ConcurrentHashMap.newKeySet();
+    private final Map<UUID, InventoryCursorJournal> cursorRecoveries = new ConcurrentHashMap<>();
+    private final Map<UUID, Integer> recoveryAttempts = new ConcurrentHashMap<>();
+    private final Set<UUID> recoveryInFlight = ConcurrentHashMap.newKeySet();
+    private final Set<UUID> assetLocks = ConcurrentHashMap.newKeySet();
+    private final Set<UUID> loginBlocks = ConcurrentHashMap.newKeySet();
     private final ScheduledTask reconciliationTask;
 
     public InventoryCoordinator(
@@ -85,8 +97,7 @@ public final class InventoryCoordinator implements Listener, InventoryLockServic
             ExecutorService workers
     ) {
         this.plugin = java.util.Objects.requireNonNull(plugin, "plugin");
-        InventoryOperationContext operationContext =
-                java.util.Objects.requireNonNull(context, "context");
+        InventoryOperationContext operationContext = java.util.Objects.requireNonNull(context, "context");
         this.clock = operationContext.clock();
         this.scopeId = operationContext.scopeId();
         this.serverId = operationContext.serverId();
@@ -95,6 +106,7 @@ public final class InventoryCoordinator implements Listener, InventoryLockServic
         this.directory = java.util.Objects.requireNonNull(directory, "directory");
         this.workers = java.util.Objects.requireNonNull(workers, "workers");
         this.editAuthority = new InventoryEditAuthorityGate(plugin);
+        this.cursorEscrow = new LiveCursorEscrow(plugin);
         this.reconciliationTask = plugin.getServer().getGlobalRegionScheduler().runAtFixedRate(
                 plugin,
                 ignored -> reconcileViewedTargets(),
@@ -108,7 +120,9 @@ public final class InventoryCoordinator implements Listener, InventoryLockServic
             throw new IllegalArgumentException("viewer and target must be present");
         }
         if (mode.get() != OperationalMode.ACTIVE) {
-            viewer.sendMessage(StaffMessageStyle.style(Component.text("Inventory editing is available only while moderation is ACTIVE.")));
+            viewer.sendMessage(StaffMessageStyle.style(Component.text(
+                    "Inventory editing is available only while moderation is ACTIVE."
+            )));
             return;
         }
         Player online = plugin.getServer().getPlayer(target.playerId());
@@ -144,47 +158,79 @@ public final class InventoryCoordinator implements Listener, InventoryLockServic
     public void onPreLogin(AsyncPlayerPreLoginEvent event) {
         InventoryJournalStore loaded = store.get();
         if (loaded == null) {
-            if (mode.get() == OperationalMode.ACTIVE) {
-                event.disallow(
-                        AsyncPlayerPreLoginEvent.Result.KICK_OTHER,
-                        Component.text("Inventory safety verification is temporarily unavailable. Please retry.")
-                );
-            }
+            denyIfActive(event, "Inventory safety verification is temporarily unavailable. Please retry.");
             return;
         }
         try {
-            loaded.cancelAbandonedConfiscations(
-                    event.getUniqueId(),
-                    scopeId,
-                    serverId,
-                    clock.instant()
-            );
-            List<InventoryPatch> patches = loaded.pending(
-                    event.getUniqueId(),
-                    scopeId,
-                    serverId,
-                    PENDING_PATCH_LOOKAHEAD
-            );
-            if (patches.size() > MAX_PENDING_PATCHES_PER_PLAYER) {
-                loginBlocks.add(event.getUniqueId());
-                event.disallow(
-                        AsyncPlayerPreLoginEvent.Result.KICK_OTHER,
-                        Component.text("Multiple inventory recovery operations require staff review.")
-                );
+            loaded.cancelAbandonedConfiscations(event.getUniqueId(), scopeId, serverId, clock.instant());
+            if (!preloadTargetPatch(event, loaded)) {
                 return;
             }
-            if (!patches.isEmpty()) {
-                preloadedPatches.put(event.getUniqueId(), patches.getFirst());
-                loginBlocks.add(event.getUniqueId());
-            }
+            preloadActorCursorRecovery(event, loaded);
         } catch (RuntimeException exception) {
             plugin.getLogger().log(Level.SEVERE, "Inventory pre-login recovery lookup failed", exception);
-            if (mode.get() == OperationalMode.ACTIVE) {
-                event.disallow(
-                        AsyncPlayerPreLoginEvent.Result.KICK_OTHER,
-                        Component.text("Inventory safety verification failed. Please retry.")
-                );
-            }
+            denyIfActive(event, "Inventory safety verification failed. Please retry.");
+        }
+    }
+
+    private boolean preloadTargetPatch(AsyncPlayerPreLoginEvent event, InventoryJournalStore loaded) {
+        List<InventoryPatch> patches = loaded.pending(
+                event.getUniqueId(), scopeId, serverId, PENDING_PATCH_LOOKAHEAD
+        );
+        if (patches.size() > MAX_PENDING_PATCHES_PER_PLAYER) {
+            loginBlocks.add(event.getUniqueId());
+            event.disallow(
+                    AsyncPlayerPreLoginEvent.Result.KICK_OTHER,
+                    Component.text("Multiple inventory recovery operations require staff review.")
+            );
+            return false;
+        }
+        if (patches.isEmpty()) {
+            return true;
+        }
+        InventoryPatch patch = patches.getFirst();
+        preloadedPatches.put(event.getUniqueId(), patch);
+        loginBlocks.add(event.getUniqueId());
+        if (isLiveCursorPatch(patch)) {
+            loaded.cursorTransfer(patch.operationId()).ifPresent(this::rememberCursorRecovery);
+        }
+        return true;
+    }
+
+    private void preloadActorCursorRecovery(
+            AsyncPlayerPreLoginEvent event,
+            InventoryJournalStore loaded
+    ) {
+        List<InventoryCursorJournal> recoveries = loaded.pendingCursorTransfersByActor(
+                event.getUniqueId(), serverId, PENDING_PATCH_LOOKAHEAD
+        );
+        if (recoveries.size() > MAX_PENDING_PATCHES_PER_PLAYER) {
+            loginBlocks.add(event.getUniqueId());
+            event.disallow(
+                    AsyncPlayerPreLoginEvent.Result.KICK_OTHER,
+                    Component.text("Multiple cursor transfer recoveries require staff review.")
+            );
+            return;
+        }
+        if (recoveries.isEmpty()) {
+            return;
+        }
+        InventoryCursorJournal recovery = recoveries.getFirst();
+        if (!serverId.equals(recovery.patch().owningServerId())) {
+            event.disallow(
+                    AsyncPlayerPreLoginEvent.Result.KICK_OTHER,
+                    Component.text("An inventory transfer must recover on its owning backend. Please retry shortly.")
+            );
+            return;
+        }
+        rememberCursorRecovery(recovery);
+        loginBlocks.add(event.getUniqueId());
+        loginBlocks.add(recovery.patch().playerId());
+    }
+
+    private void denyIfActive(AsyncPlayerPreLoginEvent event, String detail) {
+        if (mode.get() == OperationalMode.ACTIVE) {
+            event.disallow(AsyncPlayerPreLoginEvent.Result.KICK_OTHER, Component.text(detail));
         }
     }
 
@@ -192,23 +238,114 @@ public final class InventoryCoordinator implements Listener, InventoryLockServic
     public void onJoin(PlayerJoinEvent event) {
         Player player = event.getPlayer();
         InventoryPatch patch = preloadedPatches.remove(player.getUniqueId());
-        if (patch == null) {
-            loginBlocks.remove(player.getUniqueId());
-            observe(player);
+        if (patch != null && !isLiveCursorPatch(patch)) {
+            applyPendingOnLogin(player, patch, 1);
             return;
         }
-        applyPendingOnLogin(player, patch, 1);
+        if (patch != null) {
+            loadOrResolveLiveRecovery(player, patch);
+        }
+        attemptMatchingRecoveries(player.getUniqueId());
+        if (patch == null && !hasCursorRecoveryFor(player.getUniqueId())) {
+            loginBlocks.remove(player.getUniqueId());
+            observe(player);
+        }
+    }
+
+    private void loadOrResolveLiveRecovery(Player target, InventoryPatch patch) {
+        if (cursorRecoveries.containsKey(patch.operationId())) {
+            attemptCursorRecovery(cursorRecoveries.get(patch.operationId()));
+            return;
+        }
+        submit(() -> {
+            InventoryJournalStore loaded = store.get();
+            if (loaded == null) {
+                retryLivePatchLookup(target, patch, "Inventory recovery storage is unavailable.");
+                return;
+            }
+            try {
+                Optional<InventoryCursorJournal> recovery = loaded.cursorTransfer(patch.operationId());
+                if (recovery.isPresent()) {
+                    rememberCursorRecovery(recovery.orElseThrow());
+                    attemptCursorRecovery(recovery.orElseThrow());
+                } else {
+                    resolveMissingCursorMetadata(target, patch);
+                }
+            } catch (RuntimeException exception) {
+                plugin.getLogger().log(Level.SEVERE, "Unable to load cursor recovery metadata", exception);
+                retryLivePatchLookup(target, patch, "Cursor recovery metadata lookup failed.");
+            }
+        });
+    }
+
+    private void retryLivePatchLookup(Player target, InventoryPatch patch, String detail) {
+        loginBlocks.add(target.getUniqueId());
+        message(target, detail);
+        plugin.getServer().getGlobalRegionScheduler().runDelayed(
+                plugin,
+                ignored -> loadOrResolveLiveRecovery(target, patch),
+                20L
+        );
+    }
+
+    private void resolveMissingCursorMetadata(Player target, InventoryPatch original) {
+        InventoryJournalStore loaded = store.get();
+        if (loaded == null) {
+            return;
+        }
+        InventoryPatch claimed = loaded.claimForApply(
+                original.patchId(), original.operationId(), APPLY_LEASE, clock.instant()
+        ).orElse(null);
+        if (claimed == null) {
+            retryLivePatchLookup(target, original, "Inventory recovery lease is busy.");
+            return;
+        }
+        if (claimed.state() == InventoryOperationState.APPLIED) {
+            loginBlocks.remove(target.getUniqueId());
+            return;
+        }
+        onEntity(target, () -> verifyMissingMetadataBeforeState(target, claimed));
+    }
+
+    private void verifyMissingMetadataBeforeState(Player target, InventoryPatch patch) {
+        InventoryImageCodec.EncodedImage current = codec.encodeWithChecksum(codec.capture(target));
+        if (!current.checksum().equals(patch.expectedChecksum())) {
+            keepRecoveryBlocked(
+                    patch.playerId(),
+                    patch.actorId(),
+                    patch.operationId(),
+                    "Live cursor metadata is missing and target state is not the prepared before-state."
+            );
+            return;
+        }
+        submit(() -> {
+            InventoryJournalStore loaded = store.get();
+            if (loaded != null && loaded.resolveCursorRollback(
+                    patch.patchId(), patch.operationId(), patch.fencingToken(), clock.instant()
+            )) {
+                loginBlocks.remove(target.getUniqueId());
+                observeEncoded(target.getUniqueId(), current);
+            } else {
+                keepRecoveryBlocked(
+                        patch.playerId(), patch.actorId(), patch.operationId(),
+                        "Unable to resolve a metadata-free live cursor preparation."
+                );
+            }
+        });
     }
 
     @EventHandler(priority = EventPriority.MONITOR)
     public void onQuit(PlayerQuitEvent event) {
         Player player = event.getPlayer();
-        closeTargetViews(player.getUniqueId(), "The target left this backend; any durable edit remains queued.");
+        handleTargetDeparture(player);
+        handleViewerDeparture(player);
+        closeTargetViews(player.getUniqueId(), "The target left this backend.");
         if (!isLocked(player.getUniqueId())) {
             observe(player);
         }
-        assetLocks.remove(player.getUniqueId());
-        loginBlocks.remove(player.getUniqueId());
+        if (!assetLocks.contains(player.getUniqueId()) && !hasCursorRecoveryFor(player.getUniqueId())) {
+            loginBlocks.remove(player.getUniqueId());
+        }
         preloadedPatches.remove(player.getUniqueId());
     }
 
@@ -217,15 +354,26 @@ public final class InventoryCoordinator implements Listener, InventoryLockServic
         if (!(event.getWhoClicked() instanceof Player viewer)) {
             return;
         }
-        if (restricted(viewer.getUniqueId())) {
+        if (interactionRestricted(viewer.getUniqueId())) {
             event.setCancelled(true);
             return;
         }
         if (!(event.getView().getTopInventory().getHolder(false) instanceof ModerationInventoryHolder holder)) {
             return;
         }
-        event.setCancelled(true);
-        editClickedSlot(event, viewer, holder);
+        if (!holder.viewerId().equals(viewer.getUniqueId())) {
+            event.setCancelled(true);
+            return;
+        }
+        int topSize = event.getView().getTopInventory().getSize();
+        if (event.getRawSlot() >= 0 && event.getRawSlot() < topSize) {
+            event.setCancelled(true);
+            editClickedSlot(event, viewer, holder);
+            return;
+        }
+        if (event.getRawSlot() >= topSize && !safeLowerInventoryAction(event.getAction())) {
+            event.setCancelled(true);
+        }
     }
 
     private void editClickedSlot(
@@ -233,50 +381,76 @@ public final class InventoryCoordinator implements Listener, InventoryLockServic
             Player viewer,
             ModerationInventoryHolder holder
     ) {
-        if (!holder.viewerId().equals(viewer.getUniqueId()) || event.getRawSlot() < 0
-                || event.getRawSlot() >= event.getView().getTopInventory().getSize()) {
-            return;
-        }
         if (!viewer.hasPermission(InventoryEditAuthorityGate.EDIT_PERMISSION)) {
-            viewer.sendMessage(StaffMessageStyle.style(Component.text("You may inspect this inventory but not edit it.")));
+            viewer.sendMessage(StaffMessageStyle.style(Component.text(
+                    "You may inspect this inventory but not edit it."
+            )));
             return;
         }
         int logicalSlot = holder.logicalSlot(event.getRawSlot());
         if (logicalSlot < 0) {
             return;
         }
-        if (event.isShiftClick()) {
-            viewer.sendMessage(StaffMessageStyle.style(Component.text("Shift-click selection is reserved for the confiscation workflow.")));
+        if (holder.offline()) {
+            applyOfflineClickedEdit(event, holder, logicalSlot);
             return;
         }
-        applyClickedEdit(event, viewer, holder, logicalSlot);
+        applyLiveClickedEdit(event, viewer, holder, logicalSlot);
     }
 
-    private void applyClickedEdit(
+    private void applyLiveClickedEdit(
             InventoryClickEvent event,
             Player viewer,
             ModerationInventoryHolder holder,
             int logicalSlot
     ) {
-        ItemStack replacement = replacement(
+        LiveInventoryTransferDecision.Click click = supportedClick(event.getClick());
+        if (click == null) {
+            return;
+        }
+        LiveSession session = liveSessions.get(holder.targetId());
+        if (session == null) {
+            message(viewer, "That live inventory session ended; reopen the view.");
+            return;
+        }
+        InventoryImage before = session.image();
+        ItemStack authoritative = before.item(logicalSlot);
+        if (!LiveInventoryTransferDecision.same(authoritative, event.getCurrentItem())) {
+            renderHolderFromSession(holder, session);
+            return;
+        }
+        LiveInventoryTransferDecision.Decision decision = LiveInventoryTransferDecision.decide(
+                authoritative, event.getCursor(), click
+        );
+        if (!decision.changed()) {
+            return;
+        }
+        InventoryImage replacement = before.withItem(logicalSlot, decision.targetAfter());
+        startLiveTransfer(viewer, session, new LiveInventoryTransferExecution(
+                UUID.randomUUID(), viewer.getUniqueId(), holder.targetId(), holder.kind(), logicalSlot,
+                before, replacement, event.getCursor(), decision.cursorAfter(), decision.action()
+        ));
+    }
+
+    private void applyOfflineClickedEdit(
+            InventoryClickEvent event,
+            ModerationInventoryHolder holder,
+            int logicalSlot
+    ) {
+        if (event.isShiftClick()) {
+            return;
+        }
+        ItemStack replacement = offlineReplacement(
                 holder.image().item(logicalSlot),
                 event.getCursor(),
                 event.isLeftClick(),
                 event.isRightClick()
         );
         if (replacement == EditRejected.ITEM) {
-            viewer.sendMessage(StaffMessageStyle.style(Component.text(
-                    "Use left click to replace/remove a stack or right click to add/remove one item."
-            )));
             return;
         }
-        InventoryImage next = holder.image().withItem(logicalSlot, replacement);
-        if (holder.offline()) {
-            holder.image(next, true);
-            render(holder);
-        } else {
-            editLive(viewer, holder, next, logicalSlot);
-        }
+        holder.image(holder.image().withItem(logicalSlot, replacement), true);
+        render(holder, holder.image());
     }
 
     @EventHandler(priority = EventPriority.HIGHEST)
@@ -284,79 +458,133 @@ public final class InventoryCoordinator implements Listener, InventoryLockServic
         if (!(event.getWhoClicked() instanceof Player viewer)) {
             return;
         }
-        if (restricted(viewer.getUniqueId())
-                || event.getView().getTopInventory().getHolder(false) instanceof ModerationInventoryHolder) {
+        if (interactionRestricted(viewer.getUniqueId())) {
             event.setCancelled(true);
+            return;
+        }
+        if (!(event.getView().getTopInventory().getHolder(false) instanceof ModerationInventoryHolder)) {
+            return;
+        }
+        int topSize = event.getView().getTopInventory().getSize();
+        if (event.getRawSlots().stream().anyMatch(slot -> slot < topSize)) {
+            event.setCancelled(true);
+        }
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onTargetInventoryClick(InventoryClickEvent event) {
+        if (!(event.getWhoClicked() instanceof Player player)) {
+            return;
+        }
+        scheduleTargetRefresh(player, ModerationInventoryHolder.Kind.PLAYER);
+        if (event.getView().getTopInventory().getType() == InventoryType.ENDER_CHEST) {
+            scheduleTargetRefresh(player, ModerationInventoryHolder.Kind.ENDER_CHEST);
+        }
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onTargetInventoryDrag(InventoryDragEvent event) {
+        if (!(event.getWhoClicked() instanceof Player player)) {
+            return;
+        }
+        scheduleTargetRefresh(player, ModerationInventoryHolder.Kind.PLAYER);
+        if (event.getView().getTopInventory().getType() == InventoryType.ENDER_CHEST) {
+            scheduleTargetRefresh(player, ModerationInventoryHolder.Kind.ENDER_CHEST);
         }
     }
 
     @EventHandler(priority = EventPriority.MONITOR)
     public void onClose(InventoryCloseEvent event) {
-        if (!(event.getPlayer() instanceof Player viewer)
-                || !(event.getInventory().getHolder(false) instanceof ModerationInventoryHolder holder)
-                || !holder.closeOnce()) {
+        if (!(event.getPlayer() instanceof Player viewer)) {
             return;
         }
+        if (event.getInventory().getHolder(false) instanceof ModerationInventoryHolder holder
+                && holder.closeOnce()) {
+            closeModerationView(viewer, holder);
+        }
+        scheduleTargetRefresh(viewer, ModerationInventoryHolder.Kind.PLAYER);
+        if (event.getInventory().getType() == InventoryType.ENDER_CHEST) {
+            scheduleTargetRefresh(viewer, ModerationInventoryHolder.Kind.ENDER_CHEST);
+        }
+    }
+
+    private void closeModerationView(Player viewer, ModerationInventoryHolder holder) {
         if (holder.offline()) {
             queueOfflineEdit(viewer, holder);
             return;
         }
         LiveSession session = liveSessions.get(holder.targetId());
-        if (session != null) {
-            session.removeViewer(holder.viewerId());
-            if (session.removable()) {
-                liveSessions.remove(holder.targetId(), session);
-            }
+        if (session == null) {
+            return;
+        }
+        session.removeViewer(holder.viewerId());
+        if (session.removable()) {
+            liveSessions.remove(holder.targetId(), session);
         }
     }
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     public void onLockedOpen(InventoryOpenEvent event) {
-        if (event.getPlayer() instanceof Player player && restricted(player.getUniqueId())) {
+        if (event.getPlayer() instanceof Player player && interactionRestricted(player.getUniqueId())) {
             event.setCancelled(true);
         }
     }
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     public void onLockedDrop(PlayerDropItemEvent event) {
-        if (restricted(event.getPlayer().getUniqueId())) {
+        if (interactionRestricted(event.getPlayer().getUniqueId())) {
             event.setCancelled(true);
+            return;
         }
+        scheduleTargetRefresh(event.getPlayer(), ModerationInventoryHolder.Kind.PLAYER);
     }
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     public void onLockedPickup(PlayerAttemptPickupItemEvent event) {
-        if (restricted(event.getPlayer().getUniqueId())) {
+        if (interactionRestricted(event.getPlayer().getUniqueId())) {
             event.setCancelled(true);
+            return;
         }
+        scheduleTargetRefresh(event.getPlayer(), ModerationInventoryHolder.Kind.PLAYER);
     }
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     public void onLockedEntityPickup(EntityPickupItemEvent event) {
-        if (event.getEntity() instanceof Player player && restricted(player.getUniqueId())) {
-            event.setCancelled(true);
+        if (!(event.getEntity() instanceof Player player)) {
+            return;
         }
+        if (interactionRestricted(player.getUniqueId())) {
+            event.setCancelled(true);
+            return;
+        }
+        scheduleTargetRefresh(player, ModerationInventoryHolder.Kind.PLAYER);
     }
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     public void onLockedSwap(PlayerSwapHandItemsEvent event) {
-        if (restricted(event.getPlayer().getUniqueId())) {
+        if (interactionRestricted(event.getPlayer().getUniqueId())) {
             event.setCancelled(true);
+            return;
         }
+        scheduleTargetRefresh(event.getPlayer(), ModerationInventoryHolder.Kind.PLAYER);
     }
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     public void onLockedHeldSlot(PlayerItemHeldEvent event) {
-        if (restricted(event.getPlayer().getUniqueId())) {
+        if (interactionRestricted(event.getPlayer().getUniqueId())) {
             event.setCancelled(true);
+            return;
         }
+        scheduleTargetRefresh(event.getPlayer(), ModerationInventoryHolder.Kind.PLAYER);
     }
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     public void onLockedInteract(PlayerInteractEvent event) {
-        if (restricted(event.getPlayer().getUniqueId())) {
+        if (interactionRestricted(event.getPlayer().getUniqueId())) {
             event.setCancelled(true);
+            return;
         }
+        scheduleTargetRefresh(event.getPlayer(), ModerationInventoryHolder.Kind.PLAYER);
     }
 
     private void openLive(
@@ -365,31 +593,46 @@ public final class InventoryCoordinator implements Listener, InventoryLockServic
             Player online,
             ModerationInventoryHolder.Kind kind
     ) {
+        LiveSession existing = liveSessions.get(target.playerId());
+        if (existing != null) {
+            openView(viewer, target, kind, false, existing.observation(), existing.image(), existing);
+            return;
+        }
         online.getScheduler().execute(plugin, () -> {
             InventoryImage image = codec.capture(online);
             InventoryImageCodec.EncodedImage encoded = codec.encodeWithChecksum(image);
-            submit(() -> {
-                InventoryJournalStore loaded = store.get();
-                if (loaded == null) {
-                    message(viewer, "Inventory storage is not ready; the view was not opened.");
-                    return;
-                }
-                try {
-                    InventoryObservation observation = loaded.recordObservation(
-                            target.playerId(), scopeId, serverId, encoded.checksum(), encoded.bytes(), clock.instant()
-                    );
-                    LiveSession session = liveSessions.compute(target.playerId(), (ignored, existing) -> {
-                        LiveSession selected = existing == null ? new LiveSession(target.playerId()) : existing;
-                        selected.observed(observation, image);
-                        return selected;
-                    });
-                    openView(viewer, target, kind, false, observation, image, session);
-                } catch (RuntimeException exception) {
-                    plugin.getLogger().log(Level.SEVERE, "Unable to prepare a live inventory view", exception);
-                    message(viewer, "The live inventory could not be journaled; no view was opened.");
-                }
-            });
+            submit(() -> createLiveSession(viewer, target, kind, image, encoded));
         }, () -> openOffline(viewer, target, kind), 1L);
+    }
+
+    private void createLiveSession(
+            Player viewer,
+            PlayerIdentity target,
+            ModerationInventoryHolder.Kind kind,
+            InventoryImage image,
+            InventoryImageCodec.EncodedImage encoded
+    ) {
+        InventoryJournalStore loaded = store.get();
+        if (loaded == null) {
+            message(viewer, "Inventory storage is not ready; the view was not opened.");
+            return;
+        }
+        try {
+            InventoryObservation observation = loaded.recordObservation(
+                    target.playerId(), scopeId, serverId, encoded.checksum(), encoded.bytes(), clock.instant()
+            );
+            LiveSession session = liveSessions.compute(target.playerId(), (ignored, current) -> {
+                LiveSession selected = current == null ? new LiveSession(target.playerId()) : current;
+                if (!selected.working()) {
+                    selected.observed(observation, image);
+                }
+                return selected;
+            });
+            openView(viewer, target, kind, false, session.observation(), session.image(), session);
+        } catch (RuntimeException exception) {
+            plugin.getLogger().log(Level.SEVERE, "Unable to prepare a live inventory view", exception);
+            message(viewer, "The live inventory could not be journaled; no view was opened.");
+        }
     }
 
     private void openOffline(
@@ -415,8 +658,7 @@ public final class InventoryCoordinator implements Listener, InventoryLockServic
                     message(viewer, "This backend has no authoritative offline snapshot for that inventory scope.");
                     return;
                 }
-                InventoryImage image = codec.decode(observation.snapshot());
-                openView(viewer, target, kind, true, observation, image, null);
+                openView(viewer, target, kind, true, observation, codec.decode(observation.snapshot()), null);
             } catch (RuntimeException exception) {
                 plugin.getLogger().log(Level.SEVERE, "Unable to load an offline inventory view", exception);
                 message(viewer, "The offline inventory could not be loaded safely.");
@@ -458,60 +700,68 @@ public final class InventoryCoordinator implements Listener, InventoryLockServic
             if (session != null) {
                 session.addViewer(holder);
             }
-            render(holder);
+            render(holder, image);
             viewer.openInventory(inventory);
-            viewer.sendMessage(StaffMessageStyle.style(Component.text(
-                    "Editor: held cursor + left click replaces; empty cursor + left click removes; right click adjusts one."
-            )));
         });
     }
 
-    private void editLive(
+    private void startLiveTransfer(
             Player viewer,
-            ModerationInventoryHolder holder,
-            InventoryImage replacement,
-            int changedSlot
+            LiveSession session,
+            LiveInventoryTransferExecution transfer
     ) {
-        LiveSession session = liveSessions.get(holder.targetId());
-        if (session == null || !session.beginEdit()) {
-            viewer.sendMessage(StaffMessageStyle.style(Component.text("That inventory is synchronizing; retry the edit.")));
+        if (!session.beginEdit(transfer)) {
+            renderHolderFromSession(findHolder(session, viewer.getUniqueId()), session);
             return;
         }
-        Player target = plugin.getServer().getPlayer(holder.targetId());
+        if (!assetLocks.add(transfer.targetId())) {
+            session.finishTransfer(transfer);
+            message(viewer, "Another asset operation already owns this player.");
+            return;
+        }
+        if (viewerTransfers.putIfAbsent(transfer.viewerId(), transfer) != null) {
+            assetLocks.remove(transfer.targetId());
+            session.finishTransfer(transfer);
+            message(viewer, "Your previous inventory transfer is still finishing.");
+            return;
+        }
+        Player target = plugin.getServer().getPlayer(transfer.targetId());
         if (target == null) {
-            session.finishWork();
-            viewer.sendMessage(StaffMessageStyle.style(Component.text("The target left; reopen the offline view after its snapshot is recorded.")));
+            finishLiveFailure(viewer, session, transfer, "The target left before the transfer started.");
             return;
         }
-        InventoryObservation before = session.observation();
-        InventoryImageCodec.EncodedImage replacementBytes = codec.encodeWithChecksum(replacement);
-        UUID operationId = UUID.randomUUID();
-        InventoryPrepareRequest request = new InventoryPrepareRequest(
-                operationId,
-                new IdempotencyKey("inventory:live:" + operationId).value(),
-                holder.targetId(),
+        InventoryPrepareRequest request = livePrepareRequest(transfer, session.observation());
+        if (!submit(() -> prepareAndApplyLive(viewer, target, session, request, transfer))) {
+            finishLiveFailure(viewer, session, transfer, "The inventory worker queue is busy; retry the transfer.");
+        }
+    }
+
+    private InventoryPrepareRequest livePrepareRequest(
+            LiveInventoryTransferExecution transfer,
+            InventoryObservation before
+    ) {
+        InventoryImageCodec.EncodedImage replacementBytes = codec.encodeWithChecksum(transfer.replacementImage());
+        InventoryCursorTransfer cursor = cursorEscrow.durableTransfer(
+                transfer.expectedCursor(), transfer.resultingCursor()
+        );
+        return new InventoryPrepareRequest(
+                transfer.operationId(),
+                new IdempotencyKey("inventory:live-cursor:" + transfer.operationId()).value(),
+                transfer.targetId(),
                 scopeId,
                 serverId,
-                viewer.getUniqueId(),
+                transfer.viewerId(),
                 Optional.empty(),
-                "ONLINE_EDIT",
+                LIVE_CURSOR_PREFIX + transfer.action().name(),
                 before.revision(),
                 before.checksum(),
                 before.snapshot(),
                 replacementBytes.checksum(),
                 replacementBytes.bytes(),
-                List.of(changedSlot),
-                false
+                List.of(transfer.logicalSlot()),
+                false,
+                Optional.of(cursor)
         );
-        if (!assetLocks.add(holder.targetId())) {
-            session.finishWork();
-            viewer.sendMessage(StaffMessageStyle.style(Component.text("Another asset operation already owns this player.")));
-            return;
-        }
-        if (!submit(() -> prepareAndApplyLive(viewer, target, session, request, replacement))) {
-            assetLocks.remove(holder.targetId());
-            session.finishWork();
-        }
     }
 
     private void prepareAndApplyLive(
@@ -519,35 +769,36 @@ public final class InventoryCoordinator implements Listener, InventoryLockServic
             Player target,
             LiveSession session,
             InventoryPrepareRequest request,
-            InventoryImage replacement
+            LiveInventoryTransferExecution transfer
     ) {
         if (!editAuthority.current(viewer)) {
             finishLiveFailure(
-                    viewer,
-                    session,
-                    request.playerId(),
-                    "Your inventory edit authority changed; no durable edit was prepared."
+                    viewer, session, transfer,
+                    "Your inventory edit authority changed; no durable transfer was prepared."
             );
             return;
         }
         InventoryJournalStore loaded = store.get();
         if (loaded == null) {
-            finishLiveFailure(viewer, session, request.playerId(), "Inventory storage became unavailable.");
+            finishLiveFailure(viewer, session, transfer, "Inventory storage became unavailable.");
             return;
         }
         try {
-            InventoryPatch patch = prepareAndClaimLivePatch(loaded, viewer, session, request);
+            InventoryPatch patch = prepareAndClaimLivePatch(loaded, viewer, session, request, transfer);
             if (patch == null) {
                 return;
             }
             if (patch.state() == InventoryOperationState.APPLIED) {
-                completeReplayedLiveEdit(viewer, session, request.playerId());
+                finishLiveFailure(viewer, session, transfer, "This durable transfer was already resolved.");
+                reconcile(session);
                 return;
             }
-            scheduleLiveApplication(viewer, target, session, patch, replacement);
+            transfer.patch(patch);
+            scheduleSourceEscrow(viewer, target, session, patch, transfer);
         } catch (RuntimeException exception) {
             plugin.getLogger().log(Level.SEVERE, "Live inventory operation preparation failed", exception);
-            finishLiveFailure(viewer, session, request.playerId(), "The inventory edit failed before target state changed.");
+            quarantineTransfer(transfer, "LIVE_PREPARE_FAILED", "Live cursor transfer preparation failed");
+            finishLiveFailure(viewer, session, transfer, "The inventory transfer failed before target state changed.");
         }
     }
 
@@ -555,36 +806,81 @@ public final class InventoryCoordinator implements Listener, InventoryLockServic
             InventoryJournalStore loaded,
             Player viewer,
             LiveSession session,
-            InventoryPrepareRequest request
+            InventoryPrepareRequest request,
+            LiveInventoryTransferExecution transfer
     ) {
         InventoryPreparation preparation = loaded.prepare(request, APPLY_LEASE, clock.instant());
         if (preparation.patch().isEmpty()) {
-            finishLiveFailure(viewer, session, request.playerId(), preparation.detail());
+            finishLiveFailure(viewer, session, transfer, preparation.detail());
             reconcile(session);
             return null;
         }
+        InventoryPatch prepared = preparation.patch().orElseThrow();
+        transfer.patch(prepared);
         InventoryPatch patch = loaded.claimForApply(
-                preparation.patch().orElseThrow().patchId(),
-                request.operationId(),
-                APPLY_LEASE,
-                clock.instant()
+                prepared.patchId(), request.operationId(), APPLY_LEASE, clock.instant()
         ).orElse(null);
         if (patch == null) {
-            finishLiveFailure(
-                    viewer,
-                    session,
-                    request.playerId(),
-                    "The prepared inventory lease could not be claimed."
-            );
+            quarantineTransfer(transfer, "LIVE_CLAIM_FAILED", "Prepared live cursor transfer could not be claimed");
+            finishLiveFailure(viewer, session, transfer, "The prepared inventory transfer lease could not be claimed.");
         }
         return patch;
     }
 
-    private void completeReplayedLiveEdit(Player viewer, LiveSession session, UUID playerId) {
-        assetLocks.remove(playerId);
-        session.finishWork();
-        message(viewer, "That exact inventory edit was already committed.");
-        reconcile(session);
+    private void scheduleSourceEscrow(
+            Player viewer,
+            Player target,
+            LiveSession session,
+            InventoryPatch patch,
+            LiveInventoryTransferExecution transfer
+    ) {
+        viewer.getScheduler().execute(
+                plugin,
+                () -> escrowSourceOnViewer(viewer, target, session, patch, transfer),
+                () -> failClosedTransfer(
+                        viewer, session, transfer,
+                        "The Staff viewer left before cursor escrow could be verified."
+                ),
+                1L
+        );
+    }
+
+    private void escrowSourceOnViewer(
+            Player viewer,
+            Player target,
+            LiveSession session,
+            InventoryPatch patch,
+            LiveInventoryTransferExecution transfer
+    ) {
+        if (!viewer.isOnline() || !cursorEscrow.escrowSource(viewer, transfer)) {
+            restoreSourceThenResolve(
+                    viewer, session, transfer,
+                    "Your cursor changed before the transfer started."
+            );
+            return;
+        }
+        submit(() -> advanceSourceEscrowPhase(viewer, target, session, patch, transfer));
+    }
+
+    private void advanceSourceEscrowPhase(
+            Player viewer,
+            Player target,
+            LiveSession session,
+            InventoryPatch patch,
+            LiveInventoryTransferExecution transfer
+    ) {
+        InventoryJournalStore loaded = store.get();
+        if (loaded == null || !loaded.advanceCursorPhase(
+                patch.patchId(), patch.operationId(), patch.fencingToken(),
+                InventoryCursorPhase.PREPARED, InventoryCursorPhase.SOURCE_ESCROWED, clock.instant()
+        )) {
+            restoreSourceThenResolve(
+                    viewer, session, transfer,
+                    "Durable cursor escrow could not be fenced."
+            );
+            return;
+        }
+        scheduleLiveApplication(viewer, target, session, patch, transfer);
     }
 
     private void scheduleLiveApplication(
@@ -592,16 +888,12 @@ public final class InventoryCoordinator implements Listener, InventoryLockServic
             Player target,
             LiveSession session,
             InventoryPatch patch,
-            InventoryImage replacement
+            LiveInventoryTransferExecution transfer
     ) {
         target.getScheduler().execute(
                 plugin,
-                () -> applyLiveOnTarget(viewer, target, session, patch, replacement),
-                () -> {
-                    assetLocks.remove(target.getUniqueId());
-                    session.finishWork();
-                    message(viewer, "The target left; the durable patch will apply before their next interaction.");
-                },
+                () -> applyLiveOnTarget(viewer, target, session, patch, transfer),
+                () -> handleRetiredTarget(viewer, session, transfer),
                 1L
         );
     }
@@ -611,49 +903,144 @@ public final class InventoryCoordinator implements Listener, InventoryLockServic
             Player target,
             LiveSession session,
             InventoryPatch patch,
-            InventoryImage replacement
+            LiveInventoryTransferExecution transfer
     ) {
-        InventoryImage current = codec.capture(target);
-        InventoryImageCodec.EncodedImage currentBytes = codec.encodeWithChecksum(current);
-        try {
-            InventoryImage applied;
-            InventoryImageCodec.EncodedImage appliedBytes;
-            switch (InventoryPatchDecision.decide(
-                    currentBytes.checksum(),
-                    patch.expectedChecksum(),
-                    patch.replacementChecksum()
-            )) {
-                case APPLY_REPLACEMENT -> {
-                    codec.apply(target, replacement);
-                    applied = codec.capture(target);
-                    appliedBytes = codec.encodeWithChecksum(applied);
-                }
-                case FINALIZE_ALREADY_APPLIED -> {
-                    applied = current;
-                    appliedBytes = currentBytes;
-                }
-                case QUARANTINE_CONFLICT -> {
-                    submit(() -> {
-                        quarantine(patch, "LIVE_STATE_CHANGED", "Target inventory changed after the edit was prepared");
-                        finishLiveFailure(
-                                viewer,
-                                session,
-                                target.getUniqueId(),
-                                "The target inventory changed; the edit was rejected."
-                        );
-                        reconcile(session);
-                    });
-                    return;
-                }
-                default -> throw new IllegalStateException("Unhandled inventory patch decision");
+        AtomicBoolean unsafeMutation = new AtomicBoolean();
+        boolean applied = transfer.applyTarget(() -> applyTargetSlot(target, patch, transfer, unsafeMutation));
+        if (!applied) {
+            if (unsafeMutation.get()) {
+                failClosedTransfer(viewer, session, transfer, "Target rollback could not be verified.");
+            } else {
+                restoreSourceThenResolve(
+                        viewer, session, transfer,
+                        "Target inventory changed before the cursor transfer could commit."
+                );
             }
-            submit(() -> finalizeLive(viewer, session, patch, applied, appliedBytes));
+            return;
+        }
+        submit(() -> advanceTargetAppliedPhase(viewer, target, session, patch, transfer));
+    }
+
+    private boolean applyTargetSlot(
+            Player target,
+            InventoryPatch patch,
+            LiveInventoryTransferExecution transfer,
+            AtomicBoolean unsafeMutation
+    ) {
+        InventoryImageCodec.EncodedImage current = codec.encodeWithChecksum(codec.capture(target));
+        if (!current.checksum().equals(patch.expectedChecksum())) {
+            return false;
+        }
+        try {
+            codec.applySlots(target, transfer.replacementImage(), List.of(transfer.logicalSlot()));
+            InventoryImageCodec.EncodedImage applied = codec.encodeWithChecksum(codec.capture(target));
+            if (applied.checksum().equals(patch.replacementChecksum())) {
+                return true;
+            }
+            unsafeMutation.set(!restoreTargetSlot(target, patch.expectedChecksum(), transfer));
+            return false;
         } catch (RuntimeException exception) {
-            plugin.getLogger().log(Level.SEVERE, "Live inventory application failed", exception);
-            submit(() -> {
-                quarantine(patch, "BUKKIT_APPLY_FAILED", "Paper inventory application failed");
-                finishLiveFailure(viewer, session, target.getUniqueId(), "The target edit failed and requires review.");
-            });
+            plugin.getLogger().log(Level.SEVERE, "Live target inventory mutation failed", exception);
+            unsafeMutation.set(!restoreTargetSlot(target, patch.expectedChecksum(), transfer));
+            return false;
+        }
+    }
+
+    private void advanceTargetAppliedPhase(
+            Player viewer,
+            Player target,
+            LiveSession session,
+            InventoryPatch patch,
+            LiveInventoryTransferExecution transfer
+    ) {
+        InventoryJournalStore loaded = store.get();
+        if (loaded == null || !loaded.advanceCursorPhase(
+                patch.patchId(), patch.operationId(), patch.fencingToken(),
+                InventoryCursorPhase.SOURCE_ESCROWED, InventoryCursorPhase.TARGET_APPLIED, clock.instant()
+        )) {
+            rollbackTargetThenRestore(viewer, target, session, transfer, "Target phase fencing failed.");
+            return;
+        }
+        scheduleCursorApplication(viewer, target, session, patch, transfer);
+    }
+
+    private void scheduleCursorApplication(
+            Player viewer,
+            Player target,
+            LiveSession session,
+            InventoryPatch patch,
+            LiveInventoryTransferExecution transfer
+    ) {
+        viewer.getScheduler().execute(
+                plugin,
+                () -> applyCursorOnViewer(viewer, target, session, patch, transfer),
+                () -> failClosedTransfer(
+                        viewer, session, transfer,
+                        "The Staff viewer disconnected after the target change was fenced."
+                ),
+                1L
+        );
+    }
+
+    private void applyCursorOnViewer(
+            Player viewer,
+            Player target,
+            LiveSession session,
+            InventoryPatch patch,
+            LiveInventoryTransferExecution transfer
+    ) {
+        boolean cursorApplied = transfer.applyCursor(() -> cursorEscrow.applyResult(viewer, transfer));
+        if (!cursorApplied) {
+            rollbackTargetThenRestore(
+                    viewer, target, session, transfer,
+                    "Your cursor changed while the transfer was committing."
+            );
+            return;
+        }
+        session.imageOnly(transfer.replacementImage());
+        renderSession(session, EnumSet.of(transfer.kind()));
+        submit(() -> advanceCursorAppliedPhase(viewer, session, patch, transfer));
+    }
+
+    private void advanceCursorAppliedPhase(
+            Player viewer,
+            LiveSession session,
+            InventoryPatch patch,
+            LiveInventoryTransferExecution transfer
+    ) {
+        InventoryJournalStore loaded = store.get();
+        if (loaded == null || !loaded.advanceCursorPhase(
+                patch.patchId(), patch.operationId(), patch.fencingToken(),
+                InventoryCursorPhase.TARGET_APPLIED, InventoryCursorPhase.CURSOR_APPLIED, clock.instant()
+        )) {
+            failClosedTransfer(
+                    viewer, session, transfer,
+                    "Both inventories changed, but durable cursor completion could not be fenced."
+            );
+            return;
+        }
+        onEntity(viewer, () -> settleCursorThenFinalize(viewer, session, patch, transfer));
+    }
+
+    private void settleCursorThenFinalize(
+            Player viewer,
+            LiveSession session,
+            InventoryPatch patch,
+            LiveInventoryTransferExecution transfer
+    ) {
+        if (!cursorEscrow.settleResult(viewer, transfer)) {
+            failClosedTransfer(
+                    viewer, session, transfer,
+                    "The Staff cursor result could not be verified after durable fencing."
+            );
+            return;
+        }
+        InventoryImageCodec.EncodedImage applied = codec.encodeWithChecksum(transfer.replacementImage());
+        if (!submit(() -> finalizeLive(viewer, session, patch, transfer, applied))) {
+            failClosedTransfer(
+                    viewer, session, transfer,
+                    "The transfer completed physically but durable finalization is pending."
+            );
         }
     }
 
@@ -661,44 +1048,578 @@ public final class InventoryCoordinator implements Listener, InventoryLockServic
             Player viewer,
             LiveSession session,
             InventoryPatch patch,
-            InventoryImage applied,
+            LiveInventoryTransferExecution transfer,
             InventoryImageCodec.EncodedImage appliedBytes
     ) {
         try {
-            InventoryFinalizeResult result = store.get().finalizeApplied(
-                    patch.patchId(),
-                    patch.operationId(),
-                    patch.fencingToken(),
-                    appliedBytes.checksum(),
-                    appliedBytes.bytes(),
-                    clock.instant()
+            InventoryJournalStore loaded = store.get();
+            if (loaded == null) {
+                failClosedTransfer(viewer, session, transfer, "Durable inventory finalization is unavailable.");
+                return;
+            }
+            InventoryFinalizeResult result = loaded.finalizeApplied(
+                    patch.patchId(), patch.operationId(), patch.fencingToken(),
+                    appliedBytes.checksum(), appliedBytes.bytes(), clock.instant()
             );
-            if (result.status() == InventoryFinalizeResult.Status.COMMITTED
-                    || result.status() == InventoryFinalizeResult.Status.REPLAYED) {
-                InventoryObservation next = new InventoryObservation(
-                        patch.profileId(),
-                        patch.playerId(),
-                        patch.scopeId(),
-                        patch.owningServerId(),
-                        result.resultingRevision(),
-                        appliedBytes.checksum(),
-                        appliedBytes.bytes(),
-                        clock.instant()
+            if (!committed(result)) {
+                failClosedTransfer(viewer, session, transfer, result.detail());
+                return;
+            }
+            InventoryObservation next = new InventoryObservation(
+                    patch.profileId(), patch.playerId(), patch.scopeId(), patch.owningServerId(),
+                    result.resultingRevision(), appliedBytes.checksum(), appliedBytes.bytes(), clock.instant()
+            );
+            session.observed(next, transfer.replacementImage());
+            transfer.committed();
+            renderSession(session, EnumSet.of(transfer.kind()));
+            releaseLiveTransfer(session, transfer);
+        } catch (RuntimeException exception) {
+            plugin.getLogger().log(Level.SEVERE, "Live cursor transfer finalization failed", exception);
+            failClosedTransfer(
+                    viewer, session, transfer,
+                    "The transfer reached both inventories but final verification is pending."
+            );
+        }
+    }
+
+    private void rollbackTargetThenRestore(
+            Player viewer,
+            Player target,
+            LiveSession session,
+            LiveInventoryTransferExecution transfer,
+            String detail
+    ) {
+        LiveInventoryTransferExecution.AbortResult abort = transfer.abort();
+        if (abort == LiveInventoryTransferExecution.AbortResult.PHYSICAL_TRANSFER_COMPLETE) {
+            failClosedTransfer(viewer, session, transfer, detail);
+            return;
+        }
+        if (abort == LiveInventoryTransferExecution.AbortResult.NO_TARGET_CHANGE) {
+            restoreSourceThenResolve(viewer, session, transfer, detail);
+            return;
+        }
+        target.getScheduler().execute(
+                plugin,
+                () -> rollbackTargetOnEntity(viewer, target, session, transfer, detail),
+                () -> failClosedTransfer(viewer, session, transfer, detail),
+                1L
+        );
+    }
+
+    private void rollbackTargetOnEntity(
+            Player viewer,
+            Player target,
+            LiveSession session,
+            LiveInventoryTransferExecution transfer,
+            String detail
+    ) {
+        InventoryPatch patch = transfer.patch();
+        if (patch != null && rollbackTargetNow(target, patch.expectedChecksum(), transfer)) {
+            transfer.rolledBack();
+            restoreSourceThenResolve(viewer, session, transfer, detail);
+            return;
+        }
+        failClosedTransfer(viewer, session, transfer, detail);
+    }
+
+    private boolean rollbackTargetNow(
+            Player target,
+            String expectedChecksum,
+            LiveInventoryTransferExecution transfer
+    ) {
+        InventoryImageCodec.EncodedImage current = codec.encodeWithChecksum(codec.capture(target));
+        if (current.checksum().equals(expectedChecksum)) {
+            return true;
+        }
+        InventoryImageCodec.EncodedImage replacement = codec.encodeWithChecksum(transfer.replacementImage());
+        if (!current.checksum().equals(replacement.checksum())) {
+            return false;
+        }
+        return restoreTargetSlot(target, expectedChecksum, transfer);
+    }
+
+    private boolean restoreTargetSlot(
+            Player target,
+            String expectedChecksum,
+            LiveInventoryTransferExecution transfer
+    ) {
+        try {
+            codec.applySlots(target, transfer.beforeImage(), List.of(transfer.logicalSlot()));
+            return codec.encodeWithChecksum(codec.capture(target)).checksum().equals(expectedChecksum);
+        } catch (RuntimeException exception) {
+            plugin.getLogger().log(Level.SEVERE, "Live cursor transfer rollback failed", exception);
+            return false;
+        }
+    }
+
+    private void restoreSourceThenResolve(
+            Player viewer,
+            LiveSession session,
+            LiveInventoryTransferExecution transfer,
+            String detail
+    ) {
+        onEntity(viewer, () -> {
+            if (!sourceRestored(viewer, transfer)) {
+                failClosedTransfer(viewer, session, transfer, detail);
+                return;
+            }
+            InventoryPatch patch = transfer.patch();
+            if (patch == null) {
+                finishLiveFailure(viewer, session, transfer, detail);
+                return;
+            }
+            submit(() -> resolveLiveRollback(viewer, session, transfer, detail));
+        });
+    }
+
+    private boolean sourceRestored(Player viewer, LiveInventoryTransferExecution transfer) {
+        if (LiveInventoryTransferDecision.same(viewer.getItemOnCursor(), transfer.expectedCursor())) {
+            return true;
+        }
+        return cursorEscrow.restoreSource(viewer, transfer);
+    }
+
+    private void resolveLiveRollback(
+            Player viewer,
+            LiveSession session,
+            LiveInventoryTransferExecution transfer,
+            String detail
+    ) {
+        InventoryPatch patch = transfer.patch();
+        InventoryJournalStore loaded = store.get();
+        if (patch != null && loaded != null && loaded.resolveCursorRollback(
+                patch.patchId(), patch.operationId(), patch.fencingToken(), clock.instant()
+        )) {
+            releaseLiveTransfer(session, transfer);
+            message(viewer, detail + " Both inventories were restored.");
+            reconcile(session);
+            return;
+        }
+        failClosedTransfer(viewer, session, transfer, detail);
+    }
+
+    private void handleTargetDeparture(Player target) {
+        LiveSession session = liveSessions.get(target.getUniqueId());
+        if (session == null) {
+            return;
+        }
+        LiveInventoryTransferExecution transfer = session.activeTransfer();
+        if (transfer == null) {
+            return;
+        }
+        Player viewer = plugin.getServer().getPlayer(transfer.viewerId());
+        if (transfer.physicalTransferComplete()) {
+            scheduleRecoveryForTransfer(viewer, session, transfer, "Target left during durable finalization.");
+            return;
+        }
+        if (transfer.targetAppliedWithoutCursor()) {
+            LiveInventoryTransferExecution.AbortResult abort = transfer.abort();
+            InventoryPatch patch = transfer.patch();
+            if (abort == LiveInventoryTransferExecution.AbortResult.ROLLBACK_TARGET
+                    && patch != null
+                    && rollbackTargetNow(target, patch.expectedChecksum(), transfer)) {
+                transfer.rolledBack();
+                restoreSourceThenResolve(
+                        viewer, session, transfer,
+                        "The target left; the in-flight transfer was rolled back."
                 );
-                session.observed(next, applied);
-                renderSession(session);
-                message(viewer, "Inventory edit committed at revision " + result.resultingRevision() + '.');
+                return;
+            }
+            failClosedTransfer(viewer, session, transfer, "Target departure rollback was not verifiable.");
+            return;
+        }
+        restoreSourceThenResolve(viewer, session, transfer, "The target left before target mutation.");
+    }
+
+    private void handleViewerDeparture(Player viewer) {
+        LiveInventoryTransferExecution transfer = viewerTransfers.get(viewer.getUniqueId());
+        if (transfer == null) {
+            return;
+        }
+        LiveSession session = liveSessions.get(transfer.targetId());
+        if (session == null) {
+            return;
+        }
+        if (transfer.targetAppliedWithoutCursor() || transfer.physicalTransferComplete()) {
+            scheduleRecoveryForTransfer(
+                    viewer, session, transfer,
+                    "The Staff viewer disconnected during a fenced cursor transfer."
+            );
+            return;
+        }
+        restoreSourceThenResolve(
+                viewer, session, transfer,
+                "The Staff viewer disconnected before target mutation."
+        );
+    }
+
+    private void handleRetiredTarget(
+            Player viewer,
+            LiveSession session,
+            LiveInventoryTransferExecution transfer
+    ) {
+        scheduleRecoveryForTransfer(viewer, session, transfer, "The target entity retired during transfer.");
+    }
+
+    private void scheduleRecoveryForTransfer(
+            Player viewer,
+            LiveSession session,
+            LiveInventoryTransferExecution transfer,
+            String detail
+    ) {
+        failClosedTransfer(viewer, session, transfer, detail);
+        InventoryPatch patch = transfer.patch();
+        if (patch == null) {
+            return;
+        }
+        submit(() -> {
+            InventoryJournalStore loaded = store.get();
+            if (loaded == null) {
+                return;
+            }
+            loaded.cursorTransfer(patch.operationId()).ifPresent(recovery -> {
+                rememberCursorRecovery(recovery);
+                attemptCursorRecovery(recovery);
+            });
+        });
+    }
+
+    private void failClosedTransfer(
+            Player viewer,
+            LiveSession session,
+            LiveInventoryTransferExecution transfer,
+            String detail
+    ) {
+        loginBlocks.add(transfer.targetId());
+        loginBlocks.add(transfer.viewerId());
+        viewerTransfers.remove(transfer.viewerId(), transfer);
+        session.finishTransfer(transfer);
+        message(viewer, detail + " Both participants are interaction-blocked for inventory recovery.");
+        alertStaff("Inventory safety blocked transfer " + transfer.operationId() + ": " + detail);
+        closeTargetViews(transfer.targetId(), "Inventory safety verification requires recovery.");
+    }
+
+    private void finishLiveFailure(
+            Player viewer,
+            LiveSession session,
+            LiveInventoryTransferExecution transfer,
+            String detail
+    ) {
+        releaseLiveTransfer(session, transfer);
+        message(viewer, detail);
+    }
+
+    private void releaseLiveTransfer(LiveSession session, LiveInventoryTransferExecution transfer) {
+        assetLocks.remove(transfer.targetId());
+        viewerTransfers.remove(transfer.viewerId(), transfer);
+        if (!hasCursorRecoveryFor(transfer.targetId())) {
+            loginBlocks.remove(transfer.targetId());
+        }
+        if (!hasCursorRecoveryFor(transfer.viewerId())) {
+            loginBlocks.remove(transfer.viewerId());
+        }
+        session.finishTransfer(transfer);
+    }
+
+    private void quarantineTransfer(
+            LiveInventoryTransferExecution transfer,
+            String reasonCode,
+            String detail
+    ) {
+        InventoryPatch patch = transfer.patch();
+        if (patch != null) {
+            quarantine(patch, reasonCode, detail);
+        }
+    }
+
+    private void rememberCursorRecovery(InventoryCursorJournal recovery) {
+        cursorRecoveries.put(recovery.patch().operationId(), recovery);
+    }
+
+    private boolean hasCursorRecoveryFor(UUID playerId) {
+        return cursorRecoveries.values().stream().anyMatch(recovery ->
+                recovery.patch().playerId().equals(playerId) || recovery.patch().actorId().equals(playerId));
+    }
+
+    private void attemptMatchingRecoveries(UUID playerId) {
+        for (InventoryCursorJournal recovery : List.copyOf(cursorRecoveries.values())) {
+            if (recovery.patch().playerId().equals(playerId) || recovery.patch().actorId().equals(playerId)) {
+                attemptCursorRecovery(recovery);
+            }
+        }
+    }
+
+    private void attemptCursorRecovery(InventoryCursorJournal recovery) {
+        InventoryPatch patch = recovery.patch();
+        if (!serverId.equals(patch.owningServerId())) {
+            return;
+        }
+        Player target = plugin.getServer().getPlayer(patch.playerId());
+        Player actor = plugin.getServer().getPlayer(patch.actorId());
+        if (target == null || actor == null || !recoveryInFlight.add(patch.operationId())) {
+            return;
+        }
+        loginBlocks.add(patch.playerId());
+        loginBlocks.add(patch.actorId());
+        submit(() -> claimCursorRecovery(target, actor, recovery));
+    }
+
+    private void claimCursorRecovery(
+            Player target,
+            Player actor,
+            InventoryCursorJournal recovery
+    ) {
+        InventoryJournalStore loaded = store.get();
+        if (loaded == null) {
+            retryCursorRecovery(recovery, "Inventory recovery storage is unavailable.");
+            return;
+        }
+        try {
+            InventoryPatch patch = recovery.patch();
+            InventoryPatch claimed = loaded.claimForApply(
+                    patch.patchId(), patch.operationId(), APPLY_LEASE, clock.instant()
+            ).orElse(null);
+            if (claimed == null) {
+                retryCursorRecovery(recovery, "Cursor recovery lease is busy.");
+                return;
+            }
+            if (claimed.state() == InventoryOperationState.APPLIED) {
+                completeCursorRecovery(recovery);
+                return;
+            }
+            InventoryCursorJournal refreshed = loaded.cursorTransfer(patch.operationId()).orElse(null);
+            if (refreshed == null) {
+                keepRecoveryBlocked(
+                        patch.playerId(), patch.actorId(), patch.operationId(),
+                        "Cursor recovery metadata disappeared after the transfer had started."
+                );
+                return;
+            }
+            cursorRecoveries.put(patch.operationId(), refreshed);
+            target.getScheduler().execute(
+                    plugin,
+                    () -> inspectRecoveryTarget(target, actor, refreshed),
+                    () -> retryCursorRecovery(refreshed, "Target left before recovery state inspection."),
+                    1L
+            );
+        } catch (RuntimeException exception) {
+            plugin.getLogger().log(Level.SEVERE, "Unable to claim live cursor recovery", exception);
+            retryCursorRecovery(recovery, "Cursor recovery claim failed.");
+        }
+    }
+
+    private void inspectRecoveryTarget(
+            Player target,
+            Player actor,
+            InventoryCursorJournal recovery
+    ) {
+        InventoryImageCodec.EncodedImage current = codec.encodeWithChecksum(codec.capture(target));
+        InventoryPatch patch = recovery.patch();
+        if (current.checksum().equals(patch.expectedChecksum())) {
+            scheduleActorRecovery(target, actor, recovery, false);
+            return;
+        }
+        if (current.checksum().equals(patch.replacementChecksum())) {
+            scheduleActorRecovery(target, actor, recovery, true);
+            return;
+        }
+        quarantine(patch, "LIVE_CURSOR_RECOVERY_CONFLICT", "Target is neither prepared before nor replacement state");
+        keepRecoveryBlocked(
+                patch.playerId(), patch.actorId(), patch.operationId(),
+                "Target inventory conflicts with both durable cursor transfer states."
+        );
+    }
+
+    private void scheduleActorRecovery(
+            Player target,
+            Player actor,
+            InventoryCursorJournal recovery,
+            boolean targetApplied
+    ) {
+        actor.getScheduler().execute(
+                plugin,
+                () -> recoverActorCursor(target, actor, recovery, targetApplied),
+                () -> retryCursorRecovery(recovery, "Staff viewer left before cursor recovery."),
+                1L
+        );
+    }
+
+    private void recoverActorCursor(
+            Player target,
+            Player actor,
+            InventoryCursorJournal recovery,
+            boolean targetApplied
+    ) {
+        LiveCursorEscrow.RecoveryResult result = targetApplied
+                ? cursorEscrow.recoverResult(actor, recovery)
+                : cursorEscrow.recoverSource(actor, recovery);
+        if (result == LiveCursorEscrow.RecoveryResult.CONFLICT) {
+            keepRecoveryBlocked(
+                    recovery.patch().playerId(),
+                    recovery.patch().actorId(),
+                    recovery.patch().operationId(),
+                    "Staff cursor conflicts with durable transfer recovery state."
+            );
+            return;
+        }
+        if (!targetApplied) {
+            submit(() -> resolveRecoveredRollback(recovery));
+            return;
+        }
+        boolean marked = result == LiveCursorEscrow.RecoveryResult.RESULT_MARKED;
+        submit(() -> advanceRecoveredCursor(target, actor, recovery, marked));
+    }
+
+    private void resolveRecoveredRollback(InventoryCursorJournal recovery) {
+        InventoryPatch patch = recovery.patch();
+        InventoryJournalStore loaded = store.get();
+        if (loaded != null && loaded.resolveCursorRollback(
+                patch.patchId(), patch.operationId(), patch.fencingToken(), clock.instant()
+        )) {
+            completeCursorRecovery(recovery);
+            return;
+        }
+        retryCursorRecovery(recovery, "Recovered before-state could not be durably resolved.");
+    }
+
+    private void advanceRecoveredCursor(
+            Player target,
+            Player actor,
+            InventoryCursorJournal recovery,
+            boolean resultMarked
+    ) {
+        if (!advanceRecoveryPhases(recovery)) {
+            retryCursorRecovery(recovery, "Recovered cursor phases could not be durably fenced.");
+            return;
+        }
+        if (!resultMarked) {
+            finalizeRecoveredCursor(recovery);
+            return;
+        }
+        actor.getScheduler().execute(
+                plugin,
+                () -> {
+                    if (cursorEscrow.settleRecoveredResult(actor, recovery)) {
+                        submit(() -> finalizeRecoveredCursor(recovery));
+                    } else {
+                        keepRecoveryBlocked(
+                                recovery.patch().playerId(), recovery.patch().actorId(),
+                                recovery.patch().operationId(),
+                                "Recovered cursor marker could not be settled safely."
+                        );
+                    }
+                },
+                () -> retryCursorRecovery(recovery, "Staff viewer left before recovered cursor settlement."),
+                1L
+        );
+    }
+
+    private boolean advanceRecoveryPhases(InventoryCursorJournal recovery) {
+        InventoryJournalStore loaded = store.get();
+        if (loaded == null) {
+            return false;
+        }
+        InventoryPatch patch = recovery.patch();
+        InventoryCursorPhase phase = recovery.phase();
+        if (phase == InventoryCursorPhase.PREPARED) {
+            if (!advancePhase(loaded, patch, phase, InventoryCursorPhase.SOURCE_ESCROWED)) {
+                return false;
+            }
+            phase = InventoryCursorPhase.SOURCE_ESCROWED;
+        }
+        if (phase == InventoryCursorPhase.SOURCE_ESCROWED) {
+            if (!advancePhase(loaded, patch, phase, InventoryCursorPhase.TARGET_APPLIED)) {
+                return false;
+            }
+            phase = InventoryCursorPhase.TARGET_APPLIED;
+        }
+        return phase == InventoryCursorPhase.CURSOR_APPLIED
+                || advancePhase(loaded, patch, phase, InventoryCursorPhase.CURSOR_APPLIED);
+    }
+
+    private boolean advancePhase(
+            InventoryJournalStore loaded,
+            InventoryPatch patch,
+            InventoryCursorPhase expected,
+            InventoryCursorPhase next
+    ) {
+        return loaded.advanceCursorPhase(
+                patch.patchId(), patch.operationId(), patch.fencingToken(), expected, next, clock.instant()
+        );
+    }
+
+    private void finalizeRecoveredCursor(InventoryCursorJournal recovery) {
+        InventoryPatch patch = recovery.patch();
+        InventoryJournalStore loaded = store.get();
+        if (loaded == null) {
+            retryCursorRecovery(recovery, "Inventory recovery storage is unavailable during finalization.");
+            return;
+        }
+        try {
+            InventoryFinalizeResult result = loaded.finalizeApplied(
+                    patch.patchId(), patch.operationId(), patch.fencingToken(),
+                    patch.replacementChecksum(), patch.replacementSnapshot(), clock.instant()
+            );
+            if (committed(result)) {
+                completeCursorRecovery(recovery);
             } else {
-                message(viewer, "Inventory state changed ambiguously; the operation is quarantined for review.");
+                retryCursorRecovery(recovery, result.detail());
             }
         } catch (RuntimeException exception) {
-            plugin.getLogger().log(Level.SEVERE,
-                    "Inventory changed but durable finalization failed; login recovery will verify it", exception);
-            message(viewer, "The edit reached the target but final verification is pending; do not repeat it.");
-        } finally {
-            assetLocks.remove(patch.playerId());
-            session.finishWork();
+            plugin.getLogger().log(Level.SEVERE, "Recovered cursor transfer finalization failed", exception);
+            retryCursorRecovery(recovery, "Recovered cursor transfer finalization failed.");
         }
+    }
+
+    private static boolean committed(InventoryFinalizeResult result) {
+        return result.status() == InventoryFinalizeResult.Status.COMMITTED
+                || result.status() == InventoryFinalizeResult.Status.REPLAYED;
+    }
+
+    private void completeCursorRecovery(InventoryCursorJournal recovery) {
+        InventoryPatch patch = recovery.patch();
+        cursorRecoveries.remove(patch.operationId());
+        recoveryAttempts.remove(patch.operationId());
+        recoveryInFlight.remove(patch.operationId());
+        assetLocks.remove(patch.playerId());
+        loginBlocks.remove(patch.playerId());
+        loginBlocks.remove(patch.actorId());
+        viewerTransfers.remove(patch.actorId());
+        LiveSession session = liveSessions.get(patch.playerId());
+        if (session != null) {
+            session.finishWork();
+            reconcile(session);
+        }
+    }
+
+    private void retryCursorRecovery(InventoryCursorJournal recovery, String detail) {
+        UUID operationId = recovery.patch().operationId();
+        recoveryInFlight.remove(operationId);
+        int attempt = recoveryAttempts.merge(operationId, 1, Integer::sum);
+        if (attempt >= MAX_LOGIN_APPLY_ATTEMPTS) {
+            keepRecoveryBlocked(
+                    recovery.patch().playerId(), recovery.patch().actorId(), operationId,
+                    detail + " Automatic recovery attempts are exhausted."
+            );
+            return;
+        }
+        plugin.getServer().getGlobalRegionScheduler().runDelayed(
+                plugin,
+                ignored -> {
+                    InventoryCursorJournal current = cursorRecoveries.get(operationId);
+                    if (current != null) {
+                        attemptCursorRecovery(current);
+                    }
+                },
+                20L
+        );
+    }
+
+    private void keepRecoveryBlocked(UUID targetId, UUID actorId, UUID operationId, String detail) {
+        recoveryInFlight.remove(operationId);
+        loginBlocks.add(targetId);
+        loginBlocks.add(actorId);
+        alertStaff("Live inventory recovery " + operationId + " remains blocked: " + detail);
     }
 
     private void queueOfflineEdit(Player viewer, ModerationInventoryHolder holder) {
@@ -730,28 +1651,30 @@ public final class InventoryCoordinator implements Listener, InventoryLockServic
                 changedSlots,
                 true
         );
-        submit(() -> {
-            if (!editAuthority.current(viewer)) {
-                message(viewer, "Your inventory edit authority changed; no offline patch was queued.");
-                return;
+        submit(() -> prepareOfflineEdit(viewer, request));
+    }
+
+    private void prepareOfflineEdit(Player viewer, InventoryPrepareRequest request) {
+        if (!editAuthority.current(viewer)) {
+            message(viewer, "Your inventory edit authority changed; no offline patch was queued.");
+            return;
+        }
+        InventoryJournalStore loaded = store.get();
+        if (loaded == null) {
+            message(viewer, "Offline inventory storage is unavailable; no patch was queued.");
+            return;
+        }
+        try {
+            InventoryPreparation result = loaded.prepare(request, APPLY_LEASE, clock.instant());
+            if (result.patch().isPresent()) {
+                message(viewer, "Offline inventory patch committed; it will apply before the player can interact.");
+            } else {
+                message(viewer, "Offline edit rejected: " + result.detail());
             }
-            InventoryJournalStore loaded = store.get();
-            if (loaded == null) {
-                message(viewer, "Offline inventory storage is unavailable; no patch was queued.");
-                return;
-            }
-            try {
-                InventoryPreparation result = loaded.prepare(request, APPLY_LEASE, clock.instant());
-                if (result.patch().isPresent()) {
-                    message(viewer, "Offline inventory patch committed; it will apply before the player can interact.");
-                } else {
-                    message(viewer, "Offline edit rejected: " + result.detail());
-                }
-            } catch (RuntimeException exception) {
-                plugin.getLogger().log(Level.SEVERE, "Offline inventory patch preparation failed", exception);
-                message(viewer, "Offline inventory edit failed before any player data changed.");
-            }
-        });
+        } catch (RuntimeException exception) {
+            plugin.getLogger().log(Level.SEVERE, "Offline inventory patch preparation failed", exception);
+            message(viewer, "Offline inventory edit failed before any player data changed.");
+        }
     }
 
     private void applyPendingOnLogin(Player player, InventoryPatch original, int attempt) {
@@ -782,10 +1705,8 @@ public final class InventoryCoordinator implements Listener, InventoryLockServic
     }
 
     private void applyPendingOnPlayer(Player player, InventoryPatch patch, int attempt) {
-        InventoryImage current = codec.capture(player);
-        InventoryImageCodec.EncodedImage currentBytes = codec.encodeWithChecksum(current);
-        InventoryImageCodec.EncodedImage applied =
-                applyPendingDecision(player, patch, currentBytes);
+        InventoryImageCodec.EncodedImage current = codec.encodeWithChecksum(codec.capture(player));
+        InventoryImageCodec.EncodedImage applied = applyPendingDecision(player, patch, current);
         if (applied != null) {
             submit(() -> finalizePendingOnLogin(player, patch, attempt, applied));
         }
@@ -796,10 +1717,15 @@ public final class InventoryCoordinator implements Listener, InventoryLockServic
             InventoryPatch patch,
             InventoryImageCodec.EncodedImage current
     ) {
+        if (isLiveCursorPatch(patch)) {
+            keepRecoveryBlocked(
+                    patch.playerId(), patch.actorId(), patch.operationId(),
+                    "A live cursor transfer reached generic login recovery and was not applied target-only."
+            );
+            return null;
+        }
         return switch (InventoryPatchDecision.decide(
-                current.checksum(),
-                patch.expectedChecksum(),
-                patch.replacementChecksum()
+                current.checksum(), patch.expectedChecksum(), patch.replacementChecksum()
         )) {
             case APPLY_REPLACEMENT -> {
                 codec.apply(player, codec.decode(patch.replacementSnapshot()));
@@ -835,15 +1761,10 @@ public final class InventoryCoordinator implements Listener, InventoryLockServic
     ) {
         try {
             InventoryFinalizeResult result = store.get().finalizeApplied(
-                    patch.patchId(),
-                    patch.operationId(),
-                    patch.fencingToken(),
-                    applied.checksum(),
-                    applied.bytes(),
-                    clock.instant()
+                    patch.patchId(), patch.operationId(), patch.fencingToken(),
+                    applied.checksum(), applied.bytes(), clock.instant()
             );
-            if (result.status() == InventoryFinalizeResult.Status.COMMITTED
-                    || result.status() == InventoryFinalizeResult.Status.REPLAYED) {
+            if (committed(result)) {
                 loginBlocks.remove(player.getUniqueId());
                 alertStaff("A queued inventory correction was applied and verified for " + player.getName() + '.');
                 return;
@@ -895,6 +1816,19 @@ public final class InventoryCoordinator implements Listener, InventoryLockServic
         });
     }
 
+    private void scheduleTargetRefresh(Player target, ModerationInventoryHolder.Kind kind) {
+        LiveSession session = liveSessions.get(target.getUniqueId());
+        if (session == null || !session.hasViewerKind(kind)) {
+            return;
+        }
+        target.getScheduler().runDelayed(
+                plugin,
+                ignored -> reconcile(session),
+                () -> closeTargetViews(target.getUniqueId(), "The target is no longer on this backend."),
+                1L
+        );
+    }
+
     private void reconcileViewedTargets() {
         for (LiveSession session : liveSessions.values()) {
             reconcile(session);
@@ -911,57 +1845,132 @@ public final class InventoryCoordinator implements Listener, InventoryLockServic
             closeTargetViews(session.targetId(), "The target is no longer on this backend.");
             return;
         }
-        target.getScheduler().execute(plugin, () -> {
-            InventoryImage image = codec.capture(target);
-            InventoryImageCodec.EncodedImage encoded = codec.encodeWithChecksum(image);
-            if (encoded.checksum().equals(session.observation().checksum())) {
-                session.finishWork();
-                return;
-            }
-            submit(() -> {
-                try {
-                    InventoryJournalStore loaded = store.get();
-                    if (loaded != null) {
-                        InventoryObservation observation = loaded.recordObservation(
-                                target.getUniqueId(),
-                                scopeId,
-                                serverId,
-                                encoded.checksum(),
-                                encoded.bytes(),
-                                clock.instant()
-                        );
-                        session.observed(observation, image);
-                        renderSession(session);
-                    }
-                } catch (RuntimeException exception) {
-                    plugin.getLogger().log(Level.SEVERE, "Live inventory reconciliation failed", exception);
-                } finally {
-                    session.finishWork();
-                }
-            });
-        }, session::finishWork, 1L);
+        target.getScheduler().execute(
+                plugin,
+                () -> captureReconciliation(target, session),
+                session::finishWork,
+                1L
+        );
     }
 
-    private void renderSession(LiveSession session) {
+    private void captureReconciliation(Player target, LiveSession session) {
+        InventoryImage image = codec.capture(target);
+        InventoryImageCodec.EncodedImage encoded = codec.encodeWithChecksum(image);
+        if (encoded.checksum().equals(session.observation().checksum())) {
+            session.finishWork();
+            return;
+        }
+        EnumSet<ModerationInventoryHolder.Kind> changedKinds = changedKinds(session.image(), image);
+        submit(() -> recordReconciliation(target, session, image, encoded, changedKinds));
+    }
+
+    private void recordReconciliation(
+            Player target,
+            LiveSession session,
+            InventoryImage image,
+            InventoryImageCodec.EncodedImage encoded,
+            EnumSet<ModerationInventoryHolder.Kind> changedKinds
+    ) {
+        try {
+            InventoryJournalStore loaded = store.get();
+            if (loaded != null) {
+                InventoryObservation observation = loaded.recordObservation(
+                        target.getUniqueId(), scopeId, serverId,
+                        encoded.checksum(), encoded.bytes(), clock.instant()
+                );
+                session.observed(observation, image);
+                renderSession(session, changedKinds);
+            }
+        } catch (RuntimeException exception) {
+            plugin.getLogger().log(Level.SEVERE, "Live inventory reconciliation failed", exception);
+        } finally {
+            session.finishWork();
+        }
+    }
+
+    private static EnumSet<ModerationInventoryHolder.Kind> changedKinds(
+            InventoryImage previous,
+            InventoryImage replacement
+    ) {
+        EnumSet<ModerationInventoryHolder.Kind> kinds = EnumSet.noneOf(ModerationInventoryHolder.Kind.class);
+        for (int slot : previous.changedSlots(replacement)) {
+            kinds.add(slot >= InventoryImage.ENDER_OFFSET
+                    ? ModerationInventoryHolder.Kind.ENDER_CHEST
+                    : ModerationInventoryHolder.Kind.PLAYER);
+        }
+        return kinds;
+    }
+
+    private void renderSession(LiveSession session, Set<ModerationInventoryHolder.Kind> kinds) {
+        if (kinds.isEmpty()) {
+            return;
+        }
+        InventoryImage image = session.image();
         for (ModerationInventoryHolder holder : session.viewers()) {
-            holder.image(session.image(), false);
+            if (!kinds.contains(holder.kind())) {
+                continue;
+            }
             Player viewer = plugin.getServer().getPlayer(holder.viewerId());
             if (viewer != null) {
-                onEntity(viewer, () -> render(holder));
+                onEntity(viewer, () -> render(holder, image));
             }
         }
     }
 
-    private void render(ModerationInventoryHolder holder) {
-        Inventory inventory = holder.getInventory();
-        InventoryImage image = holder.image();
-        for (int guiSlot = 0; guiSlot < inventory.getSize(); guiSlot++) {
-            int logical = holder.logicalSlot(guiSlot);
-            inventory.setItem(guiSlot, logical < 0 ? filler() : image.item(logical));
+    private void renderHolderFromSession(ModerationInventoryHolder holder, LiveSession session) {
+        if (holder == null) {
+            return;
+        }
+        Player viewer = plugin.getServer().getPlayer(holder.viewerId());
+        if (viewer != null) {
+            onEntity(viewer, () -> render(holder, session.image()));
         }
     }
 
-    private static ItemStack replacement(
+    private static ModerationInventoryHolder findHolder(LiveSession session, UUID viewerId) {
+        for (ModerationInventoryHolder holder : session.viewers()) {
+            if (holder.viewerId().equals(viewerId)) {
+                return holder;
+            }
+        }
+        return null;
+    }
+
+    private void render(ModerationInventoryHolder holder, InventoryImage image) {
+        Inventory inventory = holder.getInventory();
+        for (int guiSlot = 0; guiSlot < inventory.getSize(); guiSlot++) {
+            int logical = holder.logicalSlot(guiSlot);
+            inventory.setItem(guiSlot, logical < 0 ? null : image.item(logical));
+        }
+        holder.image(image, false);
+    }
+
+    private static LiveInventoryTransferDecision.Click supportedClick(ClickType click) {
+        return switch (click) {
+            case LEFT -> LiveInventoryTransferDecision.Click.LEFT;
+            case RIGHT -> LiveInventoryTransferDecision.Click.RIGHT;
+            default -> null;
+        };
+    }
+
+    private static boolean safeLowerInventoryAction(InventoryAction action) {
+        return switch (action) {
+            case NOTHING,
+                    PICKUP_ALL,
+                    PICKUP_HALF,
+                    PICKUP_ONE,
+                    PICKUP_SOME,
+                    PLACE_ALL,
+                    PLACE_ONE,
+                    PLACE_SOME,
+                    SWAP_WITH_CURSOR,
+                    DROP_ALL_SLOT,
+                    DROP_ONE_SLOT -> true;
+            default -> false;
+        };
+    }
+
+    private static ItemStack offlineReplacement(
             ItemStack current,
             ItemStack cursor,
             boolean leftClick,
@@ -974,10 +1983,10 @@ public final class InventoryCoordinator implements Listener, InventoryLockServic
         if (!rightClick) {
             return EditRejected.ITEM;
         }
-        return rightClickReplacement(current, template);
+        return offlineRightClickReplacement(current, template);
     }
 
-    private static ItemStack rightClickReplacement(ItemStack current, ItemStack template) {
+    private static ItemStack offlineRightClickReplacement(ItemStack current, ItemStack template) {
         if (template == null) {
             return removeOne(current);
         }
@@ -1003,32 +2012,18 @@ public final class InventoryCoordinator implements Listener, InventoryLockServic
         return item != null && !item.isEmpty() && item.getType() != Material.AIR;
     }
 
-    private static ItemStack filler() {
-        ItemStack filler = ItemStack.of(Material.GRAY_STAINED_GLASS_PANE);
-        ItemMeta meta = filler.getItemMeta();
-        meta.displayName(Component.text("Inventory metadata slot"));
-        filler.setItemMeta(meta);
-        return filler;
+    private static boolean isLiveCursorPatch(InventoryPatch patch) {
+        return patch.operationType().startsWith(LIVE_CURSOR_PREFIX);
     }
 
     private void quarantine(InventoryPatch patch, String reasonCode, String detail) {
         InventoryJournalStore loaded = store.get();
         if (loaded != null) {
             loaded.quarantine(
-                    patch.patchId(),
-                    patch.operationId(),
-                    patch.fencingToken(),
-                    reasonCode,
-                    detail,
-                    clock.instant()
+                    patch.patchId(), patch.operationId(), patch.fencingToken(),
+                    reasonCode, detail, clock.instant()
             );
         }
-    }
-
-    private void finishLiveFailure(Player viewer, LiveSession session, UUID targetId, String detail) {
-        assetLocks.remove(targetId);
-        session.finishWork();
-        message(viewer, detail);
     }
 
     private void closeTargetViews(UUID targetId, String reason) {
@@ -1049,6 +2044,10 @@ public final class InventoryCoordinator implements Listener, InventoryLockServic
         }
     }
 
+    private boolean interactionRestricted(UUID playerId) {
+        return restricted(playerId) || viewerTransfers.containsKey(playerId);
+    }
+
     private boolean restricted(UUID playerId) {
         return assetLocks.contains(playerId) || loginBlocks.contains(playerId);
     }
@@ -1064,11 +2063,15 @@ public final class InventoryCoordinator implements Listener, InventoryLockServic
     }
 
     private void onEntity(Player player, Runnable operation) {
-        player.getScheduler().execute(plugin, operation, null, 1L);
+        if (player != null) {
+            player.getScheduler().execute(plugin, operation, null, 1L);
+        }
     }
 
     private void message(Player player, String body) {
-        onEntity(player, () -> player.sendMessage(StaffMessageStyle.style(Component.text(body))));
+        if (player != null) {
+            onEntity(player, () -> player.sendMessage(StaffMessageStyle.style(Component.text(body))));
+        }
     }
 
     private void alertStaff(String body) {
@@ -1082,7 +2085,11 @@ public final class InventoryCoordinator implements Listener, InventoryLockServic
     public void close() {
         reconciliationTask.cancel();
         liveSessions.clear();
+        viewerTransfers.clear();
         preloadedPatches.clear();
+        cursorRecoveries.clear();
+        recoveryAttempts.clear();
+        recoveryInFlight.clear();
         assetLocks.clear();
         loginBlocks.clear();
     }
@@ -1093,6 +2100,7 @@ public final class InventoryCoordinator implements Listener, InventoryLockServic
         private final AtomicBoolean working = new AtomicBoolean();
         private volatile InventoryObservation observation;
         private volatile InventoryImage image;
+        private volatile LiveInventoryTransferExecution activeTransfer;
 
         private LiveSession(UUID targetId) {
             this.targetId = targetId;
@@ -1104,6 +2112,10 @@ public final class InventoryCoordinator implements Listener, InventoryLockServic
 
         void observed(InventoryObservation nextObservation, InventoryImage nextImage) {
             observation = java.util.Objects.requireNonNull(nextObservation);
+            image = java.util.Objects.requireNonNull(nextImage);
+        }
+
+        void imageOnly(InventoryImage nextImage) {
             image = java.util.Objects.requireNonNull(nextImage);
         }
 
@@ -1127,16 +2139,39 @@ public final class InventoryCoordinator implements Listener, InventoryLockServic
             return List.copyOf(viewers.values());
         }
 
-        boolean beginEdit() {
-            return !viewers.isEmpty() && working.compareAndSet(false, true);
+        boolean hasViewerKind(ModerationInventoryHolder.Kind kind) {
+            return viewers.values().stream().anyMatch(holder -> holder.kind() == kind);
+        }
+
+        synchronized boolean beginEdit(LiveInventoryTransferExecution transfer) {
+            if (viewers.isEmpty() || !working.compareAndSet(false, true)) {
+                return false;
+            }
+            activeTransfer = java.util.Objects.requireNonNull(transfer);
+            return true;
         }
 
         boolean beginReconcile() {
             return !viewers.isEmpty() && working.compareAndSet(false, true);
         }
 
+        synchronized void finishTransfer(LiveInventoryTransferExecution transfer) {
+            if (activeTransfer == transfer) {
+                activeTransfer = null;
+            }
+            working.set(false);
+        }
+
         void finishWork() {
             working.set(false);
+        }
+
+        LiveInventoryTransferExecution activeTransfer() {
+            return activeTransfer;
+        }
+
+        boolean working() {
+            return working.get();
         }
 
         boolean removable() {
