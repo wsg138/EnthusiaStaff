@@ -1,0 +1,29 @@
+name: Temporary PR 276 Codacy issue dump
+
+on:
+  push:
+    branches:
+      - fix/velocity-private-db-file-fallback
+
+permissions:
+  contents: read
+
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Report Codacy PR issue details
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          curl --fail --silent --show-error \
+            "https://api.codacy.com/api/v3/analysis/organizations/gh/wsg138/repositories/EnthusiaStaff/pull-requests/276/issues" \
+            | jq -r '.data[] | [
+                .commitIssue.toolInfo.name,
+                .commitIssue.patternInfo.id,
+                .commitIssue.patternInfo.category,
+                .commitIssue.patternInfo.severityLevel,
+                .commitIssue.filePath,
+                (.commitIssue.lineNumber | tostring),
+                .commitIssue.message
+              ] | @tsv'
