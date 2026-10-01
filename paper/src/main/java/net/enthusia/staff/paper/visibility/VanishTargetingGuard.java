@@ -17,6 +17,7 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.entity.EntityRemoveEvent;
 import org.bukkit.event.entity.EntityTargetEvent;
 import org.bukkit.event.entity.ProjectileLaunchEvent;
+import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.plugin.Plugin;
 
 /** Prevents full-vanish state from leaking through AI or homing projectile targets. */
@@ -66,6 +67,11 @@ public final class VanishTargetingGuard implements Listener {
     @EventHandler(priority = EventPriority.MONITOR)
     public void onEntityRemoved(EntityRemoveEvent event) {
         trackedTargets.remove(event.getEntity().getUniqueId());
+    }
+
+    @EventHandler(priority = EventPriority.HIGHEST)
+    public void onJoin(PlayerJoinEvent event) {
+        reconcile(event.getPlayer());
     }
 
     /**

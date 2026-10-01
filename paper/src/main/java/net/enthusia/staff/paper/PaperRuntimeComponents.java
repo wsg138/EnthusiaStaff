@@ -2,6 +2,7 @@ package net.enthusia.staff.paper;
 
 import java.time.Clock;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.function.Supplier;
 import java.util.logging.Level;
@@ -40,6 +41,7 @@ import net.enthusia.staff.paper.tester.FakeBaseManager;
 import net.enthusia.staff.paper.visibility.DefaultStaffVisibilityService;
 import net.enthusia.staff.paper.visibility.VanishBroadcastListener;
 import net.enthusia.staff.paper.visibility.VanishManager;
+import net.enthusia.staff.paper.visibility.VanishTargetingGuard;
 import net.enthusia.staff.paper.auth.LuckPermsStaffDutyContext;
 import net.enthusia.staff.paper.visibility.PrivateMessagePresenceListener;
 import org.bukkit.event.Listener;
@@ -236,8 +238,13 @@ record PaperRuntimeComponents(
             StaffModeManager staffMode,
             DefaultStaffVisibilityService visibility
     ) {
+        JavaPlugin plugin = dependencies.environment().plugin();
+        VanishTargetingGuard targeting = new VanishTargetingGuard(plugin, visibility::isVanished);
+        visibility.setVanishEnabledListener(playerId ->
+                scheduleVanishTargetingReconciliation(plugin, targeting, playerId));
+        registerListener(plugin, targeting);
         VanishManager vanish = new VanishManager(
-                dependencies.environment().plugin(),
+                plugin,
                 dependencies.environment().clock(),
                 visibility,
                 dependencies.stores().vanishStore(),
@@ -246,8 +253,41 @@ record PaperRuntimeComponents(
                 dependencies.environment().workers()
         );
         staffMode.setExitListener(vanish::staffModeExited);
-        registerListener(dependencies.environment().plugin(), vanish);
+        registerListener(plugin, vanish);
         return vanish;
+    }
+
+    private static void scheduleVanishTargetingReconciliation(
+            JavaPlugin plugin,
+            VanishTargetingGuard targeting,
+            UUID playerId
+    ) {
+        try {
+            plugin.getServer().getGlobalRegionScheduler().execute(
+                    plugin,
+                    () -> scheduleVanishTargetingForPlayer(plugin, targeting, playerId)
+            );
+        } catch (RuntimeException exception) {
+            plugin.getLogger().log(Level.WARNING, "Vanish targeting reconciliation could not be scheduled", exception);
+        }
+    }
+
+    private static void scheduleVanishTargetingForPlayer(
+            JavaPlugin plugin,
+            VanishTargetingGuard targeting,
+            UUID playerId
+    ) {
+        var player = plugin.getServer().getPlayer(playerId);
+        if (player == null) {
+            return;
+        }
+        try {
+            if (!player.getScheduler().execute(plugin, () -> targeting.reconcile(player), null, 1L)) {
+                plugin.getLogger().fine("Vanish targeting reconciliation retired before execution");
+            }
+        } catch (RuntimeException exception) {
+            plugin.getLogger().log(Level.WARNING, "Vanish targeting reconciliation scheduling failed", exception);
+        }
     }
 
     private static void registerOperationalListeners(Dependencies dependencies, VanishManager vanish) {

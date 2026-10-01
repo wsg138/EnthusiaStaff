@@ -7,6 +7,7 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Consumer;
 import net.enthusia.staff.domain.auth.StaffRank;
 import net.enthusia.staff.paper.api.StaffVisibilityService;
 
@@ -14,6 +15,7 @@ public final class DefaultStaffVisibilityService implements StaffVisibilityServi
     private final Map<StaffRank, Set<StaffRank>> visibilityMatrix;
     private final Map<UUID, StaffRank> vanished = new ConcurrentHashMap<>();
     private final Map<UUID, StaffRank> viewers = new ConcurrentHashMap<>();
+    private volatile Consumer<UUID> vanishEnabledListener = ignored -> { };
 
     public DefaultStaffVisibilityService(Map<StaffRank, Set<StaffRank>> visibilityMatrix) {
         if (visibilityMatrix == null) {
@@ -64,10 +66,17 @@ public final class DefaultStaffVisibilityService implements StaffVisibilityServi
 
     public void setVanished(UUID playerId, StaffRank rank, boolean value) {
         if (value) {
-            vanished.put(playerId, Objects.requireNonNull(rank, "rank"));
+            boolean newlyVanished = vanished.put(playerId, Objects.requireNonNull(rank, "rank")) == null;
+            if (newlyVanished) {
+                vanishEnabledListener.accept(playerId);
+            }
         } else {
             vanished.remove(playerId);
         }
+    }
+
+    public void setVanishEnabledListener(Consumer<UUID> listener) {
+        vanishEnabledListener = Objects.requireNonNull(listener, "listener");
     }
 
     public void setViewerRank(UUID playerId, StaffRank rank) {
