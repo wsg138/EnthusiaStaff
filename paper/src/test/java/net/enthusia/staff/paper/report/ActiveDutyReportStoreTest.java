@@ -25,6 +25,7 @@ import org.junit.jupiter.api.Test;
 class ActiveDutyReportStoreTest {
     private static final UUID REPORT_ID = UUID.fromString("52000000-0000-0000-0000-000000000001");
     private static final UUID ACTOR_ID = UUID.fromString("52000000-0000-0000-0000-000000000002");
+    private static final UUID CONSOLE_ACTOR_ID = new UUID(0L, 0L);
     private static final Instant NOW = Instant.parse("2026-09-30T20:00:00Z");
 
     @Test
@@ -32,7 +33,7 @@ class ActiveDutyReportStoreTest {
         CountingStore delegate = new CountingStore();
         ActiveDutyReportStore store = new ActiveDutyReportStore(delegate, ignored -> false);
 
-        ReportStateChangeResult result = store.changeState(request());
+        ReportStateChangeResult result = store.changeState(request(ACTOR_ID));
 
         ReportStateChangeResult.Rejected rejected = assertInstanceOf(ReportStateChangeResult.Rejected.class, result);
         assertEquals("ACTIVE_DUTY_REQUIRED", rejected.code());
@@ -44,16 +45,27 @@ class ActiveDutyReportStoreTest {
         CountingStore delegate = new CountingStore();
         ActiveDutyReportStore store = new ActiveDutyReportStore(delegate, ACTOR_ID::equals);
 
-        ReportStateChangeResult result = store.changeState(request());
+        ReportStateChangeResult result = store.changeState(request(ACTOR_ID));
 
         assertInstanceOf(ReportStateChangeResult.Applied.class, result);
         assertEquals(1, delegate.changes.get());
     }
 
-    private static ReportStateChangeRequest request() {
+    @Test
+    void consoleActorPreservesSystemMutationPathWithoutPlayerSession() {
+        CountingStore delegate = new CountingStore();
+        ActiveDutyReportStore store = new ActiveDutyReportStore(delegate, ignored -> false);
+
+        ReportStateChangeResult result = store.changeState(request(CONSOLE_ACTOR_ID));
+
+        assertInstanceOf(ReportStateChangeResult.Applied.class, result);
+        assertEquals(1, delegate.changes.get());
+    }
+
+    private static ReportStateChangeRequest request(UUID actorId) {
         return new ReportStateChangeRequest(
                 REPORT_ID,
-                ACTOR_ID,
+                actorId,
                 ReportAction.CLOSE,
                 1L,
                 "resolved in test",
