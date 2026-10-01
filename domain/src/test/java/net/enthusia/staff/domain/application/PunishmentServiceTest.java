@@ -12,6 +12,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import net.enthusia.staff.common.CaseId;
 import net.enthusia.staff.common.IdempotencyKey;
 import net.enthusia.staff.common.SecureIdentifiers;
 import net.enthusia.staff.domain.OperationalMode;
@@ -34,6 +35,26 @@ import org.junit.jupiter.api.Test;
 class PunishmentServiceTest {
     private static final Instant NOW = Instant.parse("2026-07-26T12:00:00Z");
     private static final UUID TARGET = UUID.fromString("10000000-0000-0000-0000-000000000001");
+
+    @Test
+    void reasonCatalogUsesMinecraftIssueAuthorityAndReasonRank() {
+        ReasonPolicy modReason = policy(StaffRank.MOD, standardSteps());
+        ReasonPolicy adminReason = policy(
+                "safety.credible-threat", "safety", "Credible threat", StaffRank.ADMIN, standardSteps());
+        PunishmentService service = service(
+                new AtomicReasonPolicyRepository("v1", List.of(modReason, adminReason)),
+                new CapturingStore(List.of())
+        );
+
+        assertEquals(List.of("chat.toxicity"), service.availableReasons(
+                new Actor(UUID.randomUUID(), "Helper", StaffRank.HELPER)).stream()
+                .map(PunishmentReasonOption::id).toList());
+        assertEquals(List.of(), service.availableReasons(
+                new Actor(UUID.randomUUID(), "Developer", StaffRank.DEVELOPER)));
+        assertEquals(List.of("chat.toxicity", "safety.credible-threat"), service.availableReasons(
+                new Actor(UUID.randomUUID(), "Admin", StaffRank.ADMIN)).stream()
+                .map(PunishmentReasonOption::id).toList());
+    }
 
     @Test
     void developerCannotEvaluateOrPersistConfiguredPunishment() {
@@ -103,6 +124,29 @@ class PunishmentServiceTest {
         assertEquals(canonical.family(), committed.family());
         assertEquals(canonical.publicReason(), committed.publicReason());
         assertEquals("v2", committed.configurationVersion());
+    }
+
+    @Test
+    void confirmedSharedCaseIdIsPreservedAtCommit() {
+        CapturingStore store = new CapturingStore(List.of());
+        PunishmentService service = service(
+                new AtomicReasonPolicyRepository("v1", List.of(policy(StaffRank.MOD, standardSteps()))),
+                store
+        );
+        CreatePunishmentRequest request = request(StaffRank.MOD, List.of());
+        PunishmentAssessment reviewed = assertInstanceOf(
+                PunishmentEvaluation.Allowed.class, service.evaluate(request, OperationalMode.ACTIVE)
+        ).assessment();
+        CaseId shared = new CaseId("FEDCBA9876543210");
+
+        PunishmentResult.Accepted accepted = assertInstanceOf(
+                PunishmentResult.Accepted.class,
+                service.createConfirmed(
+                        request, OperationalMode.ACTIVE, PunishmentExpectation.from(reviewed), shared)
+        );
+
+        assertEquals(shared, accepted.caseId());
+        assertEquals(shared, store.plans.getFirst().caseId());
     }
 
     @Test
@@ -257,10 +301,20 @@ class PunishmentServiceTest {
     }
 
     private static ReasonPolicy policy(StaffRank requiredRank, List<PunishmentStep> steps) {
+        return policy("chat.toxicity", "chat", "Chat toxicity", requiredRank, steps);
+    }
+
+    private static ReasonPolicy policy(
+            String id,
+            String family,
+            String publicReason,
+            StaffRank requiredRank,
+            List<PunishmentStep> steps
+    ) {
         return new ReasonPolicy(
-                "chat.toxicity",
-                "chat",
-                "Chat toxicity",
+                id,
+                family,
+                publicReason,
                 10,
                 true,
                 steps,

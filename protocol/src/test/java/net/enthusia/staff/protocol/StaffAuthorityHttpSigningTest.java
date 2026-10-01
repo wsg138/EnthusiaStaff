@@ -80,4 +80,49 @@ class StaffAuthorityHttpSigningTest {
         assertFalse(StaffAuthorityHttpSigning.verifyResponse(
                 CREDENTIAL, "12345678901234567890123456789012", 404, "", signature));
     }
+
+    @Test
+    void bodyRequestBindsExactBody() {
+        String body = "{\"scope\":\"BOTH\"}";
+        StaffAuthorityHttpSigning.RequestProof proof = StaffAuthorityHttpSigning.signBodyRequest(
+                CREDENTIAL, "POST", "/v1/cross-platform-punishment", body, NOW, NONCE);
+
+        assertEquals(StaffAuthorityHttpSigning.Verification.ACCEPTED,
+                StaffAuthorityHttpSigning.verifyBodyRequest(
+                        CREDENTIAL,
+                        "POST",
+                        "/v1/cross-platform-punishment",
+                        body,
+                        proof.timestamp(),
+                        proof.nonce(),
+                        proof.signature(),
+                        CLOCK));
+        assertEquals(StaffAuthorityHttpSigning.Verification.INVALID_SIGNATURE,
+                StaffAuthorityHttpSigning.verifyBodyRequest(
+                        CREDENTIAL,
+                        "POST",
+                        "/v1/cross-platform-punishment",
+                        "{\"scope\":\"MINECRAFT\"}",
+                        proof.timestamp(),
+                        proof.nonce(),
+                        proof.signature(),
+                        CLOCK));
+    }
+
+    @Test
+    void bodyRequestRejectsMissingBody() {
+        StaffAuthorityHttpSigning.RequestProof proof = StaffAuthorityHttpSigning.signBodyRequest(
+                CREDENTIAL, "POST", "/v1/cross-platform-punishment", "{}", NOW, NONCE);
+
+        assertEquals(StaffAuthorityHttpSigning.Verification.MALFORMED,
+                StaffAuthorityHttpSigning.verifyBodyRequest(
+                        CREDENTIAL,
+                        "POST",
+                        "/v1/cross-platform-punishment",
+                        null,
+                        proof.timestamp(),
+                        proof.nonce(),
+                        proof.signature(),
+                        CLOCK));
+    }
 }

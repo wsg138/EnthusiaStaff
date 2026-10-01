@@ -141,8 +141,11 @@ final class PaperIntegrationManager implements Listener {
             );
             reputationRestrictions.start();
         }
-        DiscordStaffAuthorityEndpoint.startIfConfigured(plugin())
-                .ifPresent(endpoint -> discordStaffAuthority = endpoint);
+        DiscordStaffAuthorityEndpoint.startIfConfigured(
+                plugin(),
+                dependencies.stores().punishmentService(),
+                dependencies.policy().authoritativeMode()
+        ).ifPresent(endpoint -> discordStaffAuthority = endpoint);
     }
 
     void initializeAutomod() {

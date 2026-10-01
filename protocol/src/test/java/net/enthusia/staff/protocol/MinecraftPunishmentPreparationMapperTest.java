@@ -1,0 +1,110 @@
+package net.enthusia.staff.protocol;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+
+import java.time.Duration;
+import java.time.Instant;
+import java.util.List;
+import java.util.UUID;
+import net.enthusia.staff.common.CaseId;
+import net.enthusia.staff.common.IdempotencyKey;
+import net.enthusia.staff.domain.application.CreatePunishmentRequest;
+import net.enthusia.staff.domain.application.PunishmentExpectation;
+import net.enthusia.staff.domain.application.PunishmentPlan;
+import net.enthusia.staff.domain.application.PunishmentReasonOption;
+import net.enthusia.staff.domain.application.PunishmentResult;
+import net.enthusia.staff.domain.auth.Actor;
+import net.enthusia.staff.domain.auth.StaffRank;
+import net.enthusia.staff.domain.casefile.CaseVisibility;
+import net.enthusia.staff.domain.escalation.DecayEligibility;
+import net.enthusia.staff.domain.escalation.EscalationDecision;
+import net.enthusia.staff.domain.escalation.PunishmentStep;
+import net.enthusia.staff.domain.sanction.SanctionLength;
+import net.enthusia.staff.domain.sanction.SanctionSpec;
+import net.enthusia.staff.domain.sanction.SanctionType;
+import org.junit.jupiter.api.Test;
+
+class MinecraftPunishmentPreparationMapperTest {
+    private static final CaseId CASE_ID = new CaseId("0123456789ABCDEF");
+    private static final UUID ACTOR_ID = UUID.fromString("30000000-0000-0000-0000-000000000088");
+    private static final UUID TARGET_ID = UUID.fromString("10000000-0000-0000-0000-000000000088");
+    private static final Actor ACTOR = new Actor(ACTOR_ID, "D08Admin", StaffRank.ADMIN);
+    private static final SanctionSpec MUTE = new SanctionSpec(
+            SanctionType.MUTE, SanctionLength.temporary(Duration.ofDays(30)));
+    private static final SanctionSpec BAN = new SanctionSpec(
+            SanctionType.NETWORK_BAN, SanctionLength.temporary(Duration.ofDays(14)));
+
+    @Test
+    void requestRoundTripPreservesExplicitMultiSanctionOverride() {
+        CreatePunishmentRequest request = new CreatePunishmentRequest(
+                new IdempotencyKey("d08:multi:request"), TARGET_ID, ACTOR,
+                "harassment.sexual", "multi sanction test", CaseVisibility.PUBLIC, List.of(MUTE, BAN)
+        );
+
+        String json = MinecraftPunishmentWireCodec.encodeRequest(
+                MinecraftPunishmentPreparationMapper.request(CASE_ID, request));
+        var decoded = MinecraftPunishmentWireCodec.decodeRequest(json);
+        CreatePunishmentRequest restored = MinecraftPunishmentPreparationMapper.request(decoded, ACTOR);
+
+        assertEquals(List.of(MUTE, BAN), restored.overrideSanctions());
+        assertEquals(request.idempotencyKey(), restored.idempotencyKey());
+    }
+
+    @Test
+    void catalogRoundTripPreservesOnlyPublicReasonMetadata() {
+        List<PunishmentReasonOption> reasons = List.of(
+                new PunishmentReasonOption("chat.toxicity", "chat", "Chat toxicity"),
+                new PunishmentReasonOption("safety.credible-threat", "safety", "Credible threat")
+        );
+        String requestJson = MinecraftPunishmentWireCodec.encodeCatalogRequest(
+                MinecraftPunishmentCatalogMapper.request(ACTOR));
+        var request = MinecraftPunishmentWireCodec.decodeCatalogRequest(requestJson);
+        String responseJson = MinecraftPunishmentWireCodec.encodeCatalogResponse(
+                MinecraftPunishmentCatalogMapper.response(reasons));
+        var response = MinecraftPunishmentWireCodec.decodeCatalogResponse(responseJson);
+
+        assertEquals(ACTOR_ID, request.actorId());
+        assertEquals(reasons, MinecraftPunishmentCatalogMapper.reasons(response));
+    }
+
+    @Test
+    void commitRoundTripPreservesSharedCaseAndFullExpectation() {
+        CreatePunishmentRequest request = new CreatePunishmentRequest(
+                new IdempotencyKey("d08:commit:request"), TARGET_ID, ACTOR,
+                "harassment.sexual", "commit multi sanction test", CaseVisibility.PUBLIC, List.of(MUTE, BAN)
+        );
+        PunishmentExpectation expectation = new PunishmentExpectation(
+                "d08-commit-v1", 2, "30 day mute and 14 day ban", List.of(MUTE, BAN));
+
+        String json = MinecraftPunishmentWireCodec.encodeCommitRequest(
+                MinecraftPunishmentCommitMapper.request(CASE_ID, request, expectation));
+        var decoded = MinecraftPunishmentWireCodec.decodeCommitRequest(json);
+
+        assertEquals(CASE_ID.value(), decoded.punishment().caseId());
+        assertEquals(expectation, MinecraftPunishmentCommitMapper.expectation(decoded.expectation()));
+        PunishmentResult.Accepted result = (PunishmentResult.Accepted) MinecraftPunishmentCommitMapper.result(
+                MinecraftPunishmentCommitWire.Response.accepted(CASE_ID.value(), false));
+        assertEquals(CASE_ID, result.caseId());
+    }
+
+    @Test
+    void preparedPlanRoundTripPreservesMultiSanctionExpectation() {
+        PunishmentStep step = new PunishmentStep(0, "30 day mute and 14 day ban", List.of(MUTE, BAN));
+        PunishmentPlan plan = new PunishmentPlan(
+                CASE_ID, new IdempotencyKey("d08:multi:plan"), TARGET_ID, ACTOR,
+                "harassment.sexual", "harassment", "Sexual harassment", "multi sanction test",
+                "d08-multi-v1", CaseVisibility.PUBLIC, Instant.parse("2026-09-20T04:00:00Z"),
+                new EscalationDecision(0, 0, 0, List.of(), DecayEligibility.UNKNOWN, step),
+                List.of(MUTE, BAN)
+        );
+
+        var wire = MinecraftPunishmentPreparationMapper.plan(plan);
+        String json = MinecraftPunishmentWireCodec.encodeResponse(
+                MinecraftPunishmentPreparationWire.Response.prepared(wire));
+        PunishmentPlan restored = MinecraftPunishmentPreparationMapper.plan(
+                MinecraftPunishmentWireCodec.decodeResponse(json).plan());
+
+        assertEquals(List.of(MUTE, BAN), restored.sanctions());
+        assertEquals(step.sanctions(), restored.escalation().selectedStep().sanctions());
+    }
+}

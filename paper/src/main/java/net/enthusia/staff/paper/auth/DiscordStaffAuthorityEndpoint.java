@@ -6,14 +6,21 @@ import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
+import java.time.Clock;
 import java.time.Duration;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.function.Supplier;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
+import net.enthusia.staff.domain.OperationalMode;
+import net.enthusia.staff.domain.application.PunishmentService;
 import net.enthusia.staff.domain.auth.StaffRank;
+import net.enthusia.staff.protocol.MinecraftPunishmentCatalogWire;
+import net.enthusia.staff.protocol.MinecraftPunishmentCommitWire;
+import net.enthusia.staff.protocol.MinecraftPunishmentPreparationWire;
 import net.enthusia.staff.protocol.StaffAuthorityHttpSigning;
 import net.luckperms.api.LuckPerms;
 import net.luckperms.api.LuckPermsProvider;
@@ -47,12 +54,23 @@ public final class DiscordStaffAuthorityEndpoint implements AutoCloseable {
     private DiscordStaffAuthorityEndpoint(
             JavaPlugin plugin,
             DiscordStaffAuthorityConfiguration.Value configuration,
-            LuckPerms luckPerms
+            LuckPerms luckPerms,
+            Supplier<PunishmentService> punishments,
+            Supplier<OperationalMode> mode
     ) throws IOException {
         this.plugin = plugin;
         this.luckPerms = luckPerms;
         this.authenticator = new DiscordStaffAuthorityAuthenticator(
                 configuration.secret(), configuration.privateSplit());
+        DiscordMinecraftPreparationHandler preparation = new DiscordMinecraftPreparationHandler(
+                authenticator, this::resolve, punishments, mode, Clock.systemUTC()
+        );
+        DiscordMinecraftCommitHandler commit = new DiscordMinecraftCommitHandler(
+                authenticator, this::resolve, punishments, mode
+        );
+        DiscordMinecraftCatalogHandler catalog = new DiscordMinecraftCatalogHandler(
+                authenticator, this::resolve, punishments
+        );
         HttpServer createdServer = HttpServer.create(
                 bindAddress(configuration.bindHost(), configuration.port()), BACKLOG);
         ThreadPoolExecutor createdExecutor = new ThreadPoolExecutor(
@@ -67,6 +85,9 @@ public final class DiscordStaffAuthorityEndpoint implements AutoCloseable {
         try {
             createdServer.setExecutor(createdExecutor);
             createdServer.createContext(PATH, this::handle);
+            createdServer.createContext(MinecraftPunishmentPreparationWire.PATH, preparation::handle);
+            createdServer.createContext(MinecraftPunishmentCommitWire.PATH, commit::handle);
+            createdServer.createContext(MinecraftPunishmentCatalogWire.PATH, catalog::handle);
             createdServer.start();
         } catch (RuntimeException exception) {
             createdServer.stop(0);
@@ -78,15 +99,23 @@ public final class DiscordStaffAuthorityEndpoint implements AutoCloseable {
     }
 
     public static Optional<DiscordStaffAuthorityEndpoint> startIfConfigured(JavaPlugin plugin) {
-        if (plugin == null) {
-            throw new IllegalArgumentException("plugin must be present");
+        return startIfConfigured(plugin, () -> null, () -> OperationalMode.BOOTSTRAP);
+    }
+
+    public static Optional<DiscordStaffAuthorityEndpoint> startIfConfigured(
+            JavaPlugin plugin,
+            Supplier<PunishmentService> punishments,
+            Supplier<OperationalMode> mode
+    ) {
+        if (plugin == null || punishments == null || mode == null) {
+            throw new IllegalArgumentException("plugin and preparation suppliers must be present");
         }
         Optional<DiscordStaffAuthorityConfiguration.Value> configuration = configuredAuthority(plugin);
         Optional<LuckPerms> luckPerms = configuredLuckPerms(plugin);
         if (configuration.isEmpty() || luckPerms.isEmpty()) {
             return Optional.empty();
         }
-        return bind(plugin, configuration.orElseThrow(), luckPerms.orElseThrow());
+        return bind(plugin, configuration.orElseThrow(), luckPerms.orElseThrow(), punishments, mode);
     }
 
     private static Optional<DiscordStaffAuthorityConfiguration.Value> configuredAuthority(JavaPlugin plugin) {
@@ -114,10 +143,14 @@ public final class DiscordStaffAuthorityEndpoint implements AutoCloseable {
     private static Optional<DiscordStaffAuthorityEndpoint> bind(
             JavaPlugin plugin,
             DiscordStaffAuthorityConfiguration.Value configuration,
-            LuckPerms luckPerms
+            LuckPerms luckPerms,
+            Supplier<PunishmentService> punishments,
+            Supplier<OperationalMode> mode
     ) {
         try {
-            return Optional.of(new DiscordStaffAuthorityEndpoint(plugin, configuration, luckPerms));
+            return Optional.of(new DiscordStaffAuthorityEndpoint(
+                    plugin, configuration, luckPerms, punishments, mode
+            ));
         } catch (IOException | RuntimeException exception) {
             log(plugin, "discord_staff_authority_bind_failed", exception);
             return Optional.empty();

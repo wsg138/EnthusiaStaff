@@ -60,6 +60,22 @@ final class DiscordStaffAuthorityAuthenticator {
         return authenticateLoopback(remoteAddress, authorization);
     }
 
+    Result authenticateBody(
+            InetAddress remoteAddress,
+            String method,
+            String target,
+            String body,
+            String authorization,
+            String timestamp,
+            String nonce,
+            String signature
+    ) {
+        if (privateSplit) {
+            return authenticatePrivateBody(remoteAddress, method, target, body, timestamp, nonce, signature);
+        }
+        return authenticateLoopback(remoteAddress, authorization);
+    }
+
     String responseSignature(Result result, int status, String body) {
         if (!result.accepted() || result.nonce() == null) {
             return null;
@@ -91,6 +107,28 @@ final class DiscordStaffAuthorityAuthenticator {
         }
         StaffAuthorityHttpSigning.Verification verification = StaffAuthorityHttpSigning.verifyRequest(
                 credential, method, target, timestamp, nonce, signature, clock);
+        if (verification != StaffAuthorityHttpSigning.Verification.ACCEPTED) {
+            return Result.rejected();
+        }
+        return replayGuard.recordIfNew(REPLAY_SCOPE, nonce, clock.instant())
+                ? Result.privateSplit(nonce)
+                : Result.rejected();
+    }
+
+    private Result authenticatePrivateBody(
+            InetAddress remoteAddress,
+            String method,
+            String target,
+            String body,
+            String timestamp,
+            String nonce,
+            String signature
+    ) {
+        if (!privatePeer(remoteAddress)) {
+            return Result.rejected();
+        }
+        StaffAuthorityHttpSigning.Verification verification = StaffAuthorityHttpSigning.verifyBodyRequest(
+                credential, method, target, body, timestamp, nonce, signature, clock);
         if (verification != StaffAuthorityHttpSigning.Verification.ACCEPTED) {
             return Result.rejected();
         }

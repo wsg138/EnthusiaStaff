@@ -40,20 +40,28 @@ public final class JdbcDiscordPunishmentRepository implements DiscordPunishmentR
 
     @Override
     public StoredPunishment create(DiscordPunishment punishment, String operationKey, Instant now) {
+        return JdbcTransactionSupport.execute(dataSource, "Unable to create Discord punishment", connection ->
+                create(connection, punishment, operationKey, now));
+    }
+
+    StoredPunishment create(
+            Connection connection,
+            DiscordPunishment punishment,
+            String operationKey,
+            Instant now
+    ) throws SQLException {
         validateCreate(punishment, operationKey, now);
-        return JdbcTransactionSupport.execute(dataSource, "Unable to create Discord punishment", connection -> {
-            Current replay = byOperation(connection, operationKey, true);
-            if (replay != null) {
-                requireReplay(replay.punishment(), punishment);
-                return replay.stored(true);
-            }
-            requireDiscordMembership(connection, punishment);
-            requireNoConflictingActive(connection, punishment);
-            insertTarget(connection, punishment, operationKey, now);
-            insertReconciliation(connection, punishment, now);
-            workQueue.upsert(connection, punishment.punishmentId(), new WorkSchedule(WorkType.APPLY, now), now);
-            return new StoredPunishment(punishment, 0, false);
-        });
+        Current replay = byOperation(connection, operationKey, true);
+        if (replay != null) {
+            requireReplay(replay.punishment(), punishment);
+            return replay.stored(true);
+        }
+        requireDiscordMembership(connection, punishment);
+        requireNoConflictingActive(connection, punishment);
+        insertTarget(connection, punishment, operationKey, now);
+        insertReconciliation(connection, punishment, now);
+        workQueue.upsert(connection, punishment.punishmentId(), new WorkSchedule(WorkType.APPLY, now), now);
+        return new StoredPunishment(punishment, 0, false);
     }
 
     @Override
@@ -428,6 +436,7 @@ public final class JdbcDiscordPunishmentRepository implements DiscordPunishmentR
     private static void requireImmutable(DiscordPunishment current, DiscordPunishment replacement) throws SQLException {
         requireSame(current.punishmentId(), replacement.punishmentId());
         requireSame(current.subjectId(), replacement.subjectId());
+        requireSame(current.caseId(), replacement.caseId());
         requireSame(current.targetUserId(), replacement.targetUserId());
         requireSame(current.guildId(), replacement.guildId());
         requireSame(current.issuer(), replacement.issuer());

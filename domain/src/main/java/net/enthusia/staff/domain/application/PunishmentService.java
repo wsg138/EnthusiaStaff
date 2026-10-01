@@ -10,6 +10,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.function.Consumer;
+import net.enthusia.staff.common.CaseId;
 import net.enthusia.staff.common.SecureIdentifiers;
 import net.enthusia.staff.domain.OperationalMode;
 import net.enthusia.staff.domain.auth.Actor;
@@ -109,6 +110,18 @@ public final class PunishmentService {
             OperationalMode mode,
             PunishmentExpectation expectation
     ) {
+        return createConfirmed(request, mode, expectation, identifiers.newCaseId());
+    }
+
+    public PunishmentResult createConfirmed(
+            CreatePunishmentRequest request,
+            OperationalMode mode,
+            PunishmentExpectation expectation,
+            CaseId caseId
+    ) {
+        if (caseId == null) {
+            throw new IllegalArgumentException("caseId must be present");
+        }
         PunishmentEvaluation evaluation = evaluate(request, mode);
         if (evaluation instanceof PunishmentEvaluation.Rejected rejected) {
             return new PunishmentResult.Rejected(rejected.code(), rejected.message());
@@ -117,7 +130,7 @@ public final class PunishmentService {
         if (expectation != null && !expectation.matches(assessment)) {
             return recommendationChanged();
         }
-        return createEvaluated(request, assessment);
+        return createEvaluated(request, assessment, caseId);
     }
 
     /**
@@ -138,7 +151,7 @@ public final class PunishmentService {
                 && !assessment.escalation().selectedStep().label().equals(expectedStepLabel)) {
             return recommendationChanged();
         }
-        return createEvaluated(request, assessment);
+        return createEvaluated(request, assessment, identifiers.newCaseId());
     }
 
     private static PunishmentResult.Rejected recommendationChanged() {
@@ -150,29 +163,47 @@ public final class PunishmentService {
 
     private PunishmentResult createEvaluated(
             CreatePunishmentRequest request,
-            PunishmentAssessment assessment
+            PunishmentAssessment assessment,
+            CaseId caseId
     ) {
-        ReasonPolicy policy = assessment.policy();
-        PunishmentPlan plan = new PunishmentPlan(
-                identifiers.newCaseId(),
-                request.idempotencyKey(),
-                request.targetId(),
-                request.actor(),
-                policy.id(),
-                policy.family(),
-                policy.publicReason(),
-                request.internalExplanation(),
-                assessment.configurationVersion(),
-                request.visibility(),
-                clock.instant(),
-                assessment.escalation(),
-                assessment.sanctions()
-        );
+        PunishmentPlan plan = plan(request, assessment, caseId, clock.instant());
         PunishmentResult result = store.createPunishment(plan);
         if (result instanceof PunishmentResult.Accepted) {
             notifyCommitted(plan);
         }
         return result;
+    }
+
+    public PunishmentPreparation prepareConfirmed(
+            CreatePunishmentRequest request,
+            OperationalMode mode,
+            CaseId caseId,
+            Instant issuedAt
+    ) {
+        if (caseId == null || issuedAt == null) {
+            throw new IllegalArgumentException("caseId and issuedAt must be present");
+        }
+        PunishmentEvaluation evaluation = evaluate(request, mode);
+        if (evaluation instanceof PunishmentEvaluation.Rejected rejected) {
+            return new PunishmentPreparation.Rejected(rejected.code(), rejected.message());
+        }
+        PunishmentAssessment assessment = ((PunishmentEvaluation.Allowed) evaluation).assessment();
+        return new PunishmentPreparation.Prepared(plan(request, assessment, caseId, issuedAt));
+    }
+
+    private static PunishmentPlan plan(
+            CreatePunishmentRequest request,
+            PunishmentAssessment assessment,
+            CaseId caseId,
+            Instant issuedAt
+    ) {
+        ReasonPolicy policy = assessment.policy();
+        return new PunishmentPlan(
+                caseId, request.idempotencyKey(), request.targetId(), request.actor(),
+                policy.id(), policy.family(), policy.publicReason(), request.internalExplanation(),
+                assessment.configurationVersion(), request.visibility(), issuedAt,
+                assessment.escalation(), assessment.sanctions()
+        );
     }
 
     private void notifyCommitted(PunishmentPlan plan) {
@@ -183,6 +214,23 @@ public final class PunishmentService {
                 // The punishment is already durable. Recovery consumers reconcile missed notifications.
             }
         }
+    }
+
+    public List<PunishmentReasonOption> availableReasons(Actor actor) {
+        Objects.requireNonNull(actor);
+        if (!authorization.permits(actor, ModerationAction.ISSUE_POLICY_SANCTION)) {
+            return List.of();
+        }
+        return policies.all().stream()
+                .filter(policy -> actor.rank() == StaffRank.SYSTEM
+                        ? policy.automaticDetectionAllowed()
+                        : meetsReasonRank(actor.rank(), policy.requiredRank()))
+                .map(policy -> new PunishmentReasonOption(
+                        policy.id(), policy.family(), policy.publicReason()))
+                .sorted(java.util.Comparator.comparing(PunishmentReasonOption::family)
+                        .thenComparing(PunishmentReasonOption::label)
+                        .thenComparing(PunishmentReasonOption::id))
+                .toList();
     }
 
     public PunishmentEvaluation evaluate(CreatePunishmentRequest request, OperationalMode mode) {
