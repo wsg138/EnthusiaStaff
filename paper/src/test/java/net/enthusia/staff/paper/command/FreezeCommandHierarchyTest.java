@@ -83,8 +83,18 @@ class FreezeCommandHierarchyTest {
     @Test
     void inactiveDutyIsRejectedBeforeFreezePersistence() {
         AtomicInteger writes = new AtomicInteger();
+        AtomicInteger lookups = new AtomicInteger();
         List<Component> messages = new ArrayList<>();
-        PlayerDirectory directory = proxy(PlayerDirectory.class, (method, arguments) -> Optional.empty());
+        PlayerIdentity target = new PlayerIdentity(
+                TARGET_ID, Optional.of("Target"), PlayerPlatform.JAVA, NOW.minusSeconds(60), NOW
+        );
+        PlayerDirectory directory = proxy(PlayerDirectory.class, (method, arguments) -> switch (method.getName()) {
+            case "find" -> {
+                lookups.incrementAndGet();
+                yield Optional.of(target);
+            }
+            default -> defaultValue(method.getReturnType());
+        });
         FreezeStore store = proxy(FreezeStore.class, (method, arguments) -> {
             if ("apply".equals(method.getName())) {
                 writes.incrementAndGet();
@@ -109,22 +119,35 @@ class FreezeCommandHierarchyTest {
         );
 
         command.onCommand(
-                playerSender(),
+                playerSender(messages),
                 command("freeze"),
                 "freeze",
                 new String[]{"Target", "screenshare"}
         );
 
         assertEquals(0, writes.get());
+        assertEquals(
+                List.of(Component.text("Enter Staff Mode before changing a player freeze.")),
+                messages
+        );
+        assertEquals(0, lookups.get());
     }
 
     private static Player playerSender() {
+        return playerSender(new ArrayList<>());
+    }
+
+    private static Player playerSender(List<Component> messages) {
         return proxy(Player.class, (method, arguments) -> switch (method.getName()) {
             case "getUniqueId" -> ACTOR_ID;
             case "getName" -> "Moderator";
             case "hasPermission" -> {
                 String permission = (String) arguments[0];
                 yield permission.equals("enthusiastaff.freeze") || permission.equals("enthusiastaff.rank.mod");
+            }
+            case "sendMessage" -> {
+                messages.add((Component) arguments[0]);
+                yield defaultValue(method.getReturnType());
             }
             default -> defaultValue(method.getReturnType());
         });
