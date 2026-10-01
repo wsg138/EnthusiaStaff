@@ -1,5 +1,7 @@
 package net.enthusia.staff.velocity;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.inject.Inject;
 import com.velocitypowered.api.command.CommandSource;
 import com.velocitypowered.api.command.SimpleCommand;
@@ -84,6 +86,7 @@ import net.enthusia.staff.persistence.migration.CutoverOutcome;
 import net.enthusia.staff.persistence.migration.LiteBansMigrationService;
 import net.enthusia.staff.persistence.migration.MigrationExecutionReport;
 import net.enthusia.staff.protocol.PersistentChannelServer;
+import net.enthusia.staff.protocol.ProtocolEnvelope;
 import net.enthusia.staff.protocol.TlsContextLoader;
 import net.kyori.adventure.text.Component;
 import org.slf4j.Logger;
@@ -126,6 +129,7 @@ public final class EnthusiaStaffVelocityPlugin {
     private static final Set<String> DISCORD_DESTINATIONS =
             Set.of("punishments", "reports", "logs-staffmode", "alerts");
     private static final UUID CONSOLE_ACTOR_ID = new UUID(0L, 0L);
+    private static final String STAFF_MODE_READY = "STAFF_MODE_READY";
 
     private final ProxyServer proxy;
     private final Logger logger;
@@ -137,7 +141,10 @@ public final class EnthusiaStaffVelocityPlugin {
     private final AtomicBoolean migrationRunning = new AtomicBoolean();
     private final VelocitySecurityEventDispatcher securityEventDispatcher;
     private final VelocityNetworkVerifier networkVerifier;
+    private final ObjectMapper json = new ObjectMapper();
     private final java.util.concurrent.ConcurrentHashMap<UUID, CompletableFuture<Void>> presenceUpdates =
+            new java.util.concurrent.ConcurrentHashMap<>();
+    private final java.util.concurrent.ConcurrentHashMap<UUID, PendingStaffReconnect> pendingStaffReconnects =
             new java.util.concurrent.ConcurrentHashMap<>();
 
     private volatile ExecutorService workers;
@@ -359,6 +366,7 @@ public final class EnthusiaStaffVelocityPlugin {
 
     @Subscribe
     public void onDisconnect(DisconnectEvent event) {
+        pendingStaffReconnects.remove(event.getPlayer().getUniqueId());
         PlayerDirectory directory = playerDirectory;
         VelocityConfiguration loaded = configuration;
         if (directory == null || loaded == null) {
@@ -740,7 +748,7 @@ public final class EnthusiaStaffVelocityPlugin {
                 ),
                 Clock.systemUTC(),
                 envelope -> {
-                    if (networkVerifier.acceptReport(envelope)) {
+                    if (networkVerifier.acceptReport(envelope) || acceptStaffModeReady(envelope)) {
                         return true;
                     }
                     outbox.recordInboxOnce(
@@ -1108,10 +1116,13 @@ public final class EnthusiaStaffVelocityPlugin {
         try {
             var session = sessions.active(event.getPlayer().getUniqueId());
             if (session.isEmpty()) {
+                pendingStaffReconnects.remove(event.getPlayer().getUniqueId());
                 return;
             }
-            String owner = session.orElseThrow().serverId();
-            var backend = proxy.getServer(owner);
+            var snapshot = session.orElseThrow();
+            String requested = event.getOriginalServer().getServerInfo().getName();
+            rememberReconnectTarget(event.getPlayer().getUniqueId(), snapshot, requested);
+            var backend = proxy.getServer(snapshot.serverId());
             if (backend.isEmpty()) {
                 denyServerSwitch(event, "Your staff snapshot belongs to an unavailable backend. Contact an administrator for recovery.");
                 return;
@@ -1121,6 +1132,21 @@ public final class EnthusiaStaffVelocityPlugin {
             logger.error("Staff snapshot ownership lookup failed during reconnect", exception);
             denyServerSwitch(event, "Staff recovery status could not be verified. Please retry shortly.");
         }
+    }
+
+    private void rememberReconnectTarget(
+            UUID playerId,
+            net.enthusia.staff.domain.staff.StaffSessionSnapshot session,
+            String requested
+    ) {
+        if (session.state() != net.enthusia.staff.domain.staff.StaffSessionState.ACTIVE
+                || session.serverId().equalsIgnoreCase(requested)) {
+            pendingStaffReconnects.remove(playerId);
+            return;
+        }
+        pendingStaffReconnects.put(playerId, new PendingStaffReconnect(
+                session.serverId(), requested, session.sessionId(), Clock.systemUTC().instant().plusSeconds(30)
+        ));
     }
 
     private boolean assetFencesAllowSwitch(
@@ -1162,29 +1188,105 @@ public final class EnthusiaStaffVelocityPlugin {
     }
 
     private void enforceModerationSwitchSafety(ServerPreConnectEvent event) {
-        FreezeStore store = freezeStore;
-        if (store == null) {
+        FreezeStore freezes = freezeStore;
+        StaffSessionStore sessions = staffSessionStore;
+        if (freezes == null || sessions == null) {
             denyServerSwitchWhenActive(event, "Server switching is unavailable while moderation status is verified.");
             return;
         }
         try {
-            if (store.active(event.getPlayer().getUniqueId(), Clock.systemUTC().instant()).isPresent()) {
+            UUID playerId = event.getPlayer().getUniqueId();
+            if (freezes.active(playerId, Clock.systemUTC().instant()).isPresent()) {
                 denyServerSwitch(event, "You cannot switch servers while frozen by staff.");
                 return;
             }
-            StaffSessionStore sessions = staffSessionStore;
-            var session = sessions == null ? Optional.<net.enthusia.staff.domain.staff.StaffSessionSnapshot>empty()
-                    : sessions.active(event.getPlayer().getUniqueId());
-            if (session.isPresent() && !StaffSessionTransferPolicy.recoveryReturnAllowed(
-                    session.orElseThrow().serverId(), session.orElseThrow().state(),
-                    event.getPreviousServer().getServerInfo().getName(),
-                    event.getResult().getServer().orElse(event.getOriginalServer()).getServerInfo().getName())) {
-                denyServerSwitch(event, "You cannot switch backends while a staff-mode snapshot is active.");
+            var session = sessions.active(playerId);
+            if (session.isPresent()) {
+                enforceStaffSessionSwitch(event, sessions, session.orElseThrow());
             }
         } catch (RuntimeException exception) {
             logger.error("Moderation safety lookup failed during server switch", exception);
             denyServerSwitchWhenActive(event, "Server switching is unavailable while moderation status is verified.");
         }
+    }
+
+    private void enforceStaffSessionSwitch(
+            ServerPreConnectEvent event,
+            StaffSessionStore sessions,
+            net.enthusia.staff.domain.staff.StaffSessionSnapshot session
+    ) {
+        String current = event.getPreviousServer().getServerInfo().getName();
+        String requested = event.getResult().getServer()
+                .orElse(event.getOriginalServer()).getServerInfo().getName();
+        if (StaffSessionTransferPolicy.recoveryReturnAllowed(
+                session.serverId(), session.state(), current, requested)) {
+            return;
+        }
+        if (!StaffSessionTransferPolicy.activeHandoffAllowed(
+                session.serverId(), session.state(), current, requested)) {
+            denyServerSwitch(event, "You cannot switch backends while this Staff Mode snapshot requires recovery.");
+            return;
+        }
+        StaffModeBackendHandoffCoordinator coordinator = new StaffModeBackendHandoffCoordinator(
+                () -> StaffModeBackendHandoffCoordinator.channelTransport(channelServer),
+                sessions::active,
+                UUID::randomUUID
+        );
+        var decision = coordinator.transfer(event.getPlayer().getUniqueId(), session, current, requested);
+        if (!decision.allowed()) {
+            denyServerSwitch(event, decision.message());
+        }
+    }
+
+    private boolean acceptStaffModeReady(ProtocolEnvelope envelope) {
+        if (!STAFF_MODE_READY.equals(envelope.messageType())) {
+            return false;
+        }
+        try {
+            JsonNode payload = json.readTree(envelope.payloadJson());
+            UUID playerId = UUID.fromString(payload.path("playerId").asText());
+            UUID sessionId = UUID.fromString(payload.path("sessionId").asText());
+            continuePendingReconnect(playerId, sessionId, envelope.serverId());
+            return true;
+        } catch (java.io.IOException | IllegalArgumentException exception) {
+            logger.warn("Rejected malformed Staff Mode readiness message from {}", envelope.serverId());
+            return false;
+        }
+    }
+
+    private void continuePendingReconnect(UUID playerId, UUID sessionId, String owner) {
+        PendingStaffReconnect pending = pendingStaffReconnects.get(playerId);
+        if (!validPendingReconnect(pending, sessionId, owner)) {
+            if (pending != null) {
+                pendingStaffReconnects.remove(playerId, pending);
+            }
+            return;
+        }
+        Player player = proxy.getPlayer(playerId).orElse(null);
+        var destination = proxy.getServer(pending.destination()).orElse(null);
+        if (!readyToContinueReconnect(player, owner) || destination == null
+                || !pendingStaffReconnects.remove(playerId, pending)) {
+            return;
+        }
+        proxy.getScheduler().buildTask(this, () ->
+                player.createConnectionRequest(destination).fireAndForget()).schedule();
+    }
+
+    private static boolean readyToContinueReconnect(Player player, String owner) {
+        return player != null
+                && player.getCurrentServer().isPresent()
+                && player.getCurrentServer().orElseThrow().getServerInfo().getName().equalsIgnoreCase(owner);
+    }
+
+    private static boolean validPendingReconnect(
+            PendingStaffReconnect pending,
+            UUID sessionId,
+            String owner
+    ) {
+        return pending != null
+                && pending.expiresAt().isAfter(Clock.systemUTC().instant())
+                && pending.sessionId().equals(sessionId)
+                && pending.owner().equalsIgnoreCase(owner);
     }
 
     private void denyServerSwitchWhenActive(ServerPreConnectEvent event, String message) {
@@ -1493,6 +1595,14 @@ public final class EnthusiaStaffVelocityPlugin {
         } catch (RejectedExecutionException exception) {
             source.sendMessage(VelocityMessageStyle.style(Component.text("The bounded work queue is full; alt operation did not start.")));
         }
+    }
+
+    private record PendingStaffReconnect(
+            String owner,
+            String destination,
+            UUID sessionId,
+            Instant expiresAt
+    ) {
     }
 
     final class StatusCommand implements SimpleCommand {
