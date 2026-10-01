@@ -192,6 +192,13 @@ public final class PunishmentCommand implements CommandExecutor, TabCompleter {
             send(sender, Component.text("Moderation storage is not ready; no draft was created.", NamedTextColor.RED));
             return;
         }
+        if (!permitsPunishmentDraft(actor)) {
+            send(sender, Component.text(
+                    "Your active staff authority expired before the punishment draft was prepared.",
+                    NamedTextColor.RED
+            ));
+            return;
+        }
         PunishmentDraftEvaluation evaluation = workflow.prepare(
                 prepareRequest(target, actor, route, label, args),
                 mode.get()
@@ -259,6 +266,13 @@ public final class PunishmentCommand implements CommandExecutor, TabCompleter {
         }
         PunishmentDraft draft = workflow.find(draftId, actor.id()).orElse(null);
         if (draft != null && !targetAllowed(sender, actor, draft.targetId())) {
+            return;
+        }
+        if (!permitsPunishmentDraft(actor)) {
+            send(sender, Component.text(
+                    "Your active staff authority expired before the punishment was confirmed.",
+                    NamedTextColor.RED
+            ));
             return;
         }
         try {
