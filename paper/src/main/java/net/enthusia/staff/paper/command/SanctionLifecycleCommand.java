@@ -25,10 +25,12 @@ import net.enthusia.staff.domain.auth.Actor;
 import net.enthusia.staff.domain.sanction.ExactSanctionChangeRequest;
 import net.enthusia.staff.domain.sanction.ExactSanctionChangeResult;
 import net.enthusia.staff.domain.sanction.SanctionChangeAction;
+import net.enthusia.staff.paper.api.StaffSessionService;
 import net.enthusia.staff.paper.auth.PaperActorResolver;
 import net.enthusia.staff.paper.config.ModerationFeatureSettings;
 import net.kyori.adventure.text.Component;
 import org.bukkit.command.CommandSender;
+import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
 
 public final class SanctionLifecycleCommand {
@@ -102,17 +104,32 @@ public final class SanctionLifecycleCommand {
             sender.sendMessage(StaffMessageStyle.style(Component.text("Your staff identity could not be resolved.")));
             return true;
         }
+        Actor resolvedActor = actor.orElseThrow();
+        boolean systemActor = !(sender instanceof Player);
+        if (!systemActor && !activeDuty(resolvedActor.id())) {
+            sender.sendMessage(StaffMessageStyle.style(Component.text(
+                    "Enter Staff Mode before changing a sanction."
+            )));
+            return true;
+        }
         PendingChange pending = new PendingChange(
-                actor.orElseThrow(),
+                resolvedActor,
                 selected,
                 parsed,
-                sender.hasPermission(BYPASS_HIERARCHY_PERMISSION)
+                sender.hasPermission(BYPASS_HIERARCHY_PERMISSION),
+                systemActor
         );
         submit(sender, () -> apply(sender, pending));
         return true;
     }
 
     private void apply(CommandSender sender, PendingChange pending) {
+        if (!pending.systemActor() && !activeDuty(pending.actor().id())) {
+            responses.send(sender, Component.text(
+                    "Your active staff authority expired before the sanction change was committed."
+            ));
+            return;
+        }
         SanctionChangeService service = changes.get();
         if (service == null) {
             responses.send(sender, Component.text("Sanction changes are unavailable while storage is offline."));
@@ -166,6 +183,11 @@ public final class SanctionLifecycleCommand {
             return;
         }
         responses.send(sender, render(result, request, active));
+    }
+
+    private boolean activeDuty(UUID actorId) {
+        StaffSessionService sessions = plugin.getServer().getServicesManager().load(StaffSessionService.class);
+        return sessions != null && sessions.hasActiveSession(actorId);
     }
 
     private static List<Component> render(
@@ -407,7 +429,8 @@ public final class SanctionLifecycleCommand {
             Actor actor,
             Operation operation,
             Parsed parsed,
-            boolean bypassHierarchy
+            boolean bypassHierarchy,
+            boolean systemActor
     ) {
     }
 
