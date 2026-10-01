@@ -170,6 +170,12 @@ public final class SanctionLifecycleCommand {
                     originRuntime,
                     pending.bypassHierarchy()
             );
+            if (!pending.systemActor() && !activeDuty(pending.actor().id())) {
+                responses.send(sender, Component.text(
+                        "Your active staff authority expired before the sanction change was committed."
+                ));
+                return;
+            }
             result = service.applyExact(request, mode.get(), active.sanctionActionLimits());
         } catch (RuntimeException exception) {
             plugin.getLogger().log(
