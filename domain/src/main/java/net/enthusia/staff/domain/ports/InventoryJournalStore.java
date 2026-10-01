@@ -91,13 +91,17 @@ public interface InventoryJournalStore {
 
     List<InventoryPatch> pending(UUID playerId, String scopeId, String owningServerId, int limit);
 
-    List<InventoryCursorJournal> pendingCursorTransfersByActor(
+    default List<InventoryCursorJournal> pendingCursorTransfersByActor(
             UUID actorId,
             String owningServerId,
             int limit
-    );
+    ) {
+        throw new UnsupportedOperationException("cursor escrow lookup is not supported by this store");
+    }
 
-    Optional<InventoryCursorJournal> cursorTransfer(UUID operationId);
+    default Optional<InventoryCursorJournal> cursorTransfer(UUID operationId) {
+        throw new UnsupportedOperationException("cursor escrow lookup is not supported by this store");
+    }
 
     Optional<InventoryPatch> claimForApply(
             UUID patchId,
@@ -106,14 +110,16 @@ public interface InventoryJournalStore {
             Instant now
     );
 
-    boolean advanceCursorPhase(
+    default boolean advanceCursorPhase(
             UUID patchId,
             UUID operationId,
             long fencingToken,
             InventoryCursorPhase expected,
             InventoryCursorPhase next,
             Instant now
-    );
+    ) {
+        throw new UnsupportedOperationException("cursor escrow transitions are not supported by this store");
+    }
 
     InventoryFinalizeResult finalizeApplied(
             UUID patchId,
