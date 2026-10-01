@@ -229,7 +229,7 @@ final class PaperCommandRegistrar {
                 workers()
         );
         plugin().getServer().getPluginManager().registerEvents(reportGui, plugin());
-        ReportsCommand reports = new ReportsCommand(plugin(), clock(), reportStore, workers(), reportGui);
+        ReportsCommand reports = new ReportsCommand(plugin(), clock(), activeReportStore, workers(), reportGui);
         bindCompleting("reports", reports, reports);
     }
 
