@@ -14,7 +14,7 @@ import org.junit.jupiter.api.Test;
 
 class JdaStaffModerationListenerTest {
     private static final String USER_ID_OPTION = "user-id";
-    private static final String MODERATE_COMMAND = MODERATE_COMMAND;
+    private static final String MODERATE_COMMAND = "moderate";
 
     @Test
     void staffReadCommandsAreCompleteAndDefaultDisabledForDiscovery() {
