@@ -68,7 +68,7 @@ public final class InventoryCoordinator implements Listener, InventoryLockServic
     private static final long RECONCILIATION_INITIAL_DELAY_TICKS = 5L;
     private static final long RECONCILIATION_PERIOD_TICKS = 40L;
     private static final String LIVE_CURSOR_PREFIX = "ONLINE_CURSOR_";
-    private static final String RECOVERY_STORAGE_UNAVAILABLE = RECOVERY_STORAGE_UNAVAILABLE;
+    private static final String RECOVERY_STORAGE_UNAVAILABLE = "Inventory recovery storage is unavailable.";
 
     private final JavaPlugin plugin;
     private final Clock clock;
