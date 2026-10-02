@@ -255,7 +255,42 @@ jobs:
                               + "|x=" + event.getTo().getX()
                               + "|y=" + event.getTo().getY()
                               + "|z=" + event.getTo().getZ());
+                      advanceChamber(event.getPlayer(), label);
                   }
+              }
+
+              private void advanceChamber(Player player, String label) {
+                  if ("WALL".equals(label)) {
+                      resetChamber(player, "FLOOR");
+                  } else if ("FLOOR".equals(label)) {
+                      resetChamber(player, "CEILING");
+                  } else if ("CEILING".equals(label)) {
+                      later(2L, () -> completeChamber(player));
+                  }
+              }
+
+              private void resetChamber(Player player, String next) {
+                  later(2L, () -> {
+                      Location base = chamberBase;
+                      boolean teleported = base != null && player.teleport(base);
+                      boolean reconciled = teleported && reconcile(player);
+                      evidence("CHAMBER_RESET|next=" + next
+                              + "|teleported=" + teleported
+                              + "|reconciled=" + reconciled);
+                      if (teleported && reconciled) {
+                          marker(player, "PROBE_" + next + ":" + base.getX()
+                                  + ":" + base.getY() + ":" + base.getZ());
+                      }
+                  });
+              }
+
+              private void completeChamber(Player player) {
+                  Location base = chamberBase;
+                  if (base != null) {
+                      clearChamber(base);
+                  }
+                  evidence("CHAMBER_COMPLETE=true");
+                  marker(player, "CHAMBER_DONE");
               }
 
               private Plugin requireStaffPlugin() {
@@ -355,11 +390,11 @@ jobs:
                       evidence("ENABLE|reconciled=" + enabled + "|noPhysics=" + player.hasNoPhysics()
                               + "|serverMode=" + player.getGameMode());
                       marker(player, "ENABLED");
-                      later(5L, () -> setupMovementChamber(player));
-                      later(70L, () -> teleportWhileActive(player));
-                      later(90L, () -> disable(player));
-                      later(110L, () -> forcedFailure(player));
-                      later(130L, () -> reconnectPreparation(player));
+                      later(5L, () -> teleportWhileActive(player));
+                      later(25L, () -> setupMovementChamber(player));
+                      later(100L, () -> disable(player));
+                      later(120L, () -> forcedFailure(player));
+                      later(140L, () -> reconnectPreparation(player));
                   } catch (Exception exception) {
                       fail("FIRST_SESSION", exception);
                   }
@@ -441,6 +476,7 @@ jobs:
 
               private void teleportWhileActive(Player player) {
                   try {
+                      releaseDisposableFreeze(player);
                       Location destination = player.getLocation().clone().add(7.0D, 2.0D, 7.0D);
                       boolean teleported = player.teleport(destination);
                       boolean reconciled = reconcile(player);
@@ -713,16 +749,16 @@ jobs:
                 const [x, y, z] = coordinates
                 await sleep(150)
                 move(bot, x + 1.0, y, z, 'WALL')
-                await sleep(450)
-                move(bot, x, y, z, 'RESET_WALL')
-                await sleep(200)
+              }
+              if (marker === 'PROBE_FLOOR') {
+                const [x, y, z] = coordinates
+                await sleep(150)
                 move(bot, x, y - 0.5, z, 'FLOOR')
-                await sleep(450)
-                move(bot, x, y, z, 'RESET_FLOOR')
-                await sleep(200)
+              }
+              if (marker === 'PROBE_CEILING') {
+                const [x, y, z] = coordinates
+                await sleep(150)
                 move(bot, x, y + 1.0, z, 'CEILING')
-                await sleep(450)
-                move(bot, x, y, z, 'RESET_CEILING')
               }
               if (marker === 'RECONNECT_PREP') reconnectExpected = true
               if (marker === 'DISABLE_CLEANED') finished = true
@@ -969,14 +1005,17 @@ jobs:
             require_line "$evidence" '^FACTORY_AVAILABLE=true\|reason=$'
             require_line "$evidence" '^ENABLE\|reconciled=true\|noPhysics=true\|serverMode=CREATIVE$'
             require_line "$evidence" '^FREEZE_RELEASE\|restricted=false$'
+            require_line "$evidence" '^TELEPORT\|teleported=true\|reconciled=true\|noPhysics=true\|serverMode=CREATIVE$'
             require_line "$evidence" '^CHAMBER_READY\|reconciled=true\|x=.*\|y=.*\|z=.*\|serverMode=CREATIVE$'
             require_line "$evidence" '^FAIL_MOVE\|label=WALL\|reason=CLIPPED_INTO_BLOCK\|allowed=true\|logWarning=false$'
-            require_line "$evidence" '^FAIL_MOVE\|label=FLOOR\|reason=CLIPPED_INTO_BLOCK\|allowed=true\|logWarning=false$'
-            require_line "$evidence" '^FAIL_MOVE\|label=CEILING\|reason=CLIPPED_INTO_BLOCK\|allowed=true\|logWarning=false$'
             require_line "$evidence" '^MOVE_ACCEPTED\|label=WALL\|.*$'
+            require_line "$evidence" '^CHAMBER_RESET\|next=FLOOR\|teleported=true\|reconciled=true$'
+            require_line "$evidence" '^FAIL_MOVE\|label=FLOOR\|reason=CLIPPED_INTO_BLOCK\|allowed=true\|logWarning=false$'
             require_line "$evidence" '^MOVE_ACCEPTED\|label=FLOOR\|.*$'
+            require_line "$evidence" '^CHAMBER_RESET\|next=CEILING\|teleported=true\|reconciled=true$'
+            require_line "$evidence" '^FAIL_MOVE\|label=CEILING\|reason=CLIPPED_INTO_BLOCK\|allowed=true\|logWarning=false$'
             require_line "$evidence" '^MOVE_ACCEPTED\|label=CEILING\|.*$'
-            require_line "$evidence" '^TELEPORT\|teleported=true\|reconciled=true\|noPhysics=true\|serverMode=CREATIVE$'
+            require_line "$evidence" '^CHAMBER_COMPLETE=true$'
             require_line "$evidence" '^DISABLE\|reconciled=true\|noPhysics=false\|serverMode=CREATIVE$'
             require_line "$evidence" '^FORCED_FAILURE\|reconciled=false\|adapterAvailable=false\|noPhysics=false$'
             require_line "$evidence" '^RECONNECT_PREP\|reconciled=true\|noPhysics=true\|serverMode=CREATIVE$'
@@ -993,11 +1032,14 @@ jobs:
             fi
 
             require_line "$client" '^MARKER\|ENABLED\|session=1\|mode=spectator$'
+            require_line "$client" '^MARKER\|TELEPORTED\|session=1\|mode=spectator$'
             require_line "$client" '^MARKER\|CHAMBER\|session=1\|mode=spectator$'
             require_line "$client" '^CLIENT_MOVE\|WALL\|.*$'
+            require_line "$client" '^MARKER\|PROBE_FLOOR\|session=1\|mode=spectator$'
             require_line "$client" '^CLIENT_MOVE\|FLOOR\|.*$'
+            require_line "$client" '^MARKER\|PROBE_CEILING\|session=1\|mode=spectator$'
             require_line "$client" '^CLIENT_MOVE\|CEILING\|.*$'
-            require_line "$client" '^MARKER\|TELEPORTED\|session=1\|mode=spectator$'
+            require_line "$client" '^MARKER\|CHAMBER_DONE\|session=1\|mode=spectator$'
             require_line "$client" '^MARKER\|DISABLED\|session=1\|mode=creative$'
             require_line "$client" '^MARKER\|RECONNECT_PREP\|session=1\|mode=spectator$'
             require_line "$client" '^MARKER\|RECONNECT_ENABLED\|session=2\|mode=spectator$'
