@@ -903,9 +903,7 @@ public final class VanishManager implements Listener {
         if (!vanished) {
             stopNoclipMaintenance(playerId);
         }
-        if (vanished && !noclip.canEnable(player)) {
-            stopNoclipMaintenance(playerId);
-            failClosedNoclip(player, "the pinned client adapter is unavailable");
+        if (noclipRuntimeUnavailable(player, playerId, vanished)) {
             return false;
         }
         if (!noclip.reconcile(player, vanished)) {
@@ -925,6 +923,15 @@ public final class VanishManager implements Listener {
             requireSafeReconnect(player);
         }
         return false;
+    }
+
+    private boolean noclipRuntimeUnavailable(Player player, UUID playerId, boolean vanished) {
+        if (!vanished || noclip.canEnable(player)) {
+            return false;
+        }
+        stopNoclipMaintenance(playerId);
+        failClosedNoclip(player, "the pinned client adapter is unavailable");
+        return true;
     }
 
     private boolean ensureNoclipMaintenance(Player player) {

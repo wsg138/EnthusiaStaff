@@ -63,6 +63,7 @@ jobs:
           path = "paper/src/main/java/net/enthusia/staff/paper/visibility/VanishManager.java"
           targets = {
               "reconcileNoclip",
+              "noclipRuntimeUnavailable",
               "ensureNoclipMaintenance",
               "maintainNoclip",
               "recoverNoclipMaintenance",
