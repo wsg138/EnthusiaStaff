@@ -1,0 +1,25 @@
+name: Diagnostic Codacy Annotations
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+  checks: read
+
+jobs:
+  dump-codacy-annotations:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Dump Codacy annotations for reconciliation head
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          repo="$GITHUB_REPOSITORY"
+          sha="8a479b9412add2f780c255c55bf8324e48557587"
+          check_id="$(gh api "repos/$repo/commits/$sha/check-runs" --jq '.check_runs[] | select(.name == "Codacy Static Code Analysis") | .id' | head -n1)"
+          test -n "$check_id"
+          echo "CHECK_ID=$check_id"
+          gh api "repos/$repo/check-runs/$check_id/annotations?per_page=100" --paginate \
+            --jq '.[] | {path, start_line, end_line, annotation_level, title, message, raw_details}'
