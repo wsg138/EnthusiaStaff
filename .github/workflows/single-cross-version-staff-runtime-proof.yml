@@ -1,0 +1,768 @@
+name: Single cross-version Staff JAR runtime proof
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths:
+      - "paper/**"
+      - ".github/workflows/single-cross-version-staff-runtime-proof.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: single-cross-version-staff-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  prove:
+    name: Exact Leaf 115 + Paper 26.2-129 common-JAR proof
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      LEAF_SHA256: 29468f84fe484412b117207c975c3fc520d0e9bd5fca96c57f63eaf707d25077
+      PAPER_USER_AGENT: EnthusiaStaff-cross-version-proof/1.0.0
+      MINEFLAYER_COMMIT: f9e7db4447afda7838f08aa13430ec768738c178
+
+    steps:
+      - name: Check out exact candidate head
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Java 25
+        uses: actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95 # v5.6.0
+        with:
+          distribution: temurin
+          java-version: "25"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@3f131e8634966bd73d06cc69884922b02e6faf92 # v6
+
+      - name: Set up Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+
+      - name: Build one candidate Staff JAR
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          chmod +x ./gradlew
+          ./gradlew :paper:test :paper:shadowJar             --no-daemon --no-build-cache --no-configuration-cache --console=plain
+          jar_path="$(find paper/build/libs -maxdepth 1 -type f -name 'EnthusiaStaff-Paper-*.jar' ! -name '*-sources.jar' -print -quit)"
+          test -n "$jar_path"
+          mkdir -p "$RUNNER_TEMP/candidate" "$RUNNER_TEMP/evidence"
+          cp "$jar_path" "$RUNNER_TEMP/candidate/EnthusiaStaff-Paper.jar"
+          sha256sum "$RUNNER_TEMP/candidate/EnthusiaStaff-Paper.jar" | tee "$RUNNER_TEMP/evidence/candidate.sha256"
+          unzip -p "$RUNNER_TEMP/candidate/EnthusiaStaff-Paper.jar" plugin.yml             | tee "$RUNNER_TEMP/evidence/candidate-plugin.yml"
+          grep -F "api-version: '1.21'" "$RUNNER_TEMP/evidence/candidate-plugin.yml"
+          {
+            echo "source=$(git rev-parse HEAD)"
+            echo "java=$(java -version 2>&1 | head -n1)"
+          } | tee "$RUNNER_TEMP/evidence/source.txt"
+
+      - name: Build disposable product-path probe
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          root="$RUNNER_TEMP/harness"
+          mkdir -p "$root/src/main/java/proof/crossversion" "$root/src/main/resources"
+          cat > "$root/pom.xml" <<'POM'
+          <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                   xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+            <modelVersion>4.0.0</modelVersion>
+            <groupId>proof.crossversion</groupId>
+            <artifactId>cross-version-runtime-proof</artifactId>
+            <version>1.0.0</version>
+            <properties>
+              <maven.compiler.release>21</maven.compiler.release>
+              <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+            </properties>
+            <repositories>
+              <repository>
+                <id>papermc</id>
+                <url>https://repo.papermc.io/repository/maven-public/</url>
+              </repository>
+            </repositories>
+            <dependencies>
+              <dependency>
+                <groupId>io.papermc.paper</groupId>
+                <artifactId>paper-api</artifactId>
+                <version>1.21.11-R0.1-SNAPSHOT</version>
+                <scope>provided</scope>
+              </dependency>
+            </dependencies>
+          </project>
+          POM
+
+          cat > "$root/src/main/resources/plugin.yml" <<'YML'
+          name: CrossVersionRuntimeProof
+          version: 1.0.0
+          main: proof.crossversion.CrossVersionRuntimeProof
+          api-version: '1.21'
+          load: POSTWORLD
+          depend: [EnthusiaStaff]
+          YML
+
+          cat > "$root/src/main/java/proof/crossversion/CrossVersionRuntimeProof.java" <<'JAVA'
+          package proof.crossversion;
+
+          import io.papermc.paper.ServerBuildInfo;
+          import java.lang.reflect.Constructor;
+          import java.lang.reflect.Field;
+          import java.lang.reflect.Method;
+          import java.nio.charset.StandardCharsets;
+          import java.nio.file.Files;
+          import java.nio.file.Path;
+          import java.nio.file.StandardOpenOption;
+          import java.util.OptionalInt;
+          import java.util.UUID;
+          import java.util.concurrent.atomic.AtomicInteger;
+          import java.util.logging.Logger;
+          import net.kyori.adventure.text.Component;
+          import org.bukkit.GameMode;
+          import org.bukkit.Location;
+          import org.bukkit.entity.Player;
+          import org.bukkit.event.EventHandler;
+          import org.bukkit.event.EventPriority;
+          import org.bukkit.event.Listener;
+          import org.bukkit.event.player.PlayerJoinEvent;
+          import org.bukkit.event.server.PluginDisableEvent;
+          import org.bukkit.plugin.Plugin;
+          import org.bukkit.plugin.java.JavaPlugin;
+
+          public final class CrossVersionRuntimeProof extends JavaPlugin implements Listener {
+              private static final Path EVIDENCE = Path.of("cross-version-runtime-evidence.txt");
+              private final AtomicInteger joins = new AtomicInteger();
+              private Plugin staffPlugin;
+              private Object vanishManager;
+              private Object visibility;
+              private Object rankAdmin;
+              private Method setVanished;
+              private Method reconcileManager;
+              private Object badController;
+              private Method reconcileController;
+
+              @Override
+              public void onEnable() {
+                  try {
+                      Files.deleteIfExists(EVIDENCE);
+                      staffPlugin = requireStaffPlugin();
+                      inspectRuntime();
+                      prepareManager();
+                      prepareForcedFailureController();
+                      getServer().getPluginManager().registerEvents(this, this);
+                      evidence("HARNESS_READY=true");
+                  } catch (Exception exception) {
+                      evidence("HARNESS_READY=false|error=" + compact(exception));
+                      getLogger().severe("Cross-version runtime proof setup failed: " + compact(exception));
+                      getServer().getPluginManager().disablePlugin(this);
+                  }
+              }
+
+              @EventHandler(priority = EventPriority.LOWEST)
+              public void prepareRank(PlayerJoinEvent event) {
+                  event.getPlayer().addAttachment(this, "enthusiastaff.rank.admin", true);
+                  event.getPlayer().addAttachment(this, "enthusiastaff.vanish", true);
+              }
+
+              @EventHandler(priority = EventPriority.MONITOR)
+              public void onJoin(PlayerJoinEvent event) {
+                  int sequence = joins.incrementAndGet();
+                  Player player = event.getPlayer();
+                  evidence("JOIN|sequence=" + sequence + "|noPhysics=" + player.hasNoPhysics()
+                          + "|serverMode=" + player.getGameMode());
+                  if (sequence == 1) {
+                      later(20L, () -> firstSession(player));
+                  } else if (sequence == 2) {
+                      later(10L, () -> secondSession(player));
+                  }
+              }
+
+              private Plugin requireStaffPlugin() {
+                  Plugin plugin = getServer().getPluginManager().getPlugin("EnthusiaStaff");
+                  if (plugin == null || !plugin.isEnabled()) {
+                      throw new IllegalStateException("EnthusiaStaff is not enabled");
+                  }
+                  return plugin;
+              }
+
+              private void inspectRuntime() throws ReflectiveOperationException {
+                  ServerBuildInfo info = ServerBuildInfo.buildInfo();
+                  evidence("RUNTIME|brandId=" + info.brandId()
+                          + "|minecraft=" + info.minecraftVersionId()
+                          + "|build=" + optionalInt(info.buildNumber()));
+                  ClassLoader loader = staffPlugin.getClass().getClassLoader();
+                  Class<?> factory = loader.loadClass(
+                          "net.enthusia.staff.paper.visibility.VanishClientGameModeAdapterFactory");
+                  Method install = factory.getDeclaredMethod("install", Logger.class);
+                  install.setAccessible(true);
+                  Object adapter = install.invoke(null, getLogger());
+                  evidence("FACTORY_AVAILABLE=" + invokeBoolean(adapter, "available")
+                          + "|reason=" + invokeString(adapter, "unavailableReason"));
+              }
+
+              private void prepareManager() throws ReflectiveOperationException {
+                  Field componentsField = staffPlugin.getClass().getDeclaredField("runtimeComponents");
+                  componentsField.setAccessible(true);
+                  Object components = componentsField.get(staffPlugin);
+                  Method vanishAccessor = components.getClass().getDeclaredMethod("vanish");
+                  vanishAccessor.setAccessible(true);
+                  vanishManager = vanishAccessor.invoke(components);
+
+                  Field visibilityField = vanishManager.getClass().getDeclaredField("visibility");
+                  visibilityField.setAccessible(true);
+                  visibility = visibilityField.get(vanishManager);
+                  ClassLoader loader = staffPlugin.getClass().getClassLoader();
+                  Class<?> rankClass = loader.loadClass("net.enthusia.staff.domain.auth.StaffRank");
+                  rankAdmin = rankClass.getField("ADMIN").get(null);
+                  setVanished = visibility.getClass().getMethod(
+                          "setVanished", UUID.class, rankClass, boolean.class);
+                  reconcileManager = vanishManager.getClass().getDeclaredMethod(
+                          "reconcileNoclip", Player.class);
+                  reconcileManager.setAccessible(true);
+              }
+
+              private void prepareForcedFailureController() throws ReflectiveOperationException {
+                  ClassLoader loader = staffPlugin.getClass().getClassLoader();
+                  Class<?> adapter = loader.loadClass(
+                          "net.enthusia.staff.paper.visibility.ReflectiveVanishClientGameModeAdapter");
+                  Method accessMethod = adapter.getDeclaredMethod("reflectionAccess");
+                  accessMethod.setAccessible(true);
+                  Object access = accessMethod.invoke(null);
+                  Object badAccess = badReflectionAccess(access);
+
+                  Constructor<?> adapterConstructor = adapter.getDeclaredConstructor(
+                          Logger.class, access.getClass());
+                  adapterConstructor.setAccessible(true);
+                  Object badAdapter = adapterConstructor.newInstance(getLogger(), badAccess);
+
+                  Class<?> controller = loader.loadClass(
+                          "net.enthusia.staff.paper.visibility.VanishNoclipController");
+                  Constructor<?> controllerConstructor = controller.getDeclaredConstructors()[0];
+                  controllerConstructor.setAccessible(true);
+                  badController = controllerConstructor.newInstance(badAdapter);
+                  reconcileController = controller.getDeclaredMethod(
+                          "reconcile", Player.class, boolean.class);
+                  reconcileController.setAccessible(true);
+              }
+
+              private Object badReflectionAccess(Object access) throws ReflectiveOperationException {
+                  Class<?> type = access.getClass();
+                  Constructor<?> constructor = type.getDeclaredConstructors()[0];
+                  constructor.setAccessible(true);
+                  Object[] parts = new Object[5];
+                  String[] names = {"getHandle", "connection", "gameEventPacket", "changeGameMode"};
+                  for (int index = 0; index < names.length; index++) {
+                      Method accessor = type.getDeclaredMethod(names[index]);
+                      accessor.setAccessible(true);
+                      parts[index] = accessor.invoke(access);
+                  }
+                  parts[4] = Object.class.getMethod("toString");
+                  return constructor.newInstance(parts);
+              }
+
+              private void firstSession(Player player) {
+                  try {
+                      preparePlayer(player);
+                      setVanish(player, true);
+                      boolean enabled = reconcile(player);
+                      evidence("ENABLE|reconciled=" + enabled + "|noPhysics=" + player.hasNoPhysics()
+                              + "|serverMode=" + player.getGameMode());
+                      marker(player, "ENABLED");
+                      later(20L, () -> teleport(player));
+                      later(40L, () -> disable(player));
+                      later(60L, () -> forcedFailure(player));
+                      later(80L, () -> reconnectPreparation(player));
+                  } catch (Exception exception) {
+                      fail("FIRST_SESSION", exception);
+                  }
+              }
+
+              private void teleport(Player player) {
+                  try {
+                      Location destination = player.getLocation().clone().add(7.0D, 2.0D, 7.0D);
+                      boolean teleported = player.teleport(destination);
+                      boolean reconciled = reconcile(player);
+                      evidence("TELEPORT|teleported=" + teleported + "|reconciled=" + reconciled
+                              + "|noPhysics=" + player.hasNoPhysics()
+                              + "|serverMode=" + player.getGameMode());
+                      marker(player, "TELEPORTED");
+                  } catch (Exception exception) {
+                      fail("TELEPORT", exception);
+                  }
+              }
+
+              private void disable(Player player) {
+                  try {
+                      setVanish(player, false);
+                      boolean disabled = reconcile(player);
+                      evidence("DISABLE|reconciled=" + disabled + "|noPhysics=" + player.hasNoPhysics()
+                              + "|serverMode=" + player.getGameMode());
+                      marker(player, "DISABLED");
+                  } catch (Exception exception) {
+                      fail("DISABLE", exception);
+                  }
+              }
+
+              private void forcedFailure(Player player) {
+                  try {
+                      player.setNoPhysics(false);
+                      boolean result = (boolean) reconcileController.invoke(badController, player, true);
+                      Field clientModes = badController.getClass().getDeclaredField("clientModes");
+                      clientModes.setAccessible(true);
+                      Object adapter = clientModes.get(badController);
+                      evidence("FORCED_FAILURE|reconciled=" + result
+                              + "|adapterAvailable=" + invokeBoolean(adapter, "available")
+                              + "|noPhysics=" + player.hasNoPhysics());
+                  } catch (Exception exception) {
+                      fail("FORCED_FAILURE", exception);
+                  }
+              }
+
+              private void reconnectPreparation(Player player) {
+                  try {
+                      setVanish(player, true);
+                      boolean enabled = reconcile(player);
+                      evidence("RECONNECT_PREP|reconciled=" + enabled
+                              + "|noPhysics=" + player.hasNoPhysics()
+                              + "|serverMode=" + player.getGameMode());
+                      marker(player, "RECONNECT_PREP");
+                      later(10L, () -> player.kick(Component.text("cross-version-runtime-proof")));
+                  } catch (Exception exception) {
+                      fail("RECONNECT_PREP", exception);
+                  }
+              }
+
+              private void secondSession(Player player) {
+                  try {
+                      preparePlayer(player);
+                      evidence("RECONNECT_JOIN|noPhysics=" + player.hasNoPhysics()
+                              + "|serverMode=" + player.getGameMode());
+                      setVanish(player, true);
+                      boolean enabled = reconcile(player);
+                      evidence("RECONNECT_ENABLE|reconciled=" + enabled
+                              + "|noPhysics=" + player.hasNoPhysics()
+                              + "|serverMode=" + player.getGameMode());
+                      marker(player, "RECONNECT_ENABLED");
+                      later(20L, () -> secondDisable(player));
+                      later(40L, () -> disablePreparation(player));
+                      later(60L, () -> pluginDisableCleanup(player));
+                  } catch (Exception exception) {
+                      fail("SECOND_SESSION", exception);
+                  }
+              }
+
+              private void secondDisable(Player player) {
+                  try {
+                      setVanish(player, false);
+                      boolean disabled = reconcile(player);
+                      evidence("RECONNECT_DISABLE|reconciled=" + disabled
+                              + "|noPhysics=" + player.hasNoPhysics()
+                              + "|serverMode=" + player.getGameMode());
+                      marker(player, "RECONNECT_DISABLED");
+                  } catch (Exception exception) {
+                      fail("RECONNECT_DISABLE", exception);
+                  }
+              }
+
+              private void disablePreparation(Player player) {
+                  try {
+                      setVanish(player, true);
+                      boolean enabled = reconcile(player);
+                      evidence("DISABLE_PREP|reconciled=" + enabled
+                              + "|noPhysics=" + player.hasNoPhysics()
+                              + "|serverMode=" + player.getGameMode());
+                      marker(player, "DISABLE_ACTIVE");
+                  } catch (Exception exception) {
+                      fail("DISABLE_PREP", exception);
+                  }
+              }
+
+              private void pluginDisableCleanup(Player player) {
+                  try {
+                      Method handler = vanishManager.getClass().getMethod(
+                              "onPluginDisable", PluginDisableEvent.class);
+                      handler.invoke(vanishManager, new PluginDisableEvent(staffPlugin));
+                      evidence("PLUGIN_DISABLE_CLEANUP|noPhysics=" + player.hasNoPhysics()
+                              + "|serverMode=" + player.getGameMode());
+                      setVanish(player, false);
+                      marker(player, "DISABLE_CLEANED");
+                      evidence("DONE=true");
+                      later(20L, () -> getServer().dispatchCommand(
+                              getServer().getConsoleSender(), "stop"));
+                  } catch (Exception exception) {
+                      fail("PLUGIN_DISABLE", exception);
+                  }
+              }
+
+              private void preparePlayer(Player player) {
+                  player.setGameMode(GameMode.CREATIVE);
+                  player.setAllowFlight(true);
+                  player.setFlying(true);
+                  player.setNoPhysics(false);
+              }
+
+              private void setVanish(Player player, boolean vanished) throws ReflectiveOperationException {
+                  setVanished.invoke(visibility, player.getUniqueId(), rankAdmin, vanished);
+              }
+
+              private boolean reconcile(Player player) throws ReflectiveOperationException {
+                  return (boolean) reconcileManager.invoke(vanishManager, player);
+              }
+
+              private void marker(Player player, String marker) {
+                  if (player.isOnline()) {
+                      player.sendMessage(Component.text("RTPROOF:" + marker));
+                  }
+              }
+
+              private void later(long ticks, Runnable operation) {
+                  getServer().getScheduler().runTaskLater(this, operation, ticks);
+              }
+
+              private boolean invokeBoolean(Object target, String methodName)
+                      throws ReflectiveOperationException {
+                  Method method = target.getClass().getDeclaredMethod(methodName);
+                  method.setAccessible(true);
+                  return (boolean) method.invoke(target);
+              }
+
+              private String invokeString(Object target, String methodName)
+                      throws ReflectiveOperationException {
+                  Method method = target.getClass().getDeclaredMethod(methodName);
+                  method.setAccessible(true);
+                  return String.valueOf(method.invoke(target));
+              }
+
+              private void fail(String phase, Exception exception) {
+                  evidence("FAIL|" + phase + "|error=" + compact(exception));
+                  getLogger().severe("Cross-version runtime proof phase " + phase
+                          + " failed: " + compact(exception));
+              }
+
+              private static String optionalInt(OptionalInt value) {
+                  return value.isPresent() ? Integer.toString(value.getAsInt()) : "missing";
+              }
+
+              private static String compact(Throwable throwable) {
+                  Throwable current = throwable;
+                  while (current.getCause() != null) {
+                      current = current.getCause();
+                  }
+                  return current.getClass().getName() + ":"
+                          + String.valueOf(current.getMessage()).replace('\n', ' ');
+              }
+
+              private synchronized void evidence(String line) {
+                  try {
+                      Files.writeString(
+                              EVIDENCE,
+                              line + System.lineSeparator(),
+                              StandardCharsets.UTF_8,
+                              StandardOpenOption.CREATE,
+                              StandardOpenOption.APPEND
+                      );
+                      getLogger().info("[RTPROOF] " + line);
+                  } catch (Exception exception) {
+                      getLogger().severe("Could not write runtime proof evidence: " + compact(exception));
+                  }
+              }
+          }
+          JAVA
+
+          (cd "$root" && mvn -B -q package)
+          cp "$root/target/cross-version-runtime-proof-1.0.0.jar" "$RUNNER_TEMP/CrossVersionRuntimeProof.jar"
+          sha256sum "$RUNNER_TEMP/CrossVersionRuntimeProof.jar"             | tee "$RUNNER_TEMP/evidence/harness.sha256"
+
+      - name: Install pinned protocol client
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          client="$RUNNER_TEMP/protocol-client"
+          mkdir -p "$client"
+          cd "$client"
+          npm init -y >/dev/null
+          npm install --no-audit --no-fund             "https://github.com/zkonikishi/Mineflayer/archive/$MINEFLAYER_COMMIT.tar.gz"
+          cat > client.js <<'JS'
+          'use strict'
+          const fs = require('fs')
+          const mineflayer = require('mineflayer')
+          const port = Number(process.argv[2])
+          const version = process.argv[3]
+          const output = process.argv[4]
+          let session = 0
+          let reconnectExpected = false
+          let finished = false
+          const seen = new Set()
+
+          function log (line) {
+            fs.appendFileSync(output, line + '\n')
+            console.log(line)
+          }
+
+          function connect () {
+            session++
+            const bot = mineflayer.createBot({
+              host: '127.0.0.1',
+              port,
+              username: 'RuntimeProof',
+              auth: 'offline',
+              version,
+              physicsEnabled: false
+            })
+
+            bot._client.on('game_state_change', packet => {
+              log('GAME_STATE|session=' + session + '|reason=' + String(packet.reason)
+                + '|gameMode=' + String(packet.gameMode))
+            })
+
+            bot.once('spawn', () => {
+              log('SPAWN|session=' + session + '|mode=' + bot.game.gameMode)
+            })
+
+            function inspectMessage (text) {
+              const match = String(text).match(/RTPROOF:([A-Z_]+)/)
+              if (!match) return
+              const marker = match[1]
+              const key = session + ':' + marker
+              if (seen.has(key)) return
+              seen.add(key)
+              log('MARKER|' + marker + '|session=' + session + '|mode=' + bot.game.gameMode)
+              if (marker === 'RECONNECT_PREP') reconnectExpected = true
+              if (marker === 'DISABLE_CLEANED') finished = true
+            }
+
+            bot.on('messagestr', inspectMessage)
+            bot.on('message', message => inspectMessage(message.toString()))
+            bot.on('kicked', reason => log('KICKED|session=' + session + '|reason=' + String(reason)))
+            bot.on('error', error => log('ERROR|session=' + session + '|error=' + (error.stack || error)))
+            bot.on('end', reason => {
+              log('END|session=' + session + '|reason=' + String(reason)
+                + '|reconnectExpected=' + reconnectExpected + '|finished=' + finished)
+              if (reconnectExpected && session === 1 && !finished) {
+                reconnectExpected = false
+                setTimeout(connect, 1000)
+              }
+            })
+          }
+
+          connect()
+          setTimeout(() => {
+            if (!finished) {
+              log('CLIENT_TIMEOUT=true')
+              process.exitCode = 2
+            }
+          }, 90000)
+          JS
+
+      - name: Fetch exact server artifacts
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          servers="$RUNNER_TEMP/servers"
+          mkdir -p "$servers/leaf" "$servers/paper"
+
+          leaf_url="https://api.leafmc.one/v2/projects/leaf/versions/1.21.11/builds/115/downloads/leaf-1.21.11-115.jar"
+          curl --fail --location --retry 4 --retry-all-errors "$leaf_url" -o "$servers/leaf/server.jar"
+          leaf_actual="$(sha256sum "$servers/leaf/server.jar" | awk '{print $1}')"
+          test "$leaf_actual" = "$LEAF_SHA256"
+          {
+            echo "runtime=Leaf 1.21.11 build 115"
+            echo "sha256=$leaf_actual"
+            echo "url=$leaf_url"
+          } > "$servers/leaf/receipt.txt"
+
+          response="$(curl --fail --silent --show-error             --header "User-Agent: $PAPER_USER_AGENT"             "https://fill.papermc.io/v3/projects/paper/versions/26.2/builds")"
+          node="$(jq -c 'first(.[] | select(.id == 129))' <<<"$response")"
+          test "$node" != "null"
+          paper_url="$(jq -r '.downloads["server:default"].url' <<<"$node")"
+          paper_expected="$(jq -r '.downloads["server:default"].checksums.sha256' <<<"$node")"
+          curl --fail --location --retry 4 --retry-all-errors             --header "User-Agent: $PAPER_USER_AGENT" "$paper_url" -o "$servers/paper/server.jar"
+          paper_actual="$(sha256sum "$servers/paper/server.jar" | awk '{print $1}')"
+          test "$paper_actual" = "$paper_expected"
+          {
+            echo "runtime=Paper 26.2 build 129"
+            echo "sha256=$paper_actual"
+            echo "url=$paper_url"
+          } > "$servers/paper/receipt.txt"
+
+      - name: Run candidate unchanged on exact Leaf and Paper
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          root="$RUNNER_TEMP/runtime-proof"
+          mkdir -p "$root"
+
+          run_runtime() {
+            local name="$1"
+            local port="$2"
+            local client_version="$3"
+            local expected_runtime="$4"
+            local expected_adapter="$5"
+            local dir="$root/$name"
+            mkdir -p "$dir/server/plugins"
+            cp "$RUNNER_TEMP/servers/$name/server.jar" "$dir/server/server.jar"
+            cp "$RUNNER_TEMP/servers/$name/receipt.txt" "$dir/server-receipt.txt"
+            cp "$RUNNER_TEMP/candidate/EnthusiaStaff-Paper.jar"               "$dir/server/plugins/EnthusiaStaff-Paper.jar"
+            cp "$RUNNER_TEMP/CrossVersionRuntimeProof.jar"               "$dir/server/plugins/CrossVersionRuntimeProof.jar"
+            printf 'eula=true\n' > "$dir/server/eula.txt"
+            cat > "$dir/server/server.properties" <<EOF
+          online-mode=false
+          enforce-secure-profile=false
+          server-port=$port
+          server-ip=127.0.0.1
+          spawn-protection=0
+          allow-flight=true
+          gamemode=creative
+          force-gamemode=true
+          max-players=4
+          view-distance=3
+          simulation-distance=3
+          enable-status=false
+          level-seed=1
+          motd=cross-version-proof-$name
+          EOF
+
+            (
+              cd "$dir/server"
+              java -Xms1G -Xmx2G -jar server.jar nogui > console.log 2>&1
+            ) &
+            local server_pid=$!
+
+            local ready=0
+            for _ in $(seq 1 150); do
+              if grep -q "Done (" "$dir/server/logs/latest.log" 2>/dev/null; then
+                ready=1
+                break
+              fi
+              if ! kill -0 "$server_pid" 2>/dev/null; then
+                break
+              fi
+              sleep 1
+            done
+            test "$ready" = 1
+
+            grep -F "$expected_adapter" "$dir/server/console.log"
+            grep -F "$expected_runtime" "$dir/server/cross-version-runtime-evidence.txt"
+            ! grep -q "Unsupported API version" "$dir/server/console.log"
+            ! grep -q "failed required vanish no-clip ABI validation" "$dir/server/console.log"
+            ! grep -Eq "LinkageError|NoSuchMethodError|NoSuchFieldError|ClassNotFoundException"               "$dir/server/console.log"
+
+            (
+              cd "$RUNNER_TEMP/protocol-client"
+              NODE_PATH="$PWD/node_modules" node client.js                 "$port" "$client_version" "$dir/client.log"
+            ) > "$dir/client-console.log" 2>&1 &
+            local client_pid=$!
+
+            local completed=0
+            for _ in $(seq 1 120); do
+              if grep -q '^DONE=true$' "$dir/server/cross-version-runtime-evidence.txt" 2>/dev/null; then
+                completed=1
+                break
+              fi
+              if ! kill -0 "$server_pid" 2>/dev/null; then
+                break
+              fi
+              sleep 1
+            done
+
+            for _ in $(seq 1 30); do
+              kill -0 "$server_pid" 2>/dev/null || break
+              sleep 1
+            done
+            kill "$server_pid" 2>/dev/null || true
+            kill "$client_pid" 2>/dev/null || true
+            wait "$server_pid" 2>/dev/null || true
+            wait "$client_pid" 2>/dev/null || true
+            test "$completed" = 1
+          }
+
+          run_runtime leaf 25590 1.21.11             'RUNTIME|brandId=winds-studio:leaf|minecraft=1.21.11|build=115'             'Vanish no-clip client adapter enabled for Leaf 1.21.11 build 115'
+          run_runtime paper 25591 26.2             'RUNTIME|brandId=papermc:paper|minecraft=26.2|build=129'             'Vanish no-clip client adapter enabled for Paper 26.2 build 129'
+
+      - name: Verify common-JAR acceptance matrix
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          root="$RUNNER_TEMP/runtime-proof"
+
+          require_line() {
+            local file="$1"
+            local pattern="$2"
+            grep -Eq "$pattern" "$file" || {
+              echo "::error::Missing pattern '$pattern' in $file"
+              tail -n 220 "$file" || true
+              return 1
+            }
+          }
+
+          for name in leaf paper; do
+            evidence="$root/$name/server/cross-version-runtime-evidence.txt"
+            client="$root/$name/client.log"
+            console="$root/$name/server/console.log"
+            echo "===== $name server receipt ====="
+            cat "$root/$name/server-receipt.txt"
+            echo "===== $name product evidence ====="
+            cat "$evidence"
+            echo "===== $name client evidence ====="
+            cat "$client"
+
+            require_line "$evidence" '^HARNESS_READY=true$'
+            require_line "$evidence" '^FACTORY_AVAILABLE=true\|reason=$'
+            require_line "$evidence" '^ENABLE\|reconciled=true\|noPhysics=true\|serverMode=CREATIVE$'
+            require_line "$evidence" '^TELEPORT\|teleported=true\|reconciled=true\|noPhysics=true\|serverMode=CREATIVE$'
+            require_line "$evidence" '^DISABLE\|reconciled=true\|noPhysics=false\|serverMode=CREATIVE$'
+            require_line "$evidence" '^FORCED_FAILURE\|reconciled=false\|adapterAvailable=false\|noPhysics=false$'
+            require_line "$evidence" '^RECONNECT_PREP\|reconciled=true\|noPhysics=true\|serverMode=CREATIVE$'
+            require_line "$evidence" '^RECONNECT_JOIN\|noPhysics=false\|serverMode=CREATIVE$'
+            require_line "$evidence" '^RECONNECT_ENABLE\|reconciled=true\|noPhysics=true\|serverMode=CREATIVE$'
+            require_line "$evidence" '^RECONNECT_DISABLE\|reconciled=true\|noPhysics=false\|serverMode=CREATIVE$'
+            require_line "$evidence" '^DISABLE_PREP\|reconciled=true\|noPhysics=true\|serverMode=CREATIVE$'
+            require_line "$evidence" '^PLUGIN_DISABLE_CLEANUP\|noPhysics=false\|serverMode=CREATIVE$'
+            require_line "$evidence" '^DONE=true$'
+            if grep -q '^FAIL|' "$evidence"; then
+              echo "::error::Runtime harness recorded a failure for $name"
+              grep '^FAIL|' "$evidence"
+              exit 1
+            fi
+
+            require_line "$client" '^MARKER\|ENABLED\|session=1\|mode=spectator$'
+            require_line "$client" '^MARKER\|TELEPORTED\|session=1\|mode=spectator$'
+            require_line "$client" '^MARKER\|DISABLED\|session=1\|mode=creative$'
+            require_line "$client" '^MARKER\|RECONNECT_PREP\|session=1\|mode=spectator$'
+            require_line "$client" '^MARKER\|RECONNECT_ENABLED\|session=2\|mode=spectator$'
+            require_line "$client" '^MARKER\|RECONNECT_DISABLED\|session=2\|mode=creative$'
+            require_line "$client" '^MARKER\|DISABLE_ACTIVE\|session=2\|mode=spectator$'
+            require_line "$client" '^MARKER\|DISABLE_CLEANED\|session=2\|mode=creative$'
+            require_line "$client" '^GAME_STATE\|session=1\|reason=change_game_mode\|gameMode=3$'
+            require_line "$client" '^GAME_STATE\|session=1\|reason=change_game_mode\|gameMode=1$'
+
+            grep -E ' (ERROR|SEVERE)\]:' "$console" > "$root/$name/severe-lines.txt" || true
+            grep -Ev               'Freeze storage is unavailable; the joining player remains restricted|Vanish rank reconciliation failed; retry remains pending|Vanish no-clip client presentation failed; adapter is now fail-closed'               "$root/$name/severe-lines.txt" > "$root/$name/unexpected-severe-lines.txt" || true
+            if [[ -s "$root/$name/unexpected-severe-lines.txt" ]]; then
+              echo "::error::Unexpected severe/error logs on supported runtime $name"
+              cat "$root/$name/unexpected-severe-lines.txt"
+              exit 1
+            fi
+          done
+
+          cmp "$RUNNER_TEMP/candidate/EnthusiaStaff-Paper.jar"               "$root/leaf/server/plugins/EnthusiaStaff-Paper.jar"
+          cmp "$RUNNER_TEMP/candidate/EnthusiaStaff-Paper.jar"               "$root/paper/server/plugins/EnthusiaStaff-Paper.jar"
+          echo 'COMMON_JAR_IDENTICAL=true'
+
+      - name: Upload proof evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: single-cross-version-staff-runtime-proof
+          path: |
+            ${{ runner.temp }}/evidence/
+            ${{ runner.temp }}/servers/*/receipt.txt
+            ${{ runner.temp }}/runtime-proof/
+          if-no-files-found: warn
+          retention-days: 30

@@ -28,8 +28,17 @@ final class VanishClientGameModeAdapterFactory {
                 String.valueOf(info.brandId()),
                 info.minecraftVersionId(),
                 info.buildNumber(),
-                runtime -> ReflectiveVanishClientGameModeAdapter.install(logger, runtime.label())
+                runtime -> installSupported(logger, runtime)
         );
+    }
+
+    private static VanishClientGameModeAdapter installSupported(Logger logger, SupportedRuntime runtime) {
+        VanishClientGameModeAdapter adapter =
+                ReflectiveVanishClientGameModeAdapter.install(logger, runtime.label());
+        if (adapter.available()) {
+            logger.log(Level.INFO, "Vanish no-clip client adapter enabled for {0}", runtime.label());
+        }
+        return adapter;
     }
 
     static VanishClientGameModeAdapter select(
