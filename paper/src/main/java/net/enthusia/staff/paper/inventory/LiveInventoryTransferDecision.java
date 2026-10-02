@@ -107,7 +107,7 @@ final class LiveInventoryTransferDecision {
     }
 
     private static boolean usable(ItemStack item) {
-        return item != null && !item.isEmpty() && item.getType() != Material.AIR;
+        return item != null && item.getAmount() > 0 && item.getType() != Material.AIR;
     }
 
     record Decision(Action action, ItemStack targetAfter, ItemStack cursorAfter) {
