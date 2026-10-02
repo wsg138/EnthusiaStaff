@@ -392,7 +392,10 @@ class AssetJournalIntegrationTest {
         );
         InventoryPatch prepared = store.prepare(request, LEASE, NOW.plusSeconds(1))
                 .patch().orElseThrow();
-        assertTrue(store.pendingCursorTransfersByActor(actorId, "paper-2", 10).isEmpty());
+        InventoryCursorJournal crossBackend = store.pendingCursorTransfersByActor(
+                actorId, "paper-2", 10
+        ).getFirst();
+        assertEquals(SERVER_ID, crossBackend.patch().owningServerId());
         InventoryPatch claimed = store.claimForApply(
                 prepared.patchId(), operationId, LEASE, NOW.plusSeconds(2)
         ).orElseThrow();

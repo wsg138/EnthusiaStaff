@@ -479,15 +479,13 @@ public final class PlayerRowEnsuringInventoryJournalStore implements InventoryJo
                      JOIN inventory_operations o ON o.operation_id = q.operation_id
                      JOIN inventory_snapshots s ON s.operation_id = q.operation_id
                      WHERE o.actor_id = ?
-                         AND p.owning_server_id = ?
                          AND o.operation_type LIKE 'ONLINE_CURSOR_%'
                          AND q.state IN ('PENDING', 'APPLYING', 'QUARANTINED')
                      ORDER BY q.created_at
                      LIMIT ?
                      """)) {
             statement.setBytes(1, UuidBytes.toBytes(actorId));
-            statement.setString(2, requestingServerId);
-            statement.setInt(3, limit);
+            statement.setInt(2, limit);
             return readCursorJournals(statement);
         } catch (SQLException exception) {
             throw cursorQueryFailure(exception);
