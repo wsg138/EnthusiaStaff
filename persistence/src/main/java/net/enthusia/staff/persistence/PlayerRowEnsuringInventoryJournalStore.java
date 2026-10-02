@@ -43,6 +43,7 @@ public final class PlayerRowEnsuringInventoryJournalStore implements InventoryJo
     private final DataSource dataSource;
     private final InventoryJournalStore delegate;
     private final ObjectMapper json = new ObjectMapper();
+    private final JdbcInventoryPatchTransitions patchTransitions = new JdbcInventoryPatchTransitions(json);
 
     public PlayerRowEnsuringInventoryJournalStore(DataSource dataSource, InventoryJournalStore delegate) {
         this.dataSource = java.util.Objects.requireNonNull(dataSource, "dataSource");
@@ -131,10 +132,9 @@ public final class PlayerRowEnsuringInventoryJournalStore implements InventoryJo
     public InventoryPreparation prepare(InventoryPrepareRequest request, Duration leaseDuration, Instant now) {
         InventoryPreparation result = delegate.prepare(request, leaseDuration, now);
         if (request != null && request.cursorTransfer().isPresent() && result.patch().isPresent()) {
-            persistCursorMetadata(
+            requireCursorMetadata(
                     result.patch().orElseThrow(),
-                    request.cursorTransfer().orElseThrow(),
-                    now
+                    request.cursorTransfer().orElseThrow()
             );
         }
         return result;
@@ -157,13 +157,15 @@ public final class PlayerRowEnsuringInventoryJournalStore implements InventoryJo
         }
         return queryCursorJournals("""
                 WHERE o.actor_id = ?
+                    AND p.owning_server_id = ?
                     AND o.operation_type LIKE 'ONLINE_CURSOR_%'
                     AND q.state IN ('PENDING', 'APPLYING', 'QUARANTINED')
                 ORDER BY q.created_at
                 LIMIT ?
                 """, statement -> {
             statement.setBytes(1, UuidBytes.toBytes(actorId));
-            statement.setInt(2, limit);
+            statement.setString(2, requestingServerId);
+            statement.setInt(3, limit);
         });
     }
 
@@ -209,6 +211,111 @@ public final class PlayerRowEnsuringInventoryJournalStore implements InventoryJo
     }
 
     @Override
+    public boolean resolveCursorRollback(
+            UUID patchId,
+            UUID operationId,
+            long fencingToken,
+            Instant now
+    ) {
+        if (patchId == null || operationId == null || fencingToken < 1L || now == null) {
+            throw new IllegalArgumentException("cursor rollback resolution is invalid");
+        }
+        return JdbcTransactionSupport.execute(
+                dataSource,
+                "Unable to resolve live inventory cursor rollback",
+                connection -> resolveCursorRollback(
+                        connection, patchId, operationId, fencingToken, now
+                )
+        );
+    }
+
+    private boolean resolveCursorRollback(
+            Connection connection,
+            UUID patchId,
+            UUID operationId,
+            long fencingToken,
+            Instant now
+    ) throws SQLException {
+        JdbcInventoryPatchTransitions.LockedPatch locked =
+                patchTransitions.lock(connection, patchId).orElse(null);
+        if (!rollbackFenceMatches(locked, operationId, fencingToken, connection, now)) {
+            return false;
+        }
+        if (locked.patch().state() == InventoryOperationState.RESTORED) {
+            return true;
+        }
+        ObjectNode operation = lockOperationJson(connection, locked.patch());
+        InventoryCursorPhase phase = readPhase(operation);
+        if (phase == InventoryCursorPhase.CURSOR_APPLIED
+                || operation.path(CURSOR_TRANSFER_FIELD).isMissingNode()) {
+            return false;
+        }
+        patchTransitions.markRestored(connection, locked, now);
+        insertRollbackAudit(connection, locked.patch(), phase, now);
+        patchTransitions.releaseLease(connection, locked.patch());
+        return true;
+    }
+
+    private boolean rollbackFenceMatches(
+            JdbcInventoryPatchTransitions.LockedPatch locked,
+            UUID operationId,
+            long fencingToken,
+            Connection connection,
+            Instant now
+    ) throws SQLException {
+        if (locked == null || !locked.patch().operationId().equals(operationId)
+                || locked.patch().fencingToken() != fencingToken) {
+            return false;
+        }
+        if (locked.patch().state() == InventoryOperationState.RESTORED) {
+            return true;
+        }
+        return locked.patch().state() == InventoryOperationState.APPLYING
+                && patchTransitions.ownsLease(connection, locked.patch(), now);
+    }
+
+    private void insertRollbackAudit(
+            Connection connection,
+            InventoryPatch patch,
+            InventoryCursorPhase phase,
+            Instant now
+    ) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement("""
+                INSERT IGNORE INTO audit_events(
+                    event_id, correlation_id, actor_id, target_id, case_id,
+                    event_type, outcome, event_json, idempotency_key, occurred_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """)) {
+            statement.setBytes(1, UuidBytes.toBytes(UUID.randomUUID()));
+            statement.setBytes(2, UuidBytes.toBytes(patch.operationId()));
+            statement.setBytes(3, UuidBytes.toBytes(patch.actorId()));
+            statement.setBytes(4, UuidBytes.toBytes(patch.playerId()));
+            if (patch.caseId().isPresent()) {
+                statement.setString(5, patch.caseId().orElseThrow());
+            } else {
+                statement.setNull(5, java.sql.Types.CHAR);
+            }
+            statement.setString(6, "INVENTORY_CURSOR_ROLLED_BACK");
+            statement.setString(7, "ROLLED_BACK");
+            statement.setString(8, rollbackAuditJson(patch, phase));
+            statement.setString(9, "inventory:cursor:rollback:" + patch.operationId());
+            statement.setTimestamp(10, Timestamp.from(now));
+            JdbcTransactionSupport.requireOptionalSingleUpdate(
+                    statement.executeUpdate(),
+                    "Multiple rollback audit rows matched one cursor transfer"
+            );
+        }
+    }
+
+    private String rollbackAuditJson(InventoryPatch patch, InventoryCursorPhase phase)
+            throws SQLException {
+        ObjectNode detail = json.createObjectNode();
+        detail.put("patchId", patch.patchId().toString());
+        detail.put("cursorPhase", phase.name());
+        return serialize(detail);
+    }
+
+    @Override
     public InventoryFinalizeResult finalizeApplied(
             UUID patchId,
             UUID operationId,
@@ -244,27 +351,21 @@ public final class PlayerRowEnsuringInventoryJournalStore implements InventoryJo
         return delegate.lockedOwningServer(playerId, now);
     }
 
-    private void persistCursorMetadata(
+    private void requireCursorMetadata(
             InventoryPatch patch,
-            InventoryCursorTransfer transfer,
-            Instant now
+            InventoryCursorTransfer transfer
     ) {
         JdbcTransactionSupport.execute(
                 dataSource,
-                "Unable to persist live inventory cursor escrow",
+                "Unable to verify live inventory cursor escrow",
                 connection -> {
                     ObjectNode operation = lockOperationJson(connection, patch);
                     JsonNode existing = operation.get(CURSOR_TRANSFER_FIELD);
-                    if (existing != null && !existing.isNull()) {
-                        InventoryCursorTransfer stored = readCursorTransfer(existing);
-                        if (!stored.equals(transfer)) {
-                            throw new SQLException("Inventory operation is bound to different cursor escrow bytes");
-                        }
-                        return null;
+                    if (existing == null || existing.isNull()
+                            || !readCursorTransfer(existing).equals(transfer)) {
+                        throw new SQLException("Inventory operation is bound to different cursor escrow bytes");
                     }
-                    operation.set(CURSOR_TRANSFER_FIELD, cursorNode(transfer));
-                    operation.put(CURSOR_PHASE_FIELD, InventoryCursorPhase.PREPARED.name());
-                    updateOperationJson(connection, patch.operationId(), patch.fencingToken(), operation, now);
+                    readPhase(operation);
                     return null;
                 }
         );
@@ -423,15 +524,6 @@ public final class PlayerRowEnsuringInventoryJournalStore implements InventoryJo
         } catch (JsonProcessingException exception) {
             throw new SQLException("Inventory patch JSON is invalid", exception);
         }
-    }
-
-    private ObjectNode cursorNode(InventoryCursorTransfer transfer) {
-        ObjectNode node = json.createObjectNode();
-        node.put("expectedChecksum", transfer.expectedChecksum());
-        node.put("expectedSnapshot", transfer.expectedSnapshot());
-        node.put("replacementChecksum", transfer.replacementChecksum());
-        node.put("replacementSnapshot", transfer.replacementSnapshot());
-        return node;
     }
 
     private InventoryCursorTransfer readCursorTransfer(JsonNode node) throws SQLException {
