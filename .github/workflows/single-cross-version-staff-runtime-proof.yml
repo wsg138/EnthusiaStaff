@@ -17,7 +17,7 @@ concurrency:
 
 jobs:
   prove:
-    name: Exact Leaf 115 + Paper 26.2-129 common-JAR proof
+    name: Exact Leaf 115 + Paper 26.2-128/129 common-JAR proof
     runs-on: ubuntu-latest
     timeout-minutes: 40
     env:
@@ -601,7 +601,7 @@ jobs:
         run: |
           set -Eeuo pipefail
           servers="$RUNNER_TEMP/servers"
-          mkdir -p "$servers/leaf" "$servers/paper"
+          mkdir -p "$servers/leaf" "$servers/paper" "$servers/paper128"
 
           leaf_url="https://api.leafmc.one/v2/projects/leaf/versions/1.21.11/builds/115/downloads/leaf-1.21.11-115.jar"
           curl --fail --location --retry 4 --retry-all-errors "$leaf_url" -o "$servers/leaf/server.jar"
@@ -626,6 +626,20 @@ jobs:
             echo "sha256=$paper_actual"
             echo "url=$paper_url"
           } > "$servers/paper/receipt.txt"
+
+          paper128_node="$(jq -c 'first(.[] | select(.id == 128))' <<<"$response")"
+          test "$paper128_node" != "null"
+          paper128_url="$(jq -r '.downloads["server:default"].url' <<<"$paper128_node")"
+          paper128_expected="$(jq -r '.downloads["server:default"].checksums.sha256' <<<"$paper128_node")"
+          curl --fail --location --retry 4 --retry-all-errors \
+            --header "User-Agent: $PAPER_USER_AGENT" "$paper128_url" -o "$servers/paper128/server.jar"
+          paper128_actual="$(sha256sum "$servers/paper128/server.jar" | awk '{print $1}')"
+          test "$paper128_actual" = "$paper128_expected"
+          {
+            echo "runtime=Paper 26.2 build 128"
+            echo "sha256=$paper128_actual"
+            echo "url=$paper128_url"
+          } > "$servers/paper128/receipt.txt"
 
       - name: Run candidate unchanged on exact Leaf and Paper
         shell: bash
@@ -720,6 +734,7 @@ jobs:
 
           run_runtime leaf 25590 1.21.11             'RUNTIME|brandId=winds-studio:leaf|minecraft=1.21.11|build=115'             'Vanish no-clip client adapter enabled for Leaf 1.21.11 build 115'
           run_runtime paper 25591 26.2             'RUNTIME|brandId=papermc:paper|minecraft=26.2|build=129'             'Vanish no-clip client adapter enabled for Paper 26.2 build 129'
+          run_runtime paper128 25592 26.2             'RUNTIME|brandId=papermc:paper|minecraft=26.2|build=128'             'Vanish no-clip client adapter enabled for Paper 26.2 build 128'
 
       - name: Verify common-JAR acceptance matrix
         shell: bash
@@ -737,7 +752,7 @@ jobs:
             }
           }
 
-          for name in leaf paper; do
+          for name in leaf paper paper128; do
             evidence="$root/$name/server/cross-version-runtime-evidence.txt"
             client="$root/$name/client.log"
             console="$root/$name/server/console.log"
@@ -790,6 +805,7 @@ jobs:
 
           cmp "$RUNNER_TEMP/candidate/EnthusiaStaff-Paper.jar"               "$root/leaf/server/plugins/EnthusiaStaff-Paper.jar"
           cmp "$RUNNER_TEMP/candidate/EnthusiaStaff-Paper.jar"               "$root/paper/server/plugins/EnthusiaStaff-Paper.jar"
+          cmp "$RUNNER_TEMP/candidate/EnthusiaStaff-Paper.jar"               "$root/paper128/server/plugins/EnthusiaStaff-Paper.jar"
           echo 'COMMON_JAR_IDENTICAL=true'
 
       - name: Upload proof evidence

@@ -14,6 +14,7 @@ final class VanishClientGameModeAdapterFactory {
     static final String LEAF_BRAND_ID = "winds-studio:leaf";
 
     private static final List<SupportedRuntime> SUPPORTED_RUNTIMES = List.of(
+            new SupportedRuntime(PAPER_BRAND_ID, "26.2", 128, "Paper 26.2 build 128"),
             new SupportedRuntime(PAPER_BRAND_ID, "26.2", 129, "Paper 26.2 build 129"),
             new SupportedRuntime(LEAF_BRAND_ID, "1.21.11", 115, "Leaf 1.21.11 build 115")
     );
@@ -35,7 +36,7 @@ final class VanishClientGameModeAdapterFactory {
     private static VanishClientGameModeAdapter installSupported(Logger logger, SupportedRuntime runtime) {
         VanishClientGameModeAdapter adapter =
                 ReflectiveVanishClientGameModeAdapter.install(logger, runtime.label());
-        if (adapter.available()) {
+        if (adapter.available() && logger.isLoggable(Level.INFO)) {
             logger.log(Level.INFO, "Vanish no-clip client adapter enabled for {0}", runtime.label());
         }
         return adapter;

@@ -2,7 +2,6 @@ package net.enthusia.staff.paper.visibility;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.ArrayList;
@@ -17,10 +16,9 @@ import org.junit.jupiter.api.Test;
 class VanishClientGameModeAdapterFactoryTest {
     @Test
     void acceptsOnlyExplicitlyProvenRuntimeIdentities() {
+        assertTrue(supported(VanishClientGameModeAdapterFactory.PAPER_BRAND_ID, "26.2", 128));
         assertTrue(supported(VanishClientGameModeAdapterFactory.PAPER_BRAND_ID, "26.2", 129));
         assertTrue(supported(VanishClientGameModeAdapterFactory.LEAF_BRAND_ID, "1.21.11", 115));
-
-        assertFalse(supported(VanishClientGameModeAdapterFactory.PAPER_BRAND_ID, "26.2", 128));
         assertFalse(supported(VanishClientGameModeAdapterFactory.PAPER_BRAND_ID, "26.3", 134));
         assertFalse(supported(VanishClientGameModeAdapterFactory.LEAF_BRAND_ID, "1.21.11", 114));
         assertFalse(VanishClientGameModeAdapterFactory.supportedRuntime(
@@ -34,9 +32,13 @@ class VanishClientGameModeAdapterFactoryTest {
     void supportedIdentitiesStaySeparateEvenWhenTheyShareReflectionImplementation() {
         var runtimes = VanishClientGameModeAdapterFactory.supportedRuntimes();
 
-        assertEquals(2, runtimes.size());
-        assertNotEquals(runtimes.get(0).brandId(), runtimes.get(1).brandId());
-        assertNotEquals(runtimes.get(0).label(), runtimes.get(1).label());
+        assertEquals(3, runtimes.size());
+        assertEquals(3L, runtimes.stream().map(
+                VanishClientGameModeAdapterFactory.SupportedRuntime::label
+        ).distinct().count());
+        assertEquals(2L, runtimes.stream().map(
+                VanishClientGameModeAdapterFactory.SupportedRuntime::brandId
+        ).distinct().count());
     }
 
     @Test
