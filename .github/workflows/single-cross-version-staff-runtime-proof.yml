@@ -720,6 +720,8 @@ jobs:
             printf 'eula=true\n' > "$dir/server/eula.txt"
             cat > "$dir/server/server.properties" <<EOF
           online-mode=false
+          white-list=false
+          enforce-whitelist=false
           enforce-secure-profile=false
           server-port=$port
           server-ip=127.0.0.1
