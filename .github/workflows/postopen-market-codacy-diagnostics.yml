@@ -1,0 +1,45 @@
+name: Market Codacy Diagnostics
+
+on:
+  pull_request:
+    branches:
+      - codex/reopening-safety-2026-10-01
+
+permissions:
+  contents: read
+
+jobs:
+  codacy-findings:
+    if: ${{ github.event.pull_request.number == 296 }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Dump new Codacy findings
+        shell: bash
+        run: |
+          set -euo pipefail
+          base="https://api.codacy.com/api/v3/analysis/organizations/gh/wsg138/repositories/EnthusiaStaff/pull-requests/296/issues"
+          cursor=""
+          page=0
+          while true; do
+            page=$((page + 1))
+            url="${base}?status=new&limit=100"
+            if [[ -n "${cursor}" ]]; then
+              url="${url}&cursor=$(python -c 'import sys,urllib.parse; print(urllib.parse.quote(sys.argv[1]))' "${cursor}")"
+            fi
+            body="$(curl --fail --silent --show-error --location -H 'Accept: application/json' "${url}")"
+            echo "=== CODACY PAGE ${page} ==="
+            echo "${body}" | jq -r '
+              .data[] |
+              [
+                (.commitIssue.filePath // ""),
+                (.commitIssue.lineNumber // .commitIssue.line // ""),
+                (.commitIssue.patternInfo.id // ""),
+                (.commitIssue.patternInfo.level // ""),
+                (.commitIssue.patternInfo.category // ""),
+                (.commitIssue.patternInfo.tool.name // .commitIssue.patternInfo.toolName // ""),
+                (.commitIssue.message // .commitIssue.patternInfo.title // "")
+              ] | @tsv
+            '
+            cursor="$(echo "${body}" | jq -r '.pagination.cursor // empty')"
+            [[ -z "${cursor}" ]] && break
+          done
