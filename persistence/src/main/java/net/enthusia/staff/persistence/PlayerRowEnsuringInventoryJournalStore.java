@@ -151,7 +151,7 @@ public final class PlayerRowEnsuringInventoryJournalStore implements InventoryJo
                 || limit < 1 || limit > MAX_CURSOR_QUERY) {
             throw new IllegalArgumentException("cursor transfer actor query is invalid");
         }
-        return queryCursorJournalsByActor(actorId, requestingServerId, limit);
+        return queryCursorJournalsByActor(actorId, limit);
     }
 
     @Override
@@ -462,11 +462,7 @@ public final class PlayerRowEnsuringInventoryJournalStore implements InventoryJo
         }
     }
 
-    private List<InventoryCursorJournal> queryCursorJournalsByActor(
-            UUID actorId,
-            String requestingServerId,
-            int limit
-    ) {
+    private List<InventoryCursorJournal> queryCursorJournalsByActor(UUID actorId, int limit) {
         try (Connection connection = dataSource.getConnection();
              PreparedStatement statement = connection.prepareStatement("""
                      SELECT q.patch_id, q.operation_id, q.profile_id, p.player_id, p.scope_id,

@@ -295,12 +295,15 @@ public final class InventoryCoordinator implements Listener, InventoryLockServic
     }
 
     private void retryLivePatchLookupOnTarget(Player target, InventoryPatch patch, String detail) {
-        if (!target.isOnline()) {
+        int attempt = recoveryAttempts.merge(patch.operationId(), 1, Integer::sum);
+        LiveInventoryRecoveryPolicy.RetryDecision decision = LiveInventoryRecoveryPolicy.metadataRetry(
+                target.isOnline(), attempt, MAX_LOGIN_APPLY_ATTEMPTS
+        );
+        if (decision == LiveInventoryRecoveryPolicy.RetryDecision.STOP_OFFLINE) {
             recoveryAttempts.remove(patch.operationId());
             return;
         }
-        int attempt = recoveryAttempts.merge(patch.operationId(), 1, Integer::sum);
-        if (attempt >= MAX_LOGIN_APPLY_ATTEMPTS) {
+        if (decision == LiveInventoryRecoveryPolicy.RetryDecision.EXHAUSTED) {
             keepRecoveryBlocked(
                     patch.playerId(), patch.actorId(), patch.operationId(),
                     detail + " Automatic metadata recovery attempts are exhausted."
@@ -1515,11 +1518,11 @@ public final class InventoryCoordinator implements Listener, InventoryLockServic
         InventoryImageCodec.EncodedImage current = codec.encodeWithChecksum(codec.capture(target));
         InventoryPatch patch = recovery.patch();
         if (current.checksum().equals(patch.expectedChecksum())) {
-            scheduleActorRecovery(target, actor, recovery, false);
+            scheduleActorRecovery(actor, recovery, false);
             return;
         }
         if (current.checksum().equals(patch.replacementChecksum())) {
-            scheduleActorRecovery(target, actor, recovery, true);
+            scheduleActorRecovery(actor, recovery, true);
             return;
         }
         quarantine(patch, "LIVE_CURSOR_RECOVERY_CONFLICT", "Target is neither prepared before nor replacement state");
@@ -1530,21 +1533,19 @@ public final class InventoryCoordinator implements Listener, InventoryLockServic
     }
 
     private void scheduleActorRecovery(
-            Player target,
             Player actor,
             InventoryCursorJournal recovery,
             boolean targetApplied
     ) {
         actor.getScheduler().execute(
                 plugin,
-                () -> recoverActorCursor(target, actor, recovery, targetApplied),
+                () -> recoverActorCursor(actor, recovery, targetApplied),
                 () -> retryCursorRecovery(recovery, "Staff viewer left before cursor recovery."),
                 1L
         );
     }
 
     private void recoverActorCursor(
-            Player target,
             Player actor,
             InventoryCursorJournal recovery,
             boolean targetApplied
@@ -2048,7 +2049,11 @@ public final class InventoryCoordinator implements Listener, InventoryLockServic
         Inventory inventory = holder.getInventory();
         for (int guiSlot = 0; guiSlot < inventory.getSize(); guiSlot++) {
             int logical = holder.logicalSlot(guiSlot);
-            inventory.setItem(guiSlot, logical < 0 ? null : image.item(logical));
+            if (logical < 0) {
+                inventory.clear(guiSlot);
+            } else {
+                inventory.setItem(guiSlot, image.item(logical));
+            }
         }
         holder.image(image, false);
     }
