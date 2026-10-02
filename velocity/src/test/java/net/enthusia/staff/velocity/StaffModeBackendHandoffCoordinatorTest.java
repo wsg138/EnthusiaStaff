@@ -63,10 +63,37 @@ class StaffModeBackendHandoffCoordinatorTest {
                 PersistentChannelServer.DeliveryStatus.REJECTED
         );
 
-        var decision = coordinator(transport, active).transfer(PLAYER, session(), SMP, HUB);
+        var decision = coordinator(transport, active).transfer(PLAYER, session(), SMP, HUB, TRANSFER);
 
         assertFalse(decision.allowed());
-        assertTrue(transport.types.equals(List.of(StaffModeBackendHandoffCoordinator.EXIT_REQUEST)));
+        assertFalse(decision.reconcile());
+        assertTrue(transport.types.equals(List.of(
+                StaffModeBackendHandoffCoordinator.EXIT_REQUEST,
+                StaffModeBackendHandoffCoordinator.ABORT_SOURCE
+        )));
+    }
+
+    @Test
+    void unacknowledgedSourceAbortRequiresReconciliation() {
+        AtomicReference<Optional<StaffSessionSnapshot>> active = new AtomicReference<>(Optional.of(session()));
+        FakeTransport transport = new FakeTransport(active, false);
+        transport.statuses.put(
+                StaffModeBackendHandoffCoordinator.EXIT_REQUEST,
+                PersistentChannelServer.DeliveryStatus.TIMED_OUT
+        );
+        transport.statuses.put(
+                StaffModeBackendHandoffCoordinator.ABORT_SOURCE,
+                PersistentChannelServer.DeliveryStatus.TIMED_OUT
+        );
+
+        var decision = coordinator(transport, active).transfer(PLAYER, session(), SMP, HUB, TRANSFER);
+
+        assertFalse(decision.allowed());
+        assertTrue(decision.reconcile());
+        assertTrue(transport.types.equals(List.of(
+                StaffModeBackendHandoffCoordinator.EXIT_REQUEST,
+                StaffModeBackendHandoffCoordinator.ABORT_SOURCE
+        )));
     }
 
     @Test
@@ -78,7 +105,7 @@ class StaffModeBackendHandoffCoordinatorTest {
                 PersistentChannelServer.DeliveryStatus.REJECTED
         );
 
-        var decision = coordinator(transport, active).transfer(PLAYER, session(), SMP, HUB);
+        var decision = coordinator(transport, active).transfer(PLAYER, session(), SMP, HUB, TRANSFER);
 
         assertFalse(decision.allowed());
         assertTrue(decision.message().contains("rollback was accepted on the current backend"));
@@ -126,7 +153,7 @@ class StaffModeBackendHandoffCoordinatorTest {
                 PersistentChannelServer.DeliveryStatus.REJECTED
         );
 
-        var decision = coordinator(transport, active).transfer(PLAYER, session(), SMP, HUB);
+        var decision = coordinator(transport, active).transfer(PLAYER, session(), SMP, HUB, TRANSFER);
 
         assertFalse(decision.allowed());
         assertTrue(decision.message().contains("original state is safe"));

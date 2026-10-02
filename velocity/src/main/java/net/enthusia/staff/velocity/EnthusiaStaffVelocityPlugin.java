@@ -1230,7 +1230,11 @@ public final class EnthusiaStaffVelocityPlugin {
         StaffModeBackendHandoffCoordinator coordinator = handoffCoordinator(sessions);
         var decision = coordinator.transfer(playerId, session, current, requested, transferId);
         if (!decision.allowed()) {
-            staffHandoffs.clear(playerId, transferId);
+            if (decision.reconcile()) {
+                scheduleStaffHandoffTimeout(playerId, transferId);
+            } else {
+                staffHandoffs.clear(playerId, transferId);
+            }
             denyServerSwitch(event, decision.message());
             return;
         }
@@ -1329,6 +1333,11 @@ public final class EnthusiaStaffVelocityPlugin {
             return;
         }
         StaffModeBackendHandoffCoordinator coordinator = handoffCoordinator(sessions);
+        if (current != null && current.equalsIgnoreCase(pending.source())
+                && durableStaffModeArrived(durable, pending.source())) {
+            stabilizeSourceHandoff(playerId, pending, coordinator);
+            return;
+        }
         if (current != null && current.equalsIgnoreCase(pending.destination()) && durable.isEmpty()
                 && pending.retryCount() == 0
                 && coordinator.retryDestination(playerId, pending.destination(), pending.transferId())) {
@@ -1337,6 +1346,24 @@ public final class EnthusiaStaffVelocityPlugin {
             return;
         }
         finishTimedOutStaffHandoff(playerId, pending, current, durable, coordinator);
+    }
+
+    private void stabilizeSourceHandoff(
+            UUID playerId,
+            StaffModeHandoffTracker.Pending pending,
+            StaffModeBackendHandoffCoordinator coordinator
+    ) {
+        if (coordinator.abortSourceHandoff(playerId, pending.source(), pending.transferId())) {
+            return;
+        }
+        if (pending.retryCount() == 0) {
+            staffHandoffs.retry(pending, Clock.systemUTC().instant());
+            scheduleStaffHandoffTimeout(playerId, pending.transferId());
+            return;
+        }
+        proxy.getPlayer(playerId).ifPresent(player -> player.sendMessage(VelocityMessageStyle.style(Component.text(
+                "Staff Mode stayed on the current backend, but the handoff abort could not be confirmed."
+        ))));
     }
 
     private void finishTimedOutStaffHandoff(

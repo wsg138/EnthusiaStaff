@@ -15,11 +15,14 @@ final class PaperStaffModeHandoffHandler {
     static final String PREPARE_RESUME = "STAFF_MODE_HANDOFF_PREPARE";
     static final String ROLLBACK_RESUME = "STAFF_MODE_HANDOFF_ROLLBACK";
     static final String CANCEL_RESUME = "STAFF_MODE_HANDOFF_CANCEL";
+    static final String ABORT_SOURCE = "STAFF_MODE_HANDOFF_ABORT_SOURCE";
     static final String READY = "STAFF_MODE_READY";
     private static final Duration OPERATION_TIMEOUT = Duration.ofSeconds(8);
 
     interface Operations {
-        CompletableFuture<Boolean> close(UUID playerId, UUID sessionId, long revision);
+        CompletableFuture<Boolean> close(UUID playerId, UUID sessionId, long revision, UUID transferId);
+
+        boolean abortSource(UUID playerId, UUID transferId);
 
         boolean prepare(UUID playerId, UUID transferId);
 
@@ -40,8 +43,18 @@ final class PaperStaffModeHandoffHandler {
         java.util.Objects.requireNonNull(manager, "manager");
         return new PaperStaffModeHandoffHandler(json, new Operations() {
             @Override
-            public CompletableFuture<Boolean> close(UUID playerId, UUID sessionId, long revision) {
-                return manager.closeForBackendHandoff(playerId, sessionId, revision);
+            public CompletableFuture<Boolean> close(
+                    UUID playerId,
+                    UUID sessionId,
+                    long revision,
+                    UUID transferId
+            ) {
+                return manager.closeForBackendHandoff(playerId, sessionId, revision, transferId);
+            }
+
+            @Override
+            public boolean abortSource(UUID playerId, UUID transferId) {
+                return manager.abortBackendHandoffSource(playerId, transferId);
             }
 
             @Override
@@ -63,7 +76,7 @@ final class PaperStaffModeHandoffHandler {
 
     boolean handles(ProtocolEnvelope envelope) {
         return switch (envelope.messageType()) {
-            case EXIT_REQUEST, PREPARE_RESUME, ROLLBACK_RESUME, CANCEL_RESUME -> true;
+            case EXIT_REQUEST, PREPARE_RESUME, ROLLBACK_RESUME, CANCEL_RESUME, ABORT_SOURCE -> true;
             default -> false;
         };
     }
@@ -73,7 +86,13 @@ final class PaperStaffModeHandoffHandler {
             JsonNode payload = json.readTree(envelope.payloadJson());
             return switch (envelope.messageType()) {
                 case EXIT_REQUEST -> await(operations.close(
-                        uuid(payload, "playerId"), uuid(payload, "sessionId"), payload.path("revision").asLong(-1L)));
+                        uuid(payload, "playerId"),
+                        uuid(payload, "sessionId"),
+                        payload.path("revision").asLong(-1L),
+                        uuid(payload, "transferId")
+                ));
+                case ABORT_SOURCE -> operations.abortSource(
+                        uuid(payload, "playerId"), uuid(payload, "transferId"));
                 case PREPARE_RESUME -> operations.prepare(uuid(payload, "playerId"), uuid(payload, "transferId"));
                 case CANCEL_RESUME -> operations.cancel(uuid(payload, "playerId"), uuid(payload, "transferId"));
                 case ROLLBACK_RESUME -> await(operations.rollback(
@@ -102,7 +121,10 @@ final class PaperStaffModeHandoffHandler {
         } catch (InterruptedException exception) {
             Thread.currentThread().interrupt();
             return false;
-        } catch (java.util.concurrent.ExecutionException | java.util.concurrent.TimeoutException exception) {
+        } catch (java.util.concurrent.TimeoutException exception) {
+            future.cancel(false);
+            return false;
+        } catch (java.util.concurrent.ExecutionException exception) {
             return false;
         }
     }

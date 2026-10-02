@@ -6,6 +6,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import net.enthusia.staff.protocol.ProtocolEnvelope;
 import org.junit.jupiter.api.Test;
@@ -22,7 +25,8 @@ class PaperStaffModeHandoffHandlerTest {
 
         assertTrue(handler.handle(envelope(
                 PaperStaffModeHandoffHandler.EXIT_REQUEST,
-                "{\"playerId\":\"" + PLAYER + "\",\"sessionId\":\"" + SESSION + "\",\"revision\":7}"
+                "{\"playerId\":\"" + PLAYER + "\",\"sessionId\":\"" + SESSION
+                        + "\",\"revision\":7,\"transferId\":\"" + TRANSFER + "\"}"
         )));
         assertTrue(operations.closed);
     }
@@ -55,6 +59,21 @@ class PaperStaffModeHandoffHandlerTest {
     }
 
     @Test
+    void timedOutOperationCancelsUnderlyingFuture() {
+        RecordingOperations operations = new RecordingOperations();
+        ImmediateTimeoutFuture future = new ImmediateTimeoutFuture();
+        operations.closeFuture = future;
+        PaperStaffModeHandoffHandler handler = new PaperStaffModeHandoffHandler(new ObjectMapper(), operations);
+
+        assertFalse(handler.handle(envelope(
+                PaperStaffModeHandoffHandler.EXIT_REQUEST,
+                "{\"playerId\":\"" + PLAYER + "\",\"sessionId\":\"" + SESSION
+                        + "\",\"revision\":7,\"transferId\":\"" + TRANSFER + "\"}"
+        )));
+        assertTrue(future.isCancelled());
+    }
+
+    @Test
     void unrelatedMessagesAreNotClaimed() {
         PaperStaffModeHandoffHandler handler = new PaperStaffModeHandoffHandler(
                 new ObjectMapper(), new RecordingOperations());
@@ -75,17 +94,39 @@ class PaperStaffModeHandoffHandlerTest {
         );
     }
 
+    private static final class ImmediateTimeoutFuture extends CompletableFuture<Boolean> {
+        @Override
+        public Boolean get(long timeout, TimeUnit unit)
+                throws InterruptedException, ExecutionException, TimeoutException {
+            throw new TimeoutException("synthetic timeout");
+        }
+    }
+
     private static final class RecordingOperations implements PaperStaffModeHandoffHandler.Operations {
         private boolean accept = true;
         private boolean closed;
+        private CompletableFuture<Boolean> closeFuture;
         private final AtomicBoolean prepared = new AtomicBoolean();
         private final AtomicBoolean cancelled = new AtomicBoolean();
         private final AtomicBoolean rolledBack = new AtomicBoolean();
 
         @Override
-        public CompletableFuture<Boolean> close(UUID playerId, UUID sessionId, long revision) {
-            closed = PLAYER.equals(playerId) && SESSION.equals(sessionId) && revision == 7L;
-            return CompletableFuture.completedFuture(accept && closed);
+        public CompletableFuture<Boolean> close(
+                UUID playerId,
+                UUID sessionId,
+                long revision,
+                UUID transferId
+        ) {
+            closed = PLAYER.equals(playerId) && SESSION.equals(sessionId)
+                    && revision == 7L && TRANSFER.equals(transferId);
+            return closeFuture == null
+                    ? CompletableFuture.completedFuture(accept && closed)
+                    : closeFuture;
+        }
+
+        @Override
+        public boolean abortSource(UUID playerId, UUID transferId) {
+            return accept && PLAYER.equals(playerId) && TRANSFER.equals(transferId);
         }
 
         @Override

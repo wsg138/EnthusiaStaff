@@ -83,6 +83,16 @@ class StaffModeRestorationWiringTest {
     }
 
     @Test
+    void backendHandoffClosureIsTransferFencedBeforeDurableClose() throws IOException {
+        String completion = method("private void completeBackendHandoff", "private void retainCancelledHandoffRecovery");
+
+        assertTrue(completion.contains("sourceHandoffs.commitIfActive"));
+        assertTrue(completion.indexOf("sourceHandoffs.commitIfActive")
+                < completion.indexOf("loaded.completeExit"));
+        assertTrue(completion.contains("retainCancelledHandoffRecovery"));
+    }
+
+    @Test
     void cleanExitSuccessMessageIsOnlyEmittedAfterVerificationPasses() throws IOException {
         String method = method("private void completeRestoration", "private void retainRecoveryAfterRuntimeExit");
         int mismatch = method.indexOf("if (!closed)");

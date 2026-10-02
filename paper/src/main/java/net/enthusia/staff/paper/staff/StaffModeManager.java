@@ -68,6 +68,7 @@ public final class StaffModeManager implements Listener {
     private final java.util.Set<UUID> profileApplications = ConcurrentHashMap.newKeySet();
     private final java.util.Set<UUID> pendingRankChecks = ConcurrentHashMap.newKeySet();
     private final StaffModeHandoffIntentRegistry handoffResumes;
+    private final StaffModeSourceHandoffRegistry sourceHandoffs = new StaffModeSourceHandoffRegistry();
     private final StaffModeActivationCoordinator activation;
     private final AtomicBoolean rankReconciliationStarted = new AtomicBoolean();
     private volatile Consumer<UUID> exitListener = ignored -> {
@@ -162,20 +163,29 @@ public final class StaffModeManager implements Listener {
     public CompletableFuture<Boolean> closeForBackendHandoff(
             UUID playerId,
             UUID expectedSessionId,
-            long expectedRevision
+            long expectedRevision,
+            UUID transferId
     ) {
         StaffSessionSnapshot runtime = active.get(playerId);
-        if (!validHandoffSource(runtime, expectedSessionId, expectedRevision)
+        if (transferId == null
+                || !sourceHandoffs.begin(playerId, transferId)
+                || !validHandoffSource(runtime, expectedSessionId, expectedRevision)
                 || !transitions.add(playerId)) {
+            sourceHandoffs.finish(playerId, transferId);
             return CompletableFuture.completedFuture(false);
         }
         CompletableFuture<Boolean> result = new CompletableFuture<>();
         if (!submit(() -> beginBackendHandoffClose(
-                playerId, expectedSessionId, expectedRevision, result))) {
+                playerId, expectedSessionId, expectedRevision, transferId, result))) {
+            sourceHandoffs.finish(playerId, transferId);
             transitions.remove(playerId);
             result.complete(false);
         }
         return result;
+    }
+
+    public boolean abortBackendHandoffSource(UUID playerId, UUID transferId) {
+        return sourceHandoffs.abort(playerId, transferId);
     }
 
     public void startRankReconciliation() {
@@ -469,19 +479,27 @@ public final class StaffModeManager implements Listener {
             UUID playerId,
             UUID expectedSessionId,
             long expectedRevision,
+            UUID transferId,
             CompletableFuture<Boolean> result
     ) {
+        if (result.isCancelled()) {
+            sourceHandoffs.abort(playerId, transferId);
+            transitions.remove(playerId);
+            return;
+        }
         StaffSessionStore loaded = store.get();
         try {
             StaffSessionSnapshot current = loaded == null ? null : loaded.active(playerId).orElse(null);
             if (!validHandoffSource(current, expectedSessionId, expectedRevision)) {
+                sourceHandoffs.finish(playerId, transferId);
                 transitions.remove(playerId);
                 result.complete(false);
                 return;
             }
             StaffSessionSnapshot exiting = loaded.beginExit(playerId, clock.instant()).orElseThrow();
-            restoreBackendHandoff(playerId, exiting, loaded, result);
+            restoreBackendHandoff(playerId, transferId, exiting, loaded, result);
         } catch (RuntimeException exception) {
+            sourceHandoffs.finish(playerId, transferId);
             transitions.remove(playerId);
             plugin.getLogger().log(Level.SEVERE, "Staff backend handoff could not begin", exception);
             result.complete(false);
@@ -490,6 +508,7 @@ public final class StaffModeManager implements Listener {
 
     private void restoreBackendHandoff(
             UUID playerId,
+            UUID transferId,
             StaffSessionSnapshot session,
             StaffSessionStore loaded,
             CompletableFuture<Boolean> result
@@ -502,7 +521,15 @@ public final class StaffModeManager implements Listener {
                 }
                 String checksum = codec.verifiedRestorationChecksum(
                         player, session.serverId(), session.snapshot(), session.checksum());
-                if (!submit(() -> completeBackendHandoff(playerId, session, loaded, checksum, result))) {
+                if (result.isCancelled()) {
+                    sourceHandoffs.abort(playerId, transferId);
+                    markBackendHandoffRecovery(
+                            playerId, session, loaded, result, "Staff handoff confirmation timed out");
+                    return;
+                }
+                if (!submit(() -> completeBackendHandoff(
+                        playerId, transferId, session, loaded, checksum, result))) {
+                    sourceHandoffs.abort(playerId, transferId);
                     recoveryGate.retry(playerId);
                     removeRuntimeState(playerId);
                     result.complete(false);
@@ -538,13 +565,28 @@ public final class StaffModeManager implements Listener {
 
     private void completeBackendHandoff(
             UUID playerId,
+            UUID transferId,
             StaffSessionSnapshot session,
             StaffSessionStore loaded,
             String restoredChecksum,
             CompletableFuture<Boolean> result
     ) {
+        if (result.isCancelled()) {
+            sourceHandoffs.abort(playerId, transferId);
+            retainCancelledHandoffRecovery(playerId, session, loaded);
+            return;
+        }
         try {
-            if (!loaded.completeExit(session.sessionId(), restoredChecksum, clock.instant())) {
+            var committed = sourceHandoffs.commitIfActive(
+                    playerId,
+                    transferId,
+                    () -> loaded.completeExit(session.sessionId(), restoredChecksum, clock.instant())
+            );
+            if (committed.isEmpty()) {
+                retainCancelledHandoffRecovery(playerId, session, loaded);
+                return;
+            }
+            if (!committed.orElseThrow()) {
                 recoveryGate.retry(playerId);
                 removeRuntimeState(playerId);
                 result.complete(false);
@@ -555,10 +597,29 @@ public final class StaffModeManager implements Listener {
             handoffGaps.add(playerId);
             result.complete(true);
         } catch (RuntimeException exception) {
+            sourceHandoffs.finish(playerId, transferId);
             recoveryGate.retry(playerId);
             removeRuntimeState(playerId);
             plugin.getLogger().log(Level.SEVERE, "Staff backend handoff closure failed", exception);
             result.complete(false);
+        }
+    }
+
+    private void retainCancelledHandoffRecovery(
+            UUID playerId,
+            StaffSessionSnapshot session,
+            StaffSessionStore loaded
+    ) {
+        recoveryGate.retry(playerId);
+        removeRuntimeState(playerId);
+        try {
+            loaded.recoveryRequired(
+                    session.sessionId(),
+                    "Staff handoff confirmation timed out or was aborted",
+                    clock.instant()
+            );
+        } catch (RuntimeException exception) {
+            plugin.getLogger().log(Level.SEVERE, "Cancelled Staff handoff recovery persistence failed", exception);
         }
     }
 
