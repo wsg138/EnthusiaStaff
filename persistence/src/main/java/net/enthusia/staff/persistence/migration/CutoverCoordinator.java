@@ -90,6 +90,23 @@ public final class CutoverCoordinator {
                 .orElseGet(() -> blockedAssessment("NO_COMPLETED_SHADOW_EVIDENCE"));
     }
 
+    /** Reads the durable activation receipt; pre-activation gates do not describe an active runtime. */
+    public Optional<UUID> committedCutoverId() {
+        try (Connection connection = dataSource.getConnection();
+             var statement = connection.prepareStatement("""
+                     SELECT cutover_id FROM cutover_records
+                     WHERE migration_run_id IS NOT NULL
+                     ORDER BY authorized_at DESC LIMIT 1
+                     """);
+             var result = statement.executeQuery()) {
+            return result.next()
+                    ? Optional.of(net.enthusia.staff.persistence.UuidBytes.fromBytes(result.getBytes(1)))
+                    : Optional.empty();
+        } catch (SQLException exception) {
+            throw new ModerationPersistenceException("Unable to read committed cutover receipt", exception);
+        }
+    }
+
     public CutoverOutcome activate(UUID actorId, Optional<FounderOverride> override) {
         validateActivation(actorId, override);
         return withMigrationLock(() -> MigrationTransactionSupport.execute(

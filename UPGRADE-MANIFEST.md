@@ -72,6 +72,6 @@ See [rollback](docs/rollback.md) for the fail-closed procedure.
 ## Remaining manual work
 
 - Publish remaining provider review branches only after target ownership and repository access are verified.
-- Repeat the clean Java 21 build and all six MariaDB Testcontainers tests for the final release commit.
+- Repeat the clean Java 25 build and all six MariaDB Testcontainers tests for the final release commit.
 - Perform Paper/Velocity staging, multi-backend channel, Java/Bedrock, visual GUI, voice-chat, and failure-injection checks.
 - Record final jar hashes, PR URLs, review SHAs, installation inventory, and acceptance evidence here before release approval.

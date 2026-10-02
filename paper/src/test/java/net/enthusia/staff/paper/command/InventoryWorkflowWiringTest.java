@@ -26,6 +26,9 @@ final class InventoryWorkflowWiringTest {
     private static final Path COORDINATOR_SOURCE = Path.of(
             "src/main/java/net/enthusia/staff/paper/inventory/InventoryCoordinator.java"
     );
+    private static final Path EDIT_AUTHORITY_SOURCE = Path.of(
+            "src/main/java/net/enthusia/staff/paper/inventory/InventoryEditAuthorityGate.java"
+    );
 
     @Test
     void registrarBindsInvseeAndEnderseeToTheSameInventoryWorkflow() throws IOException {
@@ -51,9 +54,11 @@ final class InventoryWorkflowWiringTest {
     @Test
     void guiKeepsViewAndEditAuthoritySeparate() throws IOException {
         String source = normalizedSource(COORDINATOR_SOURCE);
+        String editAuthoritySource = normalizedSource(EDIT_AUTHORITY_SOURCE);
         JsonNode metadata = pluginMetadata();
 
-        assertTrue(source.contains("if (!viewer.hasPermission(\"" + EDIT_PERMISSION + "\"))"));
+        assertTrue(source.contains("if (!viewer.hasPermission(InventoryEditAuthorityGate.EDIT_PERMISSION))"));
+        assertTrue(editAuthoritySource.contains("static final String EDIT_PERMISSION = \"" + EDIT_PERMISSION + "\";"));
         assertTrue(source.contains("You may inspect this inventory but not edit it."));
         assertTrue(source.contains("online.getScheduler().execute(plugin, () ->"));
         assertTrue(source.contains("queueOfflineEdit(viewer, holder);"));
@@ -69,6 +74,28 @@ final class InventoryWorkflowWiringTest {
         assertTrue(editPermission.hasNonNull(DEFAULT_FIELD));
         assertFalse(viewPermission.path(DEFAULT_FIELD).asBoolean());
         assertFalse(editPermission.path(DEFAULT_FIELD).asBoolean());
+    }
+
+    @Test
+    void liveViewsRefreshAllRelevantViewersWithoutDecorativeEditorControls() throws IOException {
+        String source = normalizedSource(COORDINATOR_SOURCE);
+
+        assertTrue(source.contains("session.addViewer(holder);"));
+        assertTrue(source.contains("for (ModerationInventoryHolder holder : session.viewers())"));
+        assertTrue(source.contains("renderSession(session, changedKinds);"));
+        assertTrue(source.contains("scheduleTargetRefresh(viewer, ModerationInventoryHolder.Kind.PLAYER);"));
+        assertTrue(source.contains("scheduleTargetRefresh(viewer, ModerationInventoryHolder.Kind.ENDER_CHEST);"));
+        assertTrue(source.contains("handleTargetDeparture(player);"));
+        assertTrue(source.contains("handleViewerDeparture(player);"));
+        assertTrue(source.contains("scheduleCursorRecoveryLookup(patch);"));
+        assertTrue(source.contains("if (!submit(() -> loadLiveRecoveryMetadata(target, patch)))"));
+        assertTrue(source.contains("target.getScheduler().runDelayed("));
+        assertTrue(source.contains("Automatic metadata recovery attempts are exhausted."));
+        assertTrue(source.contains("inventory.clear(guiSlot);"));
+        assertTrue(source.contains("inventory.setItem(guiSlot, image.item(logical));"));
+        assertFalse(source.contains("GRAY_STAINED_GLASS"));
+        assertFalse(source.contains("Inventory metadata slot"));
+        assertFalse(source.contains("Use left click to replace/remove a stack"));
     }
 
     private static String normalizedSource(Path source) throws IOException {

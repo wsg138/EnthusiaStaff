@@ -106,6 +106,10 @@ public final class StaffBotRuntime implements AutoCloseable {
         Objects.requireNonNull(configuration, "configuration");
         Objects.requireNonNull(moderationConfigFile, "moderationConfigFile");
         Objects.requireNonNull(tunnelFiles, "tunnelFiles");
+        if (configuration.moderationWebUri().isPresent()
+                && (tunnelFiles.isEmpty() || moderationConfigFile.isEmpty())) {
+            throw new IllegalArgumentException("production moderation website requires its private read tunnel");
+        }
         Optional<StagingTunnel> tunnel = tunnelFiles.map(files -> createTunnel(configuration, files));
         StaffBotHealth health = new StaffBotHealth(configuration.environment());
         StaffBotWorkerPool workers = new StaffBotWorkerPool(
@@ -275,8 +279,14 @@ public final class StaffBotRuntime implements AutoCloseable {
             StaffBotConfiguration configuration,
             StaffBotCommandLine.TunnelFiles files
     ) {
-        if (configuration.environment() != StaffBotEnvironment.STAGING || !configuration.uiPreviewEnabled()) {
-            throw new IllegalArgumentException("staging tunnel requires the staging UI preview runtime");
+        boolean staging = configuration.environment() == StaffBotEnvironment.STAGING
+                && configuration.uiPreviewEnabled()
+                && "cloudflared-token.txt".equals(files.tokenFile().getFileName().toString());
+        boolean production = configuration.environment() == StaffBotEnvironment.PRODUCTION
+                && configuration.moderationWebUri().isPresent()
+                && "prod-tunnel".equals(files.tokenFile().getFileName().toString());
+        if (!staging && !production) {
+            throw new IllegalArgumentException("moderation tunnel configuration does not match the runtime");
         }
         return new CloudflaredStagingTunnel(files.binaryFile(), files.tokenFile());
     }

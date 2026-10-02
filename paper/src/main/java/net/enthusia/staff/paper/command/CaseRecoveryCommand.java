@@ -1,5 +1,6 @@
 package net.enthusia.staff.paper.command;
 
+import net.enthusia.staff.paper.presentation.StaffMessageStyle;
 import java.util.Objects;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.RejectedExecutionException;
@@ -60,25 +61,25 @@ public final class CaseRecoveryCommand implements CommandExecutor {
             return true;
         }
         if (arguments.length != RECOVERY_ARGUMENT_COUNT) {
-            sender.sendMessage(Component.text("Usage: /" + label + " recoveritems <case-id>"));
+            sender.sendMessage(StaffMessageStyle.style(Component.text("Usage: /" + label + " recoveritems <case-id>")));
             return true;
         }
         Actor actor = PaperActorResolver.resolve(sender).orElse(null);
         if (actor == null) {
-            sender.sendMessage(Component.text("Unable to resolve your staff identity; nothing changed."));
+            sender.sendMessage(StaffMessageStyle.style(Component.text("Unable to resolve your staff identity; nothing changed.")));
             return true;
         }
         CaseId caseId;
         try {
             caseId = new CaseId(arguments[1]);
         } catch (IllegalArgumentException exception) {
-            sender.sendMessage(Component.text("Invalid case ID: " + sanitized(exception.getMessage())));
+            sender.sendMessage(StaffMessageStyle.style(Component.text("Invalid case ID: " + sanitized(exception.getMessage()))));
             return true;
         }
         try {
             workers.execute(() -> executeRecovery(sender, actor, caseId));
         } catch (RejectedExecutionException exception) {
-            sender.sendMessage(Component.text("The moderation work queue is full; nothing changed."));
+            sender.sendMessage(StaffMessageStyle.style(Component.text("The moderation work queue is full; nothing changed.")));
         }
         return true;
     }

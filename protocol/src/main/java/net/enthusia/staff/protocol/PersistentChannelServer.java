@@ -294,6 +294,8 @@ public final class PersistentChannelServer implements AutoCloseable {
         }
         if ("ACK".equals(envelope.messageType())) {
             session.receiveAck(envelope.payloadJson());
+        } else if ("KEEPALIVE".equals(envelope.messageType())) {
+            session.acknowledge(envelope.messageId());
         } else if (inboundHandler.handle(envelope)) {
             session.acknowledge(envelope.messageId());
         }

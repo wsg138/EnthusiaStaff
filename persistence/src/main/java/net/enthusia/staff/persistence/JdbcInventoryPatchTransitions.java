@@ -384,8 +384,11 @@ final class JdbcInventoryPatchTransitions {
 
     private static void requireCoherent(LockedPatch locked) throws SQLException {
         InventoryPatch patch = locked.patch();
+        boolean restoredCursor = patch.state() == InventoryOperationState.APPLIED
+                && locked.operationState() == InventoryOperationState.RESTORED
+                && patch.operationType().startsWith("ONLINE_CURSOR_");
         boolean statesMatch = patch.state() == InventoryOperationState.APPLIED
-                ? locked.operationState() == InventoryOperationState.COMMITTED
+                ? locked.operationState() == InventoryOperationState.COMMITTED || restoredCursor
                 : patch.state() == locked.operationState();
         if (!statesMatch) {
             throw new SQLException("Inventory patch and operation states diverged");

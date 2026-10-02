@@ -110,6 +110,11 @@ public final class DiscordStaffReadRuntime implements AutoCloseable {
         return notes.recent(targetId, limit);
     }
 
+    public DiscordPunishmentHistoryReader.Page discordHistory(
+            net.enthusia.staff.domain.moderation.DiscordGuildId guildId, DiscordUserId userId, int limit) {
+        return new DiscordPunishmentHistoryReader(dataSource).recent(guildId, userId, limit);
+    }
+
     @Override
     public void close() {
         dataSource.close();

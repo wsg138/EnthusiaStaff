@@ -96,7 +96,7 @@ final class JdbcPunishmentCodeRepository {
         String sql = sanctionSelect() + """
                  WHERE s.status IN ('ACTIVE', 'APPLIED')
                    AND (s.expiration_at IS NULL OR s.expiration_at > ?)
-                   AND s.sanction_type IN ('BAN', 'NETWORK_BAN', 'NETWORK_IDENTITY_BAN', 'MUTE')
+                   AND s.sanction_type IN ('BAN', 'NETWORK_BAN', 'NETWORK_IDENTITY_BAN', 'MUTE', 'PUBLIC_MUTE')
                    AND c.state <> 'FULLY_OVERTURNED'
                    AND NOT EXISTS (
                        SELECT 1 FROM punishment_codes pc WHERE pc.sanction_id = s.sanction_id

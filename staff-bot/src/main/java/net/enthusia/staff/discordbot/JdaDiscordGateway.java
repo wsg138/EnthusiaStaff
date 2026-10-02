@@ -34,6 +34,7 @@ final class JdaDiscordGateway implements DiscordGateway {
     private JDA jda;
     private JdaStaffModerationListener moderationListener;
     private JdaModerationUiPreviewListener previewListener;
+    private ModerationReadApiServer productionReadApi;
 
     JdaDiscordGateway(StaffBotConfiguration configuration) {
         this(configuration, null, null, Optional.empty());
@@ -103,7 +104,8 @@ final class JdaDiscordGateway implements DiscordGateway {
         }
         moderation.ifPresent(runtime -> {
             moderationListener = new JdaStaffModerationListener(
-                    configuration.environment().guildId(), workers, interactions, runtime);
+                    configuration.environment().guildId(), workers, interactions, runtime,
+                    configuration.moderationWebUri(), configuration.discordToken());
             builder.addEventListeners(moderationListener);
         });
     }
@@ -115,6 +117,17 @@ final class JdaDiscordGateway implements DiscordGateway {
                 return;
             }
             moderation.ifPresent(runtime -> runtime.resumePunishments(jda));
+            if (configuration.moderationWebUri().isPresent() && productionReadApi == null) {
+                try {
+                    ModerationReadApiService service = new ModerationReadApiService(
+                            configuration.environment().guildId(), moderation.orElseThrow(), jda);
+                    productionReadApi = new ModerationReadApiServer(configuration.discordToken(), service,
+                            configuration.moderationWebUri().orElseThrow().toString());
+                    productionReadApi.start();
+                } catch (java.io.IOException exception) {
+                    throw new IllegalStateException("production moderation read API failed to start", exception);
+                }
+            }
             if (previewListener != null) {
                 previewListener.enable(jda);
             } else if (moderationListener != null) {
@@ -123,6 +136,7 @@ final class JdaDiscordGateway implements DiscordGateway {
         }
     }
 
+    @SuppressWarnings("PMD.NullAssignment") // Clearing the closed API reference prevents later reuse.
     private void disableInteractions() {
         synchronized (lifecycleLock) {
             moderation.ifPresent(StaffModerationRuntime::pausePunishments);
@@ -131,6 +145,10 @@ final class JdaDiscordGateway implements DiscordGateway {
             }
             if (moderationListener != null) {
                 moderationListener.disable();
+            }
+            if (productionReadApi != null) {
+                productionReadApi.close();
+                productionReadApi = null;
             }
         }
     }
@@ -155,10 +173,15 @@ final class JdaDiscordGateway implements DiscordGateway {
         }
     }
 
+    @SuppressWarnings("PMD.NullAssignment") // Clearing the closed API reference prevents later reuse.
     private void closeListeners() {
         moderation.ifPresent(StaffModerationRuntime::pausePunishments);
         if (previewListener != null) {
             previewListener.close();
+        }
+        if (productionReadApi != null) {
+            productionReadApi.close();
+            productionReadApi = null;
         }
         if (moderationListener != null) {
             moderationListener.disable();

@@ -2,11 +2,34 @@ package net.enthusia.staff.persistence.migration;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.util.Optional;
+import net.enthusia.staff.domain.migration.LegacySanctionType;
 import org.junit.jupiter.api.Test;
 
 class LiteBansReaderTest {
+    @Test
+    void uuidOnlyLiteBansBansStayUuidOnlyWhenIpIsAbsent() {
+        assertEquals(LegacySanctionType.BAN,
+                LiteBansReader.effectiveSanctionType(LegacySanctionType.BAN, true, Optional.empty()));
+        assertEquals(LegacySanctionType.BAN,
+                LiteBansReader.effectiveSanctionType(LegacySanctionType.BAN, true, Optional.of("#")));
+        assertEquals(LegacySanctionType.IP_BAN,
+                LiteBansReader.effectiveSanctionType(
+                        LegacySanctionType.BAN, true, Optional.of("192.0.2.1")));
+    }
+
+    @Test
+    void liteBansHistoryNullSentinelIsNotAnIpObservation() {
+        assertTrue(LiteBansReader.liteBansNullSentinel("#"));
+        assertTrue(LiteBansReader.liteBansNullSentinel("#hidden"));
+        assertFalse(LiteBansReader.liteBansNullSentinel(null));
+        assertFalse(LiteBansReader.liteBansNullSentinel("192.0.2.1"));
+    }
+
     @Test
     void parsesLiteralIpv4AndIpv6WithoutAcceptingHostnames() {
         assertArrayEquals(

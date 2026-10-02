@@ -202,8 +202,8 @@ function actionDmText(w) {
 
 function testEnvironmentBoundary() {
   return element('div',{className:'simulation-boundary'},
-    element('strong',{text:'Testing note'}),
-    element('span',{text:'This environment currently reviews the action but does not send punishments or DMs, change Discord permissions, or delete messages.'}));
+    element('strong',{text:'Simulation only'}),
+    element('span',{text:'This panel reviews the action but does not send punishments or DMs, change Discord permissions, or delete messages.'}));
 }
 
 function readinessChecklistNode(workflow) {
@@ -279,7 +279,7 @@ function hardenedRenderCompleteStep() {
     element('div', {className:'completion-icon', text:'✓', attrs:{'aria-hidden':'true'}}),
     element('h3', {text:'Action review complete'}),
     element('p', {text:'Review completed. No changes were sent.'}),
-    element('span', {text:'No live moderation action was applied in this test environment.'})));
+    element('span', {text:'No live moderation action was applied.'})));
   replaceChildrenOf($('#workflowFooter'), buttonNode('Done','button primary',{done:''}));
   $('[data-done]').addEventListener('click',closeWorkflow);
 }

@@ -1,124 +1,131 @@
 # Developer Guide Index
 
-Start here when you need to change, review, debug, or validate EnthusiaStaff. This page stays intentionally shallow: choose the task, get the answer you need, then follow the link into deeper source or evidence detail.
+Start here when you need to change, review, debug, or validate EnthusiaStaff. This page stays intentionally shallow: choose the task, get the answer you need, then follow the focused page into deeper source/evidence detail.
 
 ## Where do I start?
 
 | I need to... | Start with | Go deeper when needed |
 | --- | --- | --- |
-| Understand what is merged versus still incomplete | [[Implementation Status]] | matching feature hub, requirements/review evidence |
-| Review a pull request or commit | [[Code Review Guide]] | [[Developer Code Guide]], [[Architecture]], [[Build and Testing]] |
+| Understand what is merged versus incomplete | [[Implementation Status]] | matching feature hub and focused deep dive |
+| Review a PR/commit | [[Code Review Guide]] | [[Architecture]], [[Developer Code Guide]], [[Build and Testing]] |
 | Set up the repository | [[Development Setup]] | [[Build and Testing]] |
-| Understand the system shape | [[Architecture]] | [`docs/architecture.md`](https://github.com/wsg138/EnthusiaStaff/blob/main/docs/architecture.md), [[Developer Code Guide]] |
+| Understand the system shape | [[Architecture]] | [[Developer Code Guide]] |
 | Find the class/store/test that owns a feature | matching feature hub | [[Developer Code Guide]] |
-| Trace one request end to end | [[Developer Code Guide]] | focused deep dive and tests |
+| Work on Discord/StaffBot | [[Discord Moderation Platform]] | [[Staff Bot Runtime and Operations]], StaffBot source/tests |
+| Build/deploy/recover StaffBot | [[Staff Bot Runtime and Operations]] | [[Build and Testing]], [[Recovery and Troubleshooting]] |
+| Work on website/public API/appeals | [[Website and Web API]] | Velocity website source, site component/tests |
+| Work on the staging browser moderation UI | [[Website and Web API]] | `moderation-web/`, StaffBot moderation-read API |
+| Work on managed Discord roles | [[Discord Moderation Platform]] | `discord-platform-api/`, provider/consumer work |
 | Review Paper/Folia player-state code | [[Code Review Guide]] | [[Staff Tools, Investigations, and Player-State Safety]], [[Cheat Tester]], [[Vanish Internals]] |
 | Understand Paper/Velocity transport | [[Protocol and Network Traffic]] | protocol/persistence source and network tests |
-| Understand Discord foundations versus future runtime | [[Discord Moderation Platform]] | [[Developer Code Guide]], [[Rank Authority]], `docs/discord-authorization.md` |
-| Review current webhook delivery/privacy | [[Discord Delivery]] | [[Protocol and Network Traffic]], [[Code Review Guide]] |
-| Review vanish/session scheduling deeply | [[Vanish Internals]] | Paper visibility/staff source and runtime staging |
-| Build or prove a change | [[Build and Testing]] | exact workflow evidence for the reviewed SHA |
-| Diagnose a runtime failure | [[Recovery and Troubleshooting]] | matching feature hub, source map, logs/evidence |
-| Understand remaining product work | [[Development-Blueprint]] | goals, requirements matrix, explicitly assigned orchestration records |
-| Change or publish Wiki documentation | [[Wiki Maintenance]] | repository Wiki README and validation workflow |
+| Review legacy webhook delivery | [[Discord Delivery]] | [[Protocol and Network Traffic]], [[Code Review Guide]] |
+| Build/prove a change | [[Build and Testing]] | exact workflow/runtime evidence for the reviewed SHA |
+| Diagnose a runtime failure | [[Recovery and Troubleshooting]] | focused runtime/feature page |
+| Understand remaining product work | [[Development-Blueprint]] | goals + live GitHub for active development |
+| Change/publish Wiki documentation | [[Wiki Maintenance]] | repository Wiki README and validation workflow |
 
 ## Feature ownership
 
-The feature hubs answer **what owns this behavior, what is merged, where are the important files, and what limitations remain?**
-
 | Feature group | Main subjects |
 | --- | --- |
-| [[Core Platform and Infrastructure]] | Builds, module boundaries, Paper/Velocity lifecycle, MariaDB, protocol, operational modes, configuration, identity and health. |
+| [[Core Platform and Infrastructure]] | Module/runtime boundaries, Paper/Velocity lifecycle, MariaDB, protocol, configuration, identity and health. |
 | [[Moderation, Punishments, and Reports]] | Cases, sanctions, punishment flows, requests, escalation, history, appeals, reports, evidence and automod. |
-| [[Staff Tools, Investigations, and Player-State Safety]] | Staff mode, hotbar/tools, Cheat Tester, vanish, freeze, inventory, confiscation, economy, alts and inspector. |
-| [[Integrations, Migration, and Release Readiness]] | Provider contracts, Discord, website, LiteBans migration/shadow/cutover, client/topology acceptance and release evidence. |
+| [[Staff Tools, Investigations, and Player-State Safety]] | Staff mode, tools, Cheat Tester, vanish, freeze, inventory, confiscation, economy, alts and inspector. |
+| [[Integrations, Migration, and Release Readiness]] | Provider contracts, Discord/StaffBot, website/web APIs, migration/shadow/cutover, client/topology acceptance and release evidence. |
 
-Use the hub to find the feature, then use [[Developer Code Guide]] for the detailed trace. Do not turn this index into a duplicate source map.
+Use the hub to find the feature, then use the focused deep dive/source map. Do not turn this index into a duplicate source guide.
 
 ## Focused deep dives
 
-Use these when the general source map is not enough:
-
-- [[Code Review Guide]] — cross-cutting reviewer checklist and evidence discipline.
-- [[Protocol and Network Traffic]] — authentication, replay, ACKs and at-least-once delivery.
-- [[Discord Moderation Platform]] — merged identity/persistence/authorization foundations versus unmerged bot/link/enforcement runtime.
-- [[Discord Delivery]] — current webhook outbox, renderer, retries and privacy boundary.
-- [[Cheat Tester]] — tester state, V18 recovery journal, fake entities and fake bases.
-- [[Vanish Internals]] — session fencing, rank reconciliation, scheduler and packet behavior.
-- [[Inventory and Confiscation Safety]] — destructive player-state invariants and recovery.
+- [[Code Review Guide]] — cross-cutting reviewer checklist/evidence discipline.
+- [[Discord Moderation Platform]] — current StaffBot/linking/enforcement/managed-role product status and Discord safety rules.
+- [[Staff Bot Runtime and Operations]] — standalone Java/JDA runtime build/config/deploy/recovery.
+- [[Website and Web API]] — public site, Velocity website API, staging moderation web and StaffBot read bridge.
+- [[Discord Delivery]] — legacy webhook outbox/delivery boundary.
+- [[Protocol and Network Traffic]] — Paper/Velocity authentication, replay, ACK and delivery.
+- [[Cheat Tester]] — tester state/recovery/fake systems.
+- [[Vanish Internals]] — session fencing, scheduler and visibility behavior.
+- [[Inventory and Confiscation Safety]] — destructive player-state invariants/recovery.
 - [[Recovery and Troubleshooting]] — runtime failure handling and safe evidence collection.
 
-## How source is organized
+## Repository shape
 
 ```text
-common/                shared identifiers, validation, security and bounded utilities
+common/                shared identifiers, validation, security, bounded utilities
 domain/                business policy, authorization, state machines and ports
 integration-contracts/ supported compile-time contracts for Enthusia-owned providers
+discord-platform-api/  provider-neutral managed-role API
 persistence/           MariaDB/Flyway/JDBC stores, leases, journals, inboxes/outboxes
 protocol/              authenticated Paper-Velocity transport
 paper/                 commands, GUIs, listeners and server-local player state
-velocity/              proxy enforcement, network identity, workers, migration/site bridge
+paper-authority-bridge/ narrow private bridge for authorized Minecraft-side operations
+velocity/              proxy enforcement, transport workers, website API, migration
+staff-bot/             standalone Java/JDA Discord runtime and private read/launch services
 integration-tests/     MariaDB/cross-module/recovery tests; never deployed
+moderation-web/         staging-only Cloudflare staff moderation workspace
+components/enthusia-site/ public site + Cloudflare Pages Functions component
 ```
 
-Current merged `main` has two Minecraft runtime artifacts, Paper and Velocity. Domain/schema foundations for a future Discord staff bot do not create another deployed runtime by themselves.
+Current merged `main` therefore has more than the original two Minecraft plugin artifacts: Paper and Velocity remain Minecraft runtimes, while StaffBot is a separate executable application and the web components have their own deployment models.
 
-The core rule is: **domain policy owns the decision; platform code owns translation and runtime effects; persistence owns durable implementation of domain ports.** See [[Architecture]] and [[Code Review Guide]] for the boundary rules.
+The core rule is: **domain policy owns the decision; platform code owns translation/runtime effects; persistence owns durable implementation; public/browser surfaces receive only explicitly approved projections.**
 
 ## Common composition roots
 
 - [Paper plugin](https://github.com/wsg138/EnthusiaStaff/blob/main/paper/src/main/java/net/enthusia/staff/paper/EnthusiaStaffPaperPlugin.java)
-- [Paper runtime lifecycle](https://github.com/wsg138/EnthusiaStaff/blob/main/paper/src/main/java/net/enthusia/staff/paper/PaperRuntimeLifecycle.java)
-- [Paper runtime components](https://github.com/wsg138/EnthusiaStaff/blob/main/paper/src/main/java/net/enthusia/staff/paper/PaperRuntimeComponents.java)
-- [Paper storage bindings](https://github.com/wsg138/EnthusiaStaff/blob/main/paper/src/main/java/net/enthusia/staff/paper/PaperStorageBindings.java)
-- [Paper commands](https://github.com/wsg138/EnthusiaStaff/tree/main/paper/src/main/java/net/enthusia/staff/paper/command)
 - [Velocity plugin](https://github.com/wsg138/EnthusiaStaff/blob/main/velocity/src/main/java/net/enthusia/staff/velocity/EnthusiaStaffVelocityPlugin.java)
+- [StaffBot application](https://github.com/wsg138/EnthusiaStaff/blob/main/staff-bot/src/main/java/net/enthusia/staff/discordbot/StaffBotApplication.java)
+- [StaffBot runtime](https://github.com/wsg138/EnthusiaStaff/blob/main/staff-bot/src/main/java/net/enthusia/staff/discordbot/StaffBotRuntime.java)
+- [Velocity website router](https://github.com/wsg138/EnthusiaStaff/blob/main/velocity/src/main/java/net/enthusia/staff/velocity/WebsiteApiRouter.java)
+- [Discord platform API](https://github.com/wsg138/EnthusiaStaff/tree/main/discord-platform-api)
 - [Domain application services](https://github.com/wsg138/EnthusiaStaff/tree/main/domain/src/main/java/net/enthusia/staff/domain/application)
 - [Domain authorization](https://github.com/wsg138/EnthusiaStaff/tree/main/domain/src/main/java/net/enthusia/staff/domain/auth)
 - [Persistence stores](https://github.com/wsg138/EnthusiaStaff/tree/main/persistence/src/main/java/net/enthusia/staff/persistence)
 - [Flyway migrations](https://github.com/wsg138/EnthusiaStaff/tree/main/persistence/src/main/resources/db/migration)
+- [Public site component](https://github.com/wsg138/EnthusiaStaff/tree/main/components/enthusia-site)
+- [Moderation web workspace](https://github.com/wsg138/EnthusiaStaff/tree/main/moderation-web)
 - [Integration tests](https://github.com/wsg138/EnthusiaStaff/tree/main/integration-tests/src/test/java)
 
 ## Before changing a feature
 
 Answer these questions first:
 
-1. What finished behavior does [`ENTHUSIASTAFF-GOALS.md`](https://github.com/wsg138/EnthusiaStaff/blob/main/ENTHUSIASTAFF-GOALS.md) require?
+1. What finished behavior do the authoritative goals/focused specifications require?
 2. What does current merged code actually do?
 3. Which domain service/policy owns the decision?
 4. Which port/store/table/migration owns durable state?
-5. Which Paper, Velocity, website, Discord, or provider adapter performs the runtime effect?
-6. Which tests prove pure policy, MariaDB behavior, concurrency, or recovery?
-7. Which runtime/staging claim still cannot be proven by those tests?
+5. Which Paper, Velocity, StaffBot, web, or provider adapter performs the runtime effect?
+6. Which tests prove pure policy, MariaDB behavior, concurrency or recovery?
+7. Which runtime/staging/production claim remains unproved?
 8. Which staff/operator/Wiki page owns the human-facing behavior?
 
-If the answer to #3 is “the command/GUI/listener contains its own copy,” stop and review the architecture boundary before adding more logic.
+For Discord/web changes also ask: **is this public data, privileged staff data, or a destructive authority path?** Do not let a browser, Discord role, or integration route silently widen that boundary.
 
 ## Review path
 
-For a disciplined review:
-
-1. [[Code Review Guide]] for invariants and failure modes.
+1. [[Code Review Guide]] for invariants/failure modes.
 2. [[Architecture]] for module/runtime ownership.
-3. matching feature hub for merged state and primary paths.
-4. [[Developer Code Guide]] for the detailed end-to-end trace.
-5. [[Build and Testing]] for what the available evidence actually proves.
-6. focused deep dives for the risk area, such as [[Protocol and Network Traffic]], [[Discord Moderation Platform]], [[Cheat Tester]], [[Vanish Internals]], [[Inventory and Confiscation Safety]], or [[Recovery and Troubleshooting]].
+3. Matching feature/focused page for merged state and primary paths.
+4. [[Developer Code Guide]] for the detailed trace where needed.
+5. [[Build and Testing]] for evidence interpretation.
+6. Focused pages such as [[Discord Moderation Platform]], [[Staff Bot Runtime and Operations]], [[Website and Web API]], [[Protocol and Network Traffic]], [[Vanish Internals]], or [[Inventory and Confiscation Safety]].
 
 ## Source-of-truth discipline
 
-- Intended finished behavior: [`ENTHUSIASTAFF-GOALS.md`](https://github.com/wsg138/EnthusiaStaff/blob/main/ENTHUSIASTAFF-GOALS.md).
+- Intended finished behavior: [`ENTHUSIASTAFF-GOALS.md`](https://github.com/wsg138/EnthusiaStaff/blob/main/ENTHUSIASTAFF-GOALS.md) plus approved focused specifications.
 - Implemented behavior: current merged code, config, migrations and tests.
-- Exact proof/blockers: [requirements matrix](https://github.com/wsg138/EnthusiaStaff/blob/main/reports/REQUIREMENTS-MATRIX.md) plus current legitimate PR/workflow/runtime evidence. Reconcile with live `main` after recent merges.
+- Exact proof/blockers: current legitimate PR/workflow/runtime evidence, reconciled with live `main`.
 - Human guidance: this Wiki.
 - Work orchestration/history: `ai-agents/`; do not copy transient worker/package state into general product pages.
 
 ## Related pages
 
 - [[Code Review Guide]]
-- [[Development Setup]]
-- [[Build and Testing]]
 - [[Architecture]]
+- [[Discord Moderation Platform]]
+- [[Staff Bot Runtime and Operations]]
+- [[Website and Web API]]
+- [[Build and Testing]]
 - [[Developer Code Guide]]
 - [[Recovery and Troubleshooting]]
 - [[Wiki Maintenance]]

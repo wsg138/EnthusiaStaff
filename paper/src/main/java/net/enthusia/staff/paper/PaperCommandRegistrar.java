@@ -20,6 +20,7 @@ import net.enthusia.staff.domain.ports.ModerationHistoryStore;
 import net.enthusia.staff.domain.ports.PlayerDirectory;
 import net.enthusia.staff.domain.ports.ReportStore;
 import net.enthusia.staff.paper.account.PaperOnlinePlayerVerifier;
+import net.enthusia.staff.paper.auth.ActiveDutyAuthorizationPolicy;
 import net.enthusia.staff.paper.client.ClientEvidenceCollector;
 import net.enthusia.staff.paper.command.AccountLinkCommand;
 import net.enthusia.staff.paper.command.CaseCommand;
@@ -38,6 +39,7 @@ import net.enthusia.staff.paper.command.SanctionChangeCommand;
 import net.enthusia.staff.paper.command.SanctionLifecycleCommand;
 import net.enthusia.staff.paper.command.StaffChatCommand;
 import net.enthusia.staff.paper.command.StaffModeCommand;
+import net.enthusia.staff.paper.command.StaffWhoCommand;
 import net.enthusia.staff.paper.command.VanishCommand;
 import net.enthusia.staff.paper.config.ModerationFeatureSettings;
 import net.enthusia.staff.paper.config.ReloadableModerationFeatureSettings;
@@ -46,6 +48,7 @@ import net.enthusia.staff.paper.config.ReportConfigurationSnapshot;
 import net.enthusia.staff.paper.config.reload.ConfigurationReloadAction;
 import net.enthusia.staff.paper.economy.EconomyCoordinator;
 import net.enthusia.staff.paper.freeze.FreezeManager;
+import net.enthusia.staff.paper.freeze.FreezeNoticeSink;
 import net.enthusia.staff.paper.integration.DiscordSrvLinkProviderAdapter;
 import net.enthusia.staff.paper.integration.MarketIntegration;
 import net.enthusia.staff.paper.integration.PlayTimeActivePlaytimeProvider;
@@ -87,7 +90,7 @@ final class PaperCommandRegistrar {
     }
 
     static void registerStatus(JavaPlugin plugin, RuntimeHealth health) {
-        registerStatus(plugin, health, new EstaffCommand(health));
+        registerStatus(plugin, health, new EstaffCommand(plugin, health));
     }
 
     static void registerStatus(
@@ -110,6 +113,7 @@ final class PaperCommandRegistrar {
     }
 
     void register() {
+        ConsoleCommandAuthority.install(plugin());
         configureEstaff();
         registerAccountLinkCommands();
         registerPunishmentCommands();
@@ -125,6 +129,7 @@ final class PaperCommandRegistrar {
         if (!(command.getExecutor() instanceof EstaffCommand estaff)) {
             throw new IllegalStateException("estaff command executor was not registered before feature commands");
         }
+        estaff.configureStorageAvailability(() -> dependencies.storage().get().isPresent());
         estaff.addSuccessfulReloadHook(() -> moderationSettings.reloadFrom(
                 dependencies.environment().moderationFeatures().get()
         ));
@@ -140,9 +145,6 @@ final class PaperCommandRegistrar {
     }
 
     private void registerAccountLinkCommands() {
-        // All Bukkit/provider discovery happens during command registration on the server thread.
-        // The command itself runs persistence work on the bounded executor and receives only
-        // thread-safe/provider-neutral adapters from this point forward.
         ActivePlaytimeProvider playtime = PlayTimeActivePlaytimeProvider.discover(plugin());
         Optional<DiscordSrvLinkProviderAdapter> discordSrv = DiscordSrvLinkProviderAdapter.discover(plugin());
         PaperOnlinePlayerVerifier online = PaperOnlinePlayerVerifier.register(plugin());
@@ -160,19 +162,20 @@ final class PaperCommandRegistrar {
         Supplier<PunishmentDraftWorkflow> drafts = storage(PaperStorageBindings::punishmentDraftWorkflow);
         Supplier<PunishmentRequestService> requests = storage(PaperStorageBindings::punishmentRequestService);
         Supplier<PlayerDirectory> players = storage(PaperStorageBindings::playerDirectory);
+        AuthorizationPolicy activeAuthorization = activeAuthorization();
         PunishmentGuiController punishmentGui = new PunishmentGuiController(
-                plugin(), writeMode(), drafts, players, authorization(), reasons(), workers()
+                plugin(), writeMode(), drafts, players, activeAuthorization, reasons(), workers()
         );
         plugin().getServer().getPluginManager().registerEvents(punishmentGui, plugin());
         PunishmentRequestGuiController requestGui = new PunishmentRequestGuiController(
-                plugin(), requests, players, authorization(), workers()
+                plugin(), requests, players, activeAuthorization, workers()
         );
         requestGui.register();
         PunishmentRequestCommandHandler requestHandler = new PunishmentRequestCommandHandler(
-                plugin(), requests, authorization(), requestGui, workers()
+                plugin(), requests, activeAuthorization, requestGui, workers()
         );
         PunishmentCommand command = new PunishmentCommand(
-                plugin(), writeMode(), drafts, players, authorization(), punishmentGui, requestHandler, workers()
+                plugin(), writeMode(), drafts, players, activeAuthorization, punishmentGui, requestHandler, workers()
         );
         PUNISHMENT_COMMANDS.forEach(name -> bindCompleting(name, command, command));
     }
@@ -181,20 +184,27 @@ final class PaperCommandRegistrar {
         Supplier<SanctionChangeService> changes = storage(PaperStorageBindings::sanctionChangeService);
         Supplier<PlayerDirectory> players = storage(PaperStorageBindings::playerDirectory);
         Supplier<CaseLookup> cases = storage(PaperStorageBindings::caseLookup);
+        AuthorizationPolicy activeAuthorization = activeAuthorization();
         SanctionChangeGuiController changeGui = new SanctionChangeGuiController(
                 plugin(), clock(), writeMode(), changes, players, cases,
-                storage(PaperStorageBindings::caseReviewStore), authorization(), workers()
+                storage(PaperStorageBindings::caseReviewStore), activeAuthorization, workers()
         );
         plugin().getServer().getPluginManager().registerEvents(changeGui, plugin());
         SanctionChangeCommand command = new SanctionChangeCommand(
-                plugin(), writeMode(), changes, players, cases, authorization(), workers(), changeGui
+                plugin(), writeMode(), changes, players, cases, activeAuthorization, workers(), changeGui
         );
         SANCTION_CHANGE_COMMANDS.forEach(name -> bindCompleting(name, command, command));
     }
 
     private void registerReportCommands() {
-        Supplier<net.enthusia.staff.domain.ports.ReportStore> reportStore =
-                storage(PaperStorageBindings::reportStore);
+        Supplier<ReportStore> reportStore = storage(PaperStorageBindings::reportStore);
+        Supplier<ReportStore> activeReportStore = () -> {
+            ReportStore loaded = reportStore.get();
+            return loaded == null ? null : new net.enthusia.staff.paper.report.ActiveDutyReportStore(
+                    loaded,
+                    dependencies.players().staffMode()::authorityActive
+            );
+        };
         ReportCommand report = new ReportCommand(
                 new ReportCommand.Dependencies(
                         plugin(), clock(), dependencies.environment().serverId(), authoritativeMode(),
@@ -214,25 +224,33 @@ final class PaperCommandRegistrar {
         ReportGuiController reportGui = new ReportGuiController(
                 plugin(),
                 clock(),
-                reportStore,
+                activeReportStore,
                 dependencies.environment().reportConfiguration(),
                 workers()
         );
         plugin().getServer().getPluginManager().registerEvents(reportGui, plugin());
-        ReportsCommand reports = new ReportsCommand(plugin(), clock(), reportStore, workers(), reportGui);
+        ReportsCommand reports = new ReportsCommand(plugin(), clock(), activeReportStore, workers(), reportGui);
         bindCompleting("reports", reports, reports);
     }
 
     private void registerStaffCommands() {
-        FreezeCommand freezes = new FreezeCommand(
+        FreezeCommand freezes = FreezeCommand.createRuntime(
                 plugin(), clock(), writeMode(), storage(PaperStorageBindings::playerDirectory),
-                storage(PaperStorageBindings::freezeStore), dependencies.players().freeze(), workers()
+                storage(PaperStorageBindings::freezeStore), dependencies.players().freeze(), workers(),
+                dependencies.players().freezeNotices()
         );
         bindCompleting("freeze", freezes, freezes);
         bindCompleting("unfreeze", freezes, freezes);
         bind("staff", new StaffModeCommand(writeMode(), dependencies.players().staffMode()));
         bind("vanish", new VanishCommand(writeMode(), dependencies.players().vanish()));
         bind("staffchat", new StaffChatCommand(dependencies.integrations().roseChat()));
+        bind("staffwho", new StaffWhoCommand(
+                plugin(),
+                storage(PaperStorageBindings::punishmentRequestService),
+                dependencies.players().staffMode(),
+                dependencies.players().vanish(),
+                workers()
+        ));
     }
 
     private void registerInventoryCommands() {
@@ -249,10 +267,11 @@ final class PaperCommandRegistrar {
         Supplier<FreezeStore> freezes = storage(PaperStorageBindings::freezeStore);
         Supplier<ReportStore> reports = storage(PaperStorageBindings::reportStore);
         Supplier<ModerationHistoryStore> histories = storage(PaperStorageBindings::moderationHistoryStore);
+        AuthorizationPolicy activeAuthorization = activeAuthorization();
         InspectCommand inspect = new InspectCommand(
                 plugin(), clock(), players, cases, freezes, reports,
                 dependencies.integrations().economy(), dependencies.integrations().confiscation(),
-                dependencies.players().inventory(), authorization(), dependencies.integrations().market(),
+                dependencies.players().inventory(), activeAuthorization, dependencies.integrations().market(),
                 dependencies.integrations().reputation(), workers()
         );
         bindCompleting("inspect", inspect, inspect);
@@ -262,10 +281,10 @@ final class PaperCommandRegistrar {
         bindCompleting("history", history, history);
         CaseCommand caseCommand = new CaseCommand(
                 plugin(), cases, dependencies.integrations().confiscation(), histories,
-                moderationSettings::current, authorization(), workers()
+                moderationSettings::current, activeAuthorization, workers()
         );
         InventoryRecoveryCoordinator recovery = new InventoryRecoveryCoordinator(
-                clock(), storage(PaperStorageBindings::inventoryRecoveryStore), authorization()
+                clock(), storage(PaperStorageBindings::inventoryRecoveryStore), activeAuthorization
         );
         bind("case", new CaseRecoveryCommand(plugin(), caseCommand, recovery, workers()));
     }
@@ -313,6 +332,13 @@ final class PaperCommandRegistrar {
 
     private AuthorizationPolicy authorization() {
         return dependencies.policy().authorization();
+    }
+
+    private AuthorizationPolicy activeAuthorization() {
+        return new ActiveDutyAuthorizationPolicy(
+                authorization(),
+                dependencies.players().staffMode()::authorityActive
+        );
     }
 
     private AtomicReasonPolicyRepository reasons() {
@@ -365,6 +391,7 @@ final class PaperCommandRegistrar {
 
     record PlayerComponents(
             FreezeManager freeze,
+            FreezeNoticeSink freezeNotices,
             StaffModeManager staffMode,
             VanishManager vanish,
             InventoryCoordinator inventory

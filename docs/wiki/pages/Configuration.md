@@ -1,8 +1,10 @@
 # Configuration
 
-EnthusiaStaff is moving toward a modular, versioned configuration tree that can be validated as one immutable model. Current merged `main` implements only part of that target, so this page separates **current sources** from **planned modular layout**.
+EnthusiaStaff has several runtime/configuration boundaries now: Paper, Velocity, the standalone StaffBot application, the public site component, and the staging moderation web workspace. Not every setting participates in one hot-reloadable tree.
 
-- Current core status: [[Core Platform and Infrastructure]]
+- Core/runtime status: [[Implementation Status]]
+- Discord/StaffBot behavior: [[Discord Moderation Platform]] and [[Staff Bot Runtime and Operations]]
+- Website/web boundaries: [[Website and Web API]]
 - Commands/permissions: [[Commands and Permissions]]
 - Provider settings: [[Integrations]]
 - Report-specific configuration: [[Report Configuration]]
@@ -10,187 +12,148 @@ EnthusiaStaff is moving toward a modular, versioned configuration tree that can 
 
 ## Current configuration sources
 
-| File or class | Current purpose |
+| File/class/area | Current purpose |
 | --- | --- |
-| [`paper/src/main/resources/config.yml`](https://github.com/wsg138/EnthusiaStaff/blob/main/paper/src/main/resources/config.yml) | Current Paper runtime settings, including current staff-tool controls |
-| [`paper/src/main/resources/reason-policies.yml`](https://github.com/wsg138/EnthusiaStaff/blob/main/paper/src/main/resources/reason-policies.yml) | Stable reason, family, ladder, decay and compatibility policy |
-| [`paper/src/main/resources/reports.yml`](https://github.com/wsg138/EnthusiaStaff/blob/main/paper/src/main/resources/reports.yml) | Report submission/evidence/retention policy |
-| [`paper/src/main/resources/gui/reports.yml`](https://github.com/wsg138/EnthusiaStaff/blob/main/paper/src/main/resources/gui/reports.yml) | Report queue/detail GUI presentation |
-| [`paper/src/main/resources/plugin.yml`](https://github.com/wsg138/EnthusiaStaff/blob/main/paper/src/main/resources/plugin.yml) | Commands, permissions, rank inheritance and soft dependencies |
-| [`ReasonPolicyConfigurationLoader.java`](https://github.com/wsg138/EnthusiaStaff/blob/main/paper/src/main/java/net/enthusia/staff/paper/config/ReasonPolicyConfigurationLoader.java) | Reason-policy parsing and validation |
-| [`PaperReasonPolicyBootstrap.java`](https://github.com/wsg138/EnthusiaStaff/blob/main/paper/src/main/java/net/enthusia/staff/paper/PaperReasonPolicyBootstrap.java) | Valid reason-policy publication |
-| [`AtomicReasonPolicyRepository.java`](https://github.com/wsg138/EnthusiaStaff/blob/main/domain/src/main/java/net/enthusia/staff/domain/ports/AtomicReasonPolicyRepository.java) | Immutable atomically replaceable policy boundary |
-| [`PaperDatabaseConfiguration.java`](https://github.com/wsg138/EnthusiaStaff/blob/main/paper/src/main/java/net/enthusia/staff/paper/PaperDatabaseConfiguration.java) | Database settings/environment-variable references |
-| [`VelocityConfiguration.java`](https://github.com/wsg138/EnthusiaStaff/blob/main/velocity/src/main/java/net/enthusia/staff/velocity/VelocityConfiguration.java) | Velocity/network/Discord/site settings and secret references |
+| [`paper/src/main/resources/config.yml`](https://github.com/wsg138/EnthusiaStaff/blob/main/paper/src/main/resources/config.yml) | Paper runtime/staff-tool controls |
+| [`paper/src/main/resources/reason-policies.yml`](https://github.com/wsg138/EnthusiaStaff/blob/main/paper/src/main/resources/reason-policies.yml) | reason/family/ladder/decay/compatibility policy |
+| [`paper/src/main/resources/reports.yml`](https://github.com/wsg138/EnthusiaStaff/blob/main/paper/src/main/resources/reports.yml) | report submission/evidence/retention policy |
+| [`paper/src/main/resources/gui/reports.yml`](https://github.com/wsg138/EnthusiaStaff/blob/main/paper/src/main/resources/gui/reports.yml) | report queue/detail GUI presentation |
+| [`paper/src/main/resources/plugin.yml`](https://github.com/wsg138/EnthusiaStaff/blob/main/paper/src/main/resources/plugin.yml) | commands/permissions/soft dependencies |
+| [`VelocityConfiguration.java`](https://github.com/wsg138/EnthusiaStaff/blob/main/velocity/src/main/java/net/enthusia/staff/velocity/VelocityConfiguration.java) | proxy/network/legacy Discord delivery/website API and secret references |
+| [`StaffBotConfiguration.java`](https://github.com/wsg138/EnthusiaStaff/blob/main/staff-bot/src/main/java/net/enthusia/staff/discordbot/StaffBotConfiguration.java) | StaffBot environment, Discord identity, workers, health, moderation/read/punishment/private-service settings |
+| [`staff-bot/README.md`](https://github.com/wsg138/EnthusiaStaff/blob/main/staff-bot/README.md) | supported StaffBot startup/configuration/recovery contract |
+| [`moderation-web/`](https://github.com/wsg138/EnthusiaStaff/tree/main/moderation-web) | staging Cloudflare workspace config/build/deploy inputs |
+| [`components/enthusia-site/`](https://github.com/wsg138/EnthusiaStaff/tree/main/components/enthusia-site) | public site/Pages Functions component configuration |
 
-The complete target modular tree is not yet implemented.
+The complete target modular configuration tree from the long-term goals is still not implemented as one atomic all-file reload boundary.
+
+## StaffBot configuration
+
+StaffBot configuration covers, at a high level:
+
+- staging/production environment identity;
+- Discord application/guild/channel fences;
+- MariaDB;
+- bounded worker queues;
+- loopback/private health endpoint;
+- moderation/read presentation and behavior;
+- Discord punishment/reconciliation behavior;
+- private moderation-read/authority service connectivity;
+- signing/authentication configuration for protected service boundaries.
+
+Do not place real values for tokens, passwords, private origins, signing material, or production IDs in Wiki examples.
+
+### File-backed staging startup
+
+The merged runtime supports the staging-only pair:
+
+```text
+--token-file=<secret-mounted token file>
+--moderation-config-file=<secret-mounted properties file>
+```
+
+Both must be supplied together for that mode. Partial/mixed staging configuration must fail closed, and the file-backed staging path must not be used to bypass production identity/configuration safety.
+
+### Discord enforcement gate
+
+Destructive Discord enforcement is intentionally explicit and defaults disabled. Configuration must never make a routine restart/reload accidentally activate production moderation authority.
+
+See [[Staff Bot Runtime and Operations]].
+
+## Website/API configuration
+
+The Velocity website API and Cloudflare/browser surfaces have different configuration/security boundaries.
+
+- Velocity owns authoritative API bind/authentication/route behavior.
+- The public site uses Cloudflare Pages Functions/server-side mediation.
+- The staging moderation workspace uses Cloudflare Worker/static assets plus signed launch/session/read configuration.
+- StaffBot owns the private read API and launch issuer used by that staging workspace.
+
+Do not collapse these into one shared secret or one public endpoint. See [[Website and Web API]].
 
 ## Reason IDs, aliases and removed reasons
 
-Reason IDs are durable identities, not display strings. The policy supports versioned compatibility metadata so old stored state can remain understandable without making removed policies newly selectable.
+Reason IDs are durable identities, not display strings. Aliases map historical IDs directly to active canonical reasons; chains/cycles/self-targets/unknown targets/duplicate IDs are invalid. Removed reasons retain presentation/history metadata but are not selectable for new punishments.
 
-An alias maps one historical ID directly to one active canonical reason. Alias chains, cycles, self-targets, unknown targets, duplicate IDs and overlap with active/removed IDs are invalid.
+Existing cases/sanctions are not rewritten when a reason is renamed/retired.
 
-A removed reason retains presentation metadata for history/review, but has no active ladder and cannot be selected for a new punishment. Existing cases/sanctions are not rewritten when a reason is renamed or retired.
+## Current history/report/staff-tool settings
 
-Aliases, removed-reason metadata, active reasons and configuration version are published as one validated snapshot.
+Current Paper configuration includes bounded history/exact-sanction presentation, mutation reason limits, report policy/GUI configuration, and Staff Mode/tool controls.
 
-## Current history/sanction settings
+A rejected reload candidate must leave the previous valid snapshot active and must not rebuild MariaDB, rerun migrations, reset operational authority, discard durable work, or duplicate workers.
 
-Current Paper configuration includes history and exact-sanction-action presentation/validation settings such as bounded page size, request/appeal timeline inclusion, timezone and mutation-reason length limits.
+## Secrets and sensitive configuration
 
-These settings are reloadable only through their validated snapshot path. A rejected candidate must leave the previous valid values active and must not rebuild MariaDB, rerun migrations, reset operational mode, activate moderation authority, discard queued work or duplicate workers.
-
-## Current report settings
-
-Report policy and GUI configuration have their own source files and validation/publication path. They cover bounded submission/evidence behavior and report inventory presentation.
-
-Use [[Report Configuration]] for supported fields and operator-facing behavior. Do not copy that full reference into this page.
-
-## Current staff-tool settings
-
-Current merged staff-tool controls are stored in Paper configuration and are applied to the runtime staff profile/dispatcher. Treat scheduler/lifecycle/provider capacity and any setting documented as restart-only accordingly; a reload command should not pretend a restart-only runtime resource was rebuilt successfully.
-
-Staff-facing behavior is documented in [[Staff Mode, Vanish, and Freeze|Staff-Mode-Vanish-and-Freeze]].
-
-## Target modular layout
-
-The authoritative goals describe a broader shape similar to:
-
-```text
-plugins/EnthusiaStaff/
-├── config.yml
-├── storage.yml
-├── messages.yml
-├── discord.yml
-├── website.yml
-├── vanish.yml
-├── staff-mode.yml
-├── staff-tools.yml
-├── inventory.yml
-├── alts.yml
-├── reports.yml
-├── automod.yml
-├── anticheat.yml
-├── market.yml
-├── reputation.yml
-├── escalation.yml
-├── migration.yml
-├── integrations.yml
-├── servers.yml
-├── gui/
-│   ├── punish-categories.yml
-│   ├── punish-reasons.yml
-│   ├── punish-review.yml
-│   ├── punishment-history.yml
-│   ├── remove-punishment.yml
-│   ├── reports.yml
-│   ├── report-details.yml
-│   ├── player-inspector.yml
-│   ├── staff-tools.yml
-│   ├── cheat-testers.yml
-│   └── alts.yml
-└── punishments/
-    └── <versioned policy files>
-```
-
-That tree is a finished-design target, not a statement that every file currently exists.
-
-## Design rules
-
-Configuration changes should preserve:
-
-- stable IDs and explicit aliases;
-- path-aware validation failures;
-- immutable runtime snapshots;
-- cross-file reference validation;
-- safe defaults that cannot activate production authority accidentally;
-- explicit restart-required settings;
-- one all-or-nothing publication boundary for settings that must agree;
-- durable state continuity across reload.
-
-A reload must not discard active sanctions, drafts, requests, reports, staff sessions, leases, journals, recovery state, or queued durable delivery.
-
-## Secrets
-
-Keep real secrets outside Git and ordinary Wiki examples, including:
+Keep real secrets out of Git, Wiki examples, issue/PR comments and ordinary logs, including:
 
 - MariaDB credentials;
-- TLS key/trust-store passwords;
-- network-identity encryption/HMAC keys;
-- Discord webhook URLs;
-- website bridge/authentication secrets;
-- Cloudflare/email/Turnstile/D1/R2/Hyperdrive credentials;
-- private provider credentials.
+- TLS/HMAC/encryption/signing keys;
+- Discord bot tokens/webhook URLs;
+- website/private API credentials;
+- Cloudflare credentials;
+- private service origins/topology details;
+- provider credentials.
 
-Configuration should normally reference an environment-variable/secret name rather than embed the secret value.
+The raw Discord bot token must not be copied into browser/Cloudflare configuration. The current staging web bootstrap derives domain-separated signing material rather than publishing the token; dedicated independent production signing secrets remain the stronger long-term design.
 
-## Reload
+## Reload model
 
-```text
-/estaff reload
-```
-
-For a reloadable configuration set, the safe model is:
+For reloadable configuration:
 
 1. parse a complete candidate separately from live state;
-2. validate versions, IDs, aliases, cross-references, ranges, GUI slots, permissions, servers and integration references;
-3. reject the whole affected candidate on any invalid dependency;
+2. validate versions/IDs/aliases/references/ranges/permissions/server scopes;
+3. reject the affected candidate on any invalid dependency;
 4. leave the prior valid snapshot active on failure;
-5. publish only a fully valid immutable replacement;
+5. atomically publish only a fully valid replacement;
 6. preserve durable in-flight workflows and owned runtime resources.
 
-Current implementation does not yet provide the full modular all-file reload described by the final goals.
+Some resources are restart-owned rather than hot-reloadable.
 
-## Restart-required boundaries
+## Restart-owned boundaries
 
 Typical restart-owned resources include:
 
 - database pools/credentials;
-- TLS key/trust material;
-- backend/proxy identity and persistent sockets;
+- TLS/signing material where the runtime contract requires startup ownership;
+- persistent transport/Gateway sessions;
 - provider classloading/service discovery;
-- executor capacity and ownership.
+- executor capacity;
+- service listeners/bind addresses;
+- StaffBot application identity and certain environment fences.
 
-Verification should report **RESTART REQUIRED** when applicable instead of claiming a hot reload changed a resource that remained live.
+Report **RESTART REQUIRED** where appropriate instead of claiming a live resource changed when it did not.
 
-## Operational modes
+## Operational/authority modes
 
-```text
-BOOTSTRAP
-DEGRADED
-SHADOW_MIGRATION
-ACTIVE
-MAINTENANCE
-READ_ONLY_FAILURE
-```
-
-Modes are safety/authority states, not convenience toggles. A configuration failure must not be “fixed” by switching authority merely to make a command available.
+Operational modes and separate authority/enforcement gates are safety state, not convenience toggles. A configuration problem must not be “fixed” by enabling authority merely to make a command or external effect work.
 
 ## Review checklist
 
-Before approving a configuration change, verify:
+Before approving configuration changes verify:
 
-- stable/unique IDs and deterministic alias handling;
-- removed IDs remain historical/presentation-only;
-- references and ranges validate together;
-- GUI slots/permissions/server scopes are known;
-- invalid candidates leave the previous valid runtime model intact;
+- IDs/references are stable, unique and validated together;
+- invalid candidates retain the old live snapshot;
 - restart-owned resources are reported honestly;
-- secrets cannot appear in source/log/error output;
-- active durable workflows remain interpretable after publication;
-- tests cover invalid and rollback publication, not only happy-path parsing;
-- any runtime claim beyond parser/publication tests is supported by the appropriate staging evidence.
+- secrets/private topology cannot appear in source/log/error output;
+- StaffBot environment/application/guild fences fail closed;
+- destructive Discord enforcement cannot be enabled accidentally;
+- public/private website endpoints are not collapsed;
+- active durable workflows remain interpretable across reload/restart;
+- tests cover invalid/rollback behavior, not only happy-path parsing;
+- runtime claims have the appropriate staging evidence.
 
 ## Current state
 
-Configuration/reload is **partial**. Several important validated snapshots exist, but the complete modular tree and full cross-file immutable reload boundary in the goals are not finished. See [[Core Platform and Infrastructure]] and [[Implementation Status]] for current merged-main status without artificial percentages.
+Configuration/reload remains **partial** as a single platform-wide system. Several strong validated configuration boundaries exist, but Paper, Velocity, StaffBot and web components intentionally have different lifecycle/secret/deployment ownership.
 
 ## Related pages
 
 - [[Core Platform and Infrastructure]]
+- [[Discord Moderation Platform]]
+- [[Staff Bot Runtime and Operations]]
+- [[Website and Web API]]
 - [[Report Configuration]]
-- [[Commands and Permissions]]
 - [[Integrations]]
 - [[Code Review Guide]]
 - [[Build and Testing]]

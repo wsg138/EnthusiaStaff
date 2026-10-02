@@ -20,6 +20,7 @@ final class JdbcTransactionSupport {
             connection.setAutoCommit(false);
             Throwable transactionFailure = null;
             try {
+                InventoryPlayerParentContext.ensure(connection);
                 T result = work.execute(connection);
                 connection.commit();
                 return result;

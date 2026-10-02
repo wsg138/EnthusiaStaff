@@ -1,7 +1,7 @@
 import { DurableObject } from 'cloudflare:workers';
 import { inspectLaunchToken, validTargetKey } from './security.js';
 import { readBoundedBody } from './request-body.js';
-import { prepareModerationRead } from './backend.js';
+import { prepareModerationRead, prepareModerationAction } from './backend.js';
 
 const SESSION_COOKIE = '__Host-enthusia_mod_preview';
 const SESSION_TTL_SECONDS = 15 * 60;
@@ -24,7 +24,10 @@ const STATIC_PATHS = new Set([
   '/assets/live-shell-usability.js',
   '/assets/live-message-usability.js',
   '/assets/live-record-usability.js',
-  '/assets/live-browse-workspace.js'
+  '/assets/live-browse-workspace.js',
+  '/assets/live-filter-focus.js',
+  '/assets/live-actions.js',
+  '/assets/live-minecraft-actions.js'
 ]);
 const ROUTE_HANDLERS = new Map([
   ['/health', handleHealth],
@@ -32,7 +35,9 @@ const ROUTE_HANDLERS = new Map([
   ['/api/session', handleSession],
   ['/api/bootstrap', handleBootstrap],
   ['/api/messages', handleMessages],
-  ['/api/simulate', handleSimulation]
+  ['/api/simulate', handleSimulation],
+  ...['capabilities', 'prepare', 'confirm', 'status'].map(operation =>
+    ['/api/actions/' + operation, (request, env) => handleAction(request, env, operation)])
 ]);
 const encoder = new TextEncoder();
 
@@ -119,9 +124,9 @@ export class ModerationSessionStore extends DurableObject {
 export default {
   async fetch(request, env) {
     try {
-      return secure(await route(request, env));
+      return secure(await route(request, env), env);
     } catch {
-      return secure(textResponse('Preview request failed.', 500));
+      return secure(textResponse('Preview request failed.', 500), env);
     }
   }
 };
@@ -138,15 +143,17 @@ function isProtectedAssetPath(pathname) {
   return pathname === '/' || pathname === '/moderation' || STATIC_PATHS.has(pathname);
 }
 
-function handleHealth(request) {
+function handleHealth(request, env) {
   if (request.method !== 'GET') return methodNotAllowed();
-  return jsonResponse({ status: 'ok', environment: 'staging', mode: 'simulation-only' });
+  return jsonResponse({ status: 'ok', environment: runtimeEnvironment(env),
+    mode: runtimeEnvironment(env) === 'production' ? 'backend-controlled' : 'simulation-only' });
 }
 
 async function handleLaunch(request, env, url) {
   if (request.method !== 'GET') return methodNotAllowed();
   const token = url.searchParams.get('t') || '';
-  const inspection = await inspectLaunchToken(token, env.LAUNCH_SIGNING_KEY_HEX, env.EXPECTED_GUILD_ID);
+  const inspection = await inspectLaunchToken(token, env.LAUNCH_SIGNING_KEY_HEX, env.EXPECTED_GUILD_ID,
+    Math.floor(Date.now() / 1000), runtimeEnvironment(env));
   if (!inspection.claims) return unauthorizedLaunch();
   const result = await store(env).consumeLaunch(inspection.claims);
   if (!result || result.status !== 'accepted') return unauthorizedLaunch();
@@ -165,7 +172,7 @@ async function handleSession(request, env) {
     targetKey: session.targetKey,
     csrfToken: session.csrfToken,
     expiresAt: new Date(session.expiresAt * 1000).toISOString(),
-    staging: true
+    staging: runtimeEnvironment(env) === 'staging'
   });
 }
 
@@ -175,6 +182,19 @@ function handleBootstrap(request, env) {
 
 function handleMessages(request, env) {
   return handleRead(request, env, 'messages');
+}
+
+async function handleAction(request, env, operation) {
+  if (request.method !== 'POST') return methodNotAllowed();
+  const session = await authorizedMutationSession(request, env);
+  if (!session) return textResponse('Session verification failed.', 403);
+  const parsed = await readJsonPayload(request);
+  if (parsed.error) return parsed.error;
+  try {
+    return await prepareModerationAction(env, session, operation, parsed.value);
+  } catch {
+    return jsonResponse({code:'invalid_request', message:'Action request is invalid.'}, 400);
+  }
 }
 
 async function handleRead(request, env, endpoint) {
@@ -256,7 +276,11 @@ async function currentSession(request, env) {
 }
 
 function store(env) {
-  return env.SESSION_STORE.getByName('staging-moderation-sessions-v1');
+  return env.SESSION_STORE.getByName(runtimeEnvironment(env) + '-moderation-sessions-v1');
+}
+
+function runtimeEnvironment(env) {
+  return env.RUNTIME_ENVIRONMENT === 'production' ? 'production' : 'staging';
 }
 
 function validSimulation(payload, session) {
@@ -309,12 +333,14 @@ function jsonResponse(value, status = 200) {
   return new Response(JSON.stringify(value), { status, headers: { 'Content-Type': 'application/json; charset=utf-8' } });
 }
 
-function secure(response) {
+function secure(response, env) {
   const secured = new Response(response.body, response);
   const headers = secured.headers;
   headers.set('Cache-Control', 'private, no-store');
   headers.set('Pragma', 'no-cache');
-  headers.set('Content-Security-Policy', "default-src 'self'; img-src 'self' data: https://cdn.discordapp.com https://media.discordapp.net https://textures.minecraft.net https://enthusia.info; style-src 'self'; script-src 'self'; connect-src 'self' https://moderation-read-staging.enthusia.info; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'");
+  const readOrigin = runtimeEnvironment(env) === 'production'
+    ? 'https://moderation-read.enthusia.info' : 'https://moderation-read-staging.enthusia.info';
+  headers.set('Content-Security-Policy', `default-src 'self'; img-src 'self' data: https://cdn.discordapp.com https://media.discordapp.net https://textures.minecraft.net https://enthusia.info; style-src 'self'; script-src 'self'; connect-src 'self' ${readOrigin}; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'`);
   headers.set('Referrer-Policy', 'no-referrer');
   headers.set('X-Content-Type-Options', 'nosniff');
   headers.set('X-Frame-Options', 'DENY'); // nosemgrep: javascript.express.security.x-frame-options-misconfiguration.x-frame-options-misconfiguration

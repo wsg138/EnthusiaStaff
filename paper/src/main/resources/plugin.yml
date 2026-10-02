@@ -1,12 +1,11 @@
 name: EnthusiaStaff
 version: '${version}'
 main: net.enthusia.staff.paper.EnthusiaStaffPaperPlugin
-api-version: '1.21'
+api-version: '26.2'
 author: P2wn
 description: Enthusia Network staff and moderation runtime for Paper
 load: POSTWORLD
 softdepend:
-  - RoseChat
   - voicechat
   - ViaVersion
   - floodgate
@@ -25,8 +24,8 @@ softdepend:
   - EnthusiaServerAutoClicker
 commands:
   estaff:
-    description: EnthusiaStaff status, reload, and exact sanction lifecycle commands
-    usage: /estaff <status|verify|reload|sanction>
+    description: EnthusiaStaff status, non-destructive verification, reload, and exact sanction lifecycle commands
+    usage: /estaff <status|verify [full]|reload|sanction>
   history:
     description: View database-paginated punishment and moderation history
     usage: /history <player|uuid> [page]
@@ -93,6 +92,7 @@ commands:
   staff:
     description: Enter or exit durable staff mode
     usage: /staff
+    aliases: [sm, staffmode]
     permission: enthusiastaff.staffmode
   stafftools:
     description: Use the staff-mode operational tool menu and text fallbacks
@@ -113,7 +113,10 @@ commands:
   staffchat:
     description: Toggle the configured RoseChat staff channel
     usage: /staffchat
-    permission: enthusiastaff.staffchat
+  staffwho:
+    description: Show online staff operational state and pending punishment-request count
+    usage: /staffwho
+    permission: enthusiastaff.staffwho
   client:
     description: Inspect or save a point-in-time client evidence snapshot
     usage: /client <player|uuid> [save CONFIRM]
@@ -235,6 +238,8 @@ permissions:
     default: false
   enthusiastaff.staffchat:
     default: false
+  enthusiastaff.staffwho:
+    default: false
   enthusiastaff.client:
     default: false
   enthusiastaff.inventory.view:
@@ -254,6 +259,16 @@ permissions:
   enthusiastaff.reputation.restrict:
     default: false
   enthusiastaff.owner.recovery:
+    default: false
+  enthusiastaff.identity.helper:
+    default: false
+  enthusiastaff.identity.mod:
+    default: false
+  enthusiastaff.identity.admin:
+    default: false
+  enthusiastaff.identity.owner:
+    default: false
+  enthusiastaff.identity.developer:
     default: false
   enthusiastaff.rank.helper:
     default: false
@@ -275,6 +290,7 @@ permissions:
       enthusiastaff.stafftools.menu: true
       enthusiastaff.vanish: true
       enthusiastaff.staffchat: true
+      enthusiastaff.staffwho: true
       enthusiastaff.inventory.view: true
       enthusiastaff.inspect: true
   enthusiastaff.rank.developer:
@@ -303,6 +319,7 @@ permissions:
       enthusiastaff.cheattester.fake-base: true
       enthusiastaff.vanish: true
       enthusiastaff.staffchat: true
+      enthusiastaff.staffwho: true
       enthusiastaff.client: true
       enthusiastaff.inventory.view: true
       enthusiastaff.inventory.edit: true

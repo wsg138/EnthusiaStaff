@@ -142,7 +142,8 @@ automod:
 visibility:
   # Outside the current /estaff reload scope; restart to apply changes.
   matrix:
-    MOD: [MOD, DEVELOPER]
-    DEVELOPER: [MOD, DEVELOPER]
-    ADMIN: [MOD, DEVELOPER, ADMIN]
-    FOUNDER: [MOD, DEVELOPER, ADMIN, FOUNDER]
+    HELPER: [HELPER, MOD, DEVELOPER]
+    MOD: [HELPER, MOD, DEVELOPER]
+    DEVELOPER: [HELPER, MOD, DEVELOPER, ADMIN]
+    ADMIN: [HELPER, MOD, DEVELOPER, ADMIN]
+    FOUNDER: [HELPER, MOD, DEVELOPER, ADMIN, FOUNDER]

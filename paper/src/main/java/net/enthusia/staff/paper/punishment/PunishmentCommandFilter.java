@@ -12,7 +12,7 @@ public final class PunishmentCommandFilter {
     private static final Map<String, Set<SanctionType>> FILTERS = Map.of(
             "ban", Set.of(SanctionType.BAN, SanctionType.NETWORK_BAN),
             "ipban", Set.of(SanctionType.NETWORK_IDENTITY_BAN),
-            "mute", Set.of(SanctionType.MUTE),
+            "mute", Set.of(SanctionType.MUTE, SanctionType.PUBLIC_MUTE),
             "warn", Set.of(SanctionType.WARNING),
             "kick", Set.of(SanctionType.KICK)
     );

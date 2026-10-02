@@ -1,5 +1,6 @@
 package net.enthusia.staff.paper.economy;
 
+import net.enthusia.staff.paper.presentation.StaffMessageStyle;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.papermc.paper.threadedregions.scheduler.ScheduledTask;
 import java.time.Clock;
@@ -1444,7 +1445,7 @@ public final class EconomyCoordinator implements Listener, AutoCloseable {
         if (player == null) {
             return;
         }
-        onEntity(player, () -> player.sendMessage(Component.text(body)), () -> {
+        onEntity(player, () -> player.sendMessage(StaffMessageStyle.style(Component.text(body))), () -> {
         });
     }
 
@@ -1470,7 +1471,7 @@ public final class EconomyCoordinator implements Listener, AutoCloseable {
         plugin.getServer().getGlobalRegionScheduler().execute(plugin, () ->
                 plugin.getServer().getOnlinePlayers().stream()
                         .filter(player -> player.hasPermission("enthusiastaff.alerts"))
-                        .forEach(player -> player.sendMessage(Component.text(body))));
+                        .forEach(player -> player.sendMessage(StaffMessageStyle.style(Component.text(body)))));
     }
 
     private static String bounded(String detail) {

@@ -66,10 +66,12 @@ final class PunishmentRequestWiringTest {
     void commandRegistrarRegistersTheRequestGuiWithThePlayerDirectory() throws IOException {
         String source = normalizedSource(REGISTRAR_SOURCE);
 
+        assertTrue(source.contains("AuthorizationPolicy activeAuthorization = activeAuthorization();"));
         assertTrue(source.contains("new PunishmentRequestGuiController("));
-        assertTrue(source.contains("plugin(), requests, players, authorization(), workers()"));
+        assertTrue(source.contains("plugin(), requests, players, activeAuthorization, workers()"));
         assertTrue(source.contains("requestGui.register();"));
         assertTrue(source.contains("new PunishmentRequestCommandHandler("));
+        assertTrue(source.contains("plugin(), requests, activeAuthorization, requestGui, workers()"));
         assertTrue(source.contains("punishmentGui, requestHandler, workers()"));
     }
 

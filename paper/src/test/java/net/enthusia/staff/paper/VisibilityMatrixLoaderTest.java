@@ -14,6 +14,13 @@ final class VisibilityMatrixLoaderTest {
     private final VisibilityMatrixLoader loader = new VisibilityMatrixLoader();
 
     @Test
+    void helpersCanUseTheConfiguredStaffVisibilityGroup() {
+        Map<StaffRank, Set<StaffRank>> matrix = loader.load(path -> path.endsWith(".HELPER")
+                ? List.of("helper", "mod", "developer") : List.of());
+        assertEquals(Set.of(StaffRank.HELPER, StaffRank.MOD, StaffRank.DEVELOPER), matrix.get(StaffRank.HELPER));
+    }
+
+    @Test
     void emptyConfigurationUsesSafeDefaults() {
         assertEquals(DefaultStaffVisibilityService.defaultMatrix(), loader.load(path -> List.of()));
     }

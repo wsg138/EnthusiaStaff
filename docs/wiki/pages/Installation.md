@@ -1,196 +1,193 @@
 # Installation
 
-This page describes **private staging installation**. It is not permission to
-activate EnthusiaStaff as production authority.
+This page describes **private staging installation and topology**, not permission to activate EnthusiaStaff as production authority.
 
 ## Before using this page
 
-- Feature and release status: [[Integrations, Migration, and Release Readiness]]
-- Current configuration shape: [[Configuration]]
-- Provider requirements: [[Integrations]]
-- Failure/recovery procedure: [[Recovery and Troubleshooting]]
-- LiteBans source import: [[LiteBans Migration]]
-- Shadow and authority change: [[Shadow Mode and Cutover]]
+- Current product/release state: [[Implementation Status]]
+- Integration/cutover readiness: [[Integrations, Migration, and Release Readiness]]
+- Configuration: [[Configuration]]
+- StaffBot operations: [[Staff Bot Runtime and Operations]]
+- Website/web boundaries: [[Website and Web API]]
+- Recovery: [[Recovery and Troubleshooting]]
+- LiteBans migration: [[LiteBans Migration]]
+- Shadow/cutover: [[Shadow Mode and Cutover]]
 - Build validation: [[Build and Testing]]
 
 ## Requirements
 
-- Java 21
-- Paper/Leaf/Purpur 1.21.x-compatible backends, with current focus on
-  1.21.8–1.21.11
-- Velocity 3.4-compatible proxy
-- MariaDB
-- Separate application and migration credentials
-- Existing LiteBans MariaDB source during migration
-- Versioned encryption and HMAC keys for protected network identity
-- PKCS#12 key/trust stores for persistent Paper–Velocity transport
-- Required provider plugins for each enabled feature
+Depending on the staging group being exercised:
 
-## Runtime artifacts
+- Java 25;
+- supported Paper/Leaf/Purpur backend(s);
+- supported Velocity proxy;
+- MariaDB;
+- separate normal/migration credentials;
+- existing LiteBans source during migration tests;
+- protected Paper–Velocity identity/TLS/HMAC material;
+- required provider plugins;
+- StaffBot Discord application/token/identity fencing for Discord staging;
+- private StaffBot authority/read connectivity where those surfaces are under test;
+- Cloudflare deployment/configuration for site/moderation-web tests where applicable.
 
-The build must produce exactly:
+Do not copy real production credentials or private topology into Wiki/PR evidence.
+
+## Java runtime artifacts
+
+The root `runtimeJars` task currently builds/verifies:
 
 ```text
 paper/build/libs/EnthusiaStaff-Paper-<version>.jar
+paper-authority-bridge/build/libs/EnthusiaStaff-AuthorityBridge-<version>.jar
 velocity/build/libs/EnthusiaStaff-Velocity-<version>.jar
+staff-bot/build/libs/EnthusiaStaff-StaffBot-<version>.jar
 ```
 
-The default project version is `0.1.0-SNAPSHOT` unless `releaseVersion` is
-provided to Gradle.
+Not every staging scenario deploys every artifact. The authority bridge is a narrow transition runtime. StaffBot is a standalone application rather than a Minecraft plugin.
 
-Never deploy an artifact whose exact source revision, hash and validation evidence
-are unknown.
+Never deploy an artifact whose exact source revision/hash/validation evidence are unknown.
 
-## Staging topology
+## Web components
 
-Install the same Paper jar on each backend:
+Web surfaces are deployed separately from the Java runtimes:
+
+- `components/enthusia-site/` — public site + Cloudflare Pages Functions;
+- `moderation-web/` — staging-only Cloudflare Worker/static-assets moderation workspace.
+
+The moderation web workspace must not be treated as a public punishment writer. See [[Website and Web API]].
+
+## Representative staging topology
 
 ```text
 Velocity + EnthusiaStaff-Velocity
 ├── HUB + EnthusiaStaff-Paper
 └── SMP + EnthusiaStaff-Paper
+
+Transition work (when explicitly required)
+└── EnthusiaStaff-AuthorityBridge on its approved target
+
+StaffBot
+├── Discord Gateway/JDA
+├── MariaDB
+├── private authority boundary
+└── private moderation-read boundary
+
+Cloudflare/web
+├── public enthusia-site
+└── staging moderation-web
 ```
 
-Keep HUB and SMP inventory, Ender chest, world and player-data scopes distinct.
-Future backends should use the same Paper jar with explicit server configuration.
+Keep backend inventory/world/player-data scopes distinct and treat private StaffBot service endpoints separately from public web ingress.
 
-## Required backups
+## Backups and rollback material
 
-Before first staging startup, back up:
+Before destructive/private staging, preserve the applicable combination of:
 
 - MariaDB and LiteBans source data;
-- current moderation/plugin configuration;
-- TLS key/trust material;
-- network-identity encryption/HMAC keys;
-- provider configuration and private integration settings;
-- existing jars and known-good artifact hashes.
+- current configuration and artifact hashes;
+- TLS/signing/encryption material through approved secret handling;
+- provider configuration;
+- known-good Java/site release artifacts;
+- component/deployment version identity.
 
-Store backups outside the live plugin directory and test that they can be read.
+Store backups outside live runtime directories and verify that the rollback material is actually usable.
 
 ## Safe staging sequence
 
-1. Select one exact source revision and build both runtime jars.
-2. Run the complete clean Java/MariaDB validation and inspect both jars.
-3. Record artifact hashes, environment versions and configuration checksum.
-4. Create restricted MariaDB users for application, migration and site access.
-5. Apply migrations to a private staging database.
-6. Configure Velocity with enforcement disabled and valid TLS material.
-7. Install the Paper jar on one staging backend.
-8. Verify configuration, schema, transport and disabled-feature reporting.
-9. Install the Paper jar on the remaining staging backends.
-10. Run `/estaff status` and `/estaff verify full` on the relevant runtimes.
-11. Test optional providers one at a time, including expected degraded behavior.
-12. Run punishment, report, staff-state, inventory, recovery and migration tests
-    with disposable accounts/data.
-13. Enter `SHADOW_MIGRATION` only after preflight passes.
-14. Keep LiteBans authoritative.
+1. Select one exact source revision.
+2. Run complete Java/MariaDB validation and relevant Node/web checks.
+3. Build/record hashes for the runtime artifacts actually used.
+4. Record environment/provider/component versions and configuration checksum/identity.
+5. Apply migrations to private staging MariaDB.
+6. Start Velocity/Paper with production authority disabled as required by the test plan.
+7. Verify schema, transport, identity and degraded/disabled-feature reporting.
+8. Add providers one at a time, then validate the supported combined set.
+9. If StaffBot is under test, start it with the approved staging identity/config contract and verify health before any interaction testing.
+10. Keep destructive Discord enforcement disabled except during an explicitly authorized isolated staging exercise.
+11. If moderation-web is under test, deploy through the protected workflow and verify signed launch/session/read/replay behavior.
+12. Run the intended punishment/report/staff-state/linking/recovery/migration tests with disposable accounts/data.
+13. Enter shadow/cutover-specific modes only when the prerequisite runbook says to do so.
+14. Keep the current production authority unchanged until its explicit cutover gate is accepted.
 
-Do not skip directly from “the plugin starts” to shadow or production use.
+“The process starts” is not a staging acceptance result.
 
-## Database access
+## StaffBot staging
 
-Use separate credentials for:
+Build/run details live in [[Staff Bot Runtime and Operations]]. Key staging rules:
 
-- normal application reads/writes;
-- LiteBans source inspection/import;
-- schema migration;
-- restricted website/public projections.
+- use the staging Discord application/guild/channel fences;
+- keep real token/signing material in protected secret storage;
+- the supported file-backed mode requires the complete token/config-file pair and is staging-only;
+- verify health before/after update/restart;
+- keep destructive Discord enforcement default-off unless the test explicitly authorizes it;
+- do not expose private health/read/authority listeners publicly for convenience.
 
-Do not reuse root/administrator credentials in plugin configuration. Store secret
-values in environment variables or an approved secret manager.
+## Website/API staging
 
-## Persistent Paper–Velocity channel
+Velocity website API, the public site component, and moderation-web are different boundaries.
 
-Each Paper backend and Velocity need:
+Validate:
 
-- explicit server identity and allowlist;
-- protocol version compatibility;
-- TLS key store and trust store;
-- environment-backed passwords;
-- replay-window and acknowledgement settings;
-- bounded queue, reconnect and backoff settings.
+- public allowlisted routes separately from privileged appeal/reviewer routes;
+- request authentication/replay/body/rate bounds;
+- browser/session/CSRF behavior;
+- StaffBot signed moderation-read boundary;
+- unauthenticated/replayed request rejection;
+- no private evidence/credentials in public responses or logs.
 
-Test both success and rejection:
+See [[Website and Web API]].
 
-- wrong hostname/certificate;
-- untrusted certificate;
-- wrong server identity;
-- unsupported protocol version;
-- stale/replayed message;
-- proxy/backend restart;
-- long outage and queue recovery;
-- operation with no online player.
+## Paper–Velocity transport staging
+
+Each runtime needs the approved identity/allowlist/protocol/TLS/authentication settings. Exercise rejection and recovery cases such as wrong identity/certificate/version, stale/replayed messages, proxy/backend restart, long outage, queue recovery and operation with no online player.
 
 See [[Protocol and Network Traffic]].
 
-## First startup expectations
-
-Startup should:
-
-1. validate configuration;
-2. check schema/migration state;
-3. discover providers;
-4. initialize durable workers;
-5. report operational mode;
-6. identify disabled, degraded and restart-required features;
-7. block unsafe commands until required state is ready.
-
-Reaching `DEGRADED` is not necessarily a crash, but every unavailable feature must
-be explicit and unsafe writes must remain blocked.
-
 ## Provider staging
 
-Install only the providers needed for the test group, then test all supported
-providers together before release. Verify:
+For enabled providers verify compatible presence, missing state, incompatible/unavailable state, failure during use, reload/restart behavior and classloader/service discovery. A missing optional provider should disable only dependent behavior where safe.
 
-- service/classloader compatibility;
-- exact API version;
-- event/callback reception;
-- isolated failure behavior;
-- reload/restart boundary;
-- no provider-owned API classes leaked into EnthusiaStaff jars.
+For Discord managed roles, compiling `discord-platform-api` does not prove the StaffBot provider/consumer migration is complete.
 
-See [[Integrations]].
+## Shadow and authority rules
 
-## Shadow installation rules
-
-During shadow:
+During LiteBans shadow:
 
 - LiteBans enforces;
-- EnthusiaStaff imports, mirrors and compares;
-- EnthusiaStaff does not write LiteBans;
-- EnthusiaStaff does not enforce its calculated result;
-- old jars/data remain available for rollback.
+- EnthusiaStaff imports/mirrors/compares;
+- EnthusiaStaff does not write LiteBans or enforce its calculated result;
+- known-good rollback artifacts/data remain available.
 
-Do not run two active authorities at once.
+Discord authority, DiscordSRV console/role-sync retirement and website public launch have separate cutover boundaries. Do not use one successful subsystem as authorization for another.
 
-## Verification checklist
+## Staging checkpoint record
 
-Before a staging checkpoint is accepted, record:
+Record:
 
 - exact source revision;
-- Paper/Velocity jar hashes;
-- Java, Paper, Velocity and MariaDB versions;
-- configuration checksum and secret-variable names;
-- schema/migration version;
-- provider versions;
-- operational mode and verify output;
-- tests/staging groups run and skipped;
-- known blockers and recovery/rollback state.
+- hashes for every deployed Java artifact;
+- site/moderation-web revision/deployment identity where applicable;
+- Java/Paper/Velocity/MariaDB/provider versions;
+- StaffBot/JDA/Discord staging identity information at a non-secret level;
+- configuration checksum/version and secret **names**, not values;
+- schema migration version;
+- topology and test scope;
+- executed/skipped/unavailable groups;
+- health/verification results;
+- known blockers and rollback state.
 
-## Old-plugin removal
+## Legacy removal
 
-Legacy removal happens only after successful cutover and accepted production
-observation. It is a later manual operation.
-
-No build, verification command, Wiki publication or automated migration task may
-delete production jars or data.
+Legacy plugins/authority are removed only after the corresponding cutover and accepted observation. No build, Wiki publication or automated migration step should delete production jars/data merely because replacement code merged.
 
 ## Related pages
 
+- [[Implementation Status]]
 - [[Integrations, Migration, and Release Readiness]]
 - [[Configuration]]
-- [[Integrations]]
+- [[Discord Moderation Platform]]
+- [[Staff Bot Runtime and Operations]]
+- [[Website and Web API]]
 - [[Recovery and Troubleshooting]]
 - [[LiteBans Migration]]
 - [[Shadow Mode and Cutover]]

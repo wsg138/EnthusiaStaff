@@ -26,6 +26,37 @@ final class PaperNetworkMessageHandlerTest {
     private static final String INVALIDATE_PREFIX = "invalidate:";
 
     @Test
+    void committedOnlineEffectIsDeliveredOnceAfterDurableInboxReceipt() {
+        List<String> actions = new ArrayList<>();
+        RecordingInbox inbox = new RecordingInbox(actions);
+        PaperNetworkMessageHandler handler = new PaperNetworkMessageHandler(new ObjectMapper(),
+                Clock.fixed(NOW, ZoneOffset.UTC), ignored -> { }, ignored -> true,
+                notification -> actions.add("online:" + notification.caseId().value()));
+        ProtocolEnvelope message = envelope("PUNISHMENT_CREATED", """
+                {"targetId":"%s","caseId":"TESTCASE00000001","publicReason":"Authorized test",
+                 "issuedAt":"%s","sanctionTypes":["WARNING"]}
+                """.formatted(TARGET_ID, NOW));
+        assertTrue(handler.handle(inbox, "TEMP", message));
+        assertTrue(handler.handle(inbox, "TEMP", message));
+        assertEquals(List.of("record:PUNISHMENT_CREATED", "online:TESTCASE00000001",
+                "record:PUNISHMENT_CREATED"), actions);
+    }
+
+    @Test
+    void malformedNewNotificationCannotConsumeTheDurableReceipt() {
+        List<String> actions = new ArrayList<>();
+        PaperNetworkMessageHandler handler = new PaperNetworkMessageHandler(new ObjectMapper(),
+                Clock.fixed(NOW, ZoneOffset.UTC), ignored -> { }, ignored -> true,
+                notification -> actions.add("online"));
+        assertThrows(IllegalArgumentException.class, () -> handler.handle(new RecordingInbox(actions), "TEMP",
+                envelope("PUNISHMENT_CREATED", """
+                        {"targetId":"%s","caseId":"TESTCASE00000001","publicReason":"Authorized test",
+                         "issuedAt":"%s","sanctionTypes":["INVALID"]}
+                        """.formatted(TARGET_ID, NOW))));
+        assertTrue(actions.isEmpty());
+    }
+
+    @Test
     void validSanctionInvalidatesBeforeRecordingTheInboxReceipt() {
         List<String> actions = new ArrayList<>();
         RecordingInbox inbox = new RecordingInbox(actions);
@@ -85,6 +116,7 @@ final class PaperNetworkMessageHandlerTest {
     private static final class RecordingInbox implements NetworkOutboxStore {
         private final List<String> actions;
         private Instant recordedAt;
+        private final Set<UUID> seen = new java.util.HashSet<>();
 
         private RecordingInbox(List<String> actions) {
             this.actions = actions;
@@ -100,7 +132,7 @@ final class PaperNetworkMessageHandlerTest {
         ) {
             actions.add("record:" + messageType);
             recordedAt = now;
-            return true;
+            return seen.add(messageId);
         }
 
         @Override

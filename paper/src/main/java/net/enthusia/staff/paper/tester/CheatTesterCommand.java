@@ -1,5 +1,6 @@
 package net.enthusia.staff.paper.tester;
 
+import net.enthusia.staff.paper.presentation.StaffMessageStyle;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -44,7 +45,7 @@ public final class CheatTesterCommand implements CommandExecutor, TabCompleter {
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
         if (!(sender instanceof Player player)) {
-            sender.sendMessage("Cheat Tester requires an in-game staff session.");
+            sender.sendMessage(StaffMessageStyle.style("Cheat Tester requires an in-game staff session."));
             return true;
         }
         if (args.length == NO_ARGUMENTS || CONFIG.equalsIgnoreCase(args[0])) {
@@ -66,28 +67,28 @@ public final class CheatTesterCommand implements CommandExecutor, TabCompleter {
     }
 
     private boolean usage(Player player) {
-        player.sendMessage(Component.text(
+        player.sendMessage(StaffMessageStyle.style(Component.text(
                 "Usage: /cheattester <select|run|cancel|status|config|base>",
                 NamedTextColor.YELLOW
-        ));
+        )));
         return true;
     }
 
     private boolean select(Player player, String[] args) {
         if (args.length != TARGET_ARGUMENT) {
-            player.sendMessage(Component.text("Usage: /cheattester select <totem-refill|no-fall|velocity|auto-armor|fake-entity>"));
+            player.sendMessage(StaffMessageStyle.style(Component.text("Usage: /cheattester select <totem-refill|no-fall|velocity|auto-armor|fake-entity>")));
             return true;
         }
         CheatTesterType.fromId(args[1]).ifPresentOrElse(
                 type -> manager.select(player, type),
-                () -> player.sendMessage(Component.text("Unknown Cheat Tester type.", NamedTextColor.RED))
+                () -> player.sendMessage(StaffMessageStyle.style(Component.text("Unknown Cheat Tester type.", NamedTextColor.RED)))
         );
         return true;
     }
 
     private boolean run(Player player, String[] args) {
         if (args.length < TARGET_ARGUMENT || args.length > TYPE_ARGUMENT) {
-            player.sendMessage(Component.text("Usage: /cheattester run <player> [type]"));
+            player.sendMessage(StaffMessageStyle.style(Component.text("Usage: /cheattester run <player> [type]")));
             return true;
         }
         Player target = onlineTarget(player, args[1]);
@@ -100,14 +101,14 @@ public final class CheatTesterCommand implements CommandExecutor, TabCompleter {
         }
         CheatTesterType.fromId(args[2]).ifPresentOrElse(
                 type -> manager.run(player, target, type),
-                () -> player.sendMessage(Component.text("Unknown Cheat Tester type.", NamedTextColor.RED))
+                () -> player.sendMessage(StaffMessageStyle.style(Component.text("Unknown Cheat Tester type.", NamedTextColor.RED)))
         );
         return true;
     }
 
     private boolean cancel(Player player, String[] args) {
         if (args.length != TARGET_ARGUMENT) {
-            player.sendMessage(Component.text("Usage: /cheattester cancel <player>"));
+            player.sendMessage(StaffMessageStyle.style(Component.text("Usage: /cheattester cancel <player>")));
             return true;
         }
         Player target = onlineTarget(player, args[1]);
@@ -120,25 +121,25 @@ public final class CheatTesterCommand implements CommandExecutor, TabCompleter {
     private Player onlineTarget(Player player, String name) {
         Player target = plugin.getServer().getPlayerExact(name);
         if (target == null) {
-            player.sendMessage(Component.text("That player is not online on this backend.", NamedTextColor.RED));
+            player.sendMessage(StaffMessageStyle.style(Component.text("That player is not online on this backend.", NamedTextColor.RED)));
         }
         return target;
     }
 
     private boolean status(Player player) {
         if (!player.hasPermission(PERMISSION)) {
-            player.sendMessage(Component.text("You do not have permission to use Cheat Tester.", NamedTextColor.RED));
+            player.sendMessage(StaffMessageStyle.style(Component.text("You do not have permission to use Cheat Tester.", NamedTextColor.RED)));
             return true;
         }
         boolean includeAll = player.hasPermission(CANCEL_ANY_PERMISSION);
         List<String> lines = manager.statusLines(player.getUniqueId(), includeAll);
         if (lines.isEmpty()) {
-            player.sendMessage(Component.text("No matching Cheat Tester sessions are active."));
+            player.sendMessage(StaffMessageStyle.style(Component.text("No matching Cheat Tester sessions are active.")));
             return true;
         }
-        player.sendMessage(Component.text("Active Cheat Tester sessions:", NamedTextColor.GOLD));
+        player.sendMessage(StaffMessageStyle.style(Component.text("Active Cheat Tester sessions:", NamedTextColor.GOLD)));
         for (String line : lines) {
-            player.sendMessage(Component.text("• " + line, NamedTextColor.GRAY));
+            player.sendMessage(StaffMessageStyle.style(Component.text("• " + line, NamedTextColor.GRAY)));
         }
         return true;
     }

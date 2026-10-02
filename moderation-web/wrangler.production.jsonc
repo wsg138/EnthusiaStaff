@@ -1,0 +1,28 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "enthusia-staff-moderation-production",
+  "main": "src/index.js",
+  "build": { "command": "node scripts/build.mjs --production" },
+  "compatibility_date": "2026-09-01",
+  "workers_dev": false,
+  "routes": [{ "pattern": "staff.enthusia.info", "custom_domain": true }],
+  "assets": {
+    "directory": "./dist",
+    "binding": "ASSETS",
+    "run_worker_first": true
+  },
+  "durable_objects": {
+    "bindings": [{ "name": "SESSION_STORE", "class_name": "ModerationSessionStore" }]
+  },
+  "exports": {
+    "ModerationSessionStore": { "type": "durable-object", "storage": "sqlite" }
+  },
+  "vars": {
+    "EXPECTED_GUILD_ID": "1410303324745371709",
+    "RUNTIME_ENVIRONMENT": "production",
+    "READ_API_ORIGIN": "https://moderation-read.enthusia.info"
+  },
+  "secrets": {
+    "required": ["LAUNCH_SIGNING_KEY_HEX", "READ_API_SIGNING_KEY_HEX"]
+  }
+}

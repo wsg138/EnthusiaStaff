@@ -8,10 +8,12 @@ destructive-state overlap.
 
 ## 2. Status
 
-**BLOCKED / PARKED_BLOCKED** after the paired static-remediation and
-owner-authorized Bedrock currency-pricing repair on 2026-09-19. The historical
-D04 serialization blocker is resolved. Exact parity is complete, but current
-required Codacy and canonical Pi gates remain non-passing.
+**PARTIAL / ACTIONABLE_CONTINUATION** after the paired static-remediation,
+owner-authorized Bedrock currency-pricing repair, and bounded Staff-only Folia
+response-routing and zero-argument MarketCase-completion repairs. The
+historical D04 serialization blocker is resolved. Fresh parity, exact-head
+Coverage, the Sentinel artifact, and durable restart are current, while Codacy
+and canonical Pi remain non-passing acceptance gates.
 
 ## 3. Objective
 
@@ -37,11 +39,11 @@ ES-P08 and ES-X02 are complete.
 
 ## 7. Repository and privacy boundaries
 
-Staff [PR #139](https://github.com/wsg138/EnthusiaStaff/pull/139) on
-package/es-x03-market-provider remains the aggregate leg. Market
-[PR #7](https://github.com/wsg138/EnthusiaMarket/pull/7) on
-package/es-x03-market-static-remediation remains the paired draft provider
-leg. Preserve the separate unpaired Market
+Staff [PR #139](https://github.com/wsg138/EnthusiaStaff/pull/139) is
+OPEN/non-draft/UNSTABLE on `package/es-x03-market-provider` and remains the
+aggregate leg. Market [PR #7](https://github.com/wsg138/EnthusiaMarket/pull/7)
+is OPEN/DRAFT/CLEAN on `package/es-x03-market-static-remediation` and remains
+the paired provider leg. Preserve the separate unpaired Market
 [PR #6](https://github.com/wsg138/EnthusiaMarket/pull/6) unchanged.
 
 Market uses only ordinary public repository CI. No private Pi or staging
@@ -49,18 +51,20 @@ runner configuration, bridge implementation, credentials, topology,
 artifact-transfer mechanism, Sentinel infrastructure, or private evidence may
 enter Market or this public repository.
 
-## 8. Frozen paired source checkpoint
+## 8. Current paired source checkpoint
 
-- Staff main at current reconciliation is
-  d4b5d44d6b88126f9663974d892e3e8b6aac5b9d.
+- Staff main currently is
+  4ffab626f4f044ef03adcf2d41c25690e1bdaa71.
 - Market main remains cc19fa966dcb155fa1743f5076fb5152e74bdf8f.
-- Market PR #7 frozen product head is
-  5b6606c2f71a410ed6f369b0b893a7888638a7f2.
-- Staff PR #139 frozen product head is
-  e67a67585179b7a8dd6b6dc8c81c9fe567f04ef1.
-- component_sync.py compare reports no added, missing, or modified shared
-  paths. Both product trees have hash
-  6ba7be19e647b9093bb9670b79026585eb5306f83e66480894fed3912b1f96f7.
+- Market PR #7 product head is
+  81b14c349be0ad404edeedbac5e109e2a375c255.
+- Staff PR #139 current head is
+  f6732816f35e3a9634068badb56c220b5d679bd4. Current `main` is not merged
+  merely to refresh the unmerged implementation branch while acceptance gates
+  remain non-passing.
+- Clean-clone component_sync.py compare reports no added, missing, or modified
+  product path. Both product trees have hash
+  e7082c5bb1aacbcd95ac8457aa17392a740c3fe5df6154e743eebb4bc6019839.
 - Staff owns V20, X03 owns V21, and D09 reserves V22. X03 and D09 retain
   disjoint PaperCommandRegistrar.java hunks.
 
@@ -84,60 +88,88 @@ existing validated-price fallback; TRADE keeps its parsed positive item quantity
 and serialized cost item. Existing shops, balances, migrations, and the Java
 menu are unchanged.
 
+The latest paired listener repair handles only the main-hand interaction, so
+Paper's per-hand interaction events cannot open duplicate creation flows. It
+preserves the established sign, shop, container, stall, authority, denial, and
+held-item guard order while adding direct Java-route, Bedrock-route, empty-hand,
+off-hand, and missing-target regression coverage.
+
+The later Staff-only Folia repair found that asynchronous punishment-command
+results could send a Player response through the legacy global Bukkit scheduler.
+`PunishmentCommand` and `PunishmentRequestCommandHandler` now use the existing
+sender-aware response dispatcher, so Player replies run on the sender's entity
+scheduler while console replies remain globally scheduled. Focused regression
+coverage proves Player ownership, rejected Player scheduling, console dispatch,
+and prevents the punishment handlers from reintroducing legacy Bukkit scheduling.
+The Folia repair commit `570304ff` does not change any Market component source
+or metadata, destructive market state, inventory, economy, player data,
+migration, database, authority, or production state.
+
+The later Staff-only command audit found that `MarketCaseCommand.onTabComplete`
+read `arguments[0]` before checking for an empty argument array. A valid
+zero-argument completion call could throw `ArrayIndexOutOfBoundsException`.
+Commit `f6732816` returns the complete action list before accessing the first
+argument and adds regression coverage for that contract. It changes no Market
+component source or metadata, destructive market state, inventory, economy,
+player data, migration, database, authority, or production state.
+
 ## 10. Exact-head validation record
 
-- **Market local:** PASS. Test, shadow JAR, JaCoCo, and Detekt passed with
-  the repository-pinned LumaGuilds artifact.
-- **Market hosted:** PASS. Run 35474189763 passed build, tests, shadow JAR,
+- **Market hosted:** PASS. Run 35601165548 passed build, tests, shadow JAR,
   MariaDB verification, security, and Detekt.
-- **Market Wiki:** PASS. Run 35474189668 passed Markdown, frontmatter, and
+- **Market Wiki:** PASS. Run 35601165577 passed Markdown, frontmatter, and
   strict MkDocs checks.
-- **Staff local:** PASS. Full component test, shadow JAR, JaCoCo, and Detekt
-  passed with the repository-pinned LumaGuilds artifact.
-- **Staff coverage/build:** PASS. Run 35474547939 passed at the exact Staff
-  head.
+- **Staff local:** PASS. Focused `MarketCaseCommandTabCompletionTest`,
+  `:paper:check`, and non-Docker `check -x :integration-tests:test` passed.
+  `runtimeJars` also passed with configuration-cache reuse.
+- **Staff coverage/build:** PASS. Run 35733465364 / job 106764602834 passed at
+  exact Staff head `f6732816`, including aggregate build/tests, runtime JAR
+  inspection, coverage, and artifact upload. Codacy Diff Coverage and Coverage
+  Variation also passed.
+- **Staff Sentinel artifact:** PASS. Run 35733465456 / job 106764605492 built
+  the exact Paper artifact required by Sentinel on `f6732816`.
+- **Durable Sentinel restart:** PASS. Exact-head restart job 516 returned
+  `PAPER_RESTART_OK` after standard command comment `5777415687`.
 - **Diff hygiene and component parity:** PASS. Every paired checkpoint passed
   git diff --check; the final paired hash is
-  6ba7be19e647b9093bb9670b79026585eb5306f83e66480894fed3912b1f96f7.
+  e7082c5bb1aacbcd95ac8457aa17392a740c3fe5df6154e743eebb4bc6019839.
 - **PR review:** No live inline threads. CodeRabbit is skipped/manual for
   Staff and draft-skipped for Market, not an automated full-review approval.
-- **Codacy static analysis:** NOT PASS. Staff is ACTION_REQUIRED with 1,129
-  findings.
-- **Canonical Pi:** NOT PASS. Staff run 35474189686 failed before private
-  dispatch on HTTP 401 Bad credentials.
-- **Durable Sentinel restart:** NOT RUN. No fresh exact-head durable restart
-  result exists.
+- **Codacy static analysis:** NOT PASS. Exact Staff check 106765372218 is
+  ACTION_REQUIRED with 1,141 reported issues.
+- **Canonical Pi:** NOT PASS. Staff run 35733463593 / job 106764599729 failed
+  before private dispatch on HTTP 401 Bad credentials; no private Pi, Paper,
+  or MariaDB runtime ran.
 
 ## 11. Static-analysis disposition
 
-The non-passing Codacy result is not suppressed. It contains 1,076
-Markdownlint reports, 43 Market production Lizard reports, eight RAC-table
-reports against immutable Market migrations, and two dependency-coordinate
-secret-pattern reports. The narrow source, test, and dialect scopes remain in
-place. A broader suppression or an analyzer-rule decision requires explicit
+The non-passing Codacy result is not suppressed. Exact check 106765372218 is
+ACTION_REQUIRED with 1,141 reported issues. The available annotations contain
+no entry for either changed `MarketCaseCommand` file; that narrow observation
+does not make the overall gate passing. Each current finding requires scoped
+verification. A broader suppression or analyzer-rule decision requires explicit
 authorization and supported Codacy configuration; it must not be guessed in
 source through a component-wide exclusion.
 
 ## 12. Current synchronization evidence
 
 The aggregate component and standalone Market product tree are exactly equal
-before merge. The final shared hash is
-6ba7be19e647b9093bb9670b79026585eb5306f83e66480894fed3912b1f96f7.
+at the current paired heads. Clean-clone comparison found no product-file delta
+and the shared hash is
+e7082c5bb1aacbcd95ac8457aa17392a740c3fe5df6154e743eebb4bc6019839.
 Post-merge parity and component metadata updates remain required.
 
 ## 13. Exact unblock condition
 
-Keep both implementation PRs and branches. The staging owner must rotate or
-replace ENTHUSIASTAFF_STAGING_TOKEN with a least-privilege credential that can
-read workflow history and dispatch the required private workflow. Do not use a
-personal credential or bypass the public bridge.
-
-An authorized, path-scoped Codacy configuration or rule decision is also
-required for analyzer configuration mismatches. Remaining stateful
-transaction, auction, persistence, listener, and GUI findings need a separate
-bounded remediation and review plan; do not fold them into an unbounded static
-cleanup. After those conditions change, freeze new heads and rerun all exact
-hosted, static, review, Sentinel, and Pi gates.
+Keep both implementation PRs and branches. Continue only small paired repairs
+for validated static findings, with matching tests and parity checks; do not
+fold unrelated stateful transaction, auction, persistence, listener, or GUI
+findings into an unbounded cleanup. The staging owner must rotate or replace
+ENTHUSIASTAFF_STAGING_TOKEN with a least-privilege credential that can read
+workflow history and dispatch the required private workflow. Do not use a
+personal credential or bypass the public bridge. After a changed product head
+or credential repair, freeze the heads and rerun every applicable exact hosted,
+static, review, Sentinel, and Pi gate.
 
 ## 14. Completion definition
 
@@ -149,7 +181,7 @@ load acceptance.
 ## 15. Handoff and production boundary
 
 Canonical handoff:
-ai-agents/reports/package-handoffs/2026-09-18-es-x03-parked-static-and-pi.md.
+ai-agents/reports/package-handoffs/2026-09-22-es-x03-marketcase-completion-validation.md.
 
 No production listing, balance, item, player data, database, deployment,
 Discord configuration, authority, LiteBans, cutover, or issue #43 acceptance

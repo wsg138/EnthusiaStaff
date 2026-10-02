@@ -16,7 +16,7 @@ concurrency:
 jobs:
   supersede:
     name: Cancel obsolete Pi staging safely
-    if: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
+    if: ${{ github.event.pull_request.head.repo.full_name == github.repository && (github.event.action == 'closed' || github.event.pull_request.draft == false) }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:

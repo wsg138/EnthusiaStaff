@@ -4,6 +4,7 @@ public enum SanctionType {
     WARNING,
     KICK,
     MUTE,
+    PUBLIC_MUTE,
     BAN,
     NETWORK_BAN,
     NETWORK_IDENTITY_BAN,

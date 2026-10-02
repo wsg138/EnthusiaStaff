@@ -90,6 +90,7 @@ class CutoverCoordinatorIntegrationTest {
             enterShadowMode(runtime, Instant.now().minus(Duration.ofDays(8)));
             CutoverCoordinator coordinator = runtime.cutoverCoordinator();
             assertTrue(coordinator.enterMaintenance(ACTOR_ID, "Run final cutover gate"));
+            assertTrue(coordinator.committedCutoverId().isEmpty());
 
             Instant maintenanceStarted = runtime.operationalStateStore().current().updatedAt();
             insertCompleteShadowWindow(maintenanceStarted);
@@ -104,6 +105,7 @@ class CutoverCoordinatorIntegrationTest {
             CutoverOutcome activated = coordinator.activate(ACTOR_ID, Optional.empty());
             assertTrue(activated.activated());
             assertTrue(activated.cutoverId().isPresent());
+            assertEquals(activated.cutoverId(), coordinator.committedCutoverId());
             assertEquals(OperationalMode.ACTIVE, runtime.operationalStateStore().current().mode());
             assertEquals(finalRunId, recordedFinalRunId());
             assertEquals(1, cutoverRecordCount());

@@ -16,7 +16,7 @@ test('product chrome removes staging diagnostics while final review keeps one tr
   assert.match(shell, /\.staging-badge'\)\?\.remove\(\)/);
   assert.match(shell, /Issue punishment/);
   assert.doesNotMatch(shell, /STAGING · REAL READS|Simulate punishment|Real data, simulated actions/);
-  assert.match(review, /Testing note/);
+  assert.match(review, /Simulation only/);
   assert.match(review, /does not send punishments or DMs, change Discord permissions, or delete messages/);
   assert.match(review, /Confirm action/);
   assert.doesNotMatch(review, /Confirm preview/);

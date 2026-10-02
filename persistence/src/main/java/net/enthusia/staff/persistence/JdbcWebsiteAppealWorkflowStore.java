@@ -100,7 +100,7 @@ final class JdbcWebsiteAppealWorkflowStore {
                        AND s.status IN ('ACTIVE', 'APPLIED')
                        AND (s.expiration_at IS NULL OR s.expiration_at > ?)
                        AND s.sanction_type IN (
-                           'BAN', 'NETWORK_BAN', 'NETWORK_IDENTITY_BAN', 'MUTE'
+                           'BAN', 'NETWORK_BAN', 'NETWORK_IDENTITY_BAN', 'MUTE', 'PUBLIC_MUTE'
                        )
                        AND c.state <> 'FULLY_OVERTURNED'
                        AND (a.appeal_id IS NULL OR a.state = 'INFORMATION_REQUESTED')
@@ -623,7 +623,7 @@ final class JdbcWebsiteAppealWorkflowStore {
                 && List.of("ACTIVE", "APPLIED").contains(code.sanctionStatus())
                 && (code.expiration() == null || code.expiration().isAfter(now))
                 && !"FULLY_OVERTURNED".equals(code.caseState())
-                && List.of("BAN", "NETWORK_BAN", "NETWORK_IDENTITY_BAN", "MUTE")
+                && List.of("BAN", "NETWORK_BAN", "NETWORK_IDENTITY_BAN", "MUTE", "PUBLIC_MUTE")
                         .contains(code.sanctionType());
     }
 

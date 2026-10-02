@@ -1,149 +1,220 @@
 # Discord Moderation Platform
 
-This page explains the Discord moderation expansion, what is already present on merged `main`, and what is still future/runtime work.
+EnthusiaStaff now includes a real standalone Discord moderation runtime, durable Discord/Minecraft account linking, Discord punishment execution/reconciliation, staff read/moderation UI, and a provider-neutral managed-role API foundation. This page is the product/status hub for those features.
 
-> **Current status: partial foundation, not an operational staff bot.** Merged `main` contains Discord/Minecraft moderation-subject and scope contracts, V19 persistence, and central Discord-origin authorization policy. It does **not** yet provide the finished account-linking runtime, interactive staff bot, Discord punishment enforcement, AutoMod, native-ban cutover, role sync, or public information bot.
-
-For existing webhook notification delivery, use [[Discord Delivery]]. For the full product contract, see [`docs/discord-moderation-platform.md`](../../../docs/discord-moderation-platform.md). Developers should also read [`docs/discord-authorization.md`](../../../docs/discord-authorization.md), [[Developer Code Guide]], and [[Code Review Guide]].
+For building, deploying, configuring, or recovering the Java/JDA runtime, use [[Staff Bot Runtime and Operations]]. For the browser moderation workspace and public website APIs, use [[Website and Web API]]. Existing one-way webhook notifications remain documented separately in [[Discord Delivery]].
 
 ## Quick status
 
-| Area | Merged-main state | What that means |
+| Area | Current merged-main state | Important limitation |
 | --- | --- | --- |
-| Moderation subject / platform identity model | **Implemented foundation** | Discord-only, Minecraft-only and linked subjects can be represented without collapsing the two enforcement scopes. |
-| Discord/Minecraft link history model | **Implemented foundation** | Domain and persistence can represent current/historical links and main-account state; the user-facing five-minute code workflow is not merged runtime behavior. |
-| Discord moderation persistence | **Implemented foundation** | V19 adds subject/link, enforcement-target, evidence-metadata, security-lock, reconciliation and maintenance state plus JDBC adapters/tests. |
-| Discord-origin authorization | **Implemented foundation** | Central domain policy models role/rank limits, target protection, consequence limits, cross-platform preconditions and reauthorization. |
-| Existing webhook notification delivery | **Available with limitations** | The current Velocity outbox worker can deliver sanitized staff notifications. It is separate from the future interactive bot. |
-| Account-link command/runtime and DiscordSRV migration | **Not available on merged main** | Do not train users on a linking command or migration flow until the runtime work is merged and validated. |
-| Interactive staff Discord bot | **Not available on merged main** | No staff-bot module is part of the current merged runtime artifacts. |
-| Discord punishments / restrictions / reconciliation | **Planned beyond the foundation** | The data and authorization model do not themselves call Discord or enforce a sanction. |
-| AutoMod / security-lock automation | **Planned beyond the foundation** | Storage concepts exist; live detection/enforcement and false-positive acceptance are separate work. |
-| Public information bot / role sync / final ban migration and cutover | **Planned** | These remain separate trust boundaries and release gates. |
+| StaffBot Java/JDA runtime | **Implemented** | Production authority is a separate cutover decision; destructive enforcement is disabled by default. |
+| Staff moderation/read UI | **Implemented** | Reads/actions still require authoritative linked-staff identity and live authorization; a Discord role alone is not authority. |
+| Discord punishment execution | **Implemented, not production-accepted** | Durable warn/mute/kick/ban/restriction and end/revoke/overturn flows exist, but production Discord authority is not implied by the merge. |
+| Discord/Minecraft account linking | **Implemented** | Migration/cutover from DiscordSRV and role-sync parity are separate concerns. |
+| Discord moderation persistence | **Implemented** | V19 owns moderation/reconciliation foundations; V20 owns account linking. |
+| Provider-neutral managed-role API | **Implemented contract foundation** | `discord-platform-api` defines the contract; final StaffBot provider/consumer migrations remain separate work. |
+| Staging browser moderation workspace | **Available for accepted staging read/simulation scope** | It is intentionally not a production/destructive moderation authority. See [[Website and Web API]]. |
+| Legacy webhook notifications | **Available with limitations** | Separate outbound subsystem; it is not the interactive StaffBot runtime. |
+| DiscordSRV console replacement | **In development** | The authenticated Discord-to-Minecraft command bridge is not merged on current `main`. |
+| Evidence/case/note/linked-alt alert expansion | **In development** | Active work must not be documented as merged until it lands. |
+| Cross-platform moderation expansion | **In development** | Existing merged punishment paths are authoritative only for their implemented scopes. |
+| Role-sync replacement/parity | **In development / not complete** | Do not claim DiscordSRV role-sync retirement is finished from the managed-role contract alone. |
 
-A merged schema or passing domain test is not staging evidence for a Discord bot or live Discord enforcement.
+## StaffBot owns the Discord gateway
 
-## What the merged foundation establishes
+The `staff-bot` Gradle module is a separate Java 25 application using JDA. It is the intended privileged Discord Gateway owner for EnthusiaStaff.
 
-### Moderation subjects and scopes
+Primary entry points:
 
-The domain can represent a moderation subject that has Minecraft identities, a Discord identity, or both. Enforcement targets retain an explicit platform and explicit scope instead of using a magic cross-platform `BOTH` state.
+- [`StaffBotApplication.java`](https://github.com/wsg138/EnthusiaStaff/blob/main/staff-bot/src/main/java/net/enthusia/staff/discordbot/StaffBotApplication.java)
+- [`StaffBotRuntime.java`](https://github.com/wsg138/EnthusiaStaff/blob/main/staff-bot/src/main/java/net/enthusia/staff/discordbot/StaffBotRuntime.java)
+- [`JdaDiscordGateway.java`](https://github.com/wsg138/EnthusiaStaff/blob/main/staff-bot/src/main/java/net/enthusia/staff/discordbot/JdaDiscordGateway.java)
 
-This matters because a staff action started on Discord should not silently become a Minecraft punishment, and vice versa. Cross-platform effects require an explicit requested consequence and an independently authorized target/scope.
+The runtime includes identity fencing, bounded workers, reconnect/rate-limit handling, replay protection, health/readiness support, privacy-safe logging, and graceful/forced shutdown behavior.
 
-Primary source areas:
+Other plugins should not create their own JDA sessions to implement managed role behavior. The provider-neutral contract for that direction lives in `discord-platform-api`.
 
-- `domain/src/main/java/net/enthusia/staff/domain/moderation/`
-- `domain/src/main/java/net/enthusia/staff/domain/auth/`
-- `domain/src/main/java/net/enthusia/staff/domain/ports/DiscordModerationPersistenceStore.java`
+Deep operational documentation: [[Staff Bot Runtime and Operations]].
 
-### Persistence and migration V19
+## Staff moderation UI and read workflows
 
-Current merged Flyway history ends at:
+Merged StaffBot supports Discord-side moderation discovery/read flows rather than only outbound notifications. Current source includes:
 
-```text
-V19__discord_moderation_persistence.sql
-```
+- staff/player moderation panels;
+- Discord user/message context workflows;
+- Minecraft-target lookup;
+- linked-account and punishment/history views;
+- cases/notes views exposed by the current read model;
+- signed, expiring interaction components;
+- replay protection;
+- authoritative linked-staff actor resolution;
+- permission-aware command discovery plus action-time reauthorization.
 
-V19 adds durable structures for moderation subjects, Minecraft and Discord identities, link history, main-account selection, platform-specific enforcement targets, Discord evidence metadata, security locks, reconciliation state and bounded maintenance work.
+Important paths:
 
-Important persistence entry points include:
+- [`StaffModerationRuntime.java`](https://github.com/wsg138/EnthusiaStaff/blob/main/staff-bot/src/main/java/net/enthusia/staff/discordbot/StaffModerationRuntime.java)
+- [`StaffModerationController.java`](https://github.com/wsg138/EnthusiaStaff/blob/main/staff-bot/src/main/java/net/enthusia/staff/discordbot/StaffModerationController.java)
+- [`JdaStaffModerationListener.java`](https://github.com/wsg138/EnthusiaStaff/blob/main/staff-bot/src/main/java/net/enthusia/staff/discordbot/JdaStaffModerationListener.java)
+- [`LinkedStaffActorResolver.java`](https://github.com/wsg138/EnthusiaStaff/blob/main/staff-bot/src/main/java/net/enthusia/staff/discordbot/LinkedStaffActorResolver.java)
 
-- `JdbcDiscordModerationPersistenceStore.java`
-- `JdbcDiscordIdentityRepository.java`
-- `JdbcDiscordLinkRepository.java`
-- `JdbcDiscordMainAccountRepository.java`
-- `JdbcDiscordOperationalRepository.java`
-- `JdbcDiscordReplayGuard.java`
+A visible slash command, button, Discord role, or previously valid confirmation is never final authority by itself.
 
-Relevant MariaDB coverage includes `DiscordPersistenceSafetyIntegrationTest` and migration/upgrade tests. Those tests prove the exercised schema and persistence properties; they do not prove a live Discord API flow.
+## Authority model
 
-### Authorization policy
+Discord actions must resolve to current Enthusia staff authority and the current target state.
 
-`DiscordModerationAuthorizationService` is the central Discord-origin policy boundary. Related policy objects model authorization requests/snapshots, runtime limits, operation/consequence policy, external preconditions, target protection and cross-platform revalidation.
+The important invariants are:
 
-The important rule is that Discord command visibility or a Discord role is never final authority. A caller must resolve current Enthusia staff identity/rank and target state, authorize the exact consequence/scope, satisfy any external hierarchy preconditions, and reauthorize stale confirmation flows before a side effect.
+- Discord roles do not independently grant punishment authority.
+- A Discord actor must resolve to the linked authoritative staff identity.
+- Rank/permission/self-target/higher-rank rules are evaluated through EnthusiaStaff policy.
+- Cross-platform effects require explicit authorization for the intended scope.
+- confirmations reauthorize before side effects rather than trusting stale snapshots;
+- external hierarchy/precondition checks fail closed when they cannot be established;
+- Paper-local Staff Mode requirements do not silently replace the independent global/Discord/website authority model.
 
-Current design deliberately allows Developer to have Mod-equivalent **Discord-only temporary moderation authority** while retaining the existing independent Minecraft authorization rules. That distinction is represented in the merged domain policy, but there is no merged interactive Discord command runtime using it yet.
+See [[Rank Authority]] and [[Code Review Guide]].
 
-## Linking design
+## Discord punishment execution and reconciliation
 
-The finished design allows a player to start linking from either Minecraft or Discord with a one-use five-minute code completed on the other platform.
+Merged StaffBot includes Discord-only punishment execution infrastructure for configured warn, mute, kick, ban, and restriction flows plus end/revoke/overturn behavior.
 
-One Discord account may have multiple current Minecraft identities, while one Minecraft UUID may have only one current Discord owner. Historical unlink records remain auditable. The first Minecraft link becomes the main account; automatic selection uses PlayTimePlugin active playtime with the approved stability threshold, while authorized staff may override/lock the main selection.
+Primary paths include:
 
-**Do not confuse the model with availability.** The merged domain/persistence foundation can represent these facts, but the complete command/code flow, provider adapter, migration of existing DiscordSRV links and production data migration remain separate runtime work.
+- [`DiscordPunishmentRuntime.java`](https://github.com/wsg138/EnthusiaStaff/blob/main/staff-bot/src/main/java/net/enthusia/staff/discordbot/DiscordPunishmentRuntime.java)
+- [`DiscordPunishmentService.java`](https://github.com/wsg138/EnthusiaStaff/blob/main/staff-bot/src/main/java/net/enthusia/staff/discordbot/DiscordPunishmentService.java)
+- [`DiscordPunishmentWorker.java`](https://github.com/wsg138/EnthusiaStaff/blob/main/staff-bot/src/main/java/net/enthusia/staff/discordbot/DiscordPunishmentWorker.java)
+- [`DiscordPunishmentAuthorization.java`](https://github.com/wsg138/EnthusiaStaff/blob/main/staff-bot/src/main/java/net/enthusia/staff/discordbot/DiscordPunishmentAuthorization.java)
+- [`JdaDiscordPunishmentGateway.java`](https://github.com/wsg138/EnthusiaStaff/blob/main/staff-bot/src/main/java/net/enthusia/staff/discordbot/JdaDiscordPunishmentGateway.java)
+- [`JdaKickEnforcer.java`](https://github.com/wsg138/EnthusiaStaff/blob/main/staff-bot/src/main/java/net/enthusia/staff/discordbot/JdaKickEnforcer.java)
+- [`JdaNativeBanEnforcer.java`](https://github.com/wsg138/EnthusiaStaff/blob/main/staff-bot/src/main/java/net/enthusia/staff/discordbot/JdaNativeBanEnforcer.java)
+- [`JdaMuteRoleOwnership.java`](https://github.com/wsg138/EnthusiaStaff/blob/main/staff-bot/src/main/java/net/enthusia/staff/discordbot/JdaMuteRoleOwnership.java)
 
-Linked-account details are private. Public output must never expose another player's Discord link, linked alts, or historical links.
+### Failure safety
 
-## Staff authority design
+External Discord effects are not ordinary local database writes. The merged implementation uses durable intent/reconciliation/retry/expiry concepts so crashes, rate limits, ambiguous responses, and external changes can be resolved deliberately.
 
-The target Discord authority model is:
+Examples of important review rules:
 
-- **Helper:** investigation/read access, warnings and configured short temporary mutes only.
-- **Mod:** configured temporary Discord punishments and custom temporary durations within policy.
-- **Developer:** the same Discord-only temporary authority as Mod, without gaining Minecraft punishment authority merely from Discord.
-- **Admin/Founder:** permanent Discord ban, permanent mute and permanent channel restriction plus elevated correction/overturn authority as configured.
+- do not blindly retry an ambiguous kick after the remote effect may already have happened;
+- verify/reconcile native ban state rather than assuming one API response establishes durable truth;
+- distinguish bot-owned mute/restriction state from unrelated human/external role changes;
+- audit enough history to find the newest relevant ownership change rather than assuming a small first page is complete;
+- persist/audit terminal ambiguity instead of reporting false success.
 
-Self-targeting, protected target hierarchy abuse, stale actor/target state and unauthorized cross-platform consequences must fail closed.
+## Discord/Minecraft account linking
 
-See [[Roles and Permissions|Rank-Authority]] for the overall authority model and [[Code Review Guide]] for review checks.
+Merged `main` includes the account-linking runtime and V20 persistence.
 
-## Finished enforcement design
+The flow supports one-use short-lived link codes initiated from either side of the Minecraft/Discord boundary. Only hashes of link codes are persisted, and replacement, expiry, replay, restart, ownership history, unlink, reassignment, and main-account behavior are handled through durable state.
 
-When later runtime work is merged, Discord enforcement is intended to support warnings, managed-role mutes, kicks, temporary/permanent native bans, and temporary/permanent channel/category restrictions.
+Minecraft-facing commands include the merged `/link` and `/unlink` paths. Authorized staff flows can correct/reassign links through the central linking services.
 
-Normal Enthusia Discord mute is designed around bot-managed role/permission enforcement rather than Discord Timeout so approved private support/ticket areas can remain usable. Channel restrictions may be read-only or no-access and may be temporary or permanent.
+One Discord identity may represent multiple Minecraft identities while current ownership and historical link state remain explicit. Main-account selection supports the approved playtime-based behavior and staff override semantics.
 
-The merged V19 enforcement/reconciliation state is preparation for safe durable execution. It is **not** proof that these effects are currently applied to Discord.
+Primary persistence migration:
 
-## AutoMod and security locks
+[`V20__discord_account_linking.sql`](https://github.com/wsg138/EnthusiaStaff/blob/main/persistence/src/main/resources/db/migration/V20__discord_account_linking.sql)
 
-The finished AutoMod design combines local server-specific rules with an AI moderation signal where configured. Uncertain or AI-only results should be review input rather than guessed severe punishment. Ticket/support exemptions, message edits, invite/link policy, repeated cross-channel link behavior and staff handling require explicit runtime policy.
+DiscordSRV migration/mirroring compatibility exists as a transition concern; do not treat that compatibility as proof that every DiscordSRV-dependent role/console/chat workflow has already been retired.
 
-An Account Security Lock is a safety state, not a punishment. V19 can persist security-lock state, but live compromised-account detection, deletion/DM behavior and unlock commands are not currently merged operational behavior.
+Linked-account information is private unless a specifically approved projection says otherwise.
 
-## Evidence and cases
+## Persistence
 
-The finished Discord workflow is intended to capture bounded message context, attachments/metadata and edit history for authorized staff review while preserving retention and privacy boundaries. V19 currently provides evidence **metadata** persistence foundations; do not imply that the full Discord capture pipeline exists merely because the table exists.
+Current merged Flyway history reaches **V20**.
 
-Formal appeals remain website-only in the approved design. Discord support may answer questions but should not become a second appeal authority.
+Discord-specific milestones:
 
-## Ban migration and authority cutover
+- `V19__discord_moderation_persistence.sql` — Discord moderation subject/enforcement/reconciliation/security-state foundation;
+- `V20__discord_account_linking.sql` — durable Discord/Minecraft linking runtime state.
 
-Discord's native guild ban remains the mechanism that prevents a banned account from joining. The planned migration imports current native bans into EnthusiaStaff without unbanning/rebanning users, preserves available audit facts, marks unavailable legacy facts as unknown, and reconciles the imported set before any authority transition.
+Current open branches may contain later migration numbers. They are not part of merged `main` and must not be documented as current schema until merged.
 
-No production Discord ban migration or cutover is implied by the merged domain/schema work. Final authority requires exact-candidate runtime validation, reconciliation, outage/retry testing and explicit operational approval.
+## Provider-neutral managed-role API
 
-## Public information bot
+`discord-platform-api` is a first-class Gradle module that defines the provider-neutral role-management contract for other Enthusia plugins.
 
-The planned public bot is a separate application and trust boundary. It may expose sanitized public commands such as player/guild/leaderboard/server links, but never linked accounts/alts, historical links, private cases, notes, evidence or privileged staff data.
+The contract includes concepts such as:
 
-It is not part of the current merged runtime artifacts.
+- managed-role namespaces/keys;
+- role claims;
+- client/provider result states;
+- unioned desired membership across multiple Minecraft identities;
+- service discovery without exposing JDA, Discord snowflake plumbing, or StaffBot persistence internals to consumers.
 
-## Developer and reviewer map
+Source:
 
-Start here for Discord changes:
+[`discord-platform-api/`](https://github.com/wsg138/EnthusiaStaff/tree/main/discord-platform-api)
 
-| Concern | Primary source / proof |
+This is a **contract foundation**, not proof that every old DiscordSRV role-sync consumer has been migrated. Role-sync parity remains a separate workstream.
+
+## Browser moderation workspace
+
+StaffBot also supports the signed private read/launch boundary used by the staging Cloudflare moderation workspace. That surface is intentionally read/simulation-oriented and is documented in [[Website and Web API]].
+
+Do not confuse the browser workspace with StaffBot itself or with the public Enthusia website.
+
+## Legacy webhook delivery
+
+The older Velocity Discord outbox/webhook subsystem still exists for bounded notification delivery. It is an at-least-once outbound integration and has different failure/privacy semantics from the interactive StaffBot runtime.
+
+Use [[Discord Delivery]] for that subsystem.
+
+## Current in-progress work
+
+These areas exist in active development but are **not merged current behavior**:
+
+- authenticated Discord-to-Minecraft console command bridge replacing DiscordSRV console;
+- expanded Discord evidence/case/note/linked-alt/evasion alert workflows;
+- broader cross-platform moderation integration;
+- final managed-role provider/consumer migrations and DiscordSRV role-sync parity;
+- expanded website appeal lifecycle beyond the routes documented in [[Website and Web API]].
+
+The Wiki should update these entries after they merge rather than copying implementation claims from their draft branches.
+
+## Developer source map
+
+| Concern | Primary path |
 | --- | --- |
-| Subject identity and scope semantics | `domain/.../moderation/` and their unit tests |
-| Discord-origin authority | `domain/.../auth/Discord*` plus Discord authorization tests and `docs/discord-authorization.md` |
-| Durable Discord moderation state | `persistence/.../JdbcDiscord*`, V19, MariaDB integration tests |
-| Legacy webhook notifications | `domain/.../discord/`, `JdbcDiscordOutboxStore`, `velocity/.../DiscordOutboxWorker.java`, [[Discord Delivery]] |
-| Full approved product behavior | `docs/discord-moderation-platform.md` |
-| Source navigation | [[Developer Code Guide]] |
-| Review invariants | [[Code Review Guide]] |
-| Evidence interpretation | [[Build and Testing]] |
+| StaffBot runtime/JDA | `staff-bot/src/main/java/net/enthusia/staff/discordbot/` |
+| Discord platform contract | `discord-platform-api/` |
+| Discord moderation domain | `domain/src/main/java/net/enthusia/staff/domain/` Discord/moderation/auth packages |
+| Discord JDBC state | `persistence/src/main/java/net/enthusia/staff/persistence/` Discord stores |
+| V19/V20 schema | `persistence/src/main/resources/db/migration/` |
+| Minecraft linking commands/adapters | `paper/` linking command/runtime paths |
+| StaffBot tests | `staff-bot/src/test/java/` |
+| Cross-module/MariaDB tests | `integration-tests/src/test/java/` |
+| Existing webhook delivery | Velocity/domain Discord outbox paths and [[Discord Delivery]] |
 
-Review especially for platform/scope mismatches, stale authorization snapshots, role/rank confusion, replay/idempotency, link-history corruption, Discord snowflake bounds, privacy leaks, partial external failure and any code that treats a future Discord runtime as already authoritative.
+## Review checklist
 
-## Go deeper
+For Discord changes verify, at minimum:
 
-- [[Discord Delivery]] — current webhook notification subsystem.
-- [[Roles and Permissions|Rank-Authority]] — current and Discord-specific authority semantics.
-- [[Developer Code Guide]] — detailed code/source map.
-- [[Code Review Guide]] — cross-cutting review checklist.
-- [[Architecture]] — module/runtime boundaries.
-- [[Build and Testing]] — what automated, MariaDB and runtime evidence prove.
-- [[Implementation Status]] — overall merged-main product status.
+- exactly one intended Gateway/JDA owner;
+- current linked staff identity is re-established before privileged actions;
+- Discord roles are not treated as standalone authority;
+- target/platform/scope cannot be silently widened;
+- replay and signed-component expiry are enforced;
+- worker queues and retries are bounded;
+- ambiguous external outcomes reconcile safely;
+- reconnect/shutdown cannot leave stale workers mutating new runtime state;
+- database intent/audit and external Discord effect ordering is crash-safe;
+- bot-owned role/ban state is distinguished from unrelated external changes;
+- account-link codes are one-use, short-lived, hashed at rest, and ownership-safe;
+- logs/errors do not expose tokens, private IDs/evidence, signing material, or raw network identity;
+- tests are not misrepresented as live Discord/staging/production acceptance.
+
+## See also
+
+- [[Staff Bot Runtime and Operations]]
+- [[Website and Web API]]
+- [[Discord Delivery]]
+- [[Rank Authority]]
+- [[Architecture]]
+- [[Developer Guide Index]]
+- [[Developer Code Guide]]
+- [[Code Review Guide]]
+- [[Build and Testing]]
+- [[Implementation Status]]

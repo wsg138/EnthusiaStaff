@@ -29,6 +29,8 @@ final class PunishmentGuiRenderer {
     static final int NEXT_SLOT = 53;
     static final int VISIBILITY_SLOT = 28;
     static final int NOTE_SLOT = 30;
+    private static final int HIGH_SEVERITY_THRESHOLD = 75;
+    private static final int MODERATE_SEVERITY_THRESHOLD = 40;
 
     private final PunishmentGuiCatalog catalog;
 
@@ -79,21 +81,25 @@ final class PunishmentGuiRenderer {
         int offset = state.page() * CONTENT_SIZE;
         for (int slot = 0; slot < CONTENT_SIZE && offset + slot < reasons.size(); slot++) {
             ReasonPolicy policy = reasons.get(offset + slot);
-            List<Component> lore = new ArrayList<>();
-            lore.add(Component.text(policy.id(), NamedTextColor.DARK_GRAY));
-            lore.add(Component.text("Severity: " + policy.severity(), NamedTextColor.GRAY));
-            lore.add(Component.text("Required rank: " + policy.requiredRank(), NamedTextColor.GRAY));
-            if (!policy.examples().isEmpty()) {
-                lore.add(Component.text("Examples:", NamedTextColor.GRAY));
-                policy.examples().stream().limit(3)
-                        .forEach(example -> lore.add(Component.text("• " + example, NamedTextColor.DARK_GRAY)));
-            }
-            lore.add(Component.text("Click to calculate the authoritative step", NamedTextColor.YELLOW));
-            inventory.setItem(slot, item(reasonMaterial(policy), policy.publicReason(), lore));
+            inventory.setItem(slot, item(reasonMaterial(policy), policy.publicReason(), reasonLore(policy)));
         }
         pageControls(inventory, state.page(), reasons.size());
         inventory.setItem(BACK_SLOT, item(Material.ARROW, "Categories", List.of()));
         inventory.setItem(CLOSE_SLOT, item(Material.BARRIER, "Close", List.of()));
+    }
+
+    private static List<Component> reasonLore(ReasonPolicy policy) {
+        List<Component> lore = new ArrayList<>();
+        lore.add(Component.text(policy.id(), NamedTextColor.DARK_GRAY));
+        lore.add(Component.text("Severity: " + policy.severity(), NamedTextColor.GRAY));
+        lore.add(Component.text("Required rank: " + policy.requiredRank(), NamedTextColor.GRAY));
+        if (!policy.examples().isEmpty()) {
+            lore.add(Component.text("Examples:", NamedTextColor.GRAY));
+            policy.examples().stream().limit(3)
+                    .forEach(example -> lore.add(Component.text("• " + example, NamedTextColor.DARK_GRAY)));
+        }
+        lore.add(Component.text("Click to calculate the authoritative step", NamedTextColor.YELLOW));
+        return List.copyOf(lore);
     }
 
     private void renderReview(Inventory inventory, PunishmentGuiState.Review state) {
@@ -123,18 +129,7 @@ final class PunishmentGuiRenderer {
         recommendation.add(Component.text(
                 "Policy version: " + draft.expectation().configurationVersion(), NamedTextColor.DARK_GRAY
         ));
-        assessment.ifPresent(value -> {
-            recommendation.add(Component.text(
-                    "Raw " + value.escalation().rawOrdinal()
-                            + " → effective " + value.escalation().effectiveOrdinal(),
-                    NamedTextColor.GRAY
-            ));
-            recommendation.add(Component.text(
-                    "Recency bonus: " + value.escalation().recencyBonus()
-                            + "; related contributions: " + value.escalation().contributions().size(),
-                    NamedTextColor.GRAY
-            ));
-        });
+        assessment.ifPresent(value -> addAssessmentLore(recommendation, value));
         inventory.setItem(14, item(Material.ANVIL, "Authoritative recommendation", recommendation));
         inventory.setItem(16, item(
                 Material.CLOCK,
@@ -173,6 +168,22 @@ final class PunishmentGuiRenderer {
                 Material.BARRIER,
                 "Save and close",
                 List.of(Component.text("Resume within 24 hours with /punish resume <player>", NamedTextColor.GRAY))
+        ));
+    }
+
+    private static void addAssessmentLore(List<Component> recommendation, PunishmentAssessment assessment) {
+        PunishmentLadderPresentation.lines(assessment).forEach(line ->
+                recommendation.add(Component.text(line, NamedTextColor.AQUA))
+        );
+        recommendation.add(Component.text(
+                "Raw " + assessment.escalation().rawOrdinal()
+                        + " → effective " + assessment.escalation().effectiveOrdinal(),
+                NamedTextColor.GRAY
+        ));
+        recommendation.add(Component.text(
+                "Recency bonus: " + assessment.escalation().recencyBonus()
+                        + "; related contributions: " + assessment.escalation().contributions().size(),
+                NamedTextColor.GRAY
         ));
     }
 
@@ -221,10 +232,10 @@ final class PunishmentGuiRenderer {
         if (policy.requiredRank() == net.enthusia.staff.domain.auth.StaffRank.ADMIN) {
             return Material.RED_CONCRETE;
         }
-        if (policy.severity() >= 75) {
+        if (policy.severity() >= HIGH_SEVERITY_THRESHOLD) {
             return Material.ORANGE_CONCRETE;
         }
-        if (policy.severity() >= 40) {
+        if (policy.severity() >= MODERATE_SEVERITY_THRESHOLD) {
             return Material.YELLOW_CONCRETE;
         }
         return Material.LIGHT_BLUE_CONCRETE;

@@ -1,5 +1,6 @@
 package net.enthusia.staff.paper.command;
 
+import net.enthusia.staff.paper.presentation.StaffMessageStyle;
 import java.time.Instant;
 import java.util.Arrays;
 import java.util.List;
@@ -35,6 +36,9 @@ import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
 
 public final class SanctionChangeCommand implements CommandExecutor, TabCompleter {
+    private static final int SINGLE_ARGUMENT = 1;
+    private static final int ALIAS_MIN_ARGUMENTS = 2;
+    private static final int CENTRAL_MIN_ARGUMENTS = 3;
     private final JavaPlugin plugin;
     private final Supplier<OperationalMode> mode;
     private final Supplier<SanctionChangeService> service;
@@ -66,52 +70,113 @@ public final class SanctionChangeCommand implements CommandExecutor, TabComplete
 
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] arguments) {
-        Actor actor = PaperActorResolver.resolve(sender).orElse(null);
-        if (actor == null || !SanctionChangeAccess.canChangeAnything(authorization, actor)) {
-            sender.sendMessage(Component.text("You do not have punishment modification authority."));
+        Actor actor = authorizedActor(sender);
+        if (actor == null) {
             return true;
         }
         String route = CommandRoute.canonicalName(command);
         boolean central = route.equals("removepunishment");
-        if (arguments.length == 1 && sender instanceof Player player) {
-            gui.open(player, arguments[0], route);
+        if (openAliasGui(sender, arguments, route, central)) {
             return true;
         }
-        int minimum = central ? 3 : 2;
-        if (arguments.length < minimum) {
-            sender.sendMessage(Component.text(central
-                    ? "Usage: /removepunishment <player|case> <action> [expiration] <reason> [CONFIRM]"
-                    : "Usage: /" + label + " <player|case> <reason> [CONFIRM]"));
+        if (!hasMinimumArguments(sender, label, arguments, central)) {
             return true;
         }
+        SanctionChangeAction action = authorizedAction(sender, actor, arguments, route, central);
+        if (action == null) {
+            return true;
+        }
+        ChangeInput input = changeInput(sender, arguments, action, central);
+        if (input == null) {
+            return true;
+        }
+        if (!input.confirmed()) {
+            sender.sendMessage(StaffMessageStyle.style(Component.text("Review only: " + action + " for " + arguments[0] + ".")));
+            sender.sendMessage(StaffMessageStyle.style(Component.text("No change was made. Append the exact word CONFIRM to commit.")));
+            return true;
+        }
+        submit(sender, () -> apply(
+                sender, route, arguments[0], action, input.expiration(), input.reason(), actor
+        ));
+        return true;
+    }
+
+    private Actor authorizedActor(CommandSender sender) {
+        Actor actor = PaperActorResolver.resolve(sender).orElse(null);
+        if (actor != null && SanctionChangeAccess.canChangeAnything(authorization, actor)) {
+            return actor;
+        }
+        sender.sendMessage(StaffMessageStyle.style(Component.text("You do not have punishment modification authority.")));
+        return null;
+    }
+
+    private boolean openAliasGui(CommandSender sender, String[] arguments, String route, boolean central) {
+        if (central || arguments.length != SINGLE_ARGUMENT || !(sender instanceof Player player)) {
+            return false;
+        }
+        gui.open(player, arguments[0], route);
+        return true;
+    }
+
+    private static boolean hasMinimumArguments(
+            CommandSender sender,
+            String label,
+            String[] arguments,
+            boolean central
+    ) {
+        int minimum = central ? CENTRAL_MIN_ARGUMENTS : ALIAS_MIN_ARGUMENTS;
+        if (arguments.length >= minimum) {
+            return true;
+        }
+        sender.sendMessage(StaffMessageStyle.style(Component.text(central
+                ? "Usage: /removepunishment <player|case> <action> [expiration] <reason> [CONFIRM]"
+                : "Usage: /" + label + " <player|case> <reason> [CONFIRM]")));
+        return false;
+    }
+
+    private SanctionChangeAction authorizedAction(
+            CommandSender sender,
+            Actor actor,
+            String[] arguments,
+            String route,
+            boolean central
+    ) {
         SanctionChangeAction action = central
                 ? SanctionChangeAccess.parseAction(arguments[1])
                 : SanctionChangeAccess.aliasAction(route);
         if (action == null) {
-            sender.sendMessage(Component.text("Unknown sanction change action."));
-            return true;
+            sender.sendMessage(StaffMessageStyle.style(Component.text("Unknown sanction change action.")));
+            return null;
         }
         if (!authorization.permits(actor, action.requiredModerationAction())) {
-            sender.sendMessage(Component.text("You are not permitted to perform that punishment change."));
-            return true;
+            sender.sendMessage(StaffMessageStyle.style(Component.text("You are not permitted to perform that punishment change.")));
+            return null;
         }
         if (!sender.hasPermission(SanctionChangeAccess.permissionFor(action))) {
-            sender.sendMessage(Component.text("You do not have permission for that punishment change."));
-            return true;
+            sender.sendMessage(StaffMessageStyle.style(Component.text("You do not have permission for that punishment change.")));
+            return null;
         }
+        return action;
+    }
+
+    private static ChangeInput changeInput(
+            CommandSender sender,
+            String[] arguments,
+            SanctionChangeAction action,
+            boolean central
+    ) {
         int reasonStart = central ? 2 : 1;
         Optional<Instant> expiration = Optional.empty();
-        if (action == SanctionChangeAction.REDUCE_DURATION
-                || action == SanctionChangeAction.REPLACE_EXPIRATION) {
+        if (requiresExpiration(action)) {
             if (arguments.length <= reasonStart + 1) {
-                sender.sendMessage(Component.text("This action requires an ISO-8601 expiration and a written reason."));
-                return true;
+                sender.sendMessage(StaffMessageStyle.style(Component.text(
+                        "This action requires an ISO-8601 expiration and a written reason."
+                )));
+                return null;
             }
-            try {
-                expiration = Optional.of(Instant.parse(arguments[reasonStart]));
-            } catch (java.time.format.DateTimeParseException exception) {
-                sender.sendMessage(Component.text("Expiration must be an ISO-8601 instant such as 2026-08-01T00:00:00Z."));
-                return true;
+            expiration = expiration(sender, arguments[reasonStart]);
+            if (expiration.isEmpty()) {
+                return null;
             }
             reasonStart++;
         }
@@ -119,19 +184,29 @@ public final class SanctionChangeCommand implements CommandExecutor, TabComplete
         int reasonEnd = confirmed ? arguments.length - 1 : arguments.length;
         String reason = String.join(" ", Arrays.copyOfRange(arguments, reasonStart, reasonEnd)).trim();
         if (reason.isBlank()) {
-            sender.sendMessage(Component.text("A written reason is required."));
-            return true;
+            sender.sendMessage(StaffMessageStyle.style(Component.text("A written reason is required.")));
+            return null;
         }
-        if (!confirmed) {
-            sender.sendMessage(Component.text("Review only: " + action + " for " + arguments[0] + "."));
-            sender.sendMessage(Component.text("No change was made. Append the exact word CONFIRM to commit."));
-            return true;
+        return new ChangeInput(expiration, reason, confirmed);
+    }
+
+    private static boolean requiresExpiration(SanctionChangeAction action) {
+        return action == SanctionChangeAction.REDUCE_DURATION
+                || action == SanctionChangeAction.REPLACE_EXPIRATION;
+    }
+
+    private static Optional<Instant> expiration(CommandSender sender, String input) {
+        try {
+            return Optional.of(Instant.parse(input));
+        } catch (java.time.format.DateTimeParseException exception) {
+            sender.sendMessage(StaffMessageStyle.style(Component.text(
+                    "Expiration must be an ISO-8601 instant such as 2026-08-01T00:00:00Z."
+            )));
+            return Optional.empty();
         }
-        Optional<Instant> requestedExpiration = expiration;
-        submit(sender, () -> apply(
-                sender, route, arguments[0], action, requestedExpiration, reason, actor
-        ));
-        return true;
+    }
+
+    private record ChangeInput(Optional<Instant> expiration, String reason, boolean confirmed) {
     }
 
     private void apply(
@@ -196,12 +271,12 @@ public final class SanctionChangeCommand implements CommandExecutor, TabComplete
         try {
             workers.execute(action);
         } catch (RejectedExecutionException exception) {
-            sender.sendMessage(Component.text("The moderation work queue is full; no change was made."));
+            sender.sendMessage(StaffMessageStyle.style(Component.text("The moderation work queue is full; no change was made.")));
         }
     }
 
     private void send(CommandSender sender, String message) {
-        plugin.getServer().getGlobalRegionScheduler().execute(plugin, () -> sender.sendMessage(Component.text(message)));
+        plugin.getServer().getGlobalRegionScheduler().execute(plugin, () -> sender.sendMessage(StaffMessageStyle.style(Component.text(message))));
     }
 
     @Override

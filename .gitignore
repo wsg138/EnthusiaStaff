@@ -12,6 +12,9 @@ libs/private/
 .env
 .env.*
 !.env.example
+moderation-web/node_modules/
+moderation-web/dist/
+moderation-web/.wrangler*/
 
 # Runtime-only staging staff-bot secret file.
 staging-bot-token.txt

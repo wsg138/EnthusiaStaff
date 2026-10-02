@@ -2,6 +2,7 @@ package net.enthusia.staff.paper;
 
 import java.time.Clock;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.function.Supplier;
 import java.util.logging.Level;
@@ -21,12 +22,15 @@ import net.enthusia.staff.paper.api.StaffModeQueryService;
 import net.enthusia.staff.paper.api.StaffSessionService;
 import net.enthusia.staff.paper.api.StaffVisibilityService;
 import net.enthusia.staff.paper.freeze.FreezeManager;
+import net.enthusia.staff.paper.freeze.FreezeNetworkReconciler;
+import net.enthusia.staff.paper.freeze.FreezeNoticeService;
 import net.enthusia.staff.paper.inventory.InventoryCoordinator;
 import net.enthusia.staff.paper.inventory.InventoryOperationContext;
 import net.enthusia.staff.paper.inventory.InventoryRecoveryGuard;
 import net.enthusia.staff.paper.report.ReportEvidenceMaintenance;
 import net.enthusia.staff.paper.staff.StaffModeManager;
 import net.enthusia.staff.paper.staff.StaffModeWorldInteractionListener;
+import net.enthusia.staff.paper.staff.StaffStatePresentation;
 import net.enthusia.staff.paper.staff.StaffToolDispatcher;
 import net.enthusia.staff.paper.staff.StaffToolTransferListener;
 import net.enthusia.staff.paper.tester.CheatTesterCommand;
@@ -35,7 +39,12 @@ import net.enthusia.staff.paper.tester.CheatTesterSettings;
 import net.enthusia.staff.paper.tester.FakeBaseCommand;
 import net.enthusia.staff.paper.tester.FakeBaseManager;
 import net.enthusia.staff.paper.visibility.DefaultStaffVisibilityService;
+import net.enthusia.staff.paper.visibility.VanishBroadcastListener;
 import net.enthusia.staff.paper.visibility.VanishManager;
+import net.enthusia.staff.paper.visibility.VanishNoclipController;
+import net.enthusia.staff.paper.visibility.VanishTargetingGuard;
+import net.enthusia.staff.paper.auth.LuckPermsStaffDutyContext;
+import net.enthusia.staff.paper.visibility.PrivateMessagePresenceListener;
 import org.bukkit.event.Listener;
 import org.bukkit.plugin.ServicePriority;
 import org.bukkit.plugin.java.JavaPlugin;
@@ -43,6 +52,8 @@ import org.bukkit.plugin.java.JavaPlugin;
 record PaperRuntimeComponents(
         ReportEvidenceMaintenance reportEvidenceMaintenance,
         FreezeManager freeze,
+        FreezeNoticeService freezeNotices,
+        FreezeNetworkReconciler freezeNetworkReconciler,
         StaffModeManager staffMode,
         CheatTesterManager cheatTester,
         FakeBaseManager fakeBases,
@@ -60,9 +71,24 @@ record PaperRuntimeComponents(
                 dependencies.environment().plugin().getLogger()
         );
         FreezeManager freeze = createFreezeManager(dependencies);
+        FreezeNoticeService freezeNotices = createFreezeNoticeService(dependencies, freeze);
+        FreezeNetworkReconciler freezeNetworkReconciler = new FreezeNetworkReconciler(
+                dependencies.environment().plugin(),
+                dependencies.environment().clock(),
+                dependencies.stores().freezeStore(),
+                dependencies.environment().workers(),
+                freeze
+        );
         StaffModeManager staffMode = createStaffModeManager(dependencies);
+        registerStaffDutyContext(dependencies, staffMode);
         DefaultStaffVisibilityService visibility = createVisibilityService(dependencies);
         VanishManager vanish = createVanishManager(dependencies, staffMode, visibility);
+        StaffStatePresentation statePresentation = new StaffStatePresentation(
+                dependencies.environment().plugin(), staffMode, vanish
+        );
+        registerListener(dependencies.environment().plugin(), statePresentation);
+        statePresentation.start();
+        registerOperationalListeners(dependencies, vanish);
         InventoryOperationContext inventoryContext = new InventoryOperationContext(
                 dependencies.environment().clock(),
                 dependencies.environment().inventoryScopeId(),
@@ -89,6 +115,8 @@ record PaperRuntimeComponents(
         return new PaperRuntimeComponents(
                 evidence,
                 freeze,
+                freezeNotices,
+                freezeNetworkReconciler,
                 staffMode,
                 cheatTester,
                 fakeBases,
@@ -121,7 +149,13 @@ record PaperRuntimeComponents(
         );
         plugin.getServer().getServicesManager().register(
                 StaffSessionService.class,
-                staffMode::active,
+                staffMode::authorityActive,
+                plugin,
+                ServicePriority.Normal
+        );
+        plugin.getServer().getServicesManager().register(
+                FreezeNetworkReconciler.class,
+                freezeNetworkReconciler,
                 plugin,
                 ServicePriority.Normal
         );
@@ -138,6 +172,18 @@ record PaperRuntimeComponents(
         return freeze;
     }
 
+    private static FreezeNoticeService createFreezeNoticeService(
+            Dependencies dependencies,
+            FreezeManager freeze
+    ) {
+        JavaPlugin plugin = dependencies.environment().plugin();
+        FreezeNoticeService notices = new FreezeNoticeService(
+                plugin, dependencies.stores().playerDirectory(), dependencies.environment().workers(), freeze
+        );
+        freeze.setNoticeSink(notices);
+        return notices;
+    }
+
     private static StaffModeManager createStaffModeManager(Dependencies dependencies) {
         JavaPlugin plugin = dependencies.environment().plugin();
         StaffModeManager staffMode = new StaffModeManager(
@@ -151,6 +197,22 @@ record PaperRuntimeComponents(
         registerListener(plugin, new StaffModeWorldInteractionListener(staffMode));
         registerListener(plugin, staffMode);
         return staffMode;
+    }
+
+    private static void registerStaffDutyContext(Dependencies dependencies, StaffModeManager staffMode) {
+        JavaPlugin plugin = dependencies.environment().plugin();
+        if (plugin.getServer().getPluginManager().getPlugin("LuckPerms") == null) {
+            dependencies.featureIssues().put("staff-duty-context",
+                    "LuckPerms is unavailable; Staff Mode active-duty permission context is disabled");
+            return;
+        }
+        try {
+            LuckPermsStaffDutyContext.install(plugin, staffMode);
+            dependencies.featureIssues().remove("staff-duty-context");
+        } catch (IllegalStateException | LinkageError exception) {
+            dependencies.featureIssues().put("staff-duty-context", "LuckPerms Staff Mode context could not be registered");
+            plugin.getLogger().log(Level.WARNING, "Staff Mode LuckPerms active-duty context registration failed", exception);
+        }
     }
 
     private static DefaultStaffVisibilityService createVisibilityService(Dependencies dependencies) {
@@ -177,18 +239,86 @@ record PaperRuntimeComponents(
             StaffModeManager staffMode,
             DefaultStaffVisibilityService visibility
     ) {
+        JavaPlugin plugin = dependencies.environment().plugin();
+        VanishTargetingGuard targeting = new VanishTargetingGuard(plugin, visibility::isVanished);
+        visibility.setVanishEnabledListener(playerId ->
+                scheduleVanishTargetingReconciliation(plugin, targeting, playerId));
+        registerListener(plugin, targeting);
+        VanishNoclipController noclip = VanishNoclipController.install(plugin);
+        publishNoclipHealth(dependencies, noclip);
         VanishManager vanish = new VanishManager(
-                dependencies.environment().plugin(),
+                plugin,
                 dependencies.environment().clock(),
                 visibility,
                 dependencies.stores().vanishStore(),
                 dependencies.stores().staffSessionStore(),
                 staffMode,
-                dependencies.environment().workers()
+                dependencies.environment().workers(),
+                noclip
         );
         staffMode.setExitListener(vanish::staffModeExited);
-        registerListener(dependencies.environment().plugin(), vanish);
+        registerListener(plugin, vanish);
         return vanish;
+    }
+
+    private static void publishNoclipHealth(
+            Dependencies dependencies,
+            VanishNoclipController noclip
+    ) {
+        if (noclip.supportsClientPresentation()) {
+            dependencies.featureIssues().remove("vanish-noclip");
+            return;
+        }
+        dependencies.featureIssues().put(
+                "vanish-noclip",
+                "Creative-mode full vanish cannot provide true block no-clip: " + noclip.unavailableReason()
+        );
+    }
+
+    private static void scheduleVanishTargetingReconciliation(
+            JavaPlugin plugin,
+            VanishTargetingGuard targeting,
+            UUID playerId
+    ) {
+        try {
+            plugin.getServer().getGlobalRegionScheduler().execute(
+                    plugin,
+                    () -> scheduleVanishTargetingForPlayer(plugin, targeting, playerId)
+            );
+        } catch (RuntimeException exception) {
+            plugin.getLogger().log(Level.WARNING, "Vanish targeting reconciliation could not be scheduled", exception);
+        }
+    }
+
+    private static void scheduleVanishTargetingForPlayer(
+            JavaPlugin plugin,
+            VanishTargetingGuard targeting,
+            UUID playerId
+    ) {
+        var player = plugin.getServer().getPlayer(playerId);
+        if (player == null) {
+            return;
+        }
+        try {
+            if (!player.getScheduler().execute(plugin, () -> targeting.reconcile(player), null, 1L)) {
+                plugin.getLogger().fine("Vanish targeting reconciliation retired before execution");
+            }
+        } catch (RuntimeException exception) {
+            plugin.getLogger().log(Level.WARNING, "Vanish targeting reconciliation scheduling failed", exception);
+        }
+    }
+
+    private static void registerOperationalListeners(Dependencies dependencies, VanishManager vanish) {
+        JavaPlugin plugin = dependencies.environment().plugin();
+        registerListener(plugin, new PaperPresenceListener(
+                plugin,
+                dependencies.environment().clock(),
+                dependencies.environment().serverId(),
+                dependencies.stores().playerDirectory(),
+                dependencies.environment().workers()
+        ));
+        registerListener(plugin, new VanishBroadcastListener(vanish));
+        registerListener(plugin, new PrivateMessagePresenceListener(plugin, vanish));
     }
 
     private static FakeBaseManager createFakeBaseManager(

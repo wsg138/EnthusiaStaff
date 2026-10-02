@@ -1,5 +1,6 @@
 package net.enthusia.staff.paper.tester;
 
+import net.enthusia.staff.paper.presentation.StaffMessageStyle;
 import java.util.List;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
@@ -22,7 +23,7 @@ public final class FakeBaseCommand implements CommandExecutor, TabCompleter {
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] arguments) {
         if (!(sender instanceof Player player)) {
-            sender.sendMessage("Fake-base controls require an in-game staff session.");
+            sender.sendMessage(StaffMessageStyle.style("Fake-base controls require an in-game staff session."));
             return true;
         }
         return router.handle(player, routedArguments(arguments));

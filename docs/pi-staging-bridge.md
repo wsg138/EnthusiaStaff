@@ -6,7 +6,7 @@ AI workers making staging or validation decisions must also follow [`ai-agents/S
 
 ## Trust boundary
 
-The public build job receives no private staging credential. It checks out a trusted copy of the staging-control scripts at the workflow control SHA, independently authorizes the requested source as either a commit already contained by `main` or the exact current head of an open same-repository pull request, then checks out that exact source SHA detached and runs the normal Java 21 Gradle build.
+The public build job receives no private staging credential. It checks out a trusted copy of the staging-control scripts at the workflow control SHA, independently authorizes the requested source as either a commit already contained by `main` or the exact current head of an open same-repository pull request, then checks out that exact source SHA detached and runs the normal Java 25 Gradle build.
 
 Fork pull requests never reach the private staging credential or Pi execution path. A later public bridge job, which does not execute source-controlled build code, may read `ENTHUSIASTAFF_STAGING_TOKEN` only after the trusted hosted build succeeds. That token is used only to dispatch and observe the private staging workflow.
 

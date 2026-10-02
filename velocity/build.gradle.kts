@@ -3,6 +3,7 @@ plugins {
 }
 
 val velocityApi = "com.velocitypowered:velocity-api:3.4.0-SNAPSHOT"
+val miniPlaceholdersApi = "io.github.miniplaceholders:miniplaceholders-api:3.0.1"
 
 dependencies {
     implementation(project(":domain"))
@@ -10,9 +11,11 @@ dependencies {
     implementation(project(":protocol"))
     implementation("com.fasterxml.jackson.core:jackson-databind:2.20.1")
     compileOnly(velocityApi)
+    compileOnly(miniPlaceholdersApi)
     annotationProcessor(velocityApi)
     compileOnly("org.slf4j:slf4j-api:2.0.17")
     testImplementation(velocityApi)
+    testImplementation(miniPlaceholdersApi)
     testImplementation("org.slf4j:slf4j-api:2.0.17")
 }
 

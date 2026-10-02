@@ -15,6 +15,7 @@ import org.bukkit.inventory.meta.ItemMeta;
 final class PunishmentRequestGuiRenderer {
     static final int QUEUE_CONTENT_SIZE = 45;
     static final int REFRESH_SLOT = 45;
+    static final int DETAILS_REFRESH_SLOT = 22;
     static final int PREVIOUS_SLOT = 46;
     static final int CLOSE_SLOT = 49;
     static final int NEXT_SLOT = 52;
@@ -114,7 +115,7 @@ final class PunishmentRequestGuiRenderer {
                 )
         ));
         inventory.setItem(BACK_SLOT, item(Material.ARROW, "Back to queue", List.of()));
-        inventory.setItem(REFRESH_SLOT, item(Material.CLOCK, "Refresh details", List.of()));
+        inventory.setItem(DETAILS_REFRESH_SLOT, item(Material.CLOCK, "Refresh details", List.of()));
         inventory.setItem(REVIEW_CLOSE_SLOT, item(Material.BARRIER, CLOSE_LABEL, List.of()));
         return inventory;
     }

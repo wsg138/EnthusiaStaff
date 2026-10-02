@@ -342,6 +342,9 @@ public final class JdbcModerationStore implements ModerationStore {
         payload.put("caseId", plan.caseId().value());
         payload.put("targetId", plan.targetId().toString());
         payload.put("reasonId", plan.reasonId());
+        payload.put("publicReason", plan.publicReason());
+        payload.put("issuedAt", plan.issuedAt().toString());
+        payload.put("sanctionTypes", plan.sanctions().stream().map(spec -> spec.type().name()).toList());
         payload.put("sanctionIds", sanctionIds.stream().map(UUID::toString).toList());
         String serialized = json.writeValueAsString(payload);
         try (PreparedStatement network = connection.prepareStatement("""

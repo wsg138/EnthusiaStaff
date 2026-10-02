@@ -57,6 +57,8 @@ class PersistentChannelTransportTest {
             )) {
                 client.start();
                 assertTrue(connected.await(5, TimeUnit.SECONDS));
+                assertTrue(client.send(UUID.randomUUID(), "KEEPALIVE", "{}", Duration.ofSeconds(3)).get());
+                assertEquals(1L, serverReceived.getCount(), "Transport keepalive reached the application handler");
                 assertTrue(client.send(UUID.randomUUID(), "HEALTH", "{}", Duration.ofSeconds(3)).get());
                 assertTrue(serverReceived.await(3, TimeUnit.SECONDS));
 

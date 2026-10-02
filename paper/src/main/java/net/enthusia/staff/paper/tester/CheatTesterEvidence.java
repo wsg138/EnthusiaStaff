@@ -16,6 +16,7 @@ import org.bukkit.inventory.ItemStack;
 final class CheatTesterEvidence {
     private static final int MAX_EVIDENCE_CHARS = 32 * 1024;
     private static final int MAX_REASON_CHARS = 255;
+    private static final double UNKNOWN_DISPLACEMENT = -1.0D;
 
     private final Clock clock;
     private final CheatTesterSettings settings;
@@ -31,7 +32,7 @@ final class CheatTesterEvidence {
         switch (session.type) {
             case TOTEM_REFILL -> addTotem(values, target);
             case AUTO_ARMOR -> addArmor(values, target, session);
-            case VELOCITY -> values.put("displacement", displacement(target.getLocation(), session.startPoint));
+            case VELOCITY -> addVelocity(values, target, session);
             case NO_FALL -> addNoFall(values, target, session);
             case FAKE_ENTITY -> addFake(values, session);
             default -> throw new IllegalStateException("Unsupported cheat tester type: " + session.type);
@@ -74,7 +75,10 @@ final class CheatTesterEvidence {
             return switch (session.type) {
                 case TOTEM_REFILL -> "offhand refill observed=" + node.path("offhandTotemObserved").asBoolean(false);
                 case AUTO_ARMOR -> "armor re-equip observed=" + node.path("armorReequippedObserved").asBoolean(false);
-                case VELOCITY -> "displacement=" + decimal(node.path("displacement").asDouble(), 2);
+                case VELOCITY -> "maximum displacement=" + decimal(
+                        node.path("maximumDisplacement").asDouble(node.path("displacement").asDouble()),
+                        2
+                );
                 case NO_FALL -> "airborne resets=" + node.path("airborneFallResets").asInt()
                         + ", max fall distance=" + decimal(node.path("maximumFallDistance").asDouble(), 2);
                 case FAKE_ENTITY -> "interactions=" + node.path("interactions").asInt()
@@ -104,9 +108,21 @@ final class CheatTesterEvidence {
     private static void addArmor(Map<String, Object> values, Player target, CheatTesterSession session) {
         ItemStack[] armor = target.getInventory().getArmorContents();
         int slot = session.probe.armorSlot();
-        boolean equipped = slot >= 0 && slot < armor.length
+        boolean equippedAtFinish = slot >= 0 && slot < armor.length
                 && armor[slot] != null && !armor[slot].isEmpty();
-        values.put("armorReequippedObserved", equipped);
+        values.put("armorReequippedObserved", session.armorReequippedObserved.get() || equippedAtFinish);
+    }
+
+    private static void addVelocity(Map<String, Object> values, Player target, CheatTesterSession session) {
+        double finalDisplacement = displacement(target.getLocation(), session.startPoint);
+        boolean finalValid = finalDisplacement >= 0.0D && Double.isFinite(finalDisplacement);
+        boolean sampled = session.maximumDisplacement >= 0.0D && Double.isFinite(session.maximumDisplacement);
+        double maximum = finalValid
+                ? Math.max(sampled ? session.maximumDisplacement : 0.0D, finalDisplacement)
+                : sampled ? session.maximumDisplacement : UNKNOWN_DISPLACEMENT;
+        values.put("displacement", maximum);
+        values.put("maximumDisplacement", maximum);
+        values.put("finalDisplacement", finalDisplacement);
     }
 
     private static void addNoFall(Map<String, Object> values, Player target, CheatTesterSession session) {
@@ -144,7 +160,7 @@ final class CheatTesterEvidence {
     static double displacement(Location current, CheatTesterSession.StartPoint start) {
         if (start == null || current == null || current.getWorld() == null
                 || !current.getWorld().getUID().equals(start.worldId())) {
-            return -1.0D;
+            return UNKNOWN_DISPLACEMENT;
         }
         double dx = current.getX() - start.x();
         double dy = current.getY() - start.y();

@@ -1,9 +1,11 @@
 package net.enthusia.staff.paper.command;
 
+import net.enthusia.staff.paper.presentation.StaffMessageStyle;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.RejectedExecutionException;
@@ -23,7 +25,9 @@ import net.enthusia.staff.domain.auth.ModerationAction;
 import net.enthusia.staff.domain.casefile.CaseVisibility;
 import net.enthusia.staff.domain.player.PlayerIdentity;
 import net.enthusia.staff.domain.ports.PlayerDirectory;
+import net.enthusia.staff.paper.auth.LuckPermsStaffTargetGuard;
 import net.enthusia.staff.paper.auth.PaperActorResolver;
+import net.enthusia.staff.paper.auth.StaffTargetGuard;
 import net.enthusia.staff.paper.punishment.PunishmentGuiController;
 import net.enthusia.staff.paper.punishment.PunishmentRequestPresentation;
 import net.kyori.adventure.text.Component;
@@ -43,8 +47,23 @@ public final class PunishmentCommand implements CommandExecutor, TabCompleter {
     private static final String CONFIRM_SUBCOMMAND = "confirm";
     private static final String RESUME_SUBCOMMAND = "resume";
     private static final String CENTRAL_COMMAND = "punish";
+    private static final String MUTE_COMMAND = "mute";
     private static final String PERMISSION = "enthusiastaff.punish.configured";
     private static final String PRIVATE_FLAG = "--private";
+    private static final Set<String> LEGACY_MUTE_UNITS = Set.of(
+            "second",
+            "seconds",
+            "minute",
+            "minutes",
+            "hour",
+            "hours",
+            "day",
+            "days",
+            "month",
+            "months",
+            "year",
+            "years"
+    );
 
     private final JavaPlugin plugin;
     private final Supplier<OperationalMode> mode;
@@ -54,6 +73,7 @@ public final class PunishmentCommand implements CommandExecutor, TabCompleter {
     private final PunishmentGuiController gui;
     private final PunishmentRequestCommandHandler requestCommands;
     private final ExecutorService workers;
+    private final StaffTargetGuard targetGuard;
 
     public PunishmentCommand(
             JavaPlugin plugin,
@@ -65,18 +85,32 @@ public final class PunishmentCommand implements CommandExecutor, TabCompleter {
             PunishmentRequestCommandHandler requestCommands,
             ExecutorService workers
     ) {
-        if (plugin == null || mode == null || workflows == null || players == null || authorization == null
-                || gui == null || requestCommands == null || workers == null) {
-            throw new IllegalArgumentException("punishment command dependencies must be present");
-        }
-        this.plugin = plugin;
-        this.mode = mode;
-        this.workflows = workflows;
-        this.players = players;
-        this.authorization = authorization;
-        this.gui = gui;
-        this.requestCommands = requestCommands;
-        this.workers = workers;
+        this(
+                new Dependencies(
+                        plugin,
+                        mode,
+                        workflows,
+                        players,
+                        authorization,
+                        gui,
+                        requestCommands,
+                        workers
+                ),
+                LuckPermsStaffTargetGuard.discover(plugin)
+        );
+    }
+
+    PunishmentCommand(Dependencies dependencies, StaffTargetGuard targetGuard) {
+        Dependencies checked = java.util.Objects.requireNonNull(dependencies, "dependencies");
+        this.plugin = checked.plugin();
+        this.mode = checked.mode();
+        this.workflows = checked.workflows();
+        this.players = checked.players();
+        this.authorization = checked.authorization();
+        this.gui = checked.gui();
+        this.requestCommands = checked.requestCommands();
+        this.workers = checked.workers();
+        this.targetGuard = java.util.Objects.requireNonNull(targetGuard, "targetGuard");
     }
 
     @Override
@@ -88,14 +122,18 @@ public final class PunishmentCommand implements CommandExecutor, TabCompleter {
             return true;
         }
         if (!sender.hasPermission(PERMISSION) || !permitsPunishmentDraft(actor)) {
-            sender.sendMessage(Component.text(
+            sender.sendMessage(StaffMessageStyle.style(Component.text(
                     "You are not allowed to prepare configured punishments or requests.",
                     NamedTextColor.RED
-            ));
+            )));
             return true;
         }
         if (args.length == NO_ARGUMENTS) {
             usage(sender, label, route);
+            return true;
+        }
+        if (isLegacyTimedMute(route, args)) {
+            legacyTimedMuteUsage(sender, label);
             return true;
         }
         if (CONFIRM_SUBCOMMAND.equalsIgnoreCase(args[0])) {
@@ -122,7 +160,9 @@ public final class PunishmentCommand implements CommandExecutor, TabCompleter {
     }
 
     private boolean openTargetOnlyGui(CommandSender sender, String route, String[] args) {
-        if (args.length != SINGLE_ARGUMENT_COUNT || !(sender instanceof Player player)) {
+        if (CENTRAL_COMMAND.equals(route)
+                || args.length != SINGLE_ARGUMENT_COUNT
+                || !(sender instanceof Player player)) {
             return false;
         }
         gui.open(player, args[0], route);
@@ -136,13 +176,27 @@ public final class PunishmentCommand implements CommandExecutor, TabCompleter {
             String label,
             String[] args
     ) {
+        if (!permitsPunishmentDraft(actor)) {
+            send(sender, Component.text(
+                    "Your active staff authority expired before the punishment draft was prepared.",
+                    NamedTextColor.RED
+            ));
+            return;
+        }
         PlayerIdentity target = findTarget(sender, args[0]);
-        if (target == null) {
+        if (target == null || !targetAllowed(sender, actor, target.playerId())) {
             return;
         }
         PunishmentDraftWorkflow workflow = workflows.get();
         if (workflow == null) {
             send(sender, Component.text("Moderation storage is not ready; no draft was created.", NamedTextColor.RED));
+            return;
+        }
+        if (!permitsPunishmentDraft(actor)) {
+            send(sender, Component.text(
+                    "Your active staff authority expired before the punishment draft was prepared.",
+                    NamedTextColor.RED
+            ));
             return;
         }
         PunishmentDraftEvaluation evaluation = workflow.prepare(
@@ -187,7 +241,7 @@ public final class PunishmentCommand implements CommandExecutor, TabCompleter {
 
     private void confirm(CommandSender sender, Actor actor, String[] args) {
         if (args.length != SUBCOMMAND_ARGUMENT_COUNT) {
-            sender.sendMessage(Component.text("Usage: /punish confirm <draft-id>", NamedTextColor.RED));
+            sender.sendMessage(StaffMessageStyle.style(Component.text("Usage: /punish confirm <draft-id>", NamedTextColor.RED)));
             return;
         }
         UUID draftId = parseUuid(sender, args[1]);
@@ -198,9 +252,27 @@ public final class PunishmentCommand implements CommandExecutor, TabCompleter {
     }
 
     private void confirmStoredDraft(CommandSender sender, Actor actor, UUID draftId) {
+        if (!permitsPunishmentDraft(actor)) {
+            send(sender, Component.text(
+                    "Your active staff authority expired before the punishment was confirmed.",
+                    NamedTextColor.RED
+            ));
+            return;
+        }
         PunishmentDraftWorkflow workflow = workflows.get();
         if (workflow == null) {
             send(sender, Component.text("Moderation storage is not ready; no action was taken.", NamedTextColor.RED));
+            return;
+        }
+        PunishmentDraft draft = workflow.find(draftId, actor.id()).orElse(null);
+        if (draft != null && !targetAllowed(sender, actor, draft.targetId())) {
+            return;
+        }
+        if (!permitsPunishmentDraft(actor)) {
+            send(sender, Component.text(
+                    "Your active staff authority expired before the punishment was confirmed.",
+                    NamedTextColor.RED
+            ));
             return;
         }
         try {
@@ -240,7 +312,7 @@ public final class PunishmentCommand implements CommandExecutor, TabCompleter {
 
     private void resume(CommandSender sender, Actor actor, String route, String[] args) {
         if (args.length != SUBCOMMAND_ARGUMENT_COUNT) {
-            sender.sendMessage(Component.text("Usage: /punish resume <target>", NamedTextColor.RED));
+            sender.sendMessage(StaffMessageStyle.style(Component.text("Usage: /punish resume <target>", NamedTextColor.RED)));
             return;
         }
         if (sender instanceof Player player) {
@@ -281,15 +353,24 @@ public final class PunishmentCommand implements CommandExecutor, TabCompleter {
         return target;
     }
 
+    private boolean targetAllowed(CommandSender sender, Actor actor, UUID targetId) {
+        StaffTargetGuard.Result result = targetGuard.check(actor, targetId, !(sender instanceof Player));
+        if (result.allowed()) {
+            return true;
+        }
+        send(sender, Component.text(result.message(), NamedTextColor.RED));
+        return false;
+    }
+
     private void submit(CommandSender sender, Runnable operation) {
         try {
             workers.submit(() -> runOperation(sender, operation));
         } catch (RejectedExecutionException exception) {
             plugin.getLogger().log(Level.WARNING, "Punishment worker rejected command", exception);
-            sender.sendMessage(Component.text(
+            sender.sendMessage(StaffMessageStyle.style(Component.text(
                     "Punishment storage is unavailable; try again shortly.",
                     NamedTextColor.RED
-            ));
+            )));
         }
     }
 
@@ -385,9 +466,38 @@ public final class PunishmentCommand implements CommandExecutor, TabCompleter {
         try {
             return UUID.fromString(input);
         } catch (IllegalArgumentException exception) {
-            sender.sendMessage(Component.text("Invalid draft ID.", NamedTextColor.RED));
+            sender.sendMessage(StaffMessageStyle.style(Component.text("Invalid draft ID.", NamedTextColor.RED)));
             return null;
         }
+    }
+
+    static boolean isLegacyTimedMute(String route, String[] args) {
+        if (!MUTE_COMMAND.equals(route) || args.length < PREPARE_MINIMUM_ARGUMENT_COUNT) {
+            return false;
+        }
+        String duration = args[1].toLowerCase(Locale.ROOT);
+        if (duration.matches("\\d+(?:s|m|h|d|w|mo|y)")) {
+            return true;
+        }
+        if (duration.isEmpty()
+                || !duration.chars().allMatch(Character::isDigit)
+                || args.length <= PREPARE_MINIMUM_ARGUMENT_COUNT) {
+            return false;
+        }
+        return LEGACY_MUTE_UNITS.contains(args[2].toLowerCase(Locale.ROOT));
+    }
+
+    private static void legacyTimedMuteUsage(CommandSender sender, String label) {
+        sender.sendMessage(StaffMessageStyle.style(Component.text(
+                "Legacy RoseChat timed /mute syntax is no longer accepted. EnthusiaStaff /mute uses configured "
+                        + "reason IDs so mutes are recorded and enforced by the central punishment system.",
+                NamedTextColor.RED
+        )));
+        sender.sendMessage(StaffMessageStyle.style(Component.text(
+                "Use /" + label + " <target> <reason-id> [internal explanation], or use "
+                        + "/punish <target> <reason-id> to prepare the central punishment directly.",
+                NamedTextColor.YELLOW
+        )));
     }
 
     private static boolean containsIgnoreCase(String[] args, String value) {
@@ -407,19 +517,19 @@ public final class PunishmentCommand implements CommandExecutor, TabCompleter {
     }
 
     private static void usage(CommandSender sender, String label, String route) {
-        sender.sendMessage(Component.text(
+        sender.sendMessage(StaffMessageStyle.style(Component.text(
                 "Usage: /" + label + " <target> [reason-id] [--private] [internal explanation]",
                 NamedTextColor.YELLOW
-        ));
-        sender.sendMessage(Component.text(
+        )));
+        sender.sendMessage(StaffMessageStyle.style(Component.text(
                 "Draft controls: /punish resume <target> | /punish confirm <draft-id>",
                 NamedTextColor.GRAY
-        ));
+        )));
         if (CENTRAL_COMMAND.equals(route)) {
-            sender.sendMessage(Component.text(
+            sender.sendMessage(StaffMessageStyle.style(Component.text(
                     "Request review: /punish requests | review | approve | deny",
                     NamedTextColor.GRAY
-            ));
+            )));
         }
     }
 
@@ -453,4 +563,27 @@ public final class PunishmentCommand implements CommandExecutor, TabCompleter {
         }
         return completions;
     }
+
+    record Dependencies(
+            JavaPlugin plugin,
+            Supplier<OperationalMode> mode,
+            Supplier<PunishmentDraftWorkflow> workflows,
+            Supplier<PlayerDirectory> players,
+            AuthorizationPolicy authorization,
+            PunishmentGuiController gui,
+            PunishmentRequestCommandHandler requestCommands,
+            ExecutorService workers
+    ) {
+        Dependencies {
+            plugin = java.util.Objects.requireNonNull(plugin, "plugin");
+            mode = java.util.Objects.requireNonNull(mode, "mode");
+            workflows = java.util.Objects.requireNonNull(workflows, "workflows");
+            players = java.util.Objects.requireNonNull(players, "players");
+            authorization = java.util.Objects.requireNonNull(authorization, "authorization");
+            gui = java.util.Objects.requireNonNull(gui, "gui");
+            requestCommands = java.util.Objects.requireNonNull(requestCommands, "requestCommands");
+            workers = java.util.Objects.requireNonNull(workers, "workers");
+        }
+    }
+
 }

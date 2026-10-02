@@ -10,6 +10,31 @@ import java.time.ZoneOffset;
 import org.junit.jupiter.api.Test;
 
 class StaffAuthorityHttpSigningTest {
+    private static final String POST = "POST";
+
+    @Test
+    void punishmentProofBindsExactBodyAndOperation() {
+        byte[] original = "{\"target\":\"player-one\"}".getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        byte[] changed = "{\"target\":\"player-two\"}".getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        String path = "/v1/staff-punishments/prepare";
+        String originalTarget = StaffAuthorityHttpSigning.punishmentRequestTarget(path, original);
+        var proof = StaffAuthorityHttpSigning.signRequest(CREDENTIAL, POST, originalTarget, NOW, NONCE);
+        assertEquals(StaffAuthorityHttpSigning.Verification.ACCEPTED,
+                StaffAuthorityHttpSigning.verifyRequest(CREDENTIAL, POST, originalTarget,
+                        proof.timestamp(), proof.nonce(), proof.signature(), CLOCK));
+        assertEquals(StaffAuthorityHttpSigning.Verification.INVALID_SIGNATURE,
+                StaffAuthorityHttpSigning.verifyRequest(CREDENTIAL, POST,
+                        StaffAuthorityHttpSigning.punishmentRequestTarget(path, changed),
+                        proof.timestamp(), proof.nonce(), proof.signature(), CLOCK));
+        assertEquals(StaffAuthorityHttpSigning.Verification.INVALID_SIGNATURE,
+                StaffAuthorityHttpSigning.verifyRequest(CREDENTIAL, POST,
+                        StaffAuthorityHttpSigning.punishmentRequestTarget("/v1/staff-punishments/confirm", original),
+                        proof.timestamp(), proof.nonce(), proof.signature(), CLOCK));
+        org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class,
+                () -> StaffAuthorityHttpSigning.punishmentRequestTarget(path, new byte[8193]));
+        org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class,
+                () -> StaffAuthorityHttpSigning.punishmentRequestTarget("/v1/staff-punishments/prepare/../confirm", original));
+    }
     private static final String CREDENTIAL = "authority-test-credential-value-1234567890";
     private static final String METHOD = "GET";
     private static final String TARGET =

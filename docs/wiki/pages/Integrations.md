@@ -1,160 +1,189 @@
 # Integrations
 
-Optional integrations must degrade independently. A missing or incompatible provider should disable only the behavior that requires it, produce actionable verification output, and leave unrelated moderation features available when that is safe.
+Optional integrations must degrade independently. A missing or incompatible provider should disable only behavior that actually depends on it, surface an actionable health state, and leave unrelated moderation available when that is safe.
 
-- Current integration/release status: [[Integrations, Migration, and Release Readiness]]
-- Core health/degradation: [[Core Platform and Infrastructure]]
-- Runtime configuration: [[Configuration]]
-- Commands/verification: [[Commands and Permissions]]
+- Overall release/integration status: [[Integrations, Migration, and Release Readiness]]
+- Discord/StaffBot: [[Discord Moderation Platform]]
+- StaffBot operations: [[Staff Bot Runtime and Operations]]
+- Public site/web APIs: [[Website and Web API]]
+- Core health/config: [[Core Platform and Infrastructure]], [[Configuration]]
 - Review guidance: [[Code Review Guide]]
 
 ## Integration matrix
 
-| Provider | Purpose | Required failure behavior |
+| Provider / boundary | Purpose | Required failure behavior |
 | --- | --- | --- |
-| MariaDB | Durable moderation/recovery authority | Block unsafe writes/destructive edits; preserve safe reads/status where possible |
-| Paper-Velocity channel | Network sanctions and coordination | Block unsafe network writes; expose reconnect/backlog state |
+| MariaDB | Durable moderation/recovery authority | Block unsafe writes; preserve safe status/reads where possible |
+| Paper–Velocity channel | Network sanctions/coordination | Block unsafe network writes; expose reconnect/backlog state |
+| StaffBot / Discord Gateway | Interactive Discord staff UX and native Discord effects | Fail closed on identity/authority; preserve durable reconciliation; do not widen authority |
+| `discord-platform-api` | Provider-neutral managed-role contract | Consumer/provider absence must be explicit; no direct JDA fallback from consumers |
+| Legacy Discord webhooks | One-way staff notifications | Queue/retry durably; never undo a valid moderation action because Discord is down |
+| Velocity website API | Public projections + authenticated appeal workflow | Reject invalid auth/replay/bounds; never expose privileged records directly |
+| Public `enthusia-site` | Website/UI and Pages Functions | Public projection only; server-side functions mediate privileged backend access |
+| `moderation-web` | Staging staff browser workspace | Read/simulation only; signed/session/replay boundaries fail closed |
 | RoseChat | Staff/global channels, mute, vanish recipients, PM evidence, automod | Disable only affected chat features |
-| Simple Voice Chat | Voice mute and vanish-aware recipients | Text moderation may remain; report voice enforcement unavailable |
-| ViaVersion/ViaBackwards | Protocol/version evidence | Mark version evidence unknown/unavailable |
-| Floodgate/Geyser | Verified Bedrock platform evidence and client compatibility | Keep platform `UNKNOWN` when provider evidence is unavailable/incompatible; retain safe lookup behavior |
-| CombatLogX | Staff-mode combat gating | Block unsafe staff-mode transition when combat safety cannot be established |
+| Simple Voice Chat | Voice mute / vanish-aware recipients | Text moderation may remain; report voice enforcement unavailable |
+| ViaVersion/ViaBackwards | Protocol/version evidence | Mark evidence unknown/unavailable |
+| Floodgate/Geyser | Verified Bedrock platform evidence/client compatibility | Keep platform `UNKNOWN` when evidence cannot be established |
+| CombatLogX | Staff-mode combat gating | Block unsafe Staff Mode transition if combat safety is unknown |
 | Polar | Anticheat evidence/supported automation | Disable unsupported automation only |
-| ProtocolLib | Player-info/packet visibility support | Fail conservatively for dependent vanish/spectator presentation |
-| Discord delivery/webhooks | Staff notifications | Queue durably where configured; never undo a valid case because Discord is down |
-| LuckPerms/permission provider | Command discovery/rank permissions | Fail authority safely; central application policy still rechecks writes |
-| EnthusiaCurrency | Economy confiscation/restoration | Hide/block economy actions when provider authority is unavailable |
-| EnthusiaMarket | Market moderation/restoration | Block confirmation when provider authority cannot be proved |
-| EnthusiaCommend | Reputation blacklist | Disable provider-specific action only |
-| EnthusiaTeleport | Visibility/teleport compatibility | Disable dependent integration behavior |
-| PlayTimePlugin | Vanish-aware external behavior | Degrade without exposing hidden staff |
-| InventoryRollbackPlus | Supporting history/recovery context | Never present it as EnthusiaStaff whole-server rollback |
+| ProtocolLib | Packet/player-info visibility behavior | Fail conservatively for dependent vanish/spectator presentation |
+| LuckPerms | Staff identity/discovery/duty context | Fail authority safely; central policy still rechecks writes |
+| EnthusiaCurrency | Economy confiscation/restoration | Hide/block economy actions if provider authority unavailable |
+| EnthusiaMarket | Market moderation/restoration | Block confirmation if provider result cannot be established |
+| EnthusiaCommend | Reputation restrictions | Disable provider-specific action only |
+| EnthusiaTeleport | Visibility/teleport compatibility | Disable dependent integration only |
+| PlayTimePlugin | Playtime/main-account and external behavior inputs | Degrade without guessing; do not expose hidden staff |
+| InventoryRollbackPlus | Supporting recovery/history context | Never present as EnthusiaStaff whole-server rollback |
 | EnthusiaAutoClicker | Versioned client evidence | Show unknown/unavailable safely |
 
 ## Where integration code lives
 
 | Location | Responsibility |
 | --- | --- |
-| [Integration contracts](https://github.com/wsg138/EnthusiaStaff/tree/main/integration-contracts/src/main/java) | Stable compile-time contracts for Enthusia-owned providers |
-| [Paper integration adapters](https://github.com/wsg138/EnthusiaStaff/tree/main/paper/src/main/java/net/enthusia/staff/paper/integration) | Bukkit-side provider discovery/behavior |
-| [Paper client adapters](https://github.com/wsg138/EnthusiaStaff/tree/main/paper/src/main/java/net/enthusia/staff/paper/client) | ViaVersion, Floodgate/Geyser, AutoClicker and client evidence |
-| [Paper economy adapters](https://github.com/wsg138/EnthusiaStaff/tree/main/paper/src/main/java/net/enthusia/staff/paper/economy) | EnthusiaCurrency moderation gateway |
-| [Visibility API](https://github.com/wsg138/EnthusiaStaff/blob/main/paper/src/main/java/net/enthusia/staff/paper/api/StaffVisibilityService.java) | Shared visibility decision boundary |
-| [Paper integration manager](https://github.com/wsg138/EnthusiaStaff/blob/main/paper/src/main/java/net/enthusia/staff/paper/PaperIntegrationManager.java) | Provider lifecycle/shutdown ownership |
-| [Velocity configuration](https://github.com/wsg138/EnthusiaStaff/blob/main/velocity/src/main/java/net/enthusia/staff/velocity/VelocityConfiguration.java) | Proxy/network/Discord/site integration settings |
+| [`integration-contracts/`](https://github.com/wsg138/EnthusiaStaff/tree/main/integration-contracts) | Stable contracts for Enthusia-owned providers |
+| [`discord-platform-api/`](https://github.com/wsg138/EnthusiaStaff/tree/main/discord-platform-api) | Provider-neutral managed Discord role contract |
+| [`paper/.../integration/`](https://github.com/wsg138/EnthusiaStaff/tree/main/paper/src/main/java/net/enthusia/staff/paper/integration) | Bukkit-side provider adapters/discovery |
+| [`paper/.../client/`](https://github.com/wsg138/EnthusiaStaff/tree/main/paper/src/main/java/net/enthusia/staff/paper/client) | Floodgate/Geyser, ViaVersion and client evidence |
+| [`paper/.../economy/`](https://github.com/wsg138/EnthusiaStaff/tree/main/paper/src/main/java/net/enthusia/staff/paper/economy) | Currency moderation adapter |
+| [`staff-bot/`](https://github.com/wsg138/EnthusiaStaff/tree/main/staff-bot) | JDA/Discord runtime and Discord external effects |
+| [`velocity/`](https://github.com/wsg138/EnthusiaStaff/tree/main/velocity/src/main/java/net/enthusia/staff/velocity) | Network/webhook/website API boundaries |
+| [`components/enthusia-site/`](https://github.com/wsg138/EnthusiaStaff/tree/main/components/enthusia-site) | Public site + Pages Functions |
+| [`moderation-web/`](https://github.com/wsg138/EnthusiaStaff/tree/main/moderation-web) | Staging browser moderation workspace |
+
+## Discord integration boundaries
+
+### StaffBot
+
+StaffBot owns the privileged Discord Gateway/JDA session. Other Minecraft plugins should not open their own JDA connections for Enthusia-managed role or moderation behavior.
+
+StaffBot integrates with:
+
+- Discord application/guild hierarchy and rate limits;
+- MariaDB Discord moderation/linking/reconciliation state;
+- current Enthusia staff authority through the approved private authority boundary;
+- the private moderation-read service used by the staging web workspace.
+
+A Discord role or visible command is not sufficient authority. See [[Discord Moderation Platform]].
+
+### Managed-role contract
+
+`discord-platform-api` lets consumers express managed role claims without depending on JDA, Discord snowflake handling, or StaffBot persistence internals.
+
+Review the distinction carefully:
+
+- **contract merged** does not mean every provider/consumer migration is complete;
+- consumers should not fall back to DiscordSRV/JDA implementation details silently;
+- role ownership/reconciliation must not remove unrelated externally managed roles;
+- desired membership must account for the approved multi-Minecraft-to-one-Discord linking semantics.
+
+Role-sync replacement/parity remains active development until its provider/consumer migration is merged and accepted.
+
+### Legacy webhook subsystem
+
+Velocity’s webhook outbox remains a separate one-way notification integration. It has at-least-once delivery/retry/privacy semantics and does not own interactive moderation.
+
+See [[Discord Delivery]].
+
+## Website integration boundaries
+
+### Velocity website API
+
+Velocity owns the authoritative EnthusiaStaff-side API. Public routes use sanitized projections; authenticated routes mediate punishment-code/appeal/reviewer workflows.
+
+A site/browser request must not directly mutate MariaDB or bypass central sanction authority.
+
+### Public site
+
+`components/enthusia-site/` is the synchronized static site/Cloudflare Pages Functions component. Keep privileged credentials server-side and preserve aggregate/standalone parity rules.
+
+### Moderation web
+
+`moderation-web/` is a staging-only Worker/static-assets staff workspace. It uses signed one-time launches, secure sessions/CSRF and independently signed/replay-protected StaffBot reads.
+
+It is intentionally not a punishment writer or production authority. See [[Website and Web API]].
 
 ## Enthusia-owned providers
 
 ### EnthusiaCurrency
 
-Used for exact balance snapshots/plans, idempotent removal, verification, conflict handling and restoration. EnthusiaStaff owns moderation intent/journaling; Currency remains balance authority. Raw provider balance SQL is outside this contract.
-
-Current state: contract/gateway/journal foundations exist; complete provider-side moderation behavior and representative cross-plugin recovery staging remain incomplete.
+Currency remains balance authority. EnthusiaStaff owns moderation intent/journaling and should use supported plan/apply/verify/restore behavior rather than provider SQL.
 
 ### EnthusiaCommend
 
-Used for a persistent moderation blacklist that must be enforced at every provider write entry point rather than one GUI surface.
-
-Current state: required boundary is defined; complete provider implementation and cross-surface staging remain incomplete.
+Reputation restrictions must be enforced through the provider’s supported contract at every relevant write surface, not just one GUI.
 
 ### EnthusiaAutoClicker
 
-Used for versioned bounded client handshake/evidence. Unknown, missing, unsupported or stale evidence is context—not automatic proof of cheating.
-
-Current state: contract/consumer foundations exist; provider/runtime integration remains incomplete.
+Versioned bounded client evidence is context, not automatic proof of cheating. Missing/unsupported/stale evidence should remain unknown/unavailable rather than guessed.
 
 ### Enthusia-RoseChat
 
-Intended capabilities include staff/global channels, current/set channel, public/private classification, pre-broadcast moderation, private-message report capture, vanish-aware recipients, mute enforcement, frozen staff-only chat, staff-chat toggle and reload-safe registration.
-
-The supported provider API required for all of those paths is still incomplete/unavailable. Do not invent a provider contract from assumptions, reflection or command behavior. Dependent PM-evidence/strict automod/chat-visibility work remains limited until a supported contract exists.
+Chat/staff-channel/mute/freeze/PM-evidence/visibility/automod integration must use supported RoseChat APIs. Do not invent behavior from reflection, private internals or command dispatch. Any still-missing provider path should degrade explicitly.
 
 ### EnthusiaMarket
 
-Used for supported stall moderation, review, ownership/restriction changes and restoration while preserving the market plugin's own transaction/rent semantics.
+Market moderation must preserve the provider’s ownership/rent/transaction semantics and use supported review/restriction/restoration contracts.
 
-Current state: contract boundaries exist; complete provider implementation and end-to-end staging remain incomplete.
+## Floodgate / Geyser
 
-## Floodgate and Geyser
+Platform identity is provider-evidence based:
 
-Platform identity uses supported provider evidence, not username shape.
+- UUID is authoritative;
+- supported verified Floodgate evidence may establish `JAVA` or `BEDROCK`;
+- missing/incompatible evidence remains `UNKNOWN`;
+- unverified Velocity observations cannot downgrade verified platform state;
+- `*` aliases are lookup compatibility, not platform proof.
 
-- UUID is authoritative.
-- A successful supported Floodgate observation may persist verified `BEDROCK` or `JAVA` platform evidence.
-- Geyser with missing/unavailable/incompatible Floodgate remains `UNKNOWN`; provider failure is not proof of Java.
-- Velocity presence is intentionally unverified for platform. It may update UUID/name/presence but cannot downgrade a verified platform record.
-- A username beginning with `*` is a supported lookup alias shape, not platform proof.
-- Verified Bedrock evidence can repair legacy Java/unknown rows and should not be overwritten by later duplicate/out-of-order unverified proxy observations.
-- Current and historical `*` aliases remain case-insensitively resolvable through the player directory.
+Representative Java/Bedrock/Geyser/Floodgate staging is still required for client/runtime claims.
 
-Representative Java/Bedrock/Geyser/Floodgate reconnect, server-switch, provider-failure, GUI/text-fallback and packet/visibility acceptance is still required before making staging claims.
+## ProtocolLib / ViaVersion / CombatLogX / Polar / Voice
 
-## ProtocolLib
+These integrations remain narrowly scoped:
 
-Used for narrowly scoped packet-level visibility behavior where Paper APIs alone are insufficient. Missing/incompatible ProtocolLib must not expose a state that the visibility contract considers unsafe.
+- ProtocolLib supports packet-level visibility behavior where necessary;
+- ViaVersion/ViaBackwards provide protocol/version context;
+- CombatLogX informs safe Staff Mode transitions;
+- Polar automation stays off unless a supported reliable event/API exists;
+- Simple Voice Chat failure must not corrupt text sanction state.
 
-Deep dive: [[Vanish Internals]].
-
-## ViaVersion and ViaBackwards
-
-Used for protocol/version context. Version information is evidence/context only and should degrade to unknown/unavailable when the supported provider is missing.
-
-## CombatLogX
-
-Used to prevent unsafe staff-mode transitions around combat and avoid staff-mode behavior silently bypassing combat policy. Provider absence or incompatible behavior should surface explicitly rather than be guessed.
-
-## Polar
-
-The project has targeted Polar `1.7.11-beta` for supported integration discovery. Automatic punishment must stay disabled unless the supported provider API exposes the required reliable violation-event contract. Private internals must not be decompiled, shaded or presented as a public API.
-
-## Simple Voice Chat
-
-Used for voice-mute and vanish-aware voice recipients. Voice integration failure must not corrupt text sanction state or cause a text moderation action to be reported as fully voice-enforced.
+Missing/incompatible providers should not silently widen behavior.
 
 ## Provider API safety
 
-For a destructive provider action:
+For a destructive external/provider action:
 
-- call a supported stable contract;
-- carry an idempotency/external operation identity;
-- record durable moderation intent before external effects where required;
-- validate/recheck authority at the appropriate service boundary;
-- verify the returned/external result;
-- distinguish unavailable, conflict, retryable, terminal and ambiguous outcomes;
-- quarantine/retain recovery evidence when the external result cannot be proved;
-- bound retries/timeouts;
-- never use raw provider SQL, reflection into private internals, or command dispatch as a transaction protocol.
+1. use a supported contract;
+2. carry idempotency/external operation identity where required;
+3. persist durable intent/recovery state before effects where required;
+4. reauthorize current actor/target state;
+5. apply the effect through the owning adapter;
+6. verify/reconcile the result;
+7. distinguish unavailable, conflict, retryable, terminal and ambiguous outcomes;
+8. bound retries/timeouts;
+9. preserve quarantine/recovery evidence when truth cannot be established.
+
+Never use raw provider SQL, reflection into private internals, or command dispatch as a transaction protocol.
 
 ## Packaging and classloaders
 
-Provider APIs should normally remain `compileOnly` or use explicit Enthusia-owned SPI/contracts. Runtime-JAR inspection can detect copied provider classes, but it does not prove live service discovery or classloader compatibility.
+Provider APIs should remain compile-only/service contracts where appropriate. Runtime-JAR scans detect accidental shading but do not prove live service discovery/classloader compatibility.
 
-Representative release staging should install supported providers together and test present/missing/incompatible/reload/restart cases.
+For `discord-platform-api`, the same rule applies in reverse: consumer plugins should not accidentally pull JDA or StaffBot implementation classes into their runtime.
 
-## Verification output
+## Verification
 
-`/estaff verify full` should distinguish states such as:
+`/estaff verify full` and runtime-specific health surfaces provide non-destructive observations. “Provider present” is not the same as “capability verified.” Resolve warnings through the corresponding staging test rather than invoking destructive provider behavior simply to prove discovery.
 
-- `PASS`
-- `WARNING`
-- `DISABLED`
-- `RESTART REQUIRED`
-- `CRITICAL`
-
-“Plugin present” is insufficient. Verification should identify whether the compatible API/service needed by the dependent capability is actually available. Verification must not perform destructive provider operations merely to prove discovery.
-
-## Current state
-
-Integration/provider work remains one of the largest release-readiness areas. Several useful adapters and contracts are merged, including the current verified Floodgate identity boundary, but multiple provider-side implementations and representative all-provider/classloader/runtime acceptance are still incomplete.
-
-See [[Integrations, Migration, and Release Readiness]] for the current qualitative status rather than transient package identifiers or exact completion percentages.
-
-## Related pages
+## See also
 
 - [[Integrations, Migration, and Release Readiness]]
+- [[Discord Moderation Platform]]
+- [[Staff Bot Runtime and Operations]]
+- [[Website and Web API]]
+- [[Discord Delivery]]
 - [[Core Platform and Infrastructure]]
 - [[Configuration]]
 - [[Commands and Permissions]]
-- [[Vanish Internals]]
 - [[Code Review Guide]]
 - [[Build and Testing]]

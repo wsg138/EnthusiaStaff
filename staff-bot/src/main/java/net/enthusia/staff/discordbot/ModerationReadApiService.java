@@ -10,6 +10,7 @@ final class ModerationReadApiService {
     private final ModerationReadRequestAuthorizer authorizer;
     private final ModerationReadSnapshotMapper snapshots;
     private final ModerationDiscordMessageReader messages;
+    private final ModerationActionApiService actions;
 
     ModerationReadApiService(long guildId, StaffModerationRuntime moderation, JDA jda) {
         if (guildId <= 0 || moderation == null || jda == null) {
@@ -19,6 +20,11 @@ final class ModerationReadApiService {
         this.authorizer = new ModerationReadRequestAuthorizer(guildId, moderation, jda);
         this.snapshots = new ModerationReadSnapshotMapper(jda, moderation.minecraftProfiles());
         this.messages = new ModerationDiscordMessageReader();
+        this.actions = new ModerationActionApiService(moderation, authorizer);
+    }
+
+    Object action(String operation, ModerationActionApiService.Request request) {
+        return actions.execute(operation, request);
     }
 
     ModerationReadApiModel.BootstrapResponse bootstrap(ModerationReadApiModel.ReadRequest request) {
@@ -42,10 +48,15 @@ final class ModerationReadApiService {
     ) {
         StaffModerationReadService.Snapshot snapshot = moderation.reads().snapshot(context.target().orElseThrow());
         List<ModerationReadApiModel.LinkedAccountDto> linkedAccounts = snapshots.linked(snapshot);
+        var discordHistory = moderation.discordHistory(context.guild().getIdLong(), context.readTarget().userId().orElseThrow());
+        var history = java.util.stream.Stream.concat(snapshots.history(snapshot).stream(),
+                discordHistory.records().stream().map(ModerationReadSnapshotMapper::discordHistory))
+                .sorted(java.util.Comparator.comparing(ModerationReadApiModel.HistoryDto::occurredAt).reversed())
+                .limit(50).toList();
         return new ModerationReadApiModel.BootstrapResponse(
                 snapshots.actor(context), context.readTarget().key(), true,
                 Optional.of(snapshots.identity(context, snapshot, linkedAccounts)), linkedAccounts,
-                snapshots.sanctions(snapshot), snapshots.history(snapshot), snapshot.totalHistoryCount(),
+                snapshots.sanctions(snapshot), history, Math.addExact(snapshot.totalHistoryCount(), discordHistory.total()),
                 snapshots.relevantHistoryCounts(snapshot), snapshots.cases(snapshot), snapshots.notes(snapshot),
                 channels, messages.initial(context, channels), centeredMessage(context));
     }

@@ -98,4 +98,4 @@ Compare stable case/report/request/sanction identifiers. A duplicate can occur o
 
 ## Validation expectations
 
-For an exact candidate, validation includes Java 21 warnings-as-errors, the full unit/Testcontainers suite, route/redaction/redirect tests, MariaDB concurrent-claim and restart lease recovery, review/static checks, and the canonical Pi staging bridge. No validation run may contact a production Discord route.
+For an exact candidate, validation includes Java 25 warnings-as-errors, the full unit/Testcontainers suite, route/redaction/redirect tests, MariaDB concurrent-claim and restart lease recovery, review/static checks, and the canonical Pi staging bridge. No validation run may contact a production Discord route.

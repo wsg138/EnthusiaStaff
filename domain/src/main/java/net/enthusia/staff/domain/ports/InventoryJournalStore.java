@@ -5,6 +5,8 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import net.enthusia.staff.domain.inventory.InventoryCursorJournal;
+import net.enthusia.staff.domain.inventory.InventoryCursorPhase;
 import net.enthusia.staff.domain.inventory.InventoryFinalizeResult;
 import net.enthusia.staff.domain.inventory.ConfiscatedAssetReservation;
 import net.enthusia.staff.domain.inventory.InventoryConfiscationCommitRequest;
@@ -89,12 +91,44 @@ public interface InventoryJournalStore {
 
     List<InventoryPatch> pending(UUID playerId, String scopeId, String owningServerId, int limit);
 
+    default List<InventoryCursorJournal> pendingCursorTransfersByActor(
+            UUID actorId,
+            String owningServerId,
+            int limit
+    ) {
+        throw new UnsupportedOperationException("cursor escrow lookup is not supported by this store");
+    }
+
+    default Optional<InventoryCursorJournal> cursorTransfer(UUID operationId) {
+        throw new UnsupportedOperationException("cursor escrow lookup is not supported by this store");
+    }
+
     Optional<InventoryPatch> claimForApply(
             UUID patchId,
             UUID operationId,
             Duration leaseDuration,
             Instant now
     );
+
+    default boolean advanceCursorPhase(
+            UUID patchId,
+            UUID operationId,
+            long fencingToken,
+            InventoryCursorPhase expected,
+            InventoryCursorPhase next,
+            Instant now
+    ) {
+        throw new UnsupportedOperationException("cursor escrow transitions are not supported by this store");
+    }
+
+    default boolean resolveCursorRollback(
+            UUID patchId,
+            UUID operationId,
+            long fencingToken,
+            Instant now
+    ) {
+        throw new UnsupportedOperationException("cursor rollback resolution is not supported by this store");
+    }
 
     InventoryFinalizeResult finalizeApplied(
             UUID patchId,

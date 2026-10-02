@@ -123,12 +123,21 @@ final class FreezeRuntimeStateTest {
     }
 
     @Test
-    void quitRetiresPendingVerificationWithoutPersistingDisconnect() {
+    void quitRetiresPendingVerificationForOfflinePersistence() {
         FreezeRuntimeState state = new FreezeRuntimeState();
         long token = state.beginVerification(PLAYER_ID);
 
-        assertFalse(state.retire(PLAYER_ID));
+        assertTrue(state.retire(PLAYER_ID));
         assertFalse(state.resolveVerification(PLAYER_ID, token, true));
+        assertFalse(state.isRestricted(PLAYER_ID));
+    }
+
+    @Test
+    void releasedSessionDoesNotRequestOfflinePersistenceOnQuit() {
+        FreezeRuntimeState state = new FreezeRuntimeState();
+        state.release(PLAYER_ID);
+
+        assertFalse(state.retire(PLAYER_ID));
         assertFalse(state.isRestricted(PLAYER_ID));
     }
 

@@ -23,6 +23,8 @@ one `hidePlayer` call covers every plugin, packet, command, and visual effect.
 paper/src/main/java/net/enthusia/staff/paper/visibility/VanishManager.java
 paper/src/main/java/net/enthusia/staff/paper/visibility/VanishAudienceCoordinator.java
 paper/src/main/java/net/enthusia/staff/paper/visibility/VanishRankReconciliationPolicy.java
+paper/src/main/java/net/enthusia/staff/paper/visibility/VanishNoclipController.java
+paper/src/main/java/net/enthusia/staff/paper/visibility/Paper26VanishClientGameModeAdapter.java
 paper/src/main/java/net/enthusia/staff/paper/visibility/DefaultStaffVisibilityService.java
 paper/src/main/java/net/enthusia/staff/paper/visibility/ProtocolLibSpectatorTabPacketAdapter.java
 paper/src/main/java/net/enthusia/staff/paper/api/StaffVisibilityService.java
@@ -163,9 +165,11 @@ Registered at `EventPriority.MONITOR` with cancelled changes ignored.
 - Refreshes the changed viewer when rank authority changed.
 - Refreshes the changed player as a target.
 
-The current manager does not directly listen for chat, command completion,
-teleport, entity-tracking, sound, particle, inventory, damage, pickup,
-advancement, scoreboard, or voice events.
+The manager also reconciles true block no-clip after teleport and accepted game-mode
+changes. While full vanish is active, suffocation damage is cancelled narrowly so
+phasing through terrain does not become a damage source. It does not directly
+listen for chat, command completion, entity-tracking, sound, particle, inventory,
+pickup, advancement, scoreboard, or voice events.
 
 ## Visibility decisions
 
@@ -188,9 +192,9 @@ A non-staff viewer has no viewer entry and therefore cannot see a vanished targe
 
 | Viewer | Vanished ranks visible to that viewer |
 | --- | --- |
-| Helper | Helper |
+| Helper | Helper, Mod, Developer |
 | Mod | Helper, Mod, Developer |
-| Developer | Helper, Mod, Developer |
+| Developer | Helper, Mod, Developer, Admin |
 | Admin | Helper, Mod, Developer, Admin |
 | Founder | Helper, Mod, Developer, Admin, Founder |
 
@@ -235,14 +239,19 @@ fail-closed on owning entity threads. Without a healthy adapter, affected
 spectator staff remain unlisted.
 
 Do not extend that claim to entity-destroy, spawn-player, metadata, equipment, or
-other packets. Direct packet handling is limited to player-info and still requires
-live compatibility testing on supported Paper and ProtocolLib versions.
+other visibility packets. Full vanish additionally uses a self-only game-mode
+presentation packet so a Creative/Survival/Adventure staff client receives
+spectator collision semantics without changing the authoritative Bukkit game mode
+or Staff Mode inventory. The adapter is pinned to exact Paper 26.2 build 129 and
+fails closed when its Mojang-mapped packet seam is unavailable. Server-side block
+collision uses Paper's supported Entity#setNoPhysics API rather than an NMS field.
+ProtocolLib remains limited to player-info masking.
 
 ## What is not currently intercepted
 
 The current vanish manager does not itself guarantee hiding from:
 
-- custom tab-list plugins or cached player-count displays;
+- custom tab-list plugins other than the optional Velocitab integration, or cached player-count displays;
 - `/seen`, `/list`, message, teleport, pay, or other command completions;
 - RoseChat recipient selection or private-message lookup;
 - voice-chat recipient discovery;
@@ -296,8 +305,12 @@ provider integrations that trigger additional scans.
   reconciliation state where applicable.
 - Failed durable session verification leaves current visibility unchanged and
   retries after backoff.
-- A persisted vanish record can be restored after restart, but complete visual and
-  integration coverage still requires staging.
+- A persisted vanish record reapplies no-clip on join; Creative-mode full vanish
+  is refused when the exact client-presentation adapter is unavailable.
+- A runtime no-clip application failure removes full vanish from live visibility so
+  durable reconciliation can close the persisted state instead of reporting a
+  false successful vanish.
+- Complete visual and integration coverage still requires staging.
 
 ## Review and staging checklist
 
@@ -325,3 +338,27 @@ Reviewers should verify:
 
 Related staff instructions are in
 [[Staff Mode, Vanish, and Freeze|Staff-Mode-Vanish-and-Freeze]].
+
+## Velocitab integration
+
+Velocity optionally connects to Velocitab's public vanish and custom-name APIs.
+It reads durable vanish and active staff-session state on a worker once per
+second; packet visibility callbacks use only the verified immutable cache and
+current permissions. Staff-mode and vanish add `[STAFF]` and `[V]` markers without
+changing LuckPerms rank prefixes or permissions. Existing custom names are
+preserved and restored only while the integration still owns the value.
+
+The proxy uses the default rank matrix above. Keep the backend
+`visibility.matrix` configuration aligned with it. Helper/Mod/Developer see each
+other, Developer additionally sees Admin, Admin sees Admin and lower ranks, and
+Founder sees every staff rank. Ordinary players see no vanished staff. Existing
+Velocitab server-group boundaries still apply.
+
+If storage cannot verify presence for five seconds, proxy tab visibility fails
+closed until verification recovers. Other players' entries may temporarily
+disappear during that outage. Recovery refreshes both visibility and names.
+The Paper packet hook relists authorized vanished staff even when spectator
+entries were originally unlisted; unrelated spectator tab choices remain intact.
+
+Restart Paper and Velocity to apply this integration and visibility configuration.
+Use the network restart queue and its player warnings for production rollout.

@@ -1,6 +1,7 @@
 package net.enthusia.staff.paper.tester;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import org.junit.jupiter.api.Test;
@@ -35,6 +36,39 @@ class FakeBasePlacementPlannerTest {
     @Test
     void rejectsUnsafeInteriorFloor() {
         assertTrue(planner.find(8, 64, 8, new FakeBlocks(-64, 320, true, true, false), template).isEmpty());
+    }
+
+    @Test
+    void rejectsBlockedInteriorLandingCell() {
+        FakeBasePlacementPlanner.Anchor anchor = new FakeBasePlacementPlanner.Anchor(8, 64, 8);
+        FakeBasePlacementPlanner.BlockView blocks = new FakeBasePlacementPlanner.BlockView() {
+            @Override
+            public int minHeight() {
+                return -64;
+            }
+
+            @Override
+            public int maxHeight() {
+                return 320;
+            }
+
+            @Override
+            public boolean isChunkLoaded(int chunkX, int chunkZ) {
+                return true;
+            }
+
+            @Override
+            public boolean isAir(int x, int y, int z) {
+                return x != anchor.x() || y != anchor.y() || z != anchor.z();
+            }
+
+            @Override
+            public boolean isSafeFloor(int x, int y, int z) {
+                return true;
+            }
+        };
+
+        assertFalse(planner.safe(anchor, blocks, template));
     }
 
     @Test

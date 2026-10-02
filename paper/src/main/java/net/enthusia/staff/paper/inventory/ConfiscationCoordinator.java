@@ -1,5 +1,6 @@
 package net.enthusia.staff.paper.inventory;
 
+import net.enthusia.staff.paper.presentation.StaffMessageStyle;
 import io.papermc.paper.threadedregions.scheduler.ScheduledTask;
 import java.time.Clock;
 import java.time.Duration;
@@ -186,15 +187,15 @@ public final class ConfiscationCoordinator implements Listener, AutoCloseable {
             String offlineMessage
     ) {
         if (!authorize(viewer, action)) {
-            viewer.sendMessage(Component.text(unauthorizedMessage));
+            viewer.sendMessage(StaffMessageStyle.style(Component.text(unauthorizedMessage)));
             return false;
         }
         if (mode.get() != OperationalMode.ACTIVE) {
-            viewer.sendMessage(Component.text(inactiveMessage));
+            viewer.sendMessage(StaffMessageStyle.style(Component.text(inactiveMessage)));
             return false;
         }
         if (!target.isOnline()) {
-            viewer.sendMessage(Component.text(offlineMessage));
+            viewer.sendMessage(StaffMessageStyle.style(Component.text(offlineMessage)));
             return false;
         }
         return true;
@@ -203,12 +204,12 @@ public final class ConfiscationCoordinator implements Listener, AutoCloseable {
     private UUID reserveOperation(Player viewer, Player target, String busyMessage) {
         UUID operationId = UUID.randomUUID();
         if (viewerOperations.putIfAbsent(viewer.getUniqueId(), operationId) != null) {
-            viewer.sendMessage(Component.text(busyMessage));
+            viewer.sendMessage(StaffMessageStyle.style(Component.text(busyMessage)));
             return null;
         }
         if (targetOperations.putIfAbsent(target.getUniqueId(), operationId) != null) {
             viewerOperations.remove(viewer.getUniqueId(), operationId);
-            viewer.sendMessage(Component.text(busyMessage));
+            viewer.sendMessage(StaffMessageStyle.style(Component.text(busyMessage)));
             return null;
         }
         return operationId;
@@ -325,9 +326,9 @@ public final class ConfiscationCoordinator implements Listener, AutoCloseable {
             return;
         }
         if (session.coveredByAncestor(selected.path())) {
-            viewer.sendMessage(Component.text(
+            viewer.sendMessage(StaffMessageStyle.style(Component.text(
                     "Deselect the selected parent container before changing a child."
-            ));
+            )));
             return;
         }
         if (NestedInventorySelection.isContainer(selected.item()) && !shiftClick) {
@@ -618,7 +619,8 @@ public final class ConfiscationCoordinator implements Listener, AutoCloseable {
                 replacement.checksum(),
                 replacement.bytes(),
                 changedRootSlots,
-                false
+                false,
+                Optional.empty()
         );
     }
 
@@ -921,7 +923,7 @@ public final class ConfiscationCoordinator implements Listener, AutoCloseable {
             plugin.getLogger().log(Level.SEVERE, "Confiscation before snapshot failed", exception);
             releaseLocalLocks(target.getUniqueId(), operationId);
             clearReservation(viewer.getUniqueId(), target.getUniqueId(), operationId);
-            viewer.sendMessage(Component.text("Confiscation snapshot failed; no assets changed."));
+            viewer.sendMessage(StaffMessageStyle.style(Component.text("Confiscation snapshot failed; no assets changed.")));
             return;
         }
         queueDurableSelection(viewer, target, caseId, operationId, before, encoded);
@@ -930,7 +932,7 @@ public final class ConfiscationCoordinator implements Listener, AutoCloseable {
     private boolean acquireSelectionLocks(Player viewer, Player target, UUID operationId) {
         if (!inventories.acquireExternalAssetLock(target.getUniqueId())) {
             clearReservation(viewer.getUniqueId(), target.getUniqueId(), operationId);
-            viewer.sendMessage(Component.text("Another inventory operation owns this target."));
+            viewer.sendMessage(StaffMessageStyle.style(Component.text("Another inventory operation owns this target.")));
             return false;
         }
         if (currency.acquireMovementLock(target.getUniqueId(), operationId, LEASE_DURATION)) {
@@ -938,7 +940,7 @@ public final class ConfiscationCoordinator implements Listener, AutoCloseable {
         }
         inventories.releaseExternalAssetLock(target.getUniqueId());
         clearReservation(viewer.getUniqueId(), target.getUniqueId(), operationId);
-        viewer.sendMessage(Component.text("Currency movement lock could not be acquired."));
+        viewer.sendMessage(StaffMessageStyle.style(Component.text("Currency movement lock could not be acquired.")));
         return false;
     }
 
@@ -965,9 +967,9 @@ public final class ConfiscationCoordinator implements Listener, AutoCloseable {
         if (!submit(() -> beginDurableSelection(viewer, target, before, request))) {
             releaseLocalLocks(target.getUniqueId(), operationId);
             clearReservation(viewer.getUniqueId(), target.getUniqueId(), operationId);
-            viewer.sendMessage(Component.text(
+            viewer.sendMessage(StaffMessageStyle.style(Component.text(
                     "Confiscation queue is full; no durable operation was created."
-            ));
+            )));
         }
     }
 
@@ -1061,7 +1063,7 @@ public final class ConfiscationCoordinator implements Listener, AutoCloseable {
                 entries = viewEntries(session, containerPath);
             } catch (RuntimeException exception) {
                 plugin.getLogger().log(Level.WARNING, "Confiscation container view failed", exception);
-                session.viewer().sendMessage(Component.text("That nested container is no longer readable."));
+                session.viewer().sendMessage(StaffMessageStyle.style(Component.text("That nested container is no longer readable.")));
                 return;
             }
             int maximumPage = entries.isEmpty() ? 0 : (entries.size() - 1) / CONTENT_SLOTS;
@@ -1313,7 +1315,7 @@ public final class ConfiscationCoordinator implements Listener, AutoCloseable {
             return;
         }
         if (session.selectionCount() == 0) {
-            session.viewer().sendMessage(Component.text("Select at least one item or container."));
+            session.viewer().sendMessage(StaffMessageStyle.style(Component.text("Select at least one item or container.")));
             return;
         }
         if (!session.beginPreparing()) {
@@ -1822,7 +1824,7 @@ public final class ConfiscationCoordinator implements Listener, AutoCloseable {
 
     private void message(Player player, String body) {
         if (player != null) {
-            onEntity(player, () -> player.sendMessage(Component.text(body)), () -> {
+            onEntity(player, () -> player.sendMessage(StaffMessageStyle.style(Component.text(body))), () -> {
             });
         }
     }
@@ -1831,7 +1833,7 @@ public final class ConfiscationCoordinator implements Listener, AutoCloseable {
         plugin.getServer().getGlobalRegionScheduler().execute(plugin, () ->
                 plugin.getServer().getOnlinePlayers().stream()
                         .filter(player -> player.hasPermission("enthusiastaff.alerts"))
-                        .forEach(player -> player.sendMessage(Component.text(body))));
+                        .forEach(player -> player.sendMessage(StaffMessageStyle.style(Component.text(body)))));
     }
 
     private boolean authorize(Player player, ModerationAction action) {

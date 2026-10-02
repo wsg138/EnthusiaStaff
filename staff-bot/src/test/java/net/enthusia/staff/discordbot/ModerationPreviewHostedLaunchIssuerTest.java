@@ -22,6 +22,18 @@ class ModerationPreviewHostedLaunchIssuerTest {
     private static final String TOKEN = "staging-test-discord-token-value";
 
     @Test
+    void productionTicketUsesSeparateEnvironmentClaim() {
+        var issuer = new ModerationPreviewHostedLaunchIssuer(
+                URI.create("https://staff.enthusia.info"), "production-test-token", "production");
+        URI uri = issuer.issueChannelLaunchUri(
+                123456789012345678L, 1410303324745371709L, 1541286004298752091L);
+        String encoded = uri.getRawQuery().substring(2).split("\\.")[0];
+        String body = new String(Base64.getUrlDecoder().decode(encoded), StandardCharsets.UTF_8);
+        assertTrue(body.startsWith("v1|production|"));
+        assertEquals("staff.enthusia.info", uri.getHost());
+    }
+
+    @Test
     void hostedChannelTicketHasNoSyntheticPlayerTarget() throws Exception {
         ModerationPreviewHostedLaunchIssuer issuer = issuer();
 

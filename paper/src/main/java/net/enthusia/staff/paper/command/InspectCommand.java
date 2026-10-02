@@ -1,5 +1,6 @@
 package net.enthusia.staff.paper.command;
 
+import net.enthusia.staff.paper.presentation.StaffMessageStyle;
 import java.time.Clock;
 import java.util.ArrayList;
 import java.util.List;
@@ -104,7 +105,7 @@ public final class InspectCommand implements CommandExecutor, TabCompleter {
             return true;
         }
         if (!(sender instanceof Player viewer)) {
-            sender.sendMessage("The player inspector requires an in-game staff viewer.");
+            sender.sendMessage(StaffMessageStyle.style("The player inspector requires an in-game staff viewer."));
             return true;
         }
         if (arguments.length == IDENTITY_ARGUMENT_COUNT) {
@@ -145,7 +146,7 @@ public final class InspectCommand implements CommandExecutor, TabCompleter {
         }
         if (arguments.length == 5 && arguments[0].equalsIgnoreCase(ECONOMY_SUBCOMMAND)) {
             if (!canApplyCaseConfiscation(viewer)) {
-                viewer.sendMessage(Component.text("You do not have case confiscation authority."));
+                viewer.sendMessage(StaffMessageStyle.style(Component.text("You do not have case confiscation authority.")));
                 return true;
             }
             confiscateEconomy(viewer, arguments);
@@ -153,7 +154,7 @@ public final class InspectCommand implements CommandExecutor, TabCompleter {
         }
         if (arguments.length == 3 && arguments[0].equalsIgnoreCase("items")) {
             if (!canApplyCaseConfiscation(viewer)) {
-                viewer.sendMessage(Component.text("You do not have case confiscation authority."));
+                viewer.sendMessage(StaffMessageStyle.style(Component.text("You do not have case confiscation authority.")));
                 return true;
             }
             confiscateItems(viewer, arguments[1], arguments[2]);
@@ -165,7 +166,7 @@ public final class InspectCommand implements CommandExecutor, TabCompleter {
             usage += " | /" + label + " items <player> <case-id> | /" + label
                     + " economy <player> <case-id> <all|amount> CONFIRM";
         }
-        viewer.sendMessage(Component.text(usage));
+        viewer.sendMessage(StaffMessageStyle.style(Component.text(usage)));
         return true;
     }
 
@@ -308,11 +309,11 @@ public final class InspectCommand implements CommandExecutor, TabCompleter {
 
     private void confiscateEconomy(Player viewer, String[] arguments) {
         if (!viewer.hasPermission(ECONOMY_CONFISCATION_PERMISSION)) {
-            viewer.sendMessage(Component.text("You do not have economy confiscation permission."));
+            viewer.sendMessage(StaffMessageStyle.style(Component.text("You do not have economy confiscation permission.")));
             return;
         }
         if (!arguments[4].equals("CONFIRM")) {
-            viewer.sendMessage(Component.text("Economy confiscation requires the exact final token CONFIRM."));
+            viewer.sendMessage(StaffMessageStyle.style(Component.text("Economy confiscation requires the exact final token CONFIRM.")));
             return;
         }
         CaseId caseId;
@@ -323,7 +324,7 @@ public final class InspectCommand implements CommandExecutor, TabCompleter {
                     ? OptionalLong.empty()
                     : OptionalLong.of(parsePositiveAmount(arguments[3]));
         } catch (IllegalArgumentException exception) {
-            viewer.sendMessage(Component.text("Invalid economy confiscation input: " + exception.getMessage()));
+            viewer.sendMessage(StaffMessageStyle.style(Component.text("Invalid economy confiscation input: " + exception.getMessage())));
             return;
         }
         submitOrMessage(viewer, () -> resolveEconomyConfiscation(
@@ -336,14 +337,14 @@ public final class InspectCommand implements CommandExecutor, TabCompleter {
 
     private void confiscateItems(Player viewer, String targetInput, String caseInput) {
         if (!viewer.hasPermission("enthusiastaff.confiscate.items")) {
-            viewer.sendMessage(Component.text("You do not have item confiscation permission."));
+            viewer.sendMessage(StaffMessageStyle.style(Component.text("You do not have item confiscation permission.")));
             return;
         }
         CaseId caseId;
         try {
             caseId = new CaseId(caseInput);
         } catch (IllegalArgumentException exception) {
-            viewer.sendMessage(Component.text("Invalid case ID: " + exception.getMessage()));
+            viewer.sendMessage(StaffMessageStyle.style(Component.text("Invalid case ID: " + exception.getMessage())));
             return;
         }
         submitOrMessage(viewer, () -> resolveItemConfiscation(viewer, targetInput, caseId));
@@ -394,9 +395,9 @@ public final class InspectCommand implements CommandExecutor, TabCompleter {
             onViewer(viewer, () -> {
                 Player onlineTarget = plugin.getServer().getPlayer(target.playerId());
                 if (onlineTarget == null) {
-                    viewer.sendMessage(Component.text(
+                    viewer.sendMessage(StaffMessageStyle.style(Component.text(
                             "Item confiscation selection requires the target on this backend."
-                    ));
+                    )));
                     return;
                 }
                 coordinator.open(viewer, onlineTarget, caseId);
@@ -450,9 +451,9 @@ public final class InspectCommand implements CommandExecutor, TabCompleter {
             onViewer(viewer, () -> {
                 Player onlineTarget = plugin.getServer().getPlayer(target.playerId());
                 if (onlineTarget == null) {
-                    viewer.sendMessage(Component.text(
+                    viewer.sendMessage(StaffMessageStyle.style(Component.text(
                             "Economy confiscation requires the target on this backend."
-                    ));
+                    )));
                     return;
                 }
                 coordinator.confiscate(viewer, onlineTarget, caseId.value(), amount);
@@ -554,7 +555,7 @@ public final class InspectCommand implements CommandExecutor, TabCompleter {
         try {
             workers.execute(operation);
         } catch (RejectedExecutionException exception) {
-            viewer.sendMessage(Component.text("The moderation work queue is full; nothing changed."));
+            viewer.sendMessage(StaffMessageStyle.style(Component.text("The moderation work queue is full; nothing changed.")));
         }
     }
 
@@ -563,6 +564,6 @@ public final class InspectCommand implements CommandExecutor, TabCompleter {
     }
 
     private void message(Player viewer, String body) {
-        onViewer(viewer, () -> viewer.sendMessage(Component.text(body)));
+        onViewer(viewer, () -> viewer.sendMessage(StaffMessageStyle.style(Component.text(body))));
     }
 }

@@ -1,5 +1,6 @@
 package net.enthusia.staff.paper.automod;
 
+import net.enthusia.staff.paper.presentation.StaffMessageStyle;
 import io.papermc.paper.event.player.AsyncChatEvent;
 import java.time.Clock;
 import java.time.Duration;
@@ -127,11 +128,11 @@ public final class AutomodListener implements Listener {
         plugin.getServer().getGlobalRegionScheduler().execute(plugin, () ->
                 plugin.getServer().getOnlinePlayers().stream()
                         .filter(player -> player.hasPermission("enthusiastaff.alerts"))
-                        .forEach(player -> player.sendMessage(Component.text(message))));
+                        .forEach(player -> player.sendMessage(StaffMessageStyle.style(Component.text(message)))));
     }
 
     private void notify(CommandSender sender, String message) {
-        plugin.getServer().getGlobalRegionScheduler().execute(plugin, () -> sender.sendMessage(Component.text(message)));
+        plugin.getServer().getGlobalRegionScheduler().execute(plugin, () -> sender.sendMessage(StaffMessageStyle.style(Component.text(message))));
     }
 
     private record Detection(int fingerprint, Instant detectedAt) {

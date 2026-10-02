@@ -1,115 +1,148 @@
 # Remaining Development Map
 
-Use this page to understand **what kinds of product work remain and which authoritative source answers the next question**. It is intentionally not a branch, package, or worker dashboard.
+Use this page to understand **what product work remains** without turning the Wiki into a package/worker dashboard.
 
 ## Quick answer
 
-EnthusiaStaff has substantial merged foundations, but production authority is still gated by unfinished product areas and representative validation.
+EnthusiaStaff now has substantial merged Minecraft, Discord, linking, website/API and staging-web implementation. The remaining work is increasingly about **finishing migrations/integrations and proving the complete system**, not building the original Discord runtime from scratch.
 
-The durable release path remains:
+The broad release path remains:
 
 1. finish correctness/safety gaps in merged product areas;
-2. complete required provider and external-component contracts;
-3. run representative distributed Java/Bedrock/provider validation;
-4. run destructive/load/process-recovery acceptance;
-5. complete private LiteBans migration/shadow evidence and owner cutover acceptance;
-6. perform the final release/no-fix audit on one pinned candidate.
+2. complete outstanding provider/DiscordSRV replacement work;
+3. finish active Discord evidence/cross-platform/console/role-sync work;
+4. finish the expanded website appeal lifecycle that is still unmerged;
+5. run representative distributed Java/Bedrock/provider/Discord/web validation;
+6. run destructive/load/process-recovery acceptance;
+7. complete LiteBans and Discord-specific migration/cutover evidence;
+8. perform final release/no-fix audit on one pinned candidate.
 
-The Discord expansion is no longer specification-only: merged `main` now includes moderation-subject/scope contracts, V19 persistence foundations and central Discord-origin authorization policy. The account-linking runtime, interactive staff bot, Discord enforcement/reconciliation, AutoMod, role sync, public bot and final Discord migration/cutover remain separate product work. See [[Discord Moderation Platform]].
-
-Use [[Implementation Status]] for the readable merged-main picture. Use the [requirements matrix](https://github.com/wsg138/EnthusiaStaff/blob/main/reports/REQUIREMENTS-MATRIX.md) plus current legitimate review/runtime evidence for requirement-level proof.
+Use [[Implementation Status]] for the merged-main picture. Active PRs are development context, not current behavior.
 
 ## What remains by product area
 
 | Area | Main remaining themes | Start here |
 | --- | --- | --- |
-| Core/runtime | full configuration/reload, lifecycle recovery, distributed topology, provider/classloader and Folia evidence | [[Core Platform and Infrastructure]] |
-| Moderation | remaining escalation/provider/report-notification details and representative staff/runtime acceptance | [[Moderation, Punishments, and Reports]] |
-| Discord moderation | account-link runtime/migration, staff-bot runtime, scoped Discord effects/reconciliation, cross-platform UX, evidence capture, AutoMod, role sync, public bot and Discord cutover | [[Discord Moderation Platform]] |
+| Core/runtime | complete configuration/reload/lifecycle acceptance, full topology/provider/classloader/Folia evidence | [[Core Platform and Infrastructure]] |
+| Moderation | remaining provider/report/evidence details and representative staff/runtime acceptance | [[Moderation, Punishments, and Reports]] |
+| Discord/StaffBot | console replacement, role-sync parity/provider migration, expanded evidence/cases/alerts, cross-platform moderation, final production authority/cutover | [[Discord Moderation Platform]] |
+| Website/API | expanded appeal lifecycle currently in development plus production deployment/security/operations acceptance | [[Website and Web API]] |
 | Player-state tools | inventory/offline/recovery safety, freeze coverage, vanish integrations, alts and representative Cheat Tester/runtime acceptance | [[Staff Tools, Investigations, and Player-State Safety]] |
-| Integrations/release | provider implementations, private site/runtime acceptance, LiteBans shadow/cutover, Java/Bedrock/Folia/load/process-kill evidence | [[Integrations, Migration, and Release Readiness]] |
+| Integrations/release | provider implementations, LiteBans shadow/cutover, Java/Bedrock/Folia/load/process-kill and complete release evidence | [[Integrations, Migration, and Release Readiness]] |
 
-These rows are product categories, not work assignments.
+These are product categories, not work assignments.
 
-## Where should I go next?
+## Discord: merged versus remaining
 
-- **Understand a feature before changing it:** [[Developer Guide Index]] → feature hub → [[Developer Code Guide]].
-- **Review a change:** [[Code Review Guide]].
-- **Understand the current Discord boundary:** [[Discord Moderation Platform]].
-- **Find what proof remains:** [[Build and Testing]] plus the requirements/evidence sources.
-- **Plan release/cutover work:** [[Integrations, Migration, and Release Readiness]], [[LiteBans Migration]], and [[Shadow Mode and Cutover]].
-- **Work under a separately assigned orchestration/package contract:** use that contract and live GitHub directly; do not infer its state from this Wiki.
+### Merged now
+
+Current `main` already includes:
+
+- standalone Java 25/JDA StaffBot runtime;
+- Discord moderation/read commands and signed interaction flow;
+- linked-staff actor resolution and central authorization;
+- Discord punishment execution/reconciliation for warn/mute/kick/ban/restriction scopes;
+- Discord/Minecraft account-linking runtime with V20 persistence and `/link`/`/unlink` paths;
+- DiscordSRV link import/mirroring transition support;
+- StaffBot health/deployment/recovery support;
+- provider-neutral `discord-platform-api` managed-role contracts;
+- staging browser moderation workspace and private StaffBot read bridge.
+
+Do not list those as future foundations anymore.
+
+### Still separate/in development
+
+Current active work includes, but is not limited to:
+
+- authenticated Discord-to-Minecraft command bridge replacing DiscordSRV console;
+- expanded Discord evidence/case/note/linked-alt/evasion alert workflows;
+- broader cross-platform Discord/Minecraft moderation integration;
+- managed-role provider/consumer migrations and DiscordSRV role-sync parity;
+- final migration/cutover/production-authority acceptance.
+
+See [[Discord Moderation Platform]].
+
+## Website/web: merged versus remaining
+
+Merged `main` includes:
+
+- synchronized `components/enthusia-site/` public site component;
+- Velocity public punishment/search/case API projections;
+- punishment-code claim/revalidation;
+- appeal eligibility/submission/reviewer list/decision/accept paths;
+- V17 appeal workflow persistence;
+- staging Cloudflare moderation web workspace;
+- signed one-time launches, secure browser sessions and private StaffBot read API.
+
+Active draft work expands the website appeal lifecycle further. Those draft endpoints/workflows are not current `main` and must stay labeled development-only until merged.
+
+Production public-site/API acceptance and the staging moderation workspace's production-hardening/cutover questions are separate from source presence.
+
+See [[Website and Web API]].
 
 ## Durable dependency principles
 
 Regardless of current development ordering:
 
 - domain/persistence correctness precedes production authority;
-- Discord identity/scope/authorization correctness precedes destructive bot execution;
-- user-facing account linking requires durable ownership/history/replay semantics before migration/cutover;
-- AutoMod shadow/quality evidence precedes automated enforcement/cutover;
-- provider behavior must be implemented through the owning provider's supported contract rather than invented in EnthusiaStaff;
-- private/runtime validation follows the exact code it is intended to validate;
-- Java/Bedrock/provider acceptance must use the exact candidate being evaluated;
+- StaffBot command visibility/Discord roles never replace authoritative linked-staff checks;
+- account linking must preserve one-use/replay/ownership/history guarantees across restart/migration;
+- external Discord effects need ambiguity-aware reconciliation rather than blind retries;
+- managed-role consumers should use the provider-neutral contract rather than direct JDA;
+- provider behavior must use supported provider contracts, not invented APIs or raw SQL;
+- public/browser APIs expose only approved projections and never become implicit moderation writers;
+- exact-candidate validation follows the code/config/artifacts being accepted;
+- Java/Bedrock/provider/Discord/web acceptance must use the exact candidate;
 - destructive/load/process-kill acceptance comes before production cutover;
-- LiteBans remains authoritative throughout shadow until an explicit accepted authority transition;
-- existing native Discord moderation remains authoritative for Discord enforcement until the separate Discord migration/cutover is accepted;
-- code/config changes after an acceptance run invalidate affected evidence.
+- LiteBans remains authoritative until its accepted transition;
+- Discord production authority remains separately gated even though enforcement code exists;
+- changes after acceptance invalidate affected evidence.
 
-## Current foundation versus finished Discord platform
+## Repository/component model
 
-Merged foundations now provide:
+`wsg138/EnthusiaStaff:main` is the aggregate platform repository. It contains the Java runtime modules plus synchronized/external-style components such as `components/enthusia-site/`.
 
-- moderation-subject and explicit Minecraft/Discord enforcement-scope domain concepts;
-- durable V19 identity/link/main-account/enforcement/evidence-metadata/security-lock/reconciliation/maintenance schema and JDBC support;
-- central Discord-origin authorization with rank/platform consequences, target protection, runtime limits, external preconditions and stale-flow reauthorization.
+Current deployment boundaries include:
 
-Those layers are prerequisites. They do **not** by themselves provide:
+- Paper plugin;
+- transition authority bridge plugin;
+- Velocity plugin;
+- StaffBot standalone application;
+- public site/Pages Functions;
+- staging moderation-web Worker/static assets.
 
-- a player-facing five-minute code linking flow;
-- existing DiscordSRV link migration runtime;
-- an interactive Discord staff bot;
-- native Discord mute/ban/restriction execution and expiry/reconciliation;
-- complete Discord evidence capture;
-- AutoMod enforcement;
-- role synchronization/public information bot;
-- native-ban migration/cutover acceptance.
+When a component also exists as a standalone repository, release confidence requires deliberate parity/revision reconciliation.
 
-That distinction should remain visible in design, code review and Wiki status pages.
+## Broad release gates
 
-## Repository and component model
+Release confidence still requires the applicable combination of:
 
-`wsg138/EnthusiaStaff:main` is the aggregate repository for the current platform source and component copies. External components may also retain standalone repositories. When a component exists in both places, release confidence requires deliberate revision/content reconciliation rather than assuming one side represents the other.
-
-The planned staff Discord bot is a separate service/runtime boundary while sharing approved domain/persistence contracts. The public bot is a separate application/trust boundary with sanitized public data only.
-
-General Wiki pages should explain durable product state rather than duplicate transient branch/worker history.
-
-## Release gates
-
-Broad release gates include:
-
-- hosted clean build/test/static-analysis/runtime-artifact checks;
-- private exact-candidate runtime checks;
+- clean build/test/static/runtime-artifact checks;
+- MariaDB migration/recovery tests;
+- exact-candidate private runtime checks;
 - representative Velocity + multiple Paper backends + providers;
-- Java and Bedrock/Geyser/Floodgate behavior;
-- Folia-compatible scheduler/ownership behavior where supported;
+- Java/Bedrock/Geyser/Floodgate behavior;
+- Folia scheduler/ownership behavior where supported;
+- StaffBot Discord identity/hierarchy/reconnect/rate-limit/reconciliation tests;
+- website authentication/replay/privacy/session checks;
 - destructive workflow interruption/recovery and load/saturation;
-- private representative LiteBans migration and shadow comparison;
-- owner-authorized cutover and rollback acceptance;
+- representative LiteBans migration/shadow comparison;
+- subsystem-specific DiscordSRV/Discord authority transition evidence;
+- explicit owner-authorized cutover/rollback acceptance;
 - final release audit.
 
-The Discord expansion adds acceptance gates for linking/migration parity, staff authorization, managed/native enforcement, temporary expiry/restart, Discord outage/rate-limit recovery, cross-platform partial failure, evidence/privacy, AutoMod shadow quality, public-bot isolation and final Discord cutover.
+See [[Build and Testing]] for what each evidence layer proves.
 
-See [[Build and Testing]] for what each evidence layer proves. Passing an earlier layer does not imply a later layer passed.
+## Where to continue
 
-## Authoritative references
+- Current state: [[Implementation Status]]
+- Developer routing: [[Developer Guide Index]]
+- Source map: [[Developer Code Guide]]
+- Review: [[Code Review Guide]]
+- Discord: [[Discord Moderation Platform]]
+- StaffBot ops: [[Staff Bot Runtime and Operations]]
+- Website/API: [[Website and Web API]]
+- Release/cutover: [[Integrations, Migration, and Release Readiness]]
+- LiteBans: [[LiteBans Migration]] and [[Shadow Mode and Cutover]]
 
-- [Finished behavior](https://github.com/wsg138/EnthusiaStaff/blob/main/ENTHUSIASTAFF-GOALS.md)
-- [Discord moderation platform specification](https://github.com/wsg138/EnthusiaStaff/blob/main/docs/discord-moderation-platform.md)
-- [Discord authorization design](https://github.com/wsg138/EnthusiaStaff/blob/main/docs/discord-authorization.md)
-- [[Implementation Status]]
-- [Requirements matrix](https://github.com/wsg138/EnthusiaStaff/blob/main/reports/REQUIREMENTS-MATRIX.md)
-- [[Developer Guide Index]]
-- [[Code Review Guide]]
-- [[Build and Testing]]
+General Wiki pages should explain durable product state, not copy transient package-worker history.

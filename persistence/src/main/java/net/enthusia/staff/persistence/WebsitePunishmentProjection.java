@@ -13,6 +13,7 @@ final class WebsitePunishmentProjection {
     private static final String TYPE_NETWORK_BAN = "NETWORK_BAN";
     private static final String TYPE_NETWORK_IDENTITY_BAN = "NETWORK_IDENTITY_BAN";
     private static final String TYPE_MUTE = "MUTE";
+    private static final String TYPE_PUBLIC_MUTE = "PUBLIC_MUTE";
     private static final String TYPE_WARNING = "WARNING";
     private static final String PUBLIC_TYPE_IP_BAN = "IP_BAN";
     private static final String STATUS_ACTIVE = "ACTIVE";
@@ -35,14 +36,15 @@ final class WebsitePunishmentProjection {
 
     static boolean isPublicType(String type) {
         return switch (type) {
-            case TYPE_BAN, TYPE_NETWORK_BAN, TYPE_NETWORK_IDENTITY_BAN, TYPE_MUTE, TYPE_WARNING -> true;
+            case TYPE_BAN, TYPE_NETWORK_BAN, TYPE_NETWORK_IDENTITY_BAN,
+                    TYPE_MUTE, TYPE_PUBLIC_MUTE, TYPE_WARNING -> true;
             default -> false;
         };
     }
 
     static boolean isCodeEligibleType(String type) {
         return switch (type) {
-            case TYPE_BAN, TYPE_NETWORK_BAN, TYPE_NETWORK_IDENTITY_BAN, TYPE_MUTE -> true;
+            case TYPE_BAN, TYPE_NETWORK_BAN, TYPE_NETWORK_IDENTITY_BAN, TYPE_MUTE, TYPE_PUBLIC_MUTE -> true;
             default -> false;
         };
     }
@@ -51,7 +53,7 @@ final class WebsitePunishmentProjection {
         return switch (type) {
             case TYPE_BAN, TYPE_NETWORK_BAN -> TYPE_BAN;
             case TYPE_NETWORK_IDENTITY_BAN -> PUBLIC_TYPE_IP_BAN;
-            case TYPE_MUTE -> TYPE_MUTE;
+            case TYPE_MUTE, TYPE_PUBLIC_MUTE -> TYPE_MUTE;
             case TYPE_WARNING -> TYPE_WARNING;
             default -> throw new IllegalArgumentException("Unsupported public sanction type");
         };

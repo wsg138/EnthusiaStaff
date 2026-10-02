@@ -1,6 +1,7 @@
 package net.enthusia.staff.discordbot;
 
 import java.util.ArrayList;
+import java.net.URI;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -78,6 +79,9 @@ final class JdaStaffModerationListener extends ListenerAdapter {
     private final StaffBotWorkerPool workers;
     private final InteractionReplayGuard interactions;
     private final StaffModerationController controller;
+    private final Optional<ModerationPreviewHostedLaunchIssuer> webIssuer;
+    private final Optional<StaffModerationRuntime> webModeration;
+    private volatile ModerationReadRequestAuthorizer webAuthorizer;
     private final Optional<DiscordPunishmentCommandController> punishments;
     private final java.util.concurrent.atomic.AtomicBoolean enabled = new java.util.concurrent.atomic.AtomicBoolean();
 
@@ -87,10 +91,27 @@ final class JdaStaffModerationListener extends ListenerAdapter {
             InteractionReplayGuard interactions,
             StaffModerationRuntime moderation
     ) {
+        this(guildId, workers, interactions, moderation, Optional.empty());
+    }
+
+    JdaStaffModerationListener(
+            long guildId, StaffBotWorkerPool workers, InteractionReplayGuard interactions,
+            StaffModerationRuntime moderation, Optional<URI> moderationWebUri, String discordToken
+    ) {
+        this(guildId, workers, interactions, moderation,
+                moderationWebUri.map(uri -> new ModerationPreviewHostedLaunchIssuer(uri, discordToken, "production")));
+    }
+
+    private JdaStaffModerationListener(
+            long guildId, StaffBotWorkerPool workers, InteractionReplayGuard interactions,
+            StaffModerationRuntime moderation, Optional<ModerationPreviewHostedLaunchIssuer> webIssuer
+    ) {
         this.guildId = guildId;
         this.workers = workers;
         this.interactions = interactions;
         this.punishments = moderation.punishmentService().map(DiscordPunishmentCommandController::new);
+        this.webIssuer = webIssuer;
+        this.webModeration = webIssuer.isPresent() ? Optional.of(moderation) : Optional.empty();
         this.controller = new StaffModerationController(
                 moderation.reads(),
                 moderation.actors(),
@@ -105,7 +126,10 @@ final class JdaStaffModerationListener extends ListenerAdapter {
             enabled.set(false);
             return;
         }
-        List<CommandData> expected = commands(punishments.isPresent());
+        if (webIssuer.isPresent()) {
+            webAuthorizer = new ModerationReadRequestAuthorizer(guildId, webModeration.orElseThrow(), jda);
+        }
+        List<CommandData> expected = commands(punishments.isPresent(), webIssuer.isPresent());
         guild.updateCommands().addCommands(expected).queue(
                 registered -> commandsRegistered(registered, expected.size()),
                 this::commandRegistrationFailed
@@ -157,6 +181,20 @@ final class JdaStaffModerationListener extends ListenerAdapter {
     }
 
     private void dispatchModerate(SlashCommandInteractionEvent event, long actorId, String actorName) {
+        if (webIssuer.isPresent()) {
+            var selected = event.getOption(USER_OPTION);
+            long channelId = event.getChannel().getIdLong();
+            String targetKey = selected == null
+                    ? "channel:" + Long.toUnsignedString(channelId)
+                    : "discord-channel:" + Long.toUnsignedString(channelId) + ":"
+                    + Long.toUnsignedString(selected.getAsUser().getIdLong());
+            dispatchWeb(event, actorId, targetKey,
+                    () -> selected == null
+                            ? webIssuer.orElseThrow().issueChannelLaunchUri(actorId, guildId, channelId)
+                            : webIssuer.orElseThrow().issueUserLaunchUri(
+                                    actorId, guildId, channelId, selected.getAsUser().getIdLong()));
+            return;
+        }
         User target = event.getOption(USER_OPTION).getAsUser();
         dispatch(event, () -> withPunish(
                 controller.moderateDiscord(actorId, actorName, target.getIdLong()),
@@ -268,6 +306,12 @@ final class JdaStaffModerationListener extends ListenerAdapter {
         }
         long actor = event.getUser().getIdLong();
         long target = event.getTarget().getIdLong();
+        if (webIssuer.isPresent()) {
+            dispatchWeb(event, actor, "discord-channel:" + event.getChannel().getId() + ":" + target,
+                    () -> webIssuer.orElseThrow().issueUserLaunchUri(
+                            actor, guildId, event.getChannel().getIdLong(), target));
+            return;
+        }
         dispatch(event, () -> withPunish(
                 controller.moderateDiscord(actor, event.getUser().getName(), target), target));
     }
@@ -280,6 +324,14 @@ final class JdaStaffModerationListener extends ListenerAdapter {
         }
         long actor = event.getUser().getIdLong();
         long target = event.getTarget().getAuthor().getIdLong();
+        if (webIssuer.isPresent()) {
+            long channel = event.getTarget().getChannelIdLong();
+            long message = event.getTarget().getIdLong();
+            dispatchWeb(event, actor, "message:" + channel + ":" + message + ":" + target,
+                    () -> webIssuer.orElseThrow().issueMessageLaunchUri(
+                            actor, guildId, channel, message, target));
+            return;
+        }
         dispatch(event, () -> withPunish(
                 controller.moderateDiscord(actor, event.getUser().getName(), target), target));
     }
@@ -436,6 +488,32 @@ final class JdaStaffModerationListener extends ListenerAdapter {
         );
     }
 
+    private void dispatchWeb(IReplyCallback event, long actorId, String targetKey, Supplier<URI> issue) {
+        long interactionId = event.getIdLong();
+        if (!claim(interactionId, event)) {
+            return;
+        }
+        event.deferReply(true).queue(hook -> {
+            boolean scheduled = workers.tryExecute(() -> {
+                try {
+                    webAuthorizer.authorize(new ModerationReadApiModel.ReadRequest(
+                            Long.toUnsignedString(actorId), Long.toUnsignedString(guildId),
+                            targetKey, Optional.empty()));
+                    URI link = issue.get();
+                    hook.sendMessage("Open the private moderation workspace. This link expires in two minutes.")
+                            .addComponents(ActionRow.of(Button.link(
+                                    link.toString(), "Open Moderation Workspace"))).queue();
+                } catch (RuntimeException exception) {
+                    log("moderation_web_launch_denied", exception);
+                    hook.sendMessage("Current staff authority could not be verified for this workspace.").queue();
+                }
+            });
+            if (!scheduled) {
+                hook.sendMessage("The moderation read queue is busy. Try again shortly.").queue();
+            }
+        }, failure -> interactions.release(interactionId));
+    }
+
     private void dispatchPunishment(
             IReplyCallback event,
             Supplier<DiscordPunishmentCommandController.Prepared> work
@@ -581,9 +659,17 @@ final class JdaStaffModerationListener extends ListenerAdapter {
     }
 
     static List<CommandData> commands(boolean includePunishments) {
+        return commands(includePunishments, false);
+    }
+
+    static List<CommandData> commands(boolean includePunishments, boolean webEnabled) {
         DefaultMemberPermissions discovery = DefaultMemberPermissions.DISABLED;
         List<CommandData> commands = new ArrayList<>(List.of(
-                userSlash(MODERATE, "Open a moderation profile for a Discord user", discovery),
+                webEnabled
+                        ? Commands.slash(MODERATE, "Open the private moderation workspace")
+                                .addOption(OptionType.USER, USER_OPTION, "Optional Discord user to inspect", false)
+                                .setDefaultPermissions(discovery)
+                        : userSlash(MODERATE, "Open a moderation profile for a Discord user", discovery),
                 Commands.user(MODERATE_USER).setDefaultPermissions(discovery),
                 Commands.message(MODERATE_MESSAGE).setDefaultPermissions(discovery),
                 stringSlash(

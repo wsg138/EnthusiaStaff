@@ -11,6 +11,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import javax.sql.DataSource;
+import net.enthusia.staff.domain.application.AccountLinkCodeException;
 import net.enthusia.staff.domain.moderation.CurrentLinkedMinecraftAccount;
 import net.enthusia.staff.domain.moderation.DiscordMinecraftLinkSource;
 import net.enthusia.staff.domain.moderation.DiscordUserId;
@@ -62,7 +63,7 @@ public final class JdbcAccountLinkingStore implements AccountLinkingStore {
                 )
         );
         if (lookup.expired()) {
-            throw new ModerationPersistenceException("account-link code expired");
+            throw new AccountLinkCodeException(AccountLinkCodeException.Reason.EXPIRED);
         }
         return lookup.minecraftPlayerId().orElseThrow();
     }
@@ -144,7 +145,7 @@ public final class JdbcAccountLinkingStore implements AccountLinkingStore {
                 )
         );
         if (result.expired()) {
-            throw new ModerationPersistenceException("account-link code expired");
+            throw new AccountLinkCodeException(AccountLinkCodeException.Reason.EXPIRED);
         }
         return result.link().orElseThrow();
     }
@@ -181,7 +182,7 @@ public final class JdbcAccountLinkingStore implements AccountLinkingStore {
             CompletionRequest request
     ) throws SQLException {
         if (!request.operationKey().equals(stored.consumedOperationKey())) {
-            throw new SQLException("account-link code was already consumed by a different completion");
+            throw new AccountLinkCodeException(AccountLinkCodeException.Reason.ALREADY_USED);
         }
         return CompletionResult.linked(linkCompletion(connection, parties, request));
     }
@@ -310,18 +311,18 @@ public final class JdbcAccountLinkingStore implements AccountLinkingStore {
         return false;
     }
 
-    private static void validateAvailableCode(StoredCode stored, Direction expectedDirection) throws SQLException {
+    private static void validateAvailableCode(StoredCode stored, Direction expectedDirection) {
         if (stored == null || stored.direction() != expectedDirection) {
-            throw new SQLException("account-link code is invalid");
+            throw new AccountLinkCodeException(AccountLinkCodeException.Reason.INVALID);
         }
         if (stored.state().equals("SUPERSEDED")) {
-            throw new SQLException("account-link code was replaced");
+            throw new AccountLinkCodeException(AccountLinkCodeException.Reason.REPLACED);
         }
         if (stored.state().equals("EXPIRED")) {
-            throw new SQLException("account-link code expired");
+            throw new AccountLinkCodeException(AccountLinkCodeException.Reason.EXPIRED);
         }
         if (!stored.state().equals("ACTIVE") && !stored.state().equals("CONSUMED")) {
-            throw new SQLException("account-link code is unavailable");
+            throw new AccountLinkCodeException(AccountLinkCodeException.Reason.INVALID);
         }
     }
 

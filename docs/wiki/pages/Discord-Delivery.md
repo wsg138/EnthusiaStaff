@@ -1,10 +1,10 @@
 # Discord Delivery
 
-EnthusiaStaff writes Discord notification intent to MariaDB in the same durable workflow as the originating action. Velocity leases due rows, renders a bounded staff-facing projection, sends it to an approved HTTPS route, and records delivery or retry/dead-letter state. Discord notification failure never rolls back a valid moderation/report/staff action.
+EnthusiaStaff writes legacy Discord **webhook notification** intent to MariaDB in the same durable workflow as the originating action. Velocity leases due rows, renders a bounded staff-facing projection, sends it to an approved HTTPS route, and records delivery or retry/dead-letter state. Discord notification failure never rolls back a valid moderation/report/staff action.
 
-> This page describes the **current webhook-notification subsystem only**. Merged `main` also contains Discord moderation identity/scope, V19 persistence, and authorization foundations, but the finished account-link runtime, interactive staff bot, Discord punishment execution, AutoMod, native-ban migration and public bot are not provided by this worker. See [[Discord Moderation Platform]].
+> This page describes the webhook-notification subsystem only. The standalone interactive StaffBot, account linking and Discord punishment/reconciliation runtime are now merged and documented in [[Discord Moderation Platform]] and [[Staff Bot Runtime and Operations]]. Do not use this page as the StaffBot architecture guide.
 
-For the source-oriented contract and full event matrix, see [`docs/discord-delivery.md`](../../../docs/discord-delivery.md).
+For the source-oriented webhook contract and full event matrix, see [`docs/discord-delivery.md`](../../../docs/discord-delivery.md).
 
 ## Safety defaults
 
@@ -69,12 +69,23 @@ A failed attempt receives bounded exponential backoff. Repeated destination fail
 - `punishments`: punishment creation, sanction change/inheritance, punishment-request lifecycle.
 - `reports`: report creation and report state lifecycle.
 - `logs-staffmode`: freeze/unfreeze, vanish, staff-mode enter/exit.
-- `alerts`: reserved approved webhook route; Discord channel-health failures themselves remain internal staff alerts rather than recursively enqueueing another Discord notification.
+- `alerts`: reserved approved webhook route; channel-health failures remain internal staff alerts rather than recursively enqueueing another Discord notification.
+
+## Relationship to StaffBot
+
+Webhook delivery and StaffBot solve different problems:
+
+- **Webhook delivery:** one-way durable notification projection from Velocity.
+- **StaffBot:** interactive Discord gateway, staff read/moderation UX, linked staff authority, account linking support, Discord punishment/reconciliation and private moderation-web read services.
+
+A failure in one subsystem should not be treated as proof that the other is unavailable. Keep their credentials, retry semantics, runtime ownership and acceptance evidence separate.
 
 ## Go deeper
 
-- [[Discord Moderation Platform]] — current moderation foundations versus future bot/link/enforcement runtime.
-- [[Protocol and Network Traffic]] — network boundaries and at-least-once semantics.
+- [[Discord Moderation Platform]] — interactive Discord product/status.
+- [[Staff Bot Runtime and Operations]] — StaffBot deployment/config/recovery.
+- [[Website and Web API]] — moderation-web and private read bridge.
+- [[Protocol and Network Traffic]] — at-least-once transport principles.
 - [[Privacy and Data Handling]] — sensitive-data rules.
-- [[Developer Code Guide]] — exact producer/store/renderer/worker trace.
-- [[Code Review Guide]] — privacy, retry, idempotency and external-side-effect review.
+- [[Developer Code Guide]] — source trace.
+- [[Code Review Guide]] — privacy/retry/idempotency review.

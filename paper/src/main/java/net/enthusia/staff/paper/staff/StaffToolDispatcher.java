@@ -1,5 +1,6 @@
 package net.enthusia.staff.paper.staff;
 
+import net.enthusia.staff.paper.presentation.StaffMessageStyle;
 import java.time.Clock;
 import java.util.EnumMap;
 import java.util.List;
@@ -7,13 +8,12 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 import java.util.function.Consumer;
+import java.util.function.Predicate;
 import net.enthusia.staff.paper.freeze.FreezeManager;
 import net.enthusia.staff.paper.tester.CheatTesterManager;
 import net.enthusia.staff.paper.visibility.VanishManager;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
-import org.bukkit.GameMode;
-import org.bukkit.Location;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
@@ -30,6 +30,7 @@ import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.plugin.Plugin;
 import org.bukkit.plugin.java.JavaPlugin;
 
 /**
@@ -38,18 +39,17 @@ import org.bukkit.plugin.java.JavaPlugin;
  * availability behavior.
  */
 public final class StaffToolDispatcher implements Listener, CommandExecutor, TabCompleter {
-    private static final String SPECTATE_EXEMPT_PERMISSION = "enthusiastaff.stafftools.spectate-exempt";
     private static final int NO_ARGUMENTS = 0;
     private static final int ACTION_ARGUMENTS = 1;
     private static final int TARGET_ARGUMENTS = 2;
 
     private final JavaPlugin plugin;
     private final StaffModeManager staffMode;
-    private final VanishManager vanish;
     private final CheatTesterManager cheatTester;
     private final StaffToolSettings settings;
     private final StaffToolCooldowns cooldowns;
     private final StaffToolRandomTeleportService randomTeleport;
+    private final StaffToolSpectateFlow spectateFlow;
     private final StaffToolsMenuController menu;
     private final Map<StaffToolDefinition, ToolAction> actions;
 
@@ -64,7 +64,7 @@ public final class StaffToolDispatcher implements Listener, CommandExecutor, Tab
     ) {
         this.plugin = java.util.Objects.requireNonNull(plugin, "plugin");
         this.staffMode = java.util.Objects.requireNonNull(staffMode, "staffMode");
-        this.vanish = java.util.Objects.requireNonNull(vanish, "vanish");
+        VanishManager checkedVanish = java.util.Objects.requireNonNull(vanish, "vanish");
         this.cheatTester = java.util.Objects.requireNonNull(cheatTester, "cheatTester");
         this.settings = StaffToolSettings.load(plugin.getConfig());
         this.cooldowns = new StaffToolCooldowns(java.util.Objects.requireNonNull(clock, "clock"));
@@ -72,12 +72,26 @@ public final class StaffToolDispatcher implements Listener, CommandExecutor, Tab
                 plugin,
                 serverId,
                 staffMode,
-                vanish,
+                checkedVanish,
                 java.util.Objects.requireNonNull(freeze, "freeze"),
                 settings
         );
-        this.menu = new StaffToolsMenuController(plugin, this, vanish);
+        this.spectateFlow = createSpectateFlow(
+                plugin,
+                actor -> staffMode.authorizedForTool(actor, StaffToolDefinition.SPECTATE)
+                        && actor.hasPermission(StaffToolDefinition.SPECTATE.permission()),
+                checkedVanish::isVanished
+        );
+        this.menu = new StaffToolsMenuController(plugin, this, checkedVanish);
         this.actions = createActions();
+    }
+
+    static StaffToolSpectateFlow createSpectateFlow(
+            Plugin plugin,
+            Predicate<Player> actorAuthorized,
+            Predicate<UUID> vanished
+    ) {
+        return new StaffToolSpectateFlow(plugin, actorAuthorized, vanished);
     }
 
     private Map<StaffToolDefinition, ToolAction> createActions() {
@@ -93,7 +107,7 @@ public final class StaffToolDispatcher implements Listener, CommandExecutor, Tab
         );
         configured.put(StaffToolDefinition.REPORTS, (player, ignored) -> runCommand(player, "reports"));
         configured.put(StaffToolDefinition.CHEAT_TESTER, (player, ignored) -> cheatTester.cycleSelection(player));
-        configured.put(StaffToolDefinition.SPECTATE, this::beginFollowOrSpectate);
+        configured.put(StaffToolDefinition.SPECTATE, spectateFlow::begin);
         configured.put(StaffToolDefinition.VANISH, (player, ignored) -> runCommand(player, "vanish"));
         configured.put(StaffToolDefinition.STAFF_CHAT, (player, ignored) -> runCommand(player, "staffchat"));
         configured.put(StaffToolDefinition.STAFF_TOOLS, (player, ignored) -> menu.open(player));
@@ -143,7 +157,7 @@ public final class StaffToolDispatcher implements Listener, CommandExecutor, Tab
         }
         event.setCancelled(true);
         if (!resolution.valid()) {
-            player.sendMessage(Component.text(resolution.status().message(), NamedTextColor.RED));
+            player.sendMessage(StaffMessageStyle.style(Component.text(resolution.status().message(), NamedTextColor.RED)));
             return;
         }
         if (resolution.tool() != StaffToolDefinition.CHEAT_TESTER) {
@@ -188,7 +202,7 @@ public final class StaffToolDispatcher implements Listener, CommandExecutor, Tab
 
     private void dispatchResolved(Player player, StaffToolResolution resolution, Player target) {
         if (!resolution.valid()) {
-            player.sendMessage(Component.text(resolution.status().message(), NamedTextColor.RED));
+            player.sendMessage(StaffMessageStyle.style(Component.text(resolution.status().message(), NamedTextColor.RED)));
             return;
         }
         dispatch(player, resolution.tool(), target == null ? null : target.getUniqueId());
@@ -203,7 +217,7 @@ public final class StaffToolDispatcher implements Listener, CommandExecutor, Tab
         }
         ToolAction action = actions.get(tool);
         if (action == null) {
-            player.sendMessage(Component.text("That staff tool is unavailable on this runtime.", NamedTextColor.RED));
+            player.sendMessage(StaffMessageStyle.style(Component.text("That staff tool is unavailable on this runtime.", NamedTextColor.RED)));
             return;
         }
         action.execute(player, targetId);
@@ -254,7 +268,7 @@ public final class StaffToolDispatcher implements Listener, CommandExecutor, Tab
             return;
         }
         if (target.getUniqueId().equals(player.getUniqueId())) {
-            player.sendMessage(Component.text("Cheat Tester cannot target yourself.", NamedTextColor.RED));
+            player.sendMessage(StaffMessageStyle.style(Component.text("Cheat Tester cannot target yourself.", NamedTextColor.RED)));
             return;
         }
         if (!acquireCooldown(player, tool)) {
@@ -265,19 +279,19 @@ public final class StaffToolDispatcher implements Listener, CommandExecutor, Tab
 
     private boolean hasToolAuthority(Player player, StaffToolDefinition tool) {
         if (!staffMode.authorizedForTool(player, tool)) {
-            player.sendMessage(Component.text(
+            player.sendMessage(StaffMessageStyle.style(Component.text(
                     "That staff tool is no longer authorized for your active staff session.",
                     NamedTextColor.RED
-            ));
+            )));
             return false;
         }
         if (player.hasPermission(tool.permission())) {
             return true;
         }
-        player.sendMessage(Component.text(
+        player.sendMessage(StaffMessageStyle.style(Component.text(
                 "You do not have permission to use " + tool.displayName() + '.',
                 NamedTextColor.RED
-        ));
+        )));
         return false;
     }
 
@@ -286,16 +300,16 @@ public final class StaffToolDispatcher implements Listener, CommandExecutor, Tab
             return true;
         }
         if (targetId == null) {
-            player.sendMessage(Component.text(
+            player.sendMessage(StaffMessageStyle.style(Component.text(
                     "Right-click a player with " + tool.displayName() + " or use the documented command fallback.",
                     NamedTextColor.YELLOW
-            ));
+            )));
             return false;
         }
         if (!targetId.equals(player.getUniqueId())) {
             return true;
         }
-        player.sendMessage(Component.text("That staff tool cannot target yourself.", NamedTextColor.RED));
+        player.sendMessage(StaffMessageStyle.style(Component.text("That staff tool cannot target yourself.", NamedTextColor.RED)));
         return false;
     }
 
@@ -308,10 +322,10 @@ public final class StaffToolDispatcher implements Listener, CommandExecutor, Tab
         if (result.allowed()) {
             return true;
         }
-        player.sendMessage(Component.text(
+        player.sendMessage(StaffMessageStyle.style(Component.text(
                 "That staff tool is cooling down for about " + result.remainingMillis() + " ms.",
                 NamedTextColor.YELLOW
-        ));
+        )));
         return false;
     }
 
@@ -332,31 +346,11 @@ public final class StaffToolDispatcher implements Listener, CommandExecutor, Tab
 
     private void runCommand(Player player, String commandLine) {
         if (!player.performCommand(commandLine)) {
-            player.sendMessage(Component.text(
+            player.sendMessage(StaffMessageStyle.style(Component.text(
                     "That staff action is unavailable on this backend. Use /estaff verify and the command fallback.",
                     NamedTextColor.RED
-            ));
+            )));
         }
-    }
-
-    private void beginFollowOrSpectate(Player actor, UUID targetId) {
-        UUID actorId = actor.getUniqueId();
-        onEntity(targetId, target -> inspectSpectateTarget(actorId, target),
-                () -> message(actorId, "That player is no longer online."));
-    }
-
-    private void inspectSpectateTarget(UUID actorId, Player target) {
-        UUID targetId = target.getUniqueId();
-        if (vanish.isVanished(targetId)) {
-            message(actorId, "That target is vanished and cannot be selected through this tool.");
-            return;
-        }
-        if (target.hasPermission(SPECTATE_EXEMPT_PERMISSION)) {
-            message(actorId, "That target is exempt from staff follow/spectate tools.");
-            return;
-        }
-        TargetSnapshot snapshot = new TargetSnapshot(targetId, target.getName(), target.getLocation().clone());
-        onEntity(actorId, current -> followSnapshot(current, snapshot));
     }
 
     private void beginNamedFollowOrSpectate(UUID actorId, String targetName) {
@@ -378,76 +372,6 @@ public final class StaffToolDispatcher implements Listener, CommandExecutor, Tab
                 .orElse(null);
     }
 
-    private void followSnapshot(Player actor, TargetSnapshot target) {
-        if (!canContinueSpectate(actor)) {
-            return;
-        }
-        UUID actorId = actor.getUniqueId();
-        actor.teleportAsync(target.location()).whenComplete(
-                (success, failure) -> finishFollowTeleport(actorId, target, success, failure)
-        );
-    }
-
-    private boolean canContinueSpectate(Player actor) {
-        if (staffMode.authorizedForTool(actor, StaffToolDefinition.SPECTATE)
-                && actor.hasPermission(StaffToolDefinition.SPECTATE.permission())) {
-            return true;
-        }
-        actor.sendMessage(Component.text(
-                "Follow/Spectate was cancelled because your staff session or permission changed.",
-                NamedTextColor.RED
-        ));
-        return false;
-    }
-
-    private void finishFollowTeleport(UUID actorId, TargetSnapshot target, Boolean success, Throwable failure) {
-        if (failure != null || !Boolean.TRUE.equals(success)) {
-            message(actorId, "Follow/Spectate teleport failed safely.");
-            return;
-        }
-        onEntity(actorId, actor -> finishFollowOnActor(actor, target));
-    }
-
-    private void finishFollowOnActor(Player actor, TargetSnapshot target) {
-        if (!canContinueSpectate(actor)) {
-            return;
-        }
-        if (actor.getGameMode() != GameMode.SPECTATOR) {
-            actor.sendMessage(Component.text(
-                    "Teleported to " + target.name()
-                            + ". Direct spectating requires spectator mode; your game mode was not changed.",
-                    NamedTextColor.GREEN
-            ));
-            return;
-        }
-        UUID actorId = actor.getUniqueId();
-        onEntity(target.playerId(), liveTarget -> prepareSpectatorAttachment(actorId, target, liveTarget),
-                () -> message(actorId, "Teleported to the last safe target location; direct spectating is unavailable."));
-    }
-
-    private void prepareSpectatorAttachment(UUID actorId, TargetSnapshot snapshot, Player liveTarget) {
-        if (vanish.isVanished(liveTarget.getUniqueId())) {
-            message(actorId, "Teleported to the last safe target location; direct spectating is no longer available.");
-            return;
-        }
-        onEntity(actorId, actor -> attachSpectator(actor, snapshot, liveTarget));
-    }
-
-    private void attachSpectator(Player actor, TargetSnapshot snapshot, Player liveTarget) {
-        if (!canContinueSpectate(actor)) {
-            return;
-        }
-        try {
-            actor.setSpectatorTarget(liveTarget);
-            actor.sendMessage(Component.text("Now spectating " + snapshot.name() + '.', NamedTextColor.GREEN));
-        } catch (IllegalArgumentException | IllegalStateException exception) {
-            actor.sendMessage(Component.text(
-                    "Teleported to " + snapshot.name() + "; direct spectator attachment was unavailable.",
-                    NamedTextColor.YELLOW
-            ));
-        }
-    }
-
     public void openTextMenu(Player player) {
         menu.open(player);
     }
@@ -455,7 +379,7 @@ public final class StaffToolDispatcher implements Listener, CommandExecutor, Tab
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] arguments) {
         if (!(sender instanceof Player player)) {
-            sender.sendMessage("Staff tools require an in-game staff session.");
+            sender.sendMessage(StaffMessageStyle.style("Staff tools require an in-game staff session."));
             return true;
         }
         handlePlayerCommand(player, label, arguments);
@@ -464,7 +388,7 @@ public final class StaffToolDispatcher implements Listener, CommandExecutor, Tab
 
     private void handlePlayerCommand(Player player, String label, String[] arguments) {
         if (!staffMode.active(player.getUniqueId())) {
-            player.sendMessage(Component.text("Enter staff mode before using /" + label + '.'));
+            player.sendMessage(StaffMessageStyle.style(Component.text("Enter staff mode before using /" + label + '.')));
             return;
         }
         if (arguments.length == NO_ARGUMENTS) {
@@ -479,9 +403,9 @@ public final class StaffToolDispatcher implements Listener, CommandExecutor, Tab
             beginNamedFollowOrSpectate(player.getUniqueId(), arguments[1]);
             return;
         }
-        player.sendMessage(Component.text(
+        player.sendMessage(StaffMessageStyle.style(Component.text(
                 "Usage: /" + label + " | /" + label + " random | /" + label + " spectate <player>"
-        ));
+        )));
     }
 
     private static boolean isRandomCommand(String[] arguments) {
@@ -540,14 +464,11 @@ public final class StaffToolDispatcher implements Listener, CommandExecutor, Tab
     }
 
     private void message(UUID playerId, String text) {
-        onEntity(playerId, player -> player.sendMessage(Component.text(text)));
+        onEntity(playerId, player -> player.sendMessage(StaffMessageStyle.style(Component.text(text))));
     }
 
     @FunctionalInterface
     private interface ToolAction {
         void execute(Player player, UUID targetId);
-    }
-
-    private record TargetSnapshot(UUID playerId, String name, Location location) {
     }
 }

@@ -1,4 +1,4 @@
-version: "2026-07-26.1"
+version: "2026-09-26.1"
 defaults:
   decay-eligible: true
   public-default: true
@@ -551,6 +551,17 @@ reasons:
       - { label: "60 day ban", sanctions: [{ type: NETWORK_BAN, duration: 60d }] }
       - { label: "90 day ban", sanctions: [{ type: NETWORK_BAN, duration: 90d }] }
       - { label: "Permanent ban", sanctions: [{ type: NETWORK_BAN, duration: permanent }] }
+
+  - id: evasion.network-identity-ban
+    family: evasion
+    display-name: Ban evasion requiring a network identity ban
+    severity: 80
+    required-rank: FOUNDER
+    ladder:
+      - { label: "30 day network identity ban", sanctions: [{ type: NETWORK_IDENTITY_BAN, duration: 30d }] }
+      - { label: "60 day network identity ban", sanctions: [{ type: NETWORK_IDENTITY_BAN, duration: 60d }] }
+      - { label: "90 day network identity ban", sanctions: [{ type: NETWORK_IDENTITY_BAN, duration: 90d }] }
+      - { label: "Permanent network identity ban", sanctions: [{ type: NETWORK_IDENTITY_BAN, duration: permanent }] }
 
   - id: evasion.helping-another
     family: evasion

@@ -23,12 +23,14 @@
 - [[Roles and Permissions|Rank-Authority]]
 - [[Configuration]]
 - [[Integrations]]
-- [[Discord Delivery]]
 - [[Discord Moderation Platform]]
+- [[Website and Web API]]
+- [[Discord Delivery]]
 
 ## Operations
 
 - [[Installation]]
+- [[Staff Bot Runtime and Operations]]
 - [[Recovery and Troubleshooting]]
 - [[LiteBans Migration]]
 - [[Shadow Mode and Cutover]]
@@ -41,6 +43,8 @@
 - [[Build and Testing]]
 - [[Architecture]]
 - [[Developer Code Guide]]
+- [[Discord Moderation Platform]]
+- [[Website and Web API]]
 - [[Protocol and Network Traffic]]
 - [[Vanish Internals]]
 - [[Remaining Development Map|Development-Blueprint]]

@@ -28,15 +28,19 @@ final class ReportWorkflowWiringTest {
     );
 
     @Test
-    void registrarBindsPlayerAndStaffReportCommandsToOneDurableStore() throws IOException {
+    void registrarKeepsPlayerSubmissionOnDurableStoreAndWrapsStaffMutations() throws IOException {
         String source = normalizedSource(REGISTRAR_SOURCE);
 
-        assertTrue(source.contains("Supplier<net.enthusia.staff.domain.ports.ReportStore> reportStore"));
+        assertTrue(source.contains("Supplier<ReportStore> reportStore = storage(PaperStorageBindings::reportStore);"));
+        assertTrue(source.contains("Supplier<ReportStore> activeReportStore = () ->"));
+        assertTrue(source.contains("new net.enthusia.staff.paper.report.ActiveDutyReportStore("));
+        assertTrue(source.contains("dependencies.players().staffMode()::authorityActive"));
         assertTrue(source.contains("new ReportCommand("));
         assertTrue(source.contains("reportStore,"));
         assertTrue(source.contains("bindCompleting(\"report\", report, report);"));
         assertTrue(source.contains("new ReportGuiController("));
-        assertTrue(source.contains("new ReportsCommand(plugin(), clock(), reportStore, workers(), reportGui)"));
+        assertTrue(source.contains("activeReportStore,"));
+        assertTrue(source.contains("new ReportsCommand(plugin(), clock(), activeReportStore, workers(), reportGui)"));
         assertTrue(source.contains("bindCompleting(\"reports\", reports, reports);"));
     }
 

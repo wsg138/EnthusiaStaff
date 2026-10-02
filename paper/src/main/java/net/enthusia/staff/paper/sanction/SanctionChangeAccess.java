@@ -35,7 +35,7 @@ public final class SanctionChangeAccess {
             case "unban" -> Set.of(
                     SanctionType.BAN, SanctionType.NETWORK_BAN, SanctionType.NETWORK_IDENTITY_BAN
             );
-            case "unmute" -> Set.of(SanctionType.MUTE);
+            case "unmute" -> Set.of(SanctionType.MUTE, SanctionType.PUBLIC_MUTE);
             case "removewarning", "unwarn" -> Set.of(SanctionType.WARNING);
             default -> ALL_TYPES;
         };

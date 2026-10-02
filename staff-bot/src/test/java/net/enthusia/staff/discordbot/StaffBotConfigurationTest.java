@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.IOException;
+import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.HashMap;
@@ -121,6 +122,20 @@ class StaffBotConfigurationTest {
         assertEquals(StaffBotEnvironment.STAGING, configuration.environment());
         assertEquals(DUMMY_TOKEN, configuration.discordToken());
         assertTrue(configuration.uiPreviewEnabled());
+    }
+
+    @Test
+    void productionWebUsesOnlyPinnedHttpsOrigin() {
+        Map<String, String> values = new HashMap<>();
+        values.put(StaffBotConfiguration.ENVIRONMENT_KEY, PRODUCTION);
+        values.put(StaffBotConfiguration.TOKEN_KEY, DUMMY_TOKEN);
+        values.put(StaffBotConfiguration.MODERATION_WEB_URL_KEY, "https://staff.enthusia.info");
+        assertEquals(URI.create("https://staff.enthusia.info"),
+                StaffBotConfiguration.fromEnvironment(values).moderationWebUri().orElseThrow());
+        values.put(StaffBotConfiguration.MODERATION_WEB_URL_KEY, "https://example.invalid");
+        assertThrows(IllegalArgumentException.class, () -> StaffBotConfiguration.fromEnvironment(values));
+        values.put(StaffBotConfiguration.MODERATION_WEB_URL_KEY, "http://staff.enthusia.info");
+        assertThrows(IllegalArgumentException.class, () -> StaffBotConfiguration.fromEnvironment(values));
     }
 
     @Test

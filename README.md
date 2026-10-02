@@ -25,7 +25,7 @@ The project is pre-release. LiteBans remains authoritative until the documented 
 
 ## Requirements
 
-- Java 21
+- Java 25
 - Paper API 1.21.11-compatible servers
 - Velocity 3.4-compatible proxy
 - MariaDB with separate application and migration credentials

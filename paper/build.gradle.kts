@@ -12,18 +12,26 @@ val integrationContractMainOutput = integrationContractsProject
     .get()
     .output
 
+java {
+    toolchain.languageVersion.set(JavaLanguageVersion.of(25))
+}
+
+tasks.withType<JavaCompile>().configureEach {
+    options.release.set(25)
+}
+
 dependencies {
     implementation(project(":domain"))
     implementation(project(":persistence"))
     implementation(project(":protocol"))
     compileOnly(integrationContractsProject)
     implementation("com.fasterxml.jackson.dataformat:jackson-dataformat-yaml:2.20.1")
-    compileOnly("io.papermc.paper:paper-api:1.21.11-R0.1-SNAPSHOT")
+    compileOnly("io.papermc.paper:paper-api:26.2.build.129-stable")
     compileOnly("net.dmulloy2:ProtocolLib:5.4.0")
     compileOnly("net.luckperms:api:5.4")
     testImplementation(integrationContractsProject)
     testRuntimeOnly(files(integrationContractMainOutput))
-    testImplementation("io.papermc.paper:paper-api:1.21.11-R0.1-SNAPSHOT")
+    testImplementation("io.papermc.paper:paper-api:26.2.build.129-stable")
     testImplementation("net.dmulloy2:ProtocolLib:5.4.0")
     testImplementation("net.luckperms:api:5.4")
 }
