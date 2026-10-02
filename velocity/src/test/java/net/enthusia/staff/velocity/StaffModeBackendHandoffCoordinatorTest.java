@@ -97,6 +97,26 @@ class StaffModeBackendHandoffCoordinatorTest {
     }
 
     @Test
+    void sourceCloseThatWinsBeforeAbortRecheckContinuesTransfer() {
+        AtomicReference<Optional<StaffSessionSnapshot>> active = new AtomicReference<>(Optional.of(session()));
+        FakeTransport transport = new FakeTransport(active, false);
+        transport.statuses.put(
+                StaffModeBackendHandoffCoordinator.EXIT_REQUEST,
+                PersistentChannelServer.DeliveryStatus.TIMED_OUT
+        );
+        transport.closeOnAbort = true;
+
+        var decision = coordinator(transport, active).transfer(PLAYER, session(), SMP, HUB, TRANSFER);
+
+        assertTrue(decision.allowed());
+        assertTrue(transport.types.equals(List.of(
+                StaffModeBackendHandoffCoordinator.EXIT_REQUEST,
+                StaffModeBackendHandoffCoordinator.ABORT_SOURCE,
+                StaffModeBackendHandoffCoordinator.PREPARE_RESUME
+        )));
+    }
+
+    @Test
     void destinationFailureRequestsSourceRollback() {
         AtomicReference<Optional<StaffSessionSnapshot>> active = new AtomicReference<>(Optional.of(session()));
         FakeTransport transport = new FakeTransport(active, true);
@@ -185,6 +205,7 @@ class StaffModeBackendHandoffCoordinatorTest {
     private static final class FakeTransport implements StaffModeBackendHandoffCoordinator.Transport {
         private final AtomicReference<Optional<StaffSessionSnapshot>> active;
         private final boolean closeDurably;
+        private boolean closeOnAbort;
         private final Map<String, PersistentChannelServer.DeliveryStatus> statuses = new HashMap<>();
         private final List<String> types = new ArrayList<>();
 
@@ -208,6 +229,9 @@ class StaffModeBackendHandoffCoordinatorTest {
         ) {
             types.add(messageType);
             if (StaffModeBackendHandoffCoordinator.EXIT_REQUEST.equals(messageType) && closeDurably) {
+                active.set(Optional.empty());
+            }
+            if (StaffModeBackendHandoffCoordinator.ABORT_SOURCE.equals(messageType) && closeOnAbort) {
                 active.set(Optional.empty());
             }
             return statuses.getOrDefault(messageType, PersistentChannelServer.DeliveryStatus.ACKNOWLEDGED);

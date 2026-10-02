@@ -161,6 +161,9 @@ final class StaffModeBackendHandoffCoordinator {
             return CloseResult.FAILED;
         }
         var abort = abortSource(channel, playerId, transferId, current);
+        if (sessions.apply(playerId).isEmpty()) {
+            return CloseResult.CLOSED;
+        }
         return abort == PersistentChannelServer.DeliveryStatus.ACKNOWLEDGED
                 ? CloseResult.FAILED
                 : CloseResult.UNCERTAIN;
