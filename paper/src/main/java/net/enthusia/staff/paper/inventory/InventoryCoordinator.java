@@ -2166,14 +2166,14 @@ public final class InventoryCoordinator implements Listener, InventoryLockServic
         loginBlocks.clear();
     }
 
-    private static final class LiveSession {
+    static final class LiveSession {
         private final UUID targetId;
         private final Map<UUID, ModerationInventoryHolder> viewers = new ConcurrentHashMap<>();
         private final LiveInventorySessionGate gate = new LiveInventorySessionGate();
         private volatile InventoryObservation observation;
         private volatile InventoryImage image;
 
-        private LiveSession(UUID targetId) {
+        LiveSession(UUID targetId) {
             this.targetId = targetId;
         }
 
