@@ -1,5 +1,6 @@
 package net.enthusia.staff.paper.command;
 
+import net.enthusia.staff.paper.testsupport.ClickEventTestValues;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -94,7 +95,7 @@ class InspectActionSectionTest {
         ClickEvent event = component.clickEvent();
         if (event != null) {
             assertEquals(ClickEvent.Action.RUN_COMMAND, event.action());
-            commands.add(event.value());
+            commands.add(ClickEventTestValues.textValue(event));
         }
         component.children().forEach(child -> collect(child, commands));
     }
