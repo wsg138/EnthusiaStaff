@@ -79,13 +79,24 @@ function minecraftAction(input) {
 function validateActionScope(operation, input, minecraft, both) {
   if (input.scope !== undefined && !both) throw new Error('invalid action scope');
   if (both) {
-    if (!minecraft || operation === 'capabilities') throw new Error('invalid Both action scope');
-    if (!validMinecraftTarget(input.minecraftTarget)) throw new Error('invalid Minecraft player');
+    validateBothActionScope(operation, input, minecraft);
     return;
   }
-  if (!minecraft) return;
+  if (minecraft) validateMinecraftActionScope(operation, input);
+}
+
+function validateBothActionScope(operation, input, minecraft) {
+  if (!minecraft || operation === 'capabilities') throw new Error('invalid Both action scope');
+  requireValidMinecraftTarget(input.minecraftTarget);
+}
+
+function validateMinecraftActionScope(operation, input) {
   if (input.intent !== undefined || operation === 'capabilities') throw new Error('cannot mix action scopes');
-  if (!validMinecraftTarget(input.minecraftTarget)) throw new Error('invalid Minecraft player');
+  requireValidMinecraftTarget(input.minecraftTarget);
+}
+
+function requireValidMinecraftTarget(value) {
+  if (!validMinecraftTarget(value)) throw new Error('invalid Minecraft player');
 }
 
 function validMinecraftTarget(value) {

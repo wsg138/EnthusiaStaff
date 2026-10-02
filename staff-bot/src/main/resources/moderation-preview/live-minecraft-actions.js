@@ -69,29 +69,55 @@ const bothOptionsRenderer = window.renderOptionsStep;
 window.renderOptionsStep = function () {
   bothOptionsRenderer();
   const workflow = state.workflow;
-  if (state.session?.staging !== false || workflow?.liveScope !== 'Both') return;
+  if (!bothOptionsActive(workflow)) return;
+  $('#workflowBody').appendChild(bothMinecraftOptions(workflow));
+};
+
+function bothOptionsActive(workflow) {
+  return state.session?.staging === false && workflow?.liveScope === 'Both';
+}
+
+function bothMinecraftOptions(workflow) {
+  const target = bothMinecraftTargetSelect(workflow);
+  const reason = bothMinecraftReasonSelect(workflow);
+  const explanation = bothMinecraftExplanation(workflow);
+  bindBothMinecraftInputs(workflow, target, reason, explanation);
+  return element('section',{className:'card option-section'},
+    sectionHeadingNode('Minecraft side','The selected configured reason is re-evaluated on confirmation.'),
+    fieldLabel('Linked Minecraft account',target),
+    fieldLabel('Configured Minecraft reason',reason),
+    fieldLabel('Minecraft explanation',explanation));
+}
+
+function bothMinecraftTargetSelect(workflow) {
   const target = element('select',{id:'bothMinecraftTarget'},optionNode('','Select linked Minecraft account',true));
   for (const account of liveModeration.bootstrap?.linkedAccounts || []) {
     target.appendChild(optionNode(account.playerId,
       (account.username || account.playerId) + (account.main ? ' · main' : ''),
       workflow.minecraftTarget === account.playerId));
   }
+  return target;
+}
+
+function bothMinecraftReasonSelect(workflow) {
   const reason = element('select',{id:'bothMinecraftReason'},optionNode('','Select configured reason',true));
   for (const option of liveActionCapabilities.minecraftReasons || []) {
     reason.appendChild(optionNode(option.id, option.family + ' — ' + option.label,
       workflow.minecraftReason === option.id));
   }
-  const explanation = element('textarea',{id:'bothMinecraftExplanation',value:workflow.minecraftExplanation || '',
+  return reason;
+}
+
+function bothMinecraftExplanation(workflow) {
+  return element('textarea',{id:'bothMinecraftExplanation',value:workflow.minecraftExplanation || '',
     attrs:{maxlength:4000,rows:4},placeholder:'Minecraft case explanation'});
+}
+
+function bindBothMinecraftInputs(workflow, target, reason, explanation) {
   target.addEventListener('change',() => { workflow.minecraftTarget = target.value; });
   reason.addEventListener('change',() => { workflow.minecraftReason = reason.value; });
   explanation.addEventListener('input',() => { workflow.minecraftExplanation = explanation.value; });
-  $('#workflowBody').appendChild(element('section',{className:'card option-section'},
-    sectionHeadingNode('Minecraft side','The selected configured reason is re-evaluated on confirmation.'),
-    fieldLabel('Linked Minecraft account',target),
-    fieldLabel('Configured Minecraft reason',reason),
-    fieldLabel('Minecraft explanation',explanation)));
-};
+}
 
 const bothReviewRenderer = window.renderReviewStep;
 window.renderReviewStep = function () {
