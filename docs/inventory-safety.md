@@ -31,6 +31,7 @@ Their operation ID, profile ID, state, and fencing token must remain coherent:
 | `PENDING` | `PENDING` | The replacement is durable but no application worker owns it. |
 | `APPLYING` | `APPLYING` | A worker claimed the current fencing token and may apply or verify the replacement. |
 | `APPLIED` | `COMMITTED` | The verified replacement and durable profile revision committed. |
+| `APPLIED` | `RESTORED` | A live cursor transfer was rolled back to its exact before-state; no replacement revision committed. |
 | `QUARANTINED` | `QUARANTINED` | Automatic progress stopped because the evidence is ambiguous or unsafe. |
 
 Claim, commit, and quarantine updates use the previously locked state and

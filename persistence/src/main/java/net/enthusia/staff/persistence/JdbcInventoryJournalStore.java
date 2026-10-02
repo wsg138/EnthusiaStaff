@@ -1029,6 +1029,7 @@ public final class JdbcInventoryJournalStore implements InventoryJournalStore {
         InventoryObservation current = observation(connection, profile, true)
                 .orElseThrow(() -> new SQLException("Inventory observation disappeared during finalization"));
         if (patch.state() == InventoryOperationState.APPLIED
+                && locked.operationState() == InventoryOperationState.COMMITTED
                 && current.checksum().equals(patch.replacementChecksum())) {
             markRestorationApplied(connection, patch, now);
             insertCommitAudit(connection, patch, current.revision(), now);

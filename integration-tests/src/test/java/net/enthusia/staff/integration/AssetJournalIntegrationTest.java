@@ -384,6 +384,7 @@ class AssetJournalIntegrationTest {
 
             InventoryPatch prepared = store.prepare(request, LEASE, NOW.plusSeconds(1))
                     .patch().orElseThrow();
+            assertTrue(store.pendingCursorTransfersByActor(actorId, "paper-2", 10).isEmpty());
             InventoryPatch claimed = store.claimForApply(
                     prepared.patchId(), operationId, LEASE, NOW.plusSeconds(2)
             ).orElseThrow();
@@ -407,13 +408,20 @@ class AssetJournalIntegrationTest {
                     claimed.patchId(), operationId, claimed.fencingToken(), NOW.plusSeconds(7)
             ));
 
-            assertEquals("RESTORED", patchState(operationId));
+            assertEquals("APPLIED", patchState(operationId));
             assertEquals("RESTORED", inventoryOperationState(operationId));
+            assertEquals(
+                    InventoryOperationState.APPLIED,
+                    store.claimForApply(
+                            claimed.patchId(), operationId, LEASE, NOW.plusSeconds(8)
+                    ).orElseThrow().state()
+            );
             assertEquals(0L, leaseCount(targetId, SCOPE_ID));
-            assertFalse(store.isLocked(targetId, SCOPE_ID, NOW.plusSeconds(8)));
+            assertFalse(store.isLocked(targetId, SCOPE_ID, NOW.plusSeconds(9)));
             assertTrue(store.pending(targetId, SCOPE_ID, SERVER_ID, 10).isEmpty());
             assertTrue(store.pendingCursorTransfersByActor(actorId, SERVER_ID, 10).isEmpty());
             assertTrue(store.cursorTransfer(operationId).isEmpty());
+            assertEquals(0L, auditCount(operationId, COMMIT_EVENT));
         }
     }
 

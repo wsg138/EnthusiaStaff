@@ -149,13 +149,15 @@ public final class PlayerRowEnsuringInventoryJournalStore implements InventoryJo
         }
         return queryCursorJournals("""
                 WHERE o.actor_id = ?
+                    AND p.owning_server_id = ?
                     AND o.operation_type LIKE 'ONLINE_CURSOR_%'
                     AND q.state IN ('PENDING', 'APPLYING', 'QUARANTINED')
                 ORDER BY q.created_at
                 LIMIT ?
                 """, statement -> {
             statement.setBytes(1, UuidBytes.toBytes(actorId));
-            statement.setInt(2, limit);
+            statement.setString(2, requestingServerId);
+            statement.setInt(3, limit);
         });
     }
 
@@ -373,7 +375,9 @@ public final class PlayerRowEnsuringInventoryJournalStore implements InventoryJo
     }
 
     private CursorRollbackDecision rollbackDecision(CursorRollbackRow row) throws SQLException {
-        if ("RESTORED".equals(row.patchState()) && "RESTORED".equals(row.operationState())) {
+        if ("APPLIED".equals(row.patchState())
+                && "RESTORED".equals(row.operationState())
+                && row.operationType().startsWith("ONLINE_CURSOR_")) {
             return CursorRollbackDecision.ALREADY_RESTORED;
         }
         if (!"APPLYING".equals(row.patchState()) || !"APPLYING".equals(row.operationState())
@@ -407,7 +411,7 @@ public final class PlayerRowEnsuringInventoryJournalStore implements InventoryJo
         operation.put("cursorRollbackResolvedAt", now.toString());
         try (PreparedStatement patch = connection.prepareStatement("""
                 UPDATE inventory_pending_patches
-                SET state = 'RESTORED', conflict_code = NULL, conflict_detail = NULL
+                SET state = 'APPLIED', conflict_code = NULL, conflict_detail = NULL
                 WHERE patch_id = ? AND operation_id = ?
                     AND state = 'APPLYING' AND fencing_token = ?
                 """);
