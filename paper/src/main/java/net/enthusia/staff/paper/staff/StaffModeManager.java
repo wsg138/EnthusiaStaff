@@ -131,9 +131,9 @@ public final class StaffModeManager implements Listener {
 
     public CompletableFuture<Boolean> rollbackBackendHandoff(UUID playerId, UUID transferId) {
         handoffResumes.cancel(playerId, transferId);
-        handoffGaps.remove(playerId);
         CompletableFuture<Boolean> result = new CompletableFuture<>();
         onEntity(playerId, player -> {
+            handoffGaps.remove(playerId);
             StaffRank rank = PaperStaffRankResolver.resolve(player::hasPermission).orElse(null);
             if (rank == null) {
                 result.complete(false);
