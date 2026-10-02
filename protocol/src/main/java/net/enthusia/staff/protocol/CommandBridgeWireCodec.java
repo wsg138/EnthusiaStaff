@@ -26,13 +26,15 @@ public final class CommandBridgeWireCodec {
     private static final String MESSAGE_FIELD = "message";
     private static final String OUTCOME_FIELD = "outcome";
     private static final String OUTPUT_FIELD = "output";
+    private static final String TRUNCATED_FIELD = "truncated";
+    private static final String REDACTED_FIELD = "redacted";
     private static final ObjectMapper JSON = new ObjectMapper();
     private static final Set<String> REQUEST_FIELDS = Set.of(
             VERSION_FIELD, "requestId", "subjectId", "discordUserId", "actorPlayerId",
             "targetServer", "command", "requestedAt"
     );
     private static final Set<String> RESPONSE_FIELDS = Set.of(
-            VERSION_FIELD, OUTCOME_FIELD, MESSAGE_FIELD, OUTPUT_FIELD, "truncated", "redacted"
+            VERSION_FIELD, OUTCOME_FIELD, MESSAGE_FIELD, OUTPUT_FIELD, TRUNCATED_FIELD, REDACTED_FIELD
     );
 
     public String encodeRequest(CommandBridgeRequest request) {
@@ -83,8 +85,8 @@ public final class CommandBridgeWireCodec {
         body.put(OUTCOME_FIELD, response.outcome().name());
         body.put(MESSAGE_FIELD, response.message());
         body.put(OUTPUT_FIELD, response.output());
-        body.put("truncated", response.truncated());
-        body.put("redacted", response.redacted());
+        body.put(TRUNCATED_FIELD, response.truncated());
+        body.put(REDACTED_FIELD, response.redacted());
         return encode(body, "command response");
     }
 
@@ -101,8 +103,8 @@ public final class CommandBridgeWireCodec {
                     CommandBridgeOutcome.valueOf(text(root, OUTCOME_FIELD)),
                     text(root, MESSAGE_FIELD),
                     text(root, OUTPUT_FIELD),
-                    root.path("truncated").booleanValue(),
-                    root.path("redacted").booleanValue()
+                    root.path(TRUNCATED_FIELD).booleanValue(),
+                    root.path(REDACTED_FIELD).booleanValue()
             ));
         } catch (JsonProcessingException | IllegalArgumentException failure) {
             return Optional.empty();
@@ -142,8 +144,8 @@ public final class CommandBridgeWireCodec {
         return root.path(OUTCOME_FIELD).isTextual()
                 && root.path(MESSAGE_FIELD).isTextual()
                 && root.path(OUTPUT_FIELD).isTextual()
-                && root.path("truncated").isBoolean()
-                && root.path("redacted").isBoolean();
+                && root.path(TRUNCATED_FIELD).isBoolean()
+                && root.path(REDACTED_FIELD).isBoolean();
     }
 
     private static boolean tooLarge(String body, int maximumBytes) {
