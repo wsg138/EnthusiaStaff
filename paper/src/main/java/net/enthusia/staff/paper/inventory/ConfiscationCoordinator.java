@@ -619,7 +619,8 @@ public final class ConfiscationCoordinator implements Listener, AutoCloseable {
                 replacement.checksum(),
                 replacement.bytes(),
                 changedRootSlots,
-                false
+                false,
+                Optional.empty()
         );
     }
 

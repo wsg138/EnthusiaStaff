@@ -39,6 +39,10 @@ public final class PlayerRowEnsuringInventoryJournalStore implements InventoryJo
     private static final String CURSOR_TRANSFER_FIELD = "cursorTransfer";
     private static final String CURSOR_PHASE_FIELD = "cursorPhase";
     private static final int MAX_CURSOR_QUERY = 32;
+    private static final String STATE_APPLYING = "APPLYING";
+    private static final String STATE_APPLIED = "APPLIED";
+    private static final String STATE_RESTORED = "RESTORED";
+    private static final String LIVE_CURSOR_PREFIX = "ONLINE_CURSOR_";
 
     private final DataSource dataSource;
     private final InventoryJournalStore delegate;
@@ -147,18 +151,7 @@ public final class PlayerRowEnsuringInventoryJournalStore implements InventoryJo
                 || limit < 1 || limit > MAX_CURSOR_QUERY) {
             throw new IllegalArgumentException("cursor transfer actor query is invalid");
         }
-        return queryCursorJournals("""
-                WHERE o.actor_id = ?
-                    AND p.owning_server_id = ?
-                    AND o.operation_type LIKE 'ONLINE_CURSOR_%'
-                    AND q.state IN ('PENDING', 'APPLYING', 'QUARANTINED')
-                ORDER BY q.created_at
-                LIMIT ?
-                """, statement -> {
-            statement.setBytes(1, UuidBytes.toBytes(actorId));
-            statement.setString(2, requestingServerId);
-            statement.setInt(3, limit);
-        });
+        return queryCursorJournalsByActor(actorId, requestingServerId, limit);
     }
 
     @Override
@@ -166,12 +159,7 @@ public final class PlayerRowEnsuringInventoryJournalStore implements InventoryJo
         if (operationId == null) {
             throw new IllegalArgumentException("operationId must be present");
         }
-        List<InventoryCursorJournal> matches = queryCursorJournals("""
-                WHERE o.operation_id = ? AND o.operation_type LIKE 'ONLINE_CURSOR_%'
-                    AND q.state IN ('PENDING', 'APPLYING', 'QUARANTINED')
-                LIMIT 1
-                """, statement -> statement.setBytes(1, UuidBytes.toBytes(operationId)));
-        return matches.stream().findFirst();
+        return queryCursorJournal(operationId);
     }
 
     @Override
@@ -375,28 +363,47 @@ public final class PlayerRowEnsuringInventoryJournalStore implements InventoryJo
     }
 
     private CursorRollbackDecision rollbackDecision(CursorRollbackRow row) throws SQLException {
-        if ("APPLIED".equals(row.patchState())
-                && "RESTORED".equals(row.operationState())
-                && row.operationType().startsWith("ONLINE_CURSOR_")) {
+        if (isResolvedCursorRollback(row)) {
             return CursorRollbackDecision.ALREADY_RESTORED;
         }
-        if (!"APPLYING".equals(row.patchState()) || !"APPLYING".equals(row.operationState())
-                || !row.operationType().startsWith("ONLINE_CURSOR_")) {
+        if (!isApplyingCursorRollback(row)) {
             return CursorRollbackDecision.REJECT;
         }
-        JsonNode transfer = row.operation().get(CURSOR_TRANSFER_FIELD);
-        JsonNode phase = row.operation().get(CURSOR_PHASE_FIELD);
-        if (transfer == null || transfer.isNull()) {
-            return phase == null || phase.isNull()
-                    ? CursorRollbackDecision.RESOLVE
-                    : CursorRollbackDecision.REJECT;
+        return activeRollbackDecision(row.operation());
+    }
+
+    private static boolean isResolvedCursorRollback(CursorRollbackRow row) {
+        return STATE_APPLIED.equals(row.patchState())
+                && STATE_RESTORED.equals(row.operationState())
+                && isLiveCursorOperation(row.operationType());
+    }
+
+    private static boolean isApplyingCursorRollback(CursorRollbackRow row) {
+        return STATE_APPLYING.equals(row.patchState())
+                && STATE_APPLYING.equals(row.operationState())
+                && isLiveCursorOperation(row.operationType());
+    }
+
+    private CursorRollbackDecision activeRollbackDecision(ObjectNode operation) throws SQLException {
+        JsonNode transfer = operation.get(CURSOR_TRANSFER_FIELD);
+        JsonNode phase = operation.get(CURSOR_PHASE_FIELD);
+        if (missing(transfer)) {
+            return missing(phase) ? CursorRollbackDecision.RESOLVE : CursorRollbackDecision.REJECT;
         }
-        if (phase == null || phase.isNull()) {
+        if (missing(phase)) {
             return CursorRollbackDecision.REJECT;
         }
-        return readPhase(row.operation()) == InventoryCursorPhase.CURSOR_APPLIED
+        return readPhase(operation) == InventoryCursorPhase.CURSOR_APPLIED
                 ? CursorRollbackDecision.REJECT
                 : CursorRollbackDecision.RESOLVE;
+    }
+
+    private static boolean isLiveCursorOperation(String operationType) {
+        return operationType != null && operationType.startsWith(LIVE_CURSOR_PREFIX);
+    }
+
+    private static boolean missing(JsonNode node) {
+        return node == null || node.isNull();
     }
 
     private void markCursorRollbackRestored(
@@ -455,34 +462,77 @@ public final class PlayerRowEnsuringInventoryJournalStore implements InventoryJo
         }
     }
 
-    private List<InventoryCursorJournal> queryCursorJournals(
-            String whereClause,
-            SqlBinder binder
+    private List<InventoryCursorJournal> queryCursorJournalsByActor(
+            UUID actorId,
+            String requestingServerId,
+            int limit
     ) {
-        String sql = """
-                SELECT q.patch_id, q.operation_id, q.profile_id, p.player_id, p.scope_id,
-                    p.owning_server_id, o.actor_id, o.case_id, o.operation_type, q.state,
-                    q.expected_revision, q.fencing_token, q.expected_checksum,
-                    q.replacement_checksum, q.replacement_blob, q.patch_json, q.created_at,
-                    o.operation_json, s.snapshot_blob AS before_snapshot
-                FROM inventory_pending_patches q
-                JOIN inventory_profiles p ON p.profile_id = q.profile_id
-                JOIN inventory_operations o ON o.operation_id = q.operation_id
-                JOIN inventory_snapshots s ON s.operation_id = q.operation_id
-                """ + whereClause;
         try (Connection connection = dataSource.getConnection();
-             PreparedStatement statement = connection.prepareStatement(sql)) {
-            binder.bind(statement);
-            try (ResultSet result = statement.executeQuery()) {
-                List<InventoryCursorJournal> journals = new ArrayList<>();
-                while (result.next()) {
-                    readCursorJournal(result).ifPresent(journals::add);
-                }
-                return List.copyOf(journals);
-            }
+             PreparedStatement statement = connection.prepareStatement("""
+                     SELECT q.patch_id, q.operation_id, q.profile_id, p.player_id, p.scope_id,
+                         p.owning_server_id, o.actor_id, o.case_id, o.operation_type, q.state,
+                         q.expected_revision, q.fencing_token, q.expected_checksum,
+                         q.replacement_checksum, q.replacement_blob, q.patch_json, q.created_at,
+                         o.operation_json, s.snapshot_blob AS before_snapshot
+                     FROM inventory_pending_patches q
+                     JOIN inventory_profiles p ON p.profile_id = q.profile_id
+                     JOIN inventory_operations o ON o.operation_id = q.operation_id
+                     JOIN inventory_snapshots s ON s.operation_id = q.operation_id
+                     WHERE o.actor_id = ?
+                         AND p.owning_server_id = ?
+                         AND o.operation_type LIKE 'ONLINE_CURSOR_%'
+                         AND q.state IN ('PENDING', 'APPLYING', 'QUARANTINED')
+                     ORDER BY q.created_at
+                     LIMIT ?
+                     """)) {
+            statement.setBytes(1, UuidBytes.toBytes(actorId));
+            statement.setString(2, requestingServerId);
+            statement.setInt(3, limit);
+            return readCursorJournals(statement);
         } catch (SQLException exception) {
-            throw new ModerationPersistenceException("Unable to load live inventory cursor escrow", exception);
+            throw cursorQueryFailure(exception);
         }
+    }
+
+    private Optional<InventoryCursorJournal> queryCursorJournal(UUID operationId) {
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement("""
+                     SELECT q.patch_id, q.operation_id, q.profile_id, p.player_id, p.scope_id,
+                         p.owning_server_id, o.actor_id, o.case_id, o.operation_type, q.state,
+                         q.expected_revision, q.fencing_token, q.expected_checksum,
+                         q.replacement_checksum, q.replacement_blob, q.patch_json, q.created_at,
+                         o.operation_json, s.snapshot_blob AS before_snapshot
+                     FROM inventory_pending_patches q
+                     JOIN inventory_profiles p ON p.profile_id = q.profile_id
+                     JOIN inventory_operations o ON o.operation_id = q.operation_id
+                     JOIN inventory_snapshots s ON s.operation_id = q.operation_id
+                     WHERE o.operation_id = ?
+                         AND o.operation_type LIKE 'ONLINE_CURSOR_%'
+                         AND q.state IN ('PENDING', 'APPLYING', 'QUARANTINED')
+                     LIMIT 1
+                     """)) {
+            statement.setBytes(1, UuidBytes.toBytes(operationId));
+            return readCursorJournals(statement).stream().findFirst();
+        } catch (SQLException exception) {
+            throw cursorQueryFailure(exception);
+        }
+    }
+
+    private List<InventoryCursorJournal> readCursorJournals(PreparedStatement statement) throws SQLException {
+        try (ResultSet result = statement.executeQuery()) {
+            List<InventoryCursorJournal> journals = new ArrayList<>();
+            while (result.next()) {
+                readCursorJournal(result).ifPresent(journals::add);
+            }
+            return List.copyOf(journals);
+        }
+    }
+
+    private static ModerationPersistenceException cursorQueryFailure(SQLException exception) {
+        return new ModerationPersistenceException(
+                "Unable to load live inventory cursor escrow",
+                exception
+        );
     }
 
     private Optional<InventoryCursorJournal> readCursorJournal(ResultSet result) throws SQLException {
@@ -592,8 +642,4 @@ public final class PlayerRowEnsuringInventoryJournalStore implements InventoryJo
     ) {
     }
 
-    @FunctionalInterface
-    private interface SqlBinder {
-        void bind(PreparedStatement statement) throws SQLException;
-    }
 }

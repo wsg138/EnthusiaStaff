@@ -37,7 +37,8 @@ final class InventoryRestorationTestSupport {
                 checksum(replacement),
                 replacement,
                 List.of(1),
-                false
+                false,
+                Optional.empty()
         );
     }
 

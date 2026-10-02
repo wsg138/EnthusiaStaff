@@ -1701,7 +1701,8 @@ public final class InventoryCoordinator implements Listener, InventoryLockServic
                 encoded.checksum(),
                 encoded.bytes(),
                 changedSlots,
-                true
+                true,
+                Optional.empty()
         );
         submit(() -> prepareOfflineEdit(viewer, request));
     }

@@ -53,43 +53,6 @@ public record InventoryPrepareRequest(
         cursorTransfer = Objects.requireNonNull(cursorTransfer, "cursorTransfer");
     }
 
-    public InventoryPrepareRequest(
-            UUID operationId,
-            String idempotencyKey,
-            UUID playerId,
-            String scopeId,
-            String owningServerId,
-            UUID actorId,
-            Optional<String> caseId,
-            String operationType,
-            long expectedRevision,
-            String expectedChecksum,
-            byte[] beforeSnapshot,
-            String replacementChecksum,
-            byte[] replacementSnapshot,
-            List<Integer> changedSlots,
-            boolean requireNetworkOffline
-    ) {
-        this(
-                operationId,
-                idempotencyKey,
-                playerId,
-                scopeId,
-                owningServerId,
-                actorId,
-                caseId,
-                operationType,
-                expectedRevision,
-                expectedChecksum,
-                beforeSnapshot,
-                replacementChecksum,
-                replacementSnapshot,
-                changedSlots,
-                requireNetworkOffline,
-                Optional.empty()
-        );
-    }
-
     @Override
     public byte[] beforeSnapshot() {
         return beforeSnapshot.clone();
