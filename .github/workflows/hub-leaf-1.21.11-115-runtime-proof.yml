@@ -24,6 +24,7 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
+          fetch-depth: 0
 
       - name: Set up Java 25
         uses: actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95 # v5.6.0
@@ -476,7 +477,13 @@ jobs:
         run: |
           set -Eeuo pipefail
           sleep 4
+          mkdir -p proof/evidence
+          if [[ ! -d proof/server ]]; then
+            echo "server directory was never created" > proof/evidence/server.log
+            exit 0
+          fi
           cd proof/server
+          touch server.log
           grep -E 'PROOF:(JOIN|QUIT|PRESENT_SPECTATOR_SENT|TELEPORT_WHILE_PRESENTED_SPECTATOR|RESTORE_PRESENTATION_SENT|PACKET_OR_PHYSICS_FAILED|RESTORE_FAILED|INTERACTION_BLOCKED)' server.log             | tee ../evidence/interaction-key-lines.txt || true
 
           PID="$(cat ../leaf.pid 2>/dev/null || true)"
@@ -523,10 +530,10 @@ jobs:
 
           {
             echo "=== frozen source ==="
-            cat ../evidence/source.txt
+            cat ../evidence/source.txt 2>/dev/null || true
             echo
             echo "=== exact Leaf artifact sha256 ==="
-            cat ../evidence/leaf-1.21.11-115.jar.sha256
+            cat ../evidence/leaf-1.21.11-115.jar.sha256 2>/dev/null || true
             echo
             echo "=== Staff plugin metadata ==="
             grep -E '^(name|version|main|api-version|load):' ../evidence/enthusiastaff-plugin.yml || true
