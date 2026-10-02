@@ -487,43 +487,14 @@ jobs:
           touch server.log
           grep -E 'PROOF:(JOIN|QUIT|PRESENT_SPECTATOR_SENT|TELEPORT_WHILE_PRESENTED_SPECTATOR|RESTORE_PRESENTATION_SENT|PACKET_OR_PHYSICS_FAILED|RESTORE_FAILED|INTERACTION_BLOCKED)' server.log             | tee ../evidence/interaction-key-lines.txt || true
 
+          cp server.log ../evidence/server.log
           PID="$(cat ../leaf.pid 2>/dev/null || true)"
           if [[ -n "$PID" ]] && kill -0 "$PID" 2>/dev/null; then
-            python - <<'PY'
-          import socket, struct
-
-          def packet(request_id, packet_type, payload):
-              body = struct.pack("<ii", request_id, packet_type) + payload.encode("utf-8") + b"\\x00\\x00"
-              return struct.pack("<i", len(body)) + body
-
-          def receive(sock):
-              raw = sock.recv(4)
-              if len(raw) != 4:
-                  raise RuntimeError("short RCON length")
-              length = struct.unpack("<i", raw)[0]
-              data = b""
-              while len(data) < length:
-                  part = sock.recv(length - len(data))
-                  if not part:
-                      raise RuntimeError("short RCON body")
-                  data += part
-              return struct.unpack("<ii", data[:8]), data[8:-2].decode("utf-8", "replace")
-
-          with socket.create_connection(("127.0.0.1", 25575), timeout=5) as sock:
-              sock.sendall(packet(11, 3, "hub-proof-only"))
-              header, _ = receive(sock)
-              if header[0] == -1:
-                  raise RuntimeError("RCON authentication failed")
-              sock.sendall(packet(12, 2, "stop"))
-              receive(sock)
-          PY
+            kill -TERM "$PID" 2>/dev/null || true
             for i in $(seq 1 30); do
               kill -0 "$PID" 2>/dev/null || break
               sleep 1
             done
-            if kill -0 "$PID" 2>/dev/null; then
-              kill -TERM "$PID" 2>/dev/null || true
-            fi
           fi
           sleep 2
           cp server.log ../evidence/server.log
@@ -553,14 +524,43 @@ jobs:
             cat ../evidence/disable-key-lines.txt 2>/dev/null || true
           } | tee ../evidence/summary.txt
 
-      - name: Require identity and ABI evidence
+      - name: Validate evidence and record compatibility disposition
         if: always()
         shell: bash
         run: |
           set -Eeuo pipefail
           test -f proof/evidence/leaf-1.21.11-115.jar.sha256
-          grep -q 'PROOF:SERVER_BUILD_INFO brandId=' proof/evidence/server.log
+          test -f proof/evidence/leaf-build-115.json
+          test -f proof/evidence/server.log
+          grep -q 'PROOF:SERVER_BUILD_INFO brandId=winds-studio:leaf minecraftVersionId=1.21.11 buildNumber=115' proof/evidence/server.log
           grep -q 'PROOF:ABI_COMPLETE=true' proof/evidence/server.log
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          ev = Path("proof/evidence")
+          build = json.loads((ev / "leaf-build-115.json").read_text())
+          recorded = (ev / "leaf-1.21.11-115.jar.sha256").read_text().split()[0]
+          expected = build["downloads"]["primary"]["sha256"]
+          if recorded != expected:
+              raise SystemExit(f"Leaf SHA mismatch: recorded={recorded} expected={expected}")
+
+          log = (ev / "server.log").read_text(errors="replace")
+          reasons = []
+          if "Unsupported API version 26.2" in log:
+              reasons.append("frozen Staff plugin metadata api-version 26.2 is rejected by Leaf 1.21.11")
+          if "PROOF:FROZEN_ADAPTER available=false" in log:
+              reasons.append("frozen no-clip adapter rejects Leaf runtime identity")
+          status = "FAIL/BLOCKED" if reasons else "INCONCLUSIVE"
+          body = (
+              "runtime=HUB Leaf 1.21.11 build 115\n"
+              f"leaf_sha256={recorded}\n"
+              f"compatibility={status}\n"
+              + "".join(f"reason={reason}\n" for reason in reasons)
+          )
+          (ev / "disposition.txt").write_text(body)
+          print(body, end="")
+          PY
 
       - name: Upload durable runtime proof
         if: always()
