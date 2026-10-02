@@ -782,6 +782,18 @@ jobs:
               sleep 1
             done
 
+            if [[ "$completed" != 1 ]]; then
+              echo "::error::Runtime proof did not reach DONE=true for $name"
+              echo "===== $name product evidence ====="
+              cat "$dir/server/cross-version-runtime-evidence.txt" 2>/dev/null || true
+              echo "===== $name client evidence ====="
+              cat "$dir/client.log" 2>/dev/null || true
+              echo "===== $name client console ====="
+              cat "$dir/client-console.log" 2>/dev/null || true
+              echo "===== $name server tail ====="
+              tail -n 260 "$dir/server/console.log" 2>/dev/null || true
+            fi
+
             for _ in $(seq 1 30); do
               kill -0 "$server_pid" 2>/dev/null || break
               sleep 1
@@ -793,10 +805,10 @@ jobs:
             test "$completed" = 1
           }
 
+          run_runtime paper263 25593 26.3             'RUNTIME|brandId=papermc:paper|minecraft=26.3|build=134'             'Vanish no-clip client adapter enabled for Paper 26.3 build 134'
           run_runtime leaf 25590 1.21.11             'RUNTIME|brandId=winds-studio:leaf|minecraft=1.21.11|build=115'             'Vanish no-clip client adapter enabled for Leaf 1.21.11 build 115'
           run_runtime paper 25591 26.2             'RUNTIME|brandId=papermc:paper|minecraft=26.2|build=129'             'Vanish no-clip client adapter enabled for Paper 26.2 build 129'
           run_runtime paper128 25592 26.2             'RUNTIME|brandId=papermc:paper|minecraft=26.2|build=128'             'Vanish no-clip client adapter enabled for Paper 26.2 build 128'
-          run_runtime paper263 25593 26.3             'RUNTIME|brandId=papermc:paper|minecraft=26.3|build=134'             'Vanish no-clip client adapter enabled for Paper 26.3 build 134'
 
       - name: Verify common-JAR acceptance matrix
         shell: bash
