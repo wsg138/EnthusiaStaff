@@ -31,6 +31,8 @@ import net.enthusia.staff.domain.economy.EconomyPreparation;
 import net.enthusia.staff.domain.economy.EconomyPrepareRequest;
 import net.enthusia.staff.domain.economy.EconomyTerminalUpdate;
 import net.enthusia.staff.domain.economy.EconomyValidatedPlan;
+import net.enthusia.staff.domain.inventory.InventoryCursorPhase;
+import net.enthusia.staff.domain.inventory.InventoryCursorTransfer;
 import net.enthusia.staff.domain.inventory.InventoryFinalizeResult;
 import net.enthusia.staff.domain.inventory.InventoryOperationState;
 import net.enthusia.staff.domain.inventory.InventoryPatch;
@@ -337,6 +339,81 @@ class AssetJournalIntegrationTest {
             assertEquals(alreadyObserved.revision(), recovered.resultingRevision());
             assertEquals("APPLIED", patchState(claimed.operationId()));
             assertEquals(1L, auditCount(claimed.operationId(), COMMIT_EVENT));
+        }
+    }
+
+    @Test
+    void liveCursorRollbackIsTerminalIdempotentAndReleasesTheAsset() throws SQLException {
+        UUID targetId = UUID.randomUUID();
+        UUID actorId = UUID.randomUUID();
+        byte[] before = {91, 92, 93};
+        byte[] replacement = {94, 95, 96};
+        byte[] cursorBefore = {1, 0, 0, 1};
+        byte[] cursorAfter = {1, 0, 0, 2};
+
+        try (MariaDbRuntime runtime = MariaDb.initialize(databaseConfig(DATABASE))) {
+            insertPlayer(DATABASE, targetId, "CursorRollbackTarget", NOW);
+            insertPlayer(DATABASE, actorId, "CursorRollbackActor", NOW);
+            InventoryJournalStore store = runtime.inventoryJournalStore();
+            var observation = store.recordObservation(
+                    targetId, SCOPE_ID, SERVER_ID, checksum(before), before, NOW
+            );
+            UUID operationId = UUID.randomUUID();
+            InventoryCursorTransfer cursor = new InventoryCursorTransfer(
+                    checksum(cursorBefore), cursorBefore,
+                    checksum(cursorAfter), cursorAfter
+            );
+            InventoryPrepareRequest request = new InventoryPrepareRequest(
+                    operationId,
+                    "inventory:cursor-rollback:" + operationId,
+                    targetId,
+                    SCOPE_ID,
+                    SERVER_ID,
+                    actorId,
+                    Optional.empty(),
+                    "ONLINE_CURSOR_PICKUP",
+                    observation.revision(),
+                    checksum(before),
+                    before,
+                    checksum(replacement),
+                    replacement,
+                    java.util.List.of(4),
+                    false,
+                    Optional.of(cursor)
+            );
+
+            InventoryPatch prepared = store.prepare(request, LEASE, NOW.plusSeconds(1))
+                    .patch().orElseThrow();
+            InventoryPatch claimed = store.claimForApply(
+                    prepared.patchId(), operationId, LEASE, NOW.plusSeconds(2)
+            ).orElseThrow();
+            assertTrue(store.advanceCursorPhase(
+                    claimed.patchId(), operationId, claimed.fencingToken(),
+                    InventoryCursorPhase.PREPARED, InventoryCursorPhase.SOURCE_ESCROWED,
+                    NOW.plusSeconds(3)
+            ));
+            assertTrue(store.advanceCursorPhase(
+                    claimed.patchId(), operationId, claimed.fencingToken(),
+                    InventoryCursorPhase.SOURCE_ESCROWED, InventoryCursorPhase.TARGET_APPLIED,
+                    NOW.plusSeconds(4)
+            ));
+            assertFalse(store.resolveCursorRollback(
+                    claimed.patchId(), operationId, claimed.fencingToken() + 1L, NOW.plusSeconds(5)
+            ));
+            assertTrue(store.resolveCursorRollback(
+                    claimed.patchId(), operationId, claimed.fencingToken(), NOW.plusSeconds(6)
+            ));
+            assertTrue(store.resolveCursorRollback(
+                    claimed.patchId(), operationId, claimed.fencingToken(), NOW.plusSeconds(7)
+            ));
+
+            assertEquals("RESTORED", patchState(operationId));
+            assertEquals("RESTORED", inventoryOperationState(operationId));
+            assertEquals(0L, leaseCount(targetId, SCOPE_ID));
+            assertFalse(store.isLocked(targetId, SCOPE_ID, NOW.plusSeconds(8)));
+            assertTrue(store.pending(targetId, SCOPE_ID, SERVER_ID, 10).isEmpty());
+            assertTrue(store.pendingCursorTransfersByActor(actorId, SERVER_ID, 10).isEmpty());
+            assertTrue(store.cursorTransfer(operationId).isEmpty());
         }
     }
 

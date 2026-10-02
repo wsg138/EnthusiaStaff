@@ -1,6 +1,7 @@
 package net.enthusia.staff.persistence;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -24,6 +25,7 @@ import net.enthusia.staff.domain.inventory.InventoryConfiscationCommitRequest;
 import net.enthusia.staff.domain.inventory.InventoryConfiscationSession;
 import net.enthusia.staff.domain.inventory.InventoryConfiscationStart;
 import net.enthusia.staff.domain.inventory.InventoryConfiscationStartRequest;
+import net.enthusia.staff.domain.inventory.InventoryCursorPhase;
 import net.enthusia.staff.domain.inventory.InventoryObservation;
 import net.enthusia.staff.domain.inventory.InventoryOperationState;
 import net.enthusia.staff.domain.inventory.InventoryPatch;
@@ -40,6 +42,8 @@ public final class JdbcInventoryJournalStore implements InventoryJournalStore {
     private static final String SCOPE_ID_FIELD = "scopeId";
     private static final String OWNING_SERVER_ID_FIELD = "owningServerId";
     private static final String CHANGED_SLOTS_FIELD = "changedSlots";
+    private static final String CURSOR_TRANSFER_FIELD = "cursorTransfer";
+    private static final String CURSOR_PHASE_FIELD = "cursorPhase";
     private static final String OWNING_SERVER_ID_COLUMN = "owning_server_id";
     private static final String LOCKED_STATE = "LOCKED";
     private static final int SINGLE_INSERT_ROW_COUNT = 1;
@@ -813,7 +817,7 @@ public final class JdbcInventoryJournalStore implements InventoryJournalStore {
         if (replay.isEmpty()) {
             return Optional.empty();
         }
-        validateReplay(replay.orElseThrow(), request);
+        validateReplay(connection, replay.orElseThrow(), request);
         return Optional.of(new InventoryPreparation(
                 InventoryPreparation.Status.REPLAYED,
                 replay,
@@ -1933,6 +1937,21 @@ public final class JdbcInventoryJournalStore implements InventoryJournalStore {
         }
     }
 
+    private String preparedOperationJson(InventoryPrepareRequest request) {
+        Map<String, Object> fields = new LinkedHashMap<>();
+        fields.put(SCOPE_ID_FIELD, request.scopeId());
+        fields.put(OWNING_SERVER_ID_FIELD, request.owningServerId());
+        fields.put("expectedChecksum", request.expectedChecksum());
+        fields.put("replacementChecksum", request.replacementChecksum());
+        fields.put(CHANGED_SLOTS_FIELD, request.changedSlots());
+        fields.put("requireNetworkOffline", request.requireNetworkOffline());
+        request.cursorTransfer().ifPresent(transfer -> {
+            fields.put(CURSOR_TRANSFER_FIELD, transfer);
+            fields.put(CURSOR_PHASE_FIELD, InventoryCursorPhase.PREPARED.name());
+        });
+        return serialize(fields);
+    }
+
     private InventoryPatch insertPreparedOperation(
             Connection connection,
             InventoryPrepareRequest request,
@@ -1942,14 +1961,7 @@ public final class JdbcInventoryJournalStore implements InventoryJournalStore {
     ) throws SQLException {
         UUID snapshotId = UUID.randomUUID();
         UUID patchId = UUID.randomUUID();
-        String operationJson = serialize(Map.of(
-                SCOPE_ID_FIELD, request.scopeId(),
-                OWNING_SERVER_ID_FIELD, request.owningServerId(),
-                "expectedChecksum", request.expectedChecksum(),
-                "replacementChecksum", request.replacementChecksum(),
-                CHANGED_SLOTS_FIELD, request.changedSlots(),
-                "requireNetworkOffline", request.requireNetworkOffline()
-        ));
+        String operationJson = preparedOperationJson(request);
         insertOperationRow(connection, request, profile, fence, operationJson, now);
         insertBeforeSnapshot(connection, request, profile, snapshotId, now);
         insertPendingPatch(connection, request, profile, patchId, fence, now);
@@ -2111,9 +2123,37 @@ public final class JdbcInventoryJournalStore implements InventoryJournalStore {
         }
     }
 
-    private static void validateReplay(InventoryPatch patch, InventoryPrepareRequest request) {
-        if (!sameReplayBinding(patch, request) || !sameReplayMutation(patch, request)) {
+    private void validateReplay(
+            Connection connection,
+            InventoryPatch patch,
+            InventoryPrepareRequest request
+    ) throws SQLException {
+        if (!sameReplayBinding(patch, request) || !sameReplayMutation(patch, request)
+                || !sameReplayCursor(connection, patch.operationId(), request)) {
             throw new IllegalArgumentException("idempotency key is already bound to another inventory operation");
+        }
+    }
+
+    private boolean sameReplayCursor(
+            Connection connection,
+            UUID operationId,
+            InventoryPrepareRequest request
+    ) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement("""
+                SELECT operation_json FROM inventory_operations WHERE operation_id = ?
+                """)) {
+            statement.setBytes(1, UuidBytes.toBytes(operationId));
+            try (ResultSet result = statement.executeQuery()) {
+                if (!result.next()) {
+                    return false;
+                }
+                JsonNode cursor = parseJson(result.getString("operation_json")).get(CURSOR_TRANSFER_FIELD);
+                if (request.cursorTransfer().isEmpty()) {
+                    return cursor == null || cursor.isNull();
+                }
+                JsonNode expected = objectMapper.valueToTree(request.cursorTransfer().orElseThrow());
+                return expected.equals(cursor);
+            }
         }
     }
 
@@ -2371,6 +2411,14 @@ public final class JdbcInventoryJournalStore implements InventoryJournalStore {
             statement.setString(9, idempotencyKey);
             statement.setTimestamp(10, Timestamp.from(occurredAt));
             requireIdempotentInsert(statement, "inventory audit event");
+        }
+    }
+
+    private JsonNode parseJson(String value) throws SQLException {
+        try {
+            return objectMapper.readTree(value);
+        } catch (JsonProcessingException exception) {
+            throw new SQLException("Inventory operation JSON is invalid", exception);
         }
     }
 

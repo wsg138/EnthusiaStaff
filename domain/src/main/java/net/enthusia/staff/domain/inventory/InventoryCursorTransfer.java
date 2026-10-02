@@ -1,6 +1,9 @@
 package net.enthusia.staff.domain.inventory;
 
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.Arrays;
+import java.util.HexFormat;
 import java.util.Objects;
 
 /** Durable, Bukkit-independent before/after state for the Staff cursor side of a live transfer. */
@@ -17,6 +20,8 @@ public record InventoryCursorTransfer(
         replacementChecksum = InventoryObservation.requireChecksum(replacementChecksum);
         expectedSnapshot = checkedCopy(expectedSnapshot, "expectedSnapshot");
         replacementSnapshot = checkedCopy(replacementSnapshot, "replacementSnapshot");
+        requireChecksumMatch(expectedChecksum, expectedSnapshot, "expectedSnapshot");
+        requireChecksumMatch(replacementChecksum, replacementSnapshot, "replacementSnapshot");
     }
 
     @Override
@@ -56,5 +61,19 @@ public record InventoryCursorTransfer(
             throw new IllegalArgumentException(field + " is outside the cursor snapshot safety limit");
         }
         return value.clone();
+    }
+
+    private static void requireChecksumMatch(String expected, byte[] snapshot, String field) {
+        if (!checksum(snapshot).equals(expected)) {
+            throw new IllegalArgumentException(field + " does not match its checksum");
+        }
+    }
+
+    private static String checksum(byte[] snapshot) {
+        try {
+            return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(snapshot));
+        } catch (NoSuchAlgorithmException exception) {
+            throw new IllegalStateException("SHA-256 is unavailable", exception);
+        }
     }
 }

@@ -156,6 +156,16 @@ public final class CompositeInventoryTesterJournalStore
     }
 
     @Override
+    public boolean resolveCursorRollback(
+            UUID patchId,
+            UUID operationId,
+            long fencingToken,
+            Instant now
+    ) {
+        return inventory.resolveCursorRollback(patchId, operationId, fencingToken, now);
+    }
+
+    @Override
     public InventoryFinalizeResult finalizeApplied(
             UUID patchId,
             UUID operationId,
