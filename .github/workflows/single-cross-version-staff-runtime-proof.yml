@@ -731,7 +731,9 @@ jobs:
 
             require_line "$evidence" '^HARNESS_READY=true$'
             require_line "$evidence" '^FACTORY_AVAILABLE=true\|reason=$'
-            require_line "$evidence" '^ENABLE\|reconciled=true\|noPhysics=true\|serverMode=CREATIVE
+            require_line "$evidence" '^ENABLE\|reconciled=true\|noPhysics=true\|serverMode=CREATIVE$'
+            require_line "$evidence" '^FREEZE_RELEASE\|restricted=false$'
+            require_line "$evidence" '^TELEPORT\|teleported=true\|reconciled=true\|noPhysics=true\|serverMode=CREATIVE$'
             require_line "$evidence" '^DISABLE\|reconciled=true\|noPhysics=false\|serverMode=CREATIVE$'
             require_line "$evidence" '^FORCED_FAILURE\|reconciled=false\|adapterAvailable=false\|noPhysics=false$'
             require_line "$evidence" '^RECONNECT_PREP\|reconciled=true\|noPhysics=true\|serverMode=CREATIVE$'
