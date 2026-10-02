@@ -79,7 +79,7 @@ final class VanishClientGameModeAdapterFactory {
 
     private static String describe(String brandId, String minecraftVersion, OptionalInt buildNumber) {
         String build = buildNumber.isPresent() ? Integer.toString(buildNumber.getAsInt()) : "unknown";
-        return String.valueOf(brandId) + "/" + String.valueOf(minecraftVersion) + "/" + build;
+        return brandId + "/" + minecraftVersion + "/" + build;
     }
 
     record SupportedRuntime(String brandId, String minecraftVersion, int buildNumber, String label) {
