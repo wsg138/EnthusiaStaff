@@ -14,6 +14,7 @@ import org.junit.jupiter.api.Test;
 
 class JdaStaffModerationListenerTest {
     private static final String USER_ID_OPTION = "user-id";
+    private static final String MODERATE_COMMAND = MODERATE_COMMAND;
 
     @Test
     void staffReadCommandsAreCompleteAndDefaultDisabledForDiscovery() {
@@ -21,7 +22,7 @@ class JdaStaffModerationListenerTest {
 
         assertEquals(8, commands.size());
         assertEquals(Set.of(
-                "moderate",
+                MODERATE_COMMAND,
                 "Moderate User",
                 "Moderate Message",
                 "moderate-minecraft",
@@ -35,7 +36,7 @@ class JdaStaffModerationListenerTest {
 
         assertEquals(Command.Type.USER, command(commands, "Moderate User").getType());
         assertEquals(Command.Type.MESSAGE, command(commands, "Moderate Message").getType());
-        assertEquals(Command.Type.SLASH, command(commands, "moderate").getType());
+        assertEquals(Command.Type.SLASH, command(commands, MODERATE_COMMAND).getType());
     }
 
     @Test
@@ -44,7 +45,7 @@ class JdaStaffModerationListenerTest {
         assertEquals(8, commands.size());
         assertTrue(commands.stream().allMatch(command ->
                 DefaultMemberPermissions.DISABLED.equals(command.getDefaultPermissions())));
-        SlashCommandData moderate = (SlashCommandData) command(commands, "moderate");
+        SlashCommandData moderate = (SlashCommandData) command(commands, MODERATE_COMMAND);
         assertEquals(1, moderate.getOptions().size());
         assertEquals(OptionType.USER, moderate.getOptions().getFirst().getType());
         assertTrue(!moderate.getOptions().getFirst().isRequired());
@@ -87,7 +88,7 @@ class JdaStaffModerationListenerTest {
         var commands = JdaStaffModerationListener.commands(false, true, true);
 
         assertEquals(12, commands.size());
-        SlashCommandData moderate = (SlashCommandData) command(commands, "moderate");
+        SlashCommandData moderate = (SlashCommandData) command(commands, MODERATE_COMMAND);
         assertEquals(1, moderate.getOptions().size());
         assertTrue(names(commands).contains("case-create"));
     }

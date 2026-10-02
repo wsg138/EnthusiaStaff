@@ -31,6 +31,7 @@ final class WebsiteAppealLifecycleRouterTest {
     private static final UUID ACCOUNT_ID = UUID.fromString("33333333-3333-4333-8333-333333333333");
     private static final UUID REVIEWER_ID = UUID.fromString("44444444-4444-4444-8444-444444444444");
     private static final CaseId CASE_ID = new CaseId("0123456789ABCDEF");
+    private static final String REVIEWER_APPEAL_PREFIX = "/v1/website/appeals/reviewer/";
 
     @Test
     void routesEditClaimAndReopenThroughExplicitContracts() {
@@ -44,14 +45,14 @@ final class WebsiteAppealLifecycleRouterTest {
         assertEquals(ACCOUNT_ID.toString(), store.accountId);
         assertFalse((Boolean) edit.get("claimed"));
 
-        Map<?, ?> claim = response(router, "/v1/website/appeals/reviewer/" + APPEAL_ID + "/claim", """
+        Map<?, ?> claim = response(router, REVIEWER_APPEAL_PREFIX + APPEAL_ID + "/claim", """
                 {"actorAccountId":"%s","actorRank":"MOD","expectedVersion":3,"idempotencyKey":"claim-request-1"}
                 """.formatted(REVIEWER_ID));
         assertEquals("claim", store.operation);
         assertEquals(REVIEWER_ID, store.reviewerId);
         assertTrue((Boolean) claim.get("claimed"));
 
-        Map<?, ?> reopen = response(router, "/v1/website/appeals/reviewer/" + APPEAL_ID + "/reopen", """
+        Map<?, ?> reopen = response(router, REVIEWER_APPEAL_PREFIX + APPEAL_ID + "/reopen", """
                 {"actorAccountId":"%s","actorRank":"ADMIN","expectedVersion":3,"note":"Senior review found new evidence.","idempotencyKey":"reopen-request-1"}
                 """.formatted(REVIEWER_ID));
         assertEquals("reopen", store.operation);
@@ -66,7 +67,7 @@ final class WebsiteAppealLifecycleRouterTest {
 
         WebsiteApiException forbidden = assertThrows(WebsiteApiException.class, () -> response(
                 router,
-                "/v1/website/appeals/reviewer/" + APPEAL_ID + "/reopen",
+                REVIEWER_APPEAL_PREFIX + APPEAL_ID + "/reopen",
                 """
                 {"actorAccountId":"%s","actorRank":"MOD","expectedVersion":3,"note":"Moderator reopen attempt.","idempotencyKey":"reopen-request-2"}
                 """.formatted(REVIEWER_ID)
@@ -92,7 +93,7 @@ final class WebsiteAppealLifecycleRouterTest {
 
         WebsiteApiException forbidden = assertThrows(WebsiteApiException.class, () -> response(
                 router,
-                "/v1/website/appeals/reviewer/" + APPEAL_ID + "/claim",
+                REVIEWER_APPEAL_PREFIX + APPEAL_ID + "/claim",
                 """
                 {"actorAccountId":"%s","actorRank":"DEVELOPER","expectedVersion":3,"idempotencyKey":"claim-request-2"}
                 """.formatted(REVIEWER_ID)

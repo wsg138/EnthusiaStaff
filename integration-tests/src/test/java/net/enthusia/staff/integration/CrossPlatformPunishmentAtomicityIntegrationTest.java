@@ -49,6 +49,7 @@ class CrossPlatformPunishmentAtomicityIntegrationTest {
     private static final Actor ACTOR = new Actor(
             UUID.fromString("50000000-0000-0000-0000-000000000008"), "D08Admin", StaffRank.ADMIN);
     private static final SanctionLength ONE_HOUR = SanctionLength.temporary(Duration.ofHours(1));
+    private static final String CASES_TABLE = "cases";
 
     @Container
     private static final MariaDBContainer<?> DATABASE = new MariaDBContainer<>("mariadb:11.4.8")
@@ -79,7 +80,7 @@ class CrossPlatformPunishmentAtomicityIntegrationTest {
             assertTrue(replay.replayed());
             assertEquals(fixture.caseId(), first.caseId());
             assertEquals(fixture.discordPunishmentId(), first.discordPunishmentId());
-            assertEquals(1L, rowCount(runtime, "cases", "case_id", fixture.caseId().value()));
+            assertEquals(1L, rowCount(runtime, CASES_TABLE, "case_id", fixture.caseId().value()));
             assertEquals(1L, binaryRowCount(runtime, "moderation_enforcement_targets", "target_id", fixture.discordPunishmentId()));
         }
     }
@@ -95,7 +96,7 @@ class CrossPlatformPunishmentAtomicityIntegrationTest {
             assertThrows(ModerationPersistenceException.class, () ->
                     d08.crossPlatformPunishments().create(plan(fixture, unlinked)));
 
-            assertEquals(0L, rowCount(runtime, "cases", "case_id", fixture.caseId().value()));
+            assertEquals(0L, rowCount(runtime, CASES_TABLE, "case_id", fixture.caseId().value()));
             assertEquals(0L, binaryRowCount(runtime, "moderation_enforcement_targets", "target_id", fixture.discordPunishmentId()));
         }
     }
@@ -114,7 +115,7 @@ class CrossPlatformPunishmentAtomicityIntegrationTest {
             assertThrows(ModerationPersistenceException.class, () ->
                     d08.crossPlatformPunishments().create(plan(conflicting, conflicting.discordUser())));
 
-            assertEquals(1L, rowCount(runtime, "cases", "idempotency_key", fixture.idempotencyKey().value()));
+            assertEquals(1L, rowCount(runtime, CASES_TABLE, "idempotency_key", fixture.idempotencyKey().value()));
             assertEquals(1L, operationRowCount(runtime, fixture.operationKey()));
         }
     }
@@ -129,7 +130,7 @@ class CrossPlatformPunishmentAtomicityIntegrationTest {
             try {
                 assertThrows(ModerationPersistenceException.class, () ->
                         d08.crossPlatformPunishments().create(plan(fixture, fixture.discordUser())));
-                assertEquals(0L, rowCount(runtime, "cases", "case_id", fixture.caseId().value()));
+                assertEquals(0L, rowCount(runtime, CASES_TABLE, "case_id", fixture.caseId().value()));
             } finally {
                 resetBootstrap(runtime);
             }
