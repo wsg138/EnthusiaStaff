@@ -18,6 +18,7 @@ import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.BiFunction;
 import net.enthusia.market.api.moderation.MarketBlacklistRemoval;
 import net.enthusia.market.api.moderation.MarketBlacklistRequest;
 import net.enthusia.market.api.moderation.MarketBlacklistResult;
@@ -30,6 +31,7 @@ import net.enthusia.market.api.moderation.StallBlacklistState;
 import net.enthusia.staff.common.CaseId;
 import net.enthusia.staff.domain.OperationalMode;
 import net.enthusia.staff.domain.auth.Actor;
+import net.enthusia.staff.domain.auth.AuthorizationPolicy;
 import net.enthusia.staff.domain.auth.DefaultAuthorizationPolicy;
 import net.enthusia.staff.domain.auth.StaffRank;
 import net.enthusia.staff.domain.evidence.IntegrationAvailability;
@@ -41,6 +43,7 @@ import net.enthusia.staff.domain.market.MarketComplianceUpdate;
 import net.enthusia.staff.domain.ports.CaseLookup;
 import net.enthusia.staff.domain.ports.MarketComplianceStore;
 import net.enthusia.staff.domain.sanction.SanctionType;
+import net.enthusia.staff.paper.auth.ActiveDutyAuthorizationPolicy;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -61,18 +64,10 @@ class MarketComplianceCoordinatorTest {
     @BeforeEach
     void setUp() {
         mode = OperationalMode.ACTIVE;
-        CaseLookup cases = new FixedCaseLookup();
-        coordinator = new MarketComplianceCoordinator(
-                new MarketCoordinatorRuntime(
-                        Clock.fixed(NOW, ZoneOffset.UTC),
-                        () -> mode,
-                        new DefaultAuthorizationPolicy(),
-                        () -> store,
-                        () -> cases,
-                        Runnable::run
-                ),
-                gateway,
-                () -> OPERATION_ID
+        coordinator = coordinator(
+                Clock.fixed(NOW, ZoneOffset.UTC),
+                new DefaultAuthorizationPolicy(),
+                new FixedCaseLookup()
         );
     }
 
@@ -202,7 +197,6 @@ class MarketComplianceCoordinatorTest {
                 admin(), TARGET_ID, CASE_ID, STALL_ID, Optional.empty()
         ).toCompletableFuture().join();
         gateway.confiscate = approval -> {
-            gateway.confiscations.incrementAndGet();
             assertEquals(ACTOR_ID, approval.reviewerId());
             assertEquals(CHECKSUM, approval.expectedSnapshotChecksum());
             return completed(operationResult(
@@ -218,6 +212,163 @@ class MarketComplianceCoordinatorTest {
         assertEquals(1, gateway.confiscations.get());
         assertEquals(MarketComplianceState.MODERATION_HOLD, result.operation().orElseThrow().state());
         assertEquals(ACTOR_ID, result.operation().orElseThrow().reviewedBy().orElseThrow());
+    }
+
+    @Test
+    void offDutyAdminCannotStartMarketMutation() {
+        coordinator = coordinator(
+                Clock.fixed(NOW, ZoneOffset.UTC),
+                new ActiveDutyAuthorizationPolicy(
+                        new DefaultAuthorizationPolicy(),
+                        ignored -> false
+                ),
+                new FixedCaseLookup()
+        );
+
+        MarketCoordinationResult result = coordinator.prepareStall(
+                admin(), TARGET_ID, CASE_ID, STALL_ID, Optional.empty()
+        ).toCompletableFuture().join();
+
+        assertEquals(MarketCoordinationResult.Status.REJECTED, result.status());
+        assertTrue(store.operations.isEmpty());
+        assertEquals(0, gateway.preparations.get());
+    }
+
+    @Test
+    void caseTargetMismatchRejectsBeforeDurableIntentOrProviderCall() {
+        coordinator = coordinator(
+                Clock.fixed(NOW, ZoneOffset.UTC),
+                new DefaultAuthorizationPolicy(),
+                new FixedCaseLookup(UUID.randomUUID())
+        );
+
+        MarketCoordinationResult result = coordinator.prepareStall(
+                admin(), TARGET_ID, CASE_ID, STALL_ID, Optional.empty()
+        ).toCompletableFuture().join();
+
+        assertEquals(MarketCoordinationResult.Status.REJECTED, result.status());
+        assertTrue(store.operations.isEmpty());
+        assertEquals(0, gateway.preparations.get());
+    }
+
+    @Test
+    void preparedOperationCanBeReleasedWithoutConfiscation() {
+        gateway.prepare = request -> completed(
+                operationResult(request, MarketOperationRecord.State.PREPARED)
+        );
+        coordinator.prepareStall(
+                admin(), TARGET_ID, CASE_ID, STALL_ID, Optional.empty()
+        ).toCompletableFuture().join();
+        gateway.release = (operationId, checksum) -> {
+            assertEquals(OPERATION_ID, operationId);
+            assertEquals(CHECKSUM, checksum);
+            return completed(operationResult(
+                    gateway.request,
+                    MarketOperationRecord.State.RELEASED
+            ));
+        };
+
+        MarketCoordinationResult result = coordinator.release(admin(), OPERATION_ID)
+                .toCompletableFuture().join();
+
+        assertEquals(MarketCoordinationResult.Status.UPDATED, result.status());
+        assertEquals(MarketComplianceState.RELEASED, result.operation().orElseThrow().state());
+        assertEquals(1, gateway.releases.get());
+        assertEquals(0, gateway.confiscations.get());
+    }
+
+    @Test
+    void founderCanRestoreHoldReviewedByDifferentStaffMember() {
+        gateway.prepare = request -> completed(
+                operationResult(request, MarketOperationRecord.State.PREPARED)
+        );
+        coordinator.prepareStall(
+                admin(), TARGET_ID, CASE_ID, STALL_ID, Optional.empty()
+        ).toCompletableFuture().join();
+        gateway.confiscate = approval -> completed(operationResult(
+                gateway.request,
+                MarketOperationRecord.State.MODERATION_HOLD,
+                Optional.of(approval.reviewerId())
+        ));
+        coordinator.approveConfiscation(admin(), OPERATION_ID).toCompletableFuture().join();
+        gateway.restore = request -> {
+            assertEquals("b".repeat(64), request.expectedCurrentChecksum());
+            return completed(operationResult(
+                    gateway.request,
+                    MarketOperationRecord.State.RESTORED,
+                    Optional.of(request.reviewerId())
+            ));
+        };
+
+        MarketCoordinationResult result = coordinator.restore(founder(), OPERATION_ID)
+                .toCompletableFuture().join();
+
+        assertEquals(MarketCoordinationResult.Status.UPDATED, result.status());
+        assertEquals(MarketComplianceState.RESTORED, result.operation().orElseThrow().state());
+        assertEquals(ACTOR_ID, result.operation().orElseThrow().reviewedBy().orElseThrow());
+        assertEquals(1, gateway.restores.get());
+    }
+
+    @Test
+    void blacklistApplyPersistsProviderState() {
+        gateway.applyBlacklist = request -> {
+            StallBlacklistState state = new StallBlacklistState(
+                    request.targetId(),
+                    StallBlacklistState.Status.ACTIVE,
+                    request.expiresAt(),
+                    request.caseId(),
+                    request.operationId(),
+                    1L,
+                    NOW
+            );
+            return completed(new MarketBlacklistResult(
+                    MarketBlacklistResult.Status.APPLIED,
+                    Optional.of(state),
+                    "blacklist applied"
+            ));
+        };
+
+        MarketCoordinationResult result = coordinator.applyBlacklist(
+                admin(), TARGET_ID, CASE_ID, Optional.empty()
+        ).toCompletableFuture().join();
+
+        assertEquals(MarketCoordinationResult.Status.UPDATED, result.status());
+        assertEquals(
+                MarketComplianceState.BLACKLIST_ACTIVE,
+                result.operation().orElseThrow().state()
+        );
+        assertEquals(1, gateway.blacklistApplies.get());
+    }
+
+    @Test
+    void staleBlacklistRemovalIsQuarantinedWithoutGuessing() {
+        gateway.removeBlacklist = removal -> {
+            StallBlacklistState current = new StallBlacklistState(
+                    removal.targetId(),
+                    StallBlacklistState.Status.ACTIVE,
+                    Optional.empty(),
+                    removal.caseId(),
+                    UUID.randomUUID(),
+                    removal.expectedRevision() + 1L,
+                    NOW
+            );
+            return completed(new MarketBlacklistResult(
+                    MarketBlacklistResult.Status.CONFLICT,
+                    Optional.of(current),
+                    "blacklist revision changed"
+            ));
+        };
+
+        MarketCoordinationResult result = coordinator.removeBlacklist(
+                admin(), TARGET_ID, CASE_ID, 1L
+        ).toCompletableFuture().join();
+
+        assertEquals(MarketCoordinationResult.Status.QUARANTINED, result.status());
+        assertEquals(
+                MarketComplianceState.QUARANTINED,
+                result.operation().orElseThrow().state()
+        );
+        assertEquals(1, gateway.blacklistRemovals.get());
     }
 
     @Test
@@ -249,8 +400,31 @@ class MarketComplianceCoordinatorTest {
         assertEquals(MarketComplianceState.PREPARED, result.operation().orElseThrow().state());
     }
 
+    private MarketComplianceCoordinator coordinator(
+            Clock clock,
+            AuthorizationPolicy authorization,
+            CaseLookup cases
+    ) {
+        return new MarketComplianceCoordinator(
+                new MarketCoordinatorRuntime(
+                        clock,
+                        () -> mode,
+                        authorization,
+                        () -> store,
+                        () -> cases,
+                        Runnable::run
+                ),
+                gateway,
+                () -> OPERATION_ID
+        );
+    }
+
     private static Actor admin() {
         return new Actor(ACTOR_ID, "admin", StaffRank.ADMIN);
+    }
+
+    private static Actor founder() {
+        return new Actor(ACTOR_ID, "founder", StaffRank.FOUNDER);
     }
 
     private MarketOperationResult operationResult(
@@ -299,6 +473,16 @@ class MarketComplianceCoordinatorTest {
     }
 
     private static final class FixedCaseLookup implements CaseLookup {
+        private final UUID targetId;
+
+        private FixedCaseLookup() {
+            this(TARGET_ID);
+        }
+
+        private FixedCaseLookup(UUID targetId) {
+            this.targetId = targetId;
+        }
+
         @Override
         public Optional<CaseId> latestCase(UUID targetId, Set<SanctionType> types, boolean activeOnly) {
             return Optional.empty();
@@ -306,7 +490,7 @@ class MarketComplianceCoordinatorTest {
 
         @Override
         public Optional<UUID> target(CaseId caseId) {
-            return CASE_ID.equals(caseId) ? Optional.of(TARGET_ID) : Optional.empty();
+            return CASE_ID.equals(caseId) ? Optional.of(targetId) : Optional.empty();
         }
 
         @Override
@@ -414,9 +598,27 @@ class MarketComplianceCoordinatorTest {
                 CompletionStage<MarketOperationResult>> prepare = ignored -> null;
         private java.util.function.Function<MarketConfiscationApproval,
                 CompletionStage<MarketOperationResult>> confiscate = ignored -> null;
+        private java.util.function.Function<MarketRestoreRequest,
+                CompletionStage<MarketOperationResult>> restore =
+                ignored -> CompletableFuture.failedStage(new UnsupportedOperationException());
+        private BiFunction<UUID, String, CompletionStage<MarketOperationResult>> release =
+                (ignoredId, ignoredChecksum) ->
+                        CompletableFuture.failedStage(new UnsupportedOperationException());
+        private java.util.function.Function<MarketBlacklistRequest,
+                CompletionStage<MarketBlacklistResult>> applyBlacklist =
+                ignored -> CompletableFuture.failedStage(new UnsupportedOperationException());
+        private java.util.function.Function<MarketBlacklistRemoval,
+                CompletionStage<MarketBlacklistResult>> removeBlacklist =
+                ignored -> CompletableFuture.failedStage(new UnsupportedOperationException());
         private java.util.function.Function<UUID,
-                CompletionStage<Optional<MarketOperationRecord>>> find = ignored -> completed(Optional.empty());
+                CompletionStage<Optional<MarketOperationRecord>>> find =
+                ignored -> completed(Optional.empty());
+        private final AtomicInteger preparations = new AtomicInteger();
         private final AtomicInteger confiscations = new AtomicInteger();
+        private final AtomicInteger restores = new AtomicInteger();
+        private final AtomicInteger releases = new AtomicInteger();
+        private final AtomicInteger blacklistApplies = new AtomicInteger();
+        private final AtomicInteger blacklistRemovals = new AtomicInteger();
         private MarketOperationRequest request;
         private MarketOperationRecord record;
 
@@ -432,22 +634,26 @@ class MarketComplianceCoordinatorTest {
 
         @Override
         public CompletionStage<MarketOperationResult> prepare(MarketOperationRequest request) {
+            preparations.incrementAndGet();
             return Objects.requireNonNull(prepare.apply(request));
         }
 
         @Override
         public CompletionStage<MarketOperationResult> confiscate(MarketConfiscationApproval approval) {
+            confiscations.incrementAndGet();
             return Objects.requireNonNull(confiscate.apply(approval));
         }
 
         @Override
         public CompletionStage<MarketOperationResult> restore(MarketRestoreRequest request) {
-            return CompletableFuture.failedStage(new UnsupportedOperationException());
+            restores.incrementAndGet();
+            return Objects.requireNonNull(restore.apply(request));
         }
 
         @Override
         public CompletionStage<MarketOperationResult> release(UUID operationId, String snapshotChecksum) {
-            return CompletableFuture.failedStage(new UnsupportedOperationException());
+            releases.incrementAndGet();
+            return Objects.requireNonNull(release.apply(operationId, snapshotChecksum));
         }
 
         @Override
@@ -462,12 +668,14 @@ class MarketComplianceCoordinatorTest {
 
         @Override
         public CompletionStage<MarketBlacklistResult> applyBlacklist(MarketBlacklistRequest request) {
-            return CompletableFuture.failedStage(new UnsupportedOperationException());
+            blacklistApplies.incrementAndGet();
+            return Objects.requireNonNull(applyBlacklist.apply(request));
         }
 
         @Override
         public CompletionStage<MarketBlacklistResult> removeBlacklist(MarketBlacklistRemoval removal) {
-            return CompletableFuture.failedStage(new UnsupportedOperationException());
+            blacklistRemovals.incrementAndGet();
+            return Objects.requireNonNull(removeBlacklist.apply(removal));
         }
     }
 }

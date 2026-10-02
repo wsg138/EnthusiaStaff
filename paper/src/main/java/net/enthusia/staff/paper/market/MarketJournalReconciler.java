@@ -204,9 +204,19 @@ final class MarketJournalReconciler {
                 && local.snapshotChecksum()
                         .map(provider.snapshotChecksum()::equals)
                         .orElse(true)
-                && local.reviewedBy()
-                        .map(reviewer -> provider.reviewerId().filter(reviewer::equals).isPresent())
-                        .orElse(true);
+                && reviewerMatches(local, provider);
+    }
+
+    private static boolean reviewerMatches(
+            MarketComplianceOperation local,
+            MarketOperationRecord provider
+    ) {
+        if (provider.state() == MarketOperationRecord.State.RESTORED) {
+            return provider.reviewerId().isPresent();
+        }
+        return local.reviewedBy()
+                .map(reviewer -> provider.reviewerId().filter(reviewer::equals).isPresent())
+                .orElse(true);
     }
 
     private static boolean matches(
