@@ -155,18 +155,31 @@ public final class PlayerRowEnsuringInventoryJournalStore implements InventoryJo
                 || limit < 1 || limit > MAX_CURSOR_QUERY) {
             throw new IllegalArgumentException("cursor transfer actor query is invalid");
         }
-        return queryCursorJournals("""
-                WHERE o.actor_id = ?
-                    AND p.owning_server_id = ?
-                    AND o.operation_type LIKE 'ONLINE_CURSOR_%'
-                    AND q.state IN ('PENDING', 'APPLYING', 'QUARANTINED')
-                ORDER BY q.created_at
-                LIMIT ?
-                """, statement -> {
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement("""
+                     SELECT q.patch_id, q.operation_id, q.profile_id, p.player_id, p.scope_id,
+                         p.owning_server_id, o.actor_id, o.case_id, o.operation_type, q.state,
+                         q.expected_revision, q.fencing_token, q.expected_checksum,
+                         q.replacement_checksum, q.replacement_blob, q.patch_json, q.created_at,
+                         o.operation_json, s.snapshot_blob AS before_snapshot
+                     FROM inventory_pending_patches q
+                     JOIN inventory_profiles p ON p.profile_id = q.profile_id
+                     JOIN inventory_operations o ON o.operation_id = q.operation_id
+                     JOIN inventory_snapshots s ON s.operation_id = q.operation_id
+                     WHERE o.actor_id = ?
+                         AND p.owning_server_id = ?
+                         AND o.operation_type LIKE 'ONLINE_CURSOR_%'
+                         AND q.state IN ('PENDING', 'APPLYING', 'QUARANTINED')
+                     ORDER BY q.created_at
+                     LIMIT ?
+                     """)) {
             statement.setBytes(1, UuidBytes.toBytes(actorId));
             statement.setString(2, requestingServerId);
             statement.setInt(3, limit);
-        });
+            return readCursorJournals(statement);
+        } catch (SQLException exception) {
+            throw new ModerationPersistenceException("Unable to load live inventory cursor escrow", exception);
+        }
     }
 
     @Override
@@ -174,11 +187,25 @@ public final class PlayerRowEnsuringInventoryJournalStore implements InventoryJo
         if (operationId == null) {
             throw new IllegalArgumentException("operationId must be present");
         }
-        List<InventoryCursorJournal> matches = queryCursorJournals("""
-                WHERE o.operation_id = ? AND o.operation_type LIKE 'ONLINE_CURSOR_%'
-                LIMIT 1
-                """, statement -> statement.setBytes(1, UuidBytes.toBytes(operationId)));
-        return matches.stream().findFirst();
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement("""
+                     SELECT q.patch_id, q.operation_id, q.profile_id, p.player_id, p.scope_id,
+                         p.owning_server_id, o.actor_id, o.case_id, o.operation_type, q.state,
+                         q.expected_revision, q.fencing_token, q.expected_checksum,
+                         q.replacement_checksum, q.replacement_blob, q.patch_json, q.created_at,
+                         o.operation_json, s.snapshot_blob AS before_snapshot
+                     FROM inventory_pending_patches q
+                     JOIN inventory_profiles p ON p.profile_id = q.profile_id
+                     JOIN inventory_operations o ON o.operation_id = q.operation_id
+                     JOIN inventory_snapshots s ON s.operation_id = q.operation_id
+                     WHERE o.operation_id = ? AND o.operation_type LIKE 'ONLINE_CURSOR_%'
+                     LIMIT 1
+                     """)) {
+            statement.setBytes(1, UuidBytes.toBytes(operationId));
+            return readCursorJournals(statement).stream().findFirst();
+        } catch (SQLException exception) {
+            throw new ModerationPersistenceException("Unable to load live inventory cursor escrow", exception);
+        }
     }
 
     @Override
@@ -449,33 +476,14 @@ public final class PlayerRowEnsuringInventoryJournalStore implements InventoryJo
         }
     }
 
-    private List<InventoryCursorJournal> queryCursorJournals(
-            String whereClause,
-            SqlBinder binder
-    ) {
-        String sql = """
-                SELECT q.patch_id, q.operation_id, q.profile_id, p.player_id, p.scope_id,
-                    p.owning_server_id, o.actor_id, o.case_id, o.operation_type, q.state,
-                    q.expected_revision, q.fencing_token, q.expected_checksum,
-                    q.replacement_checksum, q.replacement_blob, q.patch_json, q.created_at,
-                    o.operation_json, s.snapshot_blob AS before_snapshot
-                FROM inventory_pending_patches q
-                JOIN inventory_profiles p ON p.profile_id = q.profile_id
-                JOIN inventory_operations o ON o.operation_id = q.operation_id
-                JOIN inventory_snapshots s ON s.operation_id = q.operation_id
-                """ + whereClause;
-        try (Connection connection = dataSource.getConnection();
-             PreparedStatement statement = connection.prepareStatement(sql)) {
-            binder.bind(statement);
-            try (ResultSet result = statement.executeQuery()) {
-                List<InventoryCursorJournal> journals = new ArrayList<>();
-                while (result.next()) {
-                    readCursorJournal(result).ifPresent(journals::add);
-                }
-                return List.copyOf(journals);
+    private List<InventoryCursorJournal> readCursorJournals(PreparedStatement statement)
+            throws SQLException {
+        try (ResultSet result = statement.executeQuery()) {
+            List<InventoryCursorJournal> journals = new ArrayList<>();
+            while (result.next()) {
+                readCursorJournal(result).ifPresent(journals::add);
             }
-        } catch (SQLException exception) {
-            throw new ModerationPersistenceException("Unable to load live inventory cursor escrow", exception);
+            return List.copyOf(journals);
         }
     }
 
@@ -570,8 +578,4 @@ public final class PlayerRowEnsuringInventoryJournalStore implements InventoryJo
         }
     }
 
-    @FunctionalInterface
-    private interface SqlBinder {
-        void bind(PreparedStatement statement) throws SQLException;
-    }
 }
