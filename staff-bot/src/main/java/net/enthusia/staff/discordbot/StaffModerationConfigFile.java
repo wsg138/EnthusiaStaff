@@ -29,6 +29,9 @@ final class StaffModerationConfigFile {
     static final String ROLE_SYNC_BATCH_SIZE_PROPERTY = "role-sync.batch-size";
     static final String ROLE_SYNC_DB_USERNAME_PROPERTY = "role-sync.db-username";
     static final String ROLE_SYNC_DB_CREDENTIAL_PROPERTY = "role-sync.db-password";
+    static final String COMMAND_BRIDGE_ENDPOINTS_PROPERTY = "command-bridge.endpoints";
+    static final String COMMAND_BRIDGE_CREDENTIAL_PROPERTY = "command-bridge.secret";
+    static final String COMMAND_BRIDGE_TIMEOUT_PROPERTY = "command-bridge.timeout-millis";
     static final String ENFORCEMENT_ENABLED_PROPERTY = "discord-enforcement.enabled";
     static final String MUTE_ROLE_PROPERTY = "discord-enforcement.mute-role-id";
     static final String SUPPORT_SCOPES_PROPERTY = "discord-enforcement.support-scope-ids";
@@ -57,6 +60,9 @@ final class StaffModerationConfigFile {
             Map.entry(ROLE_SYNC_BATCH_SIZE_PROPERTY, DiscordRoleSyncConfiguration.BATCH_SIZE_ENV),
             Map.entry(ROLE_SYNC_DB_USERNAME_PROPERTY, StaffModerationConfiguration.ROLE_SYNC_DB_USERNAME_ENV),
             Map.entry(ROLE_SYNC_DB_CREDENTIAL_PROPERTY, StaffModerationConfiguration.ROLE_SYNC_DB_CREDENTIAL_ENV),
+            Map.entry(COMMAND_BRIDGE_ENDPOINTS_PROPERTY, DiscordCommandBridgeConfiguration.ENDPOINTS_ENV),
+            Map.entry(COMMAND_BRIDGE_CREDENTIAL_PROPERTY, DiscordCommandBridgeConfiguration.CREDENTIAL_ENV),
+            Map.entry(COMMAND_BRIDGE_TIMEOUT_PROPERTY, DiscordCommandBridgeConfiguration.TIMEOUT_MILLIS_ENV),
             Map.entry(ENFORCEMENT_ENABLED_PROPERTY, DiscordPunishmentConfiguration.ENABLED_ENV),
             Map.entry(MUTE_ROLE_PROPERTY, DiscordPunishmentConfiguration.MUTE_ROLE_ENV),
             Map.entry(SUPPORT_SCOPES_PROPERTY, DiscordPunishmentConfiguration.SUPPORT_SCOPES_ENV),

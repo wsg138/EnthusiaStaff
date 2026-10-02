@@ -62,6 +62,21 @@ class JdaStaffModerationListenerTest {
     }
 
     @Test
+    void commandBridgeAddsOnlyThePrivateConsoleCommand() {
+        var commands = JdaStaffModerationListener.commands(false, false, true);
+
+        assertEquals(9, commands.size());
+        SlashCommandData console = (SlashCommandData) command(commands, "console");
+        assertEquals(
+                java.util.List.of("server", "command"),
+                console.getOptions().stream().map(option -> option.getName()).toList()
+        );
+        assertTrue(console.getOptions().stream().allMatch(option ->
+                option.getType() == OptionType.STRING && option.isRequired()));
+        assertEquals(DefaultMemberPermissions.DISABLED, console.getDefaultPermissions());
+    }
+
+    @Test
     void removalCommandsUseExactDiscordUserIds() {
         for (String name : java.util.List.of("unmute", "unban", "unrestrict")) {
             SlashCommandData command = (SlashCommandData) command(JdaStaffModerationListener.commands(true), name);
