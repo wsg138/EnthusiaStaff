@@ -28,7 +28,7 @@ class HttpMinecraftCommandBridgeClientTest {
     private static final String NONCE = "0123456789abcdef0123456789abcdef";
     private static final Instant NOW = Instant.parse("2026-09-30T19:00:00Z");
     private static final DiscordUserId DISCORD_ID = new DiscordUserId("123456789012345678");
-    private static final String TARGET_SERVER = TARGET_SERVER;
+    private static final String TARGET_SERVER = "smp";
     private static final URI ENDPOINT = URI.create("http://127.0.0.1:8772/v1/discord-command");
     private static final CommandBridgeWireCodec CODEC = new CommandBridgeWireCodec();
 

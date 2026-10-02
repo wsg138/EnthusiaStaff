@@ -32,8 +32,8 @@ class CommandBridgeServiceTest {
     private static final UUID ACTOR_ID = UUID.fromString("33333333-3333-3333-3333-333333333333");
     private static final Instant NOW = Instant.parse("2026-09-30T19:00:00Z");
     private static final Clock CLOCK = Clock.fixed(NOW.plusSeconds(1), ZoneOffset.UTC);
-    private static final String TARGET_SERVER = TARGET_SERVER;
-    private static final String LIST_COMMAND = LIST_COMMAND;
+    private static final String TARGET_SERVER = "smp";
+    private static final String LIST_COMMAND = "list";
     private static final CommandBridgeRule LIST_RULE =
             new CommandBridgeRule(LIST_COMMAND, StaffRank.MOD, "enthusia.console.list", 0);
 

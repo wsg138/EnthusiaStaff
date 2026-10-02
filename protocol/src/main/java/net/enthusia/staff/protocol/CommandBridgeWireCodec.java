@@ -22,8 +22,8 @@ public final class CommandBridgeWireCodec {
     private static final int VERSION = 1;
     private static final int MAX_REQUEST_BYTES = 4_096;
     private static final int MAX_RESPONSE_BYTES = 8_192;
-    private static final String VERSION_FIELD = VERSION_FIELD;
-    private static final String MESSAGE_FIELD = MESSAGE_FIELD;
+    private static final String VERSION_FIELD = "version";
+    private static final String MESSAGE_FIELD = "message";
     private static final ObjectMapper JSON = new ObjectMapper();
     private static final Set<String> REQUEST_FIELDS = Set.of(
             VERSION_FIELD, "requestId", "subjectId", "discordUserId", "actorPlayerId",
