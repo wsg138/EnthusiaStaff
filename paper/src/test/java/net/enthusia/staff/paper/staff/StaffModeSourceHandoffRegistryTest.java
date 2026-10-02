@@ -17,6 +17,7 @@ class StaffModeSourceHandoffRegistryTest {
         StaffModeSourceHandoffRegistry registry = new StaffModeSourceHandoffRegistry();
 
         assertTrue(registry.begin(PLAYER, TRANSFER));
+        assertFalse(registry.begin(PLAYER, TRANSFER));
         assertFalse(registry.begin(PLAYER, OTHER));
         assertFalse(registry.abort(PLAYER, OTHER));
         assertTrue(registry.abort(PLAYER, TRANSFER));

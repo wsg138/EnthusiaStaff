@@ -12,8 +12,7 @@ final class StaffModeSourceHandoffRegistry {
         java.util.Objects.requireNonNull(playerId, "playerId");
         java.util.Objects.requireNonNull(transferId, "transferId");
         Entry created = new Entry(transferId);
-        Entry existing = active.putIfAbsent(playerId, created);
-        return existing == null || existing.transferId().equals(transferId);
+        return active.putIfAbsent(playerId, created) == null;
     }
 
     boolean abort(UUID playerId, UUID transferId) {

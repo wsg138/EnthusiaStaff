@@ -167,9 +167,10 @@ public final class StaffModeManager implements Listener {
             UUID transferId
     ) {
         StaffSessionSnapshot runtime = active.get(playerId);
-        if (transferId == null
-                || !sourceHandoffs.begin(playerId, transferId)
-                || !validHandoffSource(runtime, expectedSessionId, expectedRevision)
+        if (transferId == null || !sourceHandoffs.begin(playerId, transferId)) {
+            return CompletableFuture.completedFuture(false);
+        }
+        if (!validHandoffSource(runtime, expectedSessionId, expectedRevision)
                 || !transitions.add(playerId)) {
             sourceHandoffs.finish(playerId, transferId);
             return CompletableFuture.completedFuture(false);
