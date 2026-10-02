@@ -78,12 +78,26 @@ final class CaseReviewTest {
     }
 
     @Test
+    void legacyConstructorRemainsCompatible() {
+        CaseReview review = new CaseReview(
+                new CaseId("FEDCBA9876543210"), UUID.randomUUID(), UUID.randomUUID(),
+                "Moderator", "ADMIN", "Public reason", "chat.abuse", "MUTE",
+                "Internal explanation", "rules-v1", CaseVisibility.PRIVATE, CaseState.OPEN,
+                ISSUED_AT, 2L, Optional.empty(), List.of(), Optional.empty()
+        );
+
+        assertTrue(review.subjectId().isEmpty());
+        assertTrue(review.minecraftTargetId().isPresent());
+    }
+
+    @Test
     void invalidCaseReviewFieldsAreRejected() {
         assertThrows(
                 IllegalArgumentException.class,
                 () -> new CaseReview(
                         new CaseId("0123456789ABCDEF"),
                         UUID.randomUUID(),
+                        Optional.empty(),
                         UUID.randomUUID(),
                         " ",
                         "ADMIN",
@@ -111,6 +125,7 @@ final class CaseReviewTest {
         return new CaseReview(
                 new CaseId("0123456789ABCDEF"),
                 UUID.randomUUID(),
+                Optional.empty(),
                 UUID.randomUUID(),
                 "Moderator",
                 "ADMIN",
