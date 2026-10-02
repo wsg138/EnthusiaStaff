@@ -144,6 +144,9 @@ jobs:
               private Object rankAdmin;
               private Method setVanished;
               private Method reconcileManager;
+              private Object freezeManager;
+              private Method releaseFreeze;
+              private Method isFreezeRestricted;
               private Object badController;
               private Method reconcileController;
 
@@ -213,6 +216,12 @@ jobs:
                   Method vanishAccessor = components.getClass().getDeclaredMethod("vanish");
                   vanishAccessor.setAccessible(true);
                   vanishManager = vanishAccessor.invoke(components);
+
+                  Method freezeAccessor = components.getClass().getDeclaredMethod("freeze");
+                  freezeAccessor.setAccessible(true);
+                  freezeManager = freezeAccessor.invoke(components);
+                  releaseFreeze = freezeManager.getClass().getMethod("releaseOnline", UUID.class);
+                  isFreezeRestricted = freezeManager.getClass().getMethod("isRestricted", UUID.class);
 
                   Field visibilityField = vanishManager.getClass().getDeclaredField("visibility");
                   visibilityField.setAccessible(true);
@@ -285,6 +294,7 @@ jobs:
 
               private void teleport(Player player) {
                   try {
+                      releaseDisposableFreeze(player);
                       Location destination = player.getLocation().clone().add(7.0D, 2.0D, 7.0D);
                       boolean teleported = player.teleport(destination);
                       boolean reconciled = reconcile(player);
@@ -409,6 +419,13 @@ jobs:
 
               private void setVanish(Player player, boolean vanished) throws ReflectiveOperationException {
                   setVanished.invoke(visibility, player.getUniqueId(), rankAdmin, vanished);
+              }
+
+              private void releaseDisposableFreeze(Player player) throws ReflectiveOperationException {
+                  UUID playerId = player.getUniqueId();
+                  releaseFreeze.invoke(freezeManager, playerId);
+                  boolean restricted = (boolean) isFreezeRestricted.invoke(freezeManager, playerId);
+                  evidence("FREEZE_RELEASE|restricted=" + restricted);
               }
 
               private boolean reconcile(Player player) throws ReflectiveOperationException {
@@ -714,8 +731,162 @@ jobs:
 
             require_line "$evidence" '^HARNESS_READY=true$'
             require_line "$evidence" '^FACTORY_AVAILABLE=true\|reason=$'
-            require_line "$evidence" '^ENABLE\|reconciled=true\|noPhysics=true\|serverMode=CREATIVE$'
-            require_line "$evidence" '^TELEPORT\|teleported=true\|reconciled=true\|noPhysics=true\|serverMode=CREATIVE$'
+            require_line "$evidence" '^ENABLE\|reconciled=true\|noPhysics=true\|serverMode=CREATIVE
+            require_line "$evidence" '^DISABLE\|reconciled=true\|noPhysics=false\|serverMode=CREATIVE$'
+            require_line "$evidence" '^FORCED_FAILURE\|reconciled=false\|adapterAvailable=false\|noPhysics=false$'
+            require_line "$evidence" '^RECONNECT_PREP\|reconciled=true\|noPhysics=true\|serverMode=CREATIVE$'
+            require_line "$evidence" '^RECONNECT_JOIN\|noPhysics=false\|serverMode=CREATIVE$'
+            require_line "$evidence" '^RECONNECT_ENABLE\|reconciled=true\|noPhysics=true\|serverMode=CREATIVE$'
+            require_line "$evidence" '^RECONNECT_DISABLE\|reconciled=true\|noPhysics=false\|serverMode=CREATIVE$'
+            require_line "$evidence" '^DISABLE_PREP\|reconciled=true\|noPhysics=true\|serverMode=CREATIVE$'
+            require_line "$evidence" '^PLUGIN_DISABLE_CLEANUP\|noPhysics=false\|serverMode=CREATIVE$'
+            require_line "$evidence" '^DONE=true$'
+            if grep -q '^FAIL|' "$evidence"; then
+              echo "::error::Runtime harness recorded a failure for $name"
+              grep '^FAIL|' "$evidence"
+              exit 1
+            fi
+
+            require_line "$client" '^MARKER\|ENABLED\|session=1\|mode=spectator$'
+            require_line "$client" '^MARKER\|TELEPORTED\|session=1\|mode=spectator$'
+            require_line "$client" '^MARKER\|DISABLED\|session=1\|mode=creative$'
+            require_line "$client" '^MARKER\|RECONNECT_PREP\|session=1\|mode=spectator$'
+            require_line "$client" '^MARKER\|RECONNECT_ENABLED\|session=2\|mode=spectator$'
+            require_line "$client" '^MARKER\|RECONNECT_DISABLED\|session=2\|mode=creative$'
+            require_line "$client" '^MARKER\|DISABLE_ACTIVE\|session=2\|mode=spectator$'
+            require_line "$client" '^MARKER\|DISABLE_CLEANED\|session=2\|mode=creative$'
+            require_line "$client" '^GAME_STATE\|session=1\|reason=change_game_mode\|gameMode=3$'
+            require_line "$client" '^GAME_STATE\|session=1\|reason=change_game_mode\|gameMode=1$'
+
+            grep -E ' (ERROR|SEVERE)\]:' "$console" > "$root/$name/severe-lines.txt" || true
+            grep -Ev               'Freeze storage is unavailable; the joining player remains restricted|Vanish rank reconciliation failed; retry remains pending|Vanish no-clip client presentation failed; adapter is now fail-closed'               "$root/$name/severe-lines.txt" > "$root/$name/unexpected-severe-lines.txt" || true
+            if [[ -s "$root/$name/unexpected-severe-lines.txt" ]]; then
+              echo "::error::Unexpected severe/error logs on supported runtime $name"
+              cat "$root/$name/unexpected-severe-lines.txt"
+              exit 1
+            fi
+          done
+
+          cmp "$RUNNER_TEMP/candidate/EnthusiaStaff-Paper.jar"               "$root/leaf/server/plugins/EnthusiaStaff-Paper.jar"
+          cmp "$RUNNER_TEMP/candidate/EnthusiaStaff-Paper.jar"               "$root/paper/server/plugins/EnthusiaStaff-Paper.jar"
+          echo 'COMMON_JAR_IDENTICAL=true'
+
+      - name: Upload proof evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: single-cross-version-staff-runtime-proof
+          path: |
+            ${{ runner.temp }}/evidence/
+            ${{ runner.temp }}/servers/*/receipt.txt
+            ${{ runner.temp }}/runtime-proof/
+          if-no-files-found: warn
+          retention-days: 30
+
+            require_line "$evidence" '^FREEZE_RELEASE\|restricted=false
+            require_line "$evidence" '^DISABLE\|reconciled=true\|noPhysics=false\|serverMode=CREATIVE$'
+            require_line "$evidence" '^FORCED_FAILURE\|reconciled=false\|adapterAvailable=false\|noPhysics=false$'
+            require_line "$evidence" '^RECONNECT_PREP\|reconciled=true\|noPhysics=true\|serverMode=CREATIVE$'
+            require_line "$evidence" '^RECONNECT_JOIN\|noPhysics=false\|serverMode=CREATIVE$'
+            require_line "$evidence" '^RECONNECT_ENABLE\|reconciled=true\|noPhysics=true\|serverMode=CREATIVE$'
+            require_line "$evidence" '^RECONNECT_DISABLE\|reconciled=true\|noPhysics=false\|serverMode=CREATIVE$'
+            require_line "$evidence" '^DISABLE_PREP\|reconciled=true\|noPhysics=true\|serverMode=CREATIVE$'
+            require_line "$evidence" '^PLUGIN_DISABLE_CLEANUP\|noPhysics=false\|serverMode=CREATIVE$'
+            require_line "$evidence" '^DONE=true$'
+            if grep -q '^FAIL|' "$evidence"; then
+              echo "::error::Runtime harness recorded a failure for $name"
+              grep '^FAIL|' "$evidence"
+              exit 1
+            fi
+
+            require_line "$client" '^MARKER\|ENABLED\|session=1\|mode=spectator$'
+            require_line "$client" '^MARKER\|TELEPORTED\|session=1\|mode=spectator$'
+            require_line "$client" '^MARKER\|DISABLED\|session=1\|mode=creative$'
+            require_line "$client" '^MARKER\|RECONNECT_PREP\|session=1\|mode=spectator$'
+            require_line "$client" '^MARKER\|RECONNECT_ENABLED\|session=2\|mode=spectator$'
+            require_line "$client" '^MARKER\|RECONNECT_DISABLED\|session=2\|mode=creative$'
+            require_line "$client" '^MARKER\|DISABLE_ACTIVE\|session=2\|mode=spectator$'
+            require_line "$client" '^MARKER\|DISABLE_CLEANED\|session=2\|mode=creative$'
+            require_line "$client" '^GAME_STATE\|session=1\|reason=change_game_mode\|gameMode=3$'
+            require_line "$client" '^GAME_STATE\|session=1\|reason=change_game_mode\|gameMode=1$'
+
+            grep -E ' (ERROR|SEVERE)\]:' "$console" > "$root/$name/severe-lines.txt" || true
+            grep -Ev               'Freeze storage is unavailable; the joining player remains restricted|Vanish rank reconciliation failed; retry remains pending|Vanish no-clip client presentation failed; adapter is now fail-closed'               "$root/$name/severe-lines.txt" > "$root/$name/unexpected-severe-lines.txt" || true
+            if [[ -s "$root/$name/unexpected-severe-lines.txt" ]]; then
+              echo "::error::Unexpected severe/error logs on supported runtime $name"
+              cat "$root/$name/unexpected-severe-lines.txt"
+              exit 1
+            fi
+          done
+
+          cmp "$RUNNER_TEMP/candidate/EnthusiaStaff-Paper.jar"               "$root/leaf/server/plugins/EnthusiaStaff-Paper.jar"
+          cmp "$RUNNER_TEMP/candidate/EnthusiaStaff-Paper.jar"               "$root/paper/server/plugins/EnthusiaStaff-Paper.jar"
+          echo 'COMMON_JAR_IDENTICAL=true'
+
+      - name: Upload proof evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: single-cross-version-staff-runtime-proof
+          path: |
+            ${{ runner.temp }}/evidence/
+            ${{ runner.temp }}/servers/*/receipt.txt
+            ${{ runner.temp }}/runtime-proof/
+          if-no-files-found: warn
+          retention-days: 30
+
+            require_line "$evidence" '^TELEPORT\|teleported=true\|reconciled=true\|noPhysics=true\|serverMode=CREATIVE
+            require_line "$evidence" '^DISABLE\|reconciled=true\|noPhysics=false\|serverMode=CREATIVE$'
+            require_line "$evidence" '^FORCED_FAILURE\|reconciled=false\|adapterAvailable=false\|noPhysics=false$'
+            require_line "$evidence" '^RECONNECT_PREP\|reconciled=true\|noPhysics=true\|serverMode=CREATIVE$'
+            require_line "$evidence" '^RECONNECT_JOIN\|noPhysics=false\|serverMode=CREATIVE$'
+            require_line "$evidence" '^RECONNECT_ENABLE\|reconciled=true\|noPhysics=true\|serverMode=CREATIVE$'
+            require_line "$evidence" '^RECONNECT_DISABLE\|reconciled=true\|noPhysics=false\|serverMode=CREATIVE$'
+            require_line "$evidence" '^DISABLE_PREP\|reconciled=true\|noPhysics=true\|serverMode=CREATIVE$'
+            require_line "$evidence" '^PLUGIN_DISABLE_CLEANUP\|noPhysics=false\|serverMode=CREATIVE$'
+            require_line "$evidence" '^DONE=true$'
+            if grep -q '^FAIL|' "$evidence"; then
+              echo "::error::Runtime harness recorded a failure for $name"
+              grep '^FAIL|' "$evidence"
+              exit 1
+            fi
+
+            require_line "$client" '^MARKER\|ENABLED\|session=1\|mode=spectator$'
+            require_line "$client" '^MARKER\|TELEPORTED\|session=1\|mode=spectator$'
+            require_line "$client" '^MARKER\|DISABLED\|session=1\|mode=creative$'
+            require_line "$client" '^MARKER\|RECONNECT_PREP\|session=1\|mode=spectator$'
+            require_line "$client" '^MARKER\|RECONNECT_ENABLED\|session=2\|mode=spectator$'
+            require_line "$client" '^MARKER\|RECONNECT_DISABLED\|session=2\|mode=creative$'
+            require_line "$client" '^MARKER\|DISABLE_ACTIVE\|session=2\|mode=spectator$'
+            require_line "$client" '^MARKER\|DISABLE_CLEANED\|session=2\|mode=creative$'
+            require_line "$client" '^GAME_STATE\|session=1\|reason=change_game_mode\|gameMode=3$'
+            require_line "$client" '^GAME_STATE\|session=1\|reason=change_game_mode\|gameMode=1$'
+
+            grep -E ' (ERROR|SEVERE)\]:' "$console" > "$root/$name/severe-lines.txt" || true
+            grep -Ev               'Freeze storage is unavailable; the joining player remains restricted|Vanish rank reconciliation failed; retry remains pending|Vanish no-clip client presentation failed; adapter is now fail-closed'               "$root/$name/severe-lines.txt" > "$root/$name/unexpected-severe-lines.txt" || true
+            if [[ -s "$root/$name/unexpected-severe-lines.txt" ]]; then
+              echo "::error::Unexpected severe/error logs on supported runtime $name"
+              cat "$root/$name/unexpected-severe-lines.txt"
+              exit 1
+            fi
+          done
+
+          cmp "$RUNNER_TEMP/candidate/EnthusiaStaff-Paper.jar"               "$root/leaf/server/plugins/EnthusiaStaff-Paper.jar"
+          cmp "$RUNNER_TEMP/candidate/EnthusiaStaff-Paper.jar"               "$root/paper/server/plugins/EnthusiaStaff-Paper.jar"
+          echo 'COMMON_JAR_IDENTICAL=true'
+
+      - name: Upload proof evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: single-cross-version-staff-runtime-proof
+          path: |
+            ${{ runner.temp }}/evidence/
+            ${{ runner.temp }}/servers/*/receipt.txt
+            ${{ runner.temp }}/runtime-proof/
+          if-no-files-found: warn
+          retention-days: 30
+
             require_line "$evidence" '^DISABLE\|reconciled=true\|noPhysics=false\|serverMode=CREATIVE$'
             require_line "$evidence" '^FORCED_FAILURE\|reconciled=false\|adapterAvailable=false\|noPhysics=false$'
             require_line "$evidence" '^RECONNECT_PREP\|reconciled=true\|noPhysics=true\|serverMode=CREATIVE$'
