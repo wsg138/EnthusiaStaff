@@ -107,18 +107,18 @@ class InspectFreezeSectionTest {
     }
 
     private static String clickCommand(Component component) {
-        ClickEvent<?> event = findClick(component);
+        ClickEvent event = findClick(component);
         assertNotNull(event);
         assertEquals(ClickEvent.Action.SUGGEST_COMMAND, event.action());
-        return ((ClickEvent.Payload.Text) event.payload()).value();
+        return event.value();
     }
 
-    private static ClickEvent<?> findClick(Component component) {
+    private static ClickEvent findClick(Component component) {
         if (component.clickEvent() != null) {
             return component.clickEvent();
         }
         for (Component child : component.children()) {
-            ClickEvent<?> event = findClick(child);
+            ClickEvent event = findClick(child);
             if (event != null) {
                 return event;
             }

@@ -62,12 +62,11 @@ class PunishmentRequestAlertRendererTest {
         );
 
         Component message = renderer.render(claim, request, null, null).message();
-        ClickEvent<?> event = findClick(message);
+        ClickEvent event = findClick(message);
 
         assertNotNull(event);
         assertEquals(ClickEvent.Action.RUN_COMMAND, event.action());
-        ClickEvent.Payload.Text payload = (ClickEvent.Payload.Text) event.payload();
-        assertEquals("/punish review " + request.requestId(), payload.value());
+                assertEquals("/punish review " + request.requestId(), event.value());
         assertTrue(plain(message).contains(PunishmentRequestAlertTestFixtures.TARGET_ID.toString()));
     }
 
@@ -115,12 +114,12 @@ class PunishmentRequestAlertRendererTest {
         return PlainTextComponentSerializer.plainText().serialize(component);
     }
 
-    private static ClickEvent<?> findClick(Component component) {
+    private static ClickEvent findClick(Component component) {
         if (component.clickEvent() != null) {
             return component.clickEvent();
         }
         for (Component child : component.children()) {
-            ClickEvent<?> nested = findClick(child);
+            ClickEvent nested = findClick(child);
             if (nested != null) {
                 return nested;
             }
