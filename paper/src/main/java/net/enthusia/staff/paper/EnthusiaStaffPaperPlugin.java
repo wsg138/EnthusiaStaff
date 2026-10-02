@@ -31,6 +31,8 @@ import net.enthusia.staff.paper.alert.PunishmentRequestAlertLifecycle;
 import net.enthusia.staff.paper.alert.PunishmentRequestAlertWorkerSettings;
 import net.enthusia.staff.paper.auth.PaperStaffRankResolver;
 import net.enthusia.staff.paper.client.ClientEvidenceCollector;
+import net.enthusia.staff.paper.commandbridge.PaperCommandBridgeConfiguration;
+import net.enthusia.staff.paper.commandbridge.PaperCommandBridgeRuntime;
 import net.enthusia.staff.paper.config.PaperConfigurationLoader;
 import net.enthusia.staff.paper.config.ModerationFeatureSettings;
 import net.enthusia.staff.paper.config.PaperConfigurationSnapshot;
@@ -76,6 +78,7 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
     private ConfigurationReloadCoordinator reloadCoordinator;
     private PaperDatabaseConfiguration.Settings databaseSettings;
     private PaperOperationalTaskCoordinator operationalTasks;
+    private PaperCommandBridgeRuntime commandBridge;
 
     @Override
     public void onEnable() {
@@ -511,9 +514,35 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
                     "Persistent Velocity channel initialization failed; new punishment writes are disabled",
                     exception);
         }
+        startCommandBridge(bindings.runtime());
         if (!lifecycle.stopping()) {
             registerOperationalStateTask();
         }
+    }
+
+    private void startCommandBridge(MariaDbRuntime storage) {
+        if (commandBridge != null || lifecycle.stopping()) {
+            return;
+        }
+        try {
+            Optional<PaperCommandBridgeConfiguration> configured =
+                    PaperCommandBridgeConfiguration.fromEnvironment(System.getenv());
+            if (configured.isEmpty()) {
+                featureIssues.remove("discord-command-bridge");
+                return;
+            }
+            commandBridge = PaperCommandBridgeRuntime.open(
+                    this, networkServerId(), storage, configured.orElseThrow());
+            featureIssues.remove("discord-command-bridge");
+        } catch (RuntimeException exception) {
+            featureIssues.put(
+                    "discord-command-bridge",
+                    "Authenticated Discord console endpoint is unavailable; no remote commands are accepted");
+            getLogger().log(Level.WARNING,
+                    "discord_command_bridge_start_failed type={0}",
+                    exception.getClass().getSimpleName());
+        }
+        refreshHealth(mode.get());
     }
 
     private boolean submitWorker(Runnable operation) {
@@ -599,6 +628,7 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
         });
         resources.close("operational task coordinator", operationalTasks);
         resources.close("punishment-request alert controller", alertController);
+        resources.close("Discord command bridge", commandBridge);
         cancelOperationalStateTask();
         closeChannelClient();
     }

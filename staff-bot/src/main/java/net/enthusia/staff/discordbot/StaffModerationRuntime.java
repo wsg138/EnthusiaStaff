@@ -20,6 +20,7 @@ final class StaffModerationRuntime implements AutoCloseable {
     private final MinecraftProfileLookup minecraftProfiles;
     private final Optional<DiscordRoleSyncService> roleSyncService;
     private final Optional<DiscordRoleSyncPersistenceRuntime> roleSyncPersistence;
+    private final Optional<DiscordCommandBridgeCoordinator> commandBridge;
     private final Optional<DiscordPunishmentRuntime> punishments;
     private final HttpStaffAuthorityClient authority;
 
@@ -32,6 +33,7 @@ final class StaffModerationRuntime implements AutoCloseable {
             MinecraftProfileLookup profiles,
             Optional<DiscordRoleSyncService> roleSync,
             Optional<DiscordRoleSyncPersistenceRuntime> rolePersistence,
+            Optional<DiscordCommandBridgeCoordinator> console,
             Optional<DiscordPunishmentRuntime> punishments,
             HttpStaffAuthorityClient authority
     ) {
@@ -43,6 +45,7 @@ final class StaffModerationRuntime implements AutoCloseable {
         this.minecraftProfiles = profiles;
         this.roleSyncService = roleSync;
         this.roleSyncPersistence = rolePersistence;
+        this.commandBridge = console;
         this.punishments = punishments;
         this.authority = authority;
     }
@@ -59,12 +62,15 @@ final class StaffModerationRuntime implements AutoCloseable {
         Optional<StaffModerationConfiguration> configuration = StaffModerationConfiguration.fromEnvironment(values);
         Optional<DiscordPunishmentConfiguration> punishmentConfiguration =
                 DiscordPunishmentConfiguration.fromEnvironment(values);
-        if (configuration.isEmpty() && punishmentConfiguration.isPresent()) {
-            throw new IllegalArgumentException("Discord enforcement requires the staff moderation runtime");
+        Optional<DiscordCommandBridgeConfiguration> commandConfiguration =
+                DiscordCommandBridgeConfiguration.fromEnvironment(values);
+        if (configuration.isEmpty() && (punishmentConfiguration.isPresent() || commandConfiguration.isPresent())) {
+            throw new IllegalArgumentException("Discord actions require the staff moderation runtime");
         }
         return configuration.map(value -> open(
                 value,
                 punishmentConfiguration,
+                commandConfiguration,
                 guildId,
                 interactionCapacity,
                 interactionTtl
@@ -74,6 +80,7 @@ final class StaffModerationRuntime implements AutoCloseable {
     private static StaffModerationRuntime open(
             StaffModerationConfiguration configuration,
             Optional<DiscordPunishmentConfiguration> punishmentConfiguration,
+            Optional<DiscordCommandBridgeConfiguration> commandConfiguration,
             long guildId,
             int interactionCapacity,
             Duration interactionTtl
@@ -106,6 +113,12 @@ final class StaffModerationRuntime implements AutoCloseable {
                 roleSync = Optional.of(new DiscordRoleSyncService(
                         rolePersistence, authority, configuration.roleSync().orElseThrow(), clock));
             }
+            Optional<DiscordCommandBridgeCoordinator> console = commandConfiguration.map(value ->
+                    new DiscordCommandBridgeCoordinator(
+                            new DiscordCommandActorResolver(data::subjectForDiscord),
+                            new HttpMinecraftCommandBridgeClient(
+                                    value.endpoints(), value.credential(), value.timeout())
+                    ));
             punishments = punishmentConfiguration.map(value -> DiscordPunishmentRuntime.open(
                     configuration.database(),
                     value,
@@ -117,7 +130,7 @@ final class StaffModerationRuntime implements AutoCloseable {
             ));
             return new StaffModerationRuntime(
                     data, reads, actors, authorization, components, profiles,
-                    roleSync, Optional.ofNullable(rolePersistence), punishments, authority
+                    roleSync, Optional.ofNullable(rolePersistence), console, punishments, authority
             );
         } catch (RuntimeException exception) {
             punishments.ifPresent(DiscordPunishmentRuntime::close);
@@ -160,6 +173,10 @@ final class StaffModerationRuntime implements AutoCloseable {
 
     Optional<DiscordRoleSyncService> roleSync() {
         return roleSyncService;
+    }
+
+    Optional<DiscordCommandBridgeCoordinator> commandBridge() {
+        return commandBridge;
     }
 
     Optional<DiscordPunishmentService> punishmentService() {

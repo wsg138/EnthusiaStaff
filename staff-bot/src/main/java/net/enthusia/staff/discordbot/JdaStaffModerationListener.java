@@ -49,6 +49,9 @@ final class JdaStaffModerationListener extends ListenerAdapter {
     private static final String SCOPE_KIND_OPTION = "scope-kind";
     private static final String SCOPE_ID_OPTION = "scope-id";
     private static final String MODE_OPTION = "mode";
+    private static final String SERVER_OPTION = "server";
+    private static final String COMMAND_OPTION = "command";
+    private static final String CONSOLE = "console";
     private static final String MODERATE = "moderate";
     private static final String MODERATE_MINECRAFT = "moderate-minecraft";
     private static final String LINKED = "linked";
@@ -83,6 +86,7 @@ final class JdaStaffModerationListener extends ListenerAdapter {
     private final Optional<StaffModerationRuntime> webModeration;
     private volatile ModerationReadRequestAuthorizer webAuthorizer;
     private final Optional<DiscordPunishmentCommandController> punishments;
+    private final Optional<DiscordCommandBridgeCoordinator> commandBridge;
     private final java.util.concurrent.atomic.AtomicBoolean enabled = new java.util.concurrent.atomic.AtomicBoolean();
 
     JdaStaffModerationListener(
@@ -110,6 +114,7 @@ final class JdaStaffModerationListener extends ListenerAdapter {
         this.workers = workers;
         this.interactions = interactions;
         this.punishments = moderation.punishmentService().map(DiscordPunishmentCommandController::new);
+        this.commandBridge = moderation.commandBridge();
         this.webIssuer = webIssuer;
         this.webModeration = webIssuer.isPresent() ? Optional.of(moderation) : Optional.empty();
         this.controller = new StaffModerationController(
@@ -129,7 +134,8 @@ final class JdaStaffModerationListener extends ListenerAdapter {
         if (webIssuer.isPresent()) {
             webAuthorizer = new ModerationReadRequestAuthorizer(guildId, webModeration.orElseThrow(), jda);
         }
-        List<CommandData> expected = commands(punishments.isPresent(), webIssuer.isPresent());
+        List<CommandData> expected = commands(
+                punishments.isPresent(), webIssuer.isPresent(), commandBridge.isPresent());
         guild.updateCommands().addCommands(expected).queue(
                 registered -> commandsRegistered(registered, expected.size()),
                 this::commandRegistrationFailed
@@ -161,11 +167,52 @@ final class JdaStaffModerationListener extends ListenerAdapter {
         }
         long actorId = event.getUser().getIdLong();
         String actorName = event.getUser().getName();
+        if (CONSOLE.equals(event.getName())) {
+            dispatchConsole(event, actorId);
+            return;
+        }
         if (PUNISHMENT_COMMANDS.contains(event.getName())) {
             dispatchQuickPunishment(event, actorId, actorName);
             return;
         }
         dispatchReadCommand(event, actorId, actorName);
+    }
+
+    private void dispatchConsole(SlashCommandInteractionEvent event, long actorId) {
+        if (commandBridge.isEmpty()) {
+            unavailable(event);
+            return;
+        }
+        String server = event.getOption(SERVER_OPTION).getAsString();
+        String command = event.getOption(COMMAND_OPTION).getAsString();
+        long interactionId = event.getIdLong();
+        if (!claim(interactionId, event)) {
+            return;
+        }
+        event.deferReply(true).queue(
+                hook -> scheduleConsole(hook, actorId, server, command),
+                failure -> interactions.release(interactionId)
+        );
+    }
+
+    private void scheduleConsole(InteractionHook hook, long actorId, String server, String command) {
+        boolean scheduled = workers.tryExecute(() -> {
+            try {
+                var result = commandBridge.orElseThrow().request(
+                        new net.enthusia.staff.domain.moderation.DiscordUserId(
+                                Long.toUnsignedString(actorId)),
+                        server,
+                        command
+                );
+                hook.sendMessage(DiscordCommandBridgeResponseFormatter.format(result)).queue();
+            } catch (RuntimeException exception) {
+                log("discord_console_request_failed", exception);
+                hook.sendMessage("The console bridge could not safely process that request.").queue();
+            }
+        });
+        if (!scheduled) {
+            hook.sendMessage("The moderation action queue is busy. Try again shortly.").queue();
+        }
     }
 
     private void dispatchReadCommand(SlashCommandInteractionEvent event, long actorId, String actorName) {
@@ -663,6 +710,10 @@ final class JdaStaffModerationListener extends ListenerAdapter {
     }
 
     static List<CommandData> commands(boolean includePunishments, boolean webEnabled) {
+        return commands(includePunishments, webEnabled, false);
+    }
+
+    static List<CommandData> commands(boolean includePunishments, boolean webEnabled, boolean includeConsole) {
         DefaultMemberPermissions discovery = DefaultMemberPermissions.DISABLED;
         List<CommandData> commands = new ArrayList<>(List.of(
                 webEnabled
@@ -686,6 +737,12 @@ final class JdaStaffModerationListener extends ListenerAdapter {
         ));
         if (includePunishments) {
             commands.addAll(punishmentCommands(discovery));
+        }
+        if (includeConsole) {
+            commands.add(Commands.slash(CONSOLE, "Run an allowlisted Minecraft console command")
+                    .addOption(OptionType.STRING, SERVER_OPTION, "Configured server ID", true)
+                    .addOption(OptionType.STRING, COMMAND_OPTION, "Allowlisted command and arguments", true)
+                    .setDefaultPermissions(discovery));
         }
         return List.copyOf(commands);
     }
