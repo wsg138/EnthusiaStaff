@@ -60,6 +60,18 @@ class StaffModeRestorationWiringTest {
     }
 
     @Test
+    void successfulBackendHandoffPreservesVanishWithoutGrantingAuthority() throws IOException {
+        String completion = method("private void completeBackendHandoff", "@EventHandler(priority = EventPriority.MONITOR)");
+        String activeMethod = method("public boolean active", "public boolean authorityActive");
+        String authorityMethod = method("public boolean authorityActive", "public CombatStatusAdapter combat");
+
+        assertTrue(completion.contains("handoffGaps.add(playerId)"));
+        assertTrue(!completion.contains("exitListener.accept(playerId)"));
+        assertTrue(activeMethod.contains("handoffGaps.contains(playerId)"));
+        assertTrue(!authorityMethod.contains("handoffGaps.contains(playerId)"));
+    }
+
+    @Test
     void cleanExitSuccessMessageIsOnlyEmittedAfterVerificationPasses() throws IOException {
         String method = method("private void completeRestoration", "private void retainRecoveryAfterRuntimeExit");
         int mismatch = method.indexOf("if (!closed)");
