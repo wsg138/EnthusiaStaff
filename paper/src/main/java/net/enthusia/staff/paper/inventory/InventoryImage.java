@@ -115,7 +115,7 @@ public final class InventoryImage {
     }
 
     private static ItemStack copy(ItemStack item) {
-        return item == null || item.isEmpty() ? null : item.clone();
+        return item == null || item.getAmount() <= 0 ? null : item.clone();
     }
 
     private static void requireSlot(int logicalSlot) {
