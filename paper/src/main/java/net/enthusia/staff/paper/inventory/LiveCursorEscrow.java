@@ -6,6 +6,7 @@ import java.util.Objects;
 import java.util.UUID;
 import java.util.logging.Level;
 import net.enthusia.staff.domain.inventory.InventoryCursorJournal;
+import net.enthusia.staff.domain.inventory.InventoryCursorPhase;
 import net.enthusia.staff.domain.inventory.InventoryCursorTransfer;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
@@ -165,10 +166,15 @@ final class LiveCursorEscrow {
     private RecoveryResult recoverUnmarkedResult(Player viewer, InventoryCursorJournal journal) {
         InventoryCursorTransfer transfer = journal.cursorTransfer();
         ItemStack cursor = viewer.getItemOnCursor();
-        if (codec.matches(cursor, transfer.replacementChecksum())) {
+        UnmarkedResultDisposition disposition = unmarkedResultDisposition(
+                journal.phase(),
+                codec.matches(cursor, transfer.replacementChecksum()),
+                codec.matches(cursor, transfer.expectedChecksum())
+        );
+        if (disposition == UnmarkedResultDisposition.ALREADY_SETTLED) {
             return RecoveryResult.RESULT_ALREADY_SETTLED;
         }
-        if (!codec.matches(cursor, transfer.expectedChecksum())) {
+        if (disposition == UnmarkedResultDisposition.CONFLICT) {
             return RecoveryResult.CONFLICT;
         }
         ItemStack desired = codec.decode(transfer.replacementSnapshot());
@@ -182,6 +188,19 @@ final class LiveCursorEscrow {
                 journal.patch().operationId(),
                 LiveCursorEscrowMarker.Role.RESULT
         ) ? RecoveryResult.RESULT_MARKED : RecoveryResult.CONFLICT;
+    }
+
+    static UnmarkedResultDisposition unmarkedResultDisposition(
+            InventoryCursorPhase phase,
+            boolean replacementMatches,
+            boolean expectedMatches
+    ) {
+        if (replacementMatches || phase == InventoryCursorPhase.CURSOR_APPLIED) {
+            return UnmarkedResultDisposition.ALREADY_SETTLED;
+        }
+        return expectedMatches
+                ? UnmarkedResultDisposition.DELIVER_RESULT
+                : UnmarkedResultDisposition.CONFLICT;
     }
 
     private boolean replaceLocatedMarker(
@@ -310,6 +329,12 @@ final class LiveCursorEscrow {
         SOURCE_RESTORED,
         RESULT_MARKED,
         RESULT_ALREADY_SETTLED,
+        CONFLICT
+    }
+
+    enum UnmarkedResultDisposition {
+        ALREADY_SETTLED,
+        DELIVER_RESULT,
         CONFLICT
     }
 

@@ -259,40 +259,63 @@ public final class InventoryCoordinator implements Listener, InventoryLockServic
             attemptCursorRecovery(cursorRecoveries.get(patch.operationId()));
             return;
         }
-        submit(() -> {
-            InventoryJournalStore loaded = store.get();
-            if (loaded == null) {
-                retryLivePatchLookup(target, patch, "Inventory recovery storage is unavailable.");
-                return;
+        if (!submit(() -> loadLiveRecoveryMetadata(target, patch))) {
+            retryLivePatchLookup(target, patch, "Inventory recovery worker queue is busy.");
+        }
+    }
+
+    private void loadLiveRecoveryMetadata(Player target, InventoryPatch patch) {
+        InventoryJournalStore loaded = store.get();
+        if (loaded == null) {
+            retryLivePatchLookup(target, patch, "Inventory recovery storage is unavailable.");
+            return;
+        }
+        try {
+            Optional<InventoryCursorJournal> recovery = loaded.cursorTransfer(patch.operationId());
+            if (recovery.isPresent()) {
+                recoveryAttempts.remove(patch.operationId());
+                rememberCursorRecovery(recovery.orElseThrow());
+                attemptCursorRecovery(recovery.orElseThrow());
+            } else {
+                resolveMissingCursorMetadata(target, patch);
             }
-            try {
-                Optional<InventoryCursorJournal> recovery = loaded.cursorTransfer(patch.operationId());
-                if (recovery.isPresent()) {
-                    rememberCursorRecovery(recovery.orElseThrow());
-                    attemptCursorRecovery(recovery.orElseThrow());
-                } else {
-                    resolveMissingCursorMetadata(target, patch);
-                }
-            } catch (RuntimeException exception) {
-                plugin.getLogger().log(Level.SEVERE, "Unable to load cursor recovery metadata", exception);
-                retryLivePatchLookup(target, patch, "Cursor recovery metadata lookup failed.");
-            }
-        });
+        } catch (RuntimeException exception) {
+            plugin.getLogger().log(Level.SEVERE, "Unable to load cursor recovery metadata", exception);
+            retryLivePatchLookup(target, patch, "Cursor recovery metadata lookup failed.");
+        }
     }
 
     private void retryLivePatchLookup(Player target, InventoryPatch patch, String detail) {
-        loginBlocks.add(target.getUniqueId());
-        message(target, detail);
-        plugin.getServer().getGlobalRegionScheduler().runDelayed(
+        target.getScheduler().runDelayed(
                 plugin,
-                ignored -> loadOrResolveLiveRecovery(target, patch),
+                ignored -> retryLivePatchLookupOnTarget(target, patch, detail),
+                () -> recoveryAttempts.remove(patch.operationId()),
                 20L
         );
+    }
+
+    private void retryLivePatchLookupOnTarget(Player target, InventoryPatch patch, String detail) {
+        if (!target.isOnline()) {
+            recoveryAttempts.remove(patch.operationId());
+            return;
+        }
+        int attempt = recoveryAttempts.merge(patch.operationId(), 1, Integer::sum);
+        if (attempt >= MAX_LOGIN_APPLY_ATTEMPTS) {
+            keepRecoveryBlocked(
+                    patch.playerId(), patch.actorId(), patch.operationId(),
+                    detail + " Automatic metadata recovery attempts are exhausted."
+            );
+            return;
+        }
+        loginBlocks.add(patch.playerId());
+        message(target, detail);
+        loadOrResolveLiveRecovery(target, patch);
     }
 
     private void resolveMissingCursorMetadata(Player target, InventoryPatch original) {
         InventoryJournalStore loaded = store.get();
         if (loaded == null) {
+            retryLivePatchLookup(target, original, "Inventory recovery storage is unavailable.");
             return;
         }
         InventoryPatch claimed = loaded.claimForApply(
@@ -303,6 +326,7 @@ public final class InventoryCoordinator implements Listener, InventoryLockServic
             return;
         }
         if (claimed.state() == InventoryOperationState.APPLIED) {
+            recoveryAttempts.remove(original.operationId());
             loginBlocks.remove(target.getUniqueId());
             return;
         }
@@ -320,20 +344,29 @@ public final class InventoryCoordinator implements Listener, InventoryLockServic
             );
             return;
         }
-        submit(() -> {
-            InventoryJournalStore loaded = store.get();
-            if (loaded != null && loaded.resolveCursorRollback(
-                    patch.patchId(), patch.operationId(), patch.fencingToken(), clock.instant()
-            )) {
-                loginBlocks.remove(target.getUniqueId());
-                observeEncoded(target.getUniqueId(), current);
-            } else {
-                keepRecoveryBlocked(
-                        patch.playerId(), patch.actorId(), patch.operationId(),
-                        "Unable to resolve a metadata-free live cursor preparation."
-                );
-            }
-        });
+        if (!submit(() -> resolveMetadataFreeRollback(target, patch, current))) {
+            retryLivePatchLookup(target, patch, "Metadata-free rollback worker queue is busy.");
+        }
+    }
+
+    private void resolveMetadataFreeRollback(
+            Player target,
+            InventoryPatch patch,
+            InventoryImageCodec.EncodedImage current
+    ) {
+        InventoryJournalStore loaded = store.get();
+        if (loaded != null && loaded.resolveCursorRollback(
+                patch.patchId(), patch.operationId(), patch.fencingToken(), clock.instant()
+        )) {
+            recoveryAttempts.remove(patch.operationId());
+            loginBlocks.remove(target.getUniqueId());
+            observeEncoded(target.getUniqueId(), current);
+        } else {
+            keepRecoveryBlocked(
+                    patch.playerId(), patch.actorId(), patch.operationId(),
+                    "Unable to resolve a metadata-free live cursor preparation."
+            );
+        }
     }
 
     @EventHandler(priority = EventPriority.MONITOR)

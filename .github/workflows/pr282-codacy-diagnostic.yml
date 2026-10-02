@@ -1,0 +1,25 @@
+name: PR 282 Codacy diagnostic
+
+on:
+  push:
+    branches:
+      - fix/reopening-live-inventory-sharing
+
+permissions:
+  checks: read
+  contents: read
+
+jobs:
+  annotations:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Print ac9 exact-head Codacy annotations
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh api \
+            -H 'Accept: application/vnd.github+json' \
+            '/repos/wsg138/EnthusiaStaff/check-runs/110654706088/annotations?per_page=100' \
+            --jq '.[] | [.path, (.start_line|tostring), .annotation_level, .title, .message, (.raw_details // "")] | @tsv'

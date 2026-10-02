@@ -88,6 +88,9 @@ final class InventoryWorkflowWiringTest {
         assertTrue(source.contains("handleTargetDeparture(player);"));
         assertTrue(source.contains("handleViewerDeparture(player);"));
         assertTrue(source.contains("scheduleCursorRecoveryLookup(patch);"));
+        assertTrue(source.contains("if (!submit(() -> loadLiveRecoveryMetadata(target, patch)))"));
+        assertTrue(source.contains("target.getScheduler().runDelayed("));
+        assertTrue(source.contains("Automatic metadata recovery attempts are exhausted."));
         assertTrue(source.contains("logical < 0 ? null : image.item(logical)"));
         assertFalse(source.contains("GRAY_STAINED_GLASS"));
         assertFalse(source.contains("Inventory metadata slot"));
