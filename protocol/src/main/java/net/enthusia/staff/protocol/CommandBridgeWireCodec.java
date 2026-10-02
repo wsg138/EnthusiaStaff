@@ -24,13 +24,14 @@ public final class CommandBridgeWireCodec {
     private static final int MAX_RESPONSE_BYTES = 8_192;
     private static final String VERSION_FIELD = "version";
     private static final String MESSAGE_FIELD = "message";
+    private static final String OUTCOME_FIELD = "outcome";
     private static final ObjectMapper JSON = new ObjectMapper();
     private static final Set<String> REQUEST_FIELDS = Set.of(
             VERSION_FIELD, "requestId", "subjectId", "discordUserId", "actorPlayerId",
             "targetServer", "command", "requestedAt"
     );
     private static final Set<String> RESPONSE_FIELDS = Set.of(
-            VERSION_FIELD, "outcome", MESSAGE_FIELD, "output", "truncated", "redacted"
+            VERSION_FIELD, OUTCOME_FIELD, MESSAGE_FIELD, "output", "truncated", "redacted"
     );
 
     public String encodeRequest(CommandBridgeRequest request) {
@@ -78,7 +79,7 @@ public final class CommandBridgeWireCodec {
         }
         ObjectNode body = JSON.createObjectNode();
         body.put(VERSION_FIELD, VERSION);
-        body.put("outcome", response.outcome().name());
+        body.put(OUTCOME_FIELD, response.outcome().name());
         body.put(MESSAGE_FIELD, response.message());
         body.put("output", response.output());
         body.put("truncated", response.truncated());
@@ -96,7 +97,7 @@ public final class CommandBridgeWireCodec {
                 return Optional.empty();
             }
             return Optional.of(new CommandBridgeResponse(
-                    CommandBridgeOutcome.valueOf(text(root, "outcome")),
+                    CommandBridgeOutcome.valueOf(text(root, OUTCOME_FIELD)),
                     text(root, MESSAGE_FIELD),
                     text(root, "output"),
                     root.path("truncated").booleanValue(),
@@ -137,7 +138,7 @@ public final class CommandBridgeWireCodec {
     }
 
     private static boolean responseFieldTypes(JsonNode root) {
-        return root.path("outcome").isTextual()
+        return root.path(OUTCOME_FIELD).isTextual()
                 && root.path(MESSAGE_FIELD).isTextual()
                 && root.path("output").isTextual()
                 && root.path("truncated").isBoolean()

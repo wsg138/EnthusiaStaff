@@ -122,15 +122,31 @@ public final class HttpMinecraftCommandBridgeClient {
             Supplier<String> nonceSource,
             RawHttpSender sender
     ) {
-        if (credential == null || credential.isBlank()) {
+        if (!validCredential(credential)) {
             throw new IllegalArgumentException("command bridge HTTP credential is invalid");
         }
-        if (timeout == null || timeout.isNegative() || timeout.isZero()) {
+        if (!validTimeout(timeout)) {
             throw new IllegalArgumentException("command bridge HTTP timeout is invalid");
         }
-        if (clock == null || nonceSource == null || sender == null) {
+        if (!validDependencies(clock, nonceSource, sender)) {
             throw new IllegalArgumentException("command bridge HTTP dependencies are invalid");
         }
+    }
+
+    private static boolean validCredential(String credential) {
+        return credential != null && !credential.isBlank();
+    }
+
+    private static boolean validTimeout(Duration timeout) {
+        return timeout != null && !timeout.isNegative() && !timeout.isZero();
+    }
+
+    private static boolean validDependencies(
+            Clock clock,
+            Supplier<String> nonceSource,
+            RawHttpSender sender
+    ) {
+        return clock != null && nonceSource != null && sender != null;
     }
 
     private static RawHttpSender defaultSender(Duration timeout) {
