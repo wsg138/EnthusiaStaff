@@ -53,6 +53,8 @@ public record InventoryPrepareRequest(
         cursorTransfer = Objects.requireNonNull(cursorTransfer, "cursorTransfer");
     }
 
+    /** Compatibility constructor for existing callers that do not participate in live cursor escrow. */
+    @SuppressWarnings("PMD.ExcessiveParameterList")
     public InventoryPrepareRequest(
             UUID operationId,
             String idempotencyKey,
