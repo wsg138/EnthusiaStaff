@@ -65,6 +65,8 @@ public final class InventoryCoordinator implements Listener, InventoryLockServic
     private static final int MAX_LOGIN_APPLY_ATTEMPTS = 5;
     private static final int MAX_PENDING_PATCHES_PER_PLAYER = 1;
     private static final int PENDING_PATCH_LOOKAHEAD = 2;
+    private static final long RECONCILIATION_INITIAL_DELAY_TICKS = 5L;
+    private static final long RECONCILIATION_PERIOD_TICKS = 40L;
     private static final String LIVE_CURSOR_PREFIX = "ONLINE_CURSOR_";
 
     private final JavaPlugin plugin;
@@ -110,8 +112,8 @@ public final class InventoryCoordinator implements Listener, InventoryLockServic
         this.reconciliationTask = plugin.getServer().getGlobalRegionScheduler().runAtFixedRate(
                 plugin,
                 ignored -> reconcileViewedTargets(),
-                5L,
-                5L
+                RECONCILIATION_INITIAL_DELAY_TICKS,
+                RECONCILIATION_PERIOD_TICKS
         );
     }
 
@@ -1964,8 +1966,12 @@ public final class InventoryCoordinator implements Listener, InventoryLockServic
             InventoryImage previous,
             InventoryImage replacement
     ) {
+        return kindsForChangedSlots(previous.changedSlots(replacement));
+    }
+
+    static EnumSet<ModerationInventoryHolder.Kind> kindsForChangedSlots(List<Integer> changedSlots) {
         EnumSet<ModerationInventoryHolder.Kind> kinds = EnumSet.noneOf(ModerationInventoryHolder.Kind.class);
-        for (int slot : previous.changedSlots(replacement)) {
+        for (int slot : changedSlots) {
             kinds.add(slot >= InventoryImage.ENDER_OFFSET
                     ? ModerationInventoryHolder.Kind.ENDER_CHEST
                     : ModerationInventoryHolder.Kind.PLAYER);
@@ -1978,10 +1984,7 @@ public final class InventoryCoordinator implements Listener, InventoryLockServic
             return;
         }
         InventoryImage image = session.image();
-        for (ModerationInventoryHolder holder : session.viewers()) {
-            if (!kinds.contains(holder.kind())) {
-                continue;
-            }
+        for (ModerationInventoryHolder holder : session.viewers(kinds)) {
             Player viewer = plugin.getServer().getPlayer(holder.viewerId());
             if (viewer != null) {
                 onEntity(viewer, () -> render(holder, image));
@@ -2208,6 +2211,12 @@ public final class InventoryCoordinator implements Listener, InventoryLockServic
 
         List<ModerationInventoryHolder> viewers() {
             return List.copyOf(viewers.values());
+        }
+
+        List<ModerationInventoryHolder> viewers(Set<ModerationInventoryHolder.Kind> kinds) {
+            return viewers.values().stream()
+                    .filter(holder -> kinds.contains(holder.kind()))
+                    .toList();
         }
 
         boolean hasViewerKind(ModerationInventoryHolder.Kind kind) {

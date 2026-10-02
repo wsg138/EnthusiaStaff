@@ -345,6 +345,49 @@ class AssetJournalIntegrationTest {
     }
 
     @Test
+    void liveCursorTransferSurvivesPersistenceRestartAndFinalizesExactlyOnce() throws SQLException {
+        UUID targetId = UUID.randomUUID();
+        UUID actorId = UUID.randomUUID();
+        CursorRollbackFixture fixture;
+        try (MariaDbRuntime runtime = MariaDb.initialize(databaseConfig(DATABASE))) {
+            fixture = prepareCursorRollback(runtime.inventoryJournalStore(), targetId, actorId);
+        }
+
+        try (MariaDbRuntime restarted = MariaDb.initialize(databaseConfig(DATABASE))) {
+            InventoryJournalStore store = restarted.inventoryJournalStore();
+            var recovery = store.cursorTransfer(fixture.operationId()).orElseThrow();
+            InventoryPatch patch = recovery.patch();
+
+            assertEquals(InventoryCursorPhase.TARGET_APPLIED, recovery.phase());
+            assertEquals(targetId, patch.playerId());
+            assertEquals(actorId, patch.actorId());
+            assertEquals(1, store.pendingCursorTransfersByActor(actorId, SERVER_ID, 10).size());
+            assertTrue(store.advanceCursorPhase(
+                    patch.patchId(), patch.operationId(), patch.fencingToken(),
+                    InventoryCursorPhase.TARGET_APPLIED, InventoryCursorPhase.CURSOR_APPLIED,
+                    NOW.plusSeconds(5)
+            ));
+
+            InventoryFinalizeResult committed = store.finalizeApplied(
+                    patch.patchId(), patch.operationId(), patch.fencingToken(),
+                    patch.replacementChecksum(), patch.replacementSnapshot(), NOW.plusSeconds(6)
+            );
+            assertEquals(InventoryFinalizeResult.Status.COMMITTED, committed.status());
+            assertEquals(
+                    InventoryFinalizeResult.Status.REPLAYED,
+                    store.finalizeApplied(
+                            patch.patchId(), patch.operationId(), patch.fencingToken(),
+                            patch.replacementChecksum(), patch.replacementSnapshot(), NOW.plusSeconds(7)
+                    ).status()
+            );
+            assertTrue(store.cursorTransfer(patch.operationId()).isEmpty());
+            assertTrue(store.pendingCursorTransfersByActor(actorId, SERVER_ID, 10).isEmpty());
+            assertFalse(store.isLocked(targetId, SCOPE_ID, NOW.plusSeconds(8)));
+            assertEquals(1L, auditCount(patch.operationId(), COMMIT_EVENT));
+        }
+    }
+
+    @Test
     void liveCursorRollbackIsTerminalIdempotentAndReleasesTheAsset() throws SQLException {
         UUID targetId = UUID.randomUUID();
         UUID actorId = UUID.randomUUID();

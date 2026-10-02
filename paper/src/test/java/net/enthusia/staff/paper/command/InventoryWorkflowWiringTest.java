@@ -85,6 +85,9 @@ final class InventoryWorkflowWiringTest {
         assertTrue(source.contains("renderSession(session, changedKinds);"));
         assertTrue(source.contains("scheduleTargetRefresh(viewer, ModerationInventoryHolder.Kind.PLAYER);"));
         assertTrue(source.contains("scheduleTargetRefresh(viewer, ModerationInventoryHolder.Kind.ENDER_CHEST);"));
+        assertTrue(source.contains("handleTargetDeparture(player);"));
+        assertTrue(source.contains("handleViewerDeparture(player);"));
+        assertTrue(source.contains("scheduleCursorRecoveryLookup(patch);"));
         assertTrue(source.contains("logical < 0 ? null : image.item(logical)"));
         assertFalse(source.contains("GRAY_STAINED_GLASS"));
         assertFalse(source.contains("Inventory metadata slot"));
