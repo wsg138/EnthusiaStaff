@@ -1,8 +1,8 @@
 package net.enthusia.staff.paper.inventory;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import org.junit.jupiter.api.Test;
 
@@ -122,7 +122,23 @@ final class LiveInventoryTransferDecisionTest {
         assertEquals(LiveInventoryTransferRule.Action.NO_CHANGE, decision.action());
         assertEquals(target, decision.targetAfter());
         assertEquals(cursor, decision.cursorAfter());
-        assertTrue(!decision.changed());
+        assertFalse(decision.changed());
+        assertConserved(target, cursor, decision);
+    }
+
+    @Test
+    void oversizedCompatibleTargetRejectsMergeWithoutChangingEitherSide() {
+        LiveInventoryTransferRule.Stack target = new LiveInventoryTransferRule.Stack(70, STACK_MAX);
+        LiveInventoryTransferRule.Stack cursor = stack(2);
+
+        LiveInventoryTransferRule.Decision decision = decide(
+                target, cursor, true, LiveInventoryTransferRule.Click.LEFT
+        );
+
+        assertEquals(LiveInventoryTransferRule.Action.NO_CHANGE, decision.action());
+        assertEquals(target, decision.targetAfter());
+        assertEquals(cursor, decision.cursorAfter());
+        assertFalse(decision.changed());
         assertConserved(target, cursor, decision);
     }
 

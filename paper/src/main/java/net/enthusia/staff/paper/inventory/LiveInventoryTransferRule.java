@@ -84,8 +84,8 @@ final class LiveInventoryTransferRule {
 
     record Stack(int amount, int maxStackSize) {
         Stack {
-            if (amount < 1 || maxStackSize < 1 || amount > maxStackSize) {
-                throw new IllegalArgumentException("stack amount must fit its maximum");
+            if (amount < 1 || maxStackSize < 1) {
+                throw new IllegalArgumentException("stack amounts and maximums must be positive");
             }
         }
 
