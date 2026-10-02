@@ -18,15 +18,16 @@ class CommandBridgePolicyTest {
     private static final DiscordUserId DISCORD_ID = new DiscordUserId("123456789012345678");
     private static final UUID ACTOR_ID = UUID.fromString("33333333-3333-3333-3333-333333333333");
     private static final Instant NOW = Instant.parse("2026-09-30T19:00:00Z");
+    private static final String TARGET_SERVER = "smp";
 
     private final CommandBridgePolicy policy = new CommandBridgePolicy(
-            Set.of("smp"),
+            Set.of(TARGET_SERVER),
             List.of(new CommandBridgeRule("list", StaffRank.MOD, "enthusia.console.list", 0))
     );
 
     @Test
     void acceptsOnlyExplicitTargetAndCommand() {
-        CommandBridgePolicy.Decision decision = policy.evaluate(request("smp", "/LIST"));
+        CommandBridgePolicy.Decision decision = policy.evaluate(request(TARGET_SERVER, "/LIST"));
         assertTrue(decision.accepted());
         assertEquals("list", decision.commandName());
         assertEquals("LIST", decision.normalizedCommand());
@@ -35,7 +36,7 @@ class CommandBridgePolicyTest {
     @Test
     void rejectsUnsupportedCommandAndServer() {
         assertEquals(CommandBridgePolicy.Status.UNSUPPORTED_COMMAND,
-                policy.evaluate(request("smp", "stop")).status());
+                policy.evaluate(request(TARGET_SERVER, "stop")).status());
         assertEquals(CommandBridgePolicy.Status.INVALID_SERVER,
                 policy.evaluate(request("events", "list")).status());
     }
@@ -43,9 +44,9 @@ class CommandBridgePolicyTest {
     @Test
     void rejectsControlCharactersAndExcessArguments() {
         assertEquals(CommandBridgePolicy.Status.MALFORMED_COMMAND,
-                policy.evaluate(request("smp", "list\nstop")).status());
+                policy.evaluate(request(TARGET_SERVER, "list\nstop")).status());
         assertEquals(CommandBridgePolicy.Status.COMMAND_POLICY_REJECTED,
-                policy.evaluate(request("smp", "list extra")).status());
+                policy.evaluate(request(TARGET_SERVER, "list extra")).status());
     }
 
     private static CommandBridgeRequest request(String server, String command) {

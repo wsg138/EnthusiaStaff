@@ -22,13 +22,15 @@ public final class CommandBridgeWireCodec {
     private static final int VERSION = 1;
     private static final int MAX_REQUEST_BYTES = 4_096;
     private static final int MAX_RESPONSE_BYTES = 8_192;
+    private static final String VERSION_FIELD = VERSION_FIELD;
+    private static final String MESSAGE_FIELD = MESSAGE_FIELD;
     private static final ObjectMapper JSON = new ObjectMapper();
     private static final Set<String> REQUEST_FIELDS = Set.of(
-            "version", "requestId", "subjectId", "discordUserId", "actorPlayerId",
+            VERSION_FIELD, "requestId", "subjectId", "discordUserId", "actorPlayerId",
             "targetServer", "command", "requestedAt"
     );
     private static final Set<String> RESPONSE_FIELDS = Set.of(
-            "version", "outcome", "message", "output", "truncated", "redacted"
+            VERSION_FIELD, "outcome", MESSAGE_FIELD, "output", "truncated", "redacted"
     );
 
     public String encodeRequest(CommandBridgeRequest request) {
@@ -36,7 +38,7 @@ public final class CommandBridgeWireCodec {
             throw new IllegalArgumentException("command bridge request is required");
         }
         ObjectNode body = JSON.createObjectNode();
-        body.put("version", VERSION);
+        body.put(VERSION_FIELD, VERSION);
         body.put("requestId", request.requestId().toString());
         body.put("subjectId", request.subjectId().toString());
         body.put("discordUserId", request.discordUserId().toString());
@@ -75,9 +77,9 @@ public final class CommandBridgeWireCodec {
             throw new IllegalArgumentException("command bridge response is required");
         }
         ObjectNode body = JSON.createObjectNode();
-        body.put("version", VERSION);
+        body.put(VERSION_FIELD, VERSION);
         body.put("outcome", response.outcome().name());
-        body.put("message", response.message());
+        body.put(MESSAGE_FIELD, response.message());
         body.put("output", response.output());
         body.put("truncated", response.truncated());
         body.put("redacted", response.redacted());
@@ -95,7 +97,7 @@ public final class CommandBridgeWireCodec {
             }
             return Optional.of(new CommandBridgeResponse(
                     CommandBridgeOutcome.valueOf(text(root, "outcome")),
-                    text(root, "message"),
+                    text(root, MESSAGE_FIELD),
                     text(root, "output"),
                     root.path("truncated").booleanValue(),
                     root.path("redacted").booleanValue()
@@ -117,7 +119,7 @@ public final class CommandBridgeWireCodec {
         if (root == null || !root.isObject() || root.size() != fields.size()) {
             return false;
         }
-        if (!root.path("version").isInt() || root.path("version").intValue() != VERSION) {
+        if (!root.path(VERSION_FIELD).isInt() || root.path(VERSION_FIELD).intValue() != VERSION) {
             return false;
         }
         Iterator<String> names = root.fieldNames();
@@ -130,13 +132,13 @@ public final class CommandBridgeWireCodec {
     }
 
     private static boolean requestFieldTypes(JsonNode root) {
-        return REQUEST_FIELDS.stream().filter(field -> !"version".equals(field))
+        return REQUEST_FIELDS.stream().filter(field -> !VERSION_FIELD.equals(field))
                 .allMatch(field -> root.path(field).isTextual());
     }
 
     private static boolean responseFieldTypes(JsonNode root) {
         return root.path("outcome").isTextual()
-                && root.path("message").isTextual()
+                && root.path(MESSAGE_FIELD).isTextual()
                 && root.path("output").isTextual()
                 && root.path("truncated").isBoolean()
                 && root.path("redacted").isBoolean();

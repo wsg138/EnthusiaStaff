@@ -28,6 +28,7 @@ class HttpMinecraftCommandBridgeClientTest {
     private static final String NONCE = "0123456789abcdef0123456789abcdef";
     private static final Instant NOW = Instant.parse("2026-09-30T19:00:00Z");
     private static final DiscordUserId DISCORD_ID = new DiscordUserId("123456789012345678");
+    private static final String TARGET_SERVER = TARGET_SERVER;
     private static final URI ENDPOINT = URI.create("http://127.0.0.1:8772/v1/discord-command");
     private static final CommandBridgeWireCodec CODEC = new CommandBridgeWireCodec();
 
@@ -43,7 +44,7 @@ class HttpMinecraftCommandBridgeClientTest {
             return new HttpMinecraftCommandBridgeClient.RawResponse(200, body, signature);
         });
 
-        HttpMinecraftCommandBridgeClient.Result result = client.dispatch(request("smp"));
+        HttpMinecraftCommandBridgeClient.Result result = client.dispatch(request(TARGET_SERVER));
         assertEquals(HttpMinecraftCommandBridgeClient.Status.RECEIVED, result.status());
         assertEquals(CommandBridgeOutcome.SUCCESS, result.response().orElseThrow().outcome());
         assertEquals(1, sends.get());
@@ -62,7 +63,7 @@ class HttpMinecraftCommandBridgeClientTest {
         });
 
         assertEquals(HttpMinecraftCommandBridgeClient.Status.ENDPOINT_UNAVAILABLE,
-                client.dispatch(request("smp")).status());
+                client.dispatch(request(TARGET_SERVER)).status());
         assertEquals(1, sends.get());
     }
 
@@ -75,7 +76,7 @@ class HttpMinecraftCommandBridgeClientTest {
         });
 
         assertEquals(HttpMinecraftCommandBridgeClient.Status.AMBIGUOUS_FAILURE,
-                client.dispatch(request("smp")).status());
+                client.dispatch(request(TARGET_SERVER)).status());
         assertEquals(1, sends.get());
     }
 
@@ -92,7 +93,7 @@ class HttpMinecraftCommandBridgeClientTest {
         });
 
         assertEquals(HttpMinecraftCommandBridgeClient.Status.INVALID_RESPONSE,
-                client.dispatch(request("smp")).status());
+                client.dispatch(request(TARGET_SERVER)).status());
     }
 
     @Test
@@ -102,14 +103,14 @@ class HttpMinecraftCommandBridgeClientTest {
             assertTrue(request.headers().firstValue(CommandBridgeHttpSigning.SIGNATURE_HEADER).isPresent());
             throw new ConnectException("test complete");
         });
-        client.dispatch(request("smp"));
+        client.dispatch(request(TARGET_SERVER));
     }
 
     private static HttpMinecraftCommandBridgeClient client(
             HttpMinecraftCommandBridgeClient.RawHttpSender sender
     ) {
         return new HttpMinecraftCommandBridgeClient(
-                Map.of("smp", ENDPOINT),
+                Map.of(TARGET_SERVER, ENDPOINT),
                 CREDENTIAL,
                 Duration.ofSeconds(2),
                 Clock.fixed(NOW, ZoneOffset.UTC),

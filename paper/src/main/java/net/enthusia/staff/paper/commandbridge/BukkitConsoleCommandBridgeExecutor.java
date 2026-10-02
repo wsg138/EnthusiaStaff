@@ -94,14 +94,19 @@ public final class BukkitConsoleCommandBridgeExecutor implements CommandBridgeEx
         }
 
         private ConsoleCommandSender sender() {
+            ClassLoader loader = Thread.currentThread().getContextClassLoader();
+            if (loader == null) {
+                throw new IllegalStateException("command bridge proxy class loader is unavailable");
+            }
             return (ConsoleCommandSender) Proxy.newProxyInstance(
-                    ConsoleCommandSender.class.getClassLoader(),
+                    loader,
                     new Class<?>[] {ConsoleCommandSender.class},
                     this::invoke
             );
         }
 
         private Object invoke(Object proxy, Method method, Object[] arguments) throws Throwable {
+            Objects.requireNonNull(proxy, "proxy");
             if (captures(method)) {
                 capture(arguments);
                 return null;

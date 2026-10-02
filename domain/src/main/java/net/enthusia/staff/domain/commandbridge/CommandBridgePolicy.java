@@ -11,6 +11,8 @@ import java.util.regex.Pattern;
 public final class CommandBridgePolicy {
     private static final Pattern TARGET = Pattern.compile("[A-Za-z0-9][A-Za-z0-9._-]{0,63}");
     private static final Pattern COMMAND_NAME = Pattern.compile("[a-z0-9][a-z0-9:_-]{0,63}");
+    private static final int NO_SEPARATOR = -1;
+    private static final char ARGUMENT_SEPARATOR = ' ';
 
     private final Set<String> targetServers;
     private final Map<String, CommandBridgeRule> rules;
@@ -70,8 +72,8 @@ public final class CommandBridgePolicy {
         if (normalized.isEmpty()) {
             return null;
         }
-        int separator = normalized.indexOf(' ');
-        String name = (separator < 0 ? normalized : normalized.substring(0, separator)).toLowerCase(Locale.ROOT);
+        int separator = normalized.indexOf(ARGUMENT_SEPARATOR);
+        String name = (separator == NO_SEPARATOR ? normalized : normalized.substring(0, separator)).toLowerCase(Locale.ROOT);
         if (!COMMAND_NAME.matcher(name).matches()) {
             return null;
         }
@@ -81,7 +83,7 @@ public final class CommandBridgePolicy {
     private static int argumentCount(String command) {
         int count = 0;
         for (int index = 0; index < command.length(); index++) {
-            if (command.charAt(index) == ' ') {
+            if (command.charAt(index) == ARGUMENT_SEPARATOR) {
                 count++;
             }
         }

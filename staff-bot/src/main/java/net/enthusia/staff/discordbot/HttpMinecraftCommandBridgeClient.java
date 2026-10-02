@@ -51,10 +51,7 @@ public final class HttpMinecraftCommandBridgeClient {
             RawHttpSender sender
     ) {
         this.endpoints = validateEndpoints(endpoints);
-        if (credential == null || credential.isBlank() || timeout == null || timeout.isNegative() || timeout.isZero()
-                || clock == null || nonceSource == null || sender == null) {
-            throw new IllegalArgumentException("command bridge HTTP client configuration is invalid");
-        }
+        validateClientConfiguration(credential, timeout, clock, nonceSource, sender);
         this.credential = credential;
         this.timeout = timeout;
         this.clock = clock;
@@ -116,6 +113,24 @@ public final class HttpMinecraftCommandBridgeClient {
                 .header(CommandBridgeHttpSigning.SIGNATURE_HEADER, proof.signature())
                 .POST(HttpRequest.BodyPublishers.ofString(body, StandardCharsets.UTF_8))
                 .build();
+    }
+
+    private static void validateClientConfiguration(
+            String credential,
+            Duration timeout,
+            Clock clock,
+            Supplier<String> nonceSource,
+            RawHttpSender sender
+    ) {
+        if (credential == null || credential.isBlank()) {
+            throw new IllegalArgumentException("command bridge HTTP credential is invalid");
+        }
+        if (timeout == null || timeout.isNegative() || timeout.isZero()) {
+            throw new IllegalArgumentException("command bridge HTTP timeout is invalid");
+        }
+        if (clock == null || nonceSource == null || sender == null) {
+            throw new IllegalArgumentException("command bridge HTTP dependencies are invalid");
+        }
     }
 
     private static RawHttpSender defaultSender(Duration timeout) {

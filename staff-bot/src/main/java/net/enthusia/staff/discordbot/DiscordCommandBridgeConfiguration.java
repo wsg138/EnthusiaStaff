@@ -69,16 +69,31 @@ record DiscordCommandBridgeConfiguration(
     private static URI parseUri(String raw) {
         try {
             URI uri = URI.create(raw);
-            if (uri.getHost() == null || uri.getUserInfo() != null || uri.getQuery() != null
-                    || uri.getFragment() != null
-                    || !HttpMinecraftCommandBridgeClient.ENDPOINT_PATH.equals(uri.getPath())
-                    || (!"http".equalsIgnoreCase(uri.getScheme()) && !"https".equalsIgnoreCase(uri.getScheme()))) {
+            if (!validEndpoint(uri)) {
                 throw new IllegalArgumentException("command bridge endpoint URI is invalid");
             }
             return uri;
         } catch (IllegalArgumentException exception) {
             throw new IllegalArgumentException("command bridge endpoint URI is invalid", exception);
         }
+    }
+
+    private static boolean validEndpoint(URI uri) {
+        return validAuthority(uri) && validTarget(uri) && validScheme(uri.getScheme());
+    }
+
+    private static boolean validAuthority(URI uri) {
+        return uri.getHost() != null && uri.getUserInfo() == null;
+    }
+
+    private static boolean validTarget(URI uri) {
+        return uri.getQuery() == null
+                && uri.getFragment() == null
+                && HttpMinecraftCommandBridgeClient.ENDPOINT_PATH.equals(uri.getPath());
+    }
+
+    private static boolean validScheme(String scheme) {
+        return "http".equalsIgnoreCase(scheme) || "https".equalsIgnoreCase(scheme);
     }
 
     private static int timeout(String raw) {

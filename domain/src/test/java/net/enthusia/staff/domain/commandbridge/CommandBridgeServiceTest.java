@@ -32,8 +32,10 @@ class CommandBridgeServiceTest {
     private static final UUID ACTOR_ID = UUID.fromString("33333333-3333-3333-3333-333333333333");
     private static final Instant NOW = Instant.parse("2026-09-30T19:00:00Z");
     private static final Clock CLOCK = Clock.fixed(NOW.plusSeconds(1), ZoneOffset.UTC);
+    private static final String TARGET_SERVER = TARGET_SERVER;
+    private static final String LIST_COMMAND = LIST_COMMAND;
     private static final CommandBridgeRule LIST_RULE =
-            new CommandBridgeRule("list", StaffRank.MOD, "enthusia.console.list", 0);
+            new CommandBridgeRule(LIST_COMMAND, StaffRank.MOD, "enthusia.console.list", 0);
 
     @Test
     void authorizedRequestExecutesOnceAndReturnsSafeOutput() {
@@ -49,7 +51,7 @@ class CommandBridgeServiceTest {
                 }
         );
 
-        CommandBridgeResponse response = service.handle(request("smp", "list"));
+        CommandBridgeResponse response = service.handle(request(TARGET_SERVER, LIST_COMMAND));
 
         assertEquals(CommandBridgeOutcome.SUCCESS, response.outcome());
         assertEquals(1, executions.get());
@@ -62,16 +64,16 @@ class CommandBridgeServiceTest {
     void rejectsUnsupportedCommandInvalidServerUnlinkedAndUnauthorizedActors() {
         assertEquals(CommandBridgeOutcome.UNSUPPORTED_COMMAND,
                 service(new FakeAudit(), true, authorized(StaffRank.ADMIN), acceptedExecutor())
-                        .handle(request("smp", "stop")).outcome());
+                        .handle(request(TARGET_SERVER, "stop")).outcome());
         assertEquals(CommandBridgeOutcome.INVALID_SERVER,
                 service(new FakeAudit(), true, authorized(StaffRank.ADMIN), acceptedExecutor())
-                        .handle(request("events", "list")).outcome());
+                        .handle(request("events", LIST_COMMAND)).outcome());
         assertEquals(CommandBridgeOutcome.UNLINKED_ACTOR,
                 service(new FakeAudit(), false, authorized(StaffRank.ADMIN), acceptedExecutor())
-                        .handle(request("smp", "list")).outcome());
+                        .handle(request(TARGET_SERVER, LIST_COMMAND)).outcome());
         assertEquals(CommandBridgeOutcome.UNAUTHORIZED_ACTOR,
                 service(new FakeAudit(), true, authorized(StaffRank.MOD, false), acceptedExecutor())
-                        .handle(request("smp", "list")).outcome());
+                        .handle(request(TARGET_SERVER, LIST_COMMAND)).outcome());
     }
 
     @Test
@@ -87,7 +89,7 @@ class CommandBridgeServiceTest {
                 }
         );
 
-        assertEquals(CommandBridgeOutcome.UNAUTHORIZED_ACTOR, service.handle(request("smp", "list")).outcome());
+        assertEquals(CommandBridgeOutcome.UNAUTHORIZED_ACTOR, service.handle(request(TARGET_SERVER, LIST_COMMAND)).outcome());
         assertEquals(0, executions.get());
     }
 
@@ -98,7 +100,7 @@ class CommandBridgeServiceTest {
             rejectedCalls.incrementAndGet();
             return CommandBridgeExecutor.Execution.rejected();
         });
-        assertEquals(CommandBridgeOutcome.EXECUTION_REJECTED, rejected.handle(request("smp", "list")).outcome());
+        assertEquals(CommandBridgeOutcome.EXECUTION_REJECTED, rejected.handle(request(TARGET_SERVER, LIST_COMMAND)).outcome());
         assertEquals(1, rejectedCalls.get());
 
         AtomicInteger ambiguousCalls = new AtomicInteger();
@@ -106,7 +108,7 @@ class CommandBridgeServiceTest {
             ambiguousCalls.incrementAndGet();
             throw new IllegalStateException("post-dispatch transport state unknown");
         });
-        assertEquals(CommandBridgeOutcome.EXECUTION_UNKNOWN, ambiguous.handle(request("smp", "list")).outcome());
+        assertEquals(CommandBridgeOutcome.EXECUTION_UNKNOWN, ambiguous.handle(request(TARGET_SERVER, LIST_COMMAND)).outcome());
         assertEquals(1, ambiguousCalls.get());
     }
 
@@ -124,9 +126,9 @@ class CommandBridgeServiceTest {
         });
 
         CompletableFuture<CommandBridgeResponse> first = CompletableFuture.supplyAsync(
-                () -> service.handle(request("smp", "list")));
+                () -> service.handle(request(TARGET_SERVER, LIST_COMMAND)));
         assertTrue(entered.await(2, TimeUnit.SECONDS));
-        CommandBridgeResponse duplicate = service.handle(request("smp", "list"));
+        CommandBridgeResponse duplicate = service.handle(request(TARGET_SERVER, LIST_COMMAND));
         release.countDown();
 
         assertEquals(CommandBridgeOutcome.EXECUTION_UNKNOWN, duplicate.outcome());
@@ -144,14 +146,14 @@ class CommandBridgeServiceTest {
             return CommandBridgeExecutor.Execution.accepted("ok");
         });
 
-        assertEquals(CommandBridgeOutcome.EXECUTION_UNKNOWN, firstProcess.handle(request("smp", "list")).outcome());
+        assertEquals(CommandBridgeOutcome.EXECUTION_UNKNOWN, firstProcess.handle(request(TARGET_SERVER, LIST_COMMAND)).outcome());
         audit.failCompletions = false;
         CommandBridgeService restarted = service(audit, true, authorized(StaffRank.MOD), command -> {
             executions.incrementAndGet();
             return CommandBridgeExecutor.Execution.accepted("should not run");
         });
 
-        assertEquals(CommandBridgeOutcome.EXECUTION_UNKNOWN, restarted.handle(request("smp", "list")).outcome());
+        assertEquals(CommandBridgeOutcome.EXECUTION_UNKNOWN, restarted.handle(request(TARGET_SERVER, LIST_COMMAND)).outcome());
         assertEquals(1, executions.get());
     }
 
@@ -159,14 +161,14 @@ class CommandBridgeServiceTest {
     void reusedRequestIdWithChangedBodyIsRejected() {
         FakeAudit audit = new FakeAudit();
         CommandBridgeService service = service(audit, true, authorized(StaffRank.MOD), acceptedExecutor());
-        assertEquals(CommandBridgeOutcome.SUCCESS, service.handle(request("smp", "list")).outcome());
+        assertEquals(CommandBridgeOutcome.SUCCESS, service.handle(request(TARGET_SERVER, LIST_COMMAND)).outcome());
 
         CommandBridgeRequest changed = new CommandBridgeRequest(
                 REQUEST_ID,
                 new ModerationSubjectId(SUBJECT_ID),
                 DISCORD_ID,
                 ACTOR_ID,
-                "smp",
+                TARGET_SERVER,
                 "LIST ",
                 NOW.plusSeconds(1)
         );
@@ -180,7 +182,7 @@ class CommandBridgeServiceTest {
             CommandBridgeExecutor executor
     ) {
         return new CommandBridgeService(
-                new CommandBridgePolicy(Set.of("smp"), List.of(LIST_RULE)),
+                new CommandBridgePolicy(Set.of(TARGET_SERVER), List.of(LIST_RULE)),
                 (subject, discord, actor) -> linked,
                 authority,
                 audit,
