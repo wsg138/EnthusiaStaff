@@ -49,13 +49,12 @@ final class DiscordPunishmentRuntime implements AutoCloseable {
     ) {
         validateOpen(database, configuration, reads, actors, minecraftPreparer,
                 guildId, interactionCapacity, interactionTtl);
-        Clock clock = Clock.systemUTC();
         DiscordPunishmentPersistenceRuntime persistence = DiscordPunishmentPersistenceRuntime.open(database);
         try {
-            return assemble(
-                    persistence, configuration, reads, actors, minecraftPreparer,
-                    guildId, interactionCapacity, interactionTtl, clock
-            );
+            return assemble(persistence, new AssemblyInputs(
+                    configuration, reads, actors, minecraftPreparer,
+                    guildId, interactionCapacity, interactionTtl
+            ));
         } catch (RuntimeException exception) {
             persistence.close();
             throw exception;
@@ -64,38 +63,40 @@ final class DiscordPunishmentRuntime implements AutoCloseable {
 
     private static DiscordPunishmentRuntime assemble(
             DiscordPunishmentPersistenceRuntime persistence,
-            DiscordPunishmentConfiguration configuration,
-            StaffModerationReadService reads,
-            LinkedStaffActorResolver actors,
-            MinecraftPunishmentPreparer minecraftPreparer,
-            long guildId,
-            int interactionCapacity,
-            Duration interactionTtl,
-            Clock clock
+            AssemblyInputs inputs
     ) {
+        Clock clock = Clock.systemUTC();
+        DiscordPunishmentConfiguration configuration = inputs.configuration();
         JdaDiscordPunishmentGateway gateway = new JdaDiscordPunishmentGateway(configuration);
-        Duration confirmationTtl = interactionTtl.compareTo(MAX_CONFIRMATION_TTL) > 0
-                ? MAX_CONFIRMATION_TTL : interactionTtl;
+        Duration confirmationTtl = inputs.interactionTtl().compareTo(MAX_CONFIRMATION_TTL) > 0
+                ? MAX_CONFIRMATION_TTL : inputs.interactionTtl();
         DiscordPunishmentConfirmationStore confirmations = new DiscordPunishmentConfirmationStore(
-                clock, confirmationTtl, interactionCapacity
+                clock, confirmationTtl, inputs.interactionCapacity()
         );
         DiscordPunishmentAuthorization authorization = new DiscordPunishmentAuthorization(
                 configuration.authorizationLimits()
         );
-        DiscordGuildId discordGuildId = new DiscordGuildId(Long.toUnsignedString(guildId));
+        DiscordGuildId discordGuildId = new DiscordGuildId(Long.toUnsignedString(inputs.guildId()));
         DiscordPunishmentService service = createService(
-                persistence, reads, actors, authorization, confirmations, gateway, discordGuildId, clock
+                persistence, inputs.reads(), inputs.actors(), authorization,
+                confirmations, gateway, discordGuildId, clock
         );
         DiscordPunishmentWorker worker = new DiscordPunishmentWorker(
                 persistence.punishments(), gateway, clock, "d07-" + UUID.randomUUID(),
                 configuration.reconciliationInterval()
         );
-        DiscordPunishmentCoordinator coordinator = new DiscordPunishmentCoordinator(worker, configuration.workerInterval());
+        DiscordPunishmentCoordinator coordinator = new DiscordPunishmentCoordinator(
+                worker, configuration.workerInterval()
+        );
         CrossPlatformPunishmentService crossPlatform = new CrossPlatformPunishmentService(
-                minecraftPreparer, persistence.crossPlatformPunishments(), persistence.crossPlatformIdentities(),
-                new DiscordModerationAuthorizationService(configuration.authorizationLimits()));
+                inputs.minecraftPreparer(), persistence.crossPlatformPunishments(),
+                persistence.crossPlatformIdentities(),
+                new DiscordModerationAuthorizationService(configuration.authorizationLimits())
+        );
         CrossPlatformActionService actions = new CrossPlatformActionService(
-                crossPlatform, persistence.crossPlatformIdentities(), service, reads, actors, discordGuildId, clock);
+                crossPlatform, persistence.crossPlatformIdentities(), service,
+                inputs.reads(), inputs.actors(), discordGuildId, clock
+        );
         coordinator.start();
         return new DiscordPunishmentRuntime(persistence, gateway, coordinator, service, actions);
     }
@@ -119,6 +120,17 @@ final class DiscordPunishmentRuntime implements AutoCloseable {
                 persistence::ensureDiscordSubject
         );
         return new DiscordPunishmentService(dependencies, gateway, guildId, clock);
+    }
+
+    private record AssemblyInputs(
+            DiscordPunishmentConfiguration configuration,
+            StaffModerationReadService reads,
+            LinkedStaffActorResolver actors,
+            MinecraftPunishmentPreparer minecraftPreparer,
+            long guildId,
+            int interactionCapacity,
+            Duration interactionTtl
+    ) {
     }
 
     private static void validateOpen(

@@ -59,17 +59,7 @@ final class JdbcWebsiteAppealLifecycleAudit {
         }
     }
 
-    void write(
-            Connection connection,
-            UUID appealId,
-            String operation,
-            String clientKey,
-            String eventType,
-            UUID actorId,
-            CaseId caseId,
-            Map<String, Object> details,
-            Instant now
-    ) throws SQLException {
+    void write(Connection connection, AuditRecord record) throws SQLException {
         try (PreparedStatement statement = connection.prepareStatement("""
                 INSERT INTO audit_events(
                     event_id, correlation_id, actor_id, target_id, case_id,
@@ -77,15 +67,15 @@ final class JdbcWebsiteAppealLifecycleAudit {
                 ) VALUES (?, ?, ?, ?, ?, ?, 'COMMITTED', ?, ?, ?)
                 """)) {
             statement.setBytes(1, UuidBytes.toBytes(UUID.randomUUID()));
-            statement.setBytes(2, UuidBytes.toBytes(appealId));
-            if (actorId == null) statement.setNull(3, Types.BINARY);
-            else statement.setBytes(3, UuidBytes.toBytes(actorId));
+            statement.setBytes(2, UuidBytes.toBytes(record.appealId()));
+            if (record.actorId() == null) statement.setNull(3, Types.BINARY);
+            else statement.setBytes(3, UuidBytes.toBytes(record.actorId()));
             statement.setNull(4, Types.BINARY);
-            statement.setString(5, caseId.value());
-            statement.setString(6, eventType);
-            statement.setString(7, serialize(details));
-            statement.setString(8, durableKey(appealId, operation, clientKey));
-            statement.setTimestamp(9, Timestamp.from(now));
+            statement.setString(5, record.caseId().value());
+            statement.setString(6, record.eventType());
+            statement.setString(7, serialize(record.details()));
+            statement.setString(8, durableKey(record.appealId(), record.operation(), record.clientKey()));
+            statement.setTimestamp(9, Timestamp.from(record.now()));
             requireSingleUpdate(statement.executeUpdate());
         }
     }
@@ -120,6 +110,27 @@ final class JdbcWebsiteAppealLifecycleAudit {
     private static void requireSingleUpdate(int updated) throws SQLException {
         if (updated != EXPECTED_UPDATE_COUNT) {
             throw new SQLException("Website appeal lifecycle audit was not inserted");
+        }
+    }
+
+    record AuditRecord(
+            UUID appealId,
+            String operation,
+            String clientKey,
+            String eventType,
+            UUID actorId,
+            CaseId caseId,
+            Map<String, Object> details,
+            Instant now
+    ) {
+        AuditRecord {
+            if (appealId == null || operation == null || clientKey == null || eventType == null
+                    || caseId == null || details == null || now == null) {
+                throw new IllegalArgumentException("Website appeal lifecycle audit fields are required");
+            }
+            details = java.util.Collections.unmodifiableMap(
+                    new java.util.LinkedHashMap<>(details)
+            );
         }
     }
 

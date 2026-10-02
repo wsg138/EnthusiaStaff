@@ -22,25 +22,19 @@ final class StaffModerationRuntime implements AutoCloseable {
     private final HttpStaffAuthorityClient authority;
 
     private StaffModerationRuntime(
-            DiscordStaffReadRuntime data,
-            StaffModerationReadService reads,
-            LinkedStaffActorResolver actors,
-            StaffReadAuthorization authorization,
-            SignedComponentCodec components,
-            MinecraftProfileLookup profiles,
+            RuntimeCore core,
             Optional<DiscordPunishmentRuntime> punishments,
-            Optional<DiscordInvestigationRuntime> investigations,
-            HttpStaffAuthorityClient authority
+            Optional<DiscordInvestigationRuntime> investigations
     ) {
-        this.data = data;
-        this.readService = reads;
-        this.actorResolver = actors;
-        this.readAuthorization = authorization;
-        this.componentCodec = components;
-        this.minecraftProfiles = profiles;
+        this.data = core.data();
+        this.readService = core.reads();
+        this.actorResolver = core.actors();
+        this.readAuthorization = core.authorization();
+        this.componentCodec = core.components();
+        this.minecraftProfiles = core.profiles();
         this.punishments = punishments;
         this.investigations = investigations;
-        this.authority = authority;
+        this.authority = core.authority();
     }
 
     static Optional<StaffModerationRuntime> open(
@@ -91,51 +85,67 @@ final class StaffModerationRuntime implements AutoCloseable {
     ) {
         Clock clock = Clock.systemUTC();
         DiscordStaffReadRuntime data = DiscordStaffReadRuntime.open(configuration.database(), clock);
-        MinecraftProfileLookup profiles = null;
+        RuntimeCore core = createCore(data, configuration, clock, interactionCapacity, interactionTtl);
         Optional<DiscordPunishmentRuntime> punishments = Optional.empty();
         Optional<DiscordInvestigationRuntime> investigations = Optional.empty();
+        try {
+            punishments = punishmentConfiguration.map(value -> DiscordPunishmentRuntime.open(
+                    configuration.database(), value, core.reads(), core.actors(),
+                    new HttpMinecraftPunishmentPreparer(core.authority()),
+                    guildId, interactionCapacity, interactionTtl
+            ));
+            investigations = investigationConfiguration.map(value -> DiscordInvestigationRuntime.open(
+                    investigationDependencies(
+                            configuration, punishmentConfiguration, core.reads(), core.actors()
+                    ),
+                    value,
+                    guildId
+            ));
+            return new StaffModerationRuntime(core, punishments, investigations);
+        } catch (RuntimeException exception) {
+            closeFailedOpen(core, punishments, investigations);
+            throw exception;
+        }
+    }
+
+    private static RuntimeCore createCore(
+            DiscordStaffReadRuntime data,
+            StaffModerationConfiguration configuration,
+            Clock clock,
+            int interactionCapacity,
+            Duration interactionTtl
+    ) {
         try {
             StaffModerationReadService reads = new StaffModerationReadService(data, clock);
             HttpStaffAuthorityClient authority = new HttpStaffAuthorityClient(
                     configuration.authorityUri(),
                     configuration.authoritySecret(),
-                    configuration.authorityTransport());
-            InteractionReplayGuard componentReplay = new InteractionReplayGuard(interactionCapacity, interactionTtl);
+                    configuration.authorityTransport()
+            );
             SignedComponentCodec components = new SignedComponentCodec(
-                    clock,
-                    interactionTtl,
-                    configuration.componentSecret(),
-                    new SecureRandom(),
-                    componentReplay
+                    clock, interactionTtl, configuration.componentSecret(), new SecureRandom(),
+                    new InteractionReplayGuard(interactionCapacity, interactionTtl)
             );
             LinkedStaffActorResolver actors = new LinkedStaffActorResolver(reads, authority);
-            StaffReadAuthorization authorization = new StaffReadAuthorization();
-            profiles = MinecraftProfileLookup.mojang();
-            punishments = punishmentConfiguration.map(value -> DiscordPunishmentRuntime.open(
-                    configuration.database(),
-                    value,
-                    reads,
-                    actors,
-                    new HttpMinecraftPunishmentPreparer(authority),
-                    guildId,
-                    interactionCapacity,
-                    interactionTtl
-            ));
-            investigations = investigationConfiguration.map(value -> DiscordInvestigationRuntime.open(
-                    investigationDependencies(configuration, punishmentConfiguration, reads, actors), value, guildId
-            ));
-            return new StaffModerationRuntime(
-                    data, reads, actors, authorization, components, profiles, punishments, investigations, authority
+            return new RuntimeCore(
+                    data, reads, actors, new StaffReadAuthorization(), components,
+                    MinecraftProfileLookup.mojang(), authority
             );
         } catch (RuntimeException exception) {
-            investigations.ifPresent(DiscordInvestigationRuntime::close);
-            punishments.ifPresent(DiscordPunishmentRuntime::close);
-            if (profiles != null) {
-                profiles.close();
-            }
             data.close();
             throw exception;
         }
+    }
+
+    private static void closeFailedOpen(
+            RuntimeCore core,
+            Optional<DiscordPunishmentRuntime> punishments,
+            Optional<DiscordInvestigationRuntime> investigations
+    ) {
+        investigations.ifPresent(DiscordInvestigationRuntime::close);
+        punishments.ifPresent(DiscordPunishmentRuntime::close);
+        core.profiles().close();
+        core.data().close();
     }
 
     private static DiscordInvestigationRuntime.Dependencies investigationDependencies(
@@ -148,6 +158,17 @@ final class StaffModerationRuntime implements AutoCloseable {
         return new DiscordInvestigationRuntime.Dependencies(
                 configuration.database(), configuration, punishment.authorizationLimits(), reads, actors
         );
+    }
+
+    private record RuntimeCore(
+            DiscordStaffReadRuntime data,
+            StaffModerationReadService reads,
+            LinkedStaffActorResolver actors,
+            StaffReadAuthorization authorization,
+            SignedComponentCodec components,
+            MinecraftProfileLookup profiles,
+            HttpStaffAuthorityClient authority
+    ) {
     }
 
     StaffModerationReadService reads() {

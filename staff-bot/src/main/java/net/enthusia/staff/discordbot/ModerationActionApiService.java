@@ -168,29 +168,55 @@ final class ModerationActionApiService {
         return request.minecraftTarget().isPresent() || request.minecraftIntent().isPresent();
     }
 
-    private Object crossPlatformRequest(String operation, Request request, ModerationReadContext context) {
+    private Object crossPlatformRequest(
+            String operation,
+            Request request,
+            ModerationReadContext context
+    ) {
         long discordTarget = context.readTarget().userId()
                 .orElseThrow(() -> new IllegalArgumentException("select a Discord target"));
         CrossPlatformActionService service = moderation.crossPlatformActions()
                 .orElseThrow(() -> new IllegalStateException("Both-platform enforcement is disabled"));
         UUID minecraftTarget = minecraftTarget(operation, request);
         if (PREPARE.equals(operation)) {
-            if (request.confirmationId().isPresent() || request.intent().isEmpty() || request.minecraftIntent().isEmpty()) {
-                throw new IllegalArgumentException("Both preparation requires Discord and Minecraft intent");
-            }
-            DiscordPunishmentIntent intent = request.intent().orElseThrow().toIntent();
-            validateRestriction(context, intent);
-            MinecraftIntent minecraft = request.minecraftIntent().orElseThrow();
-            return service.prepare(request, context, discordTarget, minecraftTarget,
-                    minecraft.reasonId(), minecraft.explanation(), intent);
+            return prepareCrossPlatform(service, request, context, discordTarget, minecraftTarget);
         }
-        if ((!CONFIRM.equals(operation) && !STATUS.equals(operation)) || request.confirmationId().isEmpty()
-                || request.intent().isPresent() || request.minecraftIntent().isPresent()) {
-            throw new IllegalArgumentException("invalid Both confirmation");
-        }
+        validateCrossPlatformConfirmation(operation, request);
         return CONFIRM.equals(operation)
                 ? service.confirm(request, context, discordTarget, minecraftTarget)
                 : service.status(request, context, discordTarget, minecraftTarget);
+    }
+
+    private static Object prepareCrossPlatform(
+            CrossPlatformActionService service,
+            Request request,
+            ModerationReadContext context,
+            long discordTarget,
+            UUID minecraftTarget
+    ) {
+        if (request.confirmationId().isPresent()
+                || request.intent().isEmpty()
+                || request.minecraftIntent().isEmpty()) {
+            throw new IllegalArgumentException("Both preparation requires Discord and Minecraft intent");
+        }
+        DiscordPunishmentIntent intent = request.intent().orElseThrow().toIntent();
+        validateRestriction(context, intent);
+        MinecraftIntent minecraft = request.minecraftIntent().orElseThrow();
+        return service.prepare(
+                request, context, discordTarget, minecraftTarget,
+                minecraft.reasonId(), minecraft.explanation(), intent
+        );
+    }
+
+    private static void validateCrossPlatformConfirmation(String operation, Request request) {
+        if (!CONFIRM.equals(operation) && !STATUS.equals(operation)) {
+            throw new IllegalArgumentException("invalid Both operation");
+        }
+        if (request.confirmationId().isEmpty()
+                || request.intent().isPresent()
+                || request.minecraftIntent().isPresent()) {
+            throw new IllegalArgumentException("invalid Both confirmation");
+        }
     }
 
     private Object discordRequest(String operation, Request request, ModerationReadContext context) {
