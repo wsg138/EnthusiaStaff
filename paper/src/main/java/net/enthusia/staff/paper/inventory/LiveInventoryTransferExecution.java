@@ -21,6 +21,51 @@ final class LiveInventoryTransferExecution {
         boolean apply();
     }
 
+    record Participants(UUID viewerId, UUID targetId) {
+        Participants {
+            Objects.requireNonNull(viewerId, "viewerId");
+            Objects.requireNonNull(targetId, "targetId");
+        }
+    }
+
+    record TargetSlot(ModerationInventoryHolder.Kind kind, int logicalSlot) {
+        TargetSlot {
+            Objects.requireNonNull(kind, "kind");
+            if (logicalSlot < 0) {
+                throw new IllegalArgumentException("logicalSlot cannot be negative");
+            }
+        }
+    }
+
+    record Images(InventoryImage before, InventoryImage replacement) {
+        Images {
+            Objects.requireNonNull(before, "before");
+            Objects.requireNonNull(replacement, "replacement");
+        }
+    }
+
+    record CursorChange(
+            ItemStack expected,
+            ItemStack resulting,
+            LiveInventoryTransferDecision.Action action
+    ) {
+        CursorChange {
+            expected = copy(expected);
+            resulting = copy(resulting);
+            Objects.requireNonNull(action, "action");
+        }
+
+        @Override
+        public ItemStack expected() {
+            return copy(expected);
+        }
+
+        @Override
+        public ItemStack resulting() {
+            return copy(resulting);
+        }
+    }
+
     private enum Phase {
         READY,
         TARGET_APPLIED,
@@ -31,40 +76,26 @@ final class LiveInventoryTransferExecution {
     }
 
     private final UUID operationId;
-    private final UUID viewerId;
-    private final UUID targetId;
-    private final ModerationInventoryHolder.Kind kind;
-    private final int logicalSlot;
-    private final InventoryImage beforeImage;
-    private final InventoryImage replacementImage;
-    private final ItemStack expectedCursor;
-    private final ItemStack resultingCursor;
-    private final LiveInventoryTransferDecision.Action action;
-    private volatile InventoryPatch patch;
+    private final Participants participants;
+    private final TargetSlot targetSlot;
+    private final Images images;
+    private final CursorChange cursor;
+    private final Object stateLock = new Object();
+    private InventoryPatch patch;
     private Phase phase = Phase.READY;
 
     LiveInventoryTransferExecution(
             UUID operationId,
-            UUID viewerId,
-            UUID targetId,
-            ModerationInventoryHolder.Kind kind,
-            int logicalSlot,
-            InventoryImage beforeImage,
-            InventoryImage replacementImage,
-            ItemStack expectedCursor,
-            ItemStack resultingCursor,
-            LiveInventoryTransferDecision.Action action
+            Participants participants,
+            TargetSlot targetSlot,
+            Images images,
+            CursorChange cursor
     ) {
         this.operationId = Objects.requireNonNull(operationId, "operationId");
-        this.viewerId = Objects.requireNonNull(viewerId, "viewerId");
-        this.targetId = Objects.requireNonNull(targetId, "targetId");
-        this.kind = Objects.requireNonNull(kind, "kind");
-        this.logicalSlot = logicalSlot;
-        this.beforeImage = Objects.requireNonNull(beforeImage, "beforeImage");
-        this.replacementImage = Objects.requireNonNull(replacementImage, "replacementImage");
-        this.expectedCursor = copy(expectedCursor);
-        this.resultingCursor = copy(resultingCursor);
-        this.action = Objects.requireNonNull(action, "action");
+        this.participants = Objects.requireNonNull(participants, "participants");
+        this.targetSlot = Objects.requireNonNull(targetSlot, "targetSlot");
+        this.images = Objects.requireNonNull(images, "images");
+        this.cursor = Objects.requireNonNull(cursor, "cursor");
     }
 
     UUID operationId() {
@@ -72,44 +103,44 @@ final class LiveInventoryTransferExecution {
     }
 
     UUID viewerId() {
-        return viewerId;
+        return participants.viewerId();
     }
 
     UUID targetId() {
-        return targetId;
+        return participants.targetId();
     }
 
     ModerationInventoryHolder.Kind kind() {
-        return kind;
+        return targetSlot.kind();
     }
 
     int logicalSlot() {
-        return logicalSlot;
+        return targetSlot.logicalSlot();
     }
 
     InventoryImage beforeImage() {
-        return beforeImage;
+        return images.before();
     }
 
     InventoryImage replacementImage() {
-        return replacementImage;
+        return images.replacement();
     }
 
     ItemStack expectedCursor() {
-        return copy(expectedCursor);
+        return cursor.expected();
     }
 
     ItemStack resultingCursor() {
-        return copy(resultingCursor);
+        return cursor.resulting();
     }
 
     LiveInventoryTransferDecision.Action action() {
-        return action;
+        return cursor.action();
     }
 
     void patch(InventoryPatch preparedPatch) {
         InventoryPatch next = Objects.requireNonNull(preparedPatch, "preparedPatch");
-        synchronized (this) {
+        synchronized (stateLock) {
             if (patch != null && !patch.patchId().equals(next.patchId())) {
                 throw new IllegalStateException("live transfer already owns another durable patch");
             }
@@ -118,28 +149,40 @@ final class LiveInventoryTransferExecution {
     }
 
     InventoryPatch patch() {
-        return patch;
-    }
-
-    synchronized boolean applyTarget(Mutation mutation) {
-        Objects.requireNonNull(mutation, "mutation");
-        if (phase != Phase.READY || !mutation.apply()) {
-            return false;
+        synchronized (stateLock) {
+            return patch;
         }
-        phase = Phase.TARGET_APPLIED;
-        return true;
     }
 
-    synchronized boolean applyCursor(Mutation mutation) {
+    boolean applyTarget(Mutation mutation) {
         Objects.requireNonNull(mutation, "mutation");
-        if (phase != Phase.TARGET_APPLIED || !mutation.apply()) {
-            return false;
+        synchronized (stateLock) {
+            if (phase != Phase.READY || !mutation.apply()) {
+                return false;
+            }
+            phase = Phase.TARGET_APPLIED;
+            return true;
         }
-        phase = Phase.CURSOR_APPLIED;
-        return true;
     }
 
-    synchronized AbortResult abort() {
+    boolean applyCursor(Mutation mutation) {
+        Objects.requireNonNull(mutation, "mutation");
+        synchronized (stateLock) {
+            if (phase != Phase.TARGET_APPLIED || !mutation.apply()) {
+                return false;
+            }
+            phase = Phase.CURSOR_APPLIED;
+            return true;
+        }
+    }
+
+    AbortResult abort() {
+        synchronized (stateLock) {
+            return abortLocked();
+        }
+    }
+
+    private AbortResult abortLocked() {
         return switch (phase) {
             case READY -> {
                 phase = Phase.ABORTED;
@@ -154,26 +197,34 @@ final class LiveInventoryTransferExecution {
         };
     }
 
-    synchronized void rolledBack() {
-        if (phase != Phase.ABORTED) {
-            throw new IllegalStateException("rollback requires an aborted live transfer");
+    void rolledBack() {
+        synchronized (stateLock) {
+            if (phase != Phase.ABORTED) {
+                throw new IllegalStateException("rollback requires an aborted live transfer");
+            }
+            phase = Phase.ROLLED_BACK;
         }
-        phase = Phase.ROLLED_BACK;
     }
 
-    synchronized void committed() {
-        if (phase != Phase.CURSOR_APPLIED) {
-            throw new IllegalStateException("durable commit requires both physical mutations");
+    void committed() {
+        synchronized (stateLock) {
+            if (phase != Phase.CURSOR_APPLIED) {
+                throw new IllegalStateException("durable commit requires both physical mutations");
+            }
+            phase = Phase.COMMITTED;
         }
-        phase = Phase.COMMITTED;
     }
 
-    synchronized boolean physicalTransferComplete() {
-        return phase == Phase.CURSOR_APPLIED || phase == Phase.COMMITTED;
+    boolean physicalTransferComplete() {
+        synchronized (stateLock) {
+            return phase == Phase.CURSOR_APPLIED || phase == Phase.COMMITTED;
+        }
     }
 
-    synchronized boolean targetAppliedWithoutCursor() {
-        return phase == Phase.TARGET_APPLIED;
+    boolean targetAppliedWithoutCursor() {
+        synchronized (stateLock) {
+            return phase == Phase.TARGET_APPLIED;
+        }
     }
 
     private static ItemStack copy(ItemStack item) {
