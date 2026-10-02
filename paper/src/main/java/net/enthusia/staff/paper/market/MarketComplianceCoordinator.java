@@ -1,12 +1,9 @@
 package net.enthusia.staff.paper.market;
 
 import java.time.Instant;
-import java.util.Collections;
-import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
@@ -84,7 +81,7 @@ public final class MarketComplianceCoordinator {
                     actor.id(), targetId, caseId, stallId, blacklistExpiresAt, clock.instant()
             );
         } catch (RuntimeException exception) {
-            return completed(rejected("Invalid market request: " + safeMessage(exception)));
+            return completed(MarketCoordinationResponses.rejected("Invalid market request: " + MarketCoordinationResponses.safeMessage(exception)));
         }
         return begin(request).thenCompose(started -> continueStallPreparation(started, request))
                 .exceptionally(this::failed);
@@ -160,7 +157,7 @@ public final class MarketComplianceCoordinator {
                     actor.id(), targetId, caseId, expiresAt, clock.instant()
             );
         } catch (RuntimeException exception) {
-            return completed(rejected("Invalid market request: " + safeMessage(exception)));
+            return completed(MarketCoordinationResponses.rejected("Invalid market request: " + MarketCoordinationResponses.safeMessage(exception)));
         }
         return begin(request).thenCompose(started -> continueBlacklistApply(started, request))
                 .exceptionally(this::failed);
@@ -184,7 +181,7 @@ public final class MarketComplianceCoordinator {
                     actor.id(), targetId, caseId, expectedRevision, clock.instant()
             );
         } catch (RuntimeException exception) {
-            return completed(rejected("Invalid market request: " + safeMessage(exception)));
+            return completed(MarketCoordinationResponses.rejected("Invalid market request: " + MarketCoordinationResponses.safeMessage(exception)));
         }
         return begin(request).thenCompose(started -> continueBlacklistRemove(started, request))
                 .exceptionally(this::failed);
@@ -317,12 +314,12 @@ public final class MarketComplianceCoordinator {
         }
         if (operation.request().kind() != MarketComplianceKind.STALL
                 || operation.state() != requiredState) {
-            return rejected(
+            return MarketCoordinationResponses.rejected(
                     "Market operation must be a " + requiredState + " stall operation"
             );
         }
         if (!caseMatches(operation.request())) {
-            return rejected("Market operation case target no longer matches the durable case");
+            return MarketCoordinationResponses.rejected("Market operation case target no longer matches the durable case");
         }
         return new MarketCoordinationResult(
                 MarketCoordinationResult.Status.UPDATED,
@@ -334,19 +331,19 @@ public final class MarketComplianceCoordinator {
     private CompletionStage<MarketCoordinationResult> begin(MarketComplianceRequest request) {
         return supply(() -> {
             if (!caseMatches(request)) {
-                return rejected("Market request target does not match the durable case");
+                return MarketCoordinationResponses.rejected("Market request target does not match the durable case");
             }
             MarketComplianceResult started = requireStore().start(request);
             MarketComplianceOperation operation = started.operation().orElse(null);
             return switch (started.status()) {
-                case CREATED -> result(MarketCoordinationResult.Status.UPDATED, operation, started.detail());
-                case REPLAYED -> result(
+                case CREATED -> MarketCoordinationResponses.result(MarketCoordinationResult.Status.UPDATED, operation, started.detail());
+                case REPLAYED -> MarketCoordinationResponses.result(
                         MarketCoordinationResult.Status.REPLAYED, operation, started.detail()
                 );
-                case CONFLICT, STALE -> result(
+                case CONFLICT, STALE -> MarketCoordinationResponses.result(
                         MarketCoordinationResult.Status.CONFLICT, operation, started.detail()
                 );
-                case NOT_FOUND, UPDATED -> rejected(started.detail());
+                case NOT_FOUND, UPDATED -> MarketCoordinationResponses.rejected(started.detail());
             };
         });
     }
@@ -438,14 +435,14 @@ public final class MarketComplianceCoordinator {
             boolean providerMutation
     ) {
         if (actor == null || !authorization.permits(actor, action)) {
-            return Optional.of(rejected("You do not have authority for this market operation"));
+            return Optional.of(MarketCoordinationResponses.rejected("You do not have authority for this market operation"));
         }
         Optional<MarketCoordinationResult> providerRejection = rejectProvider(providerMutation);
         if (providerRejection.isPresent()) {
             return providerRejection;
         }
         if (dependenciesUnavailable(providerMutation)) {
-            return Optional.of(unavailable("Market compliance storage is unavailable"));
+            return Optional.of(MarketCoordinationResponses.unavailable("Market compliance storage is unavailable"));
         }
         return Optional.empty();
     }
@@ -455,10 +452,10 @@ public final class MarketComplianceCoordinator {
             return Optional.empty();
         }
         if (mode.get() != OperationalMode.ACTIVE) {
-            return Optional.of(unavailable("Market writes require ACTIVE moderation mode"));
+            return Optional.of(MarketCoordinationResponses.unavailable("Market writes require ACTIVE moderation mode"));
         }
         if (market.availability() != IntegrationAvailability.AVAILABLE) {
-            return Optional.of(unavailable(market.issue()));
+            return Optional.of(MarketCoordinationResponses.unavailable(market.issue()));
         }
         return Optional.empty();
     }
@@ -476,7 +473,7 @@ public final class MarketComplianceCoordinator {
     }
 
     private MarketCoordinationResult failed(Throwable failure) {
-        return unavailable("Market coordination failed safely: " + safeMessage(failure));
+        return MarketCoordinationResponses.unavailable("Market coordination failed safely: " + MarketCoordinationResponses.safeMessage(failure));
     }
 
     private static MarketComplianceOperation preparable(MarketCoordinationResult started) {
@@ -506,47 +503,9 @@ public final class MarketComplianceCoordinator {
         );
     }
 
-    private static MarketCoordinationResult result(
-            MarketCoordinationResult.Status status,
-            MarketComplianceOperation operation,
-            String detail
-    ) {
-        return new MarketCoordinationResult(status, Optional.ofNullable(operation), bounded(detail));
-    }
-
-    private static MarketCoordinationResult rejected(String detail) {
-        return new MarketCoordinationResult(
-                MarketCoordinationResult.Status.REJECTED, Optional.empty(), bounded(detail)
-        );
-    }
-
-    private static MarketCoordinationResult unavailable(String detail) {
-        return new MarketCoordinationResult(
-                MarketCoordinationResult.Status.UNAVAILABLE, Optional.empty(), bounded(detail)
-        );
-    }
-
     private static <T> CompletionStage<T> completed(T value) {
         return CompletableFuture.completedFuture(value);
     }
 
-    private static String safeMessage(Throwable failure) {
-        Throwable current = failure;
-        Set<Throwable> visited = Collections.newSetFromMap(new IdentityHashMap<>());
-        visited.add(current);
-        while (current.getCause() != null && visited.add(current.getCause())) {
-            current = current.getCause();
-        }
-        String message = current.getMessage();
-        return message == null || message.isBlank()
-                ? current.getClass().getSimpleName()
-                : bounded(message);
-    }
 
-    private static String bounded(String detail) {
-        if (detail == null || detail.isBlank()) {
-            return "Market operation failed without detail";
-        }
-        return detail.length() <= 512 ? detail : detail.substring(0, 512);
-    }
 }

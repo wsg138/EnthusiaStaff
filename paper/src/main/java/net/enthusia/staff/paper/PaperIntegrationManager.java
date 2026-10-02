@@ -251,7 +251,6 @@ final class PaperIntegrationManager implements Listener {
     void closeModerationProviders() {
         if (marketMaintenance != null) {
             marketMaintenance.cancel();
-            marketMaintenance = null;
         }
         resources.close("punishment commit effects", punishmentEffects);
         resources.close("Discord staff authority endpoint", discordStaffAuthority);
