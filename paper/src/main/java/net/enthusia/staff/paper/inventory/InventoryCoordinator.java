@@ -68,6 +68,7 @@ public final class InventoryCoordinator implements Listener, InventoryLockServic
     private static final long RECONCILIATION_INITIAL_DELAY_TICKS = 5L;
     private static final long RECONCILIATION_PERIOD_TICKS = 40L;
     private static final String LIVE_CURSOR_PREFIX = "ONLINE_CURSOR_";
+    private static final String RECOVERY_STORAGE_UNAVAILABLE = RECOVERY_STORAGE_UNAVAILABLE;
 
     private final JavaPlugin plugin;
     private final Clock clock;
@@ -267,7 +268,7 @@ public final class InventoryCoordinator implements Listener, InventoryLockServic
     private void loadLiveRecoveryMetadata(Player target, InventoryPatch patch) {
         InventoryJournalStore loaded = store.get();
         if (loaded == null) {
-            retryLivePatchLookup(target, patch, "Inventory recovery storage is unavailable.");
+            retryLivePatchLookup(target, patch, RECOVERY_STORAGE_UNAVAILABLE);
             return;
         }
         try {
@@ -318,7 +319,7 @@ public final class InventoryCoordinator implements Listener, InventoryLockServic
     private void resolveMissingCursorMetadata(Player target, InventoryPatch original) {
         InventoryJournalStore loaded = store.get();
         if (loaded == null) {
-            retryLivePatchLookup(target, original, "Inventory recovery storage is unavailable.");
+            retryLivePatchLookup(target, original, RECOVERY_STORAGE_UNAVAILABLE);
             return;
         }
         InventoryPatch claimed = loaded.claimForApply(
@@ -1473,7 +1474,7 @@ public final class InventoryCoordinator implements Listener, InventoryLockServic
     ) {
         InventoryJournalStore loaded = store.get();
         if (loaded == null) {
-            retryCursorRecovery(recovery, "Inventory recovery storage is unavailable.");
+            retryCursorRecovery(recovery, RECOVERY_STORAGE_UNAVAILABLE);
             return;
         }
         try {
@@ -1787,7 +1788,7 @@ public final class InventoryCoordinator implements Listener, InventoryLockServic
         submit(() -> {
             InventoryJournalStore loaded = store.get();
             if (loaded == null) {
-                retryLoginApply(player, original, attempt, "Inventory recovery storage is unavailable.");
+                retryLoginApply(player, original, attempt, RECOVERY_STORAGE_UNAVAILABLE);
                 return;
             }
             try {
