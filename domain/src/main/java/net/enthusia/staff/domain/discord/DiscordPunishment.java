@@ -47,31 +47,6 @@ public record DiscordPunishment(
         lastTransitionOperationKey.ifPresent(value -> bounded(value, "lastTransitionOperationKey", MAX_OPERATION_KEY));
     }
 
-    public DiscordPunishment(
-            UUID punishmentId,
-            ModerationSubjectId subjectId,
-            DiscordUserId targetUserId,
-            DiscordGuildId guildId,
-            Actor issuer,
-            DiscordPunishmentIntent intent,
-            Instant issuedAt,
-            Optional<Instant> expiresAt,
-            DiscordPunishmentState state,
-            DiscordPunishmentTermination termination,
-            DiscordDeliveryOutcome dmOutcome,
-            DiscordDeliveryOutcome removalDmOutcome,
-            boolean externalApplied,
-            Optional<DiscordPermissionSnapshot> previousRestriction,
-            Optional<String> lastErrorCode,
-            Optional<String> lastTransitionOperationKey
-    ) {
-        this(
-                punishmentId, subjectId, Optional.empty(), targetUserId, guildId, issuer, intent, issuedAt, expiresAt,
-                state, termination, dmOutcome, removalDmOutcome, externalApplied, previousRestriction,
-                lastErrorCode, lastTransitionOperationKey
-        );
-    }
-
     public static DiscordPunishment pending(
             UUID punishmentId,
             ModerationSubjectId subjectId,

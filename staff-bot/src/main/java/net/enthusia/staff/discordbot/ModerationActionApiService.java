@@ -17,6 +17,7 @@ final class ModerationActionApiService {
     private static final String PREPARE = "prepare";
     private static final String CONFIRM = "confirm";
     private static final String STATUS = "status";
+    private static final String BOTH_SCOPE = "BOTH";
     private final StaffModerationRuntime moderation;
     private final ModerationReadRequestAuthorizer authorizer;
     private final Map<UUID, Binding> drafts = new ConcurrentHashMap<>();
@@ -32,7 +33,7 @@ final class ModerationActionApiService {
             minecraftIntent = minecraftIntent == null ? Optional.empty() : minecraftIntent;
             scope = scope == null ? Optional.empty() : scope;
             scope.ifPresent(value -> {
-                if (!"BOTH".equals(value)) throw new IllegalArgumentException("unsupported action scope");
+                if (!BOTH_SCOPE.equals(value)) throw new IllegalArgumentException("unsupported action scope");
             });
             minecraftTarget.ifPresent(target -> {
                 if (!target.matches("(?:[A-Za-z0-9_]{1,16}|[a-fA-F0-9]{8}(?:-[a-fA-F0-9]{4}){3}-[a-fA-F0-9]{12})")) {
@@ -161,7 +162,7 @@ final class ModerationActionApiService {
     }
 
     private static boolean bothOperation(Request request) {
-        return request.scope().filter("BOTH"::equals).isPresent();
+        return request.scope().filter(BOTH_SCOPE::equals).isPresent();
     }
 
     private static boolean minecraftOperation(Request request) {
