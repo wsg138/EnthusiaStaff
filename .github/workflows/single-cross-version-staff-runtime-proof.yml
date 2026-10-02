@@ -884,13 +884,17 @@ jobs:
             })
           }
 
-          ;(async () => {
-            for (const probe of probes) await runProbe(probe)
-            log('PROBES_COMPLETE=true')
-          })().catch(error => {
-            log('PROBES_FAILED=' + (error.stack || error))
+          const requested = process.argv[5]
+          const probe = probes.find(candidate => candidate.label === requested)
+          if (!probe) {
+            log('PROBE_CONFIG_ERROR=' + String(requested))
             process.exitCode = 2
-          })
+          } else {
+            runProbe(probe).catch(error => {
+              log('PROBE_FAILED|' + probe.label + '|error=' + (error.stack || error))
+              process.exitCode = 2
+            })
+          }
           JS
 
           client263="$RUNNER_TEMP/protocol-client-263"
@@ -1026,10 +1030,33 @@ jobs:
             if [[ "$name" == "paper263" ]]; then
               client_root="$RUNNER_TEMP/protocol-client-263"
             fi
-            (
-              cd "$client_root"
-              NODE_PATH="$PWD/node_modules" node probe.js                 "$port" "$client_version" "$dir/probe-client.log"
-            ) > "$dir/probe-client-console.log" 2>&1
+            : > "$dir/probe-client.log"
+            : > "$dir/probe-client-console.log"
+            for probe_label in WALL FLOOR CEILING; do
+              (
+                cd "$client_root"
+                NODE_PATH="$PWD/node_modules" node probe.js                   "$port" "$client_version" "$dir/probe-client.log" "$probe_label"
+              ) >> "$dir/probe-client-console.log" 2>&1
+
+              probe_complete=0
+              for _ in $(seq 1 40); do
+                if grep -q "^PROBE_COMPLETE|label=$probe_label|restored=true|noPhysics=false$"                     "$dir/server/cross-version-runtime-evidence.txt" 2>/dev/null; then
+                  probe_complete=1
+                  break
+                fi
+                sleep 1
+              done
+              if [[ "$probe_complete" != 1 ]]; then
+                echo "::error::Movement probe $probe_label did not complete for $name"
+                cat "$dir/probe-client.log" || true
+                cat "$dir/server/cross-version-runtime-evidence.txt" || true
+                tail -n 160 "$dir/server/console.log" || true
+                return 1
+              fi
+              sleep 2
+            done
+            echo 'PROBES_COMPLETE=true' >> "$dir/probe-client.log"
+            echo 'PROBES_COMPLETE=true' >> "$dir/probe-client-console.log"
 
             (
               cd "$client_root"
