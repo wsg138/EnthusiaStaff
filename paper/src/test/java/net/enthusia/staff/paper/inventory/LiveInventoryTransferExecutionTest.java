@@ -67,16 +67,15 @@ final class LiveInventoryTransferExecutionTest {
         InventoryImage before = emptyImage();
         InventoryImage replacement = emptyImage();
         return new LiveInventoryTransferExecution(
-                UUID.randomUUID(),
-                UUID.randomUUID(),
-                UUID.randomUUID(),
-                ModerationInventoryHolder.Kind.PLAYER,
-                0,
-                before,
-                replacement,
-                null,
-                null,
-                LiveInventoryTransferDecision.Action.PICKUP
+                new LiveInventoryTransferExecution.Identity(
+                        UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID()
+                ),
+                new LiveInventoryTransferExecution.TargetMutation(
+                        ModerationInventoryHolder.Kind.PLAYER, 0, before, replacement
+                ),
+                new LiveInventoryTransferExecution.CursorMutation(
+                        null, null, LiveInventoryTransferDecision.Action.PICKUP
+                )
         );
     }
 

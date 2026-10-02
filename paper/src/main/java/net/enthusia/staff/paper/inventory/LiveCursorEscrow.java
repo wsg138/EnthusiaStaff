@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
+import java.util.logging.Level;
 import net.enthusia.staff.domain.inventory.InventoryCursorJournal;
 import net.enthusia.staff.domain.inventory.InventoryCursorTransfer;
 import org.bukkit.entity.Player;
@@ -12,10 +13,14 @@ import org.bukkit.inventory.PlayerInventory;
 import org.bukkit.plugin.java.JavaPlugin;
 
 final class LiveCursorEscrow {
+    private static final int SINGLE_MARKER = 1;
+
+    private final JavaPlugin plugin;
     private final CursorStackCodec codec = new CursorStackCodec();
     private final LiveCursorEscrowMarker marker;
 
     LiveCursorEscrow(JavaPlugin plugin) {
+        this.plugin = Objects.requireNonNull(plugin, "plugin");
         marker = new LiveCursorEscrowMarker(plugin);
     }
 
@@ -73,7 +78,7 @@ final class LiveCursorEscrow {
 
     RecoveryResult recoverSource(Player viewer, InventoryCursorJournal journal) {
         List<LocatedMarker> markers = locate(viewer, journal.patch().operationId());
-        if (markers.size() > 1) {
+        if (markers.size() > SINGLE_MARKER) {
             return RecoveryResult.CONFLICT;
         }
         if (markers.isEmpty()) {
@@ -94,7 +99,7 @@ final class LiveCursorEscrow {
 
     RecoveryResult recoverResult(Player viewer, InventoryCursorJournal journal) {
         List<LocatedMarker> markers = locate(viewer, journal.patch().operationId());
-        if (markers.size() > 1) {
+        if (markers.size() > SINGLE_MARKER) {
             return RecoveryResult.CONFLICT;
         }
         if (markers.isEmpty()) {
@@ -121,7 +126,7 @@ final class LiveCursorEscrow {
                     journal.cursorTransfer().replacementChecksum()
             );
         }
-        if (markers.size() != 1) {
+        if (markers.size() != SINGLE_MARKER) {
             return false;
         }
         LocatedMarker located = markers.getFirst();
@@ -209,7 +214,11 @@ final class LiveCursorEscrow {
                 return true;
             }
         } catch (RuntimeException exception) {
-            // The exact before-state is restored below; the caller will fail closed.
+            plugin.getLogger().log(
+                    Level.FINE,
+                    "Live cursor escrow mutation failed; restoring the exact before-state",
+                    exception
+            );
         }
         restoreRecoveryBeforeState(viewer, located, originalCursor);
         return false;
@@ -285,6 +294,7 @@ final class LiveCursorEscrow {
                 inventory.setArmorContents(armor);
             }
             case OFF_HAND -> inventory.setItemInOffHand(item);
+            default -> throw new IllegalStateException("Unsupported cursor escrow slot kind");
         }
     }
 

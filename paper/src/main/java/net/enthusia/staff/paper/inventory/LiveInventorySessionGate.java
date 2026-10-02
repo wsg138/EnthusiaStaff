@@ -2,18 +2,19 @@ package net.enthusia.staff.paper.inventory;
 
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 
 /** Serializes one target's reconciliation and cursor-transfer work. */
 final class LiveInventorySessionGate {
     private final AtomicBoolean working = new AtomicBoolean();
-    private volatile LiveInventoryTransferExecution activeTransfer;
+    private final AtomicReference<LiveInventoryTransferExecution> activeTransfer = new AtomicReference<>();
 
-    synchronized boolean beginEdit(LiveInventoryTransferExecution transfer) {
-        Objects.requireNonNull(transfer, "transfer");
+    boolean beginEdit(LiveInventoryTransferExecution transfer) {
+        LiveInventoryTransferExecution next = Objects.requireNonNull(transfer, "transfer");
         if (!working.compareAndSet(false, true)) {
             return false;
         }
-        activeTransfer = transfer;
+        activeTransfer.set(next);
         return true;
     }
 
@@ -21,11 +22,10 @@ final class LiveInventorySessionGate {
         return working.compareAndSet(false, true);
     }
 
-    synchronized void finishTransfer(LiveInventoryTransferExecution transfer) {
-        if (activeTransfer == transfer) {
-            activeTransfer = null;
+    void finishTransfer(LiveInventoryTransferExecution transfer) {
+        if (activeTransfer.compareAndSet(transfer, null)) {
+            working.set(false);
         }
-        working.set(false);
     }
 
     void finishWork() {
@@ -33,7 +33,7 @@ final class LiveInventorySessionGate {
     }
 
     LiveInventoryTransferExecution activeTransfer() {
-        return activeTransfer;
+        return activeTransfer.get();
     }
 
     boolean working() {

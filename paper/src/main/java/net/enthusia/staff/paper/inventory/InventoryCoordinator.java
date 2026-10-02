@@ -404,10 +404,11 @@ public final class InventoryCoordinator implements Listener, InventoryLockServic
             ModerationInventoryHolder holder,
             int logicalSlot
     ) {
-        LiveInventoryTransferDecision.Click click = supportedClick(event.getClick());
-        if (click == null) {
+        Optional<LiveInventoryTransferDecision.Click> supported = supportedClick(event.getClick());
+        if (supported.isEmpty()) {
             return;
         }
+        LiveInventoryTransferDecision.Click click = supported.orElseThrow();
         LiveSession session = liveSessions.get(holder.targetId());
         if (session == null) {
             message(viewer, "That live inventory session ended; reopen the view.");
@@ -427,8 +428,15 @@ public final class InventoryCoordinator implements Listener, InventoryLockServic
         }
         InventoryImage replacement = before.withItem(logicalSlot, decision.targetAfter());
         startLiveTransfer(viewer, session, new LiveInventoryTransferExecution(
-                UUID.randomUUID(), viewer.getUniqueId(), holder.targetId(), holder.kind(), logicalSlot,
-                before, replacement, event.getCursor(), decision.cursorAfter(), decision.action()
+                new LiveInventoryTransferExecution.Identity(
+                        UUID.randomUUID(), viewer.getUniqueId(), holder.targetId()
+                ),
+                new LiveInventoryTransferExecution.TargetMutation(
+                        holder.kind(), logicalSlot, before, replacement
+                ),
+                new LiveInventoryTransferExecution.CursorMutation(
+                        event.getCursor(), decision.cursorAfter(), decision.action()
+                )
         ));
     }
 
@@ -1508,7 +1516,7 @@ public final class InventoryCoordinator implements Listener, InventoryLockServic
             return;
         }
         boolean marked = result == LiveCursorEscrow.RecoveryResult.RESULT_MARKED;
-        if (!submit(() -> advanceRecoveredCursor(target, actor, recovery, marked))) {
+        if (!submit(() -> advanceRecoveredCursor(actor, recovery, marked))) {
             retryCursorRecovery(recovery, "Recovered cursor-phase worker queue is busy.");
         }
     }
@@ -1526,7 +1534,6 @@ public final class InventoryCoordinator implements Listener, InventoryLockServic
     }
 
     private void advanceRecoveredCursor(
-            Player target,
             Player actor,
             InventoryCursorJournal recovery,
             boolean resultMarked
@@ -1992,11 +1999,11 @@ public final class InventoryCoordinator implements Listener, InventoryLockServic
         holder.image(image, false);
     }
 
-    private static LiveInventoryTransferDecision.Click supportedClick(ClickType click) {
+    private static Optional<LiveInventoryTransferDecision.Click> supportedClick(ClickType click) {
         return switch (click) {
-            case LEFT -> LiveInventoryTransferDecision.Click.LEFT;
-            case RIGHT -> LiveInventoryTransferDecision.Click.RIGHT;
-            default -> null;
+            case LEFT -> Optional.of(LiveInventoryTransferDecision.Click.LEFT);
+            case RIGHT -> Optional.of(LiveInventoryTransferDecision.Click.RIGHT);
+            default -> Optional.empty();
         };
     }
 
