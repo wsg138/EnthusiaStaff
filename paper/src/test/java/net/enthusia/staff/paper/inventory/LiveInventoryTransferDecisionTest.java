@@ -111,6 +111,21 @@ final class LiveInventoryTransferDecisionTest {
     }
 
     @Test
+    void incompatibleRightClickSwapsCursorAndTarget() {
+        LiveInventoryTransferRule.Stack target = stack(3);
+        LiveInventoryTransferRule.Stack cursor = stack(5);
+
+        LiveInventoryTransferRule.Decision decision = decide(
+                target, cursor, false, LiveInventoryTransferRule.Click.RIGHT
+        );
+
+        assertEquals(LiveInventoryTransferRule.Action.SWAP, decision.action());
+        assertEquals(cursor, decision.targetAfter());
+        assertEquals(target, decision.cursorAfter());
+        assertConserved(target, cursor, decision);
+    }
+
+    @Test
     void fullCompatibleStackDoesNotSwapOrDuplicate() {
         LiveInventoryTransferRule.Stack target = stack(64);
         LiveInventoryTransferRule.Stack cursor = stack(2);

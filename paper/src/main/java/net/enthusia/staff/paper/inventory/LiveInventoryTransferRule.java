@@ -58,7 +58,10 @@ final class LiveInventoryTransferRule {
         if (target == null) {
             return new Decision(Action.PLACE_ONE, cursor.withAmount(1), cursor.remaining(1));
         }
-        if (!compatible || target.amount() >= target.maxStackSize()) {
+        if (!compatible) {
+            return new Decision(Action.SWAP, cursor, target);
+        }
+        if (target.amount() >= target.maxStackSize()) {
             return unchanged(target, cursor);
         }
         return new Decision(
