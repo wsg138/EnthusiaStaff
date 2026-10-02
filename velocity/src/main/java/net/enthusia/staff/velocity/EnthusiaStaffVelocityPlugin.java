@@ -1322,30 +1322,74 @@ public final class EnthusiaStaffVelocityPlugin {
     }
 
     private void recoverTimedOutStaffHandoff(UUID playerId, StaffModeHandoffTracker.Pending pending) {
-        String current = proxy.getPlayer(playerId)
-                .flatMap(Player::getCurrentServer)
-                .map(connection -> connection.getServerInfo().getName())
-                .orElse(null);
+        String current = currentBackend(playerId);
         StaffSessionStore sessions = staffSessionStore;
-        var durable = sessions == null ? Optional.<net.enthusia.staff.domain.staff.StaffSessionSnapshot>empty()
-                : sessions.active(playerId);
+        var durable = activeStaffSession(sessions, playerId);
         if (durableStaffModeArrived(durable, pending.destination())) {
             return;
         }
         StaffModeBackendHandoffCoordinator coordinator = handoffCoordinator(sessions);
-        if (current != null && current.equalsIgnoreCase(pending.source())
-                && durableStaffModeArrived(durable, pending.source())) {
+        if (sourceHandoffStillActive(current, durable, pending)) {
             stabilizeSourceHandoff(playerId, pending, coordinator);
             return;
         }
-        if (current != null && current.equalsIgnoreCase(pending.destination()) && durable.isEmpty()
-                && pending.retryCount() == 0
-                && coordinator.retryDestination(playerId, pending.destination(), pending.transferId())) {
-            staffHandoffs.retry(pending, Clock.systemUTC().instant());
-            scheduleStaffHandoffTimeout(playerId, pending.transferId());
+        if (retryTimedOutDestination(playerId, current, durable, pending, coordinator)) {
             return;
         }
         finishTimedOutStaffHandoff(playerId, pending, current, durable, coordinator);
+    }
+
+    private String currentBackend(UUID playerId) {
+        return proxy.getPlayer(playerId)
+                .flatMap(Player::getCurrentServer)
+                .map(connection -> connection.getServerInfo().getName())
+                .orElse(null);
+    }
+
+    private static Optional<net.enthusia.staff.domain.staff.StaffSessionSnapshot> activeStaffSession(
+            StaffSessionStore sessions,
+            UUID playerId
+    ) {
+        return sessions == null
+                ? Optional.empty()
+                : sessions.active(playerId);
+    }
+
+    private static boolean sourceHandoffStillActive(
+            String current,
+            Optional<net.enthusia.staff.domain.staff.StaffSessionSnapshot> durable,
+            StaffModeHandoffTracker.Pending pending
+    ) {
+        return current != null
+                && current.equalsIgnoreCase(pending.source())
+                && durableStaffModeArrived(durable, pending.source());
+    }
+
+    private boolean retryTimedOutDestination(
+            UUID playerId,
+            String current,
+            Optional<net.enthusia.staff.domain.staff.StaffSessionSnapshot> durable,
+            StaffModeHandoffTracker.Pending pending,
+            StaffModeBackendHandoffCoordinator coordinator
+    ) {
+        if (!destinationRetryEligible(current, durable, pending)
+                || !coordinator.retryDestination(playerId, pending.destination(), pending.transferId())) {
+            return false;
+        }
+        staffHandoffs.retry(pending, Clock.systemUTC().instant());
+        scheduleStaffHandoffTimeout(playerId, pending.transferId());
+        return true;
+    }
+
+    private static boolean destinationRetryEligible(
+            String current,
+            Optional<net.enthusia.staff.domain.staff.StaffSessionSnapshot> durable,
+            StaffModeHandoffTracker.Pending pending
+    ) {
+        return current != null
+                && current.equalsIgnoreCase(pending.destination())
+                && durable.isEmpty()
+                && pending.retryCount() == 0;
     }
 
     private void stabilizeSourceHandoff(
