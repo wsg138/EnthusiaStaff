@@ -392,7 +392,7 @@ class AssetJournalIntegrationTest {
         );
         InventoryPatch prepared = store.prepare(request, LEASE, NOW.plusSeconds(1))
                 .patch().orElseThrow();
-        InventoryCursorJournal crossBackend = store.pendingCursorTransfersByActor(
+        var crossBackend = store.pendingCursorTransfersByActor(
                 actorId, "paper-2", 10
         ).getFirst();
         assertEquals(SERVER_ID, crossBackend.patch().owningServerId());
