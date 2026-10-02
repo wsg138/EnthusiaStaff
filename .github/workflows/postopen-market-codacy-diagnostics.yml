@@ -13,21 +13,20 @@ jobs:
     if: ${{ github.event.pull_request.number == 296 }}
     runs-on: ubuntu-latest
     steps:
-      - name: Dump new Codacy findings
+      - name: Summarize new Codacy findings
         shell: bash
         run: |
           set -euo pipefail
           base="https://api.codacy.com/api/v3/analysis/organizations/gh/wsg138/repositories/EnthusiaStaff/pull-requests/296/issues"
           cursor=""
-          page=0
+          : > /tmp/findings.tsv
           while true; do
-            page=$((page + 1))
             url="${base}?status=new&limit=100"
             if [[ -n "${cursor}" ]]; then
-              url="${url}&cursor=$(python -c 'import sys,urllib.parse; print(urllib.parse.quote(sys.argv[1]))' "${cursor}")"
+              encoded="$(python -c 'import sys,urllib.parse; print(urllib.parse.quote(sys.argv[1]))' "${cursor}")"
+              url="${url}&cursor=${encoded}"
             fi
             body="$(curl --fail --silent --show-error --location -H 'Accept: application/json' "${url}")"
-            echo "=== CODACY PAGE ${page} ==="
             echo "${body}" | jq -r '
               .data[] |
               [
@@ -36,10 +35,27 @@ jobs:
                 (.commitIssue.patternInfo.id // ""),
                 (.commitIssue.patternInfo.level // ""),
                 (.commitIssue.patternInfo.category // ""),
-                (.commitIssue.patternInfo.tool.name // .commitIssue.patternInfo.toolName // ""),
                 (.commitIssue.message // .commitIssue.patternInfo.title // "")
               ] | @tsv
-            '
+            ' >> /tmp/findings.tsv
             cursor="$(echo "${body}" | jq -r '.pagination.cursor // empty')"
             [[ -z "${cursor}" ]] && break
           done
+
+          echo "=== TOTAL ==="
+          wc -l < /tmp/findings.tsv
+
+          echo "=== ROOT FINDINGS ==="
+          awk -F '\t' '$1 !~ /^components\/enthusia-market\// && $1 !~ /postopen-market-codacy-diagnostics\.yml$/ {print}' /tmp/findings.tsv
+
+          echo "=== ROOT COUNT ==="
+          awk -F '\t' '$1 !~ /^components\/enthusia-market\// && $1 !~ /postopen-market-codacy-diagnostics\.yml$/ {n++} END {print n+0}' /tmp/findings.tsv
+
+          echo "=== COMPONENT CATEGORY COUNTS ==="
+          awk -F '\t' '$1 ~ /^components\/enthusia-market\// {key=$5 "\t" $4; count[key]++} END {for (k in count) print count[k] "\t" k}' /tmp/findings.tsv | sort -nr
+
+          echo "=== COMPONENT RULE COUNTS ==="
+          awk -F '\t' '$1 ~ /^components\/enthusia-market\// {count[$3]++} END {for (k in count) print count[k] "\t" k}' /tmp/findings.tsv | sort -nr | head -80
+
+          echo "=== COMPONENT SECURITY FINDINGS ==="
+          awk -F '\t' '$1 ~ /^components\/enthusia-market\// && $5 == "Security" {print}' /tmp/findings.tsv
