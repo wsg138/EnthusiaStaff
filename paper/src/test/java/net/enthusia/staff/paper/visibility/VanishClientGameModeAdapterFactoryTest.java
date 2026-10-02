@@ -32,8 +32,8 @@ class VanishClientGameModeAdapterFactoryTest {
     void supportedIdentitiesStaySeparateEvenWhenTheyShareReflectionImplementation() {
         var runtimes = VanishClientGameModeAdapterFactory.supportedRuntimes();
 
-        assertEquals(3, runtimes.size());
-        assertEquals(3L, runtimes.stream().map(
+        assertEquals(4, runtimes.size());
+        assertEquals(4L, runtimes.stream().map(
                 VanishClientGameModeAdapterFactory.SupportedRuntime::label
         ).distinct().count());
         assertEquals(2L, runtimes.stream().map(

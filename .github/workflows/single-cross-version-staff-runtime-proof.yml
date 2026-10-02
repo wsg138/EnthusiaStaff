@@ -17,12 +17,13 @@ concurrency:
 
 jobs:
   prove:
-    name: Exact Leaf 115 + Paper 26.2-128/129 common-JAR proof
+    name: Exact Leaf 115 + Paper 26.2-128/129 + 26.3-134 common-JAR proof
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 50
     env:
       LEAF_SHA256: 29468f84fe484412b117207c975c3fc520d0e9bd5fca96c57f63eaf707d25077
       PAPER_USER_AGENT: EnthusiaStaff-cross-version-proof/1.0.0
+      PAPER263_SHA256: 16c5494aed1015de4e7c6e5aefece74e0b398f733bd3fcd8975c820598c19bca
       MINEFLAYER_COMMIT: f9e7db4447afda7838f08aa13430ec768738c178
 
     steps:
@@ -304,8 +305,11 @@ jobs:
                       marker(player, "ENABLED");
                       later(20L, () -> teleport(player));
                       later(40L, () -> disable(player));
-                      later(60L, () -> forcedFailure(player));
-                      later(80L, () -> reconnectPreparation(player));
+                      later(60L, () -> survivalEnable(player));
+                      later(80L, () -> survivalStability(player));
+                      later(100L, () -> survivalDisable(player));
+                      later(120L, () -> forcedFailure(player));
+                      later(140L, () -> reconnectPreparation(player));
                   } catch (Exception exception) {
                       fail("FIRST_SESSION", exception);
                   }
@@ -335,6 +339,40 @@ jobs:
                       marker(player, "DISABLED");
                   } catch (Exception exception) {
                       fail("DISABLE", exception);
+                  }
+              }
+
+              private void survivalEnable(Player player) {
+                  try {
+                      player.setGameMode(GameMode.SURVIVAL);
+                      player.setNoPhysics(false);
+                      setVanish(player, true);
+                      boolean enabled = reconcile(player);
+                      evidence("SURVIVAL_ENABLE|reconciled=" + enabled
+                              + "|noPhysics=" + player.hasNoPhysics()
+                              + "|serverMode=" + player.getGameMode());
+                      marker(player, "SURVIVAL_ENABLED");
+                  } catch (Exception exception) {
+                      fail("SURVIVAL_ENABLE", exception);
+                  }
+              }
+
+              private void survivalStability(Player player) {
+                  evidence("SURVIVAL_STABILITY|noPhysics=" + player.hasNoPhysics()
+                          + "|serverMode=" + player.getGameMode());
+                  marker(player, "SURVIVAL_STABLE");
+              }
+
+              private void survivalDisable(Player player) {
+                  try {
+                      setVanish(player, false);
+                      boolean disabled = reconcile(player);
+                      evidence("SURVIVAL_DISABLE|reconciled=" + disabled
+                              + "|noPhysics=" + player.hasNoPhysics()
+                              + "|serverMode=" + player.getGameMode());
+                      marker(player, "SURVIVAL_DISABLED");
+                  } catch (Exception exception) {
+                      fail("SURVIVAL_DISABLE", exception);
                   }
               }
 
@@ -596,12 +634,20 @@ jobs:
           }, 90000)
           JS
 
+          client263="$RUNNER_TEMP/protocol-client-263"
+          mkdir -p "$client263"
+          cd "$client263"
+          npm init -y >/dev/null
+          npm install --no-audit --no-fund --ignore-scripts \
+            'mineflayer@npm:@wp2508/mineflayer@4.42.2'
+          cp "$RUNNER_TEMP/protocol-client/client.js" "$client263/client.js"
+
       - name: Fetch exact server artifacts
         shell: bash
         run: |
           set -Eeuo pipefail
           servers="$RUNNER_TEMP/servers"
-          mkdir -p "$servers/leaf" "$servers/paper" "$servers/paper128"
+          mkdir -p "$servers/leaf" "$servers/paper" "$servers/paper128" "$servers/paper263"
 
           leaf_url="https://api.leafmc.one/v2/projects/leaf/versions/1.21.11/builds/115/downloads/leaf-1.21.11-115.jar"
           curl --fail --location --retry 4 --retry-all-errors "$leaf_url" -o "$servers/leaf/server.jar"
@@ -640,6 +686,17 @@ jobs:
             echo "sha256=$paper128_actual"
             echo "url=$paper128_url"
           } > "$servers/paper128/receipt.txt"
+
+          paper263_url="https://fill-data.papermc.io/v1/objects/$PAPER263_SHA256/paper-26.3-134.jar"
+          curl --fail --location --retry 4 --retry-all-errors \
+            --header "User-Agent: $PAPER_USER_AGENT" "$paper263_url" -o "$servers/paper263/server.jar"
+          paper263_actual="$(sha256sum "$servers/paper263/server.jar" | awk '{print $1}')"
+          test "$paper263_actual" = "$PAPER263_SHA256"
+          {
+            echo "runtime=Paper 26.3 build 134"
+            echo "sha256=$paper263_actual"
+            echo "url=$paper263_url"
+          } > "$servers/paper263/receipt.txt"
 
       - name: Run candidate unchanged on exact Leaf and Paper
         shell: bash
@@ -703,8 +760,12 @@ jobs:
             ! grep -q "failed required vanish no-clip ABI validation" "$dir/server/console.log"
             ! grep -Eq "LinkageError|NoSuchMethodError|NoSuchFieldError|ClassNotFoundException"               "$dir/server/console.log"
 
+            local client_root="$RUNNER_TEMP/protocol-client"
+            if [[ "$name" == "paper263" ]]; then
+              client_root="$RUNNER_TEMP/protocol-client-263"
+            fi
             (
-              cd "$RUNNER_TEMP/protocol-client"
+              cd "$client_root"
               NODE_PATH="$PWD/node_modules" node client.js                 "$port" "$client_version" "$dir/client.log"
             ) > "$dir/client-console.log" 2>&1 &
             local client_pid=$!
@@ -735,6 +796,7 @@ jobs:
           run_runtime leaf 25590 1.21.11             'RUNTIME|brandId=winds-studio:leaf|minecraft=1.21.11|build=115'             'Vanish no-clip client adapter enabled for Leaf 1.21.11 build 115'
           run_runtime paper 25591 26.2             'RUNTIME|brandId=papermc:paper|minecraft=26.2|build=129'             'Vanish no-clip client adapter enabled for Paper 26.2 build 129'
           run_runtime paper128 25592 26.2             'RUNTIME|brandId=papermc:paper|minecraft=26.2|build=128'             'Vanish no-clip client adapter enabled for Paper 26.2 build 128'
+          run_runtime paper263 25593 26.3             'RUNTIME|brandId=papermc:paper|minecraft=26.3|build=134'             'Vanish no-clip client adapter enabled for Paper 26.3 build 134'
 
       - name: Verify common-JAR acceptance matrix
         shell: bash
@@ -752,7 +814,7 @@ jobs:
             }
           }
 
-          for name in leaf paper paper128; do
+          for name in leaf paper paper128 paper263; do
             evidence="$root/$name/server/cross-version-runtime-evidence.txt"
             client="$root/$name/client.log"
             console="$root/$name/server/console.log"
@@ -769,6 +831,9 @@ jobs:
             require_line "$evidence" '^FREEZE_RELEASE\|restricted=false$'
             require_line "$evidence" '^TELEPORT\|teleported=true\|reconciled=true\|noPhysics=true\|serverMode=CREATIVE$'
             require_line "$evidence" '^DISABLE\|reconciled=true\|noPhysics=false\|serverMode=CREATIVE$'
+            require_line "$evidence" '^SURVIVAL_ENABLE\|reconciled=true\|noPhysics=true\|serverMode=SURVIVAL$'
+            require_line "$evidence" '^SURVIVAL_STABILITY\|noPhysics=true\|serverMode=SURVIVAL$'
+            require_line "$evidence" '^SURVIVAL_DISABLE\|reconciled=true\|noPhysics=false\|serverMode=SURVIVAL$'
             require_line "$evidence" '^FORCED_FAILURE\|reconciled=false\|adapterAvailable=false\|noPhysics=false$'
             require_line "$evidence" '^RECONNECT_PREP\|reconciled=true\|noPhysics=true\|serverMode=CREATIVE$'
             require_line "$evidence" '^RECONNECT_JOIN\|noPhysics=false\|serverMode=CREATIVE$'
@@ -786,6 +851,9 @@ jobs:
             require_line "$client" '^MARKER\|ENABLED\|session=1\|mode=spectator$'
             require_line "$client" '^MARKER\|TELEPORTED\|session=1\|mode=spectator$'
             require_line "$client" '^MARKER\|DISABLED\|session=1\|mode=creative$'
+            require_line "$client" '^MARKER\|SURVIVAL_ENABLED\|session=1\|mode=spectator$'
+            require_line "$client" '^MARKER\|SURVIVAL_STABLE\|session=1\|mode=spectator$'
+            require_line "$client" '^MARKER\|SURVIVAL_DISABLED\|session=1\|mode=survival$'
             require_line "$client" '^MARKER\|RECONNECT_PREP\|session=1\|mode=spectator$'
             require_line "$client" '^MARKER\|RECONNECT_ENABLED\|session=2\|mode=spectator$'
             require_line "$client" '^MARKER\|RECONNECT_DISABLED\|session=2\|mode=creative$'
@@ -806,6 +874,7 @@ jobs:
           cmp "$RUNNER_TEMP/candidate/EnthusiaStaff-Paper.jar"               "$root/leaf/server/plugins/EnthusiaStaff-Paper.jar"
           cmp "$RUNNER_TEMP/candidate/EnthusiaStaff-Paper.jar"               "$root/paper/server/plugins/EnthusiaStaff-Paper.jar"
           cmp "$RUNNER_TEMP/candidate/EnthusiaStaff-Paper.jar"               "$root/paper128/server/plugins/EnthusiaStaff-Paper.jar"
+          cmp "$RUNNER_TEMP/candidate/EnthusiaStaff-Paper.jar"               "$root/paper263/server/plugins/EnthusiaStaff-Paper.jar"
           echo 'COMMON_JAR_IDENTICAL=true'
 
       - name: Upload proof evidence

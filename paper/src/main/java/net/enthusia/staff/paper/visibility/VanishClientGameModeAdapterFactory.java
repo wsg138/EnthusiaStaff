@@ -16,6 +16,7 @@ final class VanishClientGameModeAdapterFactory {
     private static final List<SupportedRuntime> SUPPORTED_RUNTIMES = List.of(
             new SupportedRuntime(PAPER_BRAND_ID, "26.2", 128, "Paper 26.2 build 128"),
             new SupportedRuntime(PAPER_BRAND_ID, "26.2", 129, "Paper 26.2 build 129"),
+            new SupportedRuntime(PAPER_BRAND_ID, "26.3", 134, "Paper 26.3 build 134"),
             new SupportedRuntime(LEAF_BRAND_ID, "1.21.11", 115, "Leaf 1.21.11 build 115")
     );
 
