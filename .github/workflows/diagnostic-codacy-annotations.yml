@@ -17,7 +17,7 @@ jobs:
         run: |
           set -euo pipefail
           repo="$GITHUB_REPOSITORY"
-          sha="8a479b9412add2f780c255c55bf8324e48557587"
+          sha="81d8719012ce11f1363430ae5b24376ecaa51195"
           check_id="$(gh api "repos/$repo/commits/$sha/check-runs" --jq '.check_runs[] | select(.name == "Codacy Static Code Analysis") | .id' | head -n1)"
           test -n "$check_id"
           echo "CHECK_ID=$check_id"
