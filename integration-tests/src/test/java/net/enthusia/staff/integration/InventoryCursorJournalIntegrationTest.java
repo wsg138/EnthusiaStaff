@@ -93,13 +93,13 @@ class InventoryCursorJournalIntegrationTest {
     }
 
     @Test
-    void actorRecoveryLookupIsRestrictedToOwningBackend() {
+    void actorRecoveryLookupIsRestrictedToOwningBackend() throws SQLException {
         UUID actor = UUID.randomUUID();
         UUID smpTarget = UUID.randomUUID();
         UUID hubTarget = UUID.randomUUID();
-        insertPlayer(DATABASE, actor, "CursorActor", NOW);
-        insertPlayer(DATABASE, smpTarget, "CursorSmpTarget", NOW);
-        insertPlayer(DATABASE, hubTarget, "CursorHubTarget", NOW);
+        insertPlayer(DATABASE, actor, name("CursorActor", actor), NOW);
+        insertPlayer(DATABASE, smpTarget, name("CursorSmpTarget", smpTarget), NOW);
+        insertPlayer(DATABASE, hubTarget, name("CursorHubTarget", hubTarget), NOW);
         try (MariaDbRuntime runtime = MariaDb.initialize(databaseConfig(DATABASE))) {
             InventoryJournalStore store = runtime.inventoryJournalStore();
             PreparedCursor smp = prepare(store, smpTarget, actor, SMP, cursor(21, 22));
@@ -114,7 +114,7 @@ class InventoryCursorJournalIntegrationTest {
     }
 
     @Test
-    void replayWithDifferentCursorEscrowIsRejectedWithoutReplacingMetadata() {
+    void replayWithDifferentCursorEscrowIsRejectedWithoutReplacingMetadata() throws SQLException {
         UUID target = UUID.randomUUID();
         UUID actor = UUID.randomUUID();
         try (MariaDbRuntime runtime = runtime(target, actor)) {
@@ -142,7 +142,7 @@ class InventoryCursorJournalIntegrationTest {
     }
 
     @Test
-    void cursorAppliedPhaseCannotBeRolledBack() {
+    void cursorAppliedPhaseCannotBeRolledBack() throws SQLException {
         UUID target = UUID.randomUUID();
         UUID actor = UUID.randomUUID();
         try (MariaDbRuntime runtime = runtime(target, actor)) {
@@ -166,10 +166,14 @@ class InventoryCursorJournalIntegrationTest {
         }
     }
 
-    private static MariaDbRuntime runtime(UUID target, UUID actor) {
-        insertPlayer(DATABASE, target, "CursorTarget", NOW);
-        insertPlayer(DATABASE, actor, "CursorActor", NOW);
+    private static MariaDbRuntime runtime(UUID target, UUID actor) throws SQLException {
+        insertPlayer(DATABASE, target, name("CursorTarget", target), NOW);
+        insertPlayer(DATABASE, actor, name("CursorActor", actor), NOW);
         return MariaDb.initialize(databaseConfig(DATABASE));
+    }
+
+    private static String name(String prefix, UUID id) {
+        return prefix + '-' + id.toString().substring(0, 8);
     }
 
     private static PreparedCursor prepare(
@@ -264,22 +268,28 @@ class InventoryCursorJournalIntegrationTest {
     }
 
     private static String patchState(UUID operationId) throws SQLException {
-        return singleState("inventory_pending_patches", operationId);
+        try (Connection connection = connection(DATABASE);
+             PreparedStatement statement = connection.prepareStatement("""
+                     SELECT state FROM inventory_pending_patches WHERE operation_id = ?
+                     """)) {
+            return state(statement, operationId);
+        }
     }
 
     private static String operationState(UUID operationId) throws SQLException {
-        return singleState("inventory_operations", operationId);
+        try (Connection connection = connection(DATABASE);
+             PreparedStatement statement = connection.prepareStatement("""
+                     SELECT state FROM inventory_operations WHERE operation_id = ?
+                     """)) {
+            return state(statement, operationId);
+        }
     }
 
-    private static String singleState(String table, UUID operationId) throws SQLException {
-        String sql = "SELECT state FROM " + table + " WHERE operation_id = ?";
-        try (Connection connection = connection(DATABASE);
-             PreparedStatement statement = connection.prepareStatement(sql)) {
-            statement.setBytes(1, uuidBytes(operationId));
-            try (ResultSet result = statement.executeQuery()) {
-                assertTrue(result.next());
-                return result.getString(1);
-            }
+    private static String state(PreparedStatement statement, UUID operationId) throws SQLException {
+        statement.setBytes(1, uuidBytes(operationId));
+        try (ResultSet result = statement.executeQuery()) {
+            assertTrue(result.next());
+            return result.getString(1);
         }
     }
 
