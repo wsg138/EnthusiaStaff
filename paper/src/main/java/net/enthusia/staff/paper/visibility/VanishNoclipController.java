@@ -33,6 +33,15 @@ public final class VanishNoclipController {
         return fullVanish ? enable(player) : disable(player);
     }
 
+    boolean maintain(Player player) {
+        UUID playerId = player.getUniqueId();
+        if (!baselineNoPhysics.containsKey(playerId)) {
+            return false;
+        }
+        player.setNoPhysics(true);
+        return true;
+    }
+
     void gameModeChanged(UUID playerId, GameMode gameMode, boolean fullVanish) {
         if (fullVanish && baselineNoPhysics.containsKey(playerId)) {
             baselineNoPhysics.put(playerId, gameMode == GameMode.SPECTATOR);

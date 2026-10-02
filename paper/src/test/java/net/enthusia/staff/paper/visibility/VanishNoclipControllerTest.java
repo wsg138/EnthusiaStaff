@@ -28,6 +28,20 @@ class VanishNoclipControllerTest {
         assertFalse(s.noPhysics); assertEquals(List.of(GameMode.SPECTATOR,GameMode.CREATIVE),c.presented);
         assertEquals(1,s.inventoryUpdates);
     }
+    @Test void maintenanceReassertsOwnedPhysicsWithoutReplacingBaseline() {
+        FakePlayer s=new FakePlayer(GameMode.CREATIVE,false); FakeClientModes c=new FakeClientModes(true);
+        VanishNoclipController x=new VanishNoclipController(c);
+        assertTrue(x.reconcile(s.player(),true));
+        s.noPhysics=false;
+        assertTrue(x.maintain(s.player())); assertTrue(s.noPhysics);
+        assertTrue(x.reconcile(s.player(),false)); assertFalse(s.noPhysics);
+    }
+    @Test void maintenanceDoesNotClaimUnownedPhysics() {
+        FakePlayer s=new FakePlayer(GameMode.SURVIVAL,false); FakeClientModes c=new FakeClientModes(true);
+        VanishNoclipController x=new VanishNoclipController(c);
+        assertFalse(x.maintain(s.player())); assertFalse(s.noPhysics); assertEquals(0,s.physicsWrites);
+    }
+
     @Test void gameModeReconciliationMakesStaffExitSnapshotAuthoritative() {
         FakePlayer s=new FakePlayer(GameMode.CREATIVE,false); FakeClientModes c=new FakeClientModes(true);
         VanishNoclipController x=new VanishNoclipController(c);

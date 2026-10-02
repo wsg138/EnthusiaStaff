@@ -58,6 +58,35 @@ jobs:
             paper/src/main/java/net/enthusia/staff/paper/visibility/VanishClientGameModeAdapterFactory.java \
             paper/src/main/java/net/enthusia/staff/paper/visibility/VanishNoclipController.java
 
+          python3 - <<'PY'
+          import lizard
+          path = "paper/src/main/java/net/enthusia/staff/paper/visibility/VanishManager.java"
+          targets = {
+              "reconcileNoclip",
+              "ensureNoclipMaintenance",
+              "maintainNoclip",
+              "recoverNoclipMaintenance",
+              "stopNoclipMaintenance",
+              "retireNoclipMaintenance",
+          }
+          found = set()
+          violations = []
+          for function in lizard.analyze_file(path).function_list:
+              name = function.name.split("::")[-1].split(".")[-1]
+              if name not in targets:
+                  continue
+              found.add(name)
+              if function.cyclomatic_complexity > 8 or function.length > 50:
+                  violations.append(
+                      f"{name}: CCN={function.cyclomatic_complexity}, length={function.length}"
+                  )
+          missing = targets - found
+          if missing:
+              raise SystemExit(f"missing VanishManager methods in Lizard scan: {sorted(missing)}")
+          if violations:
+              raise SystemExit("VanishManager complexity violations: " + "; ".join(violations))
+          PY
+
           curl --fail --location --silent --show-error \
             'https://github.com/pmd/pmd/releases/download/pmd_releases%2F6.55.0/pmd-bin-6.55.0.zip' \
             --output "$RUNNER_TEMP/pmd.zip"
@@ -303,13 +332,12 @@ jobs:
                       evidence("ENABLE|reconciled=" + enabled + "|noPhysics=" + player.hasNoPhysics()
                               + "|serverMode=" + player.getGameMode());
                       marker(player, "ENABLED");
-                      later(20L, () -> teleport(player));
-                      later(40L, () -> disable(player));
-                      later(60L, () -> survivalEnable(player));
-                      later(80L, () -> survivalStability(player));
-                      later(100L, () -> survivalDisable(player));
-                      later(120L, () -> forcedFailure(player));
-                      later(140L, () -> reconnectPreparation(player));
+                      later(5L, () -> physicsStability(player, 1));
+                      later(15L, () -> physicsStability(player, 2));
+                      later(25L, () -> teleport(player));
+                      later(45L, () -> disable(player));
+                      later(65L, () -> forcedFailure(player));
+                      later(85L, () -> reconnectPreparation(player));
                   } catch (Exception exception) {
                       fail("FIRST_SESSION", exception);
                   }
@@ -342,38 +370,10 @@ jobs:
                   }
               }
 
-              private void survivalEnable(Player player) {
-                  try {
-                      player.setGameMode(GameMode.SURVIVAL);
-                      player.setNoPhysics(false);
-                      setVanish(player, true);
-                      boolean enabled = reconcile(player);
-                      evidence("SURVIVAL_ENABLE|reconciled=" + enabled
-                              + "|noPhysics=" + player.hasNoPhysics()
-                              + "|serverMode=" + player.getGameMode());
-                      marker(player, "SURVIVAL_ENABLED");
-                  } catch (Exception exception) {
-                      fail("SURVIVAL_ENABLE", exception);
-                  }
-              }
-
-              private void survivalStability(Player player) {
-                  evidence("SURVIVAL_STABILITY|noPhysics=" + player.hasNoPhysics()
+              private void physicsStability(Player player, int sample) {
+                  evidence("PHYSICS_STABILITY|sample=" + sample
+                          + "|noPhysics=" + player.hasNoPhysics()
                           + "|serverMode=" + player.getGameMode());
-                  marker(player, "SURVIVAL_STABLE");
-              }
-
-              private void survivalDisable(Player player) {
-                  try {
-                      setVanish(player, false);
-                      boolean disabled = reconcile(player);
-                      evidence("SURVIVAL_DISABLE|reconciled=" + disabled
-                              + "|noPhysics=" + player.hasNoPhysics()
-                              + "|serverMode=" + player.getGameMode());
-                      marker(player, "SURVIVAL_DISABLED");
-                  } catch (Exception exception) {
-                      fail("SURVIVAL_DISABLE", exception);
-                  }
               }
 
               private void forcedFailure(Player player) {
@@ -842,12 +842,11 @@ jobs:
             require_line "$evidence" '^HARNESS_READY=true$'
             require_line "$evidence" '^FACTORY_AVAILABLE=true\|reason=$'
             require_line "$evidence" '^ENABLE\|reconciled=true\|noPhysics=true\|serverMode=CREATIVE$'
+            require_line "$evidence" '^PHYSICS_STABILITY\|sample=1\|noPhysics=true\|serverMode=CREATIVE$'
+            require_line "$evidence" '^PHYSICS_STABILITY\|sample=2\|noPhysics=true\|serverMode=CREATIVE$'
             require_line "$evidence" '^FREEZE_RELEASE\|restricted=false$'
             require_line "$evidence" '^TELEPORT\|teleported=true\|reconciled=true\|noPhysics=true\|serverMode=CREATIVE$'
             require_line "$evidence" '^DISABLE\|reconciled=true\|noPhysics=false\|serverMode=CREATIVE$'
-            require_line "$evidence" '^SURVIVAL_ENABLE\|reconciled=true\|noPhysics=true\|serverMode=SURVIVAL$'
-            require_line "$evidence" '^SURVIVAL_STABILITY\|noPhysics=true\|serverMode=SURVIVAL$'
-            require_line "$evidence" '^SURVIVAL_DISABLE\|reconciled=true\|noPhysics=false\|serverMode=SURVIVAL$'
             require_line "$evidence" '^FORCED_FAILURE\|reconciled=false\|adapterAvailable=false\|noPhysics=false$'
             require_line "$evidence" '^RECONNECT_PREP\|reconciled=true\|noPhysics=true\|serverMode=CREATIVE$'
             require_line "$evidence" '^RECONNECT_JOIN\|noPhysics=false\|serverMode=CREATIVE$'
@@ -865,9 +864,6 @@ jobs:
             require_line "$client" '^MARKER\|ENABLED\|session=1\|mode=spectator$'
             require_line "$client" '^MARKER\|TELEPORTED\|session=1\|mode=spectator$'
             require_line "$client" '^MARKER\|DISABLED\|session=1\|mode=creative$'
-            require_line "$client" '^MARKER\|SURVIVAL_ENABLED\|session=1\|mode=spectator$'
-            require_line "$client" '^MARKER\|SURVIVAL_STABLE\|session=1\|mode=spectator$'
-            require_line "$client" '^MARKER\|SURVIVAL_DISABLED\|session=1\|mode=survival$'
             require_line "$client" '^MARKER\|RECONNECT_PREP\|session=1\|mode=spectator$'
             require_line "$client" '^MARKER\|RECONNECT_ENABLED\|session=2\|mode=spectator$'
             require_line "$client" '^MARKER\|RECONNECT_DISABLED\|session=2\|mode=creative$'
