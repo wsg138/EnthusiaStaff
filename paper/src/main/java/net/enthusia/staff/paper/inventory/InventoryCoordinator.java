@@ -427,8 +427,15 @@ public final class InventoryCoordinator implements Listener, InventoryLockServic
         }
         InventoryImage replacement = before.withItem(logicalSlot, decision.targetAfter());
         startLiveTransfer(viewer, session, new LiveInventoryTransferExecution(
-                UUID.randomUUID(), viewer.getUniqueId(), holder.targetId(), holder.kind(), logicalSlot,
-                before, replacement, event.getCursor(), decision.cursorAfter(), decision.action()
+                UUID.randomUUID(),
+                new LiveInventoryTransferExecution.Participants(
+                        viewer.getUniqueId(), holder.targetId()
+                ),
+                new LiveInventoryTransferExecution.TargetSlot(holder.kind(), logicalSlot),
+                new LiveInventoryTransferExecution.Images(before, replacement),
+                new LiveInventoryTransferExecution.CursorChange(
+                        event.getCursor(), decision.cursorAfter(), decision.action()
+                )
         ));
     }
 
@@ -1203,10 +1210,11 @@ public final class InventoryCoordinator implements Listener, InventoryLockServic
         if (session == null) {
             return;
         }
-        LiveInventoryTransferExecution transfer = session.activeTransfer();
-        if (transfer == null) {
+        Optional<LiveInventoryTransferExecution> currentTransfer = session.activeTransfer();
+        if (currentTransfer.isEmpty()) {
             return;
         }
+        LiveInventoryTransferExecution transfer = currentTransfer.orElseThrow();
         Player viewer = plugin.getServer().getPlayer(transfer.viewerId());
         if (transfer.physicalTransferComplete()) {
             scheduleRecoveryForTransfer(viewer, session, transfer, "Target left during durable finalization.");
@@ -1467,7 +1475,7 @@ public final class InventoryCoordinator implements Listener, InventoryLockServic
             return;
         }
         boolean marked = result == LiveCursorEscrow.RecoveryResult.RESULT_MARKED;
-        submit(() -> advanceRecoveredCursor(target, actor, recovery, marked));
+        submit(() -> advanceRecoveredCursor(actor, recovery, marked));
     }
 
     private void resolveRecoveredRollback(InventoryCursorJournal recovery) {
@@ -1483,7 +1491,6 @@ public final class InventoryCoordinator implements Listener, InventoryLockServic
     }
 
     private void advanceRecoveredCursor(
-            Player target,
             Player actor,
             InventoryCursorJournal recovery,
             boolean resultMarked
@@ -1940,7 +1947,11 @@ public final class InventoryCoordinator implements Listener, InventoryLockServic
         Inventory inventory = holder.getInventory();
         for (int guiSlot = 0; guiSlot < inventory.getSize(); guiSlot++) {
             int logical = holder.logicalSlot(guiSlot);
-            inventory.setItem(guiSlot, logical < 0 ? null : image.item(logical));
+            if (logical < 0) {
+                inventory.clear(guiSlot);
+            } else {
+                inventory.setItem(guiSlot, image.item(logical));
+            }
         }
         holder.image(image, false);
     }
@@ -2100,7 +2111,8 @@ public final class InventoryCoordinator implements Listener, InventoryLockServic
         private final AtomicBoolean working = new AtomicBoolean();
         private volatile InventoryObservation observation;
         private volatile InventoryImage image;
-        private volatile LiveInventoryTransferExecution activeTransfer;
+        private final Object transferLock = new Object();
+        private Optional<LiveInventoryTransferExecution> activeTransfer = Optional.empty();
 
         private LiveSession(UUID targetId) {
             this.targetId = targetId;
@@ -2143,31 +2155,37 @@ public final class InventoryCoordinator implements Listener, InventoryLockServic
             return viewers.values().stream().anyMatch(holder -> holder.kind() == kind);
         }
 
-        synchronized boolean beginEdit(LiveInventoryTransferExecution transfer) {
-            if (viewers.isEmpty() || !working.compareAndSet(false, true)) {
-                return false;
+        boolean beginEdit(LiveInventoryTransferExecution transfer) {
+            synchronized (transferLock) {
+                if (viewers.isEmpty() || !working.compareAndSet(false, true)) {
+                    return false;
+                }
+                activeTransfer = Optional.of(java.util.Objects.requireNonNull(transfer));
+                return true;
             }
-            activeTransfer = java.util.Objects.requireNonNull(transfer);
-            return true;
         }
 
         boolean beginReconcile() {
             return !viewers.isEmpty() && working.compareAndSet(false, true);
         }
 
-        synchronized void finishTransfer(LiveInventoryTransferExecution transfer) {
-            if (activeTransfer == transfer) {
-                activeTransfer = null;
+        void finishTransfer(LiveInventoryTransferExecution transfer) {
+            synchronized (transferLock) {
+                if (activeTransfer.filter(current -> current == transfer).isPresent()) {
+                    activeTransfer = Optional.empty();
+                }
+                working.set(false);
             }
-            working.set(false);
         }
 
         void finishWork() {
             working.set(false);
         }
 
-        LiveInventoryTransferExecution activeTransfer() {
-            return activeTransfer;
+        Optional<LiveInventoryTransferExecution> activeTransfer() {
+            synchronized (transferLock) {
+                return activeTransfer;
+            }
         }
 
         boolean working() {
