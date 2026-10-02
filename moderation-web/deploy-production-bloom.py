@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import hashlib
-import urllib.request
+import http.client
+import socket
+import ssl
 import importlib
 import io
 import json
@@ -72,27 +74,50 @@ def bloom_endpoint(raw_url: str, username: str) -> tuple[str, int]:
 def wrangler_oauth_token() -> str:
     with WRANGLER_CREDENTIALS.open("rb") as stream:
         oauth_token = tomllib.load(stream).get("oauth_token")
-    if not isinstance(oauth_token, str) or not oauth_token:
+    if (not isinstance(oauth_token, str) or not oauth_token or not oauth_token.isascii()
+            or "\r" in oauth_token or "\n" in oauth_token):
         raise RuntimeError("Cloudflare authorization is unavailable")
     return oauth_token
 
 
 def cloudflare_get(oauth_token: str, path: str) -> dict[str, Any]:
-    if not path.startswith(CLOUDFLARE_PREFIX) or "://" in path:
-        raise RuntimeError("Cloudflare API path is invalid")
-    request = urllib.request.Request(
-        f"https://{CLOUDFLARE_HOST}{path}",
-        headers={"Authorization": f"Bearer {oauth_token}"},
-        method="GET",
-    )
-    # nosec B310 -- scheme and host are fixed above; only an allowlisted API path is appended.
-    with urllib.request.urlopen(request, timeout=20) as response:
-        if response.status < 200 or response.status >= 300:
-            raise RuntimeError("Cloudflare API request failed")
-        payload = json.load(response)
+    validate_cloudflare_path(path)
+    payload = cloudflare_tls_get(oauth_token, path)
     if not isinstance(payload, dict) or not payload.get("success"):
         raise RuntimeError("Cloudflare API rejected the tunnel lookup")
     return payload
+
+
+def validate_cloudflare_path(path: str) -> None:
+    if (not path.startswith(CLOUDFLARE_PREFIX) or "://" in path or not path.isascii()
+            or "\r" in path or "\n" in path):
+        raise RuntimeError("Cloudflare API path is invalid")
+
+
+def cloudflare_tls_get(oauth_token: str, path: str) -> object:
+    context = ssl.create_default_context()
+    with socket.create_connection((CLOUDFLARE_HOST, 443), timeout=20) as raw_socket:
+        with context.wrap_socket(raw_socket, server_hostname=CLOUDFLARE_HOST) as tls_socket:
+            tls_socket.sendall(cloudflare_request(oauth_token, path))
+            response = http.client.HTTPResponse(tls_socket)
+            response.begin()
+            try:
+                if response.status < 200 or response.status >= 300:
+                    raise RuntimeError("Cloudflare API request failed")
+                return json.load(response)
+            finally:
+                response.close()
+
+
+def cloudflare_request(oauth_token: str, path: str) -> bytes:
+    request = (
+        f"GET {path} HTTP/1.1\r\n"
+        f"Host: {CLOUDFLARE_HOST}\r\n"
+        f"Authorization: Bearer {oauth_token}\r\n"
+        "Connection: close\r\n"
+        "\r\n"
+    )
+    return request.encode("ascii")
 
 
 def cloudflare_id(value: object, label: str) -> str:
