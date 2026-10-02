@@ -60,6 +60,39 @@ class StaffModeRestorationWiringTest {
     }
 
     @Test
+    void successfulBackendHandoffPreservesVanishWithoutGrantingAuthority() throws IOException {
+        String completion = method("private void completeBackendHandoff", "@EventHandler(priority = EventPriority.MONITOR)");
+        String activeMethod = method("public boolean active", "public boolean authorityActive");
+        String authorityMethod = method("public boolean authorityActive", "public CombatStatusAdapter combat");
+
+        assertTrue(completion.contains("handoffGaps.add(playerId)"));
+        assertTrue(!completion.contains("exitListener.accept(playerId)"));
+        assertTrue(activeMethod.contains("handoffGaps.contains(playerId)"));
+        assertTrue(!authorityMethod.contains("handoffGaps.contains(playerId)"));
+    }
+
+    @Test
+    void destinationHandoffIntentProtectsVanishUntilFreshSessionActivates() throws IOException {
+        String prepare = method("public boolean prepareBackendHandoffResume", "public boolean cancelBackendHandoffResume");
+        String activation = method("private void activateDurableSession", "private boolean validHandoffSource");
+
+        assertTrue(prepare.contains("handoffGaps.add(playerId)"));
+        assertTrue(activation.contains("handoffGaps.remove(playerId)"));
+        assertTrue(activation.indexOf("handoffGaps.remove(playerId)")
+                < activation.indexOf("activeSessionListener.accept(session)"));
+    }
+
+    @Test
+    void backendHandoffClosureIsTransferFencedBeforeDurableClose() throws IOException {
+        String completion = method("private void completeBackendHandoff", "private void retainCancelledHandoffRecovery");
+
+        assertTrue(completion.contains("sourceHandoffs.commitIfActive"));
+        assertTrue(completion.indexOf("sourceHandoffs.commitIfActive")
+                < completion.indexOf("loaded.completeExit"));
+        assertTrue(completion.contains("retainCancelledHandoffRecovery"));
+    }
+
+    @Test
     void cleanExitSuccessMessageIsOnlyEmittedAfterVerificationPasses() throws IOException {
         String method = method("private void completeRestoration", "private void retainRecoveryAfterRuntimeExit");
         int mismatch = method.indexOf("if (!closed)");

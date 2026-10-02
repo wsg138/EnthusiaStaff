@@ -27,6 +27,7 @@ final class PaperNetworkMessageHandler {
     private final Consumer<UUID> invalidateSanctionCache;
     private final Function<UUID, Boolean> reconcileFreeze;
     private final Consumer<net.enthusia.staff.domain.network.PunishmentCommitNotification> deliverPunishment;
+    private final PaperStaffModeHandoffHandler staffModeHandoff;
 
     PaperNetworkMessageHandler(ObjectMapper json, Clock clock, Consumer<UUID> invalidateSanctionCache) {
         this(json, clock, invalidateSanctionCache, PaperNetworkMessageHandler::reconcileFreeze);
@@ -46,6 +47,15 @@ final class PaperNetworkMessageHandler {
             Function<UUID, Boolean> reconcileFreeze,
             Consumer<net.enthusia.staff.domain.network.PunishmentCommitNotification> deliverPunishment
     ) {
+        this(json, clock, invalidateSanctionCache, reconcileFreeze, deliverPunishment, null);
+    }
+
+    PaperNetworkMessageHandler(
+            ObjectMapper json, Clock clock, Consumer<UUID> invalidateSanctionCache,
+            Function<UUID, Boolean> reconcileFreeze,
+            Consumer<net.enthusia.staff.domain.network.PunishmentCommitNotification> deliverPunishment,
+            PaperStaffModeHandoffHandler staffModeHandoff
+    ) {
         this.json = java.util.Objects.requireNonNull(json, "json");
         this.clock = java.util.Objects.requireNonNull(clock, "clock");
         this.invalidateSanctionCache = java.util.Objects.requireNonNull(
@@ -54,9 +64,13 @@ final class PaperNetworkMessageHandler {
         );
         this.reconcileFreeze = java.util.Objects.requireNonNull(reconcileFreeze, "reconcileFreeze");
         this.deliverPunishment = java.util.Objects.requireNonNull(deliverPunishment, "deliverPunishment");
+        this.staffModeHandoff = staffModeHandoff;
     }
 
     boolean handle(NetworkOutboxStore inbox, String backendId, ProtocolEnvelope envelope) {
+        if (staffModeHandoff != null && staffModeHandoff.handles(envelope)) {
+            return staffModeHandoff.handle(envelope);
+        }
         var notification = punishmentNotification(envelope);
         UUID sanctionTarget = sanctionTarget(envelope);
         if (sanctionTarget != null) {

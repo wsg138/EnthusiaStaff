@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import io.papermc.paper.threadedregions.scheduler.ScheduledTask;
 import java.nio.file.Path;
 import java.time.Clock;
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -898,7 +899,8 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
                             net.enthusia.staff.paper.freeze.FreezeNetworkReconciler.class);
                     return reconciler != null && reconciler.reconcile(playerId);
                 },
-                integrations::deliverNetworkPunishment
+                integrations::deliverNetworkPunishment,
+                PaperStaffModeHandoffHandler.forManager(json, runtimeComponents.staffMode())
         );
         PaperPersistentChannelFactory.Settings channel = PaperPersistentChannelFactory.snapshot(
                 configurationSnapshot.restartRequired(),
@@ -914,7 +916,14 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
         ).ifPresent(started -> {
             if (!lifecycle.publishChannel(started)) {
                 resources.close("persistent Velocity channel opened during shutdown", started);
+                return;
             }
+            runtimeComponents.staffMode().setActiveSessionListener(session -> started.send(
+                    UUID.randomUUID(),
+                    PaperStaffModeHandoffHandler.READY,
+                    PaperStaffModeHandoffHandler.readyPayload(session.staffId(), session.sessionId()),
+                    Duration.ofSeconds(2)
+            ));
         });
     }
 

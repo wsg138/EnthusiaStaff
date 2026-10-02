@@ -411,6 +411,7 @@ final class VelocitySecurityEventSubmissionTest {
         INVENTORIES.set(plugin, optionalStore(InventoryJournalStore.class, inventoryReads, Optional.empty()));
         ECONOMIES.set(plugin, optionalStore(EconomyJournalStore.class, new AtomicInteger(), Optional.empty()));
         FREEZES.set(plugin, optionalStore(FreezeStore.class, new AtomicInteger(), Optional.empty()));
+        SESSIONS.set(plugin, optionalStore(StaffSessionStore.class, new AtomicInteger(), Optional.empty()));
         return inventoryReads;
     }
 
