@@ -12,6 +12,8 @@ import org.bukkit.inventory.PlayerInventory;
 import org.bukkit.plugin.java.JavaPlugin;
 
 final class LiveCursorEscrow {
+    private static final int SINGLE_MARKER_COUNT = 1;
+
     private final CursorStackCodec codec = new CursorStackCodec();
     private final LiveCursorEscrowMarker marker;
 
@@ -73,7 +75,7 @@ final class LiveCursorEscrow {
 
     RecoveryResult recoverSource(Player viewer, InventoryCursorJournal journal) {
         List<LocatedMarker> markers = locate(viewer, journal.patch().operationId());
-        if (markers.size() > 1) {
+        if (markers.size() > SINGLE_MARKER_COUNT) {
             return RecoveryResult.CONFLICT;
         }
         if (markers.isEmpty()) {
@@ -94,7 +96,7 @@ final class LiveCursorEscrow {
 
     RecoveryResult recoverResult(Player viewer, InventoryCursorJournal journal) {
         List<LocatedMarker> markers = locate(viewer, journal.patch().operationId());
-        if (markers.size() > 1) {
+        if (markers.size() > SINGLE_MARKER_COUNT) {
             return RecoveryResult.CONFLICT;
         }
         if (markers.isEmpty()) {
@@ -121,7 +123,7 @@ final class LiveCursorEscrow {
                     journal.cursorTransfer().replacementChecksum()
             );
         }
-        if (markers.size() != 1) {
+        if (markers.size() != SINGLE_MARKER_COUNT) {
             return false;
         }
         LocatedMarker located = markers.getFirst();
@@ -209,7 +211,8 @@ final class LiveCursorEscrow {
                 return true;
             }
         } catch (RuntimeException exception) {
-            // The exact before-state is restored below; the caller will fail closed.
+            restoreRecoveryBeforeState(viewer, located, originalCursor);
+            return false;
         }
         restoreRecoveryBeforeState(viewer, located, originalCursor);
         return false;
@@ -285,6 +288,7 @@ final class LiveCursorEscrow {
                 inventory.setArmorContents(armor);
             }
             case OFF_HAND -> inventory.setItemInOffHand(item);
+            default -> throw new IllegalStateException("Unsupported escrow slot kind: " + location.kind());
         }
     }
 
