@@ -5,7 +5,6 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.UUID;
-import org.bukkit.Material;
 import org.bukkit.inventory.ItemStack;
 import org.junit.jupiter.api.Test;
 
@@ -64,9 +63,9 @@ final class LiveInventoryTransferExecutionTest {
         assertTrue(execution.physicalTransferComplete());
     }
 
-    private static LiveInventoryTransferExecution execution() {
-        InventoryImage before = emptyImage().withItem(0, stack(Material.DIAMOND, 4));
-        InventoryImage replacement = before.withItem(0, null);
+    static LiveInventoryTransferExecution execution() {
+        InventoryImage before = emptyImage();
+        InventoryImage replacement = emptyImage();
         return new LiveInventoryTransferExecution(
                 UUID.randomUUID(),
                 UUID.randomUUID(),
@@ -76,7 +75,7 @@ final class LiveInventoryTransferExecutionTest {
                 before,
                 replacement,
                 null,
-                stack(Material.DIAMOND, 4),
+                null,
                 LiveInventoryTransferDecision.Action.PICKUP
         );
     }
@@ -89,11 +88,5 @@ final class LiveInventoryTransferExecutionTest {
                 new ItemStack[InventoryImage.ENDER_SIZE],
                 0
         );
-    }
-
-    private static ItemStack stack(Material material, int amount) {
-        ItemStack item = ItemStack.of(material);
-        item.setAmount(amount);
-        return item;
     }
 }

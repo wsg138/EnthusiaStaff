@@ -76,6 +76,21 @@ final class InventoryWorkflowWiringTest {
         assertFalse(editPermission.path(DEFAULT_FIELD).asBoolean());
     }
 
+    @Test
+    void liveViewsRefreshAllRelevantViewersWithoutDecorativeEditorControls() throws IOException {
+        String source = normalizedSource(COORDINATOR_SOURCE);
+
+        assertTrue(source.contains("session.addViewer(holder);"));
+        assertTrue(source.contains("for (ModerationInventoryHolder holder : session.viewers())"));
+        assertTrue(source.contains("renderSession(session, changedKinds);"));
+        assertTrue(source.contains("scheduleTargetRefresh(viewer, ModerationInventoryHolder.Kind.PLAYER);"));
+        assertTrue(source.contains("scheduleTargetRefresh(viewer, ModerationInventoryHolder.Kind.ENDER_CHEST);"));
+        assertTrue(source.contains("logical < 0 ? null : image.item(logical)"));
+        assertFalse(source.contains("GRAY_STAINED_GLASS"));
+        assertFalse(source.contains("Inventory metadata slot"));
+        assertFalse(source.contains("Use left click to replace/remove a stack"));
+    }
+
     private static String normalizedSource(Path source) throws IOException {
         return Files.readString(source).replace("\r\n", "\n");
     }

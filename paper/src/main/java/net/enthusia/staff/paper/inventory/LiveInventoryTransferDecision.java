@@ -1,10 +1,9 @@
 package net.enthusia.staff.paper.inventory;
 
 import java.util.Objects;
-import org.bukkit.Material;
 import org.bukkit.inventory.ItemStack;
 
-/** Pure vanilla-style cursor decision for one remote logical inventory slot. */
+/** Vanilla-style ItemStack adapter for one remote logical inventory slot. */
 final class LiveInventoryTransferDecision {
     enum Click {
         LEFT,
@@ -28,73 +27,58 @@ final class LiveInventoryTransferDecision {
         Objects.requireNonNull(click, "click");
         ItemStack targetCopy = copy(target);
         ItemStack cursorCopy = copy(cursor);
-        return click == Click.LEFT
-                ? left(targetCopy, cursorCopy)
-                : right(targetCopy, cursorCopy);
+        LiveInventoryTransferRule.Decision rule = LiveInventoryTransferRule.decide(
+                state(targetCopy),
+                state(cursorCopy),
+                similar(targetCopy, cursorCopy),
+                LiveInventoryTransferRule.Click.valueOf(click.name())
+        );
+        Action action = Action.valueOf(rule.action().name());
+        return new Decision(
+                action,
+                item(rule.targetAfter(), targetTemplate(action, targetCopy, cursorCopy)),
+                item(rule.cursorAfter(), cursorTemplate(action, targetCopy, cursorCopy))
+        );
     }
 
     static boolean same(ItemStack first, ItemStack second) {
         return Objects.equals(normalized(first), normalized(second));
     }
 
-    private static Decision left(ItemStack target, ItemStack cursor) {
-        if (!usable(cursor)) {
-            return usable(target)
-                    ? new Decision(Action.PICKUP, null, target)
-                    : unchanged(target, cursor);
-        }
-        if (!usable(target)) {
-            return new Decision(Action.PLACE, cursor, null);
-        }
-        if (!target.isSimilar(cursor)) {
-            return new Decision(Action.SWAP, cursor, target);
-        }
-        int capacity = target.getMaxStackSize() - target.getAmount();
-        if (capacity <= 0) {
-            return unchanged(target, cursor);
-        }
-        int moved = Math.min(capacity, cursor.getAmount());
-        ItemStack targetAfter = amount(target, target.getAmount() + moved);
-        ItemStack cursorAfter = remaining(cursor, moved);
-        return new Decision(Action.MERGE, targetAfter, cursorAfter);
+    private static LiveInventoryTransferRule.Stack state(ItemStack item) {
+        return usable(item)
+                ? new LiveInventoryTransferRule.Stack(item.getAmount(), item.getMaxStackSize())
+                : null;
     }
 
-    private static Decision right(ItemStack target, ItemStack cursor) {
-        if (!usable(cursor)) {
-            return usable(target) ? split(target) : unchanged(target, cursor);
+    private static boolean similar(ItemStack target, ItemStack cursor) {
+        return usable(target) && usable(cursor) && target.isSimilar(cursor);
+    }
+
+    private static ItemStack targetTemplate(Action action, ItemStack target, ItemStack cursor) {
+        return switch (action) {
+            case PLACE, SWAP -> cursor;
+            case PLACE_ONE -> usable(target) ? target : cursor;
+            default -> target;
+        };
+    }
+
+    private static ItemStack cursorTemplate(Action action, ItemStack target, ItemStack cursor) {
+        return switch (action) {
+            case PICKUP, SWAP, SPLIT -> target;
+            default -> cursor;
+        };
+    }
+
+    private static ItemStack item(LiveInventoryTransferRule.Stack state, ItemStack template) {
+        if (state == null) {
+            return null;
         }
-        if (!usable(target)) {
-            return new Decision(Action.PLACE_ONE, amount(cursor, 1), remaining(cursor, 1));
+        if (!usable(template)) {
+            throw new IllegalStateException("transfer rule produced a stack without an item template");
         }
-        if (!target.isSimilar(cursor) || target.getAmount() >= target.getMaxStackSize()) {
-            return unchanged(target, cursor);
-        }
-        return new Decision(
-                Action.PLACE_ONE,
-                amount(target, target.getAmount() + 1),
-                remaining(cursor, 1)
-        );
-    }
-
-    private static Decision split(ItemStack target) {
-        int cursorAmount = (target.getAmount() + 1) / 2;
-        int targetAmount = target.getAmount() - cursorAmount;
-        ItemStack targetAfter = targetAmount == 0 ? null : amount(target, targetAmount);
-        return new Decision(Action.SPLIT, targetAfter, amount(target, cursorAmount));
-    }
-
-    private static Decision unchanged(ItemStack target, ItemStack cursor) {
-        return new Decision(Action.NO_CHANGE, target, cursor);
-    }
-
-    private static ItemStack remaining(ItemStack item, int removed) {
-        int amount = item.getAmount() - removed;
-        return amount <= 0 ? null : amount(item, amount);
-    }
-
-    private static ItemStack amount(ItemStack item, int amount) {
-        ItemStack result = item.clone();
-        result.setAmount(amount);
+        ItemStack result = template.clone();
+        result.setAmount(state.amount());
         return result;
     }
 
@@ -107,7 +91,7 @@ final class LiveInventoryTransferDecision {
     }
 
     private static boolean usable(ItemStack item) {
-        return item != null && !item.isEmpty() && item.getType() != Material.AIR;
+        return item != null && !item.isEmpty();
     }
 
     record Decision(Action action, ItemStack targetAfter, ItemStack cursorAfter) {

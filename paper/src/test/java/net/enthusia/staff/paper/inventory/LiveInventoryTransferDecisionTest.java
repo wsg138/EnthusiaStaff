@@ -4,129 +4,153 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import org.bukkit.Material;
-import org.bukkit.inventory.ItemStack;
 import org.junit.jupiter.api.Test;
 
 final class LiveInventoryTransferDecisionTest {
+    private static final int STACK_MAX = 64;
+
     @Test
     void leftPickupMovesExactTargetStackToEmptyCursor() {
-        ItemStack target = stack(Material.DIAMOND, 17);
+        LiveInventoryTransferRule.Stack target = stack(17);
 
-        LiveInventoryTransferDecision.Decision decision = LiveInventoryTransferDecision.decide(
-                target,
-                null,
-                LiveInventoryTransferDecision.Click.LEFT
+        LiveInventoryTransferRule.Decision decision = decide(
+                target, null, false, LiveInventoryTransferRule.Click.LEFT
         );
 
-        assertEquals(LiveInventoryTransferDecision.Action.PICKUP, decision.action());
+        assertEquals(LiveInventoryTransferRule.Action.PICKUP, decision.action());
         assertNull(decision.targetAfter());
         assertEquals(target, decision.cursorAfter());
+        assertConserved(target, null, decision);
     }
 
     @Test
     void leftPlacementMovesEntireCursorIntoEmptyTargetSlot() {
-        ItemStack cursor = stack(Material.EMERALD, 11);
+        LiveInventoryTransferRule.Stack cursor = stack(11);
 
-        LiveInventoryTransferDecision.Decision decision = LiveInventoryTransferDecision.decide(
-                null,
-                cursor,
-                LiveInventoryTransferDecision.Click.LEFT
+        LiveInventoryTransferRule.Decision decision = decide(
+                null, cursor, false, LiveInventoryTransferRule.Click.LEFT
         );
 
-        assertEquals(LiveInventoryTransferDecision.Action.PLACE, decision.action());
+        assertEquals(LiveInventoryTransferRule.Action.PLACE, decision.action());
         assertEquals(cursor, decision.targetAfter());
         assertNull(decision.cursorAfter());
+        assertConserved(null, cursor, decision);
     }
 
     @Test
     void compatibleLeftClickMergesOnlyAvailableCapacity() {
-        LiveInventoryTransferDecision.Decision decision = LiveInventoryTransferDecision.decide(
-                stack(Material.DIAMOND, 60),
-                stack(Material.DIAMOND, 10),
-                LiveInventoryTransferDecision.Click.LEFT
+        LiveInventoryTransferRule.Stack target = stack(60);
+        LiveInventoryTransferRule.Stack cursor = stack(10);
+
+        LiveInventoryTransferRule.Decision decision = decide(
+                target, cursor, true, LiveInventoryTransferRule.Click.LEFT
         );
 
-        assertEquals(LiveInventoryTransferDecision.Action.MERGE, decision.action());
-        assertEquals(64, decision.targetAfter().getAmount());
-        assertEquals(6, decision.cursorAfter().getAmount());
+        assertEquals(LiveInventoryTransferRule.Action.MERGE, decision.action());
+        assertEquals(64, decision.targetAfter().amount());
+        assertEquals(6, decision.cursorAfter().amount());
+        assertConserved(target, cursor, decision);
     }
 
     @Test
     void incompatibleLeftClickSwapsCursorAndTarget() {
-        ItemStack target = stack(Material.DIAMOND, 3);
-        ItemStack cursor = stack(Material.EMERALD, 5);
+        LiveInventoryTransferRule.Stack target = stack(3);
+        LiveInventoryTransferRule.Stack cursor = stack(5);
 
-        LiveInventoryTransferDecision.Decision decision = LiveInventoryTransferDecision.decide(
-                target,
-                cursor,
-                LiveInventoryTransferDecision.Click.LEFT
+        LiveInventoryTransferRule.Decision decision = decide(
+                target, cursor, false, LiveInventoryTransferRule.Click.LEFT
         );
 
-        assertEquals(LiveInventoryTransferDecision.Action.SWAP, decision.action());
+        assertEquals(LiveInventoryTransferRule.Action.SWAP, decision.action());
         assertEquals(cursor, decision.targetAfter());
         assertEquals(target, decision.cursorAfter());
+        assertConserved(target, cursor, decision);
     }
 
     @Test
     void emptyCursorRightClickSplitsTargetWithLargerHalfOnCursor() {
-        LiveInventoryTransferDecision.Decision decision = LiveInventoryTransferDecision.decide(
-                stack(Material.DIAMOND, 9),
-                null,
-                LiveInventoryTransferDecision.Click.RIGHT
+        LiveInventoryTransferRule.Stack target = stack(9);
+
+        LiveInventoryTransferRule.Decision decision = decide(
+                target, null, false, LiveInventoryTransferRule.Click.RIGHT
         );
 
-        assertEquals(LiveInventoryTransferDecision.Action.SPLIT, decision.action());
-        assertEquals(4, decision.targetAfter().getAmount());
-        assertEquals(5, decision.cursorAfter().getAmount());
+        assertEquals(LiveInventoryTransferRule.Action.SPLIT, decision.action());
+        assertEquals(4, decision.targetAfter().amount());
+        assertEquals(5, decision.cursorAfter().amount());
+        assertConserved(target, null, decision);
     }
 
     @Test
     void rightClickPlacesOneAndReducesCursor() {
-        LiveInventoryTransferDecision.Decision decision = LiveInventoryTransferDecision.decide(
-                null,
-                stack(Material.DIAMOND, 2),
-                LiveInventoryTransferDecision.Click.RIGHT
+        LiveInventoryTransferRule.Stack cursor = stack(2);
+
+        LiveInventoryTransferRule.Decision decision = decide(
+                null, cursor, false, LiveInventoryTransferRule.Click.RIGHT
         );
 
-        assertEquals(LiveInventoryTransferDecision.Action.PLACE_ONE, decision.action());
-        assertEquals(1, decision.targetAfter().getAmount());
-        assertEquals(1, decision.cursorAfter().getAmount());
+        assertEquals(LiveInventoryTransferRule.Action.PLACE_ONE, decision.action());
+        assertEquals(1, decision.targetAfter().amount());
+        assertEquals(1, decision.cursorAfter().amount());
+        assertConserved(null, cursor, decision);
     }
 
     @Test
     void rightClickMergesExactlyOneCompatibleItem() {
-        LiveInventoryTransferDecision.Decision decision = LiveInventoryTransferDecision.decide(
-                stack(Material.DIAMOND, 4),
-                stack(Material.DIAMOND, 3),
-                LiveInventoryTransferDecision.Click.RIGHT
+        LiveInventoryTransferRule.Stack target = stack(4);
+        LiveInventoryTransferRule.Stack cursor = stack(3);
+
+        LiveInventoryTransferRule.Decision decision = decide(
+                target, cursor, true, LiveInventoryTransferRule.Click.RIGHT
         );
 
-        assertEquals(LiveInventoryTransferDecision.Action.PLACE_ONE, decision.action());
-        assertEquals(5, decision.targetAfter().getAmount());
-        assertEquals(2, decision.cursorAfter().getAmount());
+        assertEquals(LiveInventoryTransferRule.Action.PLACE_ONE, decision.action());
+        assertEquals(5, decision.targetAfter().amount());
+        assertEquals(2, decision.cursorAfter().amount());
+        assertConserved(target, cursor, decision);
     }
 
     @Test
     void fullCompatibleStackDoesNotSwapOrDuplicate() {
-        ItemStack target = stack(Material.DIAMOND, 64);
-        ItemStack cursor = stack(Material.DIAMOND, 2);
+        LiveInventoryTransferRule.Stack target = stack(64);
+        LiveInventoryTransferRule.Stack cursor = stack(2);
 
-        LiveInventoryTransferDecision.Decision decision = LiveInventoryTransferDecision.decide(
-                target,
-                cursor,
-                LiveInventoryTransferDecision.Click.LEFT
+        LiveInventoryTransferRule.Decision decision = decide(
+                target, cursor, true, LiveInventoryTransferRule.Click.LEFT
         );
 
-        assertEquals(LiveInventoryTransferDecision.Action.NO_CHANGE, decision.action());
+        assertEquals(LiveInventoryTransferRule.Action.NO_CHANGE, decision.action());
         assertEquals(target, decision.targetAfter());
         assertEquals(cursor, decision.cursorAfter());
         assertTrue(!decision.changed());
+        assertConserved(target, cursor, decision);
     }
 
-    private static ItemStack stack(Material material, int amount) {
-        ItemStack item = ItemStack.of(material);
-        item.setAmount(amount);
-        return item;
+    private static LiveInventoryTransferRule.Decision decide(
+            LiveInventoryTransferRule.Stack target,
+            LiveInventoryTransferRule.Stack cursor,
+            boolean compatible,
+            LiveInventoryTransferRule.Click click
+    ) {
+        return LiveInventoryTransferRule.decide(target, cursor, compatible, click);
+    }
+
+    private static LiveInventoryTransferRule.Stack stack(int amount) {
+        return new LiveInventoryTransferRule.Stack(amount, STACK_MAX);
+    }
+
+    private static void assertConserved(
+            LiveInventoryTransferRule.Stack target,
+            LiveInventoryTransferRule.Stack cursor,
+            LiveInventoryTransferRule.Decision decision
+    ) {
+        assertEquals(
+                amount(target) + amount(cursor),
+                amount(decision.targetAfter()) + amount(decision.cursorAfter())
+        );
+    }
+
+    private static int amount(LiveInventoryTransferRule.Stack stack) {
+        return stack == null ? 0 : stack.amount();
     }
 }

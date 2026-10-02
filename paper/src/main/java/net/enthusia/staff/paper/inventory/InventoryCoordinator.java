@@ -859,7 +859,12 @@ public final class InventoryCoordinator implements Listener, InventoryLockServic
             );
             return;
         }
-        submit(() -> advanceSourceEscrowPhase(viewer, target, session, patch, transfer));
+        if (!submit(() -> advanceSourceEscrowPhase(viewer, target, session, patch, transfer))) {
+            failClosedTransfer(
+                    viewer, session, transfer,
+                    "Cursor escrow was prepared, but the inventory worker queue became unavailable."
+            );
+        }
     }
 
     private void advanceSourceEscrowPhase(
@@ -918,7 +923,12 @@ public final class InventoryCoordinator implements Listener, InventoryLockServic
             }
             return;
         }
-        submit(() -> advanceTargetAppliedPhase(viewer, target, session, patch, transfer));
+        if (!submit(() -> advanceTargetAppliedPhase(viewer, target, session, patch, transfer))) {
+            failClosedTransfer(
+                    viewer, session, transfer,
+                    "The target changed, but durable target-phase fencing was deferred."
+            );
+        }
     }
 
     private boolean applyTargetSlot(
@@ -999,7 +1009,12 @@ public final class InventoryCoordinator implements Listener, InventoryLockServic
         }
         session.imageOnly(transfer.replacementImage());
         renderSession(session, EnumSet.of(transfer.kind()));
-        submit(() -> advanceCursorAppliedPhase(viewer, session, patch, transfer));
+        if (!submit(() -> advanceCursorAppliedPhase(viewer, session, patch, transfer))) {
+            failClosedTransfer(
+                    viewer, session, transfer,
+                    "Both physical sides changed, but durable cursor-phase fencing was deferred."
+            );
+        }
     }
 
     private void advanceCursorAppliedPhase(
@@ -1168,7 +1183,12 @@ public final class InventoryCoordinator implements Listener, InventoryLockServic
                 finishLiveFailure(viewer, session, transfer, detail);
                 return;
             }
-            submit(() -> resolveLiveRollback(viewer, session, transfer, detail));
+            if (!submit(() -> resolveLiveRollback(viewer, session, transfer, detail))) {
+                failClosedTransfer(
+                        viewer, session, transfer,
+                        detail + " Durable rollback resolution was deferred."
+                );
+            }
         });
     }
 
@@ -1268,20 +1288,6 @@ public final class InventoryCoordinator implements Listener, InventoryLockServic
             String detail
     ) {
         failClosedTransfer(viewer, session, transfer, detail);
-        InventoryPatch patch = transfer.patch();
-        if (patch == null) {
-            return;
-        }
-        submit(() -> {
-            InventoryJournalStore loaded = store.get();
-            if (loaded == null) {
-                return;
-            }
-            loaded.cursorTransfer(patch.operationId()).ifPresent(recovery -> {
-                rememberCursorRecovery(recovery);
-                attemptCursorRecovery(recovery);
-            });
-        });
     }
 
     private void failClosedTransfer(
@@ -1297,6 +1303,36 @@ public final class InventoryCoordinator implements Listener, InventoryLockServic
         message(viewer, detail + " Both participants are interaction-blocked for inventory recovery.");
         alertStaff("Inventory safety blocked transfer " + transfer.operationId() + ": " + detail);
         closeTargetViews(transfer.targetId(), "Inventory safety verification requires recovery.");
+        InventoryPatch patch = transfer.patch();
+        if (patch != null) {
+            scheduleCursorRecoveryLookup(patch);
+        }
+    }
+
+    private void scheduleCursorRecoveryLookup(InventoryPatch patch) {
+        if (!submit(() -> loadCursorRecovery(patch))) {
+            plugin.getServer().getGlobalRegionScheduler().runDelayed(
+                    plugin,
+                    ignored -> scheduleCursorRecoveryLookup(patch),
+                    20L
+            );
+        }
+    }
+
+    private void loadCursorRecovery(InventoryPatch patch) {
+        InventoryJournalStore loaded = store.get();
+        if (loaded == null) {
+            plugin.getServer().getGlobalRegionScheduler().runDelayed(
+                    plugin,
+                    ignored -> scheduleCursorRecoveryLookup(patch),
+                    20L
+            );
+            return;
+        }
+        loaded.cursorTransfer(patch.operationId()).ifPresent(recovery -> {
+            rememberCursorRecovery(recovery);
+            attemptCursorRecovery(recovery);
+        });
     }
 
     private void finishLiveFailure(
@@ -1361,7 +1397,10 @@ public final class InventoryCoordinator implements Listener, InventoryLockServic
         }
         loginBlocks.add(patch.playerId());
         loginBlocks.add(patch.actorId());
-        submit(() -> claimCursorRecovery(target, actor, recovery));
+        if (!submit(() -> claimCursorRecovery(target, actor, recovery))) {
+            recoveryInFlight.remove(patch.operationId());
+            retryCursorRecovery(recovery, "Cursor recovery worker queue is busy.");
+        }
     }
 
     private void claimCursorRecovery(
@@ -1463,11 +1502,15 @@ public final class InventoryCoordinator implements Listener, InventoryLockServic
             return;
         }
         if (!targetApplied) {
-            submit(() -> resolveRecoveredRollback(recovery));
+            if (!submit(() -> resolveRecoveredRollback(recovery))) {
+                retryCursorRecovery(recovery, "Recovered rollback worker queue is busy.");
+            }
             return;
         }
         boolean marked = result == LiveCursorEscrow.RecoveryResult.RESULT_MARKED;
-        submit(() -> advanceRecoveredCursor(target, actor, recovery, marked));
+        if (!submit(() -> advanceRecoveredCursor(target, actor, recovery, marked))) {
+            retryCursorRecovery(recovery, "Recovered cursor-phase worker queue is busy.");
+        }
     }
 
     private void resolveRecoveredRollback(InventoryCursorJournal recovery) {
@@ -1500,7 +1543,9 @@ public final class InventoryCoordinator implements Listener, InventoryLockServic
                 plugin,
                 () -> {
                     if (cursorEscrow.settleRecoveredResult(actor, recovery)) {
-                        submit(() -> finalizeRecoveredCursor(recovery));
+                        if (!submit(() -> finalizeRecoveredCursor(recovery))) {
+                            retryCursorRecovery(recovery, "Recovered finalization worker queue is busy.");
+                        }
                     } else {
                         keepRecoveryBlocked(
                                 recovery.patch().playerId(), recovery.patch().actorId(),
@@ -1861,7 +1906,9 @@ public final class InventoryCoordinator implements Listener, InventoryLockServic
             return;
         }
         EnumSet<ModerationInventoryHolder.Kind> changedKinds = changedKinds(session.image(), image);
-        submit(() -> recordReconciliation(target, session, image, encoded, changedKinds));
+        if (!submit(() -> recordReconciliation(target, session, image, encoded, changedKinds))) {
+            session.finishWork();
+        }
     }
 
     private void recordReconciliation(
@@ -2097,10 +2144,9 @@ public final class InventoryCoordinator implements Listener, InventoryLockServic
     private static final class LiveSession {
         private final UUID targetId;
         private final Map<UUID, ModerationInventoryHolder> viewers = new ConcurrentHashMap<>();
-        private final AtomicBoolean working = new AtomicBoolean();
+        private final LiveInventorySessionGate gate = new LiveInventorySessionGate();
         private volatile InventoryObservation observation;
         private volatile InventoryImage image;
-        private volatile LiveInventoryTransferExecution activeTransfer;
 
         private LiveSession(UUID targetId) {
             this.targetId = targetId;
@@ -2143,39 +2189,32 @@ public final class InventoryCoordinator implements Listener, InventoryLockServic
             return viewers.values().stream().anyMatch(holder -> holder.kind() == kind);
         }
 
-        synchronized boolean beginEdit(LiveInventoryTransferExecution transfer) {
-            if (viewers.isEmpty() || !working.compareAndSet(false, true)) {
-                return false;
-            }
-            activeTransfer = java.util.Objects.requireNonNull(transfer);
-            return true;
+        boolean beginEdit(LiveInventoryTransferExecution transfer) {
+            return !viewers.isEmpty() && gate.beginEdit(transfer);
         }
 
         boolean beginReconcile() {
-            return !viewers.isEmpty() && working.compareAndSet(false, true);
+            return !viewers.isEmpty() && gate.beginWork();
         }
 
-        synchronized void finishTransfer(LiveInventoryTransferExecution transfer) {
-            if (activeTransfer == transfer) {
-                activeTransfer = null;
-            }
-            working.set(false);
+        void finishTransfer(LiveInventoryTransferExecution transfer) {
+            gate.finishTransfer(transfer);
         }
 
         void finishWork() {
-            working.set(false);
+            gate.finishWork();
         }
 
         LiveInventoryTransferExecution activeTransfer() {
-            return activeTransfer;
+            return gate.activeTransfer();
         }
 
         boolean working() {
-            return working.get();
+            return gate.working();
         }
 
         boolean removable() {
-            return viewers.isEmpty() && !working.get();
+            return viewers.isEmpty() && !gate.working();
         }
     }
 
