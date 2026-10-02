@@ -17,6 +17,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import javax.sql.DataSource;
+import net.enthusia.staff.domain.inventory.InventoryCursorTransfer;
 import net.enthusia.staff.domain.inventory.InventoryFinalizeResult;
 import net.enthusia.staff.domain.inventory.ConfiscatedAssetReservation;
 import net.enthusia.staff.domain.inventory.ConfiscatedAssetSnapshot;
@@ -40,6 +41,8 @@ public final class JdbcInventoryJournalStore implements InventoryJournalStore {
     private static final String SCOPE_ID_FIELD = "scopeId";
     private static final String OWNING_SERVER_ID_FIELD = "owningServerId";
     private static final String CHANGED_SLOTS_FIELD = "changedSlots";
+    private static final String CURSOR_TRANSFER_FIELD = "cursorTransfer";
+    private static final String CURSOR_PHASE_FIELD = "cursorPhase";
     private static final String OWNING_SERVER_ID_COLUMN = "owning_server_id";
     private static final String LOCKED_STATE = "LOCKED";
     private static final int SINGLE_INSERT_ROW_COUNT = 1;
@@ -1942,14 +1945,7 @@ public final class JdbcInventoryJournalStore implements InventoryJournalStore {
     ) throws SQLException {
         UUID snapshotId = UUID.randomUUID();
         UUID patchId = UUID.randomUUID();
-        String operationJson = serialize(Map.of(
-                SCOPE_ID_FIELD, request.scopeId(),
-                OWNING_SERVER_ID_FIELD, request.owningServerId(),
-                "expectedChecksum", request.expectedChecksum(),
-                "replacementChecksum", request.replacementChecksum(),
-                CHANGED_SLOTS_FIELD, request.changedSlots(),
-                "requireNetworkOffline", request.requireNetworkOffline()
-        ));
+        String operationJson = serialize(operationMetadata(request));
         insertOperationRow(connection, request, profile, fence, operationJson, now);
         insertBeforeSnapshot(connection, request, profile, snapshotId, now);
         insertPendingPatch(connection, request, profile, patchId, fence, now);
@@ -1972,6 +1968,31 @@ public final class JdbcInventoryJournalStore implements InventoryJournalStore {
                 request.changedSlots(),
                 now
         );
+    }
+
+    private static Map<String, ?> operationMetadata(InventoryPrepareRequest request) {
+        Map<String, Object> metadata = new LinkedHashMap<>();
+        metadata.put(SCOPE_ID_FIELD, request.scopeId());
+        metadata.put(OWNING_SERVER_ID_FIELD, request.owningServerId());
+        metadata.put("expectedChecksum", request.expectedChecksum());
+        metadata.put("replacementChecksum", request.replacementChecksum());
+        metadata.put(CHANGED_SLOTS_FIELD, request.changedSlots());
+        metadata.put("requireNetworkOffline", request.requireNetworkOffline());
+        request.cursorTransfer().ifPresent(cursor -> addCursorMetadata(metadata, cursor));
+        return metadata;
+    }
+
+    private static void addCursorMetadata(
+            Map<String, Object> metadata,
+            InventoryCursorTransfer cursor
+    ) {
+        metadata.put(CURSOR_TRANSFER_FIELD, Map.of(
+                "expectedChecksum", cursor.expectedChecksum(),
+                "expectedSnapshot", cursor.expectedSnapshot(),
+                "replacementChecksum", cursor.replacementChecksum(),
+                "replacementSnapshot", cursor.replacementSnapshot()
+        ));
+        metadata.put(CURSOR_PHASE_FIELD, "PREPARED");
     }
 
     private static void insertOperationRow(
