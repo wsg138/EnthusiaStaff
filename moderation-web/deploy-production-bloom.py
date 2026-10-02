@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import hashlib
-import http.client
+import urllib.request
 import importlib
 import io
 import json
@@ -80,15 +80,16 @@ def wrangler_oauth_token() -> str:
 def cloudflare_get(oauth_token: str, path: str) -> dict[str, Any]:
     if not path.startswith(CLOUDFLARE_PREFIX) or "://" in path:
         raise RuntimeError("Cloudflare API path is invalid")
-    connection = http.client.HTTPSConnection(CLOUDFLARE_HOST, timeout=20)
-    try:
-        connection.request("GET", path, headers={"Authorization": f"Bearer {oauth_token}"})
-        response = connection.getresponse()
+    request = urllib.request.Request(
+        f"https://{CLOUDFLARE_HOST}{path}",
+        headers={"Authorization": f"Bearer {oauth_token}"},
+        method="GET",
+    )
+    # nosec B310 -- scheme and host are fixed above; only an allowlisted API path is appended.
+    with urllib.request.urlopen(request, timeout=20) as response:
         if response.status < 200 or response.status >= 300:
             raise RuntimeError("Cloudflare API request failed")
         payload = json.load(response)
-    finally:
-        connection.close()
     if not isinstance(payload, dict) or not payload.get("success"):
         raise RuntimeError("Cloudflare API rejected the tunnel lookup")
     return payload
