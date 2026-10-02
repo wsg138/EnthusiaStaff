@@ -11,6 +11,8 @@ import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.plugin.java.JavaPlugin;
 
 final class LiveCursorEscrowMarker {
+    private static final int MARKER_PART_COUNT = 2;
+
     enum Role {
         SOURCE,
         RESULT
@@ -61,7 +63,7 @@ final class LiveCursorEscrowMarker {
             return Optional.empty();
         }
         String[] parts = encoded.split(":", 2);
-        if (parts.length != 2) {
+        if (parts.length != MARKER_PART_COUNT) {
             return Optional.empty();
         }
         try {
