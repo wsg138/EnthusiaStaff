@@ -187,6 +187,7 @@ jobs:
               private static final Path EVIDENCE = Path.of("cross-version-runtime-evidence.txt");
               private final AtomicInteger joins = new AtomicInteger();
               private final Set<String> acceptedMoves = ConcurrentHashMap.newKeySet();
+              private final ConcurrentHashMap<UUID, String> movementProbes = new ConcurrentHashMap<>();
               private Plugin staffPlugin;
               private Location chamberBase;
               private Object vanishManager;
@@ -225,8 +226,14 @@ jobs:
 
               @EventHandler(priority = EventPriority.MONITOR)
               public void onJoin(PlayerJoinEvent event) {
-                  int sequence = joins.incrementAndGet();
                   Player player = event.getPlayer();
+                  String probe = movementProbeLabel(player.getName());
+                  if (probe != null) {
+                      evidence("PROBE_JOIN|label=" + probe);
+                      later(20L, () -> startMovementProbe(player, probe));
+                      return;
+                  }
+                  int sequence = joins.incrementAndGet();
                   evidence("JOIN|sequence=" + sequence + "|noPhysics=" + player.hasNoPhysics()
                           + "|serverMode=" + player.getGameMode());
                   if (sequence == 1) {
@@ -238,8 +245,10 @@ jobs:
 
               @EventHandler(priority = EventPriority.MONITOR)
               public void onFailMove(PlayerFailMoveEvent event) {
+                  Player player = event.getPlayer();
+                  String expected = movementProbes.get(player.getUniqueId());
                   String label = chamberLabel(event.getTo());
-                  if (label != null) {
+                  if (expected != null && expected.equals(label)) {
                       evidence("FAIL_MOVE|label=" + label
                               + "|reason=" + event.getFailReason()
                               + "|allowed=" + event.isAllowed()
@@ -249,52 +258,43 @@ jobs:
 
               @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
               public void onMove(PlayerMoveEvent event) {
+                  Player player = event.getPlayer();
+                  String expected = movementProbes.get(player.getUniqueId());
                   String label = chamberLabel(event.getTo());
-                  if (label != null && acceptedMoves.add(label)) {
+                  if (expected != null && expected.equals(label) && acceptedMoves.add(label)) {
                       evidence("MOVE_ACCEPTED|label=" + label
                               + "|x=" + event.getTo().getX()
                               + "|y=" + event.getTo().getY()
                               + "|z=" + event.getTo().getZ());
-                      advanceChamber(event.getPlayer(), label);
+                      completeMovementProbe(player, label);
                   }
               }
 
-              private void advanceChamber(Player player, String label) {
-                  if ("WALL".equals(label)) {
-                      resetChamber(player, "FLOOR");
-                  } else if ("FLOOR".equals(label)) {
-                      resetChamber(player, "CEILING");
-                  } else if ("CEILING".equals(label)) {
-                      later(2L, () -> completeChamber(player));
-                  }
+              private static String movementProbeLabel(String playerName) {
+                  return switch (playerName) {
+                      case "ProbeWall" -> "WALL";
+                      case "ProbeFloor" -> "FLOOR";
+                      case "ProbeCeiling" -> "CEILING";
+                      default -> null;
+                  };
               }
 
-              private void resetChamber(Player player, String next) {
-                  later(2L, () -> {
-                      try {
-                          Location base = chamberBase;
-                          boolean teleported = base != null && player.teleport(base);
-                          boolean reconciled = teleported && reconcile(player);
-                          evidence("CHAMBER_RESET|next=" + next
-                                  + "|teleported=" + teleported
-                                  + "|reconciled=" + reconciled);
-                          if (teleported && reconciled) {
-                              marker(player, "PROBE_" + next + ":" + base.getX()
-                                      + ":" + base.getY() + ":" + base.getZ());
-                          }
-                      } catch (Exception exception) {
-                          fail("CHAMBER_RESET_" + next, exception);
+              private void completeMovementProbe(Player player, String label) {
+                  try {
+                      movementProbes.remove(player.getUniqueId());
+                      setVanish(player, false);
+                      boolean restored = reconcile(player);
+                      Location base = chamberBase;
+                      if (base != null) {
+                          clearChamber(base);
                       }
-                  });
-              }
-
-              private void completeChamber(Player player) {
-                  Location base = chamberBase;
-                  if (base != null) {
-                      clearChamber(base);
+                      evidence("PROBE_COMPLETE|label=" + label
+                              + "|restored=" + restored
+                              + "|noPhysics=" + player.hasNoPhysics());
+                      later(2L, () -> player.kick(Component.text("movement-probe-complete")));
+                  } catch (Exception exception) {
+                      fail("PROBE_COMPLETE_" + label, exception);
                   }
-                  evidence("CHAMBER_COMPLETE=true");
-                  marker(player, "CHAMBER_DONE");
               }
 
               private Plugin requireStaffPlugin() {
@@ -395,17 +395,19 @@ jobs:
                               + "|serverMode=" + player.getGameMode());
                       marker(player, "ENABLED");
                       later(5L, () -> teleportWhileActive(player));
-                      later(25L, () -> setupMovementChamber(player));
-                      later(100L, () -> disable(player));
-                      later(120L, () -> forcedFailure(player));
-                      later(140L, () -> reconnectPreparation(player));
+                      later(25L, () -> disable(player));
+                      later(45L, () -> forcedFailure(player));
+                      later(65L, () -> reconnectPreparation(player));
                   } catch (Exception exception) {
                       fail("FIRST_SESSION", exception);
                   }
               }
 
-              private void setupMovementChamber(Player player) {
+              private void startMovementProbe(Player player, String label) {
                   try {
+                      preparePlayer(player);
+                      setVanish(player, true);
+                      boolean enabled = reconcile(player);
                       releaseDisposableFreeze(player);
                       Location current = player.getLocation();
                       Location base = new Location(
@@ -416,19 +418,19 @@ jobs:
                       );
                       clearChamber(base);
                       placeChamberBlocks(base);
-                      if (!player.teleport(base)) {
-                          throw new IllegalStateException("could not center movement chamber");
-                      }
+                      boolean centered = player.teleport(base);
                       chamberBase = base;
-                      boolean reconciled = reconcile(player);
-                      evidence("CHAMBER_READY|reconciled=" + reconciled
-                              + "|x=" + base.getX()
-                              + "|y=" + base.getY()
-                              + "|z=" + base.getZ()
+                      movementProbes.put(player.getUniqueId(), label);
+                      boolean reconciled = centered && reconcile(player);
+                      evidence("PROBE_READY|label=" + label
+                              + "|enabled=" + enabled
+                              + "|centered=" + centered
+                              + "|reconciled=" + reconciled
                               + "|serverMode=" + player.getGameMode());
-                      marker(player, "CHAMBER:" + base.getX() + ":" + base.getY() + ":" + base.getZ());
+                      marker(player, "PROBE_" + label + ":" + base.getX()
+                              + ":" + base.getY() + ":" + base.getZ());
                   } catch (Exception exception) {
-                      fail("CHAMBER", exception);
+                      fail("PROBE_READY_" + label, exception);
                   }
               }
 
@@ -800,6 +802,97 @@ jobs:
           }, 90000)
           JS
 
+          cat > probe.js <<'JS'
+          'use strict'
+          const fs = require('fs')
+          const mineflayer = require('mineflayer')
+          const port = Number(process.argv[2])
+          const version = process.argv[3]
+          const output = process.argv[4]
+          const probes = [
+            { username: 'ProbeWall', label: 'WALL', dx: 1.0, dy: 0.0, dz: 0.0 },
+            { username: 'ProbeFloor', label: 'FLOOR', dx: 0.0, dy: -0.5, dz: 0.0 },
+            { username: 'ProbeCeiling', label: 'CEILING', dx: 0.0, dy: 1.0, dz: 0.0 }
+          ]
+
+          function log (line) {
+            fs.appendFileSync(output, line + '\n')
+            console.log(line)
+          }
+
+          function runProbe (probe) {
+            return new Promise((resolve, reject) => {
+              const bot = mineflayer.createBot({
+                host: '127.0.0.1',
+                port,
+                username: probe.username,
+                auth: 'offline',
+                version,
+                physicsEnabled: false
+              })
+              let sent = false
+              let settled = false
+              const timer = setTimeout(() => {
+                if (!settled) {
+                  settled = true
+                  log('PROBE_TIMEOUT|' + probe.label)
+                  try { bot.quit() } catch {}
+                  reject(new Error('probe timed out: ' + probe.label))
+                }
+              }, 20000)
+
+              function finish (error) {
+                if (settled) return
+                settled = true
+                clearTimeout(timer)
+                if (error) reject(error)
+                else setTimeout(resolve, 300)
+              }
+
+              function inspect (text) {
+                const match = String(text).match(
+                  /RTPROOF:PROBE_(WALL|FLOOR|CEILING):(-?\d+(?:\.\d+)?):(-?\d+(?:\.\d+)?):(-?\d+(?:\.\d+)?)/
+                )
+                if (!match || match[1] !== probe.label || sent) return
+                sent = true
+                const x = Number(match[2]) + probe.dx
+                const y = Number(match[3]) + probe.dy
+                const z = Number(match[4]) + probe.dz
+                log('PROBE_MARKER|' + probe.label + '|mode=' + bot.game.gameMode)
+                setTimeout(() => {
+                  bot.entity.position.set(x, y, z)
+                  bot._client.write('position', {
+                    x,
+                    y,
+                    z,
+                    onGround: false,
+                    flags: { onGround: false, hasHorizontalCollision: false }
+                  })
+                  log('CLIENT_MOVE|' + probe.label + '|x=' + x + '|y=' + y + '|z=' + z)
+                }, 150)
+              }
+
+              bot.on('messagestr', inspect)
+              bot.on('message', message => inspect(message.toString()))
+              bot.on('kicked', reason => log('PROBE_KICKED|' + probe.label + '|reason=' + String(reason)))
+              bot.on('error', error => log('PROBE_ERROR|' + probe.label + '|error=' + (error.stack || error)))
+              bot.on('end', reason => {
+                log('PROBE_END|' + probe.label + '|sent=' + sent + '|reason=' + String(reason))
+                if (sent) finish()
+                else finish(new Error('probe ended before move: ' + probe.label))
+              })
+            })
+          }
+
+          ;(async () => {
+            for (const probe of probes) await runProbe(probe)
+            log('PROBES_COMPLETE=true')
+          })().catch(error => {
+            log('PROBES_FAILED=' + (error.stack || error))
+            process.exitCode = 2
+          })
+          JS
+
           client263="$RUNNER_TEMP/protocol-client-263"
           mkdir -p "$client263"
           cd "$client263"
@@ -807,6 +900,7 @@ jobs:
           npm install --no-audit --no-fund --ignore-scripts \
             'mineflayer@npm:@wp2508/mineflayer@4.42.2'
           cp "$RUNNER_TEMP/protocol-client/client.js" "$client263/client.js"
+          cp "$RUNNER_TEMP/protocol-client/probe.js" "$client263/probe.js"
 
       - name: Fetch exact server artifacts
         shell: bash
@@ -934,6 +1028,11 @@ jobs:
             fi
             (
               cd "$client_root"
+              NODE_PATH="$PWD/node_modules" node probe.js                 "$port" "$client_version" "$dir/probe-client.log"
+            ) > "$dir/probe-client-console.log" 2>&1
+
+            (
+              cd "$client_root"
               NODE_PATH="$PWD/node_modules" node client.js                 "$port" "$client_version" "$dir/client.log"
             ) > "$dir/client-console.log" 2>&1 &
             local client_pid=$!
@@ -954,6 +1053,10 @@ jobs:
               echo "::error::Runtime proof did not reach DONE=true for $name"
               echo "===== $name product evidence ====="
               cat "$dir/server/cross-version-runtime-evidence.txt" 2>/dev/null || true
+              echo "===== $name probe client evidence ====="
+              cat "$dir/probe-client.log" 2>/dev/null || true
+              echo "===== $name probe client console ====="
+              cat "$dir/probe-client-console.log" 2>/dev/null || true
               echo "===== $name client evidence ====="
               cat "$dir/client.log" 2>/dev/null || true
               echo "===== $name client console ====="
@@ -996,12 +1099,15 @@ jobs:
 
           for name in leaf paper paper128 paper263; do
             evidence="$root/$name/server/cross-version-runtime-evidence.txt"
+            probe="$root/$name/probe-client.log"
             client="$root/$name/client.log"
             console="$root/$name/server/console.log"
             echo "===== $name server receipt ====="
             cat "$root/$name/server-receipt.txt"
             echo "===== $name product evidence ====="
             cat "$evidence"
+            echo "===== $name probe client evidence ====="
+            cat "$probe"
             echo "===== $name client evidence ====="
             cat "$client"
 
@@ -1010,16 +1116,12 @@ jobs:
             require_line "$evidence" '^ENABLE\|reconciled=true\|noPhysics=true\|serverMode=CREATIVE$'
             require_line "$evidence" '^FREEZE_RELEASE\|restricted=false$'
             require_line "$evidence" '^TELEPORT\|teleported=true\|reconciled=true\|noPhysics=true\|serverMode=CREATIVE$'
-            require_line "$evidence" '^CHAMBER_READY\|reconciled=true\|x=.*\|y=.*\|z=.*\|serverMode=CREATIVE$'
-            require_line "$evidence" '^FAIL_MOVE\|label=WALL\|reason=CLIPPED_INTO_BLOCK\|allowed=true\|logWarning=false$'
-            require_line "$evidence" '^MOVE_ACCEPTED\|label=WALL\|.*$'
-            require_line "$evidence" '^CHAMBER_RESET\|next=FLOOR\|teleported=true\|reconciled=true$'
-            require_line "$evidence" '^FAIL_MOVE\|label=FLOOR\|reason=CLIPPED_INTO_BLOCK\|allowed=true\|logWarning=false$'
-            require_line "$evidence" '^MOVE_ACCEPTED\|label=FLOOR\|.*$'
-            require_line "$evidence" '^CHAMBER_RESET\|next=CEILING\|teleported=true\|reconciled=true$'
-            require_line "$evidence" '^FAIL_MOVE\|label=CEILING\|reason=CLIPPED_INTO_BLOCK\|allowed=true\|logWarning=false$'
-            require_line "$evidence" '^MOVE_ACCEPTED\|label=CEILING\|.*$'
-            require_line "$evidence" '^CHAMBER_COMPLETE=true$'
+            for label in WALL FLOOR CEILING; do
+              require_line "$evidence" "^PROBE_READY\\|label=$label\\|enabled=true\\|centered=true\\|reconciled=true\\|serverMode=CREATIVE$"
+              require_line "$evidence" "^FAIL_MOVE\\|label=$label\\|reason=CLIPPED_INTO_BLOCK\\|allowed=true\\|logWarning=false$"
+              require_line "$evidence" "^MOVE_ACCEPTED\\|label=$label\\|.*$"
+              require_line "$evidence" "^PROBE_COMPLETE\\|label=$label\\|restored=true\\|noPhysics=false$"
+            done
             require_line "$evidence" '^DISABLE\|reconciled=true\|noPhysics=false\|serverMode=CREATIVE$'
             require_line "$evidence" '^FORCED_FAILURE\|reconciled=false\|adapterAvailable=false\|noPhysics=false$'
             require_line "$evidence" '^RECONNECT_PREP\|reconciled=true\|noPhysics=true\|serverMode=CREATIVE$'
@@ -1035,15 +1137,14 @@ jobs:
               exit 1
             fi
 
+            for label in WALL FLOOR CEILING; do
+              require_line "$probe" "^PROBE_MARKER\\|$label\\|mode=spectator$"
+              require_line "$probe" "^CLIENT_MOVE\\|$label\\|.*$"
+            done
+            require_line "$probe" '^PROBES_COMPLETE=true$'
+
             require_line "$client" '^MARKER\|ENABLED\|session=1\|mode=spectator$'
             require_line "$client" '^MARKER\|TELEPORTED\|session=1\|mode=spectator$'
-            require_line "$client" '^MARKER\|CHAMBER\|session=1\|mode=spectator$'
-            require_line "$client" '^CLIENT_MOVE\|WALL\|.*$'
-            require_line "$client" '^MARKER\|PROBE_FLOOR\|session=1\|mode=spectator$'
-            require_line "$client" '^CLIENT_MOVE\|FLOOR\|.*$'
-            require_line "$client" '^MARKER\|PROBE_CEILING\|session=1\|mode=spectator$'
-            require_line "$client" '^CLIENT_MOVE\|CEILING\|.*$'
-            require_line "$client" '^MARKER\|CHAMBER_DONE\|session=1\|mode=spectator$'
             require_line "$client" '^MARKER\|DISABLED\|session=1\|mode=creative$'
             require_line "$client" '^MARKER\|RECONNECT_PREP\|session=1\|mode=spectator$'
             require_line "$client" '^MARKER\|RECONNECT_ENABLED\|session=2\|mode=spectator$'
