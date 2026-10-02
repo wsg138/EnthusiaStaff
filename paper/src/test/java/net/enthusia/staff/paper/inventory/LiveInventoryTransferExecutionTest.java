@@ -92,8 +92,6 @@ final class LiveInventoryTransferExecutionTest {
     }
 
     private static ItemStack stack(Material material, int amount) {
-        ItemStack item = ItemStack.of(material);
-        item.setAmount(amount);
-        return item;
+        return new TestItemStack(material, amount);
     }
 }
