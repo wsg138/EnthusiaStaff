@@ -182,6 +182,40 @@ final class JdbcInventoryPatchTransitions {
         }
     }
 
+    void markRestored(Connection connection, LockedPatch locked, Instant now) throws SQLException {
+        InventoryPatch patch = locked.patch();
+        if (patch.state() != InventoryOperationState.APPLYING) {
+            throw new SQLException("Only an applying inventory patch can be rolled back");
+        }
+        try (PreparedStatement pending = connection.prepareStatement("""
+                UPDATE inventory_pending_patches
+                SET state = 'RESTORED', conflict_code = NULL, conflict_detail = NULL
+                WHERE patch_id = ? AND operation_id = ?
+                    AND state = 'APPLYING' AND fencing_token = ?
+                """);
+             PreparedStatement operation = connection.prepareStatement("""
+                UPDATE inventory_operations
+                SET state = 'RESTORED', updated_at = ?
+                WHERE operation_id = ? AND state = 'APPLYING' AND fencing_token = ?
+                """)) {
+            pending.setBytes(1, UuidBytes.toBytes(patch.patchId()));
+            pending.setBytes(2, UuidBytes.toBytes(patch.operationId()));
+            pending.setLong(3, patch.fencingToken());
+            JdbcTransactionSupport.requireSingleUpdate(
+                    pending.executeUpdate(),
+                    "Inventory patch state changed before rollback resolution"
+            );
+
+            operation.setTimestamp(1, Timestamp.from(now));
+            operation.setBytes(2, UuidBytes.toBytes(patch.operationId()));
+            operation.setLong(3, patch.fencingToken());
+            JdbcTransactionSupport.requireSingleUpdate(
+                    operation.executeUpdate(),
+                    "Inventory operation state changed before rollback resolution"
+            );
+        }
+    }
+
     void quarantine(
             Connection connection,
             LockedPatch locked,
