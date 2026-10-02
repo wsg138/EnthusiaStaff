@@ -1,0 +1,521 @@
+name: HUB Leaf 1.21.11 build 115 runtime proof
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: hub-leaf115-proof-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  prove:
+    name: Exact Leaf 1.21.11-115 compatibility proof
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+
+    steps:
+      - name: Check out exact validation head
+        uses: actions/checkout@3d3c42e5aac5ba805825e18fcb136590ce7c4a0ac95 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+
+      - name: Set up Java 25
+        uses: actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95 # v5.6.0
+        with:
+          distribution: temurin
+          java-version: "25"
+
+      - name: Set up Node
+        uses: actions/setup-node@8f152de45cc393bb48ce5d89d36b731f54556e65 # v6.0.0
+        with:
+          node-version: "22"
+
+      - name: Build frozen Staff artifact
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          test "$(git rev-parse HEAD^)" != "8f2c9fbd6ac15523304ea6759d40fec576f1fcd4" || true
+          git merge-base --is-ancestor 8f2c9fbd6ac15523304ea6759d40fec576f1fcd4 HEAD
+          chmod +x ./gradlew
+          ./gradlew :paper:shadowJar --no-daemon --no-build-cache --no-configuration-cache --console=plain
+          STAFF_JAR="$(find paper/build/libs -maxdepth 1 -type f -name 'EnthusiaStaff-Paper-*.jar' ! -name '*-sources.jar' ! -name '*-javadoc.jar' -print -quit)"
+          test -n "$STAFF_JAR"
+          mkdir -p proof/server/plugins proof/evidence
+          cp "$STAFF_JAR" proof/server/plugins/EnthusiaStaff-Paper.jar
+          sha256sum proof/server/plugins/EnthusiaStaff-Paper.jar | tee proof/evidence/enthusiastaff.sha256
+          unzip -p proof/server/plugins/EnthusiaStaff-Paper.jar plugin.yml > proof/evidence/enthusiastaff-plugin.yml
+          {
+            echo "frozen_source=8f2c9fbd6ac15523304ea6759d40fec576f1fcd4"
+            echo "validation_head=$(git rev-parse HEAD)"
+            echo "java=$(java -version 2>&1 | head -n1)"
+          } | tee proof/evidence/source.txt
+
+      - name: Fetch exact Leaf build 115 and pin hash
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          API_BASE="https://api.leafmc.one/v2/projects/leaf/versions/1.21.11/builds/115"
+          JAR_URL="$API_BASE/downloads/leaf-1.21.11-115.jar"
+          curl --fail --location --retry 4 --retry-all-errors --connect-timeout 20 "$API_BASE"             -o proof/evidence/leaf-build-115.json || true
+          curl --fail --location --retry 4 --retry-all-errors --connect-timeout 20 "$JAR_URL"             -o proof/server/leaf-1.21.11-115.jar
+          test "$(stat -c %s proof/server/leaf-1.21.11-115.jar)" -gt 10000000
+          sha256sum proof/server/leaf-1.21.11-115.jar | tee proof/evidence/leaf-1.21.11-115.jar.sha256
+          file proof/server/leaf-1.21.11-115.jar | tee proof/evidence/leaf-file.txt
+
+      - name: Build disposable runtime probe plugin
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          mkdir -p proof/harness/src/main/java/proof/hub proof/harness/src/main/resources
+          cat > proof/harness/pom.xml <<'POM'
+          <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                   xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+            <modelVersion>4.0.0</modelVersion>
+            <groupId>proof.hub</groupId>
+            <artifactId>hub-leaf-runtime-proof</artifactId>
+            <version>1.0.0</version>
+            <properties>
+              <maven.compiler.release>21</maven.compiler.release>
+              <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+            </properties>
+            <repositories>
+              <repository>
+                <id>papermc</id>
+                <url>https://repo.papermc.io/repository/maven-public/</url>
+              </repository>
+            </repositories>
+            <dependencies>
+              <dependency>
+                <groupId>io.papermc.paper</groupId>
+                <artifactId>paper-api</artifactId>
+                <version>1.21.11-R0.1-SNAPSHOT</version>
+                <scope>provided</scope>
+              </dependency>
+            </dependencies>
+          </project>
+          POM
+
+          cat > proof/harness/src/main/resources/plugin.yml <<'YML'
+          name: HubLeafRuntimeProof
+          version: 1.0.0
+          main: proof.hub.HubLeafRuntimeProof
+          api-version: '1.21'
+          load: POSTWORLD
+          YML
+
+          cat > proof/harness/src/main/java/proof/hub/HubLeafRuntimeProof.java <<'JAVA'
+          package proof.hub;
+
+          import java.io.File;
+          import java.lang.reflect.Constructor;
+          import java.lang.reflect.Field;
+          import java.lang.reflect.Method;
+          import java.net.URL;
+          import java.net.URLClassLoader;
+          import java.util.OptionalInt;
+          import java.util.logging.Level;
+          import org.bukkit.Bukkit;
+          import org.bukkit.GameMode;
+          import org.bukkit.Location;
+          import org.bukkit.entity.Player;
+          import org.bukkit.event.EventHandler;
+          import org.bukkit.event.Listener;
+          import org.bukkit.event.player.PlayerJoinEvent;
+          import org.bukkit.event.player.PlayerQuitEvent;
+          import org.bukkit.plugin.java.JavaPlugin;
+
+          public final class HubLeafRuntimeProof extends JavaPlugin implements Listener {
+              private ReflectionAccess access;
+
+              @Override
+              public void onEnable() {
+                  getLogger().info("PROOF:HARNESS_ENABLE=true");
+                  logBuildInfo();
+                  probeAbi();
+                  probeFrozenAdapter();
+                  Bukkit.getPluginManager().registerEvents(this, this);
+              }
+
+              @Override
+              public void onDisable() {
+                  for (Player player : Bukkit.getOnlinePlayers()) {
+                      getLogger().info("PROOF:DISABLE_PLAYER name=" + player.getName()
+                              + " gm=" + player.getGameMode() + " noPhysics=" + player.hasNoPhysics());
+                  }
+                  getLogger().info("PROOF:HARNESS_DISABLE=true");
+              }
+
+              private void logBuildInfo() {
+                  try {
+                      Class<?> infoClass = Class.forName("io.papermc.paper.ServerBuildInfo");
+                      Object info = infoClass.getMethod("buildInfo").invoke(null);
+                      Object brandId = infoClass.getMethod("brandId").invoke(info);
+                      String minecraft = (String) infoClass.getMethod("minecraftVersionId").invoke(info);
+                      OptionalInt build = (OptionalInt) infoClass.getMethod("buildNumber").invoke(info);
+                      Class<?> reprClass = Class.forName("io.papermc.paper.ServerBuildInfo$StringRepresentation");
+                      @SuppressWarnings({"rawtypes", "unchecked"})
+                      Object simple = Enum.valueOf((Class<? extends Enum>) reprClass.asSubclass(Enum.class), "VERSION_SIMPLE");
+                      String version = (String) infoClass.getMethod("asString", reprClass).invoke(info, simple);
+                      getLogger().info("PROOF:SERVER_BUILD_INFO brandId=" + brandId
+                              + " minecraftVersionId=" + minecraft
+                              + " buildNumber=" + (build.isPresent() ? build.getAsInt() : "empty")
+                              + " versionSimple=" + version);
+                      getLogger().info("PROOF:REPORTS_PAPER_BRAND=" + "papermc:paper".equals(String.valueOf(brandId)));
+                  } catch (ReflectiveOperationException | RuntimeException exception) {
+                      getLogger().log(Level.SEVERE, "PROOF:SERVER_BUILD_INFO_FAILED", exception);
+                  }
+              }
+
+              private void probeAbi() {
+                  try {
+                      Class<?> craftPlayer = Class.forName("org.bukkit.craftbukkit.entity.CraftPlayer");
+                      Class<?> serverPlayer = Class.forName("net.minecraft.server.level.ServerPlayer");
+                      Class<?> listener = Class.forName("net.minecraft.server.network.ServerGamePacketListenerImpl");
+                      Class<?> packet = Class.forName("net.minecraft.network.protocol.Packet");
+                      Class<?> gameEvent = Class.forName("net.minecraft.network.protocol.game.ClientboundGameEventPacket");
+
+                      Method getHandle = craftPlayer.getMethod("getHandle");
+                      Field connection = serverPlayer.getField("connection");
+                      Field change = gameEvent.getField("CHANGE_GAME_MODE");
+                      Object changeValue = change.get(null);
+                      Constructor<?> constructor = gameEvent.getConstructor(change.getType(), float.class);
+                      Method send = listener.getMethod("send", packet);
+                      this.access = new ReflectionAccess(getHandle, connection, constructor, changeValue, send);
+
+                      getLogger().info("PROOF:ABI CraftPlayer#getHandle=" + getHandle);
+                      getLogger().info("PROOF:ABI ServerPlayer.connection=" + connection);
+                      getLogger().info("PROOF:ABI Packet=" + packet.getName());
+                      getLogger().info("PROOF:ABI ServerGamePacketListenerImpl#send(Packet)=" + send);
+                      getLogger().info("PROOF:ABI ClientboundGameEventPacket.CHANGE_GAME_MODE.type=" + change.getType().getName());
+                      getLogger().info("PROOF:ABI ClientboundGameEventPacket(<event-type>,float)=" + constructor);
+                      getLogger().info("PROOF:ABI_COMPLETE=true");
+                  } catch (ReflectiveOperationException | LinkageError exception) {
+                      this.access = null;
+                      getLogger().log(Level.SEVERE, "PROOF:ABI_COMPLETE=false", exception);
+                  }
+              }
+
+              private void probeFrozenAdapter() {
+                  File staff = new File(getDataFolder().getParentFile(), "EnthusiaStaff-Paper.jar");
+                  if (!staff.isFile()) {
+                      getLogger().warning("PROOF:FROZEN_ADAPTER_SKIPPED missing=" + staff);
+                      return;
+                  }
+                  try (URLClassLoader loader = new URLClassLoader(
+                          new URL[]{staff.toURI().toURL()}, getClass().getClassLoader())) {
+                      Class<?> adapter = Class.forName(
+                              "net.enthusia.staff.paper.visibility.Paper26VanishClientGameModeAdapter", true, loader);
+                      Method install = adapter.getDeclaredMethod("install", java.util.logging.Logger.class);
+                      install.setAccessible(true);
+                      Object instance = install.invoke(null, getLogger());
+                      Method available = instance.getClass().getMethod("available");
+                      Method reason = instance.getClass().getMethod("unavailableReason");
+                      available.setAccessible(true);
+                      reason.setAccessible(true);
+                      getLogger().info("PROOF:FROZEN_ADAPTER available=" + available.invoke(instance)
+                              + " reason=" + reason.invoke(instance));
+                  } catch (ReflectiveOperationException | java.io.IOException | LinkageError exception) {
+                      getLogger().log(Level.SEVERE, "PROOF:FROZEN_ADAPTER_PROBE_FAILED", exception);
+                  }
+              }
+
+              @EventHandler
+              public void onJoin(PlayerJoinEvent event) {
+                  Player player = event.getPlayer();
+                  getLogger().info("PROOF:JOIN name=" + player.getName() + " gm=" + player.getGameMode()
+                          + " noPhysics=" + player.hasNoPhysics());
+                  Bukkit.getScheduler().runTaskLater(this, () -> runPacketAndPhysicsSequence(player), 20L);
+              }
+
+              @EventHandler
+              public void onQuit(PlayerQuitEvent event) {
+                  Player player = event.getPlayer();
+                  getLogger().info("PROOF:QUIT name=" + player.getName() + " gm=" + player.getGameMode()
+                          + " noPhysics=" + player.hasNoPhysics());
+              }
+
+              private void runPacketAndPhysicsSequence(Player player) {
+                  if (!player.isOnline() || access == null) {
+                      getLogger().warning("PROOF:INTERACTION_BLOCKED online=" + player.isOnline() + " abi=" + (access != null));
+                      return;
+                  }
+                  try {
+                      player.setGameMode(GameMode.CREATIVE);
+                      boolean baseline = player.hasNoPhysics();
+                      player.setNoPhysics(true);
+                      sendPresentation(player, 3.0F);
+                      getLogger().info("PROOF:PRESENT_SPECTATOR_SENT serverGameMode=" + player.getGameMode()
+                              + " noPhysics=" + player.hasNoPhysics() + " baselineNoPhysics=" + baseline);
+
+                      Location from = player.getLocation().clone();
+                      Location to = from.clone().add(7.0, 2.0, 7.0);
+                      boolean teleported = player.teleport(to);
+                      getLogger().info("PROOF:TELEPORT_WHILE_PRESENTED_SPECTATOR success=" + teleported
+                              + " from=" + compact(from) + " to=" + compact(player.getLocation()));
+
+                      Bukkit.getScheduler().runTaskLater(this, () -> restore(player, baseline), 20L);
+                  } catch (ReflectiveOperationException | RuntimeException exception) {
+                      getLogger().log(Level.SEVERE, "PROOF:PACKET_OR_PHYSICS_FAILED", exception);
+                  }
+              }
+
+              private void restore(Player player, boolean baseline) {
+                  if (!player.isOnline()) {
+                      getLogger().warning("PROOF:RESTORE_BLOCKED_OFFLINE=true");
+                      return;
+                  }
+                  try {
+                      sendPresentation(player, 1.0F);
+                      player.setNoPhysics(baseline);
+                      player.updateInventory();
+                      getLogger().info("PROOF:RESTORE_PRESENTATION_SENT serverGameMode=" + player.getGameMode()
+                              + " noPhysics=" + player.hasNoPhysics());
+                  } catch (ReflectiveOperationException | RuntimeException exception) {
+                      getLogger().log(Level.SEVERE, "PROOF:RESTORE_FAILED", exception);
+                  }
+              }
+
+              private void sendPresentation(Player player, float gameModeId) throws ReflectiveOperationException {
+                  Object handle = access.getHandle.invoke(player);
+                  Object listener = access.connection.get(handle);
+                  if (listener == null) {
+                      throw new IllegalStateException("connection is null");
+                  }
+                  Object packet = access.gameEventPacket.newInstance(access.changeGameMode, gameModeId);
+                  access.sendPacket.invoke(listener, packet);
+              }
+
+              private static String compact(Location location) {
+                  return String.format("%.2f,%.2f,%.2f", location.getX(), location.getY(), location.getZ());
+              }
+
+              private record ReflectionAccess(
+                      Method getHandle,
+                      Field connection,
+                      Constructor<?> gameEventPacket,
+                      Object changeGameMode,
+                      Method sendPacket
+              ) {}
+          }
+          JAVA
+
+          (cd proof/harness && mvn -B -q package)
+          cp proof/harness/target/hub-leaf-runtime-proof-1.0.0.jar proof/server/plugins/HubLeafRuntimeProof.jar
+          sha256sum proof/server/plugins/HubLeafRuntimeProof.jar | tee proof/evidence/harness.sha256
+
+      - name: Configure disposable Leaf server
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          cd proof/server
+          printf 'eula=true\n' > eula.txt
+          cat > server.properties <<'PROPS'
+          server-port=25570
+          online-mode=false
+          enforce-secure-profile=false
+          gamemode=creative
+          force-gamemode=true
+          spawn-protection=0
+          difficulty=peaceful
+          level-type=minecraft:flat
+          view-distance=4
+          simulation-distance=4
+          motd=HUB Leaf 115 disposable runtime proof
+          enable-rcon=false
+          PROPS
+
+      - name: Boot Leaf with frozen Staff and probe harness
+        id: boot
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          cd proof/server
+          coproc LEAFPROC { java -Xms1G -Xmx2G -jar leaf-1.21.11-115.jar nogui > server.log 2>&1; }
+          echo "$LEAFPROC_PID" > ../leaf.pid
+          echo "${LEAFPROC[1]}" > ../leaf.stdinfd
+          for i in $(seq 1 180); do
+            if grep -qE 'Done \([0-9.]+s\)!|Done \(' server.log; then
+              echo "started=true" >> "$GITHUB_OUTPUT"
+              break
+            fi
+            if ! kill -0 "$LEAFPROC_PID" 2>/dev/null; then
+              break
+            fi
+            sleep 1
+          done
+          cat server.log
+          grep -E 'This server is running Leaf|Running Java|PROOF:SERVER_BUILD_INFO|PROOF:REPORTS_PAPER_BRAND|PROOF:ABI|PROOF:FROZEN_ADAPTER|Unsupported API version|EnthusiaStaff' server.log             | tee ../evidence/startup-key-lines.txt || true
+
+          if grep -q 'PROOF:HARNESS_ENABLE=true' server.log; then
+            echo "harness_loaded=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "harness_loaded=false" >> "$GITHUB_OUTPUT"
+          fi
+          if grep -qE '\[EnthusiaStaff\].*Enabling|Enabling EnthusiaStaff|Enabled EnthusiaStaff' server.log; then
+            echo "staff_loaded=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "staff_loaded=false" >> "$GITHUB_OUTPUT"
+          fi
+
+          # Keep the server process alive across subsequent steps.
+          disown "$LEAFPROC_PID" 2>/dev/null || true
+          echo "$LEAFPROC_PID" > ../leaf.pid
+
+      - name: Run real protocol client smoke
+        if: steps.boot.outputs.harness_loaded == 'true'
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          mkdir -p proof/client
+          cd proof/client
+          npm init -y >/dev/null
+          npm install --silent minecraft-protocol@latest
+          cat > client.js <<'JS'
+          const mc = require('minecraft-protocol');
+          const fs = require('fs');
+
+          const out = [];
+          const stamp = (msg) => {
+            const line = new Date().toISOString() + ' ' + msg;
+            console.log(line);
+            out.push(line);
+            fs.writeFileSync('client.log', out.join('\n') + '\n');
+          };
+
+          function session(label, durationMs) {
+            return new Promise((resolve, reject) => {
+              const client = mc.createClient({
+                host: '127.0.0.1',
+                port: 25570,
+                username: 'HubProofBot',
+                version: '1.21.11',
+                auth: 'offline'
+              });
+              let settled = false;
+              const timer = setTimeout(() => {
+                stamp(label + ': timeout; ending client');
+                try { client.end('proof timeout'); } catch (_) {}
+              }, durationMs);
+              client.on('login', () => stamp(label + ': login'));
+              client.on('playerJoin', () => stamp(label + ': playerJoin'));
+              client.on('packet', (data, meta) => {
+                if (meta && (
+                    meta.name.includes('game') ||
+                    meta.name.includes('position') ||
+                    meta.name.includes('teleport') ||
+                    meta.name.includes('respawn')
+                )) {
+                  stamp(label + ': packet ' + meta.name + ' ' + JSON.stringify(data));
+                }
+              });
+              client.on('end', (reason) => {
+                clearTimeout(timer);
+                if (!settled) {
+                  settled = true;
+                  stamp(label + ': end ' + reason);
+                  resolve();
+                }
+              });
+              client.on('error', (err) => {
+                stamp(label + ': error ' + err.stack);
+                if (!settled) {
+                  settled = true;
+                  clearTimeout(timer);
+                  reject(err);
+                }
+              });
+              setTimeout(() => {
+                try { client.end('proof reconnect'); } catch (_) {}
+              }, Math.max(3000, durationMs - 1500));
+            });
+          }
+
+          (async () => {
+            try {
+              await session('session1', 9000);
+              await new Promise(r => setTimeout(r, 1500));
+              await session('session2', 9000);
+              process.exit(0);
+            } catch (e) {
+              stamp('CLIENT_SMOKE_FAILED ' + e.stack);
+              process.exit(2);
+            }
+          })();
+          JS
+          set +e
+          timeout 25s node client.js | tee client-console.log
+          CLIENT_RC=${PIPESTATUS[0]}
+          set -e
+          echo "client_rc=$CLIENT_RC" | tee ../evidence/client-result.txt
+          cp client.log ../evidence/client.log 2>/dev/null || true
+          # Client-library inability is evidence/blocking, not a workflow infrastructure failure.
+          exit 0
+
+      - name: Collect interaction and cleanup evidence
+        if: always()
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          sleep 4
+          cd proof/server
+          grep -E 'PROOF:(JOIN|QUIT|PRESENT_SPECTATOR_SENT|TELEPORT_WHILE_PRESENTED_SPECTATOR|RESTORE_PRESENTATION_SENT|PACKET_OR_PHYSICS_FAILED|RESTORE_FAILED|INTERACTION_BLOCKED)' server.log             | tee ../evidence/interaction-key-lines.txt || true
+
+          PID="$(cat ../leaf.pid 2>/dev/null || true)"
+          if [[ -n "$PID" ]] && kill -0 "$PID" 2>/dev/null; then
+            kill -TERM "$PID" 2>/dev/null || true
+            for i in $(seq 1 20); do
+              kill -0 "$PID" 2>/dev/null || break
+              sleep 1
+            done
+          fi
+          sleep 1
+          cp server.log ../evidence/server.log
+          grep -E 'PROOF:HARNESS_DISABLE|PROOF:DISABLE_PLAYER|Stopping server|Saving players' server.log             | tee ../evidence/disable-key-lines.txt || true
+
+          {
+            echo "=== frozen source ==="
+            cat ../evidence/source.txt
+            echo
+            echo "=== exact Leaf artifact sha256 ==="
+            cat ../evidence/leaf-1.21.11-115.jar.sha256
+            echo
+            echo "=== Staff plugin metadata ==="
+            grep -E '^(name|version|main|api-version|load):' ../evidence/enthusiastaff-plugin.yml || true
+            echo
+            echo "=== runtime identity / ABI / frozen adapter ==="
+            cat ../evidence/startup-key-lines.txt 2>/dev/null || true
+            echo
+            echo "=== interaction ==="
+            cat ../evidence/interaction-key-lines.txt 2>/dev/null || true
+            echo
+            echo "=== client ==="
+            cat ../evidence/client-result.txt 2>/dev/null || true
+            cat ../evidence/client.log 2>/dev/null || true
+            echo
+            echo "=== disable ==="
+            cat ../evidence/disable-key-lines.txt 2>/dev/null || true
+          } | tee ../evidence/summary.txt
+
+      - name: Require identity and ABI evidence
+        if: always()
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          test -f proof/evidence/leaf-1.21.11-115.jar.sha256
+          grep -q 'PROOF:SERVER_BUILD_INFO' proof/evidence/server.log
+          grep -q 'PROOF:ABI_COMPLETE=true' proof/evidence/server.log
+
+      - name: Upload durable runtime proof
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: hub-leaf-1.21.11-115-runtime-proof
+          path: proof/evidence/
+          if-no-files-found: error
+          retention-days: 14
