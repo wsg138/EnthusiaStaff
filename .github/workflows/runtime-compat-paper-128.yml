@@ -1,0 +1,472 @@
+name: Disposable Paper 26.2 build 128 runtime proof
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/runtime-compat-paper-128.yml"
+      - "paper/src/test/java/net/enthusia/staff/paper/visibility/RuntimeCompatibilityProofPlugin.java"
+      - "runtime-proof/paper-26.2-build128/**"
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  proof:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      FROZEN_SOURCE_SHA: 8f2c9fbd6ac15523304ea6759d40fec576f1fcd4
+      STAFF_ARTIFACT_ID: "11210937258"
+      STAFF_ZIP_SHA256: 1d94811c27c68ee73838237e6df213ec27458e40fb04e43e7c2d3161c72330a6
+      STAFF_JAR_SHA256: eaffc760219a6d7f412b678048817f7e3b62d3638e17d21144a518097652f101
+      PAPER_USER_AGENT: EnthusiaStaff-runtime-proof/1.0.0 (https://github.com/wsg138/EnthusiaStaff)
+      MINEFLAYER_COMMIT: f9e7db4447afda7838f08aa13430ec768738c178
+    steps:
+      - name: Check out disposable proof head
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 2
+          persist-credentials: false
+
+      - name: Verify frozen-parent boundary
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          test "$(git rev-parse HEAD^)" = "$FROZEN_SOURCE_SHA"
+          echo "Proof head: $(git rev-parse HEAD)"
+          echo "Frozen parent: $(git rev-parse HEAD^)"
+
+      - name: Set up Java 25
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "25"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@3f131e8634966bd73d06cc69884922b02e6faf92 # v6
+
+      - name: Compile disposable harness and run Paper tests
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          chmod +x gradlew
+          ./gradlew :paper:testClasses :paper:test             --no-daemon             --no-build-cache             --no-configuration-cache             --console=plain
+
+          stage="$RUNNER_TEMP/runtime-proof-plugin"
+          rm -rf "$stage"
+          mkdir -p "$stage/net/enthusia/staff/paper/visibility"
+          cp paper/build/classes/java/test/net/enthusia/staff/paper/visibility/RuntimeCompatibilityProofPlugin*.class             "$stage/net/enthusia/staff/paper/visibility/"
+          cp runtime-proof/paper-26.2-build128/plugin.yml "$stage/plugin.yml"
+          jar --create --file "$RUNNER_TEMP/RuntimeCompatibilityProof.jar" -C "$stage" .
+          jar tf "$RUNNER_TEMP/RuntimeCompatibilityProof.jar"
+
+      - name: Fetch exact frozen EnthusiaStaff Paper artifact
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -Eeuo pipefail
+          mkdir -p "$RUNNER_TEMP/frozen-staff"
+          curl --fail --silent --show-error --location             --header "Authorization: Bearer $GH_TOKEN"             --header "Accept: application/vnd.github+json"             --header "X-GitHub-Api-Version: 2022-11-28"             "https://api.github.com/repos/wsg138/EnthusiaStaff/actions/artifacts/$STAFF_ARTIFACT_ID/zip"             --output "$RUNNER_TEMP/frozen-staff/staff.zip"
+          echo "$STAFF_ZIP_SHA256  $RUNNER_TEMP/frozen-staff/staff.zip" | sha256sum --check -
+          unzip -q "$RUNNER_TEMP/frozen-staff/staff.zip" -d "$RUNNER_TEMP/frozen-staff/unpacked"
+          test -f "$RUNNER_TEMP/frozen-staff/unpacked/EnthusiaStaff-Paper.jar"
+          echo "$STAFF_JAR_SHA256  $RUNNER_TEMP/frozen-staff/unpacked/EnthusiaStaff-Paper.jar" | sha256sum --check -
+          stat --printf='Frozen Staff JAR size: %s bytes\n' "$RUNNER_TEMP/frozen-staff/unpacked/EnthusiaStaff-Paper.jar"
+
+      - name: Install pinned native 26.2 protocol client
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          client="$RUNNER_TEMP/protocol-client"
+          mkdir -p "$client"
+          cd "$client"
+          npm init -y >/dev/null
+          npm install --no-audit --no-fund             "https://github.com/zkonikishi/Mineflayer/archive/$MINEFLAYER_COMMIT.tar.gz"
+          node -e "const m=require('mineflayer/package.json'); console.log('mineflayer', m.version)"
+
+      - name: Run exact 128 and 129 disposable servers
+        id: runtime
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -Eeuo pipefail
+          root="$RUNNER_TEMP/runtime-proof"
+          mkdir -p "$root"
+
+          fetch_paper() {
+            local build="$1"
+            local dest="$2"
+            local response node url expected actual name size
+            response="$(curl --fail --silent --show-error               --header "User-Agent: $PAPER_USER_AGENT"               "https://fill.papermc.io/v3/projects/paper/versions/26.2/builds")"
+            node="$(jq -c --argjson build "$build" 'first(.[] | select(.id == $build))' <<<"$response")"
+            test "$node" != "null"
+            printf '%s\n' "$node" | jq . > "$dest/paper-build-metadata.json"
+            url="$(jq -r '.downloads["server:default"].url' <<<"$node")"
+            expected="$(jq -r '.downloads["server:default"].checksums.sha256' <<<"$node")"
+            name="$(jq -r '.downloads["server:default"].name' <<<"$node")"
+            size="$(jq -r '.downloads["server:default"].size' <<<"$node")"
+            test -n "$url"
+            test "$expected" != "null"
+            curl --fail --silent --show-error --location               --header "User-Agent: $PAPER_USER_AGENT"               "$url" --output "$dest/paper.jar"
+            actual="$(sha256sum "$dest/paper.jar" | awk '{print $1}')"
+            test "$actual" = "$expected"
+            test "$(stat -c %s "$dest/paper.jar")" = "$size"
+            {
+              echo "build=$build"
+              echo "name=$name"
+              echo "size=$size"
+              echo "sha256=$actual"
+              echo "url=$url"
+            } > "$dest/paper-artifact-receipt.txt"
+          }
+
+          run_build() {
+            local build="$1"
+            local port="$2"
+            local dir="$root/$build"
+            mkdir -p "$dir/server/plugins"
+            fetch_paper "$build" "$dir"
+            cp "$dir/paper.jar" "$dir/server/paper.jar"
+            cp "$RUNNER_TEMP/frozen-staff/unpacked/EnthusiaStaff-Paper.jar"               "$dir/server/plugins/EnthusiaStaff-Paper.jar"
+            cp "$RUNNER_TEMP/RuntimeCompatibilityProof.jar"               "$dir/server/plugins/RuntimeCompatibilityProof.jar"
+            printf 'eula=true\n' > "$dir/server/eula.txt"
+            cat > "$dir/server/server.properties" <<EOF
+          online-mode=false
+          enforce-secure-profile=false
+          server-port=$port
+          server-ip=127.0.0.1
+          spawn-protection=0
+          allow-flight=true
+          gamemode=creative
+          max-players=4
+          view-distance=2
+          simulation-distance=2
+          enable-status=false
+          level-seed=1
+          motd=runtime-proof-$build
+          EOF
+
+            (
+              cd "$dir/server"
+              java -Xms1G -Xmx2G -XX:+UseG1GC -jar paper.jar --nogui                 > console.log 2>&1
+            ) &
+            local server_pid=$!
+
+            local ready=0
+            for _ in $(seq 1 120); do
+              if grep -q "Done (" "$dir/server/logs/latest.log" 2>/dev/null; then
+                ready=1
+                break
+              fi
+              if ! kill -0 "$server_pid" 2>/dev/null; then
+                break
+              fi
+              sleep 1
+            done
+            if [[ "$ready" != 1 ]]; then
+              echo "::error::Paper $build did not reach Done"
+              tail -n 200 "$dir/server/console.log" || true
+              return 1
+            fi
+
+            (
+              cd "$RUNNER_TEMP/protocol-client"
+              NODE_PATH="$PWD/node_modules" node                 "$GITHUB_WORKSPACE/runtime-proof/paper-26.2-build128/client.js"                 "$port" "$dir/client.log"
+            ) > "$dir/client-console.log" 2>&1 &
+            local client_pid=$!
+
+            local completed=0
+            for _ in $(seq 1 150); do
+              if grep -q '^DONE=true$' "$dir/server/runtime-proof-evidence.txt" 2>/dev/null; then
+                completed=1
+                break
+              fi
+              if ! kill -0 "$server_pid" 2>/dev/null; then
+                break
+              fi
+              sleep 1
+            done
+
+            for _ in $(seq 1 30); do
+              kill -0 "$server_pid" 2>/dev/null || break
+              sleep 1
+            done
+            if kill -0 "$server_pid" 2>/dev/null; then
+              kill "$server_pid" || true
+            fi
+            kill "$client_pid" 2>/dev/null || true
+            wait "$server_pid" 2>/dev/null || true
+            wait "$client_pid" 2>/dev/null || true
+
+            if [[ "$completed" != 1 ]]; then
+              echo "::error::Runtime proof did not complete for Paper $build"
+              tail -n 240 "$dir/server/console.log" || true
+              cat "$dir/client-console.log" || true
+              return 1
+            fi
+          }
+
+          rc=0
+          run_build 128 25580 || rc=1
+          run_build 129 25581 || rc=1
+          exit "$rc"
+
+      - name: Verify runtime acceptance matrix
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          root="$RUNNER_TEMP/runtime-proof"
+
+          require_line() {
+            local file="$1"
+            local pattern="$2"
+            grep -Eq "$pattern" "$file" || {
+              echo "::error::Missing pattern '$pattern' in $file"
+              tail -n 220 "$file" || true
+              return 1
+            }
+          }
+
+          for build in 128 129; do
+            evidence="$root/$build/server/runtime-proof-evidence.txt"
+            client="$root/$build/client.log"
+            console="$root/$build/server/console.log"
+            echo "===== PAPER $build ARTIFACT ====="
+            cat "$root/$build/paper-artifact-receipt.txt"
+            echo "===== PAPER $build SERVER EVIDENCE ====="
+            cat "$evidence"
+            echo "===== PAPER $build CLIENT EVIDENCE ====="
+            cat "$client"
+            require_line "$evidence" '^HARNESS_READY=true$'
+            require_line "$evidence" '^REFLECTION_ACCESS=true'
+            require_line "$evidence" '^MANAGER_INJECTION=true$'
+            require_line "$evidence" '^ACTIVE\|reconciled=true\|noPhysics=true\|serverMode=CREATIVE            require_line "$evidence" '^MOVEMENT\|FLOOR\|pass=true'
+            require_line "$evidence" '^MOVEMENT\|CEILING\|pass=true'
+            require_line "$evidence" '^TELEPORT_ACTIVE\|reconciled=true\|noPhysics=true\|serverMode=CREATIVE'
+            require_line "$evidence" '^RESTORE\|reconciled=true\|noPhysics=false\|serverMode=CREATIVE$'
+            require_line "$evidence" '^FORCED_FAILURE\|reconciled=false\|adapterAvailable=false\|noPhysics=false$'
+            require_line "$evidence" '^RECONNECT_RESTORED\|reconciled=true\|noPhysics=true\|serverMode=CREATIVE$'
+            require_line "$evidence" '^RECONNECT_UNVANISHED\|reconciled=true\|noPhysics=false\|serverMode=CREATIVE$'
+            require_line "$evidence" '^PLUGIN_DISABLE_CLEANUP\|noPhysics=false\|serverMode=CREATIVE$'
+            require_line "$evidence" '^DONE=true$'
+            if grep -q '^FAIL|' "$evidence"; then
+              echo "::error::Harness failure recorded for $build"
+              grep '^FAIL|' "$evidence"
+              exit 1
+            fi
+            if grep -q "Error occurred while enabling EnthusiaStaff" "$console"; then
+              echo "::error::Frozen Staff plugin failed startup on $build"
+              exit 1
+            fi
+
+            require_line "$client" '^MARKER\|PRODUCT_RESTORED\|session=1\|mode=creative$'
+            require_line "$client" '^MARKER\|ACTIVE\|session=1\|mode=spectator$'
+            require_line "$client" '^MARKER\|TELEPORT_ACTIVE\|session=1\|mode=spectator$'
+            require_line "$client" '^MARKER\|RESTORED\|session=1\|mode=creative$'
+            require_line "$client" '^MARKER\|RECONNECT_ACTIVE\|session=1\|mode=spectator$'
+            require_line "$client" '^MARKER\|RECONNECT_RESTORED\|session=2\|mode=spectator$'
+            require_line "$client" '^MARKER\|RECONNECT_UNVANISHED\|session=2\|mode=creative$'
+            require_line "$client" '^MARKER\|DISABLE_ACTIVE\|session=2\|mode=spectator$'
+            require_line "$client" '^MARKER\|DISABLE_CLEANED\|session=2\|mode=creative$'
+          done
+
+          e128="$root/128/server/runtime-proof-evidence.txt"
+          e129="$root/129/server/runtime-proof-evidence.txt"
+          c128="$root/128/client.log"
+          c129="$root/129/client.log"
+
+          require_line "$e128" '^RUNTIME\|brandId=papermc:paper\|brandName=Paper\|minecraft=26\.2\|build=128\|'
+          require_line "$e129" '^RUNTIME\|brandId=papermc:paper\|brandName=Paper\|minecraft=26\.2\|build=129\|'
+          require_line "$e128" '^PRODUCT_SUPPORTS=false$'
+          require_line "$e129" '^PRODUCT_SUPPORTS=true$'
+          require_line "$e128" '^PRODUCT_INSTALL\|.*\|available=false\|'
+          require_line "$e129" '^PRODUCT_INSTALL\|.*\|available=true\|'
+          require_line "$e128" '^PRODUCT_MANAGER\|reconciled=false\|noPhysics=false\|serverMode=CREATIVE$'
+          require_line "$e129" '^PRODUCT_MANAGER\|reconciled=true\|noPhysics=true\|serverMode=CREATIVE$'
+          require_line "$c128" '^MARKER\|PRODUCT_PROBE\|session=1\|mode=creative$'
+          require_line "$c129" '^MARKER\|PRODUCT_PROBE\|session=1\|mode=spectator$'
+
+          grep '^ABI_SIGNATURE|' "$e128" | sort > "$root/abi-128.txt"
+          grep '^ABI_SIGNATURE|' "$e129" | sort > "$root/abi-129.txt"
+          diff -u "$root/abi-128.txt" "$root/abi-129.txt" > "$root/abi-signature-diff.txt" || {
+            echo "::error::128 and 129 reflection signatures differ"
+            cat "$root/abi-signature-diff.txt"
+            exit 1
+          }
+          echo 'REFLECTION_IDENTICAL=true' > "$root/comparison.txt"
+
+          {
+            echo
+            echo 'Class bytecode hashes (informational; signature identity is the adapter compatibility criterion):'
+            echo '--- 128 ---'
+            grep '^ABI_CLASS|' "$e128" | sort
+            echo '--- 129 ---'
+            grep '^ABI_CLASS|' "$e129" | sort
+          } >> "$root/comparison.txt"
+
+          cat "$root/128/paper-artifact-receipt.txt"
+          cat "$root/129/paper-artifact-receipt.txt"
+          cat "$root/comparison.txt"
+
+      - name: Upload durable proof bundle
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: paper-26.2-build128-runtime-proof
+          path: |
+            ${{ runner.temp }}/runtime-proof/128/paper-build-metadata.json
+            ${{ runner.temp }}/runtime-proof/128/paper-artifact-receipt.txt
+            ${{ runner.temp }}/runtime-proof/128/client.log
+            ${{ runner.temp }}/runtime-proof/128/client-console.log
+            ${{ runner.temp }}/runtime-proof/128/server/runtime-proof-evidence.txt
+            ${{ runner.temp }}/runtime-proof/128/server/console.log
+            ${{ runner.temp }}/runtime-proof/128/server/logs/latest.log
+            ${{ runner.temp }}/runtime-proof/129/paper-build-metadata.json
+            ${{ runner.temp }}/runtime-proof/129/paper-artifact-receipt.txt
+            ${{ runner.temp }}/runtime-proof/129/client.log
+            ${{ runner.temp }}/runtime-proof/129/client-console.log
+            ${{ runner.temp }}/runtime-proof/129/server/runtime-proof-evidence.txt
+            ${{ runner.temp }}/runtime-proof/129/server/console.log
+            ${{ runner.temp }}/runtime-proof/129/server/logs/latest.log
+            ${{ runner.temp }}/runtime-proof/comparison.txt
+            ${{ runner.temp }}/runtime-proof/abi-128.txt
+            ${{ runner.temp }}/runtime-proof/abi-129.txt
+            ${{ runner.temp }}/runtime-proof/abi-signature-diff.txt
+            ${{ runner.temp }}/RuntimeCompatibilityProof.jar
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Summarize proof
+        if: always()
+        shell: bash
+        run: |
+          root="$RUNNER_TEMP/runtime-proof"
+          {
+            echo '# Disposable Paper 26.2 build 128 compatibility proof'
+            echo
+            echo "- Frozen source parent: `$FROZEN_SOURCE_SHA`"
+            echo "- Frozen Staff JAR SHA-256: `$STAFF_JAR_SHA256`"
+            if [[ -f "$root/128/paper-artifact-receipt.txt" ]]; then
+              echo '## Paper 128'
+              sed 's/^/- /' "$root/128/paper-artifact-receipt.txt"
+            fi
+            if [[ -f "$root/129/paper-artifact-receipt.txt" ]]; then
+              echo '## Paper 129 control'
+              sed 's/^/- /' "$root/129/paper-artifact-receipt.txt"
+            fi
+            if [[ -f "$root/comparison.txt" ]]; then
+              echo '## Comparison'
+              sed 's/^/- /' "$root/comparison.txt"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+            for tick in 1 2 5 10 15; do
+              require_line "$evidence" "^PHYSICS_STABILITY\\|tick=$tick\\|noPhysics=true\\|serverMode=CREATIVE$"
+            done
+            require_line "$evidence" '^MOVEMENT\|WALL\|pass=true'
+            require_line "$evidence" '^MOVEMENT\|FLOOR\|pass=true'
+            require_line "$evidence" '^MOVEMENT\|CEILING\|pass=true'
+            require_line "$evidence" '^TELEPORT_ACTIVE\|reconciled=true\|noPhysics=true\|serverMode=CREATIVE'
+            require_line "$evidence" '^RESTORE\|reconciled=true\|noPhysics=false\|serverMode=CREATIVE$'
+            require_line "$evidence" '^FORCED_FAILURE\|reconciled=false\|adapterAvailable=false\|noPhysics=false$'
+            require_line "$evidence" '^RECONNECT_RESTORED\|reconciled=true\|noPhysics=true\|serverMode=CREATIVE$'
+            require_line "$evidence" '^RECONNECT_UNVANISHED\|reconciled=true\|noPhysics=false\|serverMode=CREATIVE$'
+            require_line "$evidence" '^PLUGIN_DISABLE_CLEANUP\|noPhysics=false\|serverMode=CREATIVE$'
+            require_line "$evidence" '^DONE=true$'
+            if grep -q '^FAIL|' "$evidence"; then
+              echo "::error::Harness failure recorded for $build"
+              grep '^FAIL|' "$evidence"
+              exit 1
+            fi
+            if grep -q "Error occurred while enabling EnthusiaStaff" "$console"; then
+              echo "::error::Frozen Staff plugin failed startup on $build"
+              exit 1
+            fi
+
+            require_line "$client" '^MARKER\|PRODUCT_RESTORED\|session=1\|mode=creative$'
+            require_line "$client" '^MARKER\|ACTIVE\|session=1\|mode=spectator$'
+            require_line "$client" '^MARKER\|TELEPORT_ACTIVE\|session=1\|mode=spectator$'
+            require_line "$client" '^MARKER\|RESTORED\|session=1\|mode=creative$'
+            require_line "$client" '^MARKER\|RECONNECT_ACTIVE\|session=1\|mode=spectator$'
+            require_line "$client" '^MARKER\|RECONNECT_RESTORED\|session=2\|mode=spectator$'
+            require_line "$client" '^MARKER\|RECONNECT_UNVANISHED\|session=2\|mode=creative$'
+            require_line "$client" '^MARKER\|DISABLE_ACTIVE\|session=2\|mode=spectator$'
+            require_line "$client" '^MARKER\|DISABLE_CLEANED\|session=2\|mode=creative$'
+          done
+
+          e128="$root/128/server/runtime-proof-evidence.txt"
+          e129="$root/129/server/runtime-proof-evidence.txt"
+          c128="$root/128/client.log"
+          c129="$root/129/client.log"
+
+          require_line "$e128" '^RUNTIME\|brandId=papermc:paper\|brandName=Paper\|minecraft=26\.2\|build=128\|'
+          require_line "$e129" '^RUNTIME\|brandId=papermc:paper\|brandName=Paper\|minecraft=26\.2\|build=129\|'
+          require_line "$e128" '^PRODUCT_SUPPORTS=false$'
+          require_line "$e129" '^PRODUCT_SUPPORTS=true$'
+          require_line "$e128" '^PRODUCT_INSTALL\|.*\|available=false\|'
+          require_line "$e129" '^PRODUCT_INSTALL\|.*\|available=true\|'
+          require_line "$e128" '^PRODUCT_MANAGER\|reconciled=false\|noPhysics=false\|serverMode=CREATIVE$'
+          require_line "$e129" '^PRODUCT_MANAGER\|reconciled=true\|noPhysics=true\|serverMode=CREATIVE$'
+          require_line "$c128" '^MARKER\|PRODUCT_PROBE\|session=1\|mode=creative$'
+          require_line "$c129" '^MARKER\|PRODUCT_PROBE\|session=1\|mode=spectator$'
+
+          grep '^ABI_SIGNATURE|' "$e128" | sort > "$root/abi-128.txt"
+          grep '^ABI_SIGNATURE|' "$e129" | sort > "$root/abi-129.txt"
+          diff -u "$root/abi-128.txt" "$root/abi-129.txt" > "$root/abi-signature-diff.txt" || {
+            echo "::error::128 and 129 reflection signatures differ"
+            cat "$root/abi-signature-diff.txt"
+            exit 1
+          }
+          echo 'REFLECTION_IDENTICAL=true' > "$root/comparison.txt"
+
+          {
+            echo
+            echo 'Class bytecode hashes (informational; signature identity is the adapter compatibility criterion):'
+            echo '--- 128 ---'
+            grep '^ABI_CLASS|' "$e128" | sort
+            echo '--- 129 ---'
+            grep '^ABI_CLASS|' "$e129" | sort
+          } >> "$root/comparison.txt"
+
+          cat "$root/128/paper-artifact-receipt.txt"
+          cat "$root/129/paper-artifact-receipt.txt"
+          cat "$root/comparison.txt"
+
+      - name: Upload durable proof bundle
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: paper-26.2-build128-runtime-proof
+          path: |
+            ${{ runner.temp }}/runtime-proof
+            ${{ runner.temp }}/RuntimeCompatibilityProof.jar
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Summarize proof
+        if: always()
+        shell: bash
+        run: |
+          root="$RUNNER_TEMP/runtime-proof"
+          {
+            echo '# Disposable Paper 26.2 build 128 compatibility proof'
+            echo
+            echo "- Frozen source parent: `$FROZEN_SOURCE_SHA`"
+            echo "- Frozen Staff JAR SHA-256: `$STAFF_JAR_SHA256`"
+            if [[ -f "$root/128/paper-artifact-receipt.txt" ]]; then
+              echo '## Paper 128'
+              sed 's/^/- /' "$root/128/paper-artifact-receipt.txt"
+            fi
+            if [[ -f "$root/129/paper-artifact-receipt.txt" ]]; then
+              echo '## Paper 129 control'
+              sed 's/^/- /' "$root/129/paper-artifact-receipt.txt"
+            fi
+            if [[ -f "$root/comparison.txt" ]]; then
+              echo '## Comparison'
+              sed 's/^/- /' "$root/comparison.txt"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"

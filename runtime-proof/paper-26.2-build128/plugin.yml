@@ -1,0 +1,7 @@
+name: RuntimeCompatibilityProof
+version: '1.0.0'
+main: net.enthusia.staff.paper.visibility.RuntimeCompatibilityProofPlugin
+api-version: '26.2'
+load: POSTWORLD
+depend:
+  - EnthusiaStaff
