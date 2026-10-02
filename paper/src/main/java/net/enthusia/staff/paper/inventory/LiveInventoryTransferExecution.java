@@ -177,6 +177,6 @@ final class LiveInventoryTransferExecution {
     }
 
     private static ItemStack copy(ItemStack item) {
-        return item == null || item.isEmpty() ? null : item.clone();
+        return item == null || item.getAmount() <= 0 ? null : item.clone();
     }
 }
