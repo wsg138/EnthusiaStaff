@@ -293,6 +293,29 @@ public final class PlayerRowEnsuringInventoryJournalStore implements InventoryJo
         }
     }
 
+    private void updateOperationJson(
+            Connection connection,
+            UUID operationId,
+            long fencingToken,
+            ObjectNode operation,
+            Instant now
+    ) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement("""
+                UPDATE inventory_operations
+                SET operation_json = ?, updated_at = ?
+                WHERE operation_id = ? AND fencing_token = ?
+                """)) {
+            statement.setString(1, serialize(operation));
+            statement.setTimestamp(2, Timestamp.from(now));
+            statement.setBytes(3, UuidBytes.toBytes(operationId));
+            statement.setLong(4, fencingToken);
+            JdbcTransactionSupport.requireSingleUpdate(
+                    statement.executeUpdate(),
+                    "Inventory cursor escrow operation changed concurrently"
+            );
+        }
+    }
+
     private boolean resolveCursorRollback(
             Connection connection,
             UUID patchId,
