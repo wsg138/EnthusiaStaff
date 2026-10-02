@@ -56,20 +56,13 @@ jobs:
           lizard -C 8 -L 50 -a 8 -w \
             paper/src/main/java/net/enthusia/staff/paper/visibility/ReflectiveVanishClientGameModeAdapter.java \
             paper/src/main/java/net/enthusia/staff/paper/visibility/VanishClientGameModeAdapterFactory.java \
-            paper/src/main/java/net/enthusia/staff/paper/visibility/VanishNoclipController.java
+            paper/src/main/java/net/enthusia/staff/paper/visibility/VanishNoclipController.java \
+            paper/src/main/java/net/enthusia/staff/paper/visibility/VanishNoclipMovementPolicy.java
 
           python3 - <<'PY'
           import lizard
           path = "paper/src/main/java/net/enthusia/staff/paper/visibility/VanishManager.java"
-          targets = {
-              "reconcileNoclip",
-              "noclipRuntimeUnavailable",
-              "ensureNoclipMaintenance",
-              "maintainNoclip",
-              "recoverNoclipMaintenance",
-              "stopNoclipMaintenance",
-              "retireNoclipMaintenance",
-          }
+          targets = {"onFailMove"}
           found = set()
           violations = []
           for function in lizard.analyze_file(path).function_list:
@@ -93,7 +86,7 @@ jobs:
             --output "$RUNNER_TEMP/pmd.zip"
           unzip -q "$RUNNER_TEMP/pmd.zip" -d "$RUNNER_TEMP"
           "$RUNNER_TEMP/pmd-bin-6.55.0/bin/run.sh" pmd \
-            -d 'paper/src/main/java/net/enthusia/staff/paper/visibility/ReflectiveVanishClientGameModeAdapter.java,paper/src/main/java/net/enthusia/staff/paper/visibility/VanishClientGameModeAdapterFactory.java,paper/src/main/java/net/enthusia/staff/paper/visibility/VanishNoclipController.java,paper/src/test/java/net/enthusia/staff/paper/visibility/ReflectiveVanishClientGameModeAdapterTest.java,paper/src/test/java/net/enthusia/staff/paper/visibility/VanishClientGameModeAdapterFactoryTest.java,paper/src/test/java/net/enthusia/staff/paper/testsupport/ClickEventTestValues.java' \
+            -d 'paper/src/main/java/net/enthusia/staff/paper/visibility/ReflectiveVanishClientGameModeAdapter.java,paper/src/main/java/net/enthusia/staff/paper/visibility/VanishClientGameModeAdapterFactory.java,paper/src/main/java/net/enthusia/staff/paper/visibility/VanishNoclipController.java,paper/src/main/java/net/enthusia/staff/paper/visibility/VanishNoclipMovementPolicy.java,paper/src/main/java/net/enthusia/staff/paper/visibility/VanishManager.java,paper/src/test/java/net/enthusia/staff/paper/visibility/ReflectiveVanishClientGameModeAdapterTest.java,paper/src/test/java/net/enthusia/staff/paper/visibility/VanishClientGameModeAdapterFactoryTest.java,paper/src/test/java/net/enthusia/staff/paper/visibility/VanishNoclipMovementPolicyTest.java,paper/src/test/java/net/enthusia/staff/paper/testsupport/ClickEventTestValues.java' \
             -R ruleset.xml -f text
           git diff --check 8f2c9fbd6ac15523304ea6759d40fec576f1fcd4..HEAD
 
@@ -162,6 +155,7 @@ jobs:
           package proof.crossversion;
 
           import io.papermc.paper.ServerBuildInfo;
+          import io.papermc.paper.event.player.PlayerFailMoveEvent;
           import java.lang.reflect.Constructor;
           import java.lang.reflect.Field;
           import java.lang.reflect.Method;
@@ -170,17 +164,21 @@ jobs:
           import java.nio.file.Path;
           import java.nio.file.StandardOpenOption;
           import java.util.OptionalInt;
+          import java.util.Set;
           import java.util.UUID;
+          import java.util.concurrent.ConcurrentHashMap;
           import java.util.concurrent.atomic.AtomicInteger;
           import java.util.logging.Logger;
           import net.kyori.adventure.text.Component;
           import org.bukkit.GameMode;
           import org.bukkit.Location;
+          import org.bukkit.Material;
           import org.bukkit.entity.Player;
           import org.bukkit.event.EventHandler;
           import org.bukkit.event.EventPriority;
           import org.bukkit.event.Listener;
           import org.bukkit.event.player.PlayerJoinEvent;
+          import org.bukkit.event.player.PlayerMoveEvent;
           import org.bukkit.event.server.PluginDisableEvent;
           import org.bukkit.plugin.Plugin;
           import org.bukkit.plugin.java.JavaPlugin;
@@ -188,7 +186,9 @@ jobs:
           public final class CrossVersionRuntimeProof extends JavaPlugin implements Listener {
               private static final Path EVIDENCE = Path.of("cross-version-runtime-evidence.txt");
               private final AtomicInteger joins = new AtomicInteger();
+              private final Set<String> acceptedMoves = ConcurrentHashMap.newKeySet();
               private Plugin staffPlugin;
+              private Location chamberBase;
               private Object vanishManager;
               private Object visibility;
               private Object rankAdmin;
@@ -233,6 +233,28 @@ jobs:
                       later(20L, () -> firstSession(player));
                   } else if (sequence == 2) {
                       later(10L, () -> secondSession(player));
+                  }
+              }
+
+              @EventHandler(priority = EventPriority.MONITOR)
+              public void onFailMove(PlayerFailMoveEvent event) {
+                  String label = chamberLabel(event.getTo());
+                  if (label != null) {
+                      evidence("FAIL_MOVE|label=" + label
+                              + "|reason=" + event.getFailReason()
+                              + "|allowed=" + event.isAllowed()
+                              + "|logWarning=" + event.getLogWarning());
+                  }
+              }
+
+              @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+              public void onMove(PlayerMoveEvent event) {
+                  String label = chamberLabel(event.getTo());
+                  if (label != null && acceptedMoves.add(label)) {
+                      evidence("MOVE_ACCEPTED|label=" + label
+                              + "|x=" + event.getTo().getX()
+                              + "|y=" + event.getTo().getY()
+                              + "|z=" + event.getTo().getZ());
                   }
               }
 
@@ -333,20 +355,92 @@ jobs:
                       evidence("ENABLE|reconciled=" + enabled + "|noPhysics=" + player.hasNoPhysics()
                               + "|serverMode=" + player.getGameMode());
                       marker(player, "ENABLED");
-                      later(5L, () -> physicsStability(player, 1));
-                      later(15L, () -> physicsStability(player, 2));
-                      later(25L, () -> teleport(player));
-                      later(45L, () -> disable(player));
-                      later(65L, () -> forcedFailure(player));
-                      later(85L, () -> reconnectPreparation(player));
+                      later(5L, () -> setupMovementChamber(player));
+                      later(70L, () -> teleportWhileActive(player));
+                      later(90L, () -> disable(player));
+                      later(110L, () -> forcedFailure(player));
+                      later(130L, () -> reconnectPreparation(player));
                   } catch (Exception exception) {
                       fail("FIRST_SESSION", exception);
                   }
               }
 
-              private void teleport(Player player) {
+              private void setupMovementChamber(Player player) {
                   try {
                       releaseDisposableFreeze(player);
+                      Location current = player.getLocation();
+                      Location base = new Location(
+                              player.getWorld(),
+                              current.getBlockX() + 0.5D,
+                              current.getBlockY(),
+                              current.getBlockZ() + 0.5D
+                      );
+                      clearChamber(base);
+                      placeChamberBlocks(base);
+                      if (!player.teleport(base)) {
+                          throw new IllegalStateException("could not center movement chamber");
+                      }
+                      chamberBase = base;
+                      boolean reconciled = reconcile(player);
+                      evidence("CHAMBER_READY|reconciled=" + reconciled
+                              + "|x=" + base.getX()
+                              + "|y=" + base.getY()
+                              + "|z=" + base.getZ()
+                              + "|serverMode=" + player.getGameMode());
+                      marker(player, "CHAMBER:" + base.getX() + ":" + base.getY() + ":" + base.getZ());
+                  } catch (Exception exception) {
+                      fail("CHAMBER", exception);
+                  }
+              }
+
+              private void clearChamber(Location base) {
+                  int bx = base.getBlockX();
+                  int by = base.getBlockY();
+                  int bz = base.getBlockZ();
+                  for (int x = bx - 2; x <= bx + 3; x++) {
+                      for (int y = by - 2; y <= by + 4; y++) {
+                          for (int z = bz - 2; z <= bz + 2; z++) {
+                              base.getWorld().getBlockAt(x, y, z).setType(Material.AIR, false);
+                          }
+                      }
+                  }
+              }
+
+              private void placeChamberBlocks(Location base) {
+                  int bx = base.getBlockX();
+                  int by = base.getBlockY();
+                  int bz = base.getBlockZ();
+                  base.getWorld().getBlockAt(bx + 1, by, bz).setType(Material.STONE, false);
+                  base.getWorld().getBlockAt(bx + 1, by + 1, bz).setType(Material.STONE, false);
+                  base.getWorld().getBlockAt(bx, by - 1, bz).setType(Material.STONE, false);
+                  base.getWorld().getBlockAt(bx, by + 2, bz).setType(Material.STONE, false);
+              }
+
+              private String chamberLabel(Location target) {
+                  Location base = chamberBase;
+                  if (base == null || target == null || !base.getWorld().equals(target.getWorld())) {
+                      return null;
+                  }
+                  if (near(target, base.getX() + 1.0D, base.getY(), base.getZ())) {
+                      return "WALL";
+                  }
+                  if (near(target, base.getX(), base.getY() - 0.5D, base.getZ())) {
+                      return "FLOOR";
+                  }
+                  if (near(target, base.getX(), base.getY() + 1.0D, base.getZ())) {
+                      return "CEILING";
+                  }
+                  return null;
+              }
+
+              private static boolean near(Location target, double x, double y, double z) {
+                  return Math.abs(target.getX() - x) < 0.15D
+                          && Math.abs(target.getY() - y) < 0.15D
+                          && Math.abs(target.getZ() - z) < 0.15D;
+              }
+
+              private void teleportWhileActive(Player player) {
+                  try {
                       Location destination = player.getLocation().clone().add(7.0D, 2.0D, 7.0D);
                       boolean teleported = player.teleport(destination);
                       boolean reconciled = reconcile(player);
@@ -369,12 +463,6 @@ jobs:
                   } catch (Exception exception) {
                       fail("DISABLE", exception);
                   }
-              }
-
-              private void physicsStability(Player player, int sample) {
-                  evidence("PHYSICS_STABILITY|sample=" + sample
-                          + "|noPhysics=" + player.hasNoPhysics()
-                          + "|serverMode=" + player.getGameMode());
               }
 
               private void forcedFailure(Player player) {
@@ -580,6 +668,22 @@ jobs:
             console.log(line)
           }
 
+          function sleep (ms) {
+            return new Promise(resolve => setTimeout(resolve, ms))
+          }
+
+          function move (bot, x, y, z, label) {
+            bot.entity.position.set(x, y, z)
+            bot._client.write('position', {
+              x,
+              y,
+              z,
+              onGround: false,
+              flags: { onGround: false, hasHorizontalCollision: false }
+            })
+            log('CLIENT_MOVE|' + label + '|x=' + x + '|y=' + y + '|z=' + z)
+          }
+
           function connect () {
             session++
             const bot = mineflayer.createBot({
@@ -600,16 +704,37 @@ jobs:
               log('SPAWN|session=' + session + '|mode=' + bot.game.gameMode)
             })
 
-            function inspectMessage (text) {
-              const match = String(text).match(/RTPROOF:([A-Z_]+)/)
-              if (!match) return
-              const marker = match[1]
+            async function handleMarker (marker, coordinates) {
               const key = session + ':' + marker
               if (seen.has(key)) return
               seen.add(key)
               log('MARKER|' + marker + '|session=' + session + '|mode=' + bot.game.gameMode)
+              if (marker === 'CHAMBER') {
+                const [x, y, z] = coordinates
+                await sleep(150)
+                move(bot, x + 1.0, y, z, 'WALL')
+                await sleep(450)
+                move(bot, x, y, z, 'RESET_WALL')
+                await sleep(200)
+                move(bot, x, y - 0.5, z, 'FLOOR')
+                await sleep(450)
+                move(bot, x, y, z, 'RESET_FLOOR')
+                await sleep(200)
+                move(bot, x, y + 1.0, z, 'CEILING')
+                await sleep(450)
+                move(bot, x, y, z, 'RESET_CEILING')
+              }
               if (marker === 'RECONNECT_PREP') reconnectExpected = true
               if (marker === 'DISABLE_CLEANED') finished = true
+            }
+
+            function inspectMessage (text) {
+              const match = String(text).match(
+                /RTPROOF:([A-Z_]+)(?::(-?\d+(?:\.\d+)?):(-?\d+(?:\.\d+)?):(-?\d+(?:\.\d+)?))?/
+              )
+              if (!match) return
+              const coordinates = match.slice(2, 5).map(value => value == null ? NaN : Number(value))
+              void handleMarker(match[1], coordinates)
             }
 
             bot.on('messagestr', inspectMessage)
@@ -843,9 +968,14 @@ jobs:
             require_line "$evidence" '^HARNESS_READY=true$'
             require_line "$evidence" '^FACTORY_AVAILABLE=true\|reason=$'
             require_line "$evidence" '^ENABLE\|reconciled=true\|noPhysics=true\|serverMode=CREATIVE$'
-            require_line "$evidence" '^PHYSICS_STABILITY\|sample=1\|noPhysics=true\|serverMode=CREATIVE$'
-            require_line "$evidence" '^PHYSICS_STABILITY\|sample=2\|noPhysics=true\|serverMode=CREATIVE$'
             require_line "$evidence" '^FREEZE_RELEASE\|restricted=false$'
+            require_line "$evidence" '^CHAMBER_READY\|reconciled=true\|x=.*\|y=.*\|z=.*\|serverMode=CREATIVE$'
+            require_line "$evidence" '^FAIL_MOVE\|label=WALL\|reason=CLIPPED_INTO_BLOCK\|allowed=true\|logWarning=false$'
+            require_line "$evidence" '^FAIL_MOVE\|label=FLOOR\|reason=CLIPPED_INTO_BLOCK\|allowed=true\|logWarning=false$'
+            require_line "$evidence" '^FAIL_MOVE\|label=CEILING\|reason=CLIPPED_INTO_BLOCK\|allowed=true\|logWarning=false$'
+            require_line "$evidence" '^MOVE_ACCEPTED\|label=WALL\|.*$'
+            require_line "$evidence" '^MOVE_ACCEPTED\|label=FLOOR\|.*$'
+            require_line "$evidence" '^MOVE_ACCEPTED\|label=CEILING\|.*$'
             require_line "$evidence" '^TELEPORT\|teleported=true\|reconciled=true\|noPhysics=true\|serverMode=CREATIVE$'
             require_line "$evidence" '^DISABLE\|reconciled=true\|noPhysics=false\|serverMode=CREATIVE$'
             require_line "$evidence" '^FORCED_FAILURE\|reconciled=false\|adapterAvailable=false\|noPhysics=false$'
@@ -863,6 +993,10 @@ jobs:
             fi
 
             require_line "$client" '^MARKER\|ENABLED\|session=1\|mode=spectator$'
+            require_line "$client" '^MARKER\|CHAMBER\|session=1\|mode=spectator$'
+            require_line "$client" '^CLIENT_MOVE\|WALL\|.*$'
+            require_line "$client" '^CLIENT_MOVE\|FLOOR\|.*$'
+            require_line "$client" '^CLIENT_MOVE\|CEILING\|.*$'
             require_line "$client" '^MARKER\|TELEPORTED\|session=1\|mode=spectator$'
             require_line "$client" '^MARKER\|DISABLED\|session=1\|mode=creative$'
             require_line "$client" '^MARKER\|RECONNECT_PREP\|session=1\|mode=spectator$'

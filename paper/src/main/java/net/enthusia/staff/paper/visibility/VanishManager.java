@@ -1,6 +1,6 @@
 package net.enthusia.staff.paper.visibility;
 
-import io.papermc.paper.threadedregions.scheduler.ScheduledTask;
+import io.papermc.paper.event.player.PlayerFailMoveEvent;
 import net.enthusia.staff.paper.presentation.StaffMessageStyle;
 import java.time.Clock;
 import java.time.Instant;
@@ -66,7 +66,6 @@ public final class VanishManager implements Listener {
     private final Set<UUID> reconciliationFailureNotified = ConcurrentHashMap.newKeySet();
     private final Set<UUID> staffSessionCheckFailureNotified = ConcurrentHashMap.newKeySet();
     private final Set<UUID> pendingStaffModeExitDisables = ConcurrentHashMap.newKeySet();
-    private final Map<UUID, ScheduledTask> noclipMaintenanceTasks = new ConcurrentHashMap<>();
     private final AtomicBoolean rankReconciliationStarted = new AtomicBoolean();
     private final AtomicInteger rankReconciliationPass = new AtomicInteger();
     private final VanishAudienceCoordinator<Player> audiences;
@@ -640,6 +639,18 @@ public final class VanishManager implements Listener {
         }
     }
 
+    @EventHandler(priority = EventPriority.HIGHEST)
+    public void onFailMove(PlayerFailMoveEvent event) {
+        Player player = event.getPlayer();
+        if (VanishNoclipMovementPolicy.bypass(
+                visibility.isVanished(player.getUniqueId()),
+                event.getFailReason()
+        )) {
+            event.setAllowed(true);
+            event.setLogWarning(false);
+        }
+    }
+
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     public void onSuffocation(EntityDamageEvent event) {
         if (event.getCause() == EntityDamageEvent.DamageCause.SUFFOCATION
@@ -683,7 +694,6 @@ public final class VanishManager implements Listener {
         pendingStaffModeExitDisables.remove(playerId);
         reconciliationRetryAfter.remove(playerId);
         reconciliationFailureNotified.remove(playerId);
-        stopNoclipMaintenance(playerId);
         noclip.retire(playerId);
     }
 
@@ -707,11 +717,9 @@ public final class VanishManager implements Listener {
     private void resetNoclipBeforeDisable(UUID playerId) {
         Player player = plugin.getServer().getPlayer(playerId);
         if (player == null) {
-            stopNoclipMaintenance(playerId);
             noclip.retire(playerId);
             return;
         }
-        stopNoclipMaintenance(playerId);
         if (!noclip.reconcile(player, false)) {
             if (plugin.getLogger().isLoggable(Level.SEVERE)) {
                 plugin.getLogger().log(
@@ -900,105 +908,18 @@ public final class VanishManager implements Listener {
     private boolean reconcileNoclip(Player player) {
         UUID playerId = player.getUniqueId();
         boolean vanished = visibility.isVanished(playerId);
-        if (!vanished) {
-            stopNoclipMaintenance(playerId);
-        }
-        if (noclipRuntimeUnavailable(player, playerId, vanished)) {
+        if (vanished && !noclip.canEnable(player)) {
+            failClosedNoclip(player, "the pinned client adapter is unavailable");
             return false;
         }
-        if (!noclip.reconcile(player, vanished)) {
-            stopNoclipMaintenance(playerId);
-            if (vanished) {
-                failClosedNoclip(player, "client game-mode presentation failed");
-            }
-            requireSafeReconnect(player);
-            return false;
-        }
-        if (!vanished || ensureNoclipMaintenance(player)) {
+        if (noclip.reconcile(player, vanished)) {
             return true;
         }
-        boolean restored = noclip.reconcile(player, false);
-        failClosedNoclip(player, "server no-clip maintenance could not be scheduled");
-        if (!restored) {
-            requireSafeReconnect(player);
+        if (vanished) {
+            failClosedNoclip(player, "client game-mode presentation failed");
         }
+        requireSafeReconnect(player);
         return false;
-    }
-
-    private boolean noclipRuntimeUnavailable(Player player, UUID playerId, boolean vanished) {
-        if (!vanished || noclip.canEnable(player)) {
-            return false;
-        }
-        stopNoclipMaintenance(playerId);
-        failClosedNoclip(player, "the pinned client adapter is unavailable");
-        return true;
-    }
-
-    private boolean ensureNoclipMaintenance(Player player) {
-        UUID playerId = player.getUniqueId();
-        if (noclipMaintenanceTasks.containsKey(playerId)) {
-            return true;
-        }
-        try {
-            ScheduledTask task = player.getScheduler().runAtFixedRate(
-                    plugin,
-                    current -> maintainNoclip(player, current),
-                    () -> retireNoclipMaintenance(playerId),
-                    1L,
-                    1L
-            );
-            ScheduledTask previous = noclipMaintenanceTasks.putIfAbsent(playerId, task);
-            if (previous != null) {
-                task.cancel();
-            }
-            return true;
-        } catch (RuntimeException exception) {
-            plugin.getLogger().log(Level.SEVERE, "Could not schedule vanished-player no-clip maintenance", exception);
-            return false;
-        }
-    }
-
-    private void maintainNoclip(Player player, ScheduledTask task) {
-        UUID playerId = player.getUniqueId();
-        if (!visibility.isVanished(playerId)) {
-            stopNoclipMaintenance(playerId, task);
-            return;
-        }
-        try {
-            if (noclip.maintain(player)) {
-                return;
-            }
-            recoverNoclipMaintenance(player, task, "server no-clip ownership was lost");
-        } catch (RuntimeException exception) {
-            plugin.getLogger().log(Level.SEVERE, "Vanished-player no-clip maintenance failed", exception);
-            recoverNoclipMaintenance(player, task, "server no-clip maintenance failed");
-        }
-    }
-
-    private void recoverNoclipMaintenance(Player player, ScheduledTask task, String reason) {
-        stopNoclipMaintenance(player.getUniqueId(), task);
-        boolean restored = noclip.reconcile(player, false);
-        failClosedNoclip(player, reason);
-        if (!restored) {
-            requireSafeReconnect(player);
-        }
-    }
-
-    private void stopNoclipMaintenance(UUID playerId) {
-        ScheduledTask task = noclipMaintenanceTasks.remove(playerId);
-        if (task != null) {
-            task.cancel();
-        }
-    }
-
-    private void stopNoclipMaintenance(UUID playerId, ScheduledTask task) {
-        noclipMaintenanceTasks.remove(playerId, task);
-        task.cancel();
-    }
-
-    private void retireNoclipMaintenance(UUID playerId) {
-        noclipMaintenanceTasks.remove(playerId);
-        noclip.retire(playerId);
     }
 
     private void failClosedNoclip(Player player, String reason) {
