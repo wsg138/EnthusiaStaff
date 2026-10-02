@@ -228,12 +228,21 @@ public final class DiscordStaffAuthorityEndpoint implements AutoCloseable {
     }
 
     private void executePunishment(HttpExchange exchange, PunishmentRequest request) throws IOException {
+        String operation = request.path().substring("/v1/staff-punishments/".length());
+        if ("both-plan".equals(operation)) {
+            String body = new String(request.body(), StandardCharsets.UTF_8);
+            var input = net.enthusia.staff.protocol.CrossPlatformPunishmentWireCodec.decodeRequest(body);
+            var result = webPunishments.prepareCrossPlatform(input);
+            respond(exchange, 200,
+                    net.enthusia.staff.protocol.CrossPlatformPunishmentWireCodec.encodeResponse(result),
+                    request.authorization());
+            return;
+        }
         StaffWebPunishmentService.Request input = json.readValue(
                 request.body(), StaffWebPunishmentService.Request.class);
         if (input == null) {
             throw new IllegalArgumentException("request object is required");
         }
-        String operation = request.path().substring("/v1/staff-punishments/".length());
         Object result = webPunishments.execute(operation, input);
         respond(exchange, 200, json.writeValueAsString(result), request.authorization());
     }

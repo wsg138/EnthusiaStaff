@@ -27,6 +27,28 @@ test('Minecraft actions bind configured reason and target without accepting clie
   await assert.rejects(prepareModerationAction(env,session,'prepare',{...input,minecraftTarget:'../unknown'}));
 });
 
+test('Both actions require explicit scope and bind both immutable intents', async () => {
+  const id = '11111111-2222-4333-8444-555555555555';
+  const input = {scope:'BOTH', minecraftTarget:'KnownPlayer',
+    minecraftIntent:{reasonId:'chat.spam', explanation:'Minecraft evidence'}, intent};
+  const proof = await (await prepareModerationAction(env,session,'prepare',input)).json();
+  const body = JSON.parse(proof.body);
+  assert.equal(body.scope,'BOTH');
+  assert.equal(body.minecraftTarget,'KnownPlayer');
+  assert.deepEqual(body.minecraftIntent,input.minecraftIntent);
+  assert.deepEqual(body.intent,intent);
+  const confirm = await (await prepareModerationAction(env,session,'confirm',{
+    scope:'BOTH', minecraftTarget:'KnownPlayer', confirmationId:id
+  })).json();
+  const confirmed = JSON.parse(confirm.body);
+  assert.equal(confirmed.scope,'BOTH');
+  assert.equal(confirmed.intent,null);
+  assert.equal(confirmed.minecraftIntent,null);
+  await assert.rejects(prepareModerationAction(env,session,'prepare',{...input,scope:'Discord'}));
+  await assert.rejects(prepareModerationAction(env,session,'confirm',{...input,confirmationId:id}));
+  await assert.rejects(prepareModerationAction(env,session,'prepare',{scope:'BOTH',intent}));
+});
+
 test('action proof binds actor, guild, session, target and exact bytes', async () => {
   const response = await prepareModerationAction(env,session,'prepare',{targetKey:'discord:999',intent});
   const proof = await response.json();

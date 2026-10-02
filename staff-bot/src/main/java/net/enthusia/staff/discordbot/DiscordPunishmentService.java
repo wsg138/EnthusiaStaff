@@ -91,6 +91,14 @@ final class DiscordPunishmentService {
         }
     }
 
+    void validateIssue(long actorDiscordId, String actorName, long targetDiscordId, DiscordPunishmentIntent intent) {
+        DiscordUserId targetUserId = discordUser(targetDiscordId);
+        StaffModerationReadService.Target target = reads.discordTarget(targetUserId);
+        Actor actor = actor(actorDiscordId, actorName);
+        authorization.captureIssue(actor, actors.targetStaff(target), intent);
+        gateway.preflight(guildId, targetUserId, intent);
+    }
+
     Confirmation prepareIssue(long actorDiscordId, String actorName, long targetDiscordId, DiscordPunishmentIntent intent) {
         DiscordUserId targetUserId = discordUser(targetDiscordId);
         StaffModerationReadService.Target target = reads.discordTarget(targetUserId);

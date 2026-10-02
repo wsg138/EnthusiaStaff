@@ -12,11 +12,16 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
 import java.util.function.Supplier;
+import net.enthusia.staff.common.CaseId;
+import net.enthusia.staff.common.IdempotencyKey;
 import net.enthusia.staff.domain.OperationalMode;
+import net.enthusia.staff.domain.application.CreatePunishmentRequest;
 import net.enthusia.staff.domain.application.PreparePunishmentDraftRequest;
 import net.enthusia.staff.domain.application.PunishmentDraftConfirmation;
 import net.enthusia.staff.domain.application.PunishmentDraftEvaluation;
 import net.enthusia.staff.domain.application.PunishmentDraftWorkflow;
+import net.enthusia.staff.domain.application.PunishmentPreparation;
+import net.enthusia.staff.domain.application.PunishmentService;
 import net.enthusia.staff.domain.auth.Actor;
 import net.enthusia.staff.domain.auth.AuthorizationPolicy;
 import net.enthusia.staff.domain.auth.ModerationAction;
@@ -29,6 +34,8 @@ import net.enthusia.staff.domain.ports.PlayerDirectory;
 import net.enthusia.staff.domain.ports.ReasonPolicyRepository;
 import net.enthusia.staff.domain.sanction.SanctionSpec;
 import net.enthusia.staff.domain.sanction.SanctionType;
+import net.enthusia.staff.protocol.CrossPlatformPunishmentPreparationMapper;
+import net.enthusia.staff.protocol.CrossPlatformPunishmentPreparationWire;
 
 /** Private website requests use the same durable configured drafts as the in-game GUI. */
 public final class StaffWebPunishmentService {
@@ -49,12 +56,19 @@ public final class StaffWebPunishmentService {
     private final Object confirmationLock = new Object();
 
     public record Dependencies(Clock clock, Supplier<OperationalMode> mode,
-            Supplier<PunishmentDraftWorkflow> workflows, Supplier<PlayerDirectory> players,
-            ReasonPolicyRepository policies, AuthorizationPolicy authorization) {
+            Supplier<PunishmentDraftWorkflow> workflows, Supplier<PunishmentService> punishments,
+            Supplier<PlayerDirectory> players, ReasonPolicyRepository policies, AuthorizationPolicy authorization) {
+        public Dependencies(Clock clock, Supplier<OperationalMode> mode,
+                Supplier<PunishmentDraftWorkflow> workflows, Supplier<PlayerDirectory> players,
+                ReasonPolicyRepository policies, AuthorizationPolicy authorization) {
+            this(clock, mode, workflows, () -> null, players, policies, authorization);
+        }
+
         public Dependencies {
             java.util.Objects.requireNonNull(clock);
             java.util.Objects.requireNonNull(mode);
             java.util.Objects.requireNonNull(workflows);
+            java.util.Objects.requireNonNull(punishments);
             java.util.Objects.requireNonNull(players);
             java.util.Objects.requireNonNull(policies);
             java.util.Objects.requireNonNull(authorization);
@@ -125,8 +139,12 @@ public final class StaffWebPunishmentService {
     }
 
     private Actor authorizedActor(Request request) {
-        Actor actor = actors.apply(request.actorId());
-        if (actor == null || !actor.id().equals(request.actorId()) || actor.rank() == StaffRank.SYSTEM
+        return authorizedActor(request.actorId());
+    }
+
+    private Actor authorizedActor(UUID actorId) {
+        Actor actor = actors.apply(actorId);
+        if (actor == null || !actor.id().equals(actorId) || actor.rank() == StaffRank.SYSTEM
                 || !hasPunishmentAuthority(actor)) {
             throw new SecurityException("current staff punishment authority is required");
         }
@@ -152,22 +170,56 @@ public final class StaffWebPunishmentService {
     }
 
     private PlayerIdentity authorizedTarget(Request request, Actor actor) {
-        if (request.targetId() == null) {
+        return authorizedTarget(request.targetId(), actor);
+    }
+
+    private PlayerIdentity authorizedTarget(UUID targetId, Actor actor) {
+        if (targetId == null) {
             throw new IllegalArgumentException("a Minecraft target is required");
         }
         PlayerDirectory players = dependencies.players().get();
         if (players == null) {
             throw new IllegalStateException("player directory is unavailable");
         }
-        PlayerIdentity target = players.find(request.targetId().toString())
+        PlayerIdentity target = players.find(targetId.toString())
                 .orElseThrow(() -> new IllegalArgumentException("Minecraft player is not known to the network"));
-        if (!target.playerId().equals(request.targetId())) {
+        if (!target.playerId().equals(targetId)) {
             throw new IllegalStateException("player identity mismatch");
         }
-        if (!new StaffTargetHierarchyPolicy().permits(actor.rank(), targetRanks.apply(request.targetId()).orElse(null))) {
+        if (!new StaffTargetHierarchyPolicy().permits(actor.rank(), targetRanks.apply(targetId).orElse(null))) {
             throw new SecurityException("staff hierarchy protects this Minecraft player");
         }
         return target;
+    }
+
+    public CrossPlatformPunishmentPreparationWire.Response prepareCrossPlatform(
+            CrossPlatformPunishmentPreparationWire.Request request
+    ) {
+        if (request == null) {
+            throw new IllegalArgumentException("cross-platform preparation request is required");
+        }
+        Actor actor = authorizedActor(request.actorId());
+        authorizedTarget(request.targetId(), actor);
+        ReasonPolicy policy = dependencies.policies().find(request.reasonId())
+                .filter(StaffWebPunishmentService::supported)
+                .filter(value -> visibleAtRank(actor, value))
+                .orElseThrow(() -> new IllegalArgumentException("select a supported configured Minecraft reason"));
+        PunishmentService service = dependencies.punishments().get();
+        if (service == null) {
+            throw new IllegalStateException("punishment storage is unavailable");
+        }
+        CreatePunishmentRequest punishment = new CreatePunishmentRequest(
+                new IdempotencyKey(request.idempotencyKey()), request.targetId(), actor, policy.id(),
+                request.internalExplanation(), policy.publicByDefault() ? CaseVisibility.PUBLIC : CaseVisibility.PRIVATE,
+                List.of());
+        PunishmentPreparation result = service.prepareConfirmed(
+                punishment, dependencies.mode().get(), new CaseId(request.caseId()), dependencies.clock().instant());
+        if (result instanceof PunishmentPreparation.Rejected rejected) {
+            return CrossPlatformPunishmentPreparationWire.Response.rejected(rejected.code(), rejected.message());
+        }
+        return CrossPlatformPunishmentPreparationWire.Response.prepared(
+                CrossPlatformPunishmentPreparationMapper.plan(
+                        ((PunishmentPreparation.Prepared) result).plan()));
     }
 
     private PunishmentDraftWorkflow requiredWorkflow() {

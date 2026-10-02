@@ -24,12 +24,16 @@ final class ModerationActionApiService {
 
     record Request(String actorId, String guildId, String targetKey, String sessionBinding,
             Optional<IntentInput> intent, Optional<UUID> confirmationId,
-            Optional<String> minecraftTarget, Optional<MinecraftIntent> minecraftIntent) {
+            Optional<String> minecraftTarget, Optional<MinecraftIntent> minecraftIntent, Optional<String> scope) {
         Request {
             intent = intent == null ? Optional.empty() : intent;
             confirmationId = confirmationId == null ? Optional.empty() : confirmationId;
             minecraftTarget = minecraftTarget == null ? Optional.empty() : minecraftTarget;
             minecraftIntent = minecraftIntent == null ? Optional.empty() : minecraftIntent;
+            scope = scope == null ? Optional.empty() : scope;
+            scope.ifPresent(value -> {
+                if (!"BOTH".equals(value)) throw new IllegalArgumentException("unsupported action scope");
+            });
             minecraftTarget.ifPresent(target -> {
                 if (!target.matches("(?:[A-Za-z0-9_]{1,16}|[a-fA-F0-9]{8}(?:-[a-fA-F0-9]{4}){3}-[a-fA-F0-9]{12})")) {
                     throw new IllegalArgumentException("invalid Minecraft player name or UUID");
@@ -42,7 +46,15 @@ final class ModerationActionApiService {
 
         Request(String actorId, String guildId, String targetKey, String sessionBinding,
                 Optional<IntentInput> intent, Optional<UUID> confirmationId) {
-            this(actorId, guildId, targetKey, sessionBinding, intent, confirmationId, Optional.empty(), Optional.empty());
+            this(actorId, guildId, targetKey, sessionBinding, intent, confirmationId,
+                    Optional.empty(), Optional.empty(), Optional.empty());
+        }
+
+        Request(String actorId, String guildId, String targetKey, String sessionBinding,
+                Optional<IntentInput> intent, Optional<UUID> confirmationId,
+                Optional<String> minecraftTarget, Optional<MinecraftIntent> minecraftIntent) {
+            this(actorId, guildId, targetKey, sessionBinding, intent, confirmationId,
+                    minecraftTarget, minecraftIntent, Optional.empty());
         }
     }
 
@@ -122,6 +134,9 @@ final class ModerationActionApiService {
         if (CAPABILITIES.equals(operation)) {
             return capabilities(request, context);
         }
+        if (bothOperation(request)) {
+            return crossPlatformRequest(operation, request, context);
+        }
         if (minecraftOperation(request)) {
             return minecraftRequest(operation, request, context);
         }
@@ -137,13 +152,45 @@ final class ModerationActionApiService {
                     .put("enabled", false).set("reasons",
                             new com.fasterxml.jackson.databind.ObjectMapper().createArrayNode());
         }
-        return Map.of("discordEnabled", moderation.punishmentService().isPresent(),
-                "minecraftEnabled", minecraft.path("enabled").asBoolean(false),
+        boolean discordEnabled = moderation.punishmentService().isPresent();
+        boolean minecraftEnabled = minecraft.path("enabled").asBoolean(false);
+        return Map.of("discordEnabled", discordEnabled,
+                "minecraftEnabled", minecraftEnabled,
+                "bothEnabled", discordEnabled && minecraftEnabled && moderation.crossPlatformActions().isPresent(),
                 "minecraftReasons", minecraft.path("reasons"), "messageDeletionEnabled", false);
+    }
+
+    private static boolean bothOperation(Request request) {
+        return request.scope().filter("BOTH"::equals).isPresent();
     }
 
     private static boolean minecraftOperation(Request request) {
         return request.minecraftTarget().isPresent() || request.minecraftIntent().isPresent();
+    }
+
+    private Object crossPlatformRequest(String operation, Request request, ModerationReadContext context) {
+        long discordTarget = context.readTarget().userId()
+                .orElseThrow(() -> new IllegalArgumentException("select a Discord target"));
+        CrossPlatformActionService service = moderation.crossPlatformActions()
+                .orElseThrow(() -> new IllegalStateException("Both-platform enforcement is disabled"));
+        UUID minecraftTarget = minecraftTarget(operation, request);
+        if (PREPARE.equals(operation)) {
+            if (request.confirmationId().isPresent() || request.intent().isEmpty() || request.minecraftIntent().isEmpty()) {
+                throw new IllegalArgumentException("Both preparation requires Discord and Minecraft intent");
+            }
+            DiscordPunishmentIntent intent = request.intent().orElseThrow().toIntent();
+            validateRestriction(context, intent);
+            MinecraftIntent minecraft = request.minecraftIntent().orElseThrow();
+            return service.prepare(request, context, discordTarget, minecraftTarget,
+                    minecraft.reasonId(), minecraft.explanation(), intent);
+        }
+        if ((!CONFIRM.equals(operation) && !STATUS.equals(operation)) || request.confirmationId().isEmpty()
+                || request.intent().isPresent() || request.minecraftIntent().isPresent()) {
+            throw new IllegalArgumentException("invalid Both confirmation");
+        }
+        return CONFIRM.equals(operation)
+                ? service.confirm(request, context, discordTarget, minecraftTarget)
+                : service.status(request, context, discordTarget, minecraftTarget);
     }
 
     private Object discordRequest(String operation, Request request, ModerationReadContext context) {
@@ -248,19 +295,24 @@ final class ModerationActionApiService {
             throw new IllegalArgumentException("cannot prepare this request");
         }
         DiscordPunishmentIntent intent = request.intent().orElseThrow().toIntent();
-        intent.restriction().ifPresent(restriction -> {
-            var visible = new ModerationDiscordMessageReader().visibleChannels(context);
-            boolean allowed = visible.stream().anyMatch(channel -> restriction.kind() == DiscordRestrictionTarget.Kind.CHANNEL
-                    ? channel.id().equals(restriction.snowflake())
-                    : channel.categoryId().filter(restriction.snowflake()::equals).isPresent());
-            if (!allowed) throw new IllegalArgumentException("restriction scope is not visible to the actor");
-        });
+        validateRestriction(context, intent);
         DiscordPunishmentService.Confirmation prepared = service.prepareIssue(
                 context.actorId(), context.actorMember().getEffectiveName(), target, intent);
         Instant expiresAt = Instant.now().plusSeconds(120);
         drafts.put(prepared.token(), new Binding(request.actorId(), request.guildId(), request.targetKey(),
                 request.sessionBinding(), expiresAt));
         return new Prepared(prepared.token(), prepared.targetUserId(), intent, expiresAt);
+    }
+
+    private static void validateRestriction(ModerationReadContext context, DiscordPunishmentIntent intent) {
+        intent.restriction().ifPresent(restriction -> {
+            var visible = new ModerationDiscordMessageReader().visibleChannels(context);
+            boolean allowed = visible.stream().anyMatch(channel ->
+                    restriction.kind() == DiscordRestrictionTarget.Kind.CHANNEL
+                            ? channel.id().equals(restriction.snowflake())
+                            : channel.categoryId().filter(restriction.snowflake()::equals).isPresent());
+            if (!allowed) throw new IllegalArgumentException("restriction scope is not visible to the actor");
+        });
     }
 
     private Status confirm(Request request, ModerationReadContext context, DiscordPunishmentService service, long target) {

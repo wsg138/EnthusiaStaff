@@ -34,6 +34,12 @@ class StaffAuthorityHttpSigningTest {
                 () -> StaffAuthorityHttpSigning.punishmentRequestTarget(path, new byte[8193]));
         org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class,
                 () -> StaffAuthorityHttpSigning.punishmentRequestTarget("/v1/staff-punishments/prepare/../confirm", original));
+        String bothTarget = StaffAuthorityHttpSigning.punishmentRequestTarget(
+                "/v1/staff-punishments/both-plan", original);
+        var bothProof = StaffAuthorityHttpSigning.signRequest(CREDENTIAL, POST, bothTarget, NOW, NONCE);
+        assertEquals(StaffAuthorityHttpSigning.Verification.ACCEPTED,
+                StaffAuthorityHttpSigning.verifyRequest(CREDENTIAL, POST, bothTarget,
+                        bothProof.timestamp(), bothProof.nonce(), bothProof.signature(), CLOCK));
     }
     private static final String CREDENTIAL = "authority-test-credential-value-1234567890";
     private static final String METHOD = "GET";

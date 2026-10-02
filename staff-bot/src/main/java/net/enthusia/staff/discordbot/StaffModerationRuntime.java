@@ -97,6 +97,7 @@ final class StaffModerationRuntime implements AutoCloseable {
                     value,
                     reads,
                     actors,
+                    new HttpMinecraftPunishmentPreparer(authority),
                     guildId,
                     interactionCapacity,
                     interactionTtl
@@ -142,6 +143,10 @@ final class StaffModerationRuntime implements AutoCloseable {
 
     Optional<DiscordPunishmentService> punishmentService() {
         return punishments.map(DiscordPunishmentRuntime::service);
+    }
+
+    Optional<CrossPlatformActionService> crossPlatformActions() {
+        return punishments.map(DiscordPunishmentRuntime::crossPlatformActions);
     }
 
     HttpStaffAuthorityClient authority() {

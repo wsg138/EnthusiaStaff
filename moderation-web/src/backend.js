@@ -63,11 +63,12 @@ function requireActionOperation(operation) {
 
 function validateActionInput(session, operation, input) {
   requireFilterObject(input);
-  requireFilterKeys(input, new Set(['targetKey', 'intent', 'confirmationId', 'minecraftTarget', 'minecraftIntent']));
+  requireFilterKeys(input, new Set(['targetKey', 'intent', 'confirmationId', 'minecraftTarget', 'minecraftIntent', 'scope']));
   const minecraft = minecraftAction(input);
-  validateActionScope(operation, input, minecraft);
+  const both = input.scope === 'BOTH';
+  validateActionScope(operation, input, minecraft, both);
   const targetKey = actionTargetKey(session, input);
-  validateActionPayload(operation, input, minecraft);
+  validateActionPayload(operation, input, minecraft, both);
   return targetKey;
 }
 
@@ -75,7 +76,13 @@ function minecraftAction(input) {
   return input.minecraftTarget !== undefined || input.minecraftIntent !== undefined;
 }
 
-function validateActionScope(operation, input, minecraft) {
+function validateActionScope(operation, input, minecraft, both) {
+  if (input.scope !== undefined && !both) throw new Error('invalid action scope');
+  if (both) {
+    if (!minecraft || operation === 'capabilities') throw new Error('invalid Both action scope');
+    if (!validMinecraftTarget(input.minecraftTarget)) throw new Error('invalid Minecraft player');
+    return;
+  }
   if (!minecraft) return;
   if (input.intent !== undefined || operation === 'capabilities') throw new Error('cannot mix action scopes');
   if (!validMinecraftTarget(input.minecraftTarget)) throw new Error('invalid Minecraft player');
@@ -95,23 +102,32 @@ function actionTargetKey(session, input) {
   return targetKey;
 }
 
-function validateActionPayload(operation, input, minecraft) {
+function validateActionPayload(operation, input, minecraft, both) {
   if (operation === 'prepare') {
-    validatePreparedAction(input, minecraft);
+    validatePreparedAction(input, minecraft, both);
     return;
   }
   requireUnchangedPreparedIntent(input);
   validateConfirmation(operation, input.confirmationId);
 }
 
-function validatePreparedAction(input, minecraft) {
+function validatePreparedAction(input, minecraft, both) {
   if (input.confirmationId !== undefined) throw new Error('invalid draft');
+  if (both) {
+    validateMinecraftIntent(input.minecraftIntent);
+    validateDiscordIntent(input.intent);
+    return;
+  }
   if (minecraft) {
     validateMinecraftIntent(input.minecraftIntent);
     return;
   }
-  requireFilterObject(input.intent);
-  requireFilterKeys(input.intent, new Set(['type', 'duration', 'reason', 'explanation', 'restriction']));
+  validateDiscordIntent(input.intent);
+}
+
+function validateDiscordIntent(intent) {
+  requireFilterObject(intent);
+  requireFilterKeys(intent, new Set(['type', 'duration', 'reason', 'explanation', 'restriction']));
 }
 
 function validateMinecraftIntent(intent) {
@@ -157,7 +173,8 @@ async function actionRequestBody(session, input, targetKey) {
   const sessionBinding = hex(new Uint8Array(digest));
   const body = JSON.stringify({actorId:session.actorId, guildId:session.guildId, targetKey,
     sessionBinding, intent:nullableActionValue(input.intent), confirmationId:nullableActionValue(input.confirmationId),
-    minecraftTarget:nullableActionValue(input.minecraftTarget), minecraftIntent:nullableActionValue(input.minecraftIntent)});
+    minecraftTarget:nullableActionValue(input.minecraftTarget), minecraftIntent:nullableActionValue(input.minecraftIntent),
+    scope:nullableActionValue(input.scope)});
   if (textEncoder.encode(body).length > 65_536) throw new Error('action body too large');
   return body;
 }

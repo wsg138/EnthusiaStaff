@@ -144,7 +144,7 @@ final class PaperIntegrationManager implements Listener {
         DiscordStaffAuthorityEndpoint.startIfConfigured(plugin(),
                 new net.enthusia.staff.paper.auth.StaffWebPunishmentService.Dependencies(
                         clock(), dependencies.policy().writeMode(), dependencies.stores().punishmentDraftWorkflow(),
-                        dependencies.stores().players(), dependencies.policy().reasons(),
+                        dependencies.stores().punishmentService(), dependencies.stores().players(), dependencies.policy().reasons(),
                         dependencies.policy().authorization()))
                 .ifPresent(endpoint -> discordStaffAuthority = endpoint);
     }

@@ -42,6 +42,13 @@ public final class CrossPlatformPunishmentService {
         this.authorization = authorization;
     }
 
+    public PunishmentPreparation prepareMinecraft(CreatePunishmentRequest request, net.enthusia.staff.common.CaseId caseId) {
+        if (request == null || caseId == null) {
+            throw new IllegalArgumentException("Minecraft preparation fields must be present");
+        }
+        return minecraft.prepareConfirmed(request, caseId);
+    }
+
     public CrossPlatformPunishmentOutcome createBoth(CrossPlatformPunishmentRequest request) {
         if (request == null) {
             throw new IllegalArgumentException("request must be present");

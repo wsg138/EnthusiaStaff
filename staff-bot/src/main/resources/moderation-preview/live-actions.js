@@ -72,12 +72,25 @@ function liveActionInput(w) {
   const duration = type === 'WARNING' || type === 'KICK' ? 'instant' : actionDuration(w.duration);
   const intent = {type, duration, reason:w.offense.label, explanation:liveExplanation(w), restriction:null};
   intent.restriction = liveRestriction(w, type);
-  return {targetKey:liveModeration.bootstrap?.targetKey, intent};
+  const input = {targetKey:liveModeration.bootstrap?.targetKey, intent};
+  if (w.liveScope === 'Both') {
+    input.scope = 'BOTH';
+    input.minecraftTarget = w.minecraftTarget;
+    input.minecraftIntent = {reasonId:w.minecraftReason, explanation:w.minecraftExplanation || ''};
+  }
+  return input;
 }
 
 function requireLiveActionContext(workflow) {
   if (!liveActionCapabilities?.discordEnabled) throw new Error('Discord enforcement is not enabled yet.');
-  if (workflow.scope !== 'Discord') throw new Error('Minecraft enforcement has not passed activation checks.');
+  if (workflow.liveScope === 'Both') {
+    if (!liveActionCapabilities?.bothEnabled) throw new Error('Both-platform enforcement is not enabled.');
+    if (!workflow.minecraftTarget || !workflow.minecraftReason) {
+      throw new Error('Select a linked Minecraft account and configured Minecraft reason.');
+    }
+  } else if (workflow.scope !== 'Discord') {
+    throw new Error('Minecraft enforcement has not passed activation checks.');
+  }
   if (state.deleting.size) throw new Error('Clear deletion selections. Message deletion is not enabled.');
   if (!workflow.dm) throw new Error('Live actions require a target notification.');
 }
@@ -157,6 +170,10 @@ async function submitLiveConfirmation(workflow) {
   workflow.submitting = true;
   $('[data-confirm]').disabled = true;
   const input = {targetKey:workflow.livePrepared.targetKey, confirmationId:workflow.livePrepared.confirmationId};
+  if (workflow.liveScope === 'Both') {
+    input.scope = 'BOTH';
+    input.minecraftTarget = workflow.minecraftTarget;
+  }
   try {
     workflow.liveStatus = await requestModerationAction('confirm', input);
     workflow.step = 'complete';
@@ -193,11 +210,15 @@ window.renderCompleteStep = function () {
   const result = state.workflow?.liveStatus;
   $('#workflowTitle').textContent = 'Live action status';
   $('#workflowSteps').replaceChildren();
-  replaceChildrenOf($('#workflowBody'), element('section',{className:'card'},
+  const rows = [
     element('h3',{text:result?.state || 'Status unavailable'}),
     element('p',{text:result?.externalApplied ? 'Discord applied the action.' : 'Discord has not confirmed the effect.'}),
     element('p',{text:'Target notification: ' + (result?.dmOutcome || 'Unknown')}),
-    element('p',{text:'Punishment ID: ' + (result?.punishmentId || 'Unknown')})));
+    element('p',{text:'Punishment ID: ' + (result?.punishmentId || 'Unknown')})
+  ];
+  if (result?.caseId) rows.push(element('p',{text:'Minecraft case: ' + result.caseId
+    + (result.minecraftCommitted ? ' · committed' : '')}));
+  replaceChildrenOf($('#workflowBody'), element('section',{className:'card'},rows));
   replaceChildrenOf($('#workflowFooter'),buttonNode('Done','button primary',{done:''}));
   $('[data-done]').addEventListener('click',closeWorkflow);
 };
@@ -222,8 +243,10 @@ window.approvalReviewText = function (workflow) {
 const simulationScopeField = window.scopeField;
 window.scopeField = function (workflow) {
   if (state.session?.staging !== false) return simulationScopeField(workflow);
-  workflow.scope = 'Discord';
-  return fieldLabel('Scope',element('select',{id:'customScope',disabled:true},optionNode('Discord','Discord',true)));
+  const both = workflow.liveScope === 'Both';
+  workflow.scope = both ? 'Both' : 'Discord';
+  return fieldLabel('Scope',element('select',{id:'customScope',disabled:true},
+    optionNode(workflow.scope, workflow.scope, true)));
 };
 const simulationOffenseStep = window.renderOffenseStep;
 window.renderOffenseStep = function () {

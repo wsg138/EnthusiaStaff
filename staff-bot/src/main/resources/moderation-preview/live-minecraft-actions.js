@@ -42,9 +42,72 @@ function renderScopeChoice() {
     $('#punishmentDialog').close();
     originalLiveOpenWorkflow();
   });
-  $('#workflowFooter').replaceChildren(minecraft,discord);
+  const buttons = [minecraft,discord];
+  if (liveActionCapabilities?.bothEnabled) {
+    const both = buttonNode('Both','button secondary',{});
+    both.addEventListener('click',openBothWorkflow);
+    buttons.push(both);
+  }
+  $('#workflowFooter').replaceChildren(...buttons);
   $('#punishmentDialog').showModal();
 }
+
+function openBothWorkflow() {
+  const selectedTarget = minecraftWorkflow?.target || '';
+  minecraftWorkflow = null;
+  $('#punishmentDialog').close();
+  originalLiveOpenWorkflow();
+  const workflow = state.workflow;
+  workflow.liveScope = 'Both';
+  workflow.minecraftTarget = selectedTarget;
+  workflow.minecraftReason = '';
+  workflow.minecraftExplanation = '';
+  renderWorkflow();
+}
+
+const bothOptionsRenderer = window.renderOptionsStep;
+window.renderOptionsStep = function () {
+  bothOptionsRenderer();
+  const workflow = state.workflow;
+  if (state.session?.staging !== false || workflow?.liveScope !== 'Both') return;
+  const target = element('select',{id:'bothMinecraftTarget'},optionNode('','Select linked Minecraft account',true));
+  for (const account of liveModeration.bootstrap?.linkedAccounts || []) {
+    target.appendChild(optionNode(account.playerId,
+      (account.username || account.playerId) + (account.main ? ' · main' : ''),
+      workflow.minecraftTarget === account.playerId));
+  }
+  const reason = element('select',{id:'bothMinecraftReason'},optionNode('','Select configured reason',true));
+  for (const option of liveActionCapabilities.minecraftReasons || []) {
+    reason.appendChild(optionNode(option.id, option.family + ' — ' + option.label,
+      workflow.minecraftReason === option.id));
+  }
+  const explanation = element('textarea',{id:'bothMinecraftExplanation',value:workflow.minecraftExplanation || '',
+    attrs:{maxlength:4000,rows:4},placeholder:'Minecraft case explanation'});
+  target.addEventListener('change',() => { workflow.minecraftTarget = target.value; });
+  reason.addEventListener('change',() => { workflow.minecraftReason = reason.value; });
+  explanation.addEventListener('input',() => { workflow.minecraftExplanation = explanation.value; });
+  $('#workflowBody').appendChild(element('section',{className:'card option-section'},
+    sectionHeadingNode('Minecraft side','The selected configured reason is re-evaluated on confirmation.'),
+    fieldLabel('Linked Minecraft account',target),
+    fieldLabel('Configured Minecraft reason',reason),
+    fieldLabel('Minecraft explanation',explanation)));
+};
+
+const bothReviewRenderer = window.renderReviewStep;
+window.renderReviewStep = function () {
+  bothReviewRenderer();
+  const workflow = state.workflow;
+  if (state.session?.staging !== false || workflow?.liveScope !== 'Both') return;
+  const selected = (liveActionCapabilities.minecraftReasons || [])
+    .find(option => option.id === workflow.minecraftReason);
+  $('#workflowBody').appendChild(element('section',{className:'card'},
+    element('h3',{text:'Minecraft side'}),
+    summaryList([
+      ['Player',workflow.minecraftTarget || 'Not selected'],
+      ['Reason',selected ? selected.family + ' — ' + selected.label : 'Not selected'],
+      ['Explanation',workflow.minecraftExplanation || 'None']
+    ])));
+};
 
 $('#punishmentDialog').addEventListener('cancel', event => {
   if (minecraftWorkflow?.busy) event.preventDefault();

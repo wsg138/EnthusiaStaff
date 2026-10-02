@@ -12,6 +12,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import net.enthusia.staff.common.CaseId;
 import net.enthusia.staff.common.IdempotencyKey;
 import net.enthusia.staff.common.SecureIdentifiers;
 import net.enthusia.staff.domain.OperationalMode;
@@ -103,6 +104,25 @@ class PunishmentServiceTest {
         assertEquals(canonical.family(), committed.family());
         assertEquals(canonical.publicReason(), committed.publicReason());
         assertEquals("v2", committed.configurationVersion());
+    }
+
+    @Test
+    void prepareConfirmedUsesSuppliedCaseWithoutPersisting() {
+        CapturingStore store = new CapturingStore(List.of());
+        PunishmentService service = service(
+                new AtomicReasonPolicyRepository("v1", List.of(policy(StaffRank.MOD, standardSteps()))),
+                store
+        );
+        CaseId caseId = new CaseId("0123456789ABCDEF");
+
+        PunishmentPreparation.Prepared prepared = assertInstanceOf(
+                PunishmentPreparation.Prepared.class,
+                service.prepareConfirmed(request(StaffRank.MOD, List.of()), OperationalMode.ACTIVE, caseId, NOW)
+        );
+
+        assertEquals(caseId, prepared.plan().caseId());
+        assertEquals(NOW, prepared.plan().issuedAt());
+        assertEquals(0, store.plans.size());
     }
 
     @Test
