@@ -27,8 +27,9 @@ final class DiscordEventRenderer {
                     "staffId", TARGET_ID, "actorId", "sessionId", "rank", "active", "reason", "serverId", STATE
             ),
             "alerts", List.of(
-                    "caseId", TARGET_ID, "sanctionId", "requestId", "reportId", "destination",
-                    "errorCode", "status", STATE, "type", "serverId"
+                    "caseId", TARGET_ID, "sanctionId", "requestId", "reportId", "operationId",
+                    "stallId", "reviewDueAt", "destination", "errorCode", "status", STATE,
+                    "type", "serverId"
             )
     );
 

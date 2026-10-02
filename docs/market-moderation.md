@@ -70,7 +70,7 @@ Restoration additionally requires `enthusiastaff.market.restore` and Founder-lev
 
 ## Review alerts and restart recovery
 
-Migration `V19__market_compliance_journal.sql` adds idempotency, recovery-window,
+Migration `V21__market_compliance_journal.sql` adds idempotency, recovery-window,
 revision, creation-time, and review-alert metadata to `market_compliance_cases`. New
 operations always populate those fields; legacy rows remain readable but are not treated
 as recoverable ES-X03 operations without an idempotency key.
@@ -94,8 +94,8 @@ result; stale journal or provider revisions return a conflict or quarantine outc
 
 ## Validation boundary
 
-The root clean build runs Java 21 unit and MariaDB Testcontainers coverage, including the
-V18-to-V19 upgrade and durable market journal lifecycle. Market independently tests V025,
+The root clean build runs unit and MariaDB Testcontainers coverage, including the
+V20-to-V21 upgrade and durable market journal lifecycle. Market independently tests V025,
 concurrent preparation, snapshot verification, and exact restoration. These tests do not
 replace representative destructive, process-kill, latency, or load acceptance, which is
 owned by the later ES-V03 validation package. No production listings or player data are

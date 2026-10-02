@@ -53,6 +53,25 @@ final class DiscordEventRendererTest {
     }
 
     @Test
+    void marketReviewAlertIncludesActionableIdsButWithholdsUnapprovedFields() {
+        String rendered = renderer.render(message(
+                "alerts",
+                "MARKET_REVIEW_DUE",
+                "{"operationId":"op-1","caseId":"case-1","targetId":"target-1","
+                        + ""stallId":"stall-1","reviewDueAt":"2026-10-03T00:00:00Z","
+                        + ""requestedBy":"private-actor","snapshotChecksum":"private-checksum"}"
+        ));
+
+        assertTrue(rendered.contains("operationId=op-1"));
+        assertTrue(rendered.contains("caseId=case-1"));
+        assertTrue(rendered.contains("targetId=target-1"));
+        assertTrue(rendered.contains("stallId=stall-1"));
+        assertTrue(rendered.contains("reviewDueAt=2026-10-03T00:00:00Z"));
+        assertFalse(rendered.contains("private-actor"));
+        assertFalse(rendered.contains("private-checksum"));
+    }
+
+    @Test
     void staffLogTextIsNormalizedAndBounded() {
         String rendered = renderer.render(message(
                 "logs-staffmode",

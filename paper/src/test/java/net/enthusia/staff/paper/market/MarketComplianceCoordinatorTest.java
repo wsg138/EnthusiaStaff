@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
@@ -111,6 +112,38 @@ class MarketComplianceCoordinatorTest {
 
         assertEquals(1, coordinator.recoverPending().toCompletableFuture().join());
         assertEquals(MarketComplianceState.PREPARED, store.find(OPERATION_ID).orElseThrow().state());
+    }
+
+    @Test
+    void expiredRecoveryWindowQuarantinesWithoutProviderMutation() {
+        gateway.prepare = request -> CompletableFuture.failedStage(
+                new IllegalStateException("provider unavailable")
+        );
+        coordinator.prepareStall(
+                admin(), TARGET_ID, CASE_ID, STALL_ID, Optional.empty()
+        ).toCompletableFuture().join();
+
+        AtomicInteger recoveryAttempts = new AtomicInteger();
+        gateway.prepare = request -> {
+            recoveryAttempts.incrementAndGet();
+            return completed(operationResult(request, MarketOperationRecord.State.PREPARED));
+        };
+        coordinator = new MarketComplianceCoordinator(
+                new MarketCoordinatorRuntime(
+                        Clock.fixed(NOW.plus(Duration.ofDays(31)), ZoneOffset.UTC),
+                        () -> mode,
+                        new DefaultAuthorizationPolicy(),
+                        () -> store,
+                        FixedCaseLookup::new,
+                        Runnable::run
+                ),
+                gateway,
+                () -> OPERATION_ID
+        );
+
+        assertEquals(1, coordinator.recoverPending().toCompletableFuture().join());
+        assertEquals(0, recoveryAttempts.get());
+        assertEquals(MarketComplianceState.QUARANTINED, store.find(OPERATION_ID).orElseThrow().state());
     }
 
     @Test

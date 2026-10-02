@@ -367,6 +367,16 @@ public final class MarketComplianceCoordinator {
     }
 
     private CompletionStage<MarketCoordinationResult> recover(MarketComplianceOperation operation) {
+        Instant now = clock.instant();
+        if (!now.isBefore(operation.request().recoveryUntil())) {
+            return supply(() -> reconciler.quarantine(
+                    requireStore(),
+                    operation,
+                    operation.providerRevision(),
+                    "Market recovery window expired; manual reconciliation is required",
+                    now
+            ));
+        }
         if (!caseMatches(operation.request())) {
             return supply(() -> reconciler.quarantine(
                     requireStore(),
