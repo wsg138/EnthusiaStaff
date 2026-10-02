@@ -1,0 +1,54 @@
+name: PR280 PMD Diagnostic
+
+on:
+  pull_request:
+    paths:
+      - "paper/**/*.java"
+      - "velocity/**/*.java"
+      - "ruleset.xml"
+      - ".github/workflows/pr280-pmd-diagnostic.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  pmd:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "21"
+      - name: Run repository PMD 6.55 rules
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          curl -fsSLo /tmp/pmd.zip "https://github.com/pmd/pmd/releases/download/pmd_releases%2F6.55.0/pmd-bin-6.55.0.zip"
+          unzip -q /tmp/pmd.zip -d /tmp
+          runner=/tmp/pmd-bin-6.55.0/bin/run.sh
+          chmod +x "$runner"
+          mkdir -p pmd-diagnostic
+          rc=0
+          "$runner" pmd -d paper/src/main/java -R ruleset.xml -f csv -r pmd-diagnostic/paper-main.csv || rc=$?
+          if [[ "$rc" -ne 0 && "$rc" -ne 4 ]]; then exit "$rc"; fi
+          rc=0
+          "$runner" pmd -d paper/src/test/java -R ruleset.xml -f csv -r pmd-diagnostic/paper-test.csv || rc=$?
+          if [[ "$rc" -ne 0 && "$rc" -ne 4 ]]; then exit "$rc"; fi
+          rc=0
+          "$runner" pmd -d velocity/src/main/java -R ruleset.xml -f csv -r pmd-diagnostic/velocity-main.csv || rc=$?
+          if [[ "$rc" -ne 0 && "$rc" -ne 4 ]]; then exit "$rc"; fi
+          rc=0
+          "$runner" pmd -d velocity/src/test/java -R ruleset.xml -f csv -r pmd-diagnostic/velocity-test.csv || rc=$?
+          if [[ "$rc" -ne 0 && "$rc" -ne 4 ]]; then exit "$rc"; fi
+          cat pmd-diagnostic/*.csv
+      - name: Upload PMD diagnostics
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: pr280-pmd-diagnostic
+          path: pmd-diagnostic/
+          if-no-files-found: error
