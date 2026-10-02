@@ -1,0 +1,11 @@
+name: Temp263Proof
+version: 1.0.0
+main: net.enthusia.staff.validation.temp263.Temp263ProofPlugin
+api-version: '26.3'
+author: CodeX
+description: Disposable TEMP Paper 26.3 compatibility proof harness
+softdepend: [EnthusiaStaff]
+commands:
+  vproof:
+    description: Disposable exact-runtime proof control
+    usage: /vproof <abi|begin|status|teleport|geometry|checkpos|disable|forced-failure|plugin-disable|finalize>
