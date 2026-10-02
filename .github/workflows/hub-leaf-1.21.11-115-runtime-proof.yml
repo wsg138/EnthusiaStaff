@@ -32,7 +32,7 @@ jobs:
           java-version: "25"
 
       - name: Set up Node
-        uses: actions/setup-node@8f152de45cc393bb48ce5d89d36b731f54556e65 # v6.0.0
+        uses: actions/setup-node@v5
         with:
           node-version: "22"
 
@@ -45,7 +45,7 @@ jobs:
           changed="$(git diff --name-only "$FROZEN"..HEAD)"
           test "$changed" = ".github/workflows/hub-leaf-1.21.11-115-runtime-proof.yml" || {
             echo "Validation branch contains non-disposable changes:" >&2
-            printf '%s\\n' "$changed" >&2
+            printf '%s\n' "$changed" >&2
             exit 1
           }
           chmod +x ./gradlew
@@ -341,7 +341,10 @@ jobs:
           view-distance=4
           simulation-distance=4
           motd=HUB Leaf 115 disposable runtime proof
-          enable-rcon=true\nrcon.port=25575\nrcon.password=hub-proof-only\nbroadcast-rcon-to-ops=false
+          enable-rcon=true
+          rcon.port=25575
+          rcon.password=hub-proof-only
+          broadcast-rcon-to-ops=false
           PROPS
 
       - name: Boot Leaf with frozen Staff and probe harness
@@ -354,7 +357,7 @@ jobs:
           LEAF_PID=$!
           echo "$LEAF_PID" > ../leaf.pid
           for i in $(seq 1 180); do
-            if grep -qE 'Done \\([0-9.]+s\\)!|Done \\(' server.log; then
+            if grep -qE 'Done \([0-9.]+s\)!|Done \(' server.log; then
               echo "started=true" >> "$GITHUB_OUTPUT"
               break
             fi
