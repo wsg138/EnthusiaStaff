@@ -69,7 +69,10 @@ A failed attempt receives bounded exponential backoff. Repeated destination fail
 - `punishments`: punishment creation, sanction change/inheritance, punishment-request lifecycle.
 - `reports`: report creation and report state lifecycle.
 - `logs-staffmode`: freeze/unfreeze, vanish, staff-mode enter/exit.
-- `alerts`: case-linked `MARKET_REVIEW_DUE` notifications with bounded operation/case/target/stall/review-due fields; requester/checksum data is withheld, and channel-health failures remain internal staff alerts rather than recursively enqueueing another Discord notification.
+- `alerts`: case-linked `MARKET_REVIEW_DUE` notifications with bounded
+  operation/case/target/stall/review-due fields. Requester/checksum data is
+  withheld. Channel-health failures remain internal staff alerts rather than
+  recursively enqueueing another Discord notification.
 
 ## Relationship to StaffBot
 
