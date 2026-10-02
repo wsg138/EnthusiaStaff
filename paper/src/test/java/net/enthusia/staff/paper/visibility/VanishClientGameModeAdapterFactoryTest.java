@@ -18,8 +18,9 @@ class VanishClientGameModeAdapterFactoryTest {
     void acceptsOnlyExplicitlyProvenRuntimeIdentities() {
         assertTrue(supported(VanishClientGameModeAdapterFactory.PAPER_BRAND_ID, "26.2", 128));
         assertTrue(supported(VanishClientGameModeAdapterFactory.PAPER_BRAND_ID, "26.2", 129));
+        assertTrue(supported(VanishClientGameModeAdapterFactory.PAPER_BRAND_ID, "26.3", 134));
         assertTrue(supported(VanishClientGameModeAdapterFactory.LEAF_BRAND_ID, "1.21.11", 115));
-        assertFalse(supported(VanishClientGameModeAdapterFactory.PAPER_BRAND_ID, "26.3", 134));
+        assertFalse(supported(VanishClientGameModeAdapterFactory.PAPER_BRAND_ID, "26.3", 133));
         assertFalse(supported(VanishClientGameModeAdapterFactory.LEAF_BRAND_ID, "1.21.11", 114));
         assertFalse(VanishClientGameModeAdapterFactory.supportedRuntime(
                 VanishClientGameModeAdapterFactory.LEAF_BRAND_ID,
