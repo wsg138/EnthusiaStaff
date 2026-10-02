@@ -63,6 +63,7 @@ public final class StaffModeManager implements Listener {
     private final Map<UUID, StaffRank> ranks = new ConcurrentHashMap<>();
     private final Map<UUID, String> toolSessions = new ConcurrentHashMap<>();
     private final java.util.Set<UUID> transitions = ConcurrentHashMap.newKeySet();
+    private final java.util.Set<UUID> handoffGaps = ConcurrentHashMap.newKeySet();
     private final StaffModeRecoveryGate recoveryGate = new StaffModeRecoveryGate(transitions);
     private final java.util.Set<UUID> profileApplications = ConcurrentHashMap.newKeySet();
     private final java.util.Set<UUID> pendingRankChecks = ConcurrentHashMap.newKeySet();
@@ -103,7 +104,7 @@ public final class StaffModeManager implements Listener {
     }
 
     public boolean active(UUID playerId) {
-        return active.containsKey(playerId);
+        return active.containsKey(playerId) || handoffGaps.contains(playerId);
     }
 
     public boolean authorityActive(UUID playerId) {
@@ -130,6 +131,7 @@ public final class StaffModeManager implements Listener {
 
     public CompletableFuture<Boolean> rollbackBackendHandoff(UUID playerId, UUID transferId) {
         handoffResumes.cancel(playerId, transferId);
+        handoffGaps.remove(playerId);
         CompletableFuture<Boolean> result = new CompletableFuture<>();
         onEntity(playerId, player -> {
             StaffRank rank = PaperStaffRankResolver.resolve(player::hasPermission).orElse(null);
@@ -530,6 +532,7 @@ public final class StaffModeManager implements Listener {
             }
             removeRuntimeState(playerId);
             recoveryGate.clear(playerId);
+            handoffGaps.add(playerId);
             result.complete(true);
         } catch (RuntimeException exception) {
             recoveryGate.retry(playerId);
@@ -548,6 +551,7 @@ public final class StaffModeManager implements Listener {
         recoveryGate.clear(playerId);
         profileApplications.remove(playerId);
         pendingRankChecks.remove(playerId);
+        handoffGaps.remove(playerId);
     }
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
@@ -936,7 +940,7 @@ public final class StaffModeManager implements Listener {
     }
 
     private boolean protectedMode(UUID playerId) {
-        return active.containsKey(playerId) || transitions.contains(playerId);
+        return active.containsKey(playerId) || transitions.contains(playerId) || handoffGaps.contains(playerId);
     }
 
     private ItemStack item(UUID playerId, String toolSession, StaffToolDefinition tool) {
