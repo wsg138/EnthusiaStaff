@@ -1,0 +1,39 @@
+name: PR 282 Codacy diagnostic
+
+on:
+  push:
+    branches:
+      - fix/reopening-live-inventory-sharing
+
+permissions:
+  checks: read
+  contents: read
+
+jobs:
+  annotations:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Print current-head Codacy annotations
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          CHECK_ID=""
+          for attempt in $(seq 1 50); do
+            CHECK_ID="$(
+              gh api                 -H 'Accept: application/vnd.github+json'                 "/repos/wsg138/EnthusiaStaff/commits/${GITHUB_SHA}/check-runs?per_page=100"                 --jq '.check_runs[] | select(.name == "Codacy Static Code Analysis") | .id'                 | head -n 1
+            )"
+            if [[ -n "${CHECK_ID}" ]]; then
+              STATUS="$(
+                gh api                   -H 'Accept: application/vnd.github+json'                   "/repos/wsg138/EnthusiaStaff/check-runs/${CHECK_ID}"                   --jq '.status'
+              )"
+              if [[ "${STATUS}" == "completed" ]]; then
+                break
+              fi
+            fi
+            sleep 10
+          done
+          test -n "${CHECK_ID}"
+          gh api             -H 'Accept: application/vnd.github+json'             "/repos/wsg138/EnthusiaStaff/check-runs/${CHECK_ID}/annotations?per_page=100"             --jq '.[] | [.path, (.start_line|tostring), .annotation_level, .title, .message, (.raw_details // "")] | @tsv'
