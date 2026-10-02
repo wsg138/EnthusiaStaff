@@ -69,15 +69,18 @@ final class LiveInventoryTransferExecutionTest {
         InventoryImage replacement = before.withItem(0, null);
         return new LiveInventoryTransferExecution(
                 UUID.randomUUID(),
-                UUID.randomUUID(),
-                UUID.randomUUID(),
-                ModerationInventoryHolder.Kind.PLAYER,
-                0,
-                before,
-                replacement,
-                null,
-                stack(Material.DIAMOND, 4),
-                LiveInventoryTransferDecision.Action.PICKUP
+                new LiveInventoryTransferExecution.Participants(
+                        UUID.randomUUID(), UUID.randomUUID()
+                ),
+                new LiveInventoryTransferExecution.TargetSlot(
+                        ModerationInventoryHolder.Kind.PLAYER, 0
+                ),
+                new LiveInventoryTransferExecution.Images(before, replacement),
+                new LiveInventoryTransferExecution.CursorChange(
+                        null,
+                        stack(Material.DIAMOND, 4),
+                        LiveInventoryTransferDecision.Action.PICKUP
+                )
         );
     }
 
