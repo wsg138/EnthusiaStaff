@@ -14,6 +14,7 @@ final class PaperStaffModeHandoffHandler {
     static final String EXIT_REQUEST = "STAFF_MODE_HANDOFF_EXIT";
     static final String PREPARE_RESUME = "STAFF_MODE_HANDOFF_PREPARE";
     static final String ROLLBACK_RESUME = "STAFF_MODE_HANDOFF_ROLLBACK";
+    static final String CANCEL_RESUME = "STAFF_MODE_HANDOFF_CANCEL";
     static final String READY = "STAFF_MODE_READY";
     private static final Duration OPERATION_TIMEOUT = Duration.ofSeconds(8);
 
@@ -21,6 +22,8 @@ final class PaperStaffModeHandoffHandler {
         CompletableFuture<Boolean> close(UUID playerId, UUID sessionId, long revision);
 
         boolean prepare(UUID playerId, UUID transferId);
+
+        boolean cancel(UUID playerId, UUID transferId);
 
         CompletableFuture<Boolean> rollback(UUID playerId, UUID transferId);
     }
@@ -47,6 +50,11 @@ final class PaperStaffModeHandoffHandler {
             }
 
             @Override
+            public boolean cancel(UUID playerId, UUID transferId) {
+                return manager.cancelBackendHandoffResume(playerId, transferId);
+            }
+
+            @Override
             public CompletableFuture<Boolean> rollback(UUID playerId, UUID transferId) {
                 return manager.rollbackBackendHandoff(playerId, transferId);
             }
@@ -55,7 +63,7 @@ final class PaperStaffModeHandoffHandler {
 
     boolean handles(ProtocolEnvelope envelope) {
         return switch (envelope.messageType()) {
-            case EXIT_REQUEST, PREPARE_RESUME, ROLLBACK_RESUME -> true;
+            case EXIT_REQUEST, PREPARE_RESUME, ROLLBACK_RESUME, CANCEL_RESUME -> true;
             default -> false;
         };
     }
@@ -67,6 +75,7 @@ final class PaperStaffModeHandoffHandler {
                 case EXIT_REQUEST -> await(operations.close(
                         uuid(payload, "playerId"), uuid(payload, "sessionId"), payload.path("revision").asLong(-1L)));
                 case PREPARE_RESUME -> operations.prepare(uuid(payload, "playerId"), uuid(payload, "transferId"));
+                case CANCEL_RESUME -> operations.cancel(uuid(payload, "playerId"), uuid(payload, "transferId"));
                 case ROLLBACK_RESUME -> await(operations.rollback(
                         uuid(payload, "playerId"), uuid(payload, "transferId")));
                 default -> false;

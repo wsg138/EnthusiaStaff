@@ -126,22 +126,36 @@ public final class StaffModeManager implements Listener {
     }
 
     public boolean prepareBackendHandoffResume(UUID playerId, UUID transferId) {
-        return handoffResumes.prepare(playerId, transferId);
+        if (!handoffResumes.prepare(playerId, transferId)) {
+            return false;
+        }
+        handoffGaps.add(playerId);
+        return true;
+    }
+
+    public boolean cancelBackendHandoffResume(UUID playerId, UUID transferId) {
+        handoffResumes.cancel(playerId, transferId);
+        abandonHandoffGap(playerId);
+        return true;
     }
 
     public CompletableFuture<Boolean> rollbackBackendHandoff(UUID playerId, UUID transferId) {
         handoffResumes.cancel(playerId, transferId);
+        handoffGaps.add(playerId);
         CompletableFuture<Boolean> result = new CompletableFuture<>();
         onEntity(playerId, player -> {
-            handoffGaps.remove(playerId);
             StaffRank rank = PaperStaffRankResolver.resolve(player::hasPermission).orElse(null);
             if (rank == null) {
+                abandonHandoffGap(playerId);
                 result.complete(false);
                 return;
             }
             enter(player, rank);
             result.complete(active.containsKey(playerId) || transitions.contains(playerId));
-        }, () -> result.complete(false));
+        }, () -> {
+            abandonHandoffGap(playerId);
+            result.complete(false);
+        });
         return result;
     }
 
@@ -256,9 +270,11 @@ public final class StaffModeManager implements Listener {
     @EventHandler(priority = EventPriority.MONITOR)
     public void onJoin(PlayerJoinEvent event) {
         Player player = event.getPlayer();
-        if (handoffResumes.consume(player.getUniqueId()).isPresent()) {
+        UUID playerId = player.getUniqueId();
+        if (handoffResumes.consume(playerId).isPresent()) {
             StaffRank rank = PaperStaffRankResolver.resolve(player::hasPermission).orElse(null);
             if (rank == null) {
+                abandonHandoffGap(playerId);
                 player.sendMessage(StaffMessageStyle.style(Component.text(
                         "Staff Mode could not resume because your explicit staff rank is unavailable."
                 )));
@@ -266,6 +282,9 @@ public final class StaffModeManager implements Listener {
             }
             enter(player, rank);
             return;
+        }
+        if (handoffGaps.contains(playerId)) {
+            abandonHandoffGap(playerId);
         }
         recover(player);
     }
@@ -425,6 +444,7 @@ public final class StaffModeManager implements Listener {
             toolSessions.remove(playerId);
             return;
         }
+        handoffGaps.remove(playerId);
         try {
             activeSessionListener.accept(session);
         } catch (RuntimeException exception) {
@@ -874,6 +894,7 @@ public final class StaffModeManager implements Listener {
     private void retainRecoveryAfterRuntimeExit(UUID playerId) {
         recoveryGate.retry(playerId);
         removeRuntimeState(playerId);
+        handoffGaps.remove(playerId);
         try {
             exitListener.accept(playerId);
         } catch (RuntimeException exception) {
@@ -884,10 +905,22 @@ public final class StaffModeManager implements Listener {
     private void completeRuntimeExit(UUID playerId) {
         removeRuntimeState(playerId);
         recoveryGate.clear(playerId);
+        handoffGaps.remove(playerId);
         try {
             exitListener.accept(playerId);
         } catch (RuntimeException exception) {
             plugin.getLogger().log(Level.WARNING, "Post-exit staff-mode cleanup callback failed", exception);
+        }
+    }
+
+    private void abandonHandoffGap(UUID playerId) {
+        if (!handoffGaps.remove(playerId)) {
+            return;
+        }
+        try {
+            exitListener.accept(playerId);
+        } catch (RuntimeException exception) {
+            plugin.getLogger().log(Level.WARNING, "Post-handoff staff-mode cleanup callback failed", exception);
         }
     }
 

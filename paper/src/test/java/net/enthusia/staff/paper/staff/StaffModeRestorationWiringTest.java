@@ -72,6 +72,17 @@ class StaffModeRestorationWiringTest {
     }
 
     @Test
+    void destinationHandoffIntentProtectsVanishUntilFreshSessionActivates() throws IOException {
+        String prepare = method("public boolean prepareBackendHandoffResume", "public boolean cancelBackendHandoffResume");
+        String activation = method("private void activateDurableSession", "private boolean validHandoffSource");
+
+        assertTrue(prepare.contains("handoffGaps.add(playerId)"));
+        assertTrue(activation.contains("handoffGaps.remove(playerId)"));
+        assertTrue(activation.indexOf("handoffGaps.remove(playerId)")
+                < activation.indexOf("activeSessionListener.accept(session)"));
+    }
+
+    @Test
     void cleanExitSuccessMessageIsOnlyEmittedAfterVerificationPasses() throws IOException {
         String method = method("private void completeRestoration", "private void retainRecoveryAfterRuntimeExit");
         int mismatch = method.indexOf("if (!closed)");

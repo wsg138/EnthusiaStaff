@@ -145,6 +145,7 @@ public final class EnthusiaStaffVelocityPlugin {
     private final java.util.concurrent.ConcurrentHashMap<UUID, CompletableFuture<Void>> presenceUpdates =
             new java.util.concurrent.ConcurrentHashMap<>();
     private final StaffModeReconnectCoordinator staffReconnects = new StaffModeReconnectCoordinator();
+    private final StaffModeHandoffTracker staffHandoffs = new StaffModeHandoffTracker();
 
     private volatile ExecutorService workers;
     private volatile VelocityConfiguration configuration;
@@ -1090,6 +1091,10 @@ public final class EnthusiaStaffVelocityPlugin {
     }
 
     private void enforceSafeServerSwitch(ServerPreConnectEvent event) {
+        if (staffHandoffs.inProgress(event.getPlayer().getUniqueId())) {
+            denyServerSwitch(event, "A Staff Mode backend handoff is already in progress.");
+            return;
+        }
         InventoryJournalStore inventories = inventoryJournalStore;
         EconomyJournalStore economies = economyJournalStore;
         if (inventories == null || economies == null) {
@@ -1216,15 +1221,20 @@ public final class EnthusiaStaffVelocityPlugin {
             denyServerSwitch(event, "You cannot switch backends while this Staff Mode snapshot requires recovery.");
             return;
         }
-        StaffModeBackendHandoffCoordinator coordinator = new StaffModeBackendHandoffCoordinator(
-                () -> StaffModeBackendHandoffCoordinator.channelTransport(channelServer),
-                sessions::active,
-                UUID::randomUUID
-        );
-        var decision = coordinator.transfer(event.getPlayer().getUniqueId(), session, current, requested);
-        if (!decision.allowed()) {
-            denyServerSwitch(event, decision.message());
+        UUID playerId = event.getPlayer().getUniqueId();
+        UUID transferId = UUID.randomUUID();
+        if (!staffHandoffs.begin(playerId, current, requested, transferId, Clock.systemUTC().instant())) {
+            denyServerSwitch(event, "A Staff Mode backend handoff is already in progress.");
+            return;
         }
+        StaffModeBackendHandoffCoordinator coordinator = handoffCoordinator(sessions);
+        var decision = coordinator.transfer(playerId, session, current, requested, transferId);
+        if (!decision.allowed()) {
+            staffHandoffs.clear(playerId, transferId);
+            denyServerSwitch(event, decision.message());
+            return;
+        }
+        scheduleStaffHandoffTimeout(playerId, transferId);
     }
 
     private boolean acceptStaffModeReady(ProtocolEnvelope envelope) {
@@ -1235,7 +1245,9 @@ public final class EnthusiaStaffVelocityPlugin {
             JsonNode payload = json.readTree(envelope.payloadJson());
             UUID playerId = UUID.fromString(payload.path("playerId").asText());
             UUID sessionId = UUID.fromString(payload.path("sessionId").asText());
-            continuePendingReconnect(playerId, sessionId, envelope.serverId());
+            if (!completePendingStaffHandoff(playerId, envelope.serverId())) {
+                continuePendingReconnect(playerId, sessionId, envelope.serverId());
+            }
             return true;
         } catch (java.io.IOException | IllegalArgumentException exception) {
             logger.warn("Rejected malformed Staff Mode readiness message from {}", envelope.serverId());
@@ -1264,6 +1276,97 @@ public final class EnthusiaStaffVelocityPlugin {
             proxy.getScheduler().buildTask(this, () ->
                     player.createConnectionRequest(destination).fireAndForget()).schedule();
         }
+    }
+
+    private StaffModeBackendHandoffCoordinator handoffCoordinator(StaffSessionStore sessions) {
+        java.util.function.Function<UUID, Optional<net.enthusia.staff.domain.staff.StaffSessionSnapshot>> lookup =
+                sessions == null ? ignored -> Optional.empty() : sessions::active;
+        return new StaffModeBackendHandoffCoordinator(
+                () -> StaffModeBackendHandoffCoordinator.channelTransport(channelServer),
+                lookup
+        );
+    }
+
+    private boolean completePendingStaffHandoff(UUID playerId, String readyBackend) {
+        Player player = proxy.getPlayer(playerId).orElse(null);
+        String current = player == null || player.getCurrentServer().isEmpty()
+                ? null
+                : player.getCurrentServer().orElseThrow().getServerInfo().getName();
+        return staffHandoffs.completeReady(playerId, readyBackend, current);
+    }
+
+    private void scheduleStaffHandoffTimeout(UUID playerId, UUID transferId) {
+        proxy.getScheduler().buildTask(
+                this,
+                () -> handleStaffHandoffTimeout(playerId, transferId)
+        ).delay(StaffModeHandoffTracker.TIMEOUT_SECONDS, TimeUnit.SECONDS).schedule();
+    }
+
+    private void handleStaffHandoffTimeout(UUID playerId, UUID transferId) {
+        var pending = staffHandoffs.claimTimedOut(playerId, transferId, Clock.systemUTC().instant());
+        if (pending.isEmpty()) {
+            return;
+        }
+        var handoff = pending.orElseThrow();
+        if (!submitWorker(() -> recoverTimedOutStaffHandoff(playerId, handoff))) {
+            staffHandoffs.restore(handoff, Clock.systemUTC().instant().plusSeconds(2));
+            proxy.getScheduler().buildTask(
+                    this,
+                    () -> handleStaffHandoffTimeout(playerId, transferId)
+            ).delay(2, TimeUnit.SECONDS).schedule();
+        }
+    }
+
+    private void recoverTimedOutStaffHandoff(UUID playerId, StaffModeHandoffTracker.Pending pending) {
+        String current = proxy.getPlayer(playerId)
+                .flatMap(Player::getCurrentServer)
+                .map(connection -> connection.getServerInfo().getName())
+                .orElse(null);
+        StaffSessionStore sessions = staffSessionStore;
+        var durable = sessions == null ? Optional.<net.enthusia.staff.domain.staff.StaffSessionSnapshot>empty()
+                : sessions.active(playerId);
+        if (durableStaffModeArrived(durable, pending.destination())) {
+            return;
+        }
+        StaffModeBackendHandoffCoordinator coordinator = handoffCoordinator(sessions);
+        if (current != null && current.equalsIgnoreCase(pending.destination()) && durable.isEmpty()
+                && pending.retryCount() == 0
+                && coordinator.retryDestination(playerId, pending.destination(), pending.transferId())) {
+            staffHandoffs.retry(pending, Clock.systemUTC().instant());
+            scheduleStaffHandoffTimeout(playerId, pending.transferId());
+            return;
+        }
+        finishTimedOutStaffHandoff(playerId, pending, current, durable, coordinator);
+    }
+
+    private void finishTimedOutStaffHandoff(
+            UUID playerId,
+            StaffModeHandoffTracker.Pending pending,
+            String current,
+            Optional<net.enthusia.staff.domain.staff.StaffSessionSnapshot> durable,
+            StaffModeBackendHandoffCoordinator coordinator
+    ) {
+        String message;
+        if (current != null && current.equalsIgnoreCase(pending.source()) && durable.isEmpty()) {
+            message = coordinator.recoverFailedConnection(
+                    playerId, pending.source(), pending.destination(), pending.transferId()).message();
+        } else {
+            coordinator.cancelPreparedDestination(playerId, pending.destination(), pending.transferId());
+            message = durable.isPresent()
+                    ? "Staff Mode handoff needs recovery on backend " + durable.orElseThrow().serverId() + '.'
+                    : "Staff Mode did not resume after the backend handoff; your original state remains restored.";
+        }
+        proxy.getPlayer(playerId).ifPresent(player ->
+                player.sendMessage(VelocityMessageStyle.style(Component.text(message))));
+    }
+
+    private static boolean durableStaffModeArrived(
+            Optional<net.enthusia.staff.domain.staff.StaffSessionSnapshot> session,
+            String destination
+    ) {
+        return session.isPresent()
+                && session.orElseThrow().state() == net.enthusia.staff.domain.staff.StaffSessionState.ACTIVE
+                && session.orElseThrow().serverId().equalsIgnoreCase(destination);
     }
 
     private void denyServerSwitchWhenActive(ServerPreConnectEvent event, String message) {

@@ -34,8 +34,10 @@ class PaperStaffModeHandoffHandlerTest {
         String payload = "{\"playerId\":\"" + PLAYER + "\",\"transferId\":\"" + TRANSFER + "\"}";
 
         assertTrue(handler.handle(envelope(PaperStaffModeHandoffHandler.PREPARE_RESUME, payload)));
+        assertTrue(handler.handle(envelope(PaperStaffModeHandoffHandler.CANCEL_RESUME, payload)));
         assertTrue(handler.handle(envelope(PaperStaffModeHandoffHandler.ROLLBACK_RESUME, payload)));
         assertTrue(operations.prepared.get());
+        assertTrue(operations.cancelled.get());
         assertTrue(operations.rolledBack.get());
     }
 
@@ -77,6 +79,7 @@ class PaperStaffModeHandoffHandlerTest {
         private boolean accept = true;
         private boolean closed;
         private final AtomicBoolean prepared = new AtomicBoolean();
+        private final AtomicBoolean cancelled = new AtomicBoolean();
         private final AtomicBoolean rolledBack = new AtomicBoolean();
 
         @Override
@@ -89,6 +92,12 @@ class PaperStaffModeHandoffHandlerTest {
         public boolean prepare(UUID playerId, UUID transferId) {
             prepared.set(PLAYER.equals(playerId) && TRANSFER.equals(transferId));
             return accept && prepared.get();
+        }
+
+        @Override
+        public boolean cancel(UUID playerId, UUID transferId) {
+            cancelled.set(PLAYER.equals(playerId) && TRANSFER.equals(transferId));
+            return accept && cancelled.get();
         }
 
         @Override

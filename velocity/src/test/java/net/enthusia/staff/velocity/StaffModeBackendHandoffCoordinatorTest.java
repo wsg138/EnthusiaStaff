@@ -31,7 +31,7 @@ class StaffModeBackendHandoffCoordinatorTest {
         FakeTransport transport = new FakeTransport(active, true);
         var coordinator = coordinator(transport, active);
 
-        var decision = coordinator.transfer(PLAYER, session(), SMP, HUB);
+        var decision = coordinator.transfer(PLAYER, session(), SMP, HUB, TRANSFER);
 
         assertTrue(decision.allowed());
         assertTrue(active.get().isEmpty());
@@ -49,7 +49,7 @@ class StaffModeBackendHandoffCoordinatorTest {
                 StaffModeBackendHandoffCoordinator.EXIT_REQUEST,
                 PersistentChannelServer.DeliveryStatus.TIMED_OUT
         );
-        var decision = coordinator(transport, active).transfer(PLAYER, session(), SMP, HUB);
+        var decision = coordinator(transport, active).transfer(PLAYER, session(), SMP, HUB, TRANSFER);
 
         assertTrue(decision.allowed());
     }
@@ -81,12 +81,36 @@ class StaffModeBackendHandoffCoordinatorTest {
         var decision = coordinator(transport, active).transfer(PLAYER, session(), SMP, HUB);
 
         assertFalse(decision.allowed());
-        assertTrue(decision.message().contains("restored on the current backend"));
+        assertTrue(decision.message().contains("rollback was accepted on the current backend"));
         assertTrue(transport.types.equals(List.of(
                 StaffModeBackendHandoffCoordinator.EXIT_REQUEST,
                 StaffModeBackendHandoffCoordinator.PREPARE_RESUME,
+                StaffModeBackendHandoffCoordinator.CANCEL_RESUME,
                 StaffModeBackendHandoffCoordinator.ROLLBACK_RESUME
         )));
+    }
+
+    @Test
+    void failedConnectionCancelsDestinationBeforeRollingBackSource() {
+        AtomicReference<Optional<StaffSessionSnapshot>> active = new AtomicReference<>(Optional.empty());
+        FakeTransport transport = new FakeTransport(active, false);
+
+        var decision = coordinator(transport, active).recoverFailedConnection(PLAYER, SMP, HUB, TRANSFER);
+
+        assertFalse(decision.allowed());
+        assertTrue(transport.types.equals(List.of(
+                StaffModeBackendHandoffCoordinator.CANCEL_RESUME,
+                StaffModeBackendHandoffCoordinator.ROLLBACK_RESUME
+        )));
+    }
+
+    @Test
+    void destinationRetryUsesThePreparedTransferIdentity() {
+        AtomicReference<Optional<StaffSessionSnapshot>> active = new AtomicReference<>(Optional.empty());
+        FakeTransport transport = new FakeTransport(active, false);
+
+        assertTrue(coordinator(transport, active).retryDestination(PLAYER, HUB, TRANSFER));
+        assertTrue(transport.types.equals(List.of(StaffModeBackendHandoffCoordinator.ROLLBACK_RESUME)));
     }
 
     @Test
@@ -113,7 +137,7 @@ class StaffModeBackendHandoffCoordinatorTest {
             FakeTransport transport,
             AtomicReference<Optional<StaffSessionSnapshot>> active
     ) {
-        return new StaffModeBackendHandoffCoordinator(() -> transport, ignored -> active.get(), () -> TRANSFER);
+        return new StaffModeBackendHandoffCoordinator(() -> transport, ignored -> active.get());
     }
 
     private static StaffSessionSnapshot session() {
