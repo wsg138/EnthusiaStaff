@@ -1,0 +1,8 @@
+---
+exclude_paths:
+  - "src/main/resources/migrations/**"
+  - "src/main/resources/website-sync-migrations/**"
+
+engines:
+  tsqllint:
+    enabled: false
