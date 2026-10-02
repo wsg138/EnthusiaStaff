@@ -22,6 +22,13 @@ final class StaffModerationConfigFile {
     static final String COMPONENT_CREDENTIAL_PROPERTY = "component.secret";
     static final String DB_POOL_SIZE_PROPERTY = "db.pool-size";
     static final String DB_TIMEOUT_MILLIS_PROPERTY = "db.timeout-millis";
+    static final String ROLE_SYNC_MAPPINGS_PROPERTY = "role-sync.mappings";
+    static final String ROLE_SYNC_PROTECTED_ROLES_PROPERTY = "role-sync.protected-role-ids";
+    static final String ROLE_SYNC_MODE_PROPERTY = "role-sync.mode";
+    static final String ROLE_SYNC_INTERVAL_PROPERTY = "role-sync.interval-seconds";
+    static final String ROLE_SYNC_BATCH_SIZE_PROPERTY = "role-sync.batch-size";
+    static final String ROLE_SYNC_DB_USERNAME_PROPERTY = "role-sync.db-username";
+    static final String ROLE_SYNC_DB_CREDENTIAL_PROPERTY = "role-sync.db-password";
     static final String ENFORCEMENT_ENABLED_PROPERTY = "discord-enforcement.enabled";
     static final String MUTE_ROLE_PROPERTY = "discord-enforcement.mute-role-id";
     static final String SUPPORT_SCOPES_PROPERTY = "discord-enforcement.support-scope-ids";
@@ -43,6 +50,13 @@ final class StaffModerationConfigFile {
             Map.entry(COMPONENT_CREDENTIAL_PROPERTY, StaffModerationConfiguration.COMPONENT_SIGNING_ENV),
             Map.entry(DB_POOL_SIZE_PROPERTY, StaffModerationConfiguration.DB_POOL_SIZE_ENV),
             Map.entry(DB_TIMEOUT_MILLIS_PROPERTY, StaffModerationConfiguration.DB_TIMEOUT_MILLIS_ENV),
+            Map.entry(ROLE_SYNC_MAPPINGS_PROPERTY, DiscordRoleSyncConfiguration.MAPPINGS_ENV),
+            Map.entry(ROLE_SYNC_PROTECTED_ROLES_PROPERTY, DiscordRoleSyncConfiguration.PROTECTED_ROLES_ENV),
+            Map.entry(ROLE_SYNC_MODE_PROPERTY, DiscordRoleSyncConfiguration.MODE_ENV),
+            Map.entry(ROLE_SYNC_INTERVAL_PROPERTY, DiscordRoleSyncConfiguration.INTERVAL_SECONDS_ENV),
+            Map.entry(ROLE_SYNC_BATCH_SIZE_PROPERTY, DiscordRoleSyncConfiguration.BATCH_SIZE_ENV),
+            Map.entry(ROLE_SYNC_DB_USERNAME_PROPERTY, StaffModerationConfiguration.ROLE_SYNC_DB_USERNAME_ENV),
+            Map.entry(ROLE_SYNC_DB_CREDENTIAL_PROPERTY, StaffModerationConfiguration.ROLE_SYNC_DB_CREDENTIAL_ENV),
             Map.entry(ENFORCEMENT_ENABLED_PROPERTY, DiscordPunishmentConfiguration.ENABLED_ENV),
             Map.entry(MUTE_ROLE_PROPERTY, DiscordPunishmentConfiguration.MUTE_ROLE_ENV),
             Map.entry(SUPPORT_SCOPES_PROPERTY, DiscordPunishmentConfiguration.SUPPORT_SCOPES_ENV),

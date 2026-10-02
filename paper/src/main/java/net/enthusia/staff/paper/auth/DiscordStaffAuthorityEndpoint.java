@@ -7,12 +7,15 @@ import java.net.InetSocketAddress;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.List;
+import java.util.Locale;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
+import java.util.regex.Pattern;
 import net.enthusia.staff.domain.auth.StaffRank;
 import net.enthusia.staff.protocol.StaffAuthorityHttpSigning;
 import net.luckperms.api.LuckPerms;
@@ -33,9 +36,12 @@ public final class DiscordStaffAuthorityEndpoint implements AutoCloseable {
     private static final int MAX_PORT = 65_535;
     private static final int BACKLOG = 16;
     private static final int WORKER_THREADS = 2;
+    private static final int MAX_ROLE_GROUPS = 128;
     private static final Duration LOOKUP_TIMEOUT = Duration.ofSeconds(3);
     private static final Duration SHUTDOWN_TIMEOUT = Duration.ofSeconds(2);
-    private static final String PATH = "/v1/staff-rank";
+    private static final Pattern ROLE_GROUP = Pattern.compile("[a-z0-9_.-]{1,64}");
+    private static final String RANK_PATH = "/v1/staff-rank";
+    private static final String ROLE_ELIGIBILITY_PATH = "/v1/role-eligibility";
     private static final String GET_METHOD = "GET";
     private static final String POST_METHOD = "POST";
 
@@ -74,7 +80,8 @@ public final class DiscordStaffAuthorityEndpoint implements AutoCloseable {
         );
         try {
             createdServer.setExecutor(createdExecutor);
-            createdServer.createContext(PATH, this::handle);
+            createdServer.createContext(RANK_PATH, this::handleRank);
+            createdServer.createContext(ROLE_ELIGIBILITY_PATH, this::handleRoleEligibility);
             if (webPunishments != null) {
                 createdServer.createContext("/v1/staff-punishments/", this::handlePunishment);
             }
@@ -141,7 +148,7 @@ public final class DiscordStaffAuthorityEndpoint implements AutoCloseable {
         }
     }
 
-    private void handle(HttpExchange exchange) throws IOException {
+    private void handleRank(HttpExchange exchange) throws IOException {
         DiscordStaffAuthorityAuthenticator.Result authorization = null;
         try {
             if (!GET_METHOD.equals(exchange.getRequestMethod())) {
@@ -166,6 +173,34 @@ public final class DiscordStaffAuthorityEndpoint implements AutoCloseable {
             respond(exchange, 200, rank.orElseThrow().name(), authorization);
         } catch (RuntimeException exception) {
             log(plugin, "discord_staff_authority_request_failed", exception);
+            if (exchange.getResponseCode() == -1) {
+                respond(exchange, 503, "", authorization);
+            }
+        } finally {
+            exchange.close();
+        }
+    }
+
+    private void handleRoleEligibility(HttpExchange exchange) throws IOException {
+        DiscordStaffAuthorityAuthenticator.Result authorization = null;
+        try {
+            if (!GET_METHOD.equals(exchange.getRequestMethod())) {
+                respond(exchange, 405, "", null);
+                return;
+            }
+            authorization = authenticate(exchange);
+            if (!authorization.accepted()) {
+                respond(exchange, 401, "", null);
+                return;
+            }
+            UUID playerId = playerId(exchange.getRequestURI().getRawQuery());
+            if (playerId == null) {
+                respond(exchange, 400, "", authorization);
+                return;
+            }
+            respond(exchange, 200, roleGroups(loadUser(playerId)), authorization);
+        } catch (RuntimeException exception) {
+            log(plugin, "discord_role_eligibility_request_failed", exception);
             if (exchange.getResponseCode() == -1) {
                 respond(exchange, 503, "", authorization);
             }
@@ -273,9 +308,33 @@ public final class DiscordStaffAuthorityEndpoint implements AutoCloseable {
     }
 
     private Optional<StaffRank> resolve(UUID playerId) {
-        User user = loadUser(playerId);
+        return resolveRank(loadUser(playerId));
+    }
+
+    private static Optional<StaffRank> resolveRank(User user) {
         return PaperStaffRankResolver.resolve(permission -> user.getCachedData()
                 .getPermissionData().checkPermission(permission).asBoolean());
+    }
+
+    private static String roleGroups(User user) {
+        List<String> groups = user.getInheritedGroups(user.getQueryOptions()).stream()
+                .map(group -> normalizedRoleGroup(group.getName()))
+                .flatMap(Optional::stream)
+                .distinct()
+                .sorted()
+                .toList();
+        if (groups.size() > MAX_ROLE_GROUPS) {
+            throw new IllegalStateException("role eligibility exceeds the bounded group limit");
+        }
+        return String.join("\n", groups);
+    }
+
+    static Optional<String> normalizedRoleGroup(String raw) {
+        if (raw == null) {
+            return Optional.empty();
+        }
+        String normalized = raw.trim().toLowerCase(Locale.ROOT);
+        return ROLE_GROUP.matcher(normalized).matches() ? Optional.of(normalized) : Optional.empty();
     }
 
     private User loadUser(UUID playerId) {

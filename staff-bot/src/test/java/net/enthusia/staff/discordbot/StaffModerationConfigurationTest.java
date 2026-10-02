@@ -29,23 +29,24 @@ class StaffModerationConfigurationTest {
     @Test
     void partialConfigurationFailsClosed() {
         assertThrows(IllegalArgumentException.class, () -> StaffModerationConfiguration.fromEnvironment(Map.of(
-                StaffModerationConfiguration.JDBC_URL_ENV, "jdbc:mariadb://localhost/enthusia"
-        )));
+                StaffModerationConfiguration.JDBC_URL_ENV, "jdbc:mariadb://localhost/enthusia")));
     }
 
     @Test
     void defaultTransportAcceptsOnlyLoopbackAuthorityAndRedactsSecrets() {
         Map<String, String> values = complete();
         StaffModerationConfiguration configuration = StaffModerationConfiguration.fromEnvironment(values).orElseThrow();
+        String display = configuration.toString();
 
-        assertEquals(
-                StaffModerationConfiguration.AuthorityTransport.LOOPBACK,
-                configuration.authorityTransport());
+        assertEquals(StaffModerationConfiguration.AuthorityTransport.LOOPBACK, configuration.authorityTransport());
         assertTrue(configuration.authorityUri().toString().startsWith("http://127.0.0.1:"));
-        assertFalse(configuration.toString().contains(DATABASE_PASSWORD));
-        assertFalse(configuration.toString().contains(AUTHORITY_SECRET));
-        assertFalse(configuration.toString().contains(COMPONENT_SECRET));
-        assertFalse(configuration.toString().contains("127.0.0.1"));
+        assertTrue(display.contains("authorityTransport=loopback"));
+        assertTrue(display.contains("roleSync=<none>"));
+        assertFalse(display.contains("%s"));
+        assertFalse(display.contains(DATABASE_PASSWORD));
+        assertFalse(display.contains(AUTHORITY_SECRET));
+        assertFalse(display.contains(COMPONENT_SECRET));
+        assertFalse(display.contains("127.0.0.1"));
     }
 
     @Test
@@ -62,15 +63,10 @@ class StaffModerationConfigurationTest {
                 "db.pool-size=3",
                 "db.timeout-millis=2500",
                 ""));
-
         StaffModerationConfiguration configuration = StaffModerationConfiguration.fromFile(file);
-
-        assertEquals(
-                StaffModerationConfiguration.AuthorityTransport.BLOOM_PRIVATE_SPLIT,
+        assertEquals(StaffModerationConfiguration.AuthorityTransport.BLOOM_PRIVATE_SPLIT,
                 configuration.authorityTransport());
-        assertEquals(
-                "http://paper-split.internal:8771/v1/staff-rank",
-                configuration.authorityUri().toString());
+        assertEquals("http://paper-split.internal:8771/v1/staff-rank", configuration.authorityUri().toString());
         assertFalse(configuration.toString().contains("paper-split.internal"));
         assertFalse(configuration.toString().contains(AUTHORITY_SECRET));
     }
@@ -80,11 +76,9 @@ class StaffModerationConfigurationTest {
         Path partial = tempDir.resolve("partial.properties");
         Files.writeString(partial, "db.jdbc-url=jdbc:mariadb://localhost/enthusia\n");
         assertThrows(IllegalArgumentException.class, () -> StaffModerationConfiguration.fromFile(partial));
-
         Path unknown = tempDir.resolve("unknown.properties");
         Files.writeString(unknown, "unsupported.secret=value\n");
         assertThrows(IllegalArgumentException.class, () -> StaffModerationConfiguration.fromFile(unknown));
-
         assertThrows(IllegalArgumentException.class,
                 () -> StaffModerationConfiguration.fromFile(tempDir.resolve("missing.properties")));
     }
@@ -95,7 +89,6 @@ class StaffModerationConfigurationTest {
         nonLoopback.put(StaffModerationConfiguration.AUTHORITY_URL_ENV, "http://10.0.0.2:8771/v1/staff-rank");
         assertThrows(IllegalArgumentException.class,
                 () -> StaffModerationConfiguration.fromEnvironment(nonLoopback));
-
         Map<String, String> weakSecret = complete();
         weakSecret.put(StaffModerationConfiguration.COMPONENT_SIGNING_ENV, Character.toString('w').repeat(8));
         assertThrows(IllegalArgumentException.class,
@@ -105,11 +98,8 @@ class StaffModerationConfigurationTest {
     @Test
     void rejectsAlternateIpv6LoopbackAuthorityEndpoint() {
         Map<String, String> alternateLoopback = complete();
-        alternateLoopback.put(
-                StaffModerationConfiguration.AUTHORITY_URL_ENV,
-                "http://[::1]:8771/v1/staff-rank"
-        );
-
+        alternateLoopback.put(StaffModerationConfiguration.AUTHORITY_URL_ENV,
+                "http://[::1]:8771/v1/staff-rank");
         assertThrows(IllegalArgumentException.class,
                 () -> StaffModerationConfiguration.fromEnvironment(alternateLoopback));
     }
@@ -117,13 +107,10 @@ class StaffModerationConfigurationTest {
     @Test
     void rejectsOutOfRangeAuthorityPortAndUnknownTransport() {
         Map<String, String> invalidPort = complete();
-        invalidPort.put(
-                StaffModerationConfiguration.AUTHORITY_URL_ENV,
-                "http://127.0.0.1:70000/v1/staff-rank"
-        );
+        invalidPort.put(StaffModerationConfiguration.AUTHORITY_URL_ENV,
+                "http://127.0.0.1:70000/v1/staff-rank");
         assertThrows(IllegalArgumentException.class,
                 () -> StaffModerationConfiguration.fromEnvironment(invalidPort));
-
         Map<String, String> invalidTransport = complete();
         invalidTransport.put(StaffModerationConfiguration.AUTHORITY_TRANSPORT_ENV, "public");
         assertThrows(IllegalArgumentException.class,
