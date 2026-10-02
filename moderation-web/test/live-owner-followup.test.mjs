@@ -37,7 +37,7 @@ test('message paging and initial session loading avoid unnecessary serial and fu
 
   assert.match(source, /const LIVE_MESSAGE_PAGE_LIMIT = '50'/);
   assert.match(source, /Promise\.all\(\[sessionRequest, bootstrapRequest\]\)/);
-  assert.match(source, /renderWorkspace\(\);\n    renderCounts\(\);/);
+  assert.match(source, /renderWorkspace\(\);\r?\n    renderCounts\(\);/);
   assert.match(source, /Loading \$\{direction\}…/);
 });
 

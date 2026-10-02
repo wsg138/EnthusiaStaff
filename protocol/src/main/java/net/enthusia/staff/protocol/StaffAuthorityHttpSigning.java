@@ -33,6 +33,19 @@ public final class StaffAuthorityHttpSigning {
     private StaffAuthorityHttpSigning() {
     }
 
+    public static String punishmentRequestTarget(String path, byte[] body) {
+        if (path == null || !path.matches("/v1/staff-punishments/(capabilities|prepare|confirm|status)")
+                || body == null || body.length > 8192) {
+            throw new IllegalArgumentException("invalid staff punishment request");
+        }
+        try {
+            return path + "?body_sha256=" + java.util.HexFormat.of().formatHex(
+                    MessageDigest.getInstance(SHA_256).digest(body));
+        } catch (java.security.NoSuchAlgorithmException exception) {
+            throw new IllegalStateException("SHA-256 is unavailable", exception);
+        }
+    }
+
     public static RequestProof signRequest(
             String credential,
             String method,

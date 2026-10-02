@@ -38,6 +38,18 @@ class JdaStaffModerationListenerTest {
     }
 
     @Test
+    void productionWebKeepsStaffCommandsAndAllowsChannelLaunch() {
+        var commands = JdaStaffModerationListener.commands(false, true);
+        assertEquals(8, commands.size());
+        assertTrue(commands.stream().allMatch(command ->
+                DefaultMemberPermissions.DISABLED.equals(command.getDefaultPermissions())));
+        SlashCommandData moderate = (SlashCommandData) command(commands, "moderate");
+        assertEquals(1, moderate.getOptions().size());
+        assertEquals(OptionType.USER, moderate.getOptions().getFirst().getType());
+        assertTrue(!moderate.getOptions().getFirst().isRequired());
+    }
+
+    @Test
     void enforcementRuntimeAddsExactlyTheEightApprovedQuickCommands() {
         var commands = JdaStaffModerationListener.commands(true);
 

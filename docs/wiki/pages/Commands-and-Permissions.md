@@ -1,101 +1,114 @@
 # Commands and Permissions
 
-This is the administrator/developer command reference. Staff-facing procedure is
-in [[Staff Quick Start|Moderator-Quick-Start]], [[Punishment System]],
-[[Reports and Evidence]] and the other focused guides.
+This is the administrator/developer command reference across the current Minecraft and StaffBot surfaces. Staff procedure belongs in [[Staff Handbook]], [[Punishment System]], [[Reports and Evidence]], [[Discord Moderation Platform]], and the focused feature guides.
 
-All declared EnthusiaStaff permissions default to `false`. Bukkit/Velocity
-permissions control command discovery and early denial, while authoritative
-services recheck rank and action policy before a mutation.
+Permission nodes and Discord command visibility are early gates. Important mutations are reauthorized in the owning application service against current actor, target, scope, duty/authority state and external preconditions.
 
-> **Registered does not mean production-ready.** Use
-> [[Feature Completion Status|Implementation-Status]] and the relevant feature
-> hub before enabling or training staff on a command.
+> **Registered does not mean production-authorized.** Check [[Implementation Status]] before enabling or training staff on a workflow.
 
 ## Find the owning feature
 
-| Command area | Feature details and source files |
+| Command area | Start here |
 | --- | --- |
 | Status, reload, database, protocol and runtime health | [[Core Platform and Infrastructure]] |
-| Punishments, requests, history, reports, evidence and automod | [[Moderation, Punishments, and Reports]] |
-| Staff mode, vanish, freeze, inventory, confiscation, alts and tools | [[Staff Tools, Investigations, and Player-State Safety]] |
-| Discord, website, providers, migration and cutover | [[Integrations, Migration, and Release Readiness]] |
+| Punishments, requests, history, reports and evidence | [[Moderation, Punishments, and Reports]] |
+| Staff mode, vanish, freeze, inventory, alts and tools | [[Staff Tools, Investigations, and Player-State Safety]] |
+| Minecraft/Discord linking and StaffBot moderation | [[Discord Moderation Platform]] |
+| StaffBot build/config/recovery | [[Staff Bot Runtime and Operations]] |
+| Website/public API/appeals | [[Website and Web API]] |
+| Providers, migration and cutover | [[Integrations, Migration, and Release Readiness]] |
 
-## Paper commands
+# Minecraft commands
 
-### Status and administration
+## Status and administration
 
-| Command | Usage | Purpose | Primary permission |
-| --- | --- | --- | --- |
-| `/estaff` | `/estaff <status\|verify\|reload\|sanction>` | Runtime status, safe reload and exact-sanction lifecycle commands | Subcommands check independent permission nodes |
+| Command | Usage | Purpose |
+| --- | --- | --- |
+| `/estaff` | `/estaff <status\|verify [full]\|reload\|sanction>` | Runtime status, verification, reload and exact-sanction lifecycle entry point |
 
-### Punishment creation and requests
+Subcommands have independent permissions. `/estaff verify full` additionally requires diagnostics authority and is not an ordinary staff command.
 
-| Command | Usage | Purpose | Primary permission |
-| --- | --- | --- | --- |
-| `/punish` | `/punish <player> [reason-id]` or `/punish resume <player>` | Central punishment/draft/request workflow | `enthusiastaff.punish` |
-| `/ban` | `/ban <player> [reason-id]` | Ban-filtered central workflow | `enthusiastaff.punish` |
-| `/mute` | `/mute <player> [reason-id]` | Mute-filtered central workflow | `enthusiastaff.punish` |
-| `/warn` | `/warn <player> [reason-id]` | Warning-filtered central workflow | `enthusiastaff.punish` |
-| `/kick` | `/kick <player> [reason-id]` | Kick-filtered central workflow | `enthusiastaff.punish` |
-| `/ipban` | `/ipban <player> [reason-id]` | Network-ban-filtered central workflow | `enthusiastaff.punish.ip` |
+## Punishment creation
 
-### Punishment history and changes
+| Command | Usage | Primary permission |
+| --- | --- | --- |
+| `/punish` | `/punish <player> [reason-id]` or `/punish resume <player>` | `enthusiastaff.punish` |
+| `/ban` | `/ban <player> [reason-id]` | `enthusiastaff.punish` |
+| `/mute` | `/mute <player> [reason-id]` | `enthusiastaff.punish` |
+| `/warn` | `/warn <player> [reason-id]` | `enthusiastaff.punish` |
+| `/kick` | `/kick <player> [reason-id]` | `enthusiastaff.punish` |
+| `/ipban` | `/ipban <player> [reason-id]` | `enthusiastaff.punish.ip` |
 
-| Command | Usage | Purpose | Primary permission |
-| --- | --- | --- | --- |
-| `/history` | `/history <player\|uuid> [page]` | Newest-first, database-paginated moderation timeline for current, historical, offline, Java and known Bedrock identities | `enthusiastaff.history.view`; staff actors/private notes require `enthusiastaff.history.view-sensitive` |
-| `/case` | `/case [view] <case-id>` | Complete case detail with every sanction, request, appeal and mutation event | `enthusiastaff.history.view` |
-| `/estaff sanction reduce` | `/estaff sanction reduce <sanction-id> <ISO-expiration\|duration> [--request <request-id>] <reason>` | Shorten one active sanction without replacing its original decision | `enthusiastaff.sanction.reduce` |
-| `/estaff sanction end` | `/estaff sanction end <sanction-id> [--request <request-id>] <reason>` | End one otherwise-valid sanction immediately | `enthusiastaff.sanction.end` |
-| `/estaff sanction revoke` | `/estaff sanction revoke <sanction-id> [--request <request-id>] <reason>` | Administratively withdraw one sanction without declaring the original decision wrong | `enthusiastaff.sanction.revoke` |
-| `/estaff sanction overturn` | `/estaff sanction overturn <sanction-id> [--appeal <appeal-id>] [--request <request-id>] <reason>` | Reverse one punishment decision and optionally link an accepted appeal | `enthusiastaff.sanction.overturn`; appeal linkage also requires `enthusiastaff.sanction.overturn.appeal` |
-| `/removepunishment` | `/removepunishment <player\|case> <action> [expiration] <reason> [CONFIRM]` | Existing case-oriented GUI workflow retained for compatibility | `enthusiastaff.remove` plus action node |
-| `/unban`, `/unmute`, `/removewarning`, `/unwarn` | Existing case/player aliases | Existing convenience paths through the central case-oriented workflow | `enthusiastaff.remove` |
+These commands enter the central punishment/request policy; the command name does not bypass hierarchy, request/approval or authority rules.
 
-Exact-sanction commands never accept an ambiguous multi-sanction case. Database work runs asynchronously, then the locked transaction rechecks operational mode, action authority, issuing-rank hierarchy and the sanction revision. Console follows the existing explicit system/Founder identity model; it is not an implicit hierarchy bypass.
+## History and exact-sanction changes
 
-### Reports and evidence
+| Command | Purpose | Primary permission |
+| --- | --- | --- |
+| `/history <player\|uuid> [page]` | newest-first moderation history | `enthusiastaff.history.view` |
+| `/case [view] <case-id>` | case detail | `enthusiastaff.history.view` |
+| `/estaff sanction reduce ...` | shorten one exact active sanction | `enthusiastaff.sanction.reduce` |
+| `/estaff sanction end ...` | end one exact sanction | `enthusiastaff.sanction.end` |
+| `/estaff sanction revoke ...` | administratively withdraw one exact sanction | `enthusiastaff.sanction.revoke` |
+| `/estaff sanction overturn ...` | reverse one exact sanction decision | `enthusiastaff.sanction.overturn` |
+| `/removepunishment ...` and `/unban`/`/unmute` aliases | compatibility/case-oriented correction paths | `enthusiastaff.remove` plus action-specific authority |
 
-| Command | Usage | Purpose | Primary permission |
-| --- | --- | --- | --- |
-| `/report` | `/report <player\|uuid> <reason-id> <description>` | Submit a private player report | No Bukkit permission declared |
-| `/reports` | `/reports` and queue/state subcommands | Staff report management | `enthusiastaff.reports.manage` |
-| `/client` | `/client <player\|uuid> [save CONFIRM]` | View or save point-in-time client evidence | `enthusiastaff.client` |
+Sensitive actor/private-note history requires the sensitive-history permission. Exact-sanction actions must not silently mutate sibling sanctions in the same case.
 
-### Staff-state and investigation tools
+## Reports and evidence
 
-| Command | Usage | Purpose | Primary permission |
-| --- | --- | --- | --- |
-| `/freeze` | `/freeze <player> <reason>` | Apply durable investigation freeze | `enthusiastaff.freeze` |
-| `/unfreeze` | `/unfreeze <player> <reason> CONFIRM` | Release freeze | `enthusiastaff.freeze` |
-| `/staff` | `/staff` | Enter or leave durable staff mode | `enthusiastaff.staffmode` |
-| `/stafftools` | `/stafftools`, `/stafftools random`, `/stafftools spectate <player>` | Open the Staff Tools menu, random teleport, or follow/spectate | `enthusiastaff.stafftools.menu`; sub-actions also require their direct tool node |
-| `/fakebase` | `/fakebase <create\|extend\|clear\|teleport\|status> [player]` | Manage bounded virtual fake-base probes | `enthusiastaff.cheattester.fake-base` |
-| `/vanish` | `/vanish` or `/vanish tab <show\|hide>` | Toggle vanish or spectator tab presentation | `enthusiastaff.vanish` |
-| `/staffchat` | `/staffchat` | Toggle the configured RoseChat staff channel | `enthusiastaff.staffchat` |
-| `/invsee` | `/invsee <player\|uuid>` | View/edit inventory as authorized | `enthusiastaff.inventory.view` |
-| `/endersee` | `/endersee <player\|uuid>` | View/edit Ender chest as authorized | `enthusiastaff.inventory.view` |
-| `/inspect` | `/inspect <player>` | Player inspector with active reports, freeze status and authorized shortcuts to investigation tools | `enthusiastaff.inspect`; report details and each shortcut also require their normal command permissions |
-| `/case` | `/case restoreitems <case-id>` | Founder-only confiscated-item restoration; case viewing is documented above | `enthusiastaff.case.restoreitems` |
-| `/case` | `/case recoveritems <case-id>` | Founder-only authorization to requeue one coherent quarantined confiscation/restoration operation; the command itself does not edit inventory | `enthusiastaff.owner.recovery` plus Founder service authorization |
+| Command | Purpose | Primary permission |
+| --- | --- | --- |
+| `/report <player\|uuid> <reason-id> <description>` | submit a private report | no Bukkit permission declared for ordinary submitter |
+| `/reports ...` | staff report queue/state workflow | `enthusiastaff.reports.manage` |
+| `/client <player\|uuid> [save CONFIRM]` | view/save point-in-time client evidence | `enthusiastaff.client` |
 
-`/case recoveritems` may be issued while the target is offline because it only
-requeues durable state. It rejects non-item quarantines, multiple matching
-quarantines, divergent patch/operation evidence, case-target mismatches and live
-competing inventory leases. Normal checksum/revision recovery must still prove
-the live outcome before any replacement commits.
+## Discord/Minecraft account linking
 
-`/stafftools` requires an active staff-mode session in addition to Bukkit
-permissions. The hotbar and command fallback share the same dispatcher. Random
-teleport requires `enthusiastaff.stafftools.teleport`; follow/spectate requires
-`enthusiastaff.stafftools.spectate`; menu access requires
-`enthusiastaff.stafftools.menu`. See [[Staff Mode, Vanish, and Freeze|Staff-Mode-Vanish-and-Freeze]]
-for target filters, cooldowns, stale-tool rejection and Bedrock behavior.
+Current merged Paper commands:
+
+| Command | Purpose |
+| --- | --- |
+| `/link` | issue a short-lived one-use code from Minecraft |
+| `/link <code>` | complete a link challenge that originated from Discord |
+| `/unlink CONFIRM` | remove the current Minecraft account's Discord link through the supported audited flow |
+
+`/link` has the alias `/discordlink` in current plugin metadata.
+
+Linking safety rules:
+
+- raw codes are short-lived and one-use;
+- only hashes are persisted;
+- replacement/expiry/replay/restart/concurrency are handled by the account-linking service/store;
+- link ownership/history is preserved rather than manually rewritten;
+- one Discord identity may have multiple current Minecraft identities, while a Minecraft identity has one current Discord owner;
+- public output must not reveal another player's link/history.
+
+Do not manually edit link rows to recover a normal user flow. See [[Discord Moderation Platform]].
+
+## Staff-state and investigation tools
+
+| Command | Purpose | Primary permission |
+| --- | --- | --- |
+| `/freeze <player> <reason>` | durable investigation freeze | `enthusiastaff.freeze` |
+| `/unfreeze <player> <reason> CONFIRM` | release freeze | `enthusiastaff.freeze` |
+| `/staff` | enter/leave durable Staff Mode | `enthusiastaff.staffmode` |
+| `/stafftools` | Staff Tools menu and supported direct sub-actions | `enthusiastaff.stafftools.menu` plus action node |
+| `/fakebase ...` | bounded fake-base tester workflow | `enthusiastaff.cheattester.fake-base` |
+| `/vanish` | toggle vanish / supported tab options | `enthusiastaff.vanish` |
+| `/staffchat` | toggle configured staff chat channel | `enthusiastaff.staffchat` |
+| `/staffwho` | show staff rank/duty/vanish/request state | `enthusiastaff.staffwho` |
+| `/invsee <player\|uuid>` | inventory view/edit as authorized | `enthusiastaff.inventory.view` plus edit authority |
+| `/endersee <player\|uuid>` | Ender chest view/edit as authorized | `enthusiastaff.inventory.view` plus edit authority |
+| `/inspect <player>` | player inspector and authorized shortcuts | `enthusiastaff.inspect` |
+| `/case restoreitems <case-id>` | Founder-level item restoration | `enthusiastaff.case.restoreitems` |
+| `/case recoveritems <case-id>` | requeue one coherent quarantined recovery operation | `enthusiastaff.owner.recovery` plus Founder policy |
+
+Player-originated destructive Paper actions may additionally require active Staff Mode duty context. A permission node alone is not the final mutation authority.
 
 ## Velocity commands
 
-The proxy currently registers:
+Current proxy entry points include:
 
 ```text
 /estaff
@@ -103,15 +116,95 @@ The proxy currently registers:
 /alt
 ```
 
-`/alts` includes a separate current verified-link section before the network relationship
-evidence. It shows other currently linked Minecraft accounts only; it does not reveal Discord
-IDs or historical links. `/alts` and `/alt` being registered does not mean the complete
-confidence, exception, inheritance, GUI, alert and key-rotation workflow is finished. See
-[[Alt Investigations]] and [[Staff Tools, Investigations, and Player-State Safety]].
+`/alts` may show other currently verified linked Minecraft accounts when authorized, but it must not expose Discord IDs or historical link ownership. Network relationship evidence and Discord account linking remain separate evidence classes.
 
-## Permission nodes
+# StaffBot Discord commands
 
-### Status, read and diagnostics
+StaffBot registers its Discord command set in the configured Enthusia guild after the runtime is ready. Command discovery is not final authority; every privileged action resolves the linked Enthusia staff actor and rechecks current policy.
+
+## Read/moderation navigation
+
+Current merged command names include:
+
+| Discord command | Purpose |
+| --- | --- |
+| `/moderate` | open the Discord-target moderation panel/read view |
+| `/moderate-minecraft` | open moderation/read context for a Minecraft player identity |
+| `/linked` | inspect authorized linked-account information for a Discord target |
+| `/history` | view authorized punishment/history context for a Discord target |
+| `/notes` | view authorized staff notes context |
+| `/case` | view one case by ID |
+
+StaffBot also supports the registered user/message context commands used for moderation entry points where current runtime configuration exposes them.
+
+Sensitive read visibility is still authorization-controlled. Discord roles do not independently grant private case/note/link access.
+
+## Discord punishment commands
+
+When the punishment runtime is present/enabled for the environment, current merged quick-action command names include:
+
+```text
+/warn
+/mute
+/unmute
+/kick
+/ban
+/unban
+/restrict
+/unrestrict
+```
+
+Exact options vary by consequence. Current runtime supports fields such as target user/user ID, reason, duration, explanation, native-ban message-delete seconds, and restriction scope/mode where applicable.
+
+### Confirmation and reauthorization
+
+Issuing a command does not immediately make the external effect authoritative merely because Discord accepted the interaction.
+
+The runtime:
+
+1. resolves the Discord actor to current linked Enthusia staff identity;
+2. checks rank/target/platform/consequence policy;
+3. prepares the intended action;
+4. uses signed/expiring interaction state where confirmation is required;
+5. reauthorizes immediately before the side effect;
+6. records/reconciles durable Discord effect state;
+7. reports the actual verified/terminal outcome.
+
+Destructive Discord enforcement is explicitly configuration-gated and defaults off. See [[Discord Moderation Platform]] and [[Staff Bot Runtime and Operations]].
+
+# Authority and permission model
+
+## Permanent staff identity
+
+Current authority work distinguishes permanent staff identity from active Paper duty state. Identity nodes include:
+
+```text
+enthusiastaff.identity.helper
+enthusiastaff.identity.mod
+enthusiastaff.identity.developer
+enthusiastaff.identity.admin
+enthusiastaff.identity.owner
+```
+
+Legacy aggregate rank nodes remain relevant during transition/configuration compatibility.
+
+## Active Staff Mode context
+
+Paper publishes an active LuckPerms context:
+
+```text
+enthusiastaff-duty=active
+```
+
+This represents current on-duty Staff Mode state. It is not a replacement for permanent identity and it is not used as a universal Discord/website authority flag.
+
+See [[Rank Authority]].
+
+## Important Paper permission groups
+
+Common nodes include, but are not limited to:
+
+### Status / diagnostics
 
 ```text
 enthusiastaff.status
@@ -123,7 +216,7 @@ enthusiastaff.case.read
 enthusiastaff.alerts
 ```
 
-### Punishment creation and review
+### Punishment / review
 
 ```text
 enthusiastaff.punish
@@ -132,11 +225,6 @@ enthusiastaff.punishment.requests.review
 enthusiastaff.punish.ip
 enthusiastaff.punish.custom-duration
 enthusiastaff.punish.custom-combination
-```
-
-### Punishment changes
-
-```text
 enthusiastaff.remove
 enthusiastaff.remove.lower
 enthusiastaff.remove.raise
@@ -148,7 +236,7 @@ enthusiastaff.remove.full-overturn
 enthusiastaff.remove.approve-overturn
 ```
 
-### Reports and staff tools
+### Reports / staff tools
 
 ```text
 enthusiastaff.reports.manage
@@ -162,17 +250,16 @@ enthusiastaff.stafftools.random-exempt
 enthusiastaff.stafftools.spectate-exempt
 enthusiastaff.vanish
 enthusiastaff.staffchat
+enthusiastaff.staffwho
 enthusiastaff.client
 enthusiastaff.inventory.view
 enthusiastaff.inventory.edit
 enthusiastaff.inspect
 ```
 
-The two `stafftools.*-exempt` nodes default to `false`. They are target-side
-exemptions and should be assigned deliberately; the dispatcher does not treat
-operators as implicitly exempt.
+Target-side `stafftools.*-exempt` nodes are deliberate exemptions; do not assume operators are implicitly exempt.
 
-### History and exact-sanction authority
+### History / sanction authority
 
 ```text
 enthusiastaff.history.view
@@ -185,9 +272,9 @@ enthusiastaff.sanction.overturn.appeal
 enthusiastaff.sanction.bypass-hierarchy
 ```
 
-Viewing history is independent from mutation authority. The bypass node is Founder-only and still cannot mutate system-issued sanctions.
+Viewing is independent from mutation authority. Founder bypass remains bounded and does not imply unrestricted mutation of system-issued state.
 
-### Asset, provider and recovery authority
+### Asset / recovery authority
 
 ```text
 enthusiastaff.confiscate.economy
@@ -198,13 +285,9 @@ enthusiastaff.reputation.restrict
 enthusiastaff.owner.recovery
 ```
 
-`enthusiastaff.owner.recovery` is the Bukkit discovery/early-denial gate for
-`/case recoveritems`; the Paper recovery coordinator independently requires the
-Founder-level `RESTORE_ASSETS` authorization policy before persistence is called.
+## Legacy aggregate rank nodes
 
-## Rank aggregate nodes
-
-Current Paper metadata defines:
+Current plugin metadata still contains aggregate groups such as:
 
 ```text
 enthusiastaff.rank.helper
@@ -214,54 +297,32 @@ enthusiastaff.rank.admin
 enthusiastaff.rank.founder
 ```
 
-### Helper
+Normal inheritance remains Mod → Helper, Admin → Mod, Founder → Admin, while Developer remains a separate technical aggregate. Central policy may be stricter than the permission tree.
 
-Includes basic status/verification, punishment/read access, configured punishment
-workflow, reports, alerts, freeze, staff mode, staff-tool teleport/spectate/menu,
-vanish, staff chat, inventory view and inspection. Central policy still limits
-direct punishment outcomes and inventory mutation.
-
-### Mod
-
-Inherits Helper and adds request review, network-ban permission, selected sanction
-changes, inventory edit and configured confiscation permissions.
-
-### Developer
-
-A separate technical aggregate with diagnostics/reload and investigation tools,
-including the direct staff-tool permissions. It includes the punishment request
-entry surface, but central policy must deny direct punishment mutation and approval.
-
-### Admin
-
-Inherits Mod and adds advanced diagnostics/configuration, custom durations,
-raising, full overturn/approval and selected Market/Reputation restrictions.
-
-### Founder
-
-Inherits Admin and adds custom punishment combinations, confiscated-item
-restoration and explicit owner recovery authorization.
-
-See [[Roles and Permissions|Rank-Authority]] for the policy explanation. Always
-compare the Wiki with
-[`plugin.yml`](https://github.com/wsg138/EnthusiaStaff/blob/main/paper/src/main/resources/plugin.yml),
-LuckPerms groups and authorization tests.
+The Discord-specific Developer exception allows approved **Discord-only temporary moderation** comparable to Mod; it does not make Developer a Minecraft Mod.
 
 ## Verification
 
-`/estaff verify full` is an operator/developer diagnostic, not an ordinary staff
-command. It is intended to inspect command ownership/conflicts, integrations,
-storage, configuration, runtime artifacts, migration state and backends.
+`/estaff verify full` is an operator/developer diagnostic. It should inspect current runtime/storage/provider facts without taking destructive ownership or claiming unsupported checks passed.
 
-Verification must never silently take command ownership from another plugin or
-run a destructive command as a test.
+StaffBot uses its own health/readiness surface. Website/moderation-web use their own protected health/deployment checks. Do not collapse all runtimes into one command result.
+
+## Source references
+
+- [`paper/src/main/resources/plugin.yml`](https://github.com/wsg138/EnthusiaStaff/blob/main/paper/src/main/resources/plugin.yml)
+- [`JdaStaffModerationListener.java`](https://github.com/wsg138/EnthusiaStaff/blob/main/staff-bot/src/main/java/net/enthusia/staff/discordbot/JdaStaffModerationListener.java)
+- [[Discord Moderation Platform]]
+- [[Staff Bot Runtime and Operations]]
+- [[Rank Authority]]
+- [[Implementation Status]]
 
 ## Related pages
 
-- [[Feature Completion Status|Implementation-Status]]
-- [[Roles and Permissions|Rank-Authority]]
-- [[Core Platform and Infrastructure]]
-- [[Moderation, Punishments, and Reports]]
+- [[Staff Handbook]]
+- [[Punishment System]]
+- [[Reports and Evidence]]
 - [[Staff Mode, Vanish, and Freeze|Staff-Mode-Vanish-and-Freeze]]
-- [[Staff Tools, Investigations, and Player-State Safety]]
+- [[Discord Moderation Platform]]
+- [[Website and Web API]]
+- [[Rank Authority]]
 - [[Developer Code Guide]]

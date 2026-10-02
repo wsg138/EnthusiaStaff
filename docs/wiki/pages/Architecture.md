@@ -1,199 +1,219 @@
 # Architecture
 
-EnthusiaStaff is a distributed moderation platform, not a single Bukkit command plugin. Domain policy and durable state are separated from Paper, Velocity, MariaDB implementation details, the website, Discord and optional provider adapters.
+EnthusiaStaff is a distributed moderation platform spanning Minecraft servers/proxy, MariaDB, Discord, private service boundaries, and public/staff web surfaces. Domain policy and durable state are separated from Paper, Velocity, StaffBot/JDA, Cloudflare/browser UI, provider adapters, and JDBC implementation details.
 
 ## Quick orientation
 
-- **What is merged?** [[Implementation Status]]
-- **Where does a feature live?** [[Developer Code Guide]]
-- **What should a reviewer verify?** [[Code Review Guide]]
-- **How do Paper and Velocity communicate?** [[Protocol and Network Traffic]]
-- **How is the change proven?** [[Build and Testing]]
-- **Deeper source-controlled architecture:** [`docs/architecture.md`](https://github.com/wsg138/EnthusiaStaff/blob/main/docs/architecture.md)
+- Current product state: [[Implementation Status]]
+- Detailed source map: [[Developer Code Guide]]
+- Discord product/runtime: [[Discord Moderation Platform]] and [[Staff Bot Runtime and Operations]]
+- Public site/web APIs: [[Website and Web API]]
+- Review invariants: [[Code Review Guide]]
+- Evidence: [[Build and Testing]]
+- Paper/Velocity transport: [[Protocol and Network Traffic]]
 
 ## Deployable shape
 
-Current merged `main` builds exactly two Minecraft runtime artifacts:
+The root `runtimeJars` task currently builds/verifies four Java runtime artifacts:
 
 1. `EnthusiaStaff-Paper-<version>.jar`
-2. `EnthusiaStaff-Velocity-<version>.jar`
+2. `EnthusiaStaff-AuthorityBridge-<version>.jar`
+3. `EnthusiaStaff-Velocity-<version>.jar`
+4. `EnthusiaStaff-StaffBot-<version>.jar`
 
-The planned interactive Discord staff bot is a separate runtime/application boundary and is **not** part of the current merged runtime modules.
+The authority bridge is a narrow transition runtime, not another full Paper feature implementation. StaffBot is a standalone Java/JDA application, not a Minecraft plugin.
 
-Internal modules:
+Web components deploy separately:
+
+- `components/enthusia-site/` — public Enthusia site + Cloudflare Pages Functions;
+- `moderation-web/` — staging-only Cloudflare Worker/static-assets staff moderation workspace.
+
+## Gradle modules
 
 | Module | Responsibility |
 | --- | --- |
-| `common` | shared identifiers, validation, cryptography/security primitives and bounded utilities |
+| `common` | identifiers, validation, security/crypto primitives, bounded utilities |
 | `domain` | business policy, authorization, application services, state machines and ports |
-| `integration-contracts` | stable compile-time contracts for supported Enthusia-owned providers |
-| `persistence` | MariaDB bootstrap, Flyway, JDBC stores, transactions, leases, journals, inboxes/outboxes, recovery |
-| `protocol` | authenticated Paper–Velocity transport, replay protection and acknowledgements |
-| `paper` | commands, GUIs/listeners and server-local/player-state adapters |
-| `velocity` | proxy enforcement, network identity, network workers, migration and restricted website bridge |
-| `integration-tests` | MariaDB/cross-module/concurrency/recovery validation; never deployed |
-
-Root references: [build](https://github.com/wsg138/EnthusiaStaff/blob/main/build.gradle.kts) and [settings](https://github.com/wsg138/EnthusiaStaff/blob/main/settings.gradle.kts).
+| `integration-contracts` | supported compile-time contracts for Enthusia-owned providers |
+| `discord-platform-api` | provider-neutral managed-role contract |
+| `persistence` | MariaDB/Flyway/JDBC, transactions, leases, journals, inbox/outbox and recovery |
+| `protocol` | authenticated Paper–Velocity transport, replay and acknowledgements |
+| `paper` | commands, GUIs/listeners, Minecraft-side effects and provider adapters |
+| `paper-authority-bridge` | narrow transition/authority bridge runtime |
+| `velocity` | proxy enforcement, network identity, distributed workers, migration and website API |
+| `staff-bot` | JDA gateway, Discord staff UX/effects/reconciliation, private read/launch services, health |
+| `integration-tests` | MariaDB/cross-module/recovery tests; never deployed |
 
 ## Dependency direction
 
 ```text
-Paper / Velocity / website adapters
-              |                  provider adapters
-              |                       |        \
-              v                       v         v
-     domain application services  domain   integration-contracts
-              |                            (compile-time contracts)
-              v
-         domain ports/models
-              ^
-              |
-     persistence / protocol adapters
+Paper / AuthorityBridge / Velocity / StaffBot / Web / provider adapters
+                              |
+                              v
+                     domain policy / ports
+                         ^           ^
+                         |           |
+                   persistence    protocol
+                         ^
+                         |
+             integration/service contracts
 ```
 
-The practical rule is: **domain policy decides; platform adapters translate/apply runtime effects; persistence implements durable ports.** `integration-contracts` is the explicit compile-time boundary used by supported Enthusia-owned provider adapters; it does not become a second home for business policy.
+The rule is: **domain policy decides; runtime adapters translate and apply effects; persistence implements durable ports; public/browser surfaces receive only explicitly approved projections.**
 
-A command, GUI, event listener, website route, future Discord runtime or provider adapter should not gain its own copy of punishment ladders, rank hierarchy, transaction policy or recovery decisions.
+`integration-contracts` and `discord-platform-api` define supported boundaries. They must not become alternate homes for punishment ladders, rank hierarchy, linking rules, target protection, transaction policy, or recovery decisions.
 
-## Bounded contexts
+## Runtime ownership
 
-Principal domains include:
+### Paper
 
-- identity, moderation subjects and player directory;
-- cases, punishments, sanctions and escalation;
-- reports and appeals;
-- alts and protected network identity;
-- inventory, economy, market and reputation moderation;
-- staff sessions, staff tools, Cheat Tester, vanish and freeze;
-- Discord webhook delivery and the separate Discord moderation identity/persistence/authorization foundation;
-- migration/shadow/cutover;
-- verification, audit and configuration;
-- external integrations.
+Paper owns server-local Bukkit/Paper state:
 
-Each context should expose a stable application-service/port boundary rather than allowing unrelated modules to reach directly into its persistence or platform implementation.
+- commands and inventory GUIs;
+- Staff Mode and staff tools;
+- vanish/freeze/player-state enforcement;
+- inventory/Ender/confiscation effects;
+- Minecraft-side account-linking adapters;
+- Paper-side provider integrations.
 
-## Paper ownership
+Blocking database/network/provider work stays off the game/entity thread. Live player/entity mutation returns to the supported owning scheduler. Async callbacks that can outlive a player session require fencing.
 
-Paper owns server-local state and Bukkit/Paper interactions:
+Player-originated destructive Paper actions also obey the current Staff Mode duty requirement where the owning action requires it. That Paper-local rule does not replace independent Discord/global/website authority.
 
-- staff commands and GUIs;
-- player/entity mutations;
-- staff-mode state application/restoration;
-- Cheat Tester/fake-base server-local effects;
-- vanish visibility application;
-- freeze restrictions;
-- inventory/Ender state;
-- report/client context capture;
-- Paper-side provider adapters.
+### Paper authority bridge
 
-Important composition paths:
+`paper-authority-bridge` packages a deliberately constrained transition runtime. Its build verifies required migration/runtime entries and rejects selected full moderation/migration classes that must not leak into the bridge.
 
-- [EnthusiaStaffPaperPlugin](https://github.com/wsg138/EnthusiaStaff/blob/main/paper/src/main/java/net/enthusia/staff/paper/EnthusiaStaffPaperPlugin.java)
-- [PaperRuntimeLifecycle](https://github.com/wsg138/EnthusiaStaff/blob/main/paper/src/main/java/net/enthusia/staff/paper/PaperRuntimeLifecycle.java)
-- [PaperRuntimeComponents](https://github.com/wsg138/EnthusiaStaff/blob/main/paper/src/main/java/net/enthusia/staff/paper/PaperRuntimeComponents.java)
-- [PaperStorageBindings](https://github.com/wsg138/EnthusiaStaff/blob/main/paper/src/main/java/net/enthusia/staff/paper/PaperStorageBindings.java)
-- [PaperCommandRegistrar](https://github.com/wsg138/EnthusiaStaff/blob/main/paper/src/main/java/net/enthusia/staff/paper/PaperCommandRegistrar.java)
-- [PaperIntegrationManager](https://github.com/wsg138/EnthusiaStaff/blob/main/paper/src/main/java/net/enthusia/staff/paper/PaperIntegrationManager.java)
-- [PaperResourceCloser](https://github.com/wsg138/EnthusiaStaff/blob/main/paper/src/main/java/net/enthusia/staff/paper/PaperResourceCloser.java)
+Review it as a containment boundary: it should expose only the transition authority needed by its contract and should remain removable once the transition no longer needs it.
 
-Blocking DB/network/provider work must not run on the game/entity thread. Player/entity mutation must return to the supported owning scheduler. Session/revision fencing is required when an asynchronous callback may outlive a disconnect/reconnect.
+### Velocity
 
-A mocked scheduler or standalone Paper boot does not prove real Folia region/entity ownership. See [[Build and Testing]].
-
-## Velocity ownership
-
-Velocity owns network-facing state and coordination such as:
+Velocity owns proxy/network coordination:
 
 - login/server-switch enforcement;
-- network-wide player/server presence;
-- protected network-identity observations;
-- persistent backend transport server;
-- network/Discord webhook delivery workers;
+- protected network identity/presence;
+- Paper–Velocity transport workers;
+- legacy Discord webhook delivery;
 - migration/shadow/cutover coordination;
-- the restricted website bridge.
+- authoritative website API server/router.
 
-Important paths:
+Velocity event threads must not wait on JDBC, HTTP, filesystem or socket I/O. Startup/reload/shutdown should be reviewed as an atomic lifecycle publication problem.
 
-- [EnthusiaStaffVelocityPlugin](https://github.com/wsg138/EnthusiaStaff/blob/main/velocity/src/main/java/net/enthusia/staff/velocity/EnthusiaStaffVelocityPlugin.java)
-- [VelocityConfiguration](https://github.com/wsg138/EnthusiaStaff/blob/main/velocity/src/main/java/net/enthusia/staff/velocity/VelocityConfiguration.java)
-- [NetworkOutboxWorker](https://github.com/wsg138/EnthusiaStaff/blob/main/velocity/src/main/java/net/enthusia/staff/velocity/NetworkOutboxWorker.java)
-- [DiscordOutboxWorker](https://github.com/wsg138/EnthusiaStaff/blob/main/velocity/src/main/java/net/enthusia/staff/velocity/DiscordOutboxWorker.java)
-- [WebsiteApiServer](https://github.com/wsg138/EnthusiaStaff/blob/main/velocity/src/main/java/net/enthusia/staff/velocity/WebsiteApiServer.java)
+### StaffBot
 
-Velocity event threads must not block on JDBC, HTTP, filesystem or socket I/O. Startup/reload/shutdown changes must be reviewed as lifecycle publication/rollback problems, not only as individual methods.
+StaffBot owns the privileged Discord Gateway/JDA lifecycle:
 
-The future interactive Discord staff bot is not a responsibility of the current Velocity artifact merely because legacy webhook delivery exists there.
+- Discord application/guild/environment fencing;
+- slash/context/component moderation UX;
+- linked-staff actor resolution and action-time authorization;
+- Discord punishment execution/reconciliation where enabled;
+- private moderation-read API;
+- signed moderation-workspace launch issuance;
+- health/readiness and bounded worker lifecycle.
 
-## MariaDB authority and persistence
+A Discord role or visible command is never sufficient authority by itself. StaffBot must resolve current Enthusia staff authority and target state.
 
-MariaDB is the durable authority for moderation/recovery state such as cases, sanctions, identity, reports/evidence, staff sessions, player-state journals, network/Discord delivery, Discord moderation foundations, migration state, configuration versions, audit, leases and quarantine.
+### Web surfaces
 
-Primary entry points:
+There are distinct web boundaries:
 
-- [MariaDb](https://github.com/wsg138/EnthusiaStaff/blob/main/persistence/src/main/java/net/enthusia/staff/persistence/MariaDb.java)
-- [MariaDbRuntime](https://github.com/wsg138/EnthusiaStaff/blob/main/persistence/src/main/java/net/enthusia/staff/persistence/MariaDbRuntime.java)
-- [persistence package](https://github.com/wsg138/EnthusiaStaff/tree/main/persistence/src/main/java/net/enthusia/staff/persistence)
+1. **Velocity website API** — authoritative public projections and authenticated punishment-code/appeal/reviewer workflow.
+2. **`components/enthusia-site/`** — public site and Cloudflare Pages Functions.
+3. **`moderation-web/`** — staging-only browser staff workspace.
+4. **StaffBot private moderation-read API** — protected data source for that staging workspace.
+
+The browser/Cloudflare layer is not a privileged database client or punishment writer. See [[Website and Web API]].
+
+## Durable authority and migrations
+
+MariaDB stores core moderation, recovery, identity, report/evidence, session, player-state, network delivery, Discord moderation/linking, website appeal, migration and audit state.
+
+Current merged Flyway history reaches **V20**:
+
+- V17 — website appeal workflow;
+- V18 — Cheat Tester session journal;
+- V19 — Discord moderation persistence/reconciliation;
+- V20 — Discord/Minecraft account linking.
+
+Applied migrations are immutable. Later versions visible only on open branches are not current schema.
+
+## High-risk write pattern
+
+A high-risk mutation normally needs an explicit sequence such as:
+
+1. normalize/validate identity and input;
+2. resolve current actor/target authority;
+3. establish idempotency/durable intent where required;
+4. lock/lease/fence the authoritative state;
+5. reread and reauthorize the current revision;
+6. persist before-state/recovery information before destructive effects where required;
+7. atomically commit domain state/audit/outbox where the model requires it;
+8. apply platform/provider effects through the owning adapter;
+9. verify/reconcile the resulting external state;
+10. record terminal/acknowledged state or preserve ambiguity for recovery.
+
+A sent Discord request, HTTP 2xx, queued packet, or completed browser request is not enough to declare an authoritative effect successful.
+
+## Distributed failure models
+
+Different boundaries fail differently:
+
+- Paper–Velocity transport is at-least-once and relies on replay protection, durable inbox/outbox and idempotent consumers.
+- Discord native effects may be ambiguous after timeouts/restarts and sometimes cannot be safely blind-retried.
+- Legacy Discord webhooks are outbound notifications and may duplicate around remote-success/local-crash windows.
+- Website/browser requests require authentication, replay/body/rate bounds and strict public/private projections.
+- Provider operations must use supported contracts and preserve recoverability when external truth is uncertain.
+
+## Account linking and Discord roles
+
+Discord/Minecraft linking is now a real merged domain/runtime, backed by V20. Link codes are one-use/short-lived and hashed at rest; ownership/history and main-account selection are durable.
+
+`discord-platform-api` separately defines a provider-neutral managed-role contract. It does not mean all old DiscordSRV role-sync consumers have already migrated. Consumer plugins should not import JDA/StaffBot internals.
+
+## Security/privacy boundaries
+
+Architecture reviews should explicitly identify whether data is:
+
+- public;
+- staff-private;
+- evidence-private;
+- account-link/network identity data;
+- a credential/signing secret;
+- production topology/configuration.
+
+Public/site/Discord projections use explicit allowlists. Raw database/domain objects should not be serialized just because they are convenient.
+
+## Safe-failure principles
+
+- stale revisions/confirmations do not overwrite newer authority/state;
+- partial external effects remain reconcilable rather than becoming false success;
+- inventory/economy/confiscation ambiguity preserves recovery evidence;
+- restart/reconnect does not let stale callbacks/workers mutate a replacement runtime;
+- optional provider loss disables only dependent behavior when safe;
+- Discord ambiguous effects reconcile instead of blind retry;
+- account-link replay/concurrency cannot create ambiguous ownership;
+- browser/public APIs never become implicit moderation authority;
+- production authority does not move merely because implementation merged.
+
+## Important source entry points
+
+- [Paper plugin](https://github.com/wsg138/EnthusiaStaff/blob/main/paper/src/main/java/net/enthusia/staff/paper/EnthusiaStaffPaperPlugin.java)
+- [Authority bridge build/containment](https://github.com/wsg138/EnthusiaStaff/blob/main/paper-authority-bridge/build.gradle.kts)
+- [Velocity plugin](https://github.com/wsg138/EnthusiaStaff/blob/main/velocity/src/main/java/net/enthusia/staff/velocity/EnthusiaStaffVelocityPlugin.java)
+- [Website API router](https://github.com/wsg138/EnthusiaStaff/blob/main/velocity/src/main/java/net/enthusia/staff/velocity/WebsiteApiRouter.java)
+- [StaffBot application](https://github.com/wsg138/EnthusiaStaff/blob/main/staff-bot/src/main/java/net/enthusia/staff/discordbot/StaffBotApplication.java)
+- [StaffBot runtime](https://github.com/wsg138/EnthusiaStaff/blob/main/staff-bot/src/main/java/net/enthusia/staff/discordbot/StaffBotRuntime.java)
+- [Discord platform API](https://github.com/wsg138/EnthusiaStaff/tree/main/discord-platform-api)
+- [Persistence](https://github.com/wsg138/EnthusiaStaff/tree/main/persistence/src/main/java/net/enthusia/staff/persistence)
 - [Flyway migrations](https://github.com/wsg138/EnthusiaStaff/tree/main/persistence/src/main/resources/db/migration)
 
-Current merged `main` contains migrations through **`V19__discord_moderation_persistence.sql`**. V18 owns the Cheat Tester session journal; V19 owns the current Discord moderation persistence foundation. Flyway history is forward-only and applied migrations are immutable; future schema changes add a new migration after reconciling the live migration ceiling.
+## Continue deeper
 
-## Authoritative write pattern
-
-Not every workflow has identical steps, but high-risk writes should make these boundaries explicit:
-
-1. normalize/validate input and identity;
-2. authorize through the central application policy;
-3. establish idempotency and durable intent where required;
-4. acquire the required row lock/lease/fence;
-5. reread/revalidate current revision and authority;
-6. persist a before snapshot before destructive external/player-state effects;
-7. commit the authoritative domain state/audit/outbox atomically where the model requires it;
-8. apply platform/provider/network side effects idempotently;
-9. verify resulting state;
-10. record acknowledgement/terminal state or quarantine ambiguity.
-
-Success should not be reported merely because bytes were sent or an external call returned before the durable result is known.
-
-## Distributed delivery
-
-Paper–Velocity transport is at-least-once. Correctness comes from authenticated/versioned messages, replay protection, durable outbox/inbox state, idempotent consumers, meaningful acknowledgements, bounded queues/backoff, reconnect/recovery and stale-worker fencing.
-
-Do not describe the transport as exactly-once. Deep dive: [[Protocol and Network Traffic]].
-
-Legacy Discord webhook delivery is a separate at-least-once external boundary with its own renderer/privacy/retry policy. See [[Discord Delivery]].
-
-## Safe failure principles
-
-- A punishment cannot partially apply an intended combined decision.
-- An exact sanction change cannot mutate unrelated sanctions.
-- Stale revisions cannot overwrite newer state.
-- Inventory/economy/confiscation ambiguity preserves recovery evidence or enters quarantine.
-- Cheat Tester does not become terminal until owned cleanup/restoration is verified.
-- Migration mismatch blocks authority transition.
-- Missing optional integrations disable only dependent behavior when safe.
-- MariaDB/proxy/provider loss blocks actions whose correctness cannot be proved.
-- Restart/reconnect work must not let stale callbacks mutate new player sessions.
-- Discord identity/schema/authorization foundations must not be mistaken for a live bot or external side effect.
-
-## Restricted website boundary
-
-The Velocity website bridge is a restricted authenticated boundary for trusted site integration. It must not become a casually exposed public moderation API.
-
-Relevant paths include `WebsiteApiRuntime`, `WebsiteApiServer`, `WebsiteApiRequestDecoder`, `WebsiteApiRouter`, `WebsiteAppealEndpoint` and `WebsiteAppealWorkflowEndpoint` under the Velocity module.
-
-Only sanitized projections may cross that boundary. See [[Privacy and Data Handling]] and [[Integrations, Migration, and Release Readiness]].
-
-## Stable service boundaries
-
-Important internal/public service contracts include `StaffVisibilityService`, `PunishmentQueryService`, `SanctionQueryService`, `StaffSessionService`, `StaffModeQueryService`, `InventoryLockService`, `AltRelationshipService` and `PlayerDirectoryService`.
-
-Other plugins should depend on supported service/contracts rather than mutable EnthusiaStaff implementation internals.
-
-## How to continue
-
-- Need the exact class/store/test trace? [[Developer Code Guide]]
-- Reviewing a change? [[Code Review Guide]]
-- Debugging a failure? [[Recovery and Troubleshooting]]
-- Validating a claim? [[Build and Testing]]
-- Discord-specific foundations/runtime distinction? [[Discord Moderation Platform]]
-- Looking at a feature family? [[Core Platform and Infrastructure]], [[Moderation, Punishments, and Reports]], [[Staff Tools, Investigations, and Player-State Safety]], or [[Integrations, Migration, and Release Readiness]].
+- [[Developer Code Guide]] — exact source ownership.
+- [[Code Review Guide]] — failure/review checklist.
+- [[Discord Moderation Platform]] — Discord product behavior/status.
+- [[Staff Bot Runtime and Operations]] — bot build/config/deploy/recovery.
+- [[Website and Web API]] — public/private web architecture and routes.
+- [[Protocol and Network Traffic]] — Paper–Velocity transport.
+- [[Core Platform and Infrastructure]] — runtime/platform hub.
+- [[Build and Testing]] — evidence interpretation.

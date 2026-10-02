@@ -30,6 +30,22 @@ class VelocityStatusSuggestionsTest {
     }
 
     @Test
+    void fullVerificationRequiresBothDiagnosticPermissions() {
+        Set<String> allowed = Set.of("enthusiastaff.verify", "enthusiastaff.diagnostics");
+        assertEquals(
+                List.of("full"),
+                VelocityStatusSuggestions.suggest(new String[]{"verify", ""}, allowed::contains)
+        );
+        assertEquals(
+                List.of(),
+                VelocityStatusSuggestions.suggest(
+                        new String[]{"verify", ""},
+                        "enthusiastaff.verify"::equals
+                )
+        );
+    }
+
+    @Test
     void secondarySuggestionsKeepTheirExistingPermissionBoundaries() {
         assertEquals(
                 List.of("inspect", "dry-run", "import", "shadow", "final"),

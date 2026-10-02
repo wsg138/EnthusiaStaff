@@ -75,7 +75,7 @@ Use `package/<package-id-lowercase>-<short-name>`. Open a draft PR early after t
 
 ## 5. Implementation standards
 
-Unless documentation-only, account for Java 21, Paper, Leaf, and Folia thread ownership, Velocity lifecycle, asynchronous and bounded database work, MariaDB transactions and indexes, multiple runtimes, idempotency and retry, restart and shutdown recovery, bounded queues, queries, and caches, permissions and hierarchy at service boundaries, atomic reload, Java and Bedrock usability, logging and privacy, provider-present and provider-missing behavior, audit completeness, rollback, and authority fencing.
+Unless documentation-only, account for Java 25, Paper, Leaf, and Folia thread ownership, Velocity lifecycle, asynchronous and bounded database work, MariaDB transactions and indexes, multiple runtimes, idempotency and retry, restart and shutdown recovery, bounded queues, queries, and caches, permissions and hierarchy at service boundaries, atomic reload, Java and Bedrock usability, logging and privacy, provider-present and provider-missing behavior, audit completeness, rollback, and authority fencing.
 
 Do not deliver placeholders, TODOs, unused interfaces, invented APIs, reflection against unknown provider implementations, log scraping as a callback substitute, or duplicate systems.
 
@@ -111,7 +111,7 @@ Classify findings as merge blockers, confirmed defects, optional cleanup, or unr
 
 Finish tracked code, tests, migrations, docs, state, component metadata, and handoff before final validation. Freeze every reviewed head. If a real defect requires another commit, repeat full-diff review and exact-head validation.
 
-Run all applicable repository gates: Java 21 clean build and tests, warnings-as-errors, MariaDB and Testcontainers, migration clean-install, upgrade, and checksum, static analysis, coverage, runtime JAR integrity, provider-leak checks, Wiki, Markdown, link, and package validation, review bots, and safe exact-head Pi when configured and applicable. Skipped, cancelled, superseded, merge-ref-only, different-revision, queued, or missing checks are not success.
+Run all applicable repository gates: Java 25 clean build and tests, warnings-as-errors, MariaDB and Testcontainers, migration clean-install, upgrade, and checksum, static analysis, coverage, runtime JAR integrity, provider-leak checks, Wiki, Markdown, link, and package validation, review bots, and safe exact-head Pi when configured and applicable. Skipped, cancelled, superseded, merge-ref-only, different-revision, queued, or missing checks are not success.
 
 Record exact heads, run and job IDs, Java version, tests, coverage, migrations, artifact hashes, static analysis, review-thread count, and Pi result or verified non-applicability in PR text or comments, not through a self-referential tracked-file loop.
 

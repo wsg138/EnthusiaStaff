@@ -1,93 +1,114 @@
 # Implementation Status
 
-> **Overall verdict: not approved for production authority.** LiteBans and the currently approved production staff stack remain authoritative until the separate migration, shadow, acceptance, and cutover gates are completed.
+> **Overall release boundary:** merged implementation is not the same thing as production authority. LiteBans and the currently approved production staff/Discord stack remain authoritative where their replacement has not completed its specific migration, acceptance, and cutover gates.
 
-This page answers a product question: **what is present on merged `main`, and what kind of proof exists?** It deliberately does not mirror package-worker state or assign exact completion percentages that become misleading after every merge.
+This page answers: **what is present on merged `main`, and what kind of proof exists?** It deliberately avoids package-worker percentages and does not describe draft PR behavior as available.
 
 ## Status language
 
 - **Available** — implemented and verified in the environment relevant to the claim.
 - **Available with limitations** — usable for the stated scope, with important limitations listed.
-- **Implemented, not staging-verified** — merged code and relevant automated evidence exist, but representative runtime staging has not established the full claim.
+- **Implemented, not staging-verified** — merged code and automated evidence exist, but representative runtime staging has not established the full claim.
+- **Implemented, not production-accepted** — merged/runtime evidence exists for some scope, but production authority/cutover has not been accepted.
 - **Partial** — meaningful foundations exist but the described workflow is incomplete.
-- **Blocked** — a required dependency, provider, environment, or authority gate is unavailable.
-- **Planned** — required by the goals/specification but not implemented.
-- **Deprecated** — retained only for migration or compatibility.
+- **In development** — active unmerged work exists; it is not current `main` behavior.
+- **Blocked** — a required dependency, environment, provider, or authority gate is unavailable.
+- **Planned** — required/approved but not implemented.
 
-A passing unit/integration suite does not automatically make a feature **Available**. See [[Build and Testing]] for the evidence ladder.
+See [[Build and Testing]] for the evidence ladder.
 
 ## Current merged-main picture
 
 | Area | Current state | What is established on merged `main` | Important remaining proof/work |
 | --- | --- | --- | --- |
-| Runtime artifacts and module architecture | **Implemented, not staging-verified** | Java 21 multi-module build produces the intended Paper and Velocity runtime artifacts; clean domain/platform boundaries and runtime-JAR leak checks have automated coverage. | Real combined provider/classloader, distributed topology, supported server-version, and release-candidate staging. |
-| MariaDB persistence and Flyway | **Implemented, not staging-verified** | Transactional JDBC stores, leases/revisions/outboxes/recovery foundations and migrations through **V17** are present; MariaDB/Testcontainers covers substantial persistence behavior. | Production-like volume/latency, process-kill, long outage, multi-server contention, and release-candidate upgrade rehearsal. |
-| Paper–Velocity protocol | **Implemented, not staging-verified** | Persistent authenticated transport, replay protection, acknowledgements, durable inbox/outbox behavior and bounded retry foundations exist. | Multi-backend reconnect/outage/backpressure, real certificate/allowlist, and no-online-player runtime acceptance. |
-| Configuration and reload | **Partial** | Validated reason-policy compatibility, report configuration/GUI snapshots, selected Paper settings and immutable publication paths exist. | Full modular configuration tree, complete cross-file atomic reload, restart-required reporting, and representative Paper/Velocity reload staging. |
-| Player identity and Java/Bedrock persistence | **Implemented, not staging-verified** | UUID authority, verified Floodgate-based platform persistence, `UNKNOWN` fallback, alias/history resolution, and protection against unverified proxy observations downgrading verified platform state are merged. | Representative Java/Bedrock/Geyser/Floodgate reconnect, multi-backend, provider-failure and presentation staging. |
-| Punishment creation, drafts and approval requests | **Implemented, not staging-verified** | Central punishment policy, durable drafts, request/approval boundaries, rank rules, MariaDB persistence and GUI/text foundations have automated evidence. | Representative multi-server/Bedrock staff use, remaining modular UI/config work, and final production authority acceptance. |
-| Punishment history and exact sanction lifecycle | **Implemented, not staging-verified** | Bounded history/case views and exact sanction reduce/end/revoke/overturn paths with locked transaction checks, audit, idempotency and V14 persistence are merged. | Representative staff usability, website/provider end-to-end enforcement, and production authority acceptance. |
-| Escalation policy | **Partial** | Stable reason IDs, aliases/removed metadata, recommendation snapshots, explicit decay eligibility, ordinals and core engine behavior exist. | Broader family/combined-sanction rules, modular policy configuration and representative runtime acceptance. |
-| Reports and retained evidence | **Available with limitations** | `/report`, report queues/detail/action GUI, text/Bedrock fallbacks, revision fencing, bounded evidence retention/cleanup and configurable report policy are implemented. | Supported RoseChat private-message bridge, remaining notification/Discord presentation, and distributed provider/runtime staging. |
-| Website punishment/appeal workflow | **Implemented, not staging-verified** | Current aggregate source includes the scoped private-site/website appeal workflow, V17 persistence, authenticated bridge foundations, exact-sanction appeal isolation, and synchronized website component work. | Private deployment/security/runtime acceptance, real authentication/provider integration, operational monitoring, and public/production launch approval. Formal appeals are planned to remain website-only as Discord moderation expands. |
-| Staff mode and operational hotbar tools | **Implemented, not staging-verified** | Durable staff-session recovery plus the operational hotbar dispatcher, random teleport, inspect/freeze/reports/follow-spectate/vanish/staff-chat/menu routes, stale-tool rejection and Bedrock text fallbacks are merged. | Representative Java/Bedrock/Folia/distributed staging and unfinished advanced tools such as cheat testers/fake systems. |
-| Vanish | **Available with limitations** | Durable intent, rank-aware visibility service, incremental audience reconciliation, session fencing and current ProtocolLib player-info handling exist. | Complete cross-plugin visibility coverage, visual/packet compatibility, Java/Bedrock/Folia/multi-backend staging, and provider integration. |
-| Freeze | **Partial** | Durable freeze state and important restriction/recovery foundations exist. | Exhaustive movement/inventory/teleport/backend/chat bypass coverage and representative restart/client/Folia staging. |
-| Inventory/Ender editing and confiscation | **Partial** | Revision/journal/lease/confiscation/restoration foundations and substantial automated persistence/domain coverage exist. | Complete concurrent-viewer, nested-container, offline ownership/save races, login patches, crash recovery, quarantine and multi-server runtime proof. |
-| Economy/market/reputation moderation | **Partial / blocked by providers where applicable** | EnthusiaStaff-side contracts, journals and adapter boundaries exist for some operations. | Supported provider APIs/implementations, idempotent end-to-end behavior and cross-plugin staging. Raw provider SQL is not an acceptable substitute. |
-| Alt/network identity workflows | **Partial** | Protected network-identity and relationship foundations exist. | Confidence lifecycle, exclusions/households, inheritance, alerts/UI, key rotation and production-like private-data validation. |
-| Discord webhook delivery | **Partial** | Durable outbox/Velocity delivery worker and bounded retry foundations exist. | Complete event routing/privacy review, outage/dead-letter/operator behavior and live integration acceptance. |
-| Discord moderation/linking/AutoMod staff bot | **Planned** | Product/architecture specification and phased worker plan define a separate Java 21 staff bot, linked identity, scoped Discord sanctions, native-ban reconciliation, managed mutes/restrictions, evidence, AutoMod and cross-platform workflows. | No runtime/schema/commands/enforcement have been implemented yet; identity/scope/persistence/authorization must be built first. See [[Discord Moderation Platform]]. |
-| Public Discord information bot | **Planned** | Sanitized public command scope and trust boundary are specified. | No public bot/runtime/API implementation yet; it must remain isolated from privileged moderation data/credentials. See [[Discord Moderation Platform]]. |
-| LiteBans migration/shadow/cutover | **Partial; production acceptance blocked** | Schema inspection/import, mappings, comparison dimensions and cutover/recovery foundations exist. | Private representative data, exact 168-hour accepted shadow evidence, final reconciliation, owner acceptance and single-authority production cutover. |
-| Full release acceptance | **Blocked / not yet completed** | Hosted build/test/static-analysis checkpoints and limited private Paper boot evidence exist for historical exact SHAs. | One pinned release candidate still needs coherent Velocity, multi-backend, providers, Java/Bedrock, Folia, load, process-kill, destructive recovery, migration/shadow and production acceptance evidence. |
+| Runtime/module architecture | **Implemented, not fully production-accepted** | Java 25 multi-module system includes Paper, Velocity, standalone StaffBot, `discord-platform-api`, `paper-authority-bridge`, persistence/protocol/domain modules and integration tests. | One coherent release-candidate topology with the intended providers, private services, Java/Bedrock/Folia coverage and production acceptance. |
+| MariaDB persistence and Flyway | **Implemented, not fully production-accepted** | Transactional stores, leases/revisions/outboxes/recovery foundations and Flyway history through **V20** are merged. V19 adds Discord moderation persistence; V20 adds account linking. | Production-like volume/latency/process-kill/multi-runtime contention and exact upgrade rehearsal for final candidates. |
+| Paper–Velocity protocol | **Implemented, not fully staging-verified** | Authenticated persistent transport, replay protection, ACKs, durable inbox/outbox, retry/backpressure foundations. | Representative multi-backend outage/reconnect/no-player/security acceptance. |
+| Configuration and reload | **Partial** | Validated policy/config snapshots and safe publication paths exist across Paper/Velocity/StaffBot scopes. | Complete modular tree/cross-file immutable reload and representative reload/restart evidence. |
+| Player identity and Java/Bedrock persistence | **Implemented, not fully staging-verified** | UUID authority, verified Floodgate platform evidence, `UNKNOWN` fallback, alias/history handling and downgrade protection. | Representative Java/Bedrock/Geyser/Floodgate/provider-failure/multi-backend acceptance. |
+| Punishment creation/history/sanction lifecycle | **Implemented, not production-accepted** | Central punishment policy, durable drafts/requests, exact sanction reduce/end/revoke/overturn, history/cases/audit/idempotency are merged. | Final production authority/cutover and representative multi-surface enforcement validation. |
+| Reports and retained evidence | **Available with limitations** | Submission, queues/detail/action UI, bounded retained evidence, revision fencing and policy are implemented. | Ongoing provider/Discord presentation/evidence expansion and full distributed acceptance. |
+| Public site + Velocity website API | **Implemented, not production-accepted as a complete public service** | Aggregate `enthusia-site` component, public punishment/search/case projections, punishment-code and appeal/reviewer workflow endpoints, V17 persistence and exact-sanction appeal authority are merged. | Production deployment/security/operations/provider acceptance; draft expanded appeal lifecycle is not yet merged. See [[Website and Web API]]. |
+| Staging moderation web workspace | **Available for accepted staging read/simulation scope** | Cloudflare Worker/static-assets workspace, one-time signed launches, secure browser sessions, signed/replay-protected StaffBot reads and read-only moderation UX are merged and have protected staging evidence. | It intentionally has no destructive/production moderation authority; production design would require separate acceptance and hardened dedicated signing secrets. |
+| Staff mode and operational tools | **Implemented, not fully staging-verified** | Durable staff sessions, operational dispatcher/tools, aliases/recovery, Staff Mode mutation authority and fallbacks are merged. | Representative Java/Bedrock/Folia/distributed acceptance and remaining advanced-tool work. |
+| Vanish | **Available with limitations** | Durable intent, rank-aware visibility, reconciliation/session fencing and current packet/tab support are merged. | Full client/provider/multi-backend coverage. |
+| Freeze | **Partial** | Durable state and important restriction/recovery foundations exist. | Exhaustive bypass/restart/client/Folia/provider coverage. |
+| Inventory/Ender editing and confiscation | **Partial** | Journals/leases/revision/confiscation/restoration foundations and automated persistence/domain coverage exist. | Concurrent-viewer/nested-container/offline-save/login-patch/crash/quarantine runtime proof. |
+| Economy/market/reputation moderation | **Partial / provider-dependent** | EnthusiaStaff-side contracts/journals/adapters exist for supported portions. | Provider-side APIs/implementations and cross-plugin acceptance where still incomplete. |
+| Alt/network identity workflows | **Partial** | Protected network identity and relationship foundations exist. | Full confidence/exclusion/inheritance/alert/private-data acceptance. |
+| Legacy Discord webhook delivery | **Available with limitations** | Durable outbox/Velocity worker, bounded renderer/retries and privacy projection exist. | Live route/outage/dead-letter/operator acceptance; this is separate from StaffBot. |
+| StaffBot Discord runtime | **Implemented** | Standalone Java/JDA runtime, gateway ownership, identity fences, worker pool, health/readiness, moderation/read UI, signed components, linked-staff resolution, private read bridge and deployment/runbook are merged. | Production authority remains separately gated; destructive enforcement defaults off. See [[Staff Bot Runtime and Operations]]. |
+| Discord punishment enforcement | **Implemented, not production-accepted** | Durable warn/mute/kick/ban/restriction execution, end/revoke/overturn, confirmations, reauthorization, DMs/outcomes, retry/reconciliation/expiry and native-effect ownership logic are merged. | Exact production cutover/authority acceptance; do not equate implementation with live production enforcement. |
+| Discord/Minecraft account linking | **Implemented** | Bidirectional one-use short-lived codes, hashed-at-rest codes, ownership/history/main-account state, unlink/reassignment, playtime-based main selection and DiscordSRV import/mirroring compatibility are merged under V20. | Final retirement of every DiscordSRV-dependent role/console/chat path is separate work. |
+| Provider-neutral Discord managed-role API | **Implemented contract foundation** | `discord-platform-api` defines provider-neutral managed-role claims/namespaces/keys/results without leaking JDA/provider internals to consumers. | StaffBot provider and all consumer migrations/role-sync parity are separate workstreams. |
+| Discord evidence/cases/alerts expansion | **In development** | Active work exists beyond the current merged read/punishment surfaces. | Not current `main`; document after merge and validation. |
+| DiscordSRV console replacement | **In development** | Authenticated command-bridge work exists on a separate draft workstream. | Not merged; current Wiki must not claim console retirement is complete. |
+| Cross-platform Discord/Minecraft moderation expansion | **In development** | Existing merged scope/authorization foundations support expansion. | Active work remains unmerged; platform scope must not be widened by assumption. |
+| Discord role-sync replacement | **In development / incomplete** | Managed-role contract foundation is merged. | Provider implementation/consumer migrations/parity and final DiscordSRV retirement are not complete. |
+| LiteBans migration/shadow/cutover | **Partial; production acceptance blocked** | Schema import/comparison/cutover/recovery foundations exist. | Representative private data, required accepted shadow evidence, final reconciliation, owner acceptance and single-authority cutover. |
+| Full release acceptance | **Blocked / incomplete** | Strong hosted automated checkpoints and scoped staging evidence exist for many subsystems. | One pinned complete candidate still needs coherent distributed/provider/client/load/recovery/migration/cutover acceptance for the exact intended production topology. |
 
-## Important merged facts readers commonly miss
+## Important merged facts
 
-### Flyway is through V17
+### Flyway is through V20
 
-Current `main` contains `V17__website_appeal_workflow.sql`. V1-V17 are forward-only history and must not be edited in place. Add a new migration for future schema changes.
+Current `main` contains migrations through:
 
-### Java/Bedrock identity is provider-evidence based
+```text
+V20__discord_account_linking.sql
+```
 
-A `*` username shape is not proof of Bedrock. Supported Floodgate evidence establishes platform; unavailable/incompatible evidence remains `UNKNOWN`. Unverified Velocity presence may update identity/presence metadata but must not downgrade a verified platform record. See [[Integrations]].
+V19 owns Discord moderation persistence; V20 owns account linking. Later migration numbers visible only on open branches are not current schema and must not be documented as merged.
 
-### Staff operational tools are merged but not production-accepted
+### StaffBot is a standalone runtime
 
-The staff-mode hotbar dispatcher and its text/Bedrock fallbacks are merged. That establishes repository behavior and automated evidence, not representative Java/Bedrock/Folia/distributed acceptance. See [[Staff Mode, Vanish, and Freeze|Staff-Mode-Vanish-and-Freeze]].
+Current merged code no longer consists only of Paper and Velocity. `staff-bot` builds a standalone Java/JDA executable with its own lifecycle, health, private service boundaries and release/update procedure; the separate AuthorityBridge artifact remains a narrow transition runtime. See [[Staff Bot Runtime and Operations]] and [[Architecture]].
 
-### Website source exists; deployment acceptance is separate
+### Discord enforcement exists, but safe defaults/cutover still matter
 
-The scoped website/appeal implementation and V17 support are present in the aggregate repository. The restricted bridge and site still require the relevant private deployment, security, provider and production acceptance before they should be treated as a live public service.
+Discord punishment services and native/role effects are merged. That does not mean production Discord authority has moved. The runtime keeps destructive enforcement explicitly gated and defaults it off unless the accepted environment enables it.
 
-### Discord moderation expansion is specification-only
+### Account linking exists
 
-The interactive staff bot, new linking authority, Discord punishment enforcement, AutoMod replacement, role-sync replacement, ban migration and public bot are planned in [[Discord Moderation Platform]]. Existing webhook delivery does not mean those features already exist.
+The Wiki should no longer describe Discord/Minecraft linking as schema-only or future work. The merged runtime includes link-code, unlink/reassignment, ownership/history and main-account behavior under V20. DiscordSRV migration compatibility does not mean every DiscordSRV function has been retired.
+
+### There are multiple web surfaces
+
+The public site, Velocity website API, staging moderation web workspace, and StaffBot private read API are distinct trust boundaries. See [[Website and Web API]].
+
+### Staging moderation web is intentionally read-only/simulation-oriented
+
+Its successful staging evidence supports the recorded browser/read workflows. It does not grant production punishment authority or make Cloudflare/the browser a trusted moderation writer.
+
+### Java/Bedrock identity remains provider-evidence based
+
+A `*` username is not platform proof. UUID plus supported Floodgate evidence remains authoritative; unavailable/incompatible evidence remains `UNKNOWN`.
 
 ## How to inspect one feature deeply
 
-1. Open the matching feature hub or focused page for purpose, current limitations, important source paths, and focused staff/operator pages.
-2. Open [[Developer Code Guide]] for the end-to-end source trace of implemented areas.
-3. Open [[Code Review Guide]] to see the invariants and failure modes a change must preserve.
-4. Use the [requirements matrix](https://github.com/wsg138/EnthusiaStaff/blob/main/reports/REQUIREMENTS-MATRIX.md) for conservative requirement-level evidence, but reconcile it with current merged code and live GitHub when a recent merge has not yet been reflected there.
-5. Use exact PR/workflow evidence only for the SHA it actually tested.
+1. Open the matching feature hub/focused page for purpose, limitations and important source paths.
+2. Open [[Developer Code Guide]] for end-to-end source traces.
+3. Open [[Code Review Guide]] for invariants/failure modes.
+4. Use current code/migrations/tests and legitimate exact-SHA workflow/runtime evidence for proof.
+5. Treat requirements/package records as evidence/history, not as a substitute for reconciling current merged `main`.
 
-## Feature hubs
+## Feature/deep-dive entry points
 
 - [[Core Platform and Infrastructure]]
 - [[Moderation, Punishments, and Reports]]
 - [[Staff Tools, Investigations, and Player-State Safety]]
 - [[Integrations, Migration, and Release Readiness]]
 - [[Discord Moderation Platform]]
+- [[Staff Bot Runtime and Operations]]
+- [[Website and Web API]]
 
 ## Release boundary
 
-No source merge, automated test, Wiki update, or successful standalone Paper boot by itself authorizes:
+No source merge, automated test, Wiki update, scoped staging success, or standalone runtime boot by itself authorizes:
 
 - production moderation authority;
-- disabling or removing LiteBans;
-- replacing Discord moderation/AutoMod before its own migration/shadow/cutover acceptance;
-- skipping the shadow/acceptance gates;
-- destructive provider testing on live data;
-- publishing private evidence or credentials;
+- disabling/removing LiteBans before its accepted cutover;
+- enabling destructive Discord enforcement in production before Discord-specific acceptance;
+- treating an in-progress console/role-sync/cross-platform feature as merged;
+- exposing private evidence/credentials/network details;
 - claiming Java/Bedrock/Folia/provider compatibility beyond the environment actually exercised.

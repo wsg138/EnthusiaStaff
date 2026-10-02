@@ -472,6 +472,9 @@ final class LiteBansTargetImporter {
     }
 
     static LegacyProjection project(LegacySanction legacy, Instant now) {
+        if (legacy.type() == LegacySanctionType.KICK) {
+            return new LegacyProjection(SanctionStatus.APPLIED, Optional.of(legacy.issuedAt()), false);
+        }
         boolean naturallyExpired = legacy.expiresAt().filter(expiration -> !expiration.isAfter(now)).isPresent();
         if (legacy.active() && !naturallyExpired) {
             return new LegacyProjection(SanctionStatus.ACTIVE, Optional.empty(), true);
@@ -777,6 +780,8 @@ final class LiteBansTargetImporter {
             case BAN -> SanctionType.NETWORK_BAN;
             case MUTE -> SanctionType.MUTE;
             case IP_BAN -> SanctionType.NETWORK_IDENTITY_BAN;
+            case WARNING -> SanctionType.WARNING;
+            case KICK -> SanctionType.KICK;
         };
     }
 

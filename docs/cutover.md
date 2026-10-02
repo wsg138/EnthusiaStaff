@@ -6,7 +6,7 @@ The complete production-like rehearsal and evidence gate is in [cutover-acceptan
 
 ## Merge and activation boundaries
 
-The dormant implementation may be merged after code review, automated tests, exact-head Java 21 build and packaging, migration checksum compatibility, and fail-closed default verification are complete. Merging does not deploy a JAR, start a shadow window, enter `ACTIVE`, disable LiteBans, or authorize production use.
+The dormant implementation may be merged after code review, automated tests, exact-head Java 25 build and packaging, migration checksum compatibility, and fail-closed default verification are complete. Merging does not deploy a JAR, start a shadow window, enter `ACTIVE`, disable LiteBans, or authorize production use.
 
 Issue #43 blocks production activation and cutover authorization. It does not block merging dormant, reviewed implementation code into the development branch. Issue #43 must remain open until the representative restore, uninterrupted shadow window, final migration rehearsal, activation/freeze/rollback exercises, distributed-runtime acceptance, and operator approval are complete.
 

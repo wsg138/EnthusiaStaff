@@ -5,6 +5,7 @@ const DEFAULT_LIMIT = 25;
 const MAX_FILTER_TEXT = 200;
 const MAX_LIMIT = 50;
 const READ_API_ORIGIN = 'https://moderation-read-staging.enthusia.info';
+const PRODUCTION_READ_API_ORIGIN = 'https://moderation-read.enthusia.info';
 const MESSAGE_FILTER_KEYS = new Set(['channel', 'before', 'after', 'around', 'author', 'text', 'date', 'limit']);
 const BOOTSTRAP_FILTER_KEYS = new Set(['browse', 'channel', 'target']);
 const SIGNED_MESSAGE_FIELDS = Object.freeze(['afterMessageId', 'aroundMessageId', 'authorId', 'beforeMessageId', 'channelId', 'date', 'limit', 'text']);
@@ -26,7 +27,7 @@ export async function prepareModerationRead(env, session, endpoint, browserInput
   const nonce = randomToken(24);
   const signature = await signRequest(keyHex, 'POST', path, body, timestamp, nonce);
   return new Response(JSON.stringify({
-    origin: READ_API_ORIGIN,
+    origin: env.RUNTIME_ENVIRONMENT === 'production' ? PRODUCTION_READ_API_ORIGIN : READ_API_ORIGIN,
     path,
     method: 'POST',
     body,
@@ -37,6 +38,141 @@ export async function prepareModerationRead(env, session, endpoint, browserInput
     status: 200,
     headers: {'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'private, no-store'}
   });
+}
+
+/** Action proofs bind a CSRF-verified session to an exact allowlisted operation and body. */
+export async function prepareModerationAction(env, session, operation, input) {
+  requireLiveActionEnvironment(env);
+  requireActionOperation(operation);
+  const targetKey = validateActionInput(session, operation, input);
+  const keyHex = readSigningKey(env);
+  if (!keyHex) return unavailable();
+  const body = await actionRequestBody(session, input, targetKey);
+  return signedActionResponse(keyHex, operation, body);
+}
+
+function requireLiveActionEnvironment(env) {
+  if (env.RUNTIME_ENVIRONMENT !== 'production') throw new Error('live actions require production');
+}
+
+function requireActionOperation(operation) {
+  if (!['capabilities', 'prepare', 'confirm', 'status'].includes(operation)) {
+    throw new Error('invalid action operation');
+  }
+}
+
+function validateActionInput(session, operation, input) {
+  requireFilterObject(input);
+  requireFilterKeys(input, new Set(['targetKey', 'intent', 'confirmationId', 'minecraftTarget', 'minecraftIntent']));
+  const minecraft = minecraftAction(input);
+  validateActionScope(operation, input, minecraft);
+  const targetKey = actionTargetKey(session, input);
+  validateActionPayload(operation, input, minecraft);
+  return targetKey;
+}
+
+function minecraftAction(input) {
+  return input.minecraftTarget !== undefined || input.minecraftIntent !== undefined;
+}
+
+function validateActionScope(operation, input, minecraft) {
+  if (!minecraft) return;
+  if (input.intent !== undefined || operation === 'capabilities') throw new Error('cannot mix action scopes');
+  if (!validMinecraftTarget(input.minecraftTarget)) throw new Error('invalid Minecraft player');
+}
+
+function validMinecraftTarget(value) {
+  return typeof value === 'string'
+    && /^(?:[A-Za-z0-9_]{1,16}|[a-fA-F0-9]{8}(?:-[a-fA-F0-9]{4}){3}-[a-fA-F0-9]{12})$/.test(value);
+}
+
+function actionTargetKey(session, input) {
+  const targetKey = input.targetKey === undefined ? session.targetKey : input.targetKey;
+  if (typeof targetKey !== 'string'
+      || !/^(channel:[1-9][0-9]{0,19}|discord:[1-9][0-9]{0,19}|discord-channel:[1-9][0-9]{0,19}:[1-9][0-9]{0,19}|message:[1-9][0-9]{0,19}:[1-9][0-9]{0,19}:[1-9][0-9]{0,19})$/.test(targetKey)) {
+    throw new Error('invalid action target');
+  }
+  return targetKey;
+}
+
+function validateActionPayload(operation, input, minecraft) {
+  if (operation === 'prepare') {
+    validatePreparedAction(input, minecraft);
+    return;
+  }
+  requireUnchangedPreparedIntent(input);
+  validateConfirmation(operation, input.confirmationId);
+}
+
+function validatePreparedAction(input, minecraft) {
+  if (input.confirmationId !== undefined) throw new Error('invalid draft');
+  if (minecraft) {
+    validateMinecraftIntent(input.minecraftIntent);
+    return;
+  }
+  requireFilterObject(input.intent);
+  requireFilterKeys(input.intent, new Set(['type', 'duration', 'reason', 'explanation', 'restriction']));
+}
+
+function validateMinecraftIntent(intent) {
+  requireFilterObject(intent);
+  requireFilterKeys(intent, new Set(['reasonId', 'explanation']));
+  if (!validConfiguredReasonId(intent.reasonId)
+      || typeof intent.explanation !== 'string' || intent.explanation.length > 4000) {
+    throw new Error('invalid configured Minecraft intent');
+  }
+}
+
+function validConfiguredReasonId(value) {
+  if (typeof value !== 'string' || value.length < 1 || value.length > 96) return false;
+  return value.split(/[.-]/).every(validReasonSegment);
+}
+
+function validReasonSegment(segment) {
+  return segment.length > 0 && [...segment].every(lowerAlphaNumeric);
+}
+
+function lowerAlphaNumeric(character) {
+  return (character >= 'a' && character <= 'z') || (character >= '0' && character <= '9');
+}
+
+function requireUnchangedPreparedIntent(input) {
+  if (input.intent !== undefined || input.minecraftIntent !== undefined) {
+    throw new Error('cannot change prepared intent');
+  }
+}
+
+function validateConfirmation(operation, confirmationId) {
+  const required = operation === 'confirm' || operation === 'status';
+  if (required && !validConfirmationId(confirmationId)) throw new Error('invalid confirmation');
+  if (!required && confirmationId !== undefined) throw new Error('invalid confirmation');
+}
+
+function validConfirmationId(value) {
+  return typeof value === 'string' && /^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$/.test(value);
+}
+
+async function actionRequestBody(session, input, targetKey) {
+  const digest = await crypto.subtle.digest('SHA-256', textEncoder.encode(session.csrfToken));
+  const sessionBinding = hex(new Uint8Array(digest));
+  const body = JSON.stringify({actorId:session.actorId, guildId:session.guildId, targetKey,
+    sessionBinding, intent:nullableActionValue(input.intent), confirmationId:nullableActionValue(input.confirmationId),
+    minecraftTarget:nullableActionValue(input.minecraftTarget), minecraftIntent:nullableActionValue(input.minecraftIntent)});
+  if (textEncoder.encode(body).length > 65_536) throw new Error('action body too large');
+  return body;
+}
+
+function nullableActionValue(value) {
+  return value === undefined ? null : value;
+}
+
+async function signedActionResponse(keyHex, operation, body) {
+  const path = '/v1/moderation/actions/' + operation;
+  const timestamp = String(Math.floor(Date.now() / 1000));
+  const nonce = randomToken(24);
+  const signature = await signRequest(keyHex, 'POST', path, body, timestamp, nonce);
+  return new Response(JSON.stringify({origin:PRODUCTION_READ_API_ORIGIN, path, method:'POST', body, timestamp, nonce, signature}),
+    {headers:{'Content-Type':'application/json; charset=utf-8', 'Cache-Control':'private, no-store'}});
 }
 
 export function browserMessageQuery(input) {

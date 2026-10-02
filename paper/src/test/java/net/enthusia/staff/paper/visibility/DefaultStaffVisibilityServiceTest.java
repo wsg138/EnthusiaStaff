@@ -11,7 +11,7 @@ import org.junit.jupiter.api.Test;
 
 class DefaultStaffVisibilityServiceTest {
     @Test
-    void helperVisibilityIsExplicitlyBelowModerator() {
+    void helpersAndModeratorsCanSeeEachOtherWhileVanished() {
         DefaultStaffVisibilityService visibility = new DefaultStaffVisibilityService(
                 DefaultStaffVisibilityService.defaultMatrix()
         );
@@ -26,7 +26,7 @@ class DefaultStaffVisibilityServiceTest {
         visibility.setVanished(vanishedMod, StaffRank.MOD, true);
 
         assertTrue(visibility.canSee(helperViewer, vanishedHelper));
-        assertFalse(visibility.canSee(helperViewer, vanishedMod));
+        assertTrue(visibility.canSee(helperViewer, vanishedMod));
         assertTrue(visibility.canSee(modViewer, vanishedHelper));
         assertTrue(visibility.canSee(modViewer, vanishedMod));
     }

@@ -6,8 +6,8 @@ const KEY_HEX = '42'.repeat(32);
 const GUILD = '1410303324745371709';
 const TARGET = 'discord:1049827163345127424';
 
-async function token({ actor = '123456789012345678', guild = GUILD, target = TARGET, issued = 1_787_000_000, expires = issued + 120, nonce = 'A'.repeat(32) } = {}) {
-  const body = `v1|staging|${nonce}|${actor}|${guild}|${target}|${issued}|${expires}`;
+async function token({ actor = '123456789012345678', guild = GUILD, target = TARGET, issued = 1_787_000_000, expires = issued + 120, nonce = 'A'.repeat(32), environment = 'staging' } = {}) {
+  const body = `v1|${environment}|${nonce}|${actor}|${guild}|${target}|${issued}|${expires}`;
   const encodedBody = Buffer.from(body, 'utf8').toString('base64url');
   const key = await crypto.subtle.importKey('raw', Buffer.from(KEY_HEX, 'hex'), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
   const signature = await crypto.subtle.sign('HMAC', key, Buffer.from(encodedBody, 'utf8'));
@@ -20,6 +20,12 @@ test('accepts a valid bounded staging user launch token', async () => {
   assert.equal(claims.actorId, '123456789012345678');
   assert.equal(claims.guildId, GUILD);
   assert.equal(claims.targetKey, TARGET);
+});
+
+test('production launch is accepted only by production verifier', async () => {
+  const value = await token({environment: 'production'});
+  assert.equal(parseLaunchToken(value), null);
+  assert.equal(parseLaunchToken(value, 'production')?.claims.actorId, '123456789012345678');
 });
 
 test('accepts a channel browse launch with no selected player', async () => {

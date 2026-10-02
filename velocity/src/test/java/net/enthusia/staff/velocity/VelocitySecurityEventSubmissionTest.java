@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.velocitypowered.api.event.Continuation;
@@ -41,6 +42,9 @@ import net.enthusia.staff.domain.ports.EconomyJournalStore;
 import net.enthusia.staff.domain.ports.FreezeStore;
 import net.enthusia.staff.domain.ports.InventoryJournalStore;
 import net.enthusia.staff.domain.ports.SanctionLookup;
+import net.enthusia.staff.domain.ports.StaffSessionStore;
+import net.enthusia.staff.domain.staff.StaffSessionSnapshot;
+import net.enthusia.staff.domain.staff.StaffSessionState;
 import net.enthusia.staff.domain.sanction.ActiveSanction;
 import net.enthusia.staff.domain.sanction.SanctionType;
 import org.junit.jupiter.api.Test;
@@ -48,6 +52,7 @@ import org.junit.jupiter.api.io.TempDir;
 import org.slf4j.Logger;
 
 final class VelocitySecurityEventSubmissionTest {
+    private static final String HUB = "HUB";
     private static final long TIMEOUT_SECONDS = 5L;
     private static final UUID PLAYER_ID = UUID.fromString("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
     private static final VarHandle WORKERS = field("workers", ExecutorService.class);
@@ -57,16 +62,18 @@ final class VelocitySecurityEventSubmissionTest {
     private static final VarHandle INVENTORIES = field("inventoryJournalStore", InventoryJournalStore.class);
     private static final VarHandle ECONOMIES = field("economyJournalStore", EconomyJournalStore.class);
     private static final VarHandle FREEZES = field("freezeStore", FreezeStore.class);
+    private static final VarHandle SESSIONS = field("staffSessionStore", StaffSessionStore.class);
 
     @TempDir
     Path tempDirectory;
 
     @Test
     void admittedCleanLoginUsesRealListenerAndRemainsAllowed() throws Exception {
-        ExecutorService executor = Executors.newSingleThreadExecutor();
+        ExecutorService executor = Executors.newSingleThreadExecutor(); // NOPMD - test closes it in finally or exercises plugin-owned shutdown.
         try {
             EnthusiaStaffVelocityPlugin plugin = plugin(executor);
-            LoginEvent event = loginEvent(new AtomicInteger());
+            setMode(plugin, OperationalMode.SHADOW_MIGRATION);
+            LoginEvent event = loginEvent(new AtomicInteger()); // NOPMD - each mode needs isolated event state.
 
             await(plugin.onLogin(event));
 
@@ -77,13 +84,29 @@ final class VelocitySecurityEventSubmissionTest {
     }
 
     @Test
+    void startupAndMaintenanceDenyRealLoginEventsWithoutPriorActiveAuthority() throws Exception {
+        ExecutorService executor = Executors.newSingleThreadExecutor(); // NOPMD - test closes it in finally or exercises plugin-owned shutdown.
+        try {
+            EnthusiaStaffVelocityPlugin plugin = plugin(executor);
+            for (OperationalMode mode : List.of(OperationalMode.BOOTSTRAP, OperationalMode.MAINTENANCE)) {
+                setMode(plugin, mode);
+                LoginEvent event = loginEvent(new AtomicInteger()); // NOPMD - each mode needs isolated event state.
+                await(plugin.onLogin(event));
+                assertFalse(event.getResult().isAllowed(), mode.name());
+            }
+        } finally {
+            executor.shutdownNow();
+        }
+    }
+
+    @Test
     void admittedSanctionDenialUsesRealListenerResult() throws Exception {
-        ExecutorService executor = Executors.newSingleThreadExecutor();
+        ExecutorService executor = Executors.newSingleThreadExecutor(); // NOPMD - test closes it in finally or exercises plugin-owned shutdown.
         try {
             EnthusiaStaffVelocityPlugin plugin = plugin(executor);
             setMode(plugin, OperationalMode.ACTIVE);
             SANCTION_LOOKUP.set(plugin, (SanctionLookup) (playerId, types, now) -> List.of(activeBan()));
-            LoginEvent event = loginEvent(new AtomicInteger());
+            LoginEvent event = loginEvent(new AtomicInteger()); // NOPMD - each mode needs isolated event state.
 
             await(plugin.onLogin(event));
 
@@ -113,6 +136,7 @@ final class VelocitySecurityEventSubmissionTest {
     void saturatedLoginHonorsExplicitConfiguredFailOpenOnly() throws Exception {
         try (SaturatedExecutor saturated = SaturatedExecutor.create()) {
             EnthusiaStaffVelocityPlugin plugin = plugin(saturated.executor());
+            setMode(plugin, OperationalMode.SHADOW_MIGRATION);
             CONFIGURATION.set(plugin, configuration(tempDirectory.resolve("open"), false));
             AtomicInteger securityReads = new AtomicInteger();
             LoginEvent event = loginEvent(securityReads);
@@ -122,6 +146,18 @@ final class VelocitySecurityEventSubmissionTest {
             assertTrue(event.getResult().isAllowed());
             assertEquals(0, securityReads.get());
             await(task);
+        }
+    }
+
+    @Test
+    void saturatedMaintenanceLoginCannotUseLegacyFailOpenConfiguration() throws Exception {
+        try (SaturatedExecutor saturated = SaturatedExecutor.create()) {
+            EnthusiaStaffVelocityPlugin plugin = plugin(saturated.executor());
+            setMode(plugin, OperationalMode.MAINTENANCE);
+            CONFIGURATION.set(plugin, configuration(tempDirectory.resolve("maintenance"), false));
+            LoginEvent event = loginEvent(new AtomicInteger()); // NOPMD - each mode needs isolated event state.
+            await(plugin.onLogin(event));
+            assertFalse(event.getResult().isAllowed());
         }
     }
 
@@ -142,6 +178,7 @@ final class VelocitySecurityEventSubmissionTest {
     void recoveredLoginCapacityAdmitsLaterRealListenerWork() throws Exception {
         try (SaturatedExecutor saturated = SaturatedExecutor.create()) {
             EnthusiaStaffVelocityPlugin plugin = plugin(saturated.executor());
+            setMode(plugin, OperationalMode.SHADOW_MIGRATION);
             LoginEvent rejected = loginEvent(new AtomicInteger());
             await(plugin.onLogin(rejected));
             assertFalse(rejected.getResult().isAllowed());
@@ -156,7 +193,7 @@ final class VelocitySecurityEventSubmissionTest {
 
     @Test
     void admittedServerSwitchRunsRealSecurityFencesAndAllowsCleanSwitch() throws Exception {
-        ExecutorService executor = Executors.newSingleThreadExecutor();
+        ExecutorService executor = Executors.newSingleThreadExecutor(); // NOPMD - test closes it in finally or exercises plugin-owned shutdown.
         try {
             EnthusiaStaffVelocityPlugin plugin = plugin(executor);
             setMode(plugin, OperationalMode.ACTIVE);
@@ -174,7 +211,7 @@ final class VelocitySecurityEventSubmissionTest {
 
     @Test
     void admittedServerSwitchSecurityDenialUsesRealEventResult() throws Exception {
-        ExecutorService executor = Executors.newSingleThreadExecutor();
+        ExecutorService executor = Executors.newSingleThreadExecutor(); // NOPMD - test closes it in finally or exercises plugin-owned shutdown.
         try {
             EnthusiaStaffVelocityPlugin plugin = plugin(executor);
             setMode(plugin, OperationalMode.ACTIVE);
@@ -246,7 +283,7 @@ final class VelocitySecurityEventSubmissionTest {
 
     @Test
     void lifecycleShutdownRefusesNewLoginAndServerSwitchWork() throws Exception {
-        ExecutorService executor = Executors.newSingleThreadExecutor();
+        ExecutorService executor = Executors.newSingleThreadExecutor(); // NOPMD - test closes it in finally or exercises plugin-owned shutdown.
         EnthusiaStaffVelocityPlugin plugin = plugin(executor);
         AtomicInteger inventoryReads = installEmptySwitchStores(plugin);
         plugin.onProxyShutdown(new ProxyShutdownEvent());
@@ -263,9 +300,99 @@ final class VelocitySecurityEventSubmissionTest {
         assertEquals(1, messages.get());
     }
 
+    @Test
+    void reconnectRoutesOpenSnapshotsToOwnerForEveryRecoverableState() throws Exception {
+        ExecutorService executor = Executors.newSingleThreadExecutor(); // NOPMD - test closes it in finally or exercises plugin-owned shutdown.
+        try {
+            RegisteredServer owner = server("TEMP");
+            ProxyServer proxy = ProxyServer.class.cast(Proxy.newProxyInstance(
+                    Thread.currentThread().getContextClassLoader(), new Class<?>[]{ProxyServer.class},
+                    (instance, method, arguments) -> method.getName().equals("getServer")
+                            ? Optional.of(owner) : defaultValue(method.getReturnType())));
+            EnthusiaStaffVelocityPlugin plugin = plugin(executor, proxy);
+            setMode(plugin, OperationalMode.ACTIVE);
+            installEmptySwitchStores(plugin);
+            for (StaffSessionState state : List.of(StaffSessionState.ACTIVE,
+                    StaffSessionState.RECOVERY_REQUIRED, StaffSessionState.EXITING)) {
+                SESSIONS.set(plugin, optionalStore(StaffSessionStore.class, new AtomicInteger(), // NOPMD - fresh counter isolates each state.
+                        Optional.of(snapshot(state))));
+                ServerPreConnectEvent event = new ServerPreConnectEvent( // NOPMD - each state needs a fresh event.
+                        player(new AtomicInteger(), new AtomicInteger()), server(HUB), null); // NOPMD - fresh counters isolate each state.
+                await(plugin.onServerPreConnect(event));
+                assertSame(owner, event.getResult().getServer().orElseThrow());
+            }
+        } finally {
+            executor.shutdownNow();
+        }
+    }
+
+    @Test
+    void reconnectWithUnavailableOwnerFailsClosed() throws Exception {
+        ExecutorService executor = Executors.newSingleThreadExecutor(); // NOPMD - test closes it in finally or exercises plugin-owned shutdown.
+        try {
+            EnthusiaStaffVelocityPlugin plugin = plugin(executor);
+            setMode(plugin, OperationalMode.ACTIVE);
+            installEmptySwitchStores(plugin);
+            SESSIONS.set(plugin, optionalStore(StaffSessionStore.class, new AtomicInteger(),
+                    Optional.of(snapshot(StaffSessionState.ACTIVE))));
+            ServerPreConnectEvent event = new ServerPreConnectEvent( // NOPMD - each state needs a fresh event.
+                    player(new AtomicInteger(), new AtomicInteger()), server(HUB), null); // NOPMD - fresh counters isolate each state.
+            await(plugin.onServerPreConnect(event));
+            assertFalse(event.getResult().isAllowed());
+        } finally {
+            executor.shutdownNow();
+        }
+    }
+
+    @Test
+    void reconnectLookupFailureNeverAdmitsForeignBackend() throws Exception {
+        ExecutorService executor = Executors.newSingleThreadExecutor(); // NOPMD - test closes it in finally or exercises plugin-owned shutdown.
+        try {
+            EnthusiaStaffVelocityPlugin plugin = plugin(executor);
+            setMode(plugin, OperationalMode.ACTIVE);
+            installEmptySwitchStores(plugin);
+            SESSIONS.set(plugin, Proxy.newProxyInstance(Thread.currentThread().getContextClassLoader(),
+                    new Class<?>[]{StaffSessionStore.class}, (instance, method, arguments) -> {
+                        throw new IllegalStateException("Unavailable test storage");
+                    }));
+            ServerPreConnectEvent event = new ServerPreConnectEvent( // NOPMD - each state needs a fresh event.
+                    player(new AtomicInteger(), new AtomicInteger()), server(HUB), null); // NOPMD - fresh counters isolate each state.
+            await(plugin.onServerPreConnect(event));
+            assertFalse(event.getResult().isAllowed());
+        } finally {
+            executor.shutdownNow();
+        }
+    }
+
+    @Test
+    void ordinaryInitialConnectionRemainsAllowed() throws Exception {
+        ExecutorService executor = Executors.newSingleThreadExecutor(); // NOPMD - test closes it in finally or exercises plugin-owned shutdown.
+        try {
+            EnthusiaStaffVelocityPlugin plugin = plugin(executor);
+            setMode(plugin, OperationalMode.ACTIVE);
+            installEmptySwitchStores(plugin);
+            SESSIONS.set(plugin, optionalStore(StaffSessionStore.class, new AtomicInteger(), Optional.empty()));
+            ServerPreConnectEvent event = new ServerPreConnectEvent( // NOPMD - each state needs a fresh event.
+                    player(new AtomicInteger(), new AtomicInteger()), server(HUB), null); // NOPMD - fresh counters isolate each state.
+            await(plugin.onServerPreConnect(event));
+            assertTrue(event.getResult().isAllowed());
+        } finally {
+            executor.shutdownNow();
+        }
+    }
+
+    private static StaffSessionSnapshot snapshot(StaffSessionState state) {
+        return new StaffSessionSnapshot(PLAYER_ID, PLAYER_ID, "TEMP", state, true, 1,
+                "a".repeat(64), new byte[]{1}, Instant.EPOCH, 1);
+    }
+
     private static EnthusiaStaffVelocityPlugin plugin(ExecutorService executor) {
+        return plugin(executor, interfaceProxy(ProxyServer.class));
+    }
+
+    private static EnthusiaStaffVelocityPlugin plugin(ExecutorService executor, ProxyServer proxy) {
         EnthusiaStaffVelocityPlugin plugin = new EnthusiaStaffVelocityPlugin(
-                interfaceProxy(ProxyServer.class),
+                proxy,
                 interfaceProxy(Logger.class),
                 Path.of(".")
         );
@@ -284,6 +411,7 @@ final class VelocitySecurityEventSubmissionTest {
         INVENTORIES.set(plugin, optionalStore(InventoryJournalStore.class, inventoryReads, Optional.empty()));
         ECONOMIES.set(plugin, optionalStore(EconomyJournalStore.class, new AtomicInteger(), Optional.empty()));
         FREEZES.set(plugin, optionalStore(FreezeStore.class, new AtomicInteger(), Optional.empty()));
+        SESSIONS.set(plugin, optionalStore(StaffSessionStore.class, new AtomicInteger(), Optional.empty()));
         return inventoryReads;
     }
 
@@ -340,6 +468,7 @@ final class VelocitySecurityEventSubmissionTest {
         ));
     }
 
+    @SuppressWarnings("AddressSelection") // Fixed loopback literal keeps this isolated test fixture non-routable.
     private static RegisteredServer server(String name) {
         ServerInfo info = new ServerInfo(name, new InetSocketAddress("127.0.0.1", 25565));
         return RegisteredServer.class.cast(Proxy.newProxyInstance(

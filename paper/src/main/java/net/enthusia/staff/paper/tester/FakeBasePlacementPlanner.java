@@ -32,6 +32,7 @@ final class FakeBasePlacementPlanner {
         return blocks.isChunkLoaded(anchor.chunkX(), anchor.chunkZ())
                 && insideWorldHeight(anchor, blocks)
                 && templateCellsAreClear(anchor, blocks, template)
+                && interiorIsClear(anchor, blocks)
                 && interiorFloorIsSafe(anchor, blocks);
     }
 
@@ -49,6 +50,19 @@ final class FakeBasePlacementPlanner {
             int z = anchor.z() + cell.z();
             if (!inAnchorChunk(anchor, x, z) || !blocks.isAir(x, y, z)) {
                 return false;
+            }
+        }
+        return true;
+    }
+
+    private static boolean interiorIsClear(Anchor anchor, BlockView blocks) {
+        for (int y = 0; y < FakeBaseTemplate.HEIGHT; y++) {
+            for (int x = -INTERIOR_FLOOR_RADIUS; x <= INTERIOR_FLOOR_RADIUS; x++) {
+                for (int z = -INTERIOR_FLOOR_RADIUS; z <= INTERIOR_FLOOR_RADIUS; z++) {
+                    if (!blocks.isAir(anchor.x() + x, anchor.y() + y, anchor.z() + z)) {
+                        return false;
+                    }
+                }
             }
         }
         return true;

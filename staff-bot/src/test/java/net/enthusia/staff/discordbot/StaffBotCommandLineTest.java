@@ -21,6 +21,7 @@ class StaffBotCommandLineTest {
     private static final String TUNNEL_TOKEN_ARGUMENT = "--tunnel-token-file=" + TUNNEL_TOKEN_NAME;
     private static final String WEB_BIND_ARGUMENT = "--preview-web-bind=127.0.0.1:8766";
     private static final String PUBLIC_URL_ARGUMENT = "--preview-public-url=http://127.0.0.1:8766";
+    private static final String MODERATION_WEB_URL_ARGUMENT = "--moderation-web-url=https://staff.enthusia.info";
 
     @Test
     void validStagingPreviewCliParsesPanelFiles() {
@@ -61,6 +62,23 @@ class StaffBotCommandLineTest {
         assertTrue(smokeOnly.tunnelFiles().isEmpty());
         assertTrue(previewSmoke.smokeTest());
         assertTrue(previewSmoke.stagingUiPreview());
+    }
+
+    @Test
+    void productionWebRequiresProductionBotAndDedicatedTunnelFiles() {
+        StaffBotCommandLine commandLine = StaffBotCommandLine.parse(new String[] {
+                "--environment=production", TOKEN_FILE_ARGUMENT, MODERATION_FILE_ARGUMENT,
+                TUNNEL_BINARY_ARGUMENT, "--tunnel-token-file=prod-tunnel",
+                MODERATION_WEB_URL_ARGUMENT
+        });
+        assertEquals("https://staff.enthusia.info", commandLine.moderationWebUrl().orElseThrow());
+        assertTrue(commandLine.tunnelFiles().isPresent());
+        assertThrows(IllegalArgumentException.class, () -> StaffBotCommandLine.parse(new String[] {
+                TOKEN_FILE_ARGUMENT, MODERATION_FILE_ARGUMENT, MODERATION_WEB_URL_ARGUMENT
+        }));
+        assertThrows(IllegalArgumentException.class, () -> StaffBotCommandLine.parse(new String[] {
+                PREVIEW_ARGUMENT, TOKEN_FILE_ARGUMENT, MODERATION_WEB_URL_ARGUMENT
+        }));
     }
 
     @Test

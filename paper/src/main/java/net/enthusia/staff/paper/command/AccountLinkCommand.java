@@ -1,10 +1,12 @@
 package net.enthusia.staff.paper.command;
 
+import net.enthusia.staff.paper.presentation.StaffMessageStyle;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.function.Supplier;
 import java.util.logging.Level;
+import net.enthusia.staff.domain.application.AccountLinkCodeException;
 import net.enthusia.staff.domain.application.DiscordSrvMigrationService.MirrorResult;
 import net.enthusia.staff.paper.account.PaperAccountLinkRuntime;
 import net.kyori.adventure.text.Component;
@@ -18,6 +20,7 @@ import org.bukkit.plugin.java.JavaPlugin;
 public final class AccountLinkCommand implements CommandExecutor {
     private static final int NO_ARGUMENTS = 0;
     private static final int ONE_ARGUMENT = 1;
+    private static final int MAX_CODE_INPUT_LENGTH = 32;
 
     private final JavaPlugin plugin;
     private final Supplier<PaperAccountLinkRuntime> runtime;
@@ -36,7 +39,7 @@ public final class AccountLinkCommand implements CommandExecutor {
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] arguments) {
         if (!(sender instanceof Player player)) {
-            sender.sendMessage(Component.text("Account linking must be completed by the Minecraft player in-game."));
+            sender.sendMessage(StaffMessageStyle.style(Component.text("Account linking must be completed by the Minecraft player in-game.")));
             return true;
         }
         UUID playerId = player.getUniqueId();
@@ -49,16 +52,20 @@ public final class AccountLinkCommand implements CommandExecutor {
         }
         if (arguments.length == ONE_ARGUMENT) {
             String code = arguments[0];
+            if (!validLinkCodeInput(code)) {
+                player.sendMessage(StaffMessageStyle.style(Component.text(linkCodeFailureMessage(AccountLinkCodeException.Reason.INVALID))));
+                return true;
+            }
             submit(player, () -> complete(player, playerId, code), "Account-link completion");
             return true;
         }
-        player.sendMessage(Component.text("Usage: /link [code]"));
+        player.sendMessage(StaffMessageStyle.style(Component.text("Usage: /link [code]")));
         return true;
     }
 
     private boolean unlink(Player player, UUID playerId, String[] arguments) {
         if (arguments.length != ONE_ARGUMENT || !arguments[0].equals("CONFIRM")) {
-            player.sendMessage(Component.text("No link was changed. Use /unlink CONFIRM to remove your current Discord link."));
+            player.sendMessage(StaffMessageStyle.style(Component.text("No link was changed. Use /unlink CONFIRM to remove your current Discord link.")));
             return true;
         }
         submit(player, () -> unlink(player, playerId), "Account unlink");
@@ -73,8 +80,12 @@ public final class AccountLinkCommand implements CommandExecutor {
 
     private void complete(Player player, UUID playerId, String code) {
         PaperAccountLinkRuntime current = requireRuntime();
-        var result = current.completeFromMinecraft(code, playerId);
-        send(player, "Discord account linked." + mirrorSuffix(result.mirrorResult()));
+        try {
+            var result = current.completeFromMinecraft(code, playerId);
+            send(player, "Discord account linked." + mirrorSuffix(result.mirrorResult()));
+        } catch (AccountLinkCodeException exception) {
+            send(player, linkCodeFailureMessage(exception.reason()));
+        }
     }
 
     private void unlink(Player player, UUID playerId) {
@@ -91,6 +102,19 @@ public final class AccountLinkCommand implements CommandExecutor {
             throw new IllegalStateException("Account-link storage is not ready");
         }
         return current;
+    }
+
+    static boolean validLinkCodeInput(String code) {
+        return code != null && !code.isBlank() && code.trim().length() <= MAX_CODE_INPUT_LENGTH;
+    }
+
+    static String linkCodeFailureMessage(AccountLinkCodeException.Reason reason) {
+        return switch (reason) {
+            case INVALID -> "That link code is invalid.";
+            case EXPIRED -> "That link code has expired. Request a new link code and try again.";
+            case REPLACED -> "That link code was replaced by a newer code. Use the newest link code.";
+            case ALREADY_USED -> "That link code was already used. Request a new link code if you still need to link.";
+        };
     }
 
     private static String mirrorSuffix(MirrorResult result) {
@@ -112,14 +136,14 @@ public final class AccountLinkCommand implements CommandExecutor {
                 }
             });
         } catch (RejectedExecutionException exception) {
-            player.sendMessage(Component.text("The bounded work queue is full; no account-link operation started."));
+            player.sendMessage(StaffMessageStyle.style(Component.text("The bounded work queue is full; no account-link operation started.")));
         }
     }
 
     private void send(Player player, String message) {
         player.getScheduler().execute(
                 plugin,
-                () -> player.sendMessage(Component.text(message)),
+                () -> player.sendMessage(StaffMessageStyle.style(Component.text(message))),
                 null,
                 1L
         );

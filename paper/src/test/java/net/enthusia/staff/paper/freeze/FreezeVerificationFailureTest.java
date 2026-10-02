@@ -7,14 +7,20 @@ import java.lang.reflect.Array;
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
 import java.time.Clock;
+import java.time.Instant;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.BiFunction;
 import java.util.logging.Logger;
+import net.enthusia.staff.domain.freeze.FreezeRecord;
 import net.enthusia.staff.domain.ports.FreezeStore;
+import net.enthusia.staff.paper.presentation.StaffMessageStyle;
 import net.kyori.adventure.text.Component;
 import org.bukkit.entity.Player;
 import org.junit.jupiter.api.Test;
@@ -24,7 +30,7 @@ final class FreezeVerificationFailureTest {
     private static final String EXECUTE_METHOD = "execute";
     private static final UUID PLAYER_ID = UUID.fromString("a321230f-30ce-499e-bd08-58126273d74c");
     private static final String PLAYER_NAME = "ReviewTarget";
-    private static final Component PLAYER_MESSAGE = Component.text(
+    private static final Component PLAYER_MESSAGE = StaffMessageStyle.error(
             "Your freeze status could not be verified. You remain restricted until staff review."
     );
     private static final List<String> SECURE_ORDER = List.of("leaveVehicle", "closeInventory", "sendMessage");
@@ -62,6 +68,49 @@ final class FreezeVerificationFailureTest {
         assertUnavailable(harness, "Freeze verification could not run for " + PLAYER_NAME + '.');
     }
 
+    @Test
+    void successfulReconnectClearsObservedOfflineDeadlineBeforeSecuringPlayer() {
+        Instant now = Instant.parse("2026-09-29T18:00:00Z");
+        FreezeRecord observed = new FreezeRecord(
+                PLAYER_ID,
+                UUID.fromString("a321230f-30ce-499e-bd08-58126273d75c"),
+                "investigation",
+                now.minusSeconds(60),
+                Optional.of(now.plusSeconds(300)),
+                false,
+                7L
+        );
+        AtomicInteger reconnects = new AtomicInteger();
+        FreezeStore store = proxy(FreezeStore.class, (method, arguments) -> switch (method.getName()) {
+            case ACTIVE_METHOD -> Optional.of(observed);
+            case "connected" -> {
+                assertEquals(7L, ((Long) arguments[1]).longValue());
+                reconnects.incrementAndGet();
+                yield Optional.of(new FreezeRecord(
+                        observed.playerId(),
+                        observed.frozenBy(),
+                        observed.reason(),
+                        observed.frozenAt(),
+                        Optional.empty(),
+                        observed.keepActive(),
+                        8L
+                ));
+            }
+            default -> defaultValue(method.getReturnType());
+        });
+        Harness harness = harness(
+                () -> store,
+                directExecutor(),
+                Clock.fixed(now, ZoneOffset.UTC)
+        );
+
+        harness.manager().verify(PLAYER_ID, PLAYER_NAME);
+
+        assertTrue(harness.manager().isRestricted(PLAYER_ID));
+        assertEquals(1, reconnects.get());
+        assertEquals(SECURE_ORDER, harness.playerInteractions());
+    }
+
     private static void assertUnavailable(Harness harness, String staffPrefix) {
         assertTrue(harness.manager().isRestricted(PLAYER_ID));
         assertEquals(SECURE_ORDER, harness.playerInteractions());
@@ -75,6 +124,14 @@ final class FreezeVerificationFailureTest {
             java.util.function.Supplier<FreezeStore> store,
             ExecutorService workers
     ) {
+        return harness(store, workers, Clock.systemUTC());
+    }
+
+    private static Harness harness(
+            java.util.function.Supplier<FreezeStore> store,
+            ExecutorService workers,
+            Clock clock
+    ) {
         List<String> interactions = new ArrayList<>();
         List<Component> playerMessages = new ArrayList<>();
         List<String> staffAlerts = new ArrayList<>();
@@ -87,7 +144,7 @@ final class FreezeVerificationFailureTest {
         logger.setUseParentHandlers(false);
         FreezeManager manager = new FreezeManager(
                 null,
-                Clock.systemUTC(),
+                clock,
                 store,
                 workers,
                 dispatcher,

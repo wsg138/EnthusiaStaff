@@ -1,5 +1,6 @@
 package net.enthusia.staff.paper.report;
 
+import net.enthusia.staff.paper.presentation.StaffMessageStyle;
 import java.time.Clock;
 import java.util.List;
 import java.util.Map;
@@ -90,12 +91,12 @@ public final class ReportGuiController implements Listener {
         }
         InputCapture capture = inputCaptures.remove(viewer.getUniqueId());
         if (capture == null) {
-            viewer.sendMessage(Component.text("No report action is waiting for a note."));
+            viewer.sendMessage(StaffMessageStyle.style(Component.text("No report action is waiting for a note.")));
             return;
         }
         String note = input == null ? "" : input.trim();
         if (note.isBlank() || note.length() > 2_000) {
-            viewer.sendMessage(Component.text("The private action note must contain 1 to 2000 characters."));
+            viewer.sendMessage(StaffMessageStyle.style(Component.text("The private action note must contain 1 to 2000 characters.")));
             openState(viewer, capture.state(), capture.configuration());
             return;
         }
@@ -117,7 +118,7 @@ public final class ReportGuiController implements Listener {
         }
         InputCapture capture = inputCaptures.remove(viewer.getUniqueId());
         if (capture == null) {
-            viewer.sendMessage(Component.text("No report action is waiting for a note."));
+            viewer.sendMessage(StaffMessageStyle.style(Component.text("No report action is waiting for a note.")));
             return;
         }
         openState(viewer, capture.state(), capture.configuration());
@@ -266,9 +267,9 @@ public final class ReportGuiController implements Listener {
         Component command = Component.text("/reports note ", NamedTextColor.YELLOW)
                 .clickEvent(ClickEvent.suggestCommand("/reports note "))
                 .hoverEvent(HoverEvent.showText(Component.text("Click to prepare the private note command")));
-        viewer.sendMessage(Component.text("Enter the private report action note with ")
+        viewer.sendMessage(StaffMessageStyle.style(Component.text("Enter the private report action note with ")
                 .append(command)
-                .append(Component.text("<note>, or run /reports cancel. The note is not public chat.")));
+                .append(Component.text("<note>, or run /reports cancel. The note is not public chat."))));
     }
 
     private void confirm(
@@ -278,7 +279,7 @@ public final class ReportGuiController implements Listener {
     ) {
         UUID actorId = state.viewerId();
         if (!confirmations.add(actorId)) {
-            viewer.sendMessage(Component.text("That report action is already being confirmed."));
+            viewer.sendMessage(StaffMessageStyle.style(Component.text("That report action is already being confirmed.")));
             return;
         }
         boolean submitted = submit(viewer, () -> {
@@ -337,7 +338,7 @@ public final class ReportGuiController implements Listener {
             String message
     ) {
         onEntity(viewer, () -> {
-            viewer.sendMessage(Component.text(message));
+            viewer.sendMessage(StaffMessageStyle.style(Component.text(message)));
             if (fresh == null) {
                 loadQueue(viewer, state.queue(), state.queuePage());
             } else {
@@ -384,7 +385,7 @@ public final class ReportGuiController implements Listener {
             ReportDetails details = store.details(reportId).orElse(null);
             if (details == null) {
                 onCurrentLoad(viewer, viewerId, loadId, () -> {
-                    viewer.sendMessage(Component.text("That report does not exist."));
+                    viewer.sendMessage(StaffMessageStyle.style(Component.text("That report does not exist.")));
                     loadQueue(viewer, queue, queuePage);
                 });
                 return;
@@ -405,7 +406,7 @@ public final class ReportGuiController implements Listener {
     }
 
     private void failLoad(Player viewer, UUID viewerId, UUID loadId, String body) {
-        onCurrentLoad(viewer, viewerId, loadId, () -> viewer.sendMessage(Component.text(body)));
+        onCurrentLoad(viewer, viewerId, loadId, () -> viewer.sendMessage(StaffMessageStyle.style(Component.text(body))));
     }
 
     private void openLoadedState(
@@ -448,7 +449,7 @@ public final class ReportGuiController implements Listener {
     private boolean authorized(Player viewer) {
         if (viewer == null || !viewer.hasPermission(MANAGE_PERMISSION)) {
             if (viewer != null) {
-                viewer.sendMessage(Component.text("You do not have permission to manage reports."));
+                viewer.sendMessage(StaffMessageStyle.style(Component.text("You do not have permission to manage reports.")));
             }
             return false;
         }
@@ -467,7 +468,7 @@ public final class ReportGuiController implements Listener {
             });
             return true;
         } catch (RejectedExecutionException exception) {
-            viewer.sendMessage(Component.text("The bounded work queue is full; no report operation started."));
+            viewer.sendMessage(StaffMessageStyle.style(Component.text("The bounded work queue is full; no report operation started.")));
             return false;
         }
     }
@@ -489,13 +490,13 @@ public final class ReportGuiController implements Listener {
             });
         } catch (RejectedExecutionException exception) {
             if (pendingLoads.remove(viewerId, loadId)) {
-                viewer.sendMessage(Component.text("The bounded work queue is full; no report load started."));
+                viewer.sendMessage(StaffMessageStyle.style(Component.text("The bounded work queue is full; no report load started.")));
             }
         }
     }
 
     private void message(Player viewer, String body) {
-        onEntity(viewer, () -> viewer.sendMessage(Component.text(body)));
+        onEntity(viewer, () -> viewer.sendMessage(StaffMessageStyle.style(Component.text(body))));
     }
 
     private void onEntity(Player viewer, Runnable task) {

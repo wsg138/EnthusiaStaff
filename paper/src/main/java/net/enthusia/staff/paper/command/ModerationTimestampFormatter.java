@@ -19,7 +19,7 @@ final class ModerationTimestampFormatter {
             .appendValue(ChronoField.SECOND_OF_MINUTE, 2)
             .appendLiteral(' ')
             .appendZoneText(TextStyle.SHORT)
-            .toFormatter(Locale.ROOT);
+            .toFormatter(Locale.US);
 
     private ModerationTimestampFormatter() {
     }

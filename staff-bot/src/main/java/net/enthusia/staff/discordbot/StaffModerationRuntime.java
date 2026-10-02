@@ -18,6 +18,7 @@ final class StaffModerationRuntime implements AutoCloseable {
     private final SignedComponentCodec componentCodec;
     private final MinecraftProfileLookup minecraftProfiles;
     private final Optional<DiscordPunishmentRuntime> punishments;
+    private final HttpStaffAuthorityClient authority;
 
     private StaffModerationRuntime(
             DiscordStaffReadRuntime data,
@@ -26,7 +27,8 @@ final class StaffModerationRuntime implements AutoCloseable {
             StaffReadAuthorization authorization,
             SignedComponentCodec components,
             MinecraftProfileLookup profiles,
-            Optional<DiscordPunishmentRuntime> punishments
+            Optional<DiscordPunishmentRuntime> punishments,
+            HttpStaffAuthorityClient authority
     ) {
         this.data = data;
         this.readService = reads;
@@ -35,6 +37,7 @@ final class StaffModerationRuntime implements AutoCloseable {
         this.componentCodec = components;
         this.minecraftProfiles = profiles;
         this.punishments = punishments;
+        this.authority = authority;
     }
 
     static Optional<StaffModerationRuntime> open(
@@ -74,7 +77,7 @@ final class StaffModerationRuntime implements AutoCloseable {
         Optional<DiscordPunishmentRuntime> punishments = Optional.empty();
         try {
             StaffModerationReadService reads = new StaffModerationReadService(data, clock);
-            StaffAuthorityClient authority = new HttpStaffAuthorityClient(
+            HttpStaffAuthorityClient authority = new HttpStaffAuthorityClient(
                     configuration.authorityUri(),
                     configuration.authoritySecret(),
                     configuration.authorityTransport());
@@ -99,7 +102,7 @@ final class StaffModerationRuntime implements AutoCloseable {
                     interactionTtl
             ));
             return new StaffModerationRuntime(
-                    data, reads, actors, authorization, components, profiles, punishments
+                    data, reads, actors, authorization, components, profiles, punishments, authority
             );
         } catch (RuntimeException exception) {
             punishments.ifPresent(DiscordPunishmentRuntime::close);
@@ -113,6 +116,12 @@ final class StaffModerationRuntime implements AutoCloseable {
 
     StaffModerationReadService reads() {
         return readService;
+    }
+
+    net.enthusia.staff.persistence.DiscordPunishmentHistoryReader.Page discordHistory(long guildId, long userId) {
+        return data.discordHistory(
+                new net.enthusia.staff.domain.moderation.DiscordGuildId(Long.toUnsignedString(guildId)),
+                new net.enthusia.staff.domain.moderation.DiscordUserId(Long.toUnsignedString(userId)), 50);
     }
 
     LinkedStaffActorResolver actors() {
@@ -133,6 +142,10 @@ final class StaffModerationRuntime implements AutoCloseable {
 
     Optional<DiscordPunishmentService> punishmentService() {
         return punishments.map(DiscordPunishmentRuntime::service);
+    }
+
+    HttpStaffAuthorityClient authority() {
+        return authority;
     }
 
     void resumePunishments(JDA jda) {

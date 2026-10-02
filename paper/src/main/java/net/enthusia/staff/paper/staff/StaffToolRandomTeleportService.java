@@ -11,6 +11,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
 import net.enthusia.staff.paper.freeze.FreezeManager;
+import net.enthusia.staff.paper.presentation.StaffMessageStyle;
 import net.enthusia.staff.paper.visibility.VanishManager;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
@@ -67,17 +68,20 @@ final class StaffToolRandomTeleportService {
 
     void begin(Player actor) {
         if (!enabled.test(serverId)) {
-            actor.sendMessage(Component.text(
+            actor.sendMessage(StaffMessageStyle.style(Component.text(
                     "Random staff teleport is disabled on backend " + serverId + '.',
                     NamedTextColor.YELLOW
-            ));
+            )));
             return;
         }
         UUID actorId = actor.getUniqueId();
         try {
             platform.executeGlobal(() -> collectCandidates(actorId));
         } catch (RuntimeException failure) {
-            actor.sendMessage(Component.text("Random staff teleport could not start safely.", NamedTextColor.RED));
+            actor.sendMessage(StaffMessageStyle.style(Component.text(
+                    "Random staff teleport could not start safely.",
+                    NamedTextColor.RED
+            )));
         }
     }
 
@@ -238,10 +242,10 @@ final class StaffToolRandomTeleportService {
         } catch (RuntimeException ignored) {
             // Authorization uncertainty fails closed.
         }
-        actor.sendMessage(Component.text(
+        actor.sendMessage(StaffMessageStyle.style(Component.text(
                 "Random teleport was cancelled because your staff session or permission changed.",
                 NamedTextColor.RED
-        ));
+        )));
         return false;
     }
 
@@ -318,7 +322,7 @@ final class StaffToolRandomTeleportService {
     }
 
     private void message(UUID playerId, String text) {
-        onEntity(playerId, player -> player.sendMessage(Component.text(text)));
+        onEntity(playerId, player -> player.sendMessage(StaffMessageStyle.style(Component.text(text))));
     }
 
     @FunctionalInterface

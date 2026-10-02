@@ -157,6 +157,16 @@ Record the backend, player UUID, session/operation ID where available, time, exa
 
 ## Permissions and authority
 
+### Snapshot recovery
+
+Quitting does not discard the original snapshot. Rejoin the owning backend and use `/staff recover` when recovery remains pending. A stranded session may return only to its owning backend, including while its durable state still reads ACTIVE during reconnect processing; it cannot leave that backend until restoration is verified.
+
+The owning backend's console can request `staff recover <online-player>`. Targeted recovery is console-only and does not delete a snapshot or bypass verification. Invalid command arguments do not toggle staff mode.
+
+Restoration first verifies the original snapshot's SHA-256 integrity. It then compares every decoded saved field with freshly captured runtime state, including ordered inventory slots and item amounts/metadata, effects, location, experience, health and interaction flags. Equivalent serializer ordering and complete yaw rotations do not require identical serialized bytes. An actual mismatch retains recovery and logs only the differing field names; never clear the lock manually.
+
+The invulnerability value is the stored entity flag paired with Bukkit's setter. Paper's computed damage-immunity getter also treats removed entities as immune, which can produce a false restoration mismatch during teleport processing. The reader is isolated to the verified Mojang-mapped Paper runtime methods and fails closed if those methods are unavailable. A failed restore remains available for a subsequent `/staff recover` attempt.
+
 The relevant command/tool permissions are listed in [[Commands and Permissions]]. Rank semantics are explained in [[Roles and Permissions|Rank-Authority]].
 
 A permission node is an entry gate, not a replacement for central rank/action policy. Staff-mode items and Discord/GUI surfaces must not become alternate authority implementations.

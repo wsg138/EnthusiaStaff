@@ -34,6 +34,7 @@ import net.enthusia.staff.domain.ports.DiscordPunishmentRepository.WorkType;
 import net.enthusia.staff.domain.sanction.SanctionLength;
 import net.enthusia.staff.persistence.JdbcDiscordModerationPersistenceStore;
 import net.enthusia.staff.persistence.JdbcDiscordPunishmentRepository;
+import net.enthusia.staff.persistence.DiscordPunishmentHistoryReader;
 import net.enthusia.staff.persistence.MariaDb;
 import net.enthusia.staff.persistence.ModerationPersistenceException;
 import org.junit.jupiter.api.BeforeAll;
@@ -94,6 +95,13 @@ class DiscordPunishmentPersistenceIntegrationTest {
             assertFalse(created.replayed());
             assertTrue(replay.replayed());
             assertEquals(created.punishment().punishmentId(), replay.punishment().punishmentId());
+            DiscordPunishmentHistoryReader history = new DiscordPunishmentHistoryReader(dataSource);
+            var page = history.recent(GUILD_ID, userId, 10);
+            assertEquals(1, page.total());
+            assertEquals(punishment.punishmentId(), page.records().getFirst().punishmentId());
+            assertEquals(0, history.recent(new DiscordGuildId("1410303324745371710"), userId, 10).total());
+            assertEquals(0, history.recent(GUILD_ID, new DiscordUserId("18446744073709551599"), 10).total());
+            assertThrows(IllegalArgumentException.class, () -> history.recent(GUILD_ID, userId, 51));
 
             var firstLease = repository.claimDue(NOW, 1, "worker-a", NOW.plusSeconds(30));
             assertEquals(1, firstLease.size());

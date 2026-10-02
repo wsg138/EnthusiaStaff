@@ -19,7 +19,7 @@ import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-/** Loopback-only authenticated private read API. It exposes no mutation route. */
+/** Loopback-only authenticated moderation API with explicit read and confirmation routes. */
 final class ModerationReadApiServer implements AutoCloseable {
     private static final System.Logger LOGGER = System.getLogger(ModerationReadApiServer.class.getName());
     private static final String BIND_HOST = "127.0.0.1";
@@ -50,9 +50,16 @@ final class ModerationReadApiServer implements AutoCloseable {
     private final ModerationReadApiAuthenticator authenticator;
     private final ModerationReadApiRateLimiter rateLimiter;
     private final ModerationReadApiService service;
+    private final String allowedOrigin;
 
     ModerationReadApiServer(String discordBotToken, ModerationReadApiService service) throws IOException {
+        this(discordBotToken, service, PREVIEW_ORIGIN);
+    }
+
+    ModerationReadApiServer(String discordBotToken, ModerationReadApiService service, String allowedOrigin)
+            throws IOException {
         this.service = Objects.requireNonNull(service, "service");
+        this.allowedOrigin = Objects.requireNonNull(allowedOrigin, "allowedOrigin");
         this.authenticator = new ModerationReadApiAuthenticator(discordBotToken);
         this.rateLimiter = new ModerationReadApiRateLimiter(REQUESTS_PER_MINUTE, Duration.ofMinutes(1));
         this.json = jsonMapper();
@@ -65,6 +72,9 @@ final class ModerationReadApiServer implements AutoCloseable {
         server.setExecutor(executor);
         server.createContext("/v1/moderation/bootstrap", exchange -> handle(exchange, true));
         server.createContext("/v1/moderation/messages", exchange -> handle(exchange, false));
+        for (String operation : List.of("capabilities", "prepare", "confirm", "status")) {
+            server.createContext("/v1/moderation/actions/" + operation, exchange -> handle(exchange, false));
+        }
     }
 
     static InetSocketAddress bindAddress() {
@@ -93,7 +103,7 @@ final class ModerationReadApiServer implements AutoCloseable {
                 handlePreflight(exchange);
                 return;
             }
-            if (!originAllowed(exchange.getRequestHeaders().get(ORIGIN_HEADER))) {
+            if (!originAllowedFor(exchange.getRequestHeaders().get(ORIGIN_HEADER))) {
                 respond(exchange, 403, new ModerationReadApiModel.ErrorResponse("forbidden", "Access denied."));
                 return;
             }
@@ -120,7 +130,7 @@ final class ModerationReadApiServer implements AutoCloseable {
     }
 
     private void handlePreflight(HttpExchange exchange) throws IOException {
-        if (!browserOrigin(exchange.getRequestHeaders().get(ORIGIN_HEADER))
+        if (!browserOriginFor(exchange.getRequestHeaders().get(ORIGIN_HEADER))
                 || !POST_METHOD.equals(exchange.getRequestHeaders().getFirst(REQUEST_METHOD_HEADER))
                 || !validPreflightHeaders(exchange.getRequestHeaders().getFirst(REQUEST_HEADERS_HEADER))) {
             respond(exchange, 403, new ModerationReadApiModel.ErrorResponse("forbidden", "Access denied."));
@@ -137,10 +147,18 @@ final class ModerationReadApiServer implements AutoCloseable {
 
     private void execute(HttpExchange exchange, byte[] body, boolean bootstrap) throws IOException {
         try {
+            String path = exchange.getRequestURI().getPath();
+            if (path.startsWith("/v1/moderation/actions/")) {
+                ModerationActionApiService.Request action = parseActionRequest(json, body);
+                if (action == null) throw new IllegalArgumentException("action request must be present");
+                respond(exchange, 200, service.action(path.substring("/v1/moderation/actions/".length()), action));
+                return;
+            }
             ModerationReadApiModel.ReadRequest request = parseRequest(json, body);
             Object response = bootstrap ? service.bootstrap(request) : service.messages(request);
             respond(exchange, 200, response);
-        } catch (StaffReadAuthorization.DeniedException | LinkedStaffActorResolver.MissingStaffLinkException exception) {
+        } catch (StaffReadAuthorization.DeniedException | LinkedStaffActorResolver.MissingStaffLinkException
+                | DiscordPunishmentAuthorization.DeniedException | SecurityException exception) {
             respond(exchange, 403, new ModerationReadApiModel.ErrorResponse("forbidden", "Access denied."));
         } catch (IllegalArgumentException exception) {
             respond(exchange, 400, new ModerationReadApiModel.ErrorResponse("invalid_request", "Request rejected."));
@@ -163,12 +181,28 @@ final class ModerationReadApiServer implements AutoCloseable {
         }
     }
 
+    static ModerationActionApiService.Request parseActionRequest(ObjectMapper json, byte[] body) throws IOException {
+        try {
+            return json.readValue(body, ModerationActionApiService.Request.class);
+        } catch (JsonProcessingException exception) {
+            throw new IllegalArgumentException("action JSON is invalid", exception);
+        }
+    }
+
     static boolean originAllowed(List<String> origins) {
         return origins == null || origins.isEmpty() || browserOrigin(origins);
     }
 
     static boolean browserOrigin(List<String> origins) {
         return origins != null && origins.size() == 1 && PREVIEW_ORIGIN.equals(origins.getFirst());
+    }
+
+    private boolean originAllowedFor(List<String> origins) {
+        return origins == null || origins.isEmpty() || browserOriginFor(origins);
+    }
+
+    private boolean browserOriginFor(List<String> origins) {
+        return origins != null && origins.size() == 1 && allowedOrigin.equals(origins.getFirst());
     }
 
     static boolean validPreflightHeaders(String raw) {
@@ -214,11 +248,11 @@ final class ModerationReadApiServer implements AutoCloseable {
         exchange.getResponseBody().write(bytes);
     }
 
-    private static void applyCorsHeaders(HttpExchange exchange) {
-        if (!browserOrigin(exchange.getRequestHeaders().get(ORIGIN_HEADER))) {
+    private void applyCorsHeaders(HttpExchange exchange) {
+        if (!browserOriginFor(exchange.getRequestHeaders().get(ORIGIN_HEADER))) {
             return;
         }
-        exchange.getResponseHeaders().set("Access-Control-Allow-Origin", PREVIEW_ORIGIN);
+        exchange.getResponseHeaders().set("Access-Control-Allow-Origin", allowedOrigin);
         exchange.getResponseHeaders().add("Vary", ORIGIN_HEADER);
     }
 

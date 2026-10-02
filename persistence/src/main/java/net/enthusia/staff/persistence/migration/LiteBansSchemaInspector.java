@@ -23,7 +23,7 @@ public final class LiteBansSchemaInspector {
     private static final String STAFF_COLUMN = "staff";
     private static final String IP_COLUMN = "ip";
     private static final List<String> SANCTION_TABLES = List.of(BANS, MUTES);
-    private static final List<String> AUDIT_ONLY_TABLES = List.of("kicks", "warnings");
+    private static final List<String> OPTIONAL_HISTORY_TABLES = List.of("kicks", "warnings");
     private static final List<String> BAN_IP_FLAG_ALIASES = List.of("ipban", "ip_ban");
     private static final List<String> NETWORK_ADDRESS_ALIASES = List.of(IP_COLUMN, "address");
     private static final List<String> BAN_STAFF_ALIASES = List.of(
@@ -68,7 +68,11 @@ public final class LiteBansSchemaInspector {
             List<String> blockers = new ArrayList<>();
             inspectSanctionTables(metadata, catalog, prefix, tables, importTables, blockers);
             inspectHistoryTable(metadata, catalog, prefix, tables, importTables, blockers);
-            inspectAuditOnlyTables(metadata, catalog, prefix, tables, auditOnly);
+            for (String kind : OPTIONAL_HISTORY_TABLES) {
+                if (tables.containsKey(expectedTable(prefix, kind))) {
+                    inspectSanctionTable(metadata, catalog, prefix, kind, tables, importTables, blockers);
+                }
+            }
             return new LiteBansSchemaReport(prefix, importTables, auditOnly, blockers);
         } catch (SQLException exception) {
             throw new IllegalStateException("Unable to inspect LiteBans schema", exception);
@@ -134,21 +138,6 @@ public final class LiteBansSchemaInspector {
         Map<String, String> resolved = resolveRequired(available, HISTORY_REQUIRED);
         addMissingColumns(actual, HISTORY_COLUMN_ORDER, resolved, blockers);
         importTables.put(HISTORY, new LiteBansSchemaReport.TableMapping(actual, resolved));
-    }
-
-    private static void inspectAuditOnlyTables(
-            DatabaseMetaData metadata,
-            String catalog,
-            String prefix,
-            Map<String, String> tables,
-            Map<String, Set<String>> auditOnly
-    ) throws SQLException {
-        for (String kind : AUDIT_ONLY_TABLES) {
-            String actual = tables.get(expectedTable(prefix, kind));
-            if (actual != null) {
-                auditOnly.put(kind, columns(metadata, catalog, actual));
-            }
-        }
     }
 
     private static void addMissingColumns(

@@ -7,7 +7,20 @@ import net.enthusia.staff.domain.auth.StaffRank;
 import net.enthusia.staff.domain.staff.VanishRecord;
 
 public interface VanishStore {
+    enum WriteResult {
+        COMMITTED,
+        UNCHANGED,
+        STAFF_SESSION_NOT_ACTIVE
+    }
+
     List<VanishRecord> active(int limit);
 
-    void set(UUID staffId, StaffRank rank, boolean vanished, UUID actorId, Instant now);
+    WriteResult set(
+            UUID staffId,
+            StaffRank rank,
+            boolean vanished,
+            UUID actorId,
+            Instant now,
+            boolean requireActiveStaffSession
+    );
 }

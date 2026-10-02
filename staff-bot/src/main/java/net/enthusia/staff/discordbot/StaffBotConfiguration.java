@@ -1,6 +1,7 @@
 package net.enthusia.staff.discordbot;
 
 import java.net.InetSocketAddress;
+import java.net.URI;
 import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
@@ -12,6 +13,8 @@ public final class StaffBotConfiguration {
     public static final String ENVIRONMENT_KEY = "ENTHUSIA_STAFF_BOT_ENVIRONMENT";
     public static final String TOKEN_KEY = "ENTHUSIA_STAFF_BOT_TOKEN";
     public static final String UI_PREVIEW_KEY = "ENTHUSIA_STAFF_BOT_UI_PREVIEW";
+    public static final String MODERATION_WEB_URL_KEY = "ENTHUSIA_STAFF_BOT_MODERATION_WEB_URL";
+    private static final URI PRODUCTION_MODERATION_WEB_URI = URI.create("https://staff.enthusia.info");
     public static final String HEALTH_HOST_KEY = "ENTHUSIA_STAFF_BOT_HEALTH_HOST";
     public static final String HEALTH_PORT_KEY = "ENTHUSIA_STAFF_BOT_HEALTH_PORT";
     public static final String WORKER_THREADS_KEY = "ENTHUSIA_STAFF_BOT_WORKER_THREADS";
@@ -40,6 +43,7 @@ public final class StaffBotConfiguration {
     private final int interactionCapacity;
     private final Duration interactionTtl;
     private final ModerationPreviewWebConfig previewWebConfig;
+    private final java.util.Optional<URI> moderationWebUri;
 
     StaffBotConfiguration(
             StaffBotEnvironment environment,
@@ -59,6 +63,7 @@ public final class StaffBotConfiguration {
         this.interactionCapacity = bounded("interaction capacity", interactionCapacity, 16, 65536);
         this.interactionTtl = Objects.requireNonNull(interactionTtl, "interactionTtl");
         this.previewWebConfig = ModerationPreviewWebConfig.fromEnvironment(Map.of());
+        this.moderationWebUri = java.util.Optional.empty();
         validateRuntimeBounds();
     }
 
@@ -73,6 +78,20 @@ public final class StaffBotConfiguration {
         this.interactionCapacity = source.interactionCapacity;
         this.interactionTtl = source.interactionTtl;
         this.previewWebConfig = Objects.requireNonNull(previewWebConfig, "previewWebConfig");
+        this.moderationWebUri = source.moderationWebUri;
+    }
+
+    private StaffBotConfiguration(StaffBotConfiguration source, URI moderationWebUri) {
+        this.environment = source.environment;
+        this.discordToken = source.discordToken;
+        this.uiPreviewEnabled = source.uiPreviewEnabled;
+        this.healthAddress = source.healthAddress;
+        this.workerThreads = source.workerThreads;
+        this.workerQueueCapacity = source.workerQueueCapacity;
+        this.interactionCapacity = source.interactionCapacity;
+        this.interactionTtl = source.interactionTtl;
+        this.previewWebConfig = source.previewWebConfig;
+        this.moderationWebUri = java.util.Optional.of(moderationWebUri);
     }
 
     StaffBotConfiguration(
@@ -106,10 +125,19 @@ public final class StaffBotConfiguration {
     static StaffBotConfiguration fromStartup(StaffBotCommandLine commandLine, Map<String, String> values) {
         Objects.requireNonNull(commandLine, "commandLine");
         Objects.requireNonNull(values, "values");
-        if (!commandLine.stagingUiPreview()) {
-            return fromEnvironment(values);
+        if (commandLine.stagingUiPreview()) {
+            return fromPreviewStartup(commandLine, values);
         }
+        if (commandLine.fileBackedStartup()) {
+            return fromFileBackedStartup(commandLine, values);
+        }
+        return fromEnvironment(values);
+    }
 
+    private static StaffBotConfiguration fromPreviewStartup(
+            StaffBotCommandLine commandLine,
+            Map<String, String> values
+    ) {
         rejectProductionPreviewEnvironment(values);
         Map<String, String> effectiveValues = new HashMap<>(values);
         effectiveValues.put(ENVIRONMENT_KEY, StaffBotEnvironment.STAGING.label());
@@ -121,38 +149,93 @@ public final class StaffBotConfiguration {
         return fromEnvironment(effectiveValues);
     }
 
+    private static StaffBotConfiguration fromFileBackedStartup(
+            StaffBotCommandLine commandLine,
+            Map<String, String> values
+    ) {
+        StaffBotEnvironment environment = commandLine.environment().orElse(StaffBotEnvironment.STAGING);
+        rejectEnvironmentConflict(values, environment);
+        Map<String, String> effectiveValues = new HashMap<>(values);
+        effectiveValues.put(ENVIRONMENT_KEY, environment.label());
+        effectiveValues.put(UI_PREVIEW_KEY, Boolean.FALSE.toString());
+        effectiveValues.put(TOKEN_KEY, StaffBotTokenFile.read(commandLine.tokenFile().orElseThrow(
+                () -> new IllegalArgumentException("file-backed startup requires a token file"))));
+        commandLine.moderationWebUrl().ifPresent(value -> effectiveValues.put(MODERATION_WEB_URL_KEY, value));
+        return fromEnvironment(effectiveValues);
+    }
+
     public static StaffBotConfiguration fromEnvironment(Map<String, String> values) {
         Objects.requireNonNull(values, "values");
+        StaffBotConfiguration base = baseConfiguration(values);
+        if (base.uiPreviewEnabled) {
+            return new StaffBotConfiguration(base, ModerationPreviewWebConfig.fromEnvironment(values));
+        }
+        return productionWebsiteConfiguration(values, base);
+    }
+
+    private static StaffBotConfiguration baseConfiguration(Map<String, String> values) {
         StaffBotEnvironment environment = StaffBotEnvironment.parse(required(values, ENVIRONMENT_KEY));
         String token = requireSecret(values.get(TOKEN_KEY));
         boolean uiPreviewEnabled = booleanValue(values, UI_PREVIEW_KEY, false);
         String healthHost = values.getOrDefault(HEALTH_HOST_KEY, IPV4_LOOPBACK_HOST).trim();
-        if (!LOOPBACK_HOSTS.contains(healthHost)) {
-            throw new IllegalArgumentException("staff bot health endpoint must bind to loopback");
-        }
+        requireLoopbackHealthHost(healthHost);
         int healthPort = integer(values, HEALTH_PORT_KEY, DEFAULT_HEALTH_PORT, 0, 65535);
         int workerThreads = integer(values, WORKER_THREADS_KEY, DEFAULT_WORKER_THREADS, 1, 16);
         int queueCapacity = integer(values, WORKER_QUEUE_CAPACITY_KEY, DEFAULT_WORKER_QUEUE_CAPACITY, 1, 4096);
         int interactionCapacity = integer(values, INTERACTION_CAPACITY_KEY, DEFAULT_INTERACTION_CAPACITY, 16, 65536);
-        int interactionTtlSeconds = integer(
-                values,
-                INTERACTION_TTL_SECONDS_KEY,
-                DEFAULT_INTERACTION_TTL_SECONDS,
-                1,
-                86400);
-        StaffBotConfiguration base = new StaffBotConfiguration(
-                environment,
-                token,
-                uiPreviewEnabled,
-                loopbackSocketAddress(healthHost, healthPort),
-                workerThreads,
-                queueCapacity,
-                interactionCapacity,
-                Duration.ofSeconds(interactionTtlSeconds));
-        if (!uiPreviewEnabled) {
+        int ttlSeconds = integer(values, INTERACTION_TTL_SECONDS_KEY, DEFAULT_INTERACTION_TTL_SECONDS, 1, 86400);
+        return new StaffBotConfiguration(environment, token, uiPreviewEnabled,
+                loopbackSocketAddress(healthHost, healthPort), workerThreads, queueCapacity,
+                interactionCapacity, Duration.ofSeconds(ttlSeconds));
+    }
+
+    private static void requireLoopbackHealthHost(String healthHost) {
+        if (!LOOPBACK_HOSTS.contains(healthHost)) {
+            throw new IllegalArgumentException("staff bot health endpoint must bind to loopback");
+        }
+    }
+
+    private static StaffBotConfiguration productionWebsiteConfiguration(
+            Map<String, String> values, StaffBotConfiguration base) {
+        String webUrl = values.getOrDefault(MODERATION_WEB_URL_KEY, "").trim();
+        if (webUrl.isEmpty()) {
             return base;
         }
-        return new StaffBotConfiguration(base, ModerationPreviewWebConfig.fromEnvironment(values));
+        if (base.environment != StaffBotEnvironment.PRODUCTION) {
+            throw new IllegalArgumentException("moderation website requires production environment");
+        }
+        URI origin = productionWebsiteOrigin(webUrl);
+        return new StaffBotConfiguration(base, origin);
+    }
+
+    private static URI productionWebsiteOrigin(String webUrl) {
+        URI uri = URI.create(webUrl);
+        if (!validHttpsOrigin(uri)) {
+            throw new IllegalArgumentException("moderation website URL must be an HTTPS origin");
+        }
+        URI origin = URI.create("https://" + uri.getHost());
+        if (!PRODUCTION_MODERATION_WEB_URI.equals(origin)) {
+            throw new IllegalArgumentException("moderation website URL must match the pinned production origin");
+        }
+        return origin;
+    }
+
+    private static boolean validHttpsOrigin(URI uri) {
+        return validHttpsHost(uri) && noAuthorityExtras(uri) && rootOnlyPath(uri);
+    }
+
+    private static boolean validHttpsHost(URI uri) {
+        return "https".equalsIgnoreCase(uri.getScheme()) && uri.getHost() != null;
+    }
+
+    private static boolean noAuthorityExtras(URI uri) {
+        return uri.getUserInfo() == null && uri.getPort() == -1
+                && uri.getRawQuery() == null && uri.getRawFragment() == null;
+    }
+
+    private static boolean rootOnlyPath(URI uri) {
+        String path = uri.getRawPath();
+        return path == null || path.isEmpty() || "/".equals(path);
     }
 
     public StaffBotEnvironment environment() {
@@ -189,6 +272,10 @@ public final class StaffBotConfiguration {
 
     ModerationPreviewWebConfig previewWebConfig() {
         return previewWebConfig;
+    }
+
+    java.util.Optional<URI> moderationWebUri() {
+        return moderationWebUri;
     }
 
     public int maxReconnectDelaySeconds() {
@@ -231,6 +318,19 @@ public final class StaffBotConfiguration {
         }
         if (StaffBotEnvironment.parse(configuredEnvironment) == StaffBotEnvironment.PRODUCTION) {
             throw new IllegalArgumentException("staging UI preview rejects production environment configuration");
+        }
+    }
+
+    private static void rejectEnvironmentConflict(
+            Map<String, String> values,
+            StaffBotEnvironment requested
+    ) {
+        String configuredEnvironment = values.get(ENVIRONMENT_KEY);
+        if (configuredEnvironment == null || configuredEnvironment.isBlank()) {
+            return;
+        }
+        if (StaffBotEnvironment.parse(configuredEnvironment) != requested) {
+            throw new IllegalArgumentException("file-backed startup environment conflicts with process configuration");
         }
     }
 

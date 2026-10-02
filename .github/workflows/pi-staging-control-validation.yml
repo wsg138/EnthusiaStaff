@@ -3,7 +3,6 @@ name: Pi Staging Control Validation
 on:
   pull_request:
     paths:
-      - .github/actions/staging-app-token/action.yml
       - .github/workflows/pi-staging-check.yml
       - .github/workflows/pi-staging-command.yml
       - .github/workflows/pi-staging-supersede.yml
@@ -13,7 +12,6 @@ on:
     branches:
       - main
     paths:
-      - .github/actions/staging-app-token/action.yml
       - .github/workflows/pi-staging-check.yml
       - .github/workflows/pi-staging-command.yml
       - .github/workflows/pi-staging-supersede.yml
@@ -43,8 +41,7 @@ jobs:
             scripts/staging/test_pi_staging_control.py \
             scripts/staging/supersede_pi_staging.py \
             scripts/staging/test_supersede_pi_staging.py \
-            scripts/staging/test_pi_staging_command_permissions.py \
-            scripts/staging/test_staging_app_auth.py
+            scripts/staging/test_pi_staging_command_permissions.py
           bash -n scripts/staging/build-enthusiastaff-bridge-artifact.sh
           bash -n scripts/staging/validate-enthusiastaff-source.sh
 
@@ -71,4 +68,3 @@ jobs:
           python3 scripts/staging/test_pi_staging_control.py
           python3 scripts/staging/test_supersede_pi_staging.py
           python3 scripts/staging/test_pi_staging_command_permissions.py
-          python3 scripts/staging/test_staging_app_auth.py

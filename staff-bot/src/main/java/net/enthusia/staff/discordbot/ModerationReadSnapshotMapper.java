@@ -73,6 +73,14 @@ final class ModerationReadSnapshotMapper {
         return snapshot.recentHistory().stream().map(entry -> history(entry, cases)).toList();
     }
 
+    static ModerationReadApiModel.HistoryDto discordHistory(net.enthusia.staff.domain.discord.DiscordPunishment record) {
+        return new ModerationReadApiModel.HistoryDto(
+                "discord:" + record.punishmentId(), "DISCORD_PUNISHMENT", record.issuedAt(), Optional.empty(),
+                Optional.of("Discord " + record.intent().type().name()),
+                record.state().name() + " · Notification: " + record.dmOutcome().name(),
+                record.intent().publicReason(), Optional.of(record.issuer().displayName()), Optional.empty(), Optional.empty());
+    }
+
     List<ModerationReadApiModel.FamilyCountDto> relevantHistoryCounts(
             StaffModerationReadService.Snapshot snapshot
     ) {

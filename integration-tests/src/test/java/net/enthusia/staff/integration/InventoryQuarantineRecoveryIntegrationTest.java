@@ -133,7 +133,8 @@ class InventoryQuarantineRecoveryIntegrationTest {
                             checksum(replacement),
                             replacement,
                             List.of(1),
-                            false
+                            false,
+                            Optional.empty()
                     ),
                     LEASE,
                     NOW.plusSeconds(1)

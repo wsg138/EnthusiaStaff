@@ -2,14 +2,18 @@ package net.enthusia.staff.paper;
 
 import java.nio.file.Path;
 import java.time.Clock;
+import java.time.Duration;
 import java.util.Arrays;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.UUID;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import javax.crypto.SecretKey;
 import javax.net.ssl.SSLContext;
 import net.enthusia.staff.common.security.SecretKeyMaterial;
+import net.enthusia.staff.common.security.PrivateRuntimeSecrets;
 import net.enthusia.staff.protocol.PersistentChannelClient;
 import net.enthusia.staff.protocol.ProtocolEnvelope;
 import net.enthusia.staff.protocol.TlsContextLoader;
@@ -17,6 +21,10 @@ import net.enthusia.staff.paper.config.RestartRequiredConfiguration;
 import org.bukkit.plugin.java.JavaPlugin;
 
 final class PaperPersistentChannelFactory {
+    private static final String VERIFY_REQUEST = "VERIFY_REQUEST";
+    private static final String VERIFY_REPORT = "VERIFY_REPORT";
+    private static final Duration VERIFY_RESPONSE_TIMEOUT = Duration.ofSeconds(2);
+
     private PaperPersistentChannelFactory() {
     }
 
@@ -68,12 +76,14 @@ final class PaperPersistentChannelFactory {
             return Optional.empty();
         }
         ChannelConfiguration loaded = loadConfiguration(settings);
+        AtomicReference<PersistentChannelClient> clientReference = new AtomicReference<>();
         PersistentChannelClient client = new PersistentChannelClient(
                 loaded.client(),
                 Clock.systemUTC(),
-                envelope -> messageHandler.apply(loaded.backendId(), envelope),
+                envelope -> handleMessage(loaded.backendId(), envelope, messageHandler, clientReference),
                 connectionState
         );
+        clientReference.set(client);
         try {
             client.start();
             return Optional.of(client);
@@ -87,6 +97,23 @@ final class PaperPersistentChannelFactory {
         }
     }
 
+    private static boolean handleMessage(
+            String backendId,
+            ProtocolEnvelope envelope,
+            BiFunction<String, ProtocolEnvelope, Boolean> messageHandler,
+            AtomicReference<PersistentChannelClient> clientReference
+    ) {
+        if (!VERIFY_REQUEST.equals(envelope.messageType())) {
+            return messageHandler.apply(backendId, envelope);
+        }
+        PersistentChannelClient client = clientReference.get();
+        if (client == null || !client.connected()) {
+            return false;
+        }
+        String payload = PaperVerificationReporter.payload(backendId);
+        return client.send(UUID.randomUUID(), VERIFY_REPORT, payload, VERIFY_RESPONSE_TIMEOUT).getNow(true);
+    }
+
     private static ChannelConfiguration loadConfiguration(Settings settings) {
         return new ChannelConfiguration(
                 settings.backendId(),
@@ -94,20 +121,20 @@ final class PaperPersistentChannelFactory {
                         settings.backendId(),
                         settings.host(),
                         settings.port(),
-                        secretFromEnvironment(settings.backendSecretEnvironment()),
+                        secretFromEnvironment(settings.dataDirectory(), settings.backendSecretEnvironment()),
                         settings.proxyId(),
-                        secretFromEnvironment(settings.proxySecretEnvironment()),
+                        secretFromEnvironment(settings.dataDirectory(), settings.proxySecretEnvironment()),
                         clientTlsContext(settings)
                 )
         );
     }
 
-    private static SecretKey secretFromEnvironment(String environment) {
-        return SecretKeyMaterial.hmacSha256FromBase64(System.getenv(environment));
+    private static SecretKey secretFromEnvironment(Path directory, String environment) {
+        return SecretKeyMaterial.hmacSha256FromBase64(PrivateRuntimeSecrets.required(directory, environment, System::getenv));
     }
 
     private static SSLContext clientTlsContext(Settings settings) {
-        char[] password = passwordFromEnvironment(settings.trustStorePasswordEnvironment());
+        char[] password = PrivateRuntimeSecrets.required(settings.dataDirectory(), settings.trustStorePasswordEnvironment(), System::getenv).toCharArray();
         try {
             Path resolved = resolveChannelTlsPath(settings.dataDirectory(), Path.of(settings.trustStore()));
             return TlsContextLoader.client(resolved, password);
@@ -125,14 +152,6 @@ final class PaperPersistentChannelFactory {
             throw new IllegalArgumentException("A relative channel TLS path must remain in the plugin data directory");
         }
         return resolved;
-    }
-
-    private static char[] passwordFromEnvironment(String environment) {
-        String value = System.getenv(environment);
-        if (value == null || value.isBlank()) {
-            throw new IllegalStateException("A required channel TLS store password environment variable is missing");
-        }
-        return value.toCharArray();
     }
 
     record Settings(

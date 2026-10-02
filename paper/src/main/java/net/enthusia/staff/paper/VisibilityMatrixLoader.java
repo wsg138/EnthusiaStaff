@@ -12,6 +12,7 @@ import net.enthusia.staff.paper.visibility.DefaultStaffVisibilityService;
 
 final class VisibilityMatrixLoader {
     private static final List<StaffRank> CONFIGURABLE_VIEWERS = List.of(
+            StaffRank.HELPER,
             StaffRank.MOD,
             StaffRank.DEVELOPER,
             StaffRank.ADMIN,

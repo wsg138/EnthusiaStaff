@@ -31,8 +31,11 @@ import net.enthusia.staff.domain.economy.EconomyPreparation;
 import net.enthusia.staff.domain.economy.EconomyPrepareRequest;
 import net.enthusia.staff.domain.economy.EconomyTerminalUpdate;
 import net.enthusia.staff.domain.economy.EconomyValidatedPlan;
+import net.enthusia.staff.domain.inventory.InventoryCursorPhase;
+import net.enthusia.staff.domain.inventory.InventoryCursorTransfer;
 import net.enthusia.staff.domain.inventory.InventoryFinalizeResult;
 import net.enthusia.staff.domain.inventory.InventoryOperationState;
+import net.enthusia.staff.domain.inventory.InventoryObservation;
 import net.enthusia.staff.domain.inventory.InventoryPatch;
 import net.enthusia.staff.domain.inventory.InventoryPreparation;
 import net.enthusia.staff.domain.inventory.InventoryPrepareRequest;
@@ -99,8 +102,9 @@ class AssetJournalIntegrationTest {
                     replacementChecksum,
                     replacement,
                     java.util.List.of(4),
-                    false
-            );
+                    false,
+                    Optional.empty()
+                );
 
             InventoryPreparation prepared = store.prepare(request, LEASE, NOW.plusSeconds(1));
             assertEquals(InventoryPreparation.Status.PREPARED, prepared.status());
@@ -341,6 +345,166 @@ class AssetJournalIntegrationTest {
     }
 
     @Test
+    void liveCursorTransferSurvivesPersistenceRestartAndFinalizesExactlyOnce() throws SQLException {
+        UUID targetId = UUID.randomUUID();
+        UUID actorId = UUID.randomUUID();
+        CursorRollbackFixture fixture;
+        try (MariaDbRuntime runtime = MariaDb.initialize(databaseConfig(DATABASE))) {
+            fixture = prepareCursorRollback(runtime.inventoryJournalStore(), targetId, actorId);
+        }
+
+        try (MariaDbRuntime restarted = MariaDb.initialize(databaseConfig(DATABASE))) {
+            InventoryJournalStore store = restarted.inventoryJournalStore();
+            var recovery = store.cursorTransfer(fixture.operationId()).orElseThrow();
+            InventoryPatch patch = recovery.patch();
+
+            assertEquals(InventoryCursorPhase.TARGET_APPLIED, recovery.phase());
+            assertEquals(targetId, patch.playerId());
+            assertEquals(actorId, patch.actorId());
+            assertEquals(1, store.pendingCursorTransfersByActor(actorId, SERVER_ID, 10).size());
+            assertTrue(store.advanceCursorPhase(
+                    patch.patchId(), patch.operationId(), patch.fencingToken(),
+                    InventoryCursorPhase.TARGET_APPLIED, InventoryCursorPhase.CURSOR_APPLIED,
+                    NOW.plusSeconds(5)
+            ));
+
+            InventoryFinalizeResult committed = store.finalizeApplied(
+                    patch.patchId(), patch.operationId(), patch.fencingToken(),
+                    patch.replacementChecksum(), patch.replacementSnapshot(), NOW.plusSeconds(6)
+            );
+            assertEquals(InventoryFinalizeResult.Status.COMMITTED, committed.status());
+            assertEquals(
+                    InventoryFinalizeResult.Status.REPLAYED,
+                    store.finalizeApplied(
+                            patch.patchId(), patch.operationId(), patch.fencingToken(),
+                            patch.replacementChecksum(), patch.replacementSnapshot(), NOW.plusSeconds(7)
+                    ).status()
+            );
+            assertTrue(store.cursorTransfer(patch.operationId()).isEmpty());
+            assertTrue(store.pendingCursorTransfersByActor(actorId, SERVER_ID, 10).isEmpty());
+            assertFalse(store.isLocked(targetId, SCOPE_ID, NOW.plusSeconds(8)));
+            assertEquals(1L, auditCount(patch.operationId(), COMMIT_EVENT));
+        }
+    }
+
+    @Test
+    void liveCursorRollbackIsTerminalIdempotentAndReleasesTheAsset() throws SQLException {
+        UUID targetId = UUID.randomUUID();
+        UUID actorId = UUID.randomUUID();
+        try (MariaDbRuntime runtime = MariaDb.initialize(databaseConfig(DATABASE))) {
+            InventoryJournalStore store = runtime.inventoryJournalStore();
+            CursorRollbackFixture fixture = prepareCursorRollback(store, targetId, actorId);
+            InventoryPatch claimed = fixture.claimed();
+
+            assertFalse(store.resolveCursorRollback(
+                    claimed.patchId(), fixture.operationId(),
+                    claimed.fencingToken() + 1L, NOW.plusSeconds(5)
+            ));
+            assertTrue(store.resolveCursorRollback(
+                    claimed.patchId(), fixture.operationId(),
+                    claimed.fencingToken(), NOW.plusSeconds(6)
+            ));
+            assertTrue(store.resolveCursorRollback(
+                    claimed.patchId(), fixture.operationId(),
+                    claimed.fencingToken(), NOW.plusSeconds(7)
+            ));
+            assertResolvedCursorRollback(store, fixture, targetId, actorId);
+        }
+    }
+
+    private static CursorRollbackFixture prepareCursorRollback(
+            InventoryJournalStore store,
+            UUID targetId,
+            UUID actorId
+    ) throws SQLException {
+        byte[] before = {91, 92, 93};
+        byte[] replacement = {94, 95, 96};
+        byte[] cursorBefore = {1, 0, 0, 1};
+        byte[] cursorAfter = {1, 0, 0, 2};
+        insertPlayer(DATABASE, targetId, "CursorRollbackTarget", NOW);
+        insertPlayer(DATABASE, actorId, "CursorRollbackActor", NOW);
+        InventoryObservation observation = store.recordObservation(
+                targetId, SCOPE_ID, SERVER_ID, checksum(before), before, NOW
+        );
+        UUID operationId = UUID.randomUUID();
+        InventoryCursorTransfer cursor = new InventoryCursorTransfer(
+                checksum(cursorBefore), cursorBefore, checksum(cursorAfter), cursorAfter
+        );
+        InventoryPrepareRequest request = cursorRollbackRequest(
+                operationId, targetId, actorId, observation, before, replacement, cursor
+        );
+        InventoryPatch prepared = store.prepare(request, LEASE, NOW.plusSeconds(1))
+                .patch().orElseThrow();
+        var crossBackend = store.pendingCursorTransfersByActor(
+                actorId, "paper-2", 10
+        ).getFirst();
+        assertEquals(SERVER_ID, crossBackend.patch().owningServerId());
+        InventoryPatch claimed = store.claimForApply(
+                prepared.patchId(), operationId, LEASE, NOW.plusSeconds(2)
+        ).orElseThrow();
+        advanceCursorRollbackToTargetApplied(store, claimed, operationId);
+        return new CursorRollbackFixture(operationId, claimed);
+    }
+
+    private static InventoryPrepareRequest cursorRollbackRequest(
+            UUID operationId,
+            UUID targetId,
+            UUID actorId,
+            InventoryObservation observation,
+            byte[] before,
+            byte[] replacement,
+            InventoryCursorTransfer cursor
+    ) {
+        return new InventoryPrepareRequest(
+                operationId, "inventory:cursor-rollback:" + operationId,
+                targetId, SCOPE_ID, SERVER_ID, actorId, Optional.empty(),
+                "ONLINE_CURSOR_PICKUP", observation.revision(), checksum(before), before,
+                checksum(replacement), replacement, java.util.List.of(4), false, Optional.of(cursor)
+        );
+    }
+
+    private static void advanceCursorRollbackToTargetApplied(
+            InventoryJournalStore store,
+            InventoryPatch claimed,
+            UUID operationId
+    ) {
+        assertTrue(store.advanceCursorPhase(
+                claimed.patchId(), operationId, claimed.fencingToken(),
+                InventoryCursorPhase.PREPARED, InventoryCursorPhase.SOURCE_ESCROWED,
+                NOW.plusSeconds(3)
+        ));
+        assertTrue(store.advanceCursorPhase(
+                claimed.patchId(), operationId, claimed.fencingToken(),
+                InventoryCursorPhase.SOURCE_ESCROWED, InventoryCursorPhase.TARGET_APPLIED,
+                NOW.plusSeconds(4)
+        ));
+    }
+
+    private static void assertResolvedCursorRollback(
+            InventoryJournalStore store,
+            CursorRollbackFixture fixture,
+            UUID targetId,
+            UUID actorId
+    ) throws SQLException {
+        UUID operationId = fixture.operationId();
+        InventoryPatch claimed = fixture.claimed();
+        assertEquals("APPLIED", patchState(operationId));
+        assertEquals("RESTORED", inventoryOperationState(operationId));
+        assertEquals(
+                InventoryOperationState.APPLIED,
+                store.claimForApply(
+                        claimed.patchId(), operationId, LEASE, NOW.plusSeconds(8)
+                ).orElseThrow().state()
+        );
+        assertEquals(0L, leaseCount(targetId, SCOPE_ID));
+        assertFalse(store.isLocked(targetId, SCOPE_ID, NOW.plusSeconds(9)));
+        assertTrue(store.pending(targetId, SCOPE_ID, SERVER_ID, 10).isEmpty());
+        assertTrue(store.pendingCursorTransfersByActor(actorId, SERVER_ID, 10).isEmpty());
+        assertTrue(store.cursorTransfer(operationId).isEmpty());
+        assertEquals(0L, auditCount(operationId, COMMIT_EVENT));
+    }
+
+    @Test
     void economyJournalRejectsLiveReclaimAndCommitsExactEvidenceOnce() throws SQLException {
         UUID targetId = UUID.randomUUID();
         UUID actorId = UUID.randomUUID();
@@ -568,8 +732,9 @@ class AssetJournalIntegrationTest {
                 checksum(replacement),
                 replacement,
                 java.util.List.of(1),
-                false
-        );
+                false,
+                Optional.empty()
+            );
     }
 
     private static InventoryPrepareRequest withChangedSlots(
@@ -591,8 +756,9 @@ class AssetJournalIntegrationTest {
                 request.replacementChecksum(),
                 request.replacementSnapshot(),
                 changedSlots,
-                request.requireNetworkOffline()
-        );
+                request.requireNetworkOffline(),
+                Optional.empty()
+            );
     }
 
     private static ClaimedInventoryOperation prepareAndClaim(
@@ -788,6 +954,9 @@ class AssetJournalIntegrationTest {
                 return result.getLong(1);
             }
         }
+    }
+
+    private record CursorRollbackFixture(UUID operationId, InventoryPatch claimed) {
     }
 
     private record ClaimedInventoryOperation(UUID operationId, InventoryPatch patch) {

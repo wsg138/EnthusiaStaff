@@ -4,7 +4,7 @@ LiteBans remains the source of truth until a validated cutover commits `ACTIVE`.
 
 ## Imported data
 
-The inspected source must contain the configured-prefix `bans`, `mutes`, and `history` tables. Column names are discovered from a bounded allowlist; table prefixes and identifiers are validated before SQL is built.
+The inspected source must contain the configured-prefix `bans`, `mutes`, and `history` tables. Existing `warnings` and `kicks` tables are also imported; when present, an unsupported schema blocks the pass instead of silently omitting their history. Column names are discovered from a bounded allowlist; table prefixes and identifiers are validated before SQL is built.
 
 Inspection handles sanction, history, and audit-only tables independently. It
 reports missing columns in canonical order so repeated preflight runs produce a
@@ -16,6 +16,7 @@ present.
 The importer preserves:
 
 - ban, IP-ban, and mute source IDs;
+- warning and kick source IDs, reasons, original actors, and timestamps;
 - active, naturally expired, and ended-early state;
 - issue, expiration, and available removal timestamps;
 - original public reason and staff display name;
@@ -26,6 +27,13 @@ The importer preserves:
 Raw network addresses exist only transiently in migration memory. They are converted with the configured versioned HMAC and AES keys before target storage and are never written to reports or logs. A write-mode migration fails if protected identity keys are unavailable. LiteBans does not provide a trustworthy historical staff rank, so imported cases use the non-interactive `SYSTEM` rank while retaining the original staff name. Existing native cases—including historical Developer-issued cases—are not rewritten or invalidated.
 
 An IP ban without a UUID or name is resolved only when its protected address matches exactly one player in imported LiteBans history. Zero matches, multiple matches, wildcard addresses, and malformed addresses are rejected with a durable reason code and block cutover; the importer never guesses which player owns an ambiguous address.
+
+Imported kicks are completed history: their status is `APPLIED`, their end time is
+the original issue time, and their cases are closed. LiteBans' stored active flag
+does not turn an old kick into a new action. Warnings preserve their source active,
+expiration, and available removal state. Importing either type creates no external
+enforcement or notification outbox work. Both types participate in checksum,
+identity, expiration, type, and record-count reconciliation.
 
 ## Commands
 

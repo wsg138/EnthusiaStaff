@@ -30,16 +30,30 @@ final class ModerationPreviewHostedLaunchIssuer {
     private final byte[] signingKey;
     private final Clock clock;
     private final SecureRandom random;
+    private final String environment;
 
     ModerationPreviewHostedLaunchIssuer(URI publicBaseUri, String discordBotToken) {
         this(publicBaseUri, deriveSigningKey(discordBotToken), Clock.systemUTC(), new SecureRandom());
     }
 
+    ModerationPreviewHostedLaunchIssuer(URI publicBaseUri, String discordBotToken, String environment) {
+        this(publicBaseUri, deriveSigningKey(discordBotToken), Clock.systemUTC(), new SecureRandom(), environment);
+    }
+
     ModerationPreviewHostedLaunchIssuer(URI publicBaseUri, byte[] signingKey, Clock clock, SecureRandom random) {
+        this(publicBaseUri, signingKey, clock, random, "staging");
+    }
+
+    private ModerationPreviewHostedLaunchIssuer(
+            URI publicBaseUri, byte[] signingKey, Clock clock, SecureRandom random, String environment) {
         this.publicBaseUri = Objects.requireNonNull(publicBaseUri, "publicBaseUri");
         this.signingKey = Objects.requireNonNull(signingKey, "signingKey").clone();
         this.clock = Objects.requireNonNull(clock, "clock");
         this.random = Objects.requireNonNull(random, "random");
+        if (!"staging".equals(environment) && !"production".equals(environment)) {
+            throw new IllegalArgumentException("unsupported moderation web environment");
+        }
+        this.environment = environment;
         if (this.signingKey.length != SIGNING_KEY_BYTES) {
             throw new IllegalArgumentException("hosted launch signing key must be 32 bytes");
         }
@@ -87,7 +101,7 @@ final class ModerationPreviewHostedLaunchIssuer {
         }
         Instant issuedAt = clock.instant();
         Instant expiresAt = issuedAt.plus(TICKET_TTL);
-        String body = "v1|staging|" + nonce()
+        String body = "v1|" + environment + "|" + nonce()
                 + "|" + Long.toUnsignedString(actorId)
                 + "|" + Long.toUnsignedString(guildId)
                 + "|" + targetKey

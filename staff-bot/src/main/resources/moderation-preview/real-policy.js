@@ -81,9 +81,9 @@ function overviewNode() {
   return element('div', {}, pageHeading(
     'Player overview', 'Moderation context', 'Live account state, recent history, and current investigation activity.'),
   element('div', {className:'metric-grid'},
-    metricNode('Active sanctions', liveModeration.sanctions.length, liveModeration.sanctions.length ? 'Live active records' : 'None'),
+    metricNode('Active Minecraft sanctions', liveModeration.sanctions.length, liveModeration.sanctions.length ? 'Live active records' : 'None'),
     metricNode('Total history', realHistoryTotal(), 'Moderation records returned for this player'),
-    metricNode('Evidence selected', state.evidence.size, 'Evidence attached to this simulation')),
+    metricNode('Evidence selected', state.evidence.size, state.session?.staging === false ? 'References attached to the action' : 'Evidence attached to this simulation')),
   element('div', {className:'two-column'},
     element('section', {className:'card'},
       sectionHeading('Recent moderation history', buttonNode('View all', 'text-button', {viewLink:'history'})),
@@ -93,7 +93,7 @@ function overviewNode() {
       summaryList([
         ['Selected messages', state.selected.size],
         ['Evidence', state.evidence.size],
-        ['Simulated deletions', state.deleting.size]
+        [state.session?.staging === false ? 'Deletion selections (disabled)' : 'Simulated deletions', state.deleting.size]
       ]))));
 }
 

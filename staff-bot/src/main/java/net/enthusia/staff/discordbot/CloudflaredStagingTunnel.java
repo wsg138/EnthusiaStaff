@@ -15,25 +15,34 @@ final class CloudflaredStagingTunnel implements StagingTunnel {
     private static final Duration FORCE_TIMEOUT = Duration.ofSeconds(2);
     private static final String BINARY_NAME = "cloudflared";
     private static final String TOKEN_FILE_NAME = "cloudflared-token.txt";
+    private static final String PRODUCTION_TOKEN_FILE_NAME = "prod-tunnel";
     private static final String TRANSPORT_PROTOCOL = "http2";
 
     private final Path runtimeDirectory;
+    private final String tokenFileName;
     private final ProcessStarter processStarter;
     private final AtomicBoolean started = new AtomicBoolean();
     private final AtomicBoolean closing = new AtomicBoolean();
     private volatile Process process;
 
     CloudflaredStagingTunnel(Path binaryFile, Path tokenFile) {
-        this(binaryFile, tokenFile, CloudflaredStagingTunnel::startProcess);
+        this(binaryFile, tokenFile,
+                directory -> startProcess(directory, tokenFile.getFileName().toString()));
     }
 
     CloudflaredStagingTunnel(Path binaryFile, Path tokenFile, ProcessStarter processStarter) {
         Path binary = normalizedFile(binaryFile, "cloudflared binary", BINARY_NAME);
-        Path token = normalizedFile(tokenFile, "cloudflared token file", TOKEN_FILE_NAME);
+        Path token = Objects.requireNonNull(tokenFile, "cloudflared token file").toAbsolutePath().normalize();
+        String name = token.getFileName().toString();
+        if (!TOKEN_FILE_NAME.equals(name) && !PRODUCTION_TOKEN_FILE_NAME.equals(name)) {
+            throw new IllegalArgumentException("cloudflared token file must use a fixed filename");
+        }
+        token = normalizedFile(token, "cloudflared token file", name);
         if (!Objects.equals(binary.getParent(), token.getParent())) {
             throw new IllegalArgumentException("cloudflared binary and token file must share one runtime directory");
         }
         this.runtimeDirectory = binary.getParent();
+        this.tokenFileName = name;
         this.processStarter = Objects.requireNonNull(processStarter, "processStarter");
         ensureExecutable(binary);
     }
@@ -65,7 +74,7 @@ final class CloudflaredStagingTunnel implements StagingTunnel {
                 "--no-autoupdate",
                 "run",
                 "--token-file",
-                TOKEN_FILE_NAME
+                tokenFileName
         );
     }
 
@@ -108,7 +117,7 @@ final class CloudflaredStagingTunnel implements StagingTunnel {
         }
     }
 
-    private static Process startProcess(Path directory) throws IOException {
+    private static Process startProcess(Path directory, String tokenFileName) throws IOException {
         return new ProcessBuilder(
                 "./cloudflared",
                 "tunnel",
@@ -117,7 +126,7 @@ final class CloudflaredStagingTunnel implements StagingTunnel {
                 "--no-autoupdate",
                 "run",
                 "--token-file",
-                TOKEN_FILE_NAME)
+                tokenFileName)
                 .directory(directory.toFile())
                 .redirectOutput(ProcessBuilder.Redirect.INHERIT)
                 .redirectError(ProcessBuilder.Redirect.INHERIT)

@@ -11,6 +11,8 @@ import net.enthusia.staff.domain.inventory.InventoryConfiscationCommitRequest;
 import net.enthusia.staff.domain.inventory.InventoryConfiscationSession;
 import net.enthusia.staff.domain.inventory.InventoryConfiscationStart;
 import net.enthusia.staff.domain.inventory.InventoryConfiscationStartRequest;
+import net.enthusia.staff.domain.inventory.InventoryCursorJournal;
+import net.enthusia.staff.domain.inventory.InventoryCursorPhase;
 import net.enthusia.staff.domain.inventory.InventoryFinalizeResult;
 import net.enthusia.staff.domain.inventory.InventoryObservation;
 import net.enthusia.staff.domain.inventory.InventoryPatch;
@@ -47,78 +49,52 @@ public final class CompositeInventoryTesterJournalStore
 
     @Override
     public InventoryConfiscationStart beginConfiscation(
-            InventoryConfiscationStartRequest request,
-            Duration leaseDuration,
-            Instant now
+            InventoryConfiscationStartRequest request, Duration leaseDuration, Instant now
     ) {
         return inventory.beginConfiscation(request, leaseDuration, now);
     }
 
     @Override
     public Optional<InventoryConfiscationSession> renewConfiscation(
-            UUID operationId,
-            long fencingToken,
-            Duration leaseDuration,
-            Instant now
+            UUID operationId, long fencingToken, Duration leaseDuration, Instant now
     ) {
         return inventory.renewConfiscation(operationId, fencingToken, leaseDuration, now);
     }
 
     @Override
-    public InventoryPreparation prepareConfiscation(
-            InventoryConfiscationCommitRequest request,
-            Instant now
-    ) {
+    public InventoryPreparation prepareConfiscation(InventoryConfiscationCommitRequest request, Instant now) {
         return inventory.prepareConfiscation(request, now);
     }
 
     @Override
     public boolean cancelConfiscation(
-            UUID operationId,
-            long fencingToken,
-            String reasonCode,
-            String detail,
-            Instant now
+            UUID operationId, long fencingToken, String reasonCode, String detail, Instant now
     ) {
         return inventory.cancelConfiscation(operationId, fencingToken, reasonCode, detail, now);
     }
 
     @Override
     public int cancelAbandonedConfiscations(
-            UUID playerId,
-            String scopeId,
-            String owningServerId,
-            Instant now
+            UUID playerId, String scopeId, String owningServerId, Instant now
     ) {
         return inventory.cancelAbandonedConfiscations(playerId, scopeId, owningServerId, now);
     }
 
     @Override
-    public ConfiscatedAssetReservation reserveRestoration(
-            CaseId caseId,
-            UUID restorationOperationId,
-            Instant now
-    ) {
-        return inventory.reserveRestoration(caseId, restorationOperationId, now);
+    public ConfiscatedAssetReservation reserveRestoration(CaseId caseId, UUID operationId, Instant now) {
+        return inventory.reserveRestoration(caseId, operationId, now);
     }
 
     @Override
-    public boolean cancelRestoration(
-            CaseId caseId,
-            UUID restorationOperationId,
-            Instant now
-    ) {
-        return inventory.cancelRestoration(caseId, restorationOperationId, now);
+    public boolean cancelRestoration(CaseId caseId, UUID operationId, Instant now) {
+        return inventory.cancelRestoration(caseId, operationId, now);
     }
 
     @Override
     public boolean finalizeRestoration(
-            CaseId caseId,
-            UUID restorationOperationId,
-            String restoredChecksum,
-            Instant now
+            CaseId caseId, UUID operationId, String restoredChecksum, Instant now
     ) {
-        return inventory.finalizeRestoration(caseId, restorationOperationId, restoredChecksum, now);
+        return inventory.finalizeRestoration(caseId, operationId, restoredChecksum, now);
     }
 
     @Override
@@ -139,11 +115,7 @@ public final class CompositeInventoryTesterJournalStore
     }
 
     @Override
-    public InventoryPreparation prepare(
-            InventoryPrepareRequest request,
-            Duration leaseDuration,
-            Instant now
-    ) {
+    public InventoryPreparation prepare(InventoryPrepareRequest request, Duration leaseDuration, Instant now) {
         return inventory.prepare(request, leaseDuration, now);
     }
 
@@ -153,13 +125,44 @@ public final class CompositeInventoryTesterJournalStore
     }
 
     @Override
+    public List<InventoryCursorJournal> pendingCursorTransfersByActor(
+            UUID actorId, String owningServerId, int limit
+    ) {
+        return inventory.pendingCursorTransfersByActor(actorId, owningServerId, limit);
+    }
+
+    @Override
+    public Optional<InventoryCursorJournal> cursorTransfer(UUID operationId) {
+        return inventory.cursorTransfer(operationId);
+    }
+
+    @Override
     public Optional<InventoryPatch> claimForApply(
-            UUID patchId,
-            UUID operationId,
-            Duration leaseDuration,
-            Instant now
+            UUID patchId, UUID operationId, Duration leaseDuration, Instant now
     ) {
         return inventory.claimForApply(patchId, operationId, leaseDuration, now);
+    }
+
+    @Override
+    public boolean advanceCursorPhase(
+            UUID patchId,
+            UUID operationId,
+            long fencingToken,
+            InventoryCursorPhase expected,
+            InventoryCursorPhase next,
+            Instant now
+    ) {
+        return inventory.advanceCursorPhase(patchId, operationId, fencingToken, expected, next, now);
+    }
+
+    @Override
+    public boolean resolveCursorRollback(
+            UUID patchId,
+            UUID operationId,
+            long fencingToken,
+            Instant now
+    ) {
+        return inventory.resolveCursorRollback(patchId, operationId, fencingToken, now);
     }
 
     @Override
@@ -172,12 +175,7 @@ public final class CompositeInventoryTesterJournalStore
             Instant now
     ) {
         return inventory.finalizeApplied(
-                patchId,
-                operationId,
-                fencingToken,
-                observedChecksum,
-                observedSnapshot,
-                now
+                patchId, operationId, fencingToken, observedChecksum, observedSnapshot, now
         );
     }
 
@@ -195,10 +193,7 @@ public final class CompositeInventoryTesterJournalStore
 
     @Override
     public boolean isLocked(UUID playerId, String scopeId, Instant now) {
-        if (inventory.isLocked(playerId, scopeId, now)) {
-            return true;
-        }
-        return testers.activeForTarget(playerId).isPresent();
+        return inventory.isLocked(playerId, scopeId, now) || testers.activeForTarget(playerId).isPresent();
     }
 
     @Override
@@ -232,10 +227,7 @@ public final class CompositeInventoryTesterJournalStore
 
     @Override
     public Optional<CheatTesterJournalRecord> checkpointEvidence(
-            UUID sessionId,
-            long expectedRevision,
-            String evidence,
-            Instant now
+            UUID sessionId, long expectedRevision, String evidence, Instant now
     ) {
         return testers.checkpointEvidence(sessionId, expectedRevision, evidence, now);
     }

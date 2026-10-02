@@ -1,7 +1,6 @@
 'use strict';
 
 const TOKEN_VERSION = 'v1';
-const TOKEN_ENVIRONMENT = 'staging';
 const MAX_TOKEN_LENGTH = 2048;
 const MAX_TTL_SECONDS = 180;
 const CLOCK_SKEW_SECONDS = 30;
@@ -11,8 +10,8 @@ const EXPECTED_SIGNATURE_BYTES = 32;
 const textEncoder = new TextEncoder();
 const textDecoder = new TextDecoder('utf-8', { fatal: true });
 
-export async function inspectLaunchToken(token, keyHex, expectedGuildId, nowSeconds = Math.floor(Date.now() / 1000)) {
-  const parsed = parseLaunchToken(token);
+export async function inspectLaunchToken(token, keyHex, expectedGuildId, nowSeconds = Math.floor(Date.now() / 1000), environment = 'staging') {
+  const parsed = parseLaunchToken(token, environment);
   if (!parsed) return { claims: null, reason: 'malformed' };
   if (!claimsAllowed(parsed.claims, expectedGuildId, nowSeconds)) {
     return { claims: null, reason: 'claims' };
@@ -28,11 +27,11 @@ export async function verifyLaunchToken(token, keyHex, expectedGuildId, nowSecon
   return (await inspectLaunchToken(token, keyHex, expectedGuildId, nowSeconds)).claims;
 }
 
-export function parseLaunchToken(token) {
+export function parseLaunchToken(token, environment = 'staging') {
   const parts = tokenParts(token);
   if (!parts) return null;
   try {
-    return decodeLaunchToken(parts);
+    return decodeLaunchToken(parts, environment);
   } catch {
     return null;
   }
@@ -45,29 +44,29 @@ function tokenParts(token) {
   return { encodedBody: pieces[0], encodedSignature: pieces[1] };
 }
 
-function decodeLaunchToken(parts) {
+function decodeLaunchToken(parts, environment) {
   const body = textDecoder.decode(decodeBase64Url(parts.encodedBody));
   const signature = decodeBase64Url(parts.encodedSignature);
   if (signature.byteLength !== EXPECTED_SIGNATURE_BYTES) return null;
-  const claims = parseClaims(body);
+  const claims = parseClaims(body, environment);
   if (!claims) return null;
   return { encodedBody: parts.encodedBody, signature, claims };
 }
 
-function parseClaims(body) {
+function parseClaims(body, expectedEnvironment) {
   const fields = body.split('|');
   if (fields.length !== EXPECTED_BODY_FIELDS) return null;
   const [version, environment, nonce, actorId, guildId, targetKey, issuedRaw, expiresRaw] = fields;
-  if (!validClaimText(version, environment, nonce, actorId, guildId, targetKey)) return null;
+  if (!validClaimText(version, environment, nonce, actorId, guildId, targetKey, expectedEnvironment)) return null;
   const times = parseClaimTimes(issuedRaw, expiresRaw);
   if (!times) return null;
   return { nonce, actorId, guildId, targetKey, issuedAt: times.issuedAt, expiresAt: times.expiresAt };
 }
 
-function validClaimText(version, environment, nonce, actorId, guildId, targetKey) {
+function validClaimText(version, environment, nonce, actorId, guildId, targetKey, expectedEnvironment) {
   return [
     version === TOKEN_VERSION,
-    environment === TOKEN_ENVIRONMENT,
+    environment === expectedEnvironment && ['staging', 'production'].includes(environment),
     /^[A-Za-z0-9_-]{32,64}$/.test(nonce),
     /^[1-9][0-9]{0,19}$/.test(actorId),
     /^[1-9][0-9]{0,19}$/.test(guildId),

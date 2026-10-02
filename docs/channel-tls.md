@@ -81,6 +81,20 @@ Missing stores, wrong passwords, an untrusted certificate, an expired
 certificate, or a SAN mismatch prevents connection. Paper remains degraded and
 new network-wide writes remain disabled; durable outbox work is not discarded.
 
+## Hosting without process environment configuration
+
+Paper and Velocity accept a private `secrets.properties` file in their respective
+plugin data directories for the configured channel HMAC keys and TLS store
+passwords. A nonblank process environment value takes precedence. When absent,
+only the exact configured name is read from that file. Missing or blank entries,
+symbolic links, invalid property syntax, and files over 16 KiB fail closed.
+
+Use the configured environment names as property keys. Keep the file outside Git,
+restrict it to the server account with mode `0600`, and never put secret values in
+startup flags or diagnostic output. Each backend receives its own HMAC key and
+the proxy key; only Velocity receives the TLS private key. Store and key changes
+require a restart. This fallback does not disable certificate or envelope checks.
+
 ## Rotation and rollback
 
 For certificate rotation, add the new CA or certificate to every Paper trust

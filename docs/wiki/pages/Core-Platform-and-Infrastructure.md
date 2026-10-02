@@ -1,206 +1,188 @@
 # Core Platform and Infrastructure
 
-This hub covers the foundation every other EnthusiaStaff feature depends on: runtime artifacts, architecture, lifecycle, MariaDB, authenticated Paper-Velocity communication, safe-write controls, configuration, identity, health, and validation.
+This hub covers the foundation every other EnthusiaStaff feature depends on: runtime artifacts, module boundaries, lifecycle, MariaDB/Flyway, authenticated Paper–Velocity communication, authority bridges, configuration, identity, health and validation.
 
-For the overall product picture use [[Implementation Status]]. For detailed source tracing use [[Developer Code Guide]]. For review invariants use [[Code Review Guide]].
+For Discord runtime/product behavior use [[Discord Moderation Platform]] and [[Staff Bot Runtime and Operations]]. For the public site and web APIs use [[Website and Web API]].
 
 ## Quick status
 
 | Area | Merged-main state | Main limitation |
 | --- | --- | --- |
-| Runtime artifacts/packaging | **Implemented, not staging-verified** | Real all-provider/classloader/release-candidate staging remains. |
-| Module architecture | **Available with limitations** | Several first-party coordinators remain large; future changes must preserve dependency direction. |
-| Paper lifecycle | **Implemented, not staging-verified** | Real Folia/restart/provider/runtime ownership still needs representative validation. |
-| Velocity lifecycle | **Partial** | Existing proxy/runtime workers are merged; broader bootstrap/reload recovery and representative distributed acceptance are not complete. |
-| MariaDB/Flyway | **Implemented, not staging-verified** | Production-like load, process-kill, latency and multi-runtime acceptance remain. |
-| Safe-write controls/recovery | **Partial** | High-risk external/player-state workflows still need complete interruption/recovery proof. |
-| Paper-Velocity protocol | **Implemented, not staging-verified** | Real multi-backend reconnect/backpressure/certificate/outage acceptance remains. |
-| Operational modes/degradation | **Partial** | Full mode-transition and production-cutover acceptance remain. |
-| Configuration/reload | **Partial** | Full modular tree and complete cross-file atomic reload are unfinished. |
-| Identity/player directory | **Implemented, not staging-verified** | Representative Geyser/Floodgate multi-backend/client staging remains. |
-| Runtime health/verification | **Partial** | Complete dependency/topology release verification remains. |
-| Build/quality gates | **Available with limitations** | Hosted checks do not replace private runtime/staging/production acceptance. |
+| Java runtime artifacts/packaging | **Implemented** | Representative all-runtime/provider/release-candidate acceptance remains broader than artifact checks. |
+| Module architecture | **Available with limitations** | Boundaries are explicit, but large coordinators still require disciplined review. |
+| Paper lifecycle | **Implemented, not fully staging-verified** | Real Folia/provider/restart ownership needs representative validation. |
+| Authority bridge runtime | **Implemented transition runtime** | Narrow migration/authority role; must not become a second full moderation implementation. |
+| Velocity lifecycle | **Implemented foundations with remaining acceptance** | Distributed reload/outage/provider acceptance remains. |
+| StaffBot lifecycle | **Implemented** | Production destructive authority remains separately gated/default-off. |
+| MariaDB/Flyway | **Implemented through V20** | Production-like load/process-kill/multi-runtime acceptance remains. |
+| Safe-write/recovery controls | **Partial by workflow** | High-risk external/player-state workflows still need complete interruption/recovery evidence. |
+| Paper–Velocity protocol | **Implemented, not fully staging-verified** | Multi-backend reconnect/backpressure/certificate/outage acceptance remains. |
+| Configuration/reload | **Partial platform-wide** | Paper, Velocity, StaffBot and web components have separate lifecycle/config boundaries. |
+| Identity/player directory | **Implemented, not fully staging-verified** | Representative Geyser/Floodgate/client/multi-backend acceptance remains. |
+| Build/quality gates | **Available with limitations** | Hosted checks do not replace runtime/production acceptance. |
 
-## Runtime artifacts and module boundaries
+## Runtime artifacts
 
-Current merged `main` builds two Java 21 Minecraft runtime artifacts:
+The root `runtimeJars` task currently builds/verifies four Java runtime artifacts:
 
-- `EnthusiaStaff-Paper-<version>.jar`
-- `EnthusiaStaff-Velocity-<version>.jar`
+```text
+EnthusiaStaff-Paper-<version>.jar
+EnthusiaStaff-AuthorityBridge-<version>.jar
+EnthusiaStaff-Velocity-<version>.jar
+EnthusiaStaff-StaffBot-<version>.jar
+```
 
-The planned interactive Discord staff bot is a separate runtime/application boundary and is not part of the current merged module set.
+Paper and Velocity are Minecraft runtimes. StaffBot is a standalone Java/JDA application. The authority bridge is a narrow transition runtime with explicit required/forbidden-content verification; it must not become an alternate general-purpose Paper implementation.
+
+Web components are deployed separately:
+
+- `components/enthusia-site/` — public site + Cloudflare Pages Functions;
+- `moderation-web/` — staging-only Cloudflare moderation workspace.
 
 Primary paths:
 
 - [root build](https://github.com/wsg138/EnthusiaStaff/blob/main/build.gradle.kts)
 - [module settings](https://github.com/wsg138/EnthusiaStaff/blob/main/settings.gradle.kts)
-- [Paper build](https://github.com/wsg138/EnthusiaStaff/blob/main/paper/build.gradle.kts)
-- [Velocity build](https://github.com/wsg138/EnthusiaStaff/blob/main/velocity/build.gradle.kts)
+- [authority bridge build](https://github.com/wsg138/EnthusiaStaff/blob/main/paper-authority-bridge/build.gradle.kts)
+- [StaffBot README](https://github.com/wsg138/EnthusiaStaff/blob/main/staff-bot/README.md)
 
-Internal module responsibilities:
+## Module responsibilities
 
 ```text
-common                 shared primitives
-domain                 business policy and ports
-integration-contracts  compile-time contracts for supported Enthusia providers
-persistence            MariaDB/Flyway adapters
-protocol               authenticated distributed transport
-paper                  Bukkit/Paper runtime adapters
-velocity               proxy/runtime adapters
+common                 shared primitives/security/bounded utilities
+domain                 business policy, authorization and ports
+integration-contracts  compile-time contracts for Enthusia-owned providers
+discord-platform-api   provider-neutral managed-role API
+persistence            MariaDB/Flyway/JDBC stores/recovery
+protocol               authenticated Paper-Velocity transport
+paper                  Bukkit/Paper commands/UI/player-state adapters
+paper-authority-bridge transition authority/migration runtime
+velocity               proxy/network workers + website API
+staff-bot              Discord JDA/runtime/moderation/read/effect services
 integration-tests      validation only; never deployed
 ```
 
-`integration-contracts` is a compile-time provider boundary. It does not own moderation policy; provider adapters use it to reach supported provider contracts while application policy remains in `domain`.
+`integration-contracts` and `discord-platform-api` are contract boundaries, not second homes for moderation policy. The owning domain/application service remains authoritative.
 
-The actual dependency graph is described in [[Architecture]]. Reviewer rule: policy belongs in `domain`; commands, GUIs, HTTP/Discord handlers and provider adapters should not become alternate business-rule implementations.
+See [[Architecture]] for the full dependency model.
 
 ## Paper lifecycle
 
-Paper composition and lifecycle are split across focused collaborators:
+Important composition paths:
 
 - [Paper plugin](https://github.com/wsg138/EnthusiaStaff/blob/main/paper/src/main/java/net/enthusia/staff/paper/EnthusiaStaffPaperPlugin.java)
 - [runtime lifecycle](https://github.com/wsg138/EnthusiaStaff/blob/main/paper/src/main/java/net/enthusia/staff/paper/PaperRuntimeLifecycle.java)
 - [runtime components](https://github.com/wsg138/EnthusiaStaff/blob/main/paper/src/main/java/net/enthusia/staff/paper/PaperRuntimeComponents.java)
 - [storage bindings](https://github.com/wsg138/EnthusiaStaff/blob/main/paper/src/main/java/net/enthusia/staff/paper/PaperStorageBindings.java)
 - [command registrar](https://github.com/wsg138/EnthusiaStaff/blob/main/paper/src/main/java/net/enthusia/staff/paper/PaperCommandRegistrar.java)
-- [integration manager](https://github.com/wsg138/EnthusiaStaff/blob/main/paper/src/main/java/net/enthusia/staff/paper/PaperIntegrationManager.java)
-- [resource closer](https://github.com/wsg138/EnthusiaStaff/blob/main/paper/src/main/java/net/enthusia/staff/paper/PaperResourceCloser.java)
 
-Database/provider/network work belongs off the game/entity thread. Player/entity state must return to the supported owning scheduler. Unit/mocked scheduling tests do not prove real Folia behavior; see [[Build and Testing]].
+Database/provider/network work belongs off the game/entity thread. Player/entity mutation returns to the supported owning scheduler, and callbacks that can outlive a session require fencing.
 
-## Velocity lifecycle
+## Paper authority bridge
 
-Velocity owns network-facing authority and workers, including login/server-switch enforcement, protected network identity, persistent backend transport, network/legacy Discord webhook delivery workers, migration coordination, and the restricted website bridge.
+`paper-authority-bridge` is built as a separate shaded Paper artifact for transition/authority needs. Its build explicitly verifies required runtime classes/resources and forbids selected full moderation/migration implementations from being pulled into the bridge.
+
+Review it as a **narrow bridge**, not a place to duplicate Paper command/business logic. The root build verifies this containment as part of `runtimeJars`.
+
+## Velocity lifecycle and website API
+
+Velocity owns login/server-switch enforcement, protected network identity, Paper–Velocity transport workers, legacy Discord webhook delivery, migration/shadow coordination, and the authoritative website API server/router.
 
 Primary paths:
 
 - [Velocity plugin](https://github.com/wsg138/EnthusiaStaff/blob/main/velocity/src/main/java/net/enthusia/staff/velocity/EnthusiaStaffVelocityPlugin.java)
-- [Velocity package](https://github.com/wsg138/EnthusiaStaff/tree/main/velocity/src/main/java/net/enthusia/staff/velocity)
 - [Velocity configuration](https://github.com/wsg138/EnthusiaStaff/blob/main/velocity/src/main/java/net/enthusia/staff/velocity/VelocityConfiguration.java)
 - [network worker](https://github.com/wsg138/EnthusiaStaff/blob/main/velocity/src/main/java/net/enthusia/staff/velocity/NetworkOutboxWorker.java)
-- [Discord webhook worker](https://github.com/wsg138/EnthusiaStaff/blob/main/velocity/src/main/java/net/enthusia/staff/velocity/DiscordOutboxWorker.java)
+- [legacy Discord worker](https://github.com/wsg138/EnthusiaStaff/blob/main/velocity/src/main/java/net/enthusia/staff/velocity/DiscordOutboxWorker.java)
+- [website API router](https://github.com/wsg138/EnthusiaStaff/blob/main/velocity/src/main/java/net/enthusia/staff/velocity/WebsiteApiRouter.java)
 
-Velocity event threads must not wait on JDBC, HTTP, filesystem or socket I/O. Do not treat classes/tests present only on an active unmerged branch as current `main` behavior.
+Velocity event threads must not block on JDBC/HTTP/filesystem/socket I/O.
+
+## StaffBot lifecycle
+
+StaffBot owns the privileged Discord Gateway/JDA lifecycle, staff moderation/read UX, Discord effect/reconciliation workers, signed browser-workspace launches, private moderation-read API and health/readiness.
+
+Important paths:
+
+- [StaffBotApplication](https://github.com/wsg138/EnthusiaStaff/blob/main/staff-bot/src/main/java/net/enthusia/staff/discordbot/StaffBotApplication.java)
+- [StaffBotRuntime](https://github.com/wsg138/EnthusiaStaff/blob/main/staff-bot/src/main/java/net/enthusia/staff/discordbot/StaffBotRuntime.java)
+- [JdaDiscordGateway](https://github.com/wsg138/EnthusiaStaff/blob/main/staff-bot/src/main/java/net/enthusia/staff/discordbot/JdaDiscordGateway.java)
+
+The runtime uses bounded workers, explicit environment/application/guild fences and safe shutdown/reconnect behavior. Destructive Discord enforcement is explicitly gated and defaults off.
+
+See [[Staff Bot Runtime and Operations]].
 
 ## MariaDB and Flyway
 
-MariaDB is the durable authority for core moderation/recovery state. The persistence runtime and stores live under:
+MariaDB is durable authority for moderation/recovery state. Current merged Flyway history reaches:
+
+```text
+V20__discord_account_linking.sql
+```
+
+Recent schema milestones:
+
+- V17 — website appeal workflow;
+- V18 — Cheat Tester session journal;
+- V19 — Discord moderation persistence/reconciliation foundations;
+- V20 — Discord/Minecraft account linking.
+
+Applied migration history is forward-only/immutable. Later versions visible on open branches are not current `main`.
+
+Primary paths:
 
 - [MariaDb](https://github.com/wsg138/EnthusiaStaff/blob/main/persistence/src/main/java/net/enthusia/staff/persistence/MariaDb.java)
 - [MariaDbRuntime](https://github.com/wsg138/EnthusiaStaff/blob/main/persistence/src/main/java/net/enthusia/staff/persistence/MariaDbRuntime.java)
 - [persistence package](https://github.com/wsg138/EnthusiaStaff/tree/main/persistence/src/main/java/net/enthusia/staff/persistence)
 - [Flyway migrations](https://github.com/wsg138/EnthusiaStaff/tree/main/persistence/src/main/resources/db/migration)
 
-Current merged `main` includes migrations through **`V19__discord_moderation_persistence.sql`**. V18 owns the Cheat Tester session journal; V19 owns the Discord moderation identity/link/operational persistence foundation. V1-V19 are immutable forward history. Future schema work must reconcile the live migration ceiling first and then add a new migration; do not edit applied migrations or use repair to hide a checksum change.
+## Safe-write and external-effect controls
 
-MariaDB/Testcontainers is strong evidence for SQL/transaction/migration scenarios actually exercised. It does not establish production volume, process-kill timing, multi-server contention, or production acceptance.
+High-risk workflows use combinations of idempotency keys, unique constraints, optimistic revisions, row locks, leases/fencing, before-state journals, durable inbox/outbox, bounded retry/backoff and quarantine/reconciliation.
 
-## Safe-write controls
+Discord native effects need special care: an ambiguous remote result may not be safely blind-retried. StaffBot verifies/reconciles effects such as bans, kicks and managed roles rather than assuming “request sent” equals success.
 
-Destructive flows use combinations of:
+## Paper–Velocity protocol
 
-- idempotency keys/unique constraints;
-- optimistic revisions;
-- row locks;
-- durable leases and fencing tokens;
-- before snapshots/journals;
-- append-only audit/events;
-- durable inbox/outbox delivery;
-- bounded retry/backoff;
-- recovery/quarantine when external outcome is ambiguous.
+The protocol provides persistent authenticated communication without requiring an online player. It is at-least-once; effect-level safety comes from replay protection, durable inbox/outbox, idempotent handlers, ACK semantics and bounded reconnect/retry.
 
-The exact mechanism depends on the workflow. The central review requirement is that timeout, stale callback, duplicate delivery, restart, or partial external failure cannot silently create a second effect or overwrite newer state.
+See [[Protocol and Network Traffic]].
 
-See [[Code Review Guide]] and [[Recovery and Troubleshooting]].
+## Configuration and authority modes
 
-## Paper-Velocity protocol
+Paper, Velocity, StaffBot and web components have different configuration/lifecycle ownership. Some settings are hot-reloadable; database pools, Gateway sessions, listener binds, provider classloading and other resources are restart-owned.
 
-The protocol provides persistent authenticated communication without depending on an online player.
+Authority/enforcement modes are safety boundaries, not convenience toggles. A broken dependency must not be bypassed by enabling a destructive mode simply to make a feature respond.
 
-Primary classes:
-
-- [PersistentChannelClient](https://github.com/wsg138/EnthusiaStaff/blob/main/protocol/src/main/java/net/enthusia/staff/protocol/PersistentChannelClient.java)
-- [PersistentChannelServer](https://github.com/wsg138/EnthusiaStaff/blob/main/protocol/src/main/java/net/enthusia/staff/protocol/PersistentChannelServer.java)
-- [EnvelopeAuthenticator](https://github.com/wsg138/EnthusiaStaff/blob/main/protocol/src/main/java/net/enthusia/staff/protocol/EnvelopeAuthenticator.java)
-- [ReplayGuard](https://github.com/wsg138/EnthusiaStaff/blob/main/protocol/src/main/java/net/enthusia/staff/protocol/ReplayGuard.java)
-- [network outbox store](https://github.com/wsg138/EnthusiaStaff/blob/main/persistence/src/main/java/net/enthusia/staff/persistence/JdbcNetworkOutboxStore.java)
-
-Transport is at-least-once. Durable idempotent consumers and inbox/outbox state provide effect-level duplicate safety. Deep dive: [[Protocol and Network Traffic]].
-
-## Operational modes
-
-The target/runtime modes are:
-
-- `BOOTSTRAP`
-- `DEGRADED`
-- `SHADOW_MIGRATION`
-- `ACTIVE`
-- `MAINTENANCE`
-- `READ_ONLY_FAILURE`
-
-A mode is an authority/safety boundary, not a cosmetic status string. Missing MariaDB, Velocity, providers, schema health or cutover evidence must block only unsafe actions whose correctness cannot be proved.
-
-Do not switch modes merely to work around an error. See [[Recovery and Troubleshooting]] and [[Shadow Mode and Cutover]].
-
-## Configuration and reload
-
-Current merged configuration includes reason policy, report policy/GUI settings, Paper runtime settings including staff-tool/Cheat Tester controls, and Velocity-owned settings. The full modular target in the goals is broader than current merged implementation.
-
-Important paths:
-
-- [Paper config](https://github.com/wsg138/EnthusiaStaff/blob/main/paper/src/main/resources/config.yml)
-- [reason policies](https://github.com/wsg138/EnthusiaStaff/blob/main/paper/src/main/resources/reason-policies.yml)
-- [reports policy](https://github.com/wsg138/EnthusiaStaff/blob/main/paper/src/main/resources/reports.yml)
-- [reports GUI](https://github.com/wsg138/EnthusiaStaff/blob/main/paper/src/main/resources/gui/reports.yml)
-- [Velocity configuration](https://github.com/wsg138/EnthusiaStaff/blob/main/velocity/src/main/java/net/enthusia/staff/velocity/VelocityConfiguration.java)
-
-A safe reload validates a complete candidate before publication and preserves the prior valid runtime state on failure. Some settings are restart-only; focused pages document those boundaries. See [[Configuration]].
+See [[Configuration]].
 
 ## Identity and player directory
 
-UUID is authoritative. Current merged platform persistence uses supported Floodgate evidence rather than username heuristics:
+UUID remains authoritative. Verified Floodgate evidence may establish Java/Bedrock platform; unavailable/incompatible evidence remains `UNKNOWN`; unverified proxy observations cannot downgrade verified platform identity. `*` aliases remain lookup compatibility, not platform proof.
 
-- verified Floodgate evidence may persist `JAVA` or `BEDROCK`;
-- Geyser with missing/unavailable/incompatible Floodgate remains `UNKNOWN`;
-- unverified Velocity presence cannot downgrade a verified platform record;
-- `*` current/historical aliases remain searchable but are not platform proof;
-- duplicate/out-of-order presence observations must not overwrite newer verified state.
+Discord/Minecraft ownership/link history is now separately persisted under V20. Public projections must not leak private link/alt history.
 
-Primary paths:
+## Runtime health
 
-- [Floodgate integration](https://github.com/wsg138/EnthusiaStaff/blob/main/paper/src/main/java/net/enthusia/staff/paper/client/FloodgateIntegration.java)
-- [player directory store](https://github.com/wsg138/EnthusiaStaff/blob/main/persistence/src/main/java/net/enthusia/staff/persistence/JdbcPlayerDirectory.java)
-- [player domain](https://github.com/wsg138/EnthusiaStaff/tree/main/domain/src/main/java/net/enthusia/staff/domain/player)
+Health should explain which dependency/authority fact makes a feature safe, degraded, disabled or restart-required.
 
-Representative Java/Bedrock/Geyser/Floodgate staging is still required for client/runtime claims. See [[Integrations]].
-
-## Runtime health and verification
-
-Health/verification should explain not just whether the plugin started, but which dependency or authority fact makes a feature safe, degraded, disabled, restart-required, or critical.
-
-Useful entry points:
-
-- `paper/.../RuntimeHealth.java`
-- `velocity/.../VelocityRuntimeHealth.java`
-- `/estaff status`
-- `/estaff verify ...`
-
-Operator procedure: [[Recovery and Troubleshooting]].
+Relevant surfaces include Paper/Velocity runtime health, `/estaff status`/verification paths, and StaffBot’s private health/readiness server. Health responses/logs must not expose secrets or private moderation data.
 
 ## Build and quality evidence
 
-The repository combines Java/unit tests, MariaDB Testcontainers, runtime-JAR inspection, coverage, static analysis, Wiki validation, and private runtime gates. These are different evidence classes; none should be silently promoted into another.
+The repository combines Java tests, MariaDB Testcontainers, runtime-JAR verification, coverage/static analysis, StaffBot smoke/runtime checks, Wiki validation, protected staging, and web/component validation. These are different evidence classes.
 
-Use [[Build and Testing]] for exact commands and evidence interpretation.
+Use [[Build and Testing]] for exact commands and interpretation.
 
 ## Go deeper
 
-- [[Architecture]] — dependency/runtime ownership.
-- [[Developer Code Guide]] — complete source/feature traces.
-- [[Code Review Guide]] — cross-cutting review checklist.
-- [[Protocol and Network Traffic]] — network internals.
-- [[Discord Moderation Platform]] — merged Discord foundations versus future runtime.
-- [[Cheat Tester]] — V18-backed tester/recovery internals.
-- [[Configuration]] — operator-facing settings/reload behavior.
-- [[Recovery and Troubleshooting]] — failure/recovery procedure.
-- [[Implementation Status]] — overall merged-main product status.
+- [[Architecture]]
+- [[Developer Code Guide]]
+- [[Code Review Guide]]
+- [[Discord Moderation Platform]]
+- [[Staff Bot Runtime and Operations]]
+- [[Website and Web API]]
+- [[Protocol and Network Traffic]]
+- [[Configuration]]
+- [[Recovery and Troubleshooting]]
+- [[Implementation Status]]

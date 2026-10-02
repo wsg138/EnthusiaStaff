@@ -15,15 +15,26 @@ final class PlayerInfoTabMasker {
     private final BiPredicate<UUID, UUID> canSee;
     private final Function<UUID, StaffRank> rankLookup;
     private final Predicate<UUID> hiddenFromTab;
+    private final Predicate<UUID> vanished;
 
     PlayerInfoTabMasker(
             BiPredicate<UUID, UUID> canSee,
             Function<UUID, StaffRank> rankLookup,
             Predicate<UUID> hiddenFromTab
     ) {
+        this(canSee, rankLookup, hiddenFromTab, ignored -> false);
+    }
+
+    PlayerInfoTabMasker(
+            BiPredicate<UUID, UUID> canSee,
+            Function<UUID, StaffRank> rankLookup,
+            Predicate<UUID> hiddenFromTab,
+            Predicate<UUID> vanished
+    ) {
         this.canSee = Objects.requireNonNull(canSee, "canSee");
         this.rankLookup = Objects.requireNonNull(rankLookup, "rankLookup");
         this.hiddenFromTab = Objects.requireNonNull(hiddenFromTab, "hiddenFromTab");
+        this.vanished = Objects.requireNonNull(vanished, "vanished");
     }
 
     List<PlayerInfoData> rewrite(UUID viewerId, List<PlayerInfoData> entries) {
@@ -48,6 +59,9 @@ final class PlayerInfoTabMasker {
     }
 
     private EntryRewrite rewriteEntry(UUID viewerId, PlayerInfoData entry) {
+        if (entry == null) {
+            return EntryRewrite.removed();
+        }
         UUID targetId = entry.getProfileId();
         if (targetId == null) {
             return EntryRewrite.unchanged(entry);
@@ -56,8 +70,10 @@ final class PlayerInfoTabMasker {
             return EntryRewrite.removed();
         }
         StaffRank rank = rankLookup.apply(targetId);
-        boolean listed = entry.isListed() && !hiddenFromTab.test(targetId);
-        EnumWrappers.NativeGameMode gameMode = maskedGameMode(rank, entry.getGameMode());
+        boolean listed = (entry.isListed() || vanished.test(targetId)) && !hiddenFromTab.test(targetId);
+        EnumWrappers.NativeGameMode gameMode = viewerId.equals(targetId)
+                ? entry.getGameMode()
+                : maskedGameMode(rank, entry.getGameMode());
         if (listed == entry.isListed() && gameMode == entry.getGameMode()) {
             return EntryRewrite.unchanged(entry);
         }

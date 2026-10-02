@@ -1,12 +1,10 @@
 package net.enthusia.staff.paper;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import dev.rosewood.rosechat.api.staff.StaffChannelConfiguration;
 import java.time.Clock;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.function.Supplier;
 import java.util.logging.Level;
@@ -25,7 +23,11 @@ import net.enthusia.staff.paper.economy.CurrencyGateway;
 import net.enthusia.staff.paper.economy.EconomyCoordinator;
 import net.enthusia.staff.paper.economy.EconomyCoordinatorRuntime;
 import net.enthusia.staff.paper.economy.EnthusiaCurrencyGateway;
+import net.enthusia.staff.paper.economy.InventoryOnlyCurrencyGateway;
+import net.enthusia.staff.paper.enforcement.MuteCommandFallbackListener;
 import net.enthusia.staff.paper.enforcement.MuteEnforcementListener;
+import net.enthusia.staff.paper.enforcement.PaperBanEnforcementListener;
+import net.enthusia.staff.paper.enforcement.PaperPunishmentCommitEffects;
 import net.enthusia.staff.paper.freeze.FreezeManager;
 import net.enthusia.staff.paper.integration.MarketIntegration;
 import net.enthusia.staff.paper.integration.ReputationIntegration;
@@ -36,12 +38,18 @@ import net.enthusia.staff.paper.inventory.InventoryCoordinator;
 import net.enthusia.staff.paper.inventory.InventoryOperationContext;
 import net.enthusia.staff.paper.report.ChatContextBuffer;
 import net.enthusia.staff.paper.visibility.DefaultStaffVisibilityService;
+import org.bukkit.event.EventHandler;
+import org.bukkit.event.HandlerList;
+import org.bukkit.event.Listener;
+import org.bukkit.event.server.PluginDisableEvent;
+import org.bukkit.event.server.PluginEnableEvent;
 import org.bukkit.plugin.java.JavaPlugin;
 
-final class PaperIntegrationManager {
+final class PaperIntegrationManager implements Listener {
     private static final String AUTOMOD = "automod";
     private static final String CURRENCY = "currency";
     private static final String ROSECHAT = "rosechat";
+    private static final String ROSECHAT_COMMANDS = "rosechat-commands";
     private static final String MARKET = "market";
     private static final String REPUTATION = "reputation";
     private static final List<CurrencyAssetSource> DEFAULT_REMOVAL_ORDER = List.of(
@@ -55,9 +63,13 @@ final class PaperIntegrationManager {
     private EconomyCoordinator economy;
     private ConfiscationCoordinator confiscation;
     private RoseChatIntegration roseChat;
+    private RoseChatCommandOwnershipCoordinator roseChatCommands;
+    private MuteCommandFallbackListener muteFallback;
+    private boolean roseChatLifecycleRegistered;
     private MarketIntegration market;
     private ReputationIntegration reputation;
     private ReputationRestrictionSynchronizer reputationRestrictions;
+    private PaperPunishmentCommitEffects punishmentEffects;
     private DiscordStaffAuthorityEndpoint discordStaffAuthority;
 
     PaperIntegrationManager(Dependencies dependencies) {
@@ -67,25 +79,43 @@ final class PaperIntegrationManager {
 
     void initializeEconomy() {
         if (!plugin().getServer().getPluginManager().isPluginEnabled("EnthusiaCurrency")) {
-            issue(CURRENCY, "EnthusiaCurrency is absent; economy confiscation is unavailable");
+            issue(CURRENCY, "EnthusiaCurrency is absent; economy confiscation is unavailable; item confiscation remains available");
+            installConfiscation(new InventoryOnlyCurrencyGateway());
             return;
         }
         EnthusiaCurrencyGateway.Discovery discovery =
                 EnthusiaCurrencyGateway.discover(plugin().getServer().getServicesManager());
         if (discovery.gateway().isEmpty()) {
-            issue(CURRENCY, discovery.issue());
+            issue(CURRENCY, discovery.issue() + "; confiscation is disabled fail-safe while the provider is present but unavailable");
             return;
         }
+        CurrencyGateway gateway = discovery.gateway().orElseThrow();
+        installConfiscation(gateway);
         try {
-            installEconomy(discovery.gateway().orElseThrow(), configuredRemovalOrder());
+            installEconomy(gateway, configuredRemovalOrder());
             clearIssue(CURRENCY);
         } catch (IllegalArgumentException exception) {
-            issue(CURRENCY, "Economy removal order is invalid; economy confiscation is unavailable");
+            issue(CURRENCY, "Economy removal order is invalid; economy confiscation is unavailable; item confiscation remains available");
             plugin().getLogger().log(Level.SEVERE, "Economy integration configuration failed", exception);
         }
     }
 
     void initializeModerationProviders() {
+        plugin().getServer().getPluginManager().registerEvents(
+                new PaperBanEnforcementListener(
+                        plugin(),
+                        clock(),
+                        dependencies.policy().authoritativeMode(),
+                        dependencies.stores().punishmentService()
+                ),
+                plugin()
+        );
+        punishmentEffects = new PaperPunishmentCommitEffects(
+                plugin(),
+                dependencies.stores().punishmentService(),
+                dependencies.evidence().muteEnforcement()
+        );
+        punishmentEffects.start();
         market = MarketIntegration.discover(
                 plugin().getServer().getServicesManager(),
                 plugin().getServer().getPluginManager().isPluginEnabled("EnthusiaMarket")
@@ -111,8 +141,19 @@ final class PaperIntegrationManager {
             );
             reputationRestrictions.start();
         }
-        DiscordStaffAuthorityEndpoint.startIfConfigured(plugin())
+        DiscordStaffAuthorityEndpoint.startIfConfigured(plugin(),
+                new net.enthusia.staff.paper.auth.StaffWebPunishmentService.Dependencies(
+                        clock(), dependencies.policy().writeMode(), dependencies.stores().punishmentDraftWorkflow(),
+                        dependencies.stores().players(), dependencies.policy().reasons(),
+                        dependencies.policy().authorization()))
                 .ifPresent(endpoint -> discordStaffAuthority = endpoint);
+    }
+
+    void deliverNetworkPunishment(net.enthusia.staff.domain.network.PunishmentCommitNotification notification) {
+        if (punishmentEffects == null) {
+            throw new IllegalStateException("online punishment effects are unavailable");
+        }
+        punishmentEffects.onNetworkPunishmentCommitted(notification);
     }
 
     void initializeAutomod() {
@@ -133,30 +174,26 @@ final class PaperIntegrationManager {
     }
 
     void initializeRoseChat() {
-        if (!plugin().getServer().getPluginManager().isPluginEnabled("RoseChat")) {
-            issue(ROSECHAT, "RoseChat is absent; staff channel and chat bridge are unavailable");
+        registerRoseChatLifecycle();
+        refreshRoseChatIntegration();
+    }
+
+    @EventHandler
+    public void onPluginEnable(PluginEnableEvent event) {
+        if (isRoseChat(event.getPlugin().getName())) {
+            refreshRoseChatIntegration();
+        }
+    }
+
+    @EventHandler
+    public void onPluginDisable(PluginDisableEvent event) {
+        if (!isRoseChat(event.getPlugin().getName())) {
             return;
         }
-        try {
-            RoseChatIntegration.Discovery discovery = RoseChatIntegration.discoverAndInstall(
-                    plugin().getServer().getServicesManager(),
-                    configuredStaffChannels(),
-                    dependencies.policy().authoritativeMode(),
-                    dependencies.evidence().muteEnforcement(),
-                    dependencies.players().freeze(),
-                    dependencies.players().visibility(),
-                    dependencies.evidence().chatContext().get()
-            );
-            if (discovery.integration().isEmpty()) {
-                issue(ROSECHAT, discovery.issue());
-                return;
-            }
-            roseChat = discovery.integration().orElseThrow();
-            clearIssue(ROSECHAT);
-        } catch (IllegalArgumentException exception) {
-            issue(ROSECHAT, "RoseChat channel configuration is invalid");
-            plugin().getLogger().log(Level.SEVERE, "RoseChat integration configuration failed", exception);
-        }
+        closeRoseChatIntegration();
+        activateMuteFallback();
+        clearIssue(ROSECHAT_COMMANDS);
+        issue(ROSECHAT, "RoseChat is absent; staff channel/chat bridge are unavailable; private-message mute fallback is active");
     }
 
     EconomyCoordinator economy() {
@@ -180,11 +217,15 @@ final class PaperIntegrationManager {
     }
 
     void closeChatBridge() {
-        resources.close("RoseChat bridge", roseChat);
+        HandlerList.unregisterAll(this);
+        roseChatLifecycleRegistered = false;
+        closeRoseChatIntegration();
+        deactivateMuteFallback();
         closeModerationProviders();
     }
 
     void closeModerationProviders() {
+        resources.close("punishment commit effects", punishmentEffects);
         resources.close("Discord staff authority endpoint", discordStaffAuthority);
         resources.close("reputation restriction synchronizer", reputationRestrictions);
     }
@@ -192,6 +233,96 @@ final class PaperIntegrationManager {
     void closeEconomyResources() {
         resources.close("economy coordinator", economy);
         resources.close("confiscation coordinator", confiscation);
+    }
+
+    private void registerRoseChatLifecycle() {
+        if (roseChatLifecycleRegistered) {
+            return;
+        }
+        plugin().getServer().getPluginManager().registerEvents(this, plugin());
+        roseChatLifecycleRegistered = true;
+    }
+
+    private void refreshRoseChatIntegration() {
+        if (!plugin().getServer().getPluginManager().isPluginEnabled("RoseChat")) {
+            activateMuteFallback();
+            clearIssue(ROSECHAT_COMMANDS);
+            issue(ROSECHAT, "RoseChat is absent; staff channel/chat bridge are unavailable; private-message mute fallback is active");
+            return;
+        }
+        reconcileRoseChatCommands();
+        try {
+            RoseChatIntegration.Discovery discovery = RoseChatIntegration.discoverAndInstall(
+                    plugin().getServer().getServicesManager(),
+                    new RoseChatIntegration.ChannelSettings(
+                            plugin().getConfig().getString("rosechat.staff-channel", "staff"),
+                            plugin().getConfig().getString("rosechat.global-channel", "global"),
+                            plugin().getConfig().getStringList("rosechat.private-channels")
+                    ),
+                    dependencies.policy().authoritativeMode(),
+                    dependencies.evidence().muteEnforcement(),
+                    dependencies.players().freeze(),
+                    dependencies.players().visibility(),
+                    dependencies.evidence().chatContext().get(),
+                    plugin(),
+                    dependencies.stores().punishmentService(),
+                    dependencies.policy().reasons()
+            );
+            if (discovery.integration().isEmpty()) {
+                activateMuteFallback();
+                issue(ROSECHAT, discovery.issue());
+                return;
+            }
+            closeRoseChatIntegration();
+            roseChat = discovery.integration().orElseThrow();
+            deactivateMuteFallback();
+            clearIssue(ROSECHAT);
+        } catch (IllegalArgumentException exception) {
+            activateMuteFallback();
+            issue(ROSECHAT, "RoseChat channel configuration is invalid");
+            plugin().getLogger().log(Level.SEVERE, "RoseChat integration configuration failed", exception);
+        }
+    }
+
+    private void reconcileRoseChatCommands() {
+        if (roseChatCommands == null) {
+            roseChatCommands = RoseChatCommandOwnershipCoordinator.forPlugin(plugin());
+        }
+        List<String> conflicts = roseChatCommands.reconcile();
+        if (conflicts.isEmpty()) {
+            clearIssue(ROSECHAT_COMMANDS);
+            return;
+        }
+        issue(ROSECHAT_COMMANDS, "EnthusiaStaff command ownership conflict: " + String.join(", ", conflicts));
+    }
+
+    // Null is the explicit inactive state for this optional hot-reloadable provider slot.
+    @SuppressWarnings("PMD.NullAssignment")
+    private void closeRoseChatIntegration() {
+        resources.close("RoseChat bridge", roseChat);
+        roseChat = null;
+    }
+
+    private void activateMuteFallback() {
+        if (muteFallback != null) {
+            return;
+        }
+        muteFallback = new MuteCommandFallbackListener(dependencies.evidence().muteEnforcement());
+        plugin().getServer().getPluginManager().registerEvents(muteFallback, plugin());
+    }
+
+    // Null is the explicit inactive state after the listener has been unregistered.
+    @SuppressWarnings("PMD.NullAssignment")
+    private void deactivateMuteFallback() {
+        if (muteFallback == null) {
+            return;
+        }
+        HandlerList.unregisterAll(muteFallback);
+        muteFallback = null;
+    }
+
+    static boolean isRoseChat(String pluginName) {
+        return "RoseChat".equals(pluginName);
     }
 
     private void installEconomy(CurrencyGateway gateway, List<CurrencyAssetSource> removalOrder) {
@@ -206,16 +337,20 @@ final class PaperIntegrationManager {
                         workers()
                 ),
                 gateway,
-                removalOrder, dependencies.environment().json()
+                removalOrder,
+                dependencies.environment().json()
         );
+        plugin().getServer().getPluginManager().registerEvents(discoveredEconomy, plugin());
+        economy = discoveredEconomy;
+    }
+
+    private void installConfiscation(CurrencyGateway movementGateway) {
         ConfiscationCoordinator discoveredConfiscation = new ConfiscationCoordinator(
                 plugin(), dependencies.players().inventoryContext(), dependencies.policy().writeMode(),
                 dependencies.policy().authorization(), dependencies.stores().inventoryJournal(), workers(),
-                dependencies.players().inventory(), gateway
+                dependencies.players().inventory(), movementGateway
         );
-        plugin().getServer().getPluginManager().registerEvents(discoveredEconomy, plugin());
         plugin().getServer().getPluginManager().registerEvents(discoveredConfiscation, plugin());
-        economy = discoveredEconomy;
         confiscation = discoveredConfiscation;
     }
 
@@ -251,14 +386,6 @@ final class PaperIntegrationManager {
             return false;
         }
         return true;
-    }
-
-    private StaffChannelConfiguration configuredStaffChannels() {
-        return new StaffChannelConfiguration(
-                plugin().getConfig().getString("rosechat.staff-channel", "staff"),
-                plugin().getConfig().getString("rosechat.global-channel", "global"),
-                Set.copyOf(plugin().getConfig().getStringList("rosechat.private-channels"))
-        );
     }
 
     private void invalidateMuteCache(java.util.UUID playerId) {
@@ -323,6 +450,8 @@ final class PaperIntegrationManager {
 
     record Stores(
             Supplier<PunishmentService> punishmentService,
+            Supplier<net.enthusia.staff.domain.application.PunishmentDraftWorkflow> punishmentDraftWorkflow,
+            Supplier<net.enthusia.staff.domain.ports.PlayerDirectory> players,
             Supplier<EconomyJournalStore> economyJournal,
             Supplier<InventoryJournalStore> inventoryJournal
     ) {

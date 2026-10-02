@@ -29,7 +29,7 @@ final class JdbcPublicPunishmentRegistry {
     private static final int MAX_SEARCH_LENGTH = 80;
     private static final String SEARCH_PATTERN = "[A-Za-z0-9_-]+";
     private static final String PUBLIC_TYPE_CONDITION = """
-              AND s.sanction_type IN ('BAN', 'NETWORK_BAN', 'NETWORK_IDENTITY_BAN', 'MUTE', 'WARNING')
+              AND s.sanction_type IN ('BAN', 'NETWORK_BAN', 'NETWORK_IDENTITY_BAN', 'MUTE', 'PUBLIC_MUTE', 'WARNING')
               AND s.status IN ('ACTIVE', 'APPLIED', 'EXPIRED', 'ENDED_EARLY', 'REVOKED')
               AND CHAR_LENGTH(p.current_username) BETWEEN 3 AND 16
               AND p.current_username REGEXP '^[A-Za-z0-9_]{3,16}$'
@@ -151,7 +151,7 @@ final class JdbcPublicPunishmentRegistry {
         String filterCondition = switch (filter) {
             case ALL -> "";
             case BAN -> " AND s.sanction_type IN ('BAN', 'NETWORK_BAN', 'NETWORK_IDENTITY_BAN')";
-            case MUTE -> " AND s.sanction_type = 'MUTE'";
+            case MUTE -> " AND s.sanction_type IN ('MUTE', 'PUBLIC_MUTE')";
             case WARNING -> " AND s.sanction_type = 'WARNING'";
         };
         String cursorCondition = hasCursor

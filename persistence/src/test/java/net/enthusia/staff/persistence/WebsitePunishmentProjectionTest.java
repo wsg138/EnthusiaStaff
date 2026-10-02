@@ -25,6 +25,7 @@ final class WebsitePunishmentProjectionTest {
         assertEquals(TYPE_BAN, WebsitePunishmentProjection.publicType("NETWORK_BAN"));
         assertEquals("IP_BAN", WebsitePunishmentProjection.publicType("NETWORK_IDENTITY_BAN"));
         assertEquals("MUTE", WebsitePunishmentProjection.publicType("MUTE"));
+        assertEquals("MUTE", WebsitePunishmentProjection.publicType("PUBLIC_MUTE"));
         assertEquals(TYPE_WARNING, WebsitePunishmentProjection.publicType(TYPE_WARNING));
         assertThrows(
                 IllegalArgumentException.class,
@@ -68,6 +69,12 @@ final class WebsitePunishmentProjectionTest {
                 "SANCTION_EXPIRED",
                 WebsitePunishmentProjection.eligibilityState(
                         STATUS_ACTIVE, CASE_OPEN, STATUS_ACTIVE, "MUTE", NOW, NOW
+                )
+        );
+        assertEquals(
+                "ELIGIBLE",
+                WebsitePunishmentProjection.eligibilityState(
+                        STATUS_ACTIVE, CASE_OPEN, STATUS_ACTIVE, "PUBLIC_MUTE", NOW.plusSeconds(60), NOW
                 )
         );
         assertEquals(
@@ -122,9 +129,15 @@ final class WebsitePunishmentProjectionTest {
     void reportsAppealAvailabilityForLiveCodeEligibleSanctions() {
         assertFalse(WebsitePunishmentProjection.isCodeEligibleType(TYPE_WARNING));
         assertTrue(WebsitePunishmentProjection.isCodeEligibleType("NETWORK_IDENTITY_BAN"));
+        assertTrue(WebsitePunishmentProjection.isCodeEligibleType("PUBLIC_MUTE"));
         assertTrue(WebsitePunishmentProjection.appealAvailable(
                 PublicPunishmentState.ACTIVE,
                 TYPE_BAN,
+                STATUS_ACTIVE
+        ));
+        assertTrue(WebsitePunishmentProjection.appealAvailable(
+                PublicPunishmentState.ACTIVE,
+                "PUBLIC_MUTE",
                 STATUS_ACTIVE
         ));
         assertFalse(WebsitePunishmentProjection.appealAvailable(

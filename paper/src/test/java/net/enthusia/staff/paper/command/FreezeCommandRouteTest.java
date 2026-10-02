@@ -8,6 +8,7 @@ import java.time.Clock;
 import java.util.ArrayList;
 import java.util.List;
 import net.enthusia.staff.domain.OperationalMode;
+import net.enthusia.staff.paper.presentation.StaffMessageStyle;
 import net.kyori.adventure.text.Component;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
@@ -21,7 +22,9 @@ final class FreezeCommandRouteTest {
 
         handler.onCommand(sender(messages), command("unfreeze"), "enthusiastaff:freeze", new String[0]);
 
-        assertEquals(List.of(Component.text("Usage: /unfreeze <player> <reason> CONFIRM")), messages);
+        assertEquals(List.of(StaffMessageStyle.usage(
+                "Usage: /unfreeze <player> <reason> CONFIRM"
+        )), messages);
     }
 
     @Test
@@ -31,7 +34,7 @@ final class FreezeCommandRouteTest {
 
         handler.onCommand(sender(messages), command("freeze"), "unfreeze", new String[0]);
 
-        assertEquals(List.of(Component.text(
+        assertEquals(List.of(StaffMessageStyle.usage(
                 "Usage: /freeze <player> <reason> | /freeze keep <player> <reason> CONFIRM"
                         + " | /freeze status <player|uuid> | /freeze list"
         )), messages);

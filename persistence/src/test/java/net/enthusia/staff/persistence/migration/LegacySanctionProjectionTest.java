@@ -86,4 +86,16 @@ class LegacySanctionProjectionTest {
                 active
         );
     }
+
+    @Test
+    void historicalKickIsAlreadyAppliedEvenWhenSourceKeepsItsActiveFlag() {
+        LegacySanction kick = new LegacySanction("litebans_kicks", "1", LegacySanctionType.KICK,
+                Optional.of(UUID.fromString("00000000-0000-0000-0000-000000000001")),
+                Optional.empty(), "Historical kick", "Staff", ISSUED,
+                Optional.empty(), Optional.empty(), Optional.empty(), true);
+        var projection = LiteBansTargetImporter.project(kick, NOW);
+        assertEquals(SanctionStatus.APPLIED, projection.status());
+        assertEquals(Optional.of(ISSUED), projection.endedAt());
+        assertFalse(projection.caseOpen());
+    }
 }

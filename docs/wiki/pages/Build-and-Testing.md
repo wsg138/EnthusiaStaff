@@ -1,8 +1,8 @@
 # Build and Testing
 
-Use this page to build one exact revision and to understand what each validation layer can prove. For review invariants, use [[Code Review Guide]]. For remaining product status, use [[Implementation Status]].
+Use this page to build one exact revision and understand what each validation layer can actually prove. For review invariants use [[Code Review Guide]]. For current product status use [[Implementation Status]].
 
-## Complete local validation
+## Complete Java validation
 
 Windows:
 
@@ -18,212 +18,206 @@ Linux/macOS:
 
 Docker must be available for the MariaDB Testcontainers suites. A run that skips required container tests is not a complete repository checkpoint.
 
-Record the exact commit SHA, command, test/suite counts, skipped/unavailable groups, runtime-jar names/hashes, hosted analysis results, and any staging workflow/run identifiers. Evidence from different commits must not be combined into one exact-head claim.
+Record the exact commit SHA, command, executed/skipped suites, artifact names/hashes, hosted-analysis results and any runtime/staging run IDs. Do not combine evidence from different commits into one exact-head claim.
 
-## Focused development tests
+## Focused Java tests
 
-Use focused module tests while editing, then rerun the complete clean gate before treating the revision as a coherent checkpoint:
+Use focused tests while editing, then rerun the complete clean gate:
 
 ```bash
 ./gradlew :domain:test
 ./gradlew :persistence:test
 ./gradlew :protocol:test
 ./gradlew :paper:test
+./gradlew :paper-authority-bridge:test
 ./gradlew :velocity:test
+./gradlew :staff-bot:test
 ./gradlew :integration-tests:test
 ```
 
-Run the tests closest to the changed boundary first. A persistence change normally needs MariaDB integration coverage; a scheduler/player-state change needs platform-focused tests and later runtime evidence; a migration needs clean-install and upgrade coverage.
+For Discord/web changes, run the tests closest to the actual trust boundary rather than only a renderer/parser test.
+
+## Runtime artifacts
+
+The root `runtimeJars` task currently builds/verifies four deployable Java runtimes:
+
+```text
+paper/build/libs/EnthusiaStaff-Paper-<version>.jar
+paper-authority-bridge/build/libs/EnthusiaStaff-AuthorityBridge-<version>.jar
+velocity/build/libs/EnthusiaStaff-Velocity-<version>.jar
+staff-bot/build/libs/EnthusiaStaff-StaffBot-<version>.jar
+```
+
+The authority bridge is a narrow transition runtime and has explicit required/forbidden class verification. StaffBot is a standalone Java/JDA application, not a Minecraft plugin.
+
+Inspect deployables for:
+
+- intended entry points/resources only;
+- no provider-owned API duplication;
+- no private jars, secrets or local configuration;
+- no test fixtures/server runtime directories/databases/logs/generated reports;
+- correct plugin/application metadata;
+- expected migration/resource content where that runtime owns it.
+
+A clean artifact scanner is not a substitute for representative provider/classloader/runtime testing.
+
+## StaffBot build and smoke test
+
+Build just StaffBot:
+
+```bash
+./gradlew --no-daemon :staff-bot:shadowJar
+```
+
+Run its non-network smoke test:
+
+```bash
+java -jar staff-bot/build/libs/EnthusiaStaff-StaffBot-<version>.jar --smoke-test
+```
+
+The smoke test can prove basic packaged startup/configuration wiring. It does not prove Discord authentication, guild/channel fencing, MariaDB, private authority/read connectivity, rate limits, reconnect behavior or destructive enforcement.
+
+See [[Staff Bot Runtime and Operations]].
+
+## Moderation web validation
+
+The staging browser moderation workspace has its own Node/Cloudflare validation:
+
+```bash
+cd moderation-web
+npm install --no-package-lock --ignore-scripts
+npm run check
+```
+
+The protected staging deployment additionally exercises signed first-use launches, unauthenticated rejection, browser session establishment, direct-read authorization/CORS and replay rejection.
+
+That evidence supports the recorded staging **read/simulation workspace**. It is not proof of production website launch or destructive moderation authority. See [[Website and Web API]].
+
+## Public site/component validation
+
+`components/enthusia-site/` is a synchronized site component with its own frontend/functions/tests and component-parity evidence. When changing aggregate component content, preserve the repository’s component synchronization rules; do not assume an aggregate-only change is automatically reflected in the standalone source.
+
+Site/API testing should cover public allowlists, authenticated appeal/reviewer routes, body/rate/session boundaries, privacy and the exact server-side API revision being consumed.
 
 ## What each evidence layer proves
 
 | Evidence | It can support claims about... | It cannot establish by itself... |
 | --- | --- | --- |
-| Unit tests | pure policy, parsing, authorization predicates, deterministic state transitions | real JDBC, scheduler, network, provider, classloader or client behavior |
+| Unit tests | pure policy, parsing, authorization predicates, deterministic transitions | real JDBC, scheduler, Discord, provider, browser or network behavior |
 | Module/component tests | one adapter/service with controlled collaborators | representative distributed runtime behavior |
-| MariaDB/Testcontainers | SQL, constraints, transactions, migrations, concurrency/restart scenarios explicitly exercised | production volume/latency or arbitrary process-kill timing |
-| Concurrency/failure-injection tests | the races/failures actually simulated | every real scheduler/network/process race |
-| Runtime-JAR checks | expected deployables, archive integrity and scanned provider-API leakage | provider discovery/classloader compatibility with real plugins |
+| MariaDB/Testcontainers | SQL, constraints, transactions, migrations, concurrency/restart scenarios exercised | production volume/latency or arbitrary process-kill timing |
+| Concurrency/failure injection | the races/failures actually simulated | every real scheduler/network/process/external-API race |
+| Runtime-JAR checks | expected deployables, archive integrity, checked provider leakage | real provider/classloader/API compatibility |
+| StaffBot smoke test | packaged non-network application startup/wiring | Discord/MariaDB/authority/API behavior |
 | Static analysis | issues detectable by configured analyzers | behavioral correctness or absence of all security defects |
-| Coverage | which code lines/branches were executed by measured tests | assertion quality, scenario completeness or staging correctness |
-| Wiki validation | Wiki structure, internal links and format rules | factual correctness of product claims |
-| Private Paper boot/restart staging | the exact jar boots/restarts in the recorded Paper environment | Velocity, multi-backend, all providers, Bedrock, Folia or production readiness |
-| Distributed Java/Bedrock/provider staging | behavior exercised in the representative recorded topology | untested load, production data, migration/cutover or later revisions |
-| Production acceptance | the explicit release/cutover claim accepted for one pinned artifact/config/evidence set | future code/config changes |
+| Coverage | code executed by measured tests | assertion quality, scenario completeness or staging correctness |
+| Wiki validation | Wiki structure/internal-link/format rules | factual truth of product claims |
+| Private Paper boot/restart | exact Paper/bridge scenario recorded by that gate | Velocity, StaffBot, Bedrock, Folia, all providers or production readiness |
+| StaffBot/Discord staging | exact recorded gateway/API/effect behavior | broader production authority or untested Discord states |
+| Moderation-web staging | exact signed-launch/session/read workspace behavior | destructive moderation or public-site acceptance |
+| Distributed Java/Bedrock/provider staging | behavior exercised in the recorded topology | untested load/data/cutover or later revisions |
+| Production acceptance | explicitly accepted production claim for one pinned artifact/config set | future code/config changes |
 
-A passing unit test is not staging evidence. A skipped or unavailable staging workflow is not a pass. “Plugin present” is not proof that its provider API works correctly.
+A passing unit test is not staging evidence. A skipped/unavailable runtime workflow is not a pass.
 
-## Runtime artifacts
+## MariaDB and migrations
 
-Expected deployables:
+Persistence changes should exercise the applicable combination of clean schema creation, relevant upgrades, constraints/indexes, transaction rollback, idempotent replay, revisions, leases/fences, restart recovery, duplicate/out-of-order delivery and concurrent runtimes.
 
-```text
-paper/build/libs/EnthusiaStaff-Paper-<version>.jar
-velocity/build/libs/EnthusiaStaff-Velocity-<version>.jar
-```
+Current merged `main` includes Flyway migrations through **`V20__discord_account_linking.sql`**.
 
-Inspect both for:
+Recent milestones:
 
-- intended entry points/resources only;
-- no provider-owned API duplication;
-- no private jars, secrets or local configuration;
-- no test fixtures, server runtime directories, databases, logs or generated reports;
-- correct service/plugin metadata;
-- no accidental third runtime plugin.
+- V17 — website appeal workflow;
+- V18 — Cheat Tester session journal;
+- V19 — Discord moderation persistence;
+- V20 — Discord account linking.
 
-A clean artifact scanner is still not a substitute for installing supported providers together and exercising service discovery/classloader behavior.
+Applied migrations are immutable history. Do not use Flyway repair/history rewrites as a normal development shortcut.
 
-## MariaDB and migration validation
+## Paper / Leaf / Folia validation
 
-Persistence changes should exercise the applicable combination of:
+Runtime acceptance is still required for claims involving region/entity ownership, reconnect callbacks, inventory/Ender mutation, staff restoration, vanish/tab/packet behavior, freeze bypasses, async teleport/follow/spectate, disable/restart or supported Paper/Leaf/Folia versions.
 
-- clean schema creation;
-- upgrade from the immediately relevant previous schema;
-- constraint/index behavior;
-- transaction rollback;
-- idempotent replay;
-- optimistic revision conflict;
-- lease/fence claim, renewal and release;
-- restart recovery;
-- duplicate/out-of-order delivery;
-- concurrent runtimes where the workflow can contend.
-
-Current merged `main` includes Flyway migrations through `V17__website_appeal_workflow.sql`. V1-V17 are immutable history; new schema work adds a new forward migration.
-
-Do not use Flyway repair or migration-history edits merely to make a changed historical migration pass.
-
-## Paper, Leaf and Folia validation
-
-Automated Paper-side tests should verify policy and scheduler handoff where possible, but real runtime acceptance is still required for claims involving:
-
-- entity/region ownership;
-- reconnect racing with queued callbacks;
-- inventory/Ender mutations;
-- staff-mode restoration;
-- vanish visual/tab/packet behavior;
-- freeze bypasses;
-- asynchronous teleport/follow/spectate;
-- plugin disable/restart recovery;
-- supported Paper/Leaf/Folia versions.
-
-A standalone Paper boot test does not prove Folia scheduler correctness.
+A standalone Paper boot does not prove Folia correctness.
 
 ## Velocity and distributed validation
 
-Representative runtime validation should cover:
+Representative validation should cover non-blocking login/server-switch events, startup/shutdown ordering, backend reconnect/replacement sessions, no-player transport, durable ACK/outbox/inbox behavior, partial outages, backpressure/retry bounds, network identity ordering and multi-backend authority/degradation.
 
-- non-blocking login/server-switch event behavior;
-- Paper/Velocity startup and shutdown order;
-- backend reconnect and replacement sessions;
-- no-online-player transport;
-- durable ACK/outbox/inbox semantics;
-- proxy/backend partial outage;
-- queue/backpressure/retry bounds;
-- network identity observations and out-of-order presence updates;
-- multi-backend authority/degradation behavior.
+Website API changes also require authentication/replay/bounds/privacy tests for the actual Velocity route boundary.
 
-See [[Protocol and Network Traffic]] and [[Code Review Guide]].
+## Discord/StaffBot validation
+
+For privileged Discord changes test, as applicable:
+
+- staging/production application/guild/channel identity fences;
+- gateway reconnect/rate-limit behavior;
+- linked-staff actor resolution;
+- command discovery versus action-time authorization;
+- signed component expiry/replay;
+- worker saturation/shutdown;
+- database/private-authority/read-service loss;
+- Discord hierarchy/precondition changes during confirmation;
+- ambiguous external effects and reconciliation;
+- native ban and bot-owned role state changes outside the bot;
+- account-link expiry/replay/reassignment/restart behavior;
+- enforcement-disabled safe default.
+
+A JDA mock/unit test is not proof of Discord’s real hierarchy, audit-log pagination, rate limits, reconnects or production guild behavior.
 
 ## Java and Bedrock validation
 
-Automated identity tests should cover verified Java, verified Bedrock, `UNKNOWN`, missing/incompatible Floodgate, aliases, historical names, duplicate observations and out-of-order proxy/backend updates.
+Automated identity tests should cover verified Java/Bedrock, `UNKNOWN`, missing/incompatible Floodgate, aliases/history, duplicate observations and out-of-order proxy/backend updates.
 
-Representative Geyser/Floodgate staging must still verify:
+Representative Geyser/Floodgate staging must still verify login/reconnect, `*` alias handling without treating it as platform proof, UI/text fallbacks, packet/tab/visibility, server switching and provider failure.
 
-- Java and Bedrock login/reconnect;
-- `*` alias resolution without treating the prefix as platform proof;
-- GUI/text fallback behavior;
-- click/hover assumptions;
-- packet/tab/visibility behavior;
-- server switching and provider absence/failure.
+## Provider/integration validation
 
-## Provider and integration validation
+For each optional provider test present-compatible, missing, incompatible/unavailable, failure during use, and restart/reload boundaries where applicable.
 
-For every optional provider, test at least:
+Verify unrelated features remain available when safe, dependent actions fail clearly, external effects are idempotent/verified, and provider-owned classes are not shaded into EnthusiaStaff.
 
-1. present and compatible;
-2. missing;
-3. present but incompatible/unavailable;
-4. dependency failure during use;
-5. reload/restart boundary where applicable.
+The same principle applies to `discord-platform-api`: a contract compiling does not prove a StaffBot provider or every consumer migration exists.
 
-Verify that unrelated features remain available when safe, dependent actions fail clearly, external effects are idempotent/verified, and provider-owned classes are not shaded into EnthusiaStaff.
+## Security/privacy validation
 
-See [[Integrations]].
+For Discord/web/API changes explicitly review:
 
-## Coverage expectations
-
-The authoritative goals set these targets:
-
-- Critical code: **80% line / 70% branch**
-- Overall Java: **70% line / 60% branch**
-
-Coverage is a diagnostic, not a substitute for meaningful assertions. Getter-only or assertion-free tests do not satisfy the intent of these targets.
-
-## Static analysis
-
-The target remains Codacy grade A with zero unresolved first-party findings. Do not reach that state by weakening analyzers, blanket exclusions/suppressions, lowering thresholds, or hiding legitimate findings.
-
-A “zero new issues” result means the branch did not worsen the measured baseline. It does not mean every older issue or every behavioral defect is gone.
-
-## Private Paper exact-SHA gate
-
-The repository has used an exact-SHA private Paper boot/restart gate to independently build, inspect the Paper runtime JAR and exercise startup/storage/commands/shutdown.
-
-Interpret it narrowly:
-
-- **pass on SHA X** — evidence for the exact recorded Paper scenario on SHA X;
-- **not run / infrastructure unavailable / skipped** — no runtime evidence for that gate;
-- **pass on an older SHA** — historical evidence, not proof for a newer source revision.
-
-It does not replace Velocity, multi-backend, providers, Bedrock, Folia, real migration data, load, process-kill, 168-hour shadow, or production acceptance.
+- tokens/credentials/signing material never appear in source/logs/artifacts;
+- private endpoints are not made public for convenience;
+- replay windows/nonces/body signatures are actually enforced;
+- public projections are allowlisted;
+- browser/Discord roles are not treated as standalone authority;
+- private evidence, account links, raw network identity and staff notes cannot leak into public output;
+- rate/body/queue bounds happen before expensive or privileged work;
+- error responses/logs do not echo sensitive request bodies.
 
 ## Full staging record
 
-For a staging claim, record:
+For a staging claim record the exact source/artifact hashes, configuration versions/checksums, runtime/provider versions, topology/accounts/data scope, steps/expected outcomes, restart/reconnect observations, sanitized logs/evidence, unresolved mismatches and rollback result.
 
-- exact source commit and runtime-jar hashes;
-- configuration versions/checksums;
-- Java, Paper/Leaf/Folia, Velocity, MariaDB, provider and Geyser/Floodgate versions;
-- topology/accounts/data scope;
-- steps and expected outcomes;
-- failure/restart/reconnect observations;
-- sanitized logs/evidence locations;
-- unresolved mismatches;
-- rollback/recovery result.
-
-A source, migration, runtime configuration, or provider-contract change invalidates the affected evidence until it is rerun for the new candidate.
+A source/migration/config/provider-contract change invalidates affected evidence until rerun.
 
 ## Wiki validation
 
-Run from the repository root:
+Run:
 
 ```bash
 python scripts/wiki/validate_wiki.py
 ```
 
-The validator checks repository-managed `docs/wiki/pages/` content. It does not validate technical truth, external source existence, privacy judgment, or whether a status claim is supported, so those still require manual review.
+Before publishing also verify new pages are reachable, internal/source links are valid, headings/sidebar are readable, no secrets/private evidence are copied, no unmerged feature is described as available, reviewer findings are resolved, active PR overlap is rechecked, the branch is synchronized with newest legitimate `main`, and the final diff is documentation-only.
 
-Before publishing Wiki changes also check:
-
-- every new page is reachable from Home, the sidebar, or an owning index;
-- internal Wiki links and Markdown links point where intended;
-- headings and sidebar destinations are readable;
-- source links still name real current files;
-- no secret/private evidence was copied into documentation;
-- no unmerged feature is described as available;
-- every reviewer finding was inspected and every valid finding was resolved;
-- every active PR was rechecked for overlapping Wiki files, with active-worker ownership preserved;
-- the documentation branch is synchronized with the newest legitimate `main` and any newer merged product facts are retained;
-- the final diff is still documentation-only.
-
-Do not publish until all applicable validation, review, overlap, synchronization, and merge gates above have completed. [[Wiki Maintenance]] owns the full merge/publish procedure.
+[[Wiki Maintenance]] owns the full merge/publish procedure.
 
 ## Related pages
 
 - [[Code Review Guide]]
 - [[Developer Guide Index]]
 - [[Architecture]]
-- [[Developer Code Guide]]
+- [[Discord Moderation Platform]]
+- [[Staff Bot Runtime and Operations]]
+- [[Website and Web API]]
 - [[Implementation Status]]
 - [[Wiki Maintenance]]

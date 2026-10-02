@@ -26,7 +26,7 @@ final class ModerationReadApiAuthenticator {
     private static final String SHA_256 = "SHA-256";
     private static final Duration MAX_SKEW = Duration.ofSeconds(30);
     private static final int KEY_BYTES = 32;
-    private static final Pattern PATH = Pattern.compile("/v1/moderation/(bootstrap|messages)");
+    private static final Pattern PATH = Pattern.compile("/v1/moderation/(bootstrap|messages|actions/(capabilities|prepare|confirm|status))");
     private static final Pattern NONCE = Pattern.compile("[A-Za-z0-9_-]{32,64}");
     private static final Pattern SIGNATURE = Pattern.compile("[A-Za-z0-9_-]{43,44}");
     private static final Pattern TIMESTAMP = Pattern.compile("[0-9]{1,12}");

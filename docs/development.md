@@ -21,7 +21,7 @@ feature completion or production readiness.
 
 ## Prerequisites
 
-- JDK 21
+- JDK 25
 - Git
 - Docker Engine API 1.44 or newer available to the build shell
 - Python 3 for Wiki validation
@@ -133,7 +133,7 @@ A merge candidate normally records:
 
 1. Exact head revision
 2. Focused test results
-3. Complete Java 21 and MariaDB validation
+3. Complete Java 25 and MariaDB validation
 4. Exactly two inspected runtime jars and hashes
 5. Wiki validation when documentation changed
 6. Hosted Codacy result and issue delta
