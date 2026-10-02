@@ -47,6 +47,25 @@ jobs:
         with:
           node-version: "22"
 
+      - name: Run repository analyzers on compatibility Java
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python3 -m pip install --disable-pip-version-check lizard==1.23.0 >/dev/null
+          lizard -C 8 -L 50 -a 8 -w \
+            paper/src/main/java/net/enthusia/staff/paper/visibility/ReflectiveVanishClientGameModeAdapter.java \
+            paper/src/main/java/net/enthusia/staff/paper/visibility/VanishClientGameModeAdapterFactory.java \
+            paper/src/main/java/net/enthusia/staff/paper/visibility/VanishNoclipController.java
+
+          curl --fail --location --silent --show-error \
+            'https://github.com/pmd/pmd/releases/download/pmd_releases%2F6.55.0/pmd-bin-6.55.0.zip' \
+            --output "$RUNNER_TEMP/pmd.zip"
+          unzip -q "$RUNNER_TEMP/pmd.zip" -d "$RUNNER_TEMP"
+          "$RUNNER_TEMP/pmd-bin-6.55.0/bin/run.sh" pmd \
+            -d 'paper/src/main/java/net/enthusia/staff/paper/visibility/ReflectiveVanishClientGameModeAdapter.java,paper/src/main/java/net/enthusia/staff/paper/visibility/VanishClientGameModeAdapterFactory.java,paper/src/main/java/net/enthusia/staff/paper/visibility/VanishNoclipController.java,paper/src/test/java/net/enthusia/staff/paper/visibility/ReflectiveVanishClientGameModeAdapterTest.java,paper/src/test/java/net/enthusia/staff/paper/visibility/VanishClientGameModeAdapterFactoryTest.java,paper/src/test/java/net/enthusia/staff/paper/testsupport/ClickEventTestValues.java' \
+            -R ruleset.xml -f text
+          git diff --check 8f2c9fbd6ac15523304ea6759d40fec576f1fcd4..HEAD
+
       - name: Build one candidate Staff JAR
         shell: bash
         run: |
