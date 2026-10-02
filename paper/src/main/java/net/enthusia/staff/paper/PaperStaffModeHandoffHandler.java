@@ -18,6 +18,9 @@ final class PaperStaffModeHandoffHandler {
     static final String ABORT_SOURCE = "STAFF_MODE_HANDOFF_ABORT_SOURCE";
     static final String READY = "STAFF_MODE_READY";
     private static final Duration OPERATION_TIMEOUT = Duration.ofSeconds(8);
+    private static final String PLAYER_ID_FIELD = "playerId";
+    private static final String SESSION_ID_FIELD = "sessionId";
+    private static final String TRANSFER_ID_FIELD = "transferId";
 
     interface Operations {
         CompletableFuture<Boolean> close(UUID playerId, UUID sessionId, long revision, UUID transferId);
@@ -86,17 +89,17 @@ final class PaperStaffModeHandoffHandler {
             JsonNode payload = json.readTree(envelope.payloadJson());
             return switch (envelope.messageType()) {
                 case EXIT_REQUEST -> await(operations.close(
-                        uuid(payload, "playerId"),
-                        uuid(payload, "sessionId"),
+                        uuid(payload, PLAYER_ID_FIELD),
+                        uuid(payload, SESSION_ID_FIELD),
                         payload.path("revision").asLong(-1L),
-                        uuid(payload, "transferId")
+                        uuid(payload, TRANSFER_ID_FIELD)
                 ));
                 case ABORT_SOURCE -> operations.abortSource(
-                        uuid(payload, "playerId"), uuid(payload, "transferId"));
-                case PREPARE_RESUME -> operations.prepare(uuid(payload, "playerId"), uuid(payload, "transferId"));
-                case CANCEL_RESUME -> operations.cancel(uuid(payload, "playerId"), uuid(payload, "transferId"));
+                        uuid(payload, PLAYER_ID_FIELD), uuid(payload, TRANSFER_ID_FIELD));
+                case PREPARE_RESUME -> operations.prepare(uuid(payload, PLAYER_ID_FIELD), uuid(payload, TRANSFER_ID_FIELD));
+                case CANCEL_RESUME -> operations.cancel(uuid(payload, PLAYER_ID_FIELD), uuid(payload, TRANSFER_ID_FIELD));
                 case ROLLBACK_RESUME -> await(operations.rollback(
-                        uuid(payload, "playerId"), uuid(payload, "transferId")));
+                        uuid(payload, PLAYER_ID_FIELD), uuid(payload, TRANSFER_ID_FIELD)));
                 default -> false;
             };
         } catch (IOException | IllegalArgumentException exception) {

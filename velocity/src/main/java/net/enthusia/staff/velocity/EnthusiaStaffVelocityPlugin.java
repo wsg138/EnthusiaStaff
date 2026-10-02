@@ -1254,7 +1254,9 @@ public final class EnthusiaStaffVelocityPlugin {
             }
             return true;
         } catch (java.io.IOException | IllegalArgumentException exception) {
-            logger.warn("Rejected malformed Staff Mode readiness message from {}", envelope.serverId());
+            if (logger.isWarnEnabled()) {
+                logger.warn("Rejected malformed Staff Mode readiness message from {}", envelope.serverId());
+            }
             return true;
         }
     }
