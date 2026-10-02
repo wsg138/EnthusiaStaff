@@ -125,6 +125,6 @@ final class LiveInventoryTransferDecisionTest {
     }
 
     private static ItemStack stack(Material material, int amount) {
-        return new TestItemStack(material, amount);
+        return new RegistryFreeItemStack(material, amount);
     }
 }
