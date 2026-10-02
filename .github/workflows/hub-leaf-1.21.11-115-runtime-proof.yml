@@ -20,7 +20,7 @@ jobs:
 
     steps:
       - name: Check out exact validation head
-        uses: actions/checkout@3d3c42e5aac5ba805825e18fcb136590ce7c4a0ac95 # v7.0.1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
@@ -327,7 +327,7 @@ jobs:
           view-distance=4
           simulation-distance=4
           motd=HUB Leaf 115 disposable runtime proof
-          enable-rcon=false
+          enable-rcon=true\nrcon.port=25575\nrcon.password=hub-proof-only\nbroadcast-rcon-to-ops=false
           PROPS
 
       - name: Boot Leaf with frozen Staff and probe harness
@@ -362,10 +362,6 @@ jobs:
           else
             echo "staff_loaded=false" >> "$GITHUB_OUTPUT"
           fi
-
-          # Keep the server process alive across subsequent steps.
-          disown "$LEAFPROC_PID" 2>/dev/null || true
-          echo "$LEAFPROC_PID" > ../leaf.pid
 
       - name: Run real protocol client smoke
         if: steps.boot.outputs.harness_loaded == 'true'
@@ -468,13 +464,43 @@ jobs:
 
           PID="$(cat ../leaf.pid 2>/dev/null || true)"
           if [[ -n "$PID" ]] && kill -0 "$PID" 2>/dev/null; then
-            kill -TERM "$PID" 2>/dev/null || true
-            for i in $(seq 1 20); do
+            python - <<'PY'
+          import socket, struct
+
+          def packet(request_id, packet_type, payload):
+              body = struct.pack("<ii", request_id, packet_type) + payload.encode("utf-8") + b"\\x00\\x00"
+              return struct.pack("<i", len(body)) + body
+
+          def receive(sock):
+              raw = sock.recv(4)
+              if len(raw) != 4:
+                  raise RuntimeError("short RCON length")
+              length = struct.unpack("<i", raw)[0]
+              data = b""
+              while len(data) < length:
+                  part = sock.recv(length - len(data))
+                  if not part:
+                      raise RuntimeError("short RCON body")
+                  data += part
+              return struct.unpack("<ii", data[:8]), data[8:-2].decode("utf-8", "replace")
+
+          with socket.create_connection(("127.0.0.1", 25575), timeout=5) as sock:
+              sock.sendall(packet(11, 3, "hub-proof-only"))
+              header, _ = receive(sock)
+              if header[0] == -1:
+                  raise RuntimeError("RCON authentication failed")
+              sock.sendall(packet(12, 2, "stop"))
+              receive(sock)
+          PY
+            for i in $(seq 1 30); do
               kill -0 "$PID" 2>/dev/null || break
               sleep 1
             done
+            if kill -0 "$PID" 2>/dev/null; then
+              kill -TERM "$PID" 2>/dev/null || true
+            fi
           fi
-          sleep 1
+          sleep 2
           cp server.log ../evidence/server.log
           grep -E 'PROOF:HARNESS_DISABLE|PROOF:DISABLE_PLAYER|Stopping server|Saving players' server.log             | tee ../evidence/disable-key-lines.txt || true
 
