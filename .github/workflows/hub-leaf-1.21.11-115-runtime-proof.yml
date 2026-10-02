@@ -40,8 +40,14 @@ jobs:
         shell: bash
         run: |
           set -Eeuo pipefail
-          test "$(git rev-parse HEAD^)" != "8f2c9fbd6ac15523304ea6759d40fec576f1fcd4" || true
-          git merge-base --is-ancestor 8f2c9fbd6ac15523304ea6759d40fec576f1fcd4 HEAD
+          FROZEN=8f2c9fbd6ac15523304ea6759d40fec576f1fcd4
+          git merge-base --is-ancestor "$FROZEN" HEAD
+          changed="$(git diff --name-only "$FROZEN"..HEAD)"
+          test "$changed" = ".github/workflows/hub-leaf-1.21.11-115-runtime-proof.yml" || {
+            echo "Validation branch contains non-disposable changes:" >&2
+            printf '%s\\n' "$changed" >&2
+            exit 1
+          }
           chmod +x ./gradlew
           ./gradlew :paper:shadowJar --no-daemon --no-build-cache --no-configuration-cache --console=plain
           STAFF_JAR="$(find paper/build/libs -maxdepth 1 -type f -name 'EnthusiaStaff-Paper-*.jar' ! -name '*-sources.jar' ! -name '*-javadoc.jar' -print -quit)"
@@ -140,6 +146,7 @@ jobs:
                   probeAbi();
                   probeFrozenAdapter();
                   Bukkit.getPluginManager().registerEvents(this, this);
+                  Bukkit.getScheduler().runTaskLater(this, this::logStaffPluginState, 40L);
               }
 
               @Override
@@ -149,6 +156,13 @@ jobs:
                               + " gm=" + player.getGameMode() + " noPhysics=" + player.hasNoPhysics());
                   }
                   getLogger().info("PROOF:HARNESS_DISABLE=true");
+              }
+
+              private void logStaffPluginState() {
+                  var staff = Bukkit.getPluginManager().getPlugin("EnthusiaStaff");
+                  getLogger().info("PROOF:STAFF_PLUGIN_STATE present=" + (staff != null)
+                          + " enabled=" + (staff != null && staff.isEnabled())
+                          + " class=" + (staff == null ? "none" : staff.getClass().getName()));
               }
 
               private void logBuildInfo() {
@@ -336,21 +350,21 @@ jobs:
         run: |
           set -Eeuo pipefail
           cd proof/server
-          coproc LEAFPROC { java -Xms1G -Xmx2G -jar leaf-1.21.11-115.jar nogui > server.log 2>&1; }
-          echo "$LEAFPROC_PID" > ../leaf.pid
-          echo "${LEAFPROC[1]}" > ../leaf.stdinfd
+          setsid java -Xms1G -Xmx2G -jar leaf-1.21.11-115.jar nogui > server.log 2>&1 </dev/null &
+          LEAF_PID=$!
+          echo "$LEAF_PID" > ../leaf.pid
           for i in $(seq 1 180); do
-            if grep -qE 'Done \([0-9.]+s\)!|Done \(' server.log; then
+            if grep -qE 'Done \\([0-9.]+s\\)!|Done \\(' server.log; then
               echo "started=true" >> "$GITHUB_OUTPUT"
               break
             fi
-            if ! kill -0 "$LEAFPROC_PID" 2>/dev/null; then
+            if ! kill -0 "$LEAF_PID" 2>/dev/null; then
               break
             fi
             sleep 1
           done
           cat server.log
-          grep -E 'This server is running Leaf|Running Java|PROOF:SERVER_BUILD_INFO|PROOF:REPORTS_PAPER_BRAND|PROOF:ABI|PROOF:FROZEN_ADAPTER|Unsupported API version|EnthusiaStaff' server.log             | tee ../evidence/startup-key-lines.txt || true
+          grep -E 'This server is running Leaf|Running Java|PROOF:SERVER_BUILD_INFO|PROOF:REPORTS_PAPER_BRAND|PROOF:ABI|PROOF:FROZEN_ADAPTER|PROOF:STAFF_PLUGIN_STATE|Unsupported API version|EnthusiaStaff' server.log             | tee ../evidence/startup-key-lines.txt || true
 
           if grep -q 'PROOF:HARNESS_ENABLE=true' server.log; then
             echo "harness_loaded=true" >> "$GITHUB_OUTPUT"
@@ -534,7 +548,7 @@ jobs:
         run: |
           set -Eeuo pipefail
           test -f proof/evidence/leaf-1.21.11-115.jar.sha256
-          grep -q 'PROOF:SERVER_BUILD_INFO' proof/evidence/server.log
+          grep -q 'PROOF:SERVER_BUILD_INFO brandId=' proof/evidence/server.log
           grep -q 'PROOF:ABI_COMPLETE=true' proof/evidence/server.log
 
       - name: Upload durable runtime proof
