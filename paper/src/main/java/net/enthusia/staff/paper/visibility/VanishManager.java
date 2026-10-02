@@ -185,8 +185,10 @@ public final class VanishManager implements Listener {
             player.sendMessage(StaffMessageStyle.style(Component.text("An explicit EnthusiaStaff rank is required before using vanish.")));
             return;
         }
-        if (requiresStaffMode(rank) && !staffMode.active(player.getUniqueId())) {
-            player.sendMessage(StaffMessageStyle.style(Component.text("Your rank requires active staff mode before vanishing.")));
+        if (requiresStaffMode(rank) && !staffMode.authorityActive(player.getUniqueId())) {
+            player.sendMessage(StaffMessageStyle.style(Component.text(
+                    "Active staff mode is required before changing vanish."
+            )));
             return;
         }
         boolean next = !visibility.isVanished(player.getUniqueId());
@@ -196,7 +198,47 @@ public final class VanishManager implements Listener {
             )));
             return;
         }
-        set(player, rank, next);
+        set(
+                player,
+                rank,
+                next,
+                true,
+                VanishStore.PreferenceUpdate.SET
+        );
+    }
+
+    public void applyStaffModeEntryVisibility(
+            Player player,
+            boolean vanished,
+            boolean rememberPreference
+    ) {
+        UUID playerId = player.getUniqueId();
+        StaffRank rank = resolveAndPublishRank(player);
+        if (rank == null) {
+            player.sendMessage(StaffMessageStyle.style(Component.text(
+                    "Your staff rank changed before entry visibility could be applied."
+            )));
+            return;
+        }
+        if (!staffMode.authorityActive(playerId)) {
+            player.sendMessage(StaffMessageStyle.style(Component.text(
+                    "Staff mode is not active enough to apply entry visibility."
+            )));
+            return;
+        }
+        if (vanished && !noclip.canEnable(player)) {
+            player.sendMessage(StaffMessageStyle.style(Component.text(
+                    "Full vanish no-clip is unavailable on this runtime: " + noclip.unavailableReason()
+            )));
+            return;
+        }
+        set(
+                player,
+                rank,
+                vanished,
+                true,
+                rememberPreference ? VanishStore.PreferenceUpdate.SET : VanishStore.PreferenceUpdate.KEEP
+        );
     }
 
     public void configureSpectatorTab(Player player, boolean appearNormally) {
@@ -253,7 +295,13 @@ public final class VanishManager implements Listener {
         }
         pendingStaffModeExitDisables.add(playerId);
         if (visibility.isVanished(playerId) || durableVanishedRanks.containsKey(playerId)) {
-            set(player, rank, false);
+            set(
+                    player,
+                    rank,
+                    false,
+                    false,
+                    VanishStore.PreferenceUpdate.KEEP
+            );
         } else {
             pendingStaffModeExitDisables.remove(playerId);
         }
@@ -263,55 +311,93 @@ public final class VanishManager implements Listener {
         return VanishRankReconciliationPolicy.requiresStaffMode(rank);
     }
 
-    private void set(Player player, StaffRank rank, boolean vanished) {
+    private void set(
+            Player player,
+            StaffRank rank,
+            boolean vanished,
+            boolean requireActiveStaffSession,
+            VanishStore.PreferenceUpdate preferenceUpdate
+    ) {
         UUID playerId = player.getUniqueId();
         if (!stateWrites.add(playerId)) {
             player.sendMessage(StaffMessageStyle.style(Component.text("A vanish state change is already being saved.")));
             return;
         }
-        if (!submit(() -> {
-            try {
-                VanishStore loaded = store.get();
-                if (loaded == null) {
-                    message(playerId, "Vanish storage is not ready; no visibility change was made.");
-                    return;
-                }
-                persistState(loaded, playerId, rank, vanished);
-                if (vanished) {
-                    durableVanishedRanks.put(playerId, rank);
-                } else {
-                    durableVanishedRanks.remove(playerId);
-                    pendingStaffModeExitDisables.remove(playerId);
-                }
-                boolean viewerChanged = publishViewerRank(playerId, rank);
-                visibility.setVanished(playerId, rank, vanished);
-                if (vanished) {
-                    hiddenSpectators.remove(playerId);
-                }
-                reconciliationRetryAfter.remove(playerId);
-                reconciliationFailureNotified.remove(playerId);
-                audiences.onOwner(playerId, current -> finishSet(current, vanished, viewerChanged));
-            } catch (RuntimeException exception) {
-                plugin.getLogger().log(Level.SEVERE, "Vanish state change failed", exception);
-                message(playerId, "Vanish change failed; inspect the sanitized server log.");
-            } finally {
-                stateWrites.remove(playerId);
-            }
-        })) {
+        if (!submit(() -> persistAndPublishState(
+                playerId,
+                rank,
+                vanished,
+                requireActiveStaffSession,
+                preferenceUpdate
+        ))) {
             stateWrites.remove(playerId);
             player.sendMessage(StaffMessageStyle.style(Component.text("The bounded work queue is full; vanish was not changed.")));
         }
     }
 
-    private void persistState(VanishStore loaded, UUID playerId, StaffRank rank, boolean vanished) {
-        Instant now = clock.instant();
+    private void persistAndPublishState(
+            UUID playerId,
+            StaffRank rank,
+            boolean vanished,
+            boolean requireActiveStaffSession,
+            VanishStore.PreferenceUpdate preferenceUpdate
+    ) {
+        try {
+            VanishStore loaded = store.get();
+            if (loaded == null) {
+                message(playerId, "Vanish storage is not ready; no visibility change was made.");
+                return;
+            }
+            persistState(
+                    loaded,
+                    playerId,
+                    rank,
+                    vanished,
+                    requireActiveStaffSession,
+                    preferenceUpdate
+            );
+            publishCommittedState(playerId, rank, vanished);
+        } catch (RuntimeException exception) {
+            plugin.getLogger().log(Level.SEVERE, "Vanish state change failed", exception);
+            message(playerId, "Vanish change failed; inspect the sanitized server log.");
+        } finally {
+            stateWrites.remove(playerId);
+        }
+    }
+
+    private void publishCommittedState(UUID playerId, StaffRank rank, boolean vanished) {
+        if (vanished) {
+            durableVanishedRanks.put(playerId, rank);
+        } else {
+            durableVanishedRanks.remove(playerId);
+            pendingStaffModeExitDisables.remove(playerId);
+        }
+        boolean viewerChanged = publishViewerRank(playerId, rank);
+        visibility.setVanished(playerId, rank, vanished);
+        if (vanished) {
+            hiddenSpectators.remove(playerId);
+        }
+        reconciliationRetryAfter.remove(playerId);
+        reconciliationFailureNotified.remove(playerId);
+        audiences.onOwner(playerId, current -> finishSet(current, vanished, viewerChanged));
+    }
+
+    private void persistState(
+            VanishStore loaded,
+            UUID playerId,
+            StaffRank rank,
+            boolean vanished,
+            boolean requireActiveStaffSession,
+            VanishStore.PreferenceUpdate preferenceUpdate
+    ) {
         VanishStore.WriteResult result = loaded.set(
                 playerId,
                 rank,
                 vanished,
                 playerId,
-                now,
-                staffMode.active(playerId)
+                clock.instant(),
+                requireActiveStaffSession,
+                preferenceUpdate
         );
         if (result == VanishStore.WriteResult.STAFF_SESSION_NOT_ACTIVE) {
             throw new IllegalStateException("active staff session ended before vanish state commit");
@@ -569,7 +655,14 @@ public final class VanishManager implements Listener {
                 if (loaded == null) {
                     throw new IllegalStateException("vanish storage is not ready");
                 }
-                persistState(loaded, playerId, rank, vanished);
+                persistState(
+                        loaded,
+                        playerId,
+                        rank,
+                        vanished,
+                        false,
+                        VanishStore.PreferenceUpdate.KEEP
+                );
                 if (vanished) {
                     durableVanishedRanks.put(playerId, rank);
                 } else {

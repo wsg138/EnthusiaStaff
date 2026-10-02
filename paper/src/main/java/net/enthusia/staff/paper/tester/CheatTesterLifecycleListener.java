@@ -24,7 +24,7 @@ final class CheatTesterLifecycleListener implements Listener {
         this.manager = Objects.requireNonNull(manager, "manager");
     }
 
-    @EventHandler(priority = EventPriority.HIGHEST)
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     public void onDeath(PlayerDeathEvent event) {
         CheatTesterSession session = manager.activeSession(event.getPlayer().getUniqueId());
         if (session == null || !session.type.mutatesTargetState()) {

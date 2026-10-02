@@ -52,6 +52,16 @@ final class StaffModeAccessPolicy {
         return usesCreativeMode(rank) ? GameMode.CREATIVE : GameMode.SPECTATOR;
     }
 
+    static boolean allowsGameMode(StaffRank rank, GameMode gameMode) {
+        Objects.requireNonNull(gameMode, "gameMode");
+        if (rank == StaffRank.HELPER) {
+            return gameMode == GameMode.SURVIVAL || gameMode == GameMode.SPECTATOR;
+        }
+        return rank != null
+                && rank != StaffRank.SYSTEM
+                && gameMode == requiredGameMode(rank);
+    }
+
     static boolean hasAdvancedStaffTools(StaffRank rank) {
         return rank != null && rank != StaffRank.HELPER && rank != StaffRank.SYSTEM;
     }

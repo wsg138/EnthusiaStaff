@@ -272,7 +272,7 @@ public final class ItemBalanceTracker implements Listener {
         markDirty(event.getPlayer(), "drop");
     }
 
-    @EventHandler(priority = EventPriority.MONITOR)
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onDeath(PlayerDeathEvent event) {
         markDirty(event.getEntity(), "death");
     }

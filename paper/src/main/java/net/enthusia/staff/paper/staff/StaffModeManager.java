@@ -213,12 +213,12 @@ public final class StaffModeManager implements Listener {
         }, 20L, 20L);
     }
 
-    public void enter(Player player, StaffRank rank) {
+    public boolean enter(Player player, StaffRank rank) {
         java.util.Objects.requireNonNull(rank, "rank");
         UUID playerId = player.getUniqueId();
         if (!transitions.add(playerId)) {
             player.sendMessage(StaffMessageStyle.style(Component.text("A staff-mode transition is already in progress.")));
-            return;
+            return false;
         }
         CombatStatusAdapter.Status combatStatus = combat.status(player);
         if (combatStatus != CombatStatusAdapter.Status.CLEAR) {
@@ -226,7 +226,7 @@ public final class StaffModeManager implements Listener {
             player.sendMessage(StaffMessageStyle.style(Component.text(combatStatus == CombatStatusAdapter.Status.TAGGED
                     ? "You cannot enter staff mode while combat tagged."
                     : "Combat state could not be verified; staff mode entry failed safely.")));
-            return;
+            return false;
         }
         StaffStateCodec.Captured captured;
         try {
@@ -235,7 +235,7 @@ public final class StaffModeManager implements Listener {
             transitions.remove(playerId);
             plugin.getLogger().log(Level.SEVERE, "Staff state snapshot capture failed", exception);
             player.sendMessage(StaffMessageStyle.style(Component.text("Your state could not be snapshotted; staff mode was not entered.")));
-            return;
+            return false;
         }
         if (!submit(() -> {
             StaffSessionStore loaded = store.get();
@@ -266,7 +266,9 @@ public final class StaffModeManager implements Listener {
         })) {
             transitions.remove(playerId);
             player.sendMessage(StaffMessageStyle.style(Component.text("The bounded work queue is full; staff mode was not entered.")));
+            return false;
         }
+        return true;
     }
 
     public void exit(Player player) {
@@ -644,7 +646,7 @@ public final class StaffModeManager implements Listener {
             return;
         }
         StaffRank rank = rankForAction(player);
-        if (rank == null || event.getNewGameMode() != StaffModeAccessPolicy.requiredGameMode(rank)) {
+        if (!StaffModeAccessPolicy.allowsGameMode(rank, event.getNewGameMode())) {
             event.setCancelled(true);
             if (!transitions.contains(playerId)) {
                 player.sendMessage(StaffMessageStyle.style(Component.text(
@@ -1032,6 +1034,17 @@ public final class StaffModeManager implements Listener {
         } finally {
             profileApplications.remove(playerId);
         }
+    }
+
+    boolean authorityActiveProfile(UUID playerId, StaffRank rank) {
+        return playerId != null
+                && rank != null
+                && authorityActive(playerId)
+                && ranks.get(playerId) == rank;
+    }
+
+    boolean protectedProfile(UUID playerId) {
+        return playerId != null && protectedMode(playerId);
     }
 
     private boolean protectedMode(UUID playerId) {

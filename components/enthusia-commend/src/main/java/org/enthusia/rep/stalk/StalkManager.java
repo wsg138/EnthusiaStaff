@@ -140,7 +140,7 @@ public final class StalkManager implements Listener {
         observe(event.getPlayer(), event.getPlayer().getLocation(), StalkMovementRouting.forWorldChange());
     }
 
-    @EventHandler
+    @EventHandler(ignoreCancelled = true)
     public void onDeath(PlayerDeathEvent event) {
         lastKnownZones.remove(event.getEntity().getUniqueId());
     }
