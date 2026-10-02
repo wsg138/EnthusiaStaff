@@ -144,8 +144,7 @@ public final class EnthusiaStaffVelocityPlugin {
     private final ObjectMapper json = new ObjectMapper();
     private final java.util.concurrent.ConcurrentHashMap<UUID, CompletableFuture<Void>> presenceUpdates =
             new java.util.concurrent.ConcurrentHashMap<>();
-    private final java.util.concurrent.ConcurrentHashMap<UUID, PendingStaffReconnect> pendingStaffReconnects =
-            new java.util.concurrent.ConcurrentHashMap<>();
+    private final StaffModeReconnectCoordinator staffReconnects = new StaffModeReconnectCoordinator();
 
     private volatile ExecutorService workers;
     private volatile VelocityConfiguration configuration;
@@ -366,7 +365,7 @@ public final class EnthusiaStaffVelocityPlugin {
 
     @Subscribe
     public void onDisconnect(DisconnectEvent event) {
-        pendingStaffReconnects.remove(event.getPlayer().getUniqueId());
+        staffReconnects.disconnected(event.getPlayer().getUniqueId());
         PlayerDirectory directory = playerDirectory;
         VelocityConfiguration loaded = configuration;
         if (directory == null || loaded == null) {
@@ -1116,12 +1115,17 @@ public final class EnthusiaStaffVelocityPlugin {
         try {
             var session = sessions.active(event.getPlayer().getUniqueId());
             if (session.isEmpty()) {
-                pendingStaffReconnects.remove(event.getPlayer().getUniqueId());
+                staffReconnects.disconnected(event.getPlayer().getUniqueId());
                 return;
             }
             var snapshot = session.orElseThrow();
             String requested = event.getOriginalServer().getServerInfo().getName();
-            rememberReconnectTarget(event.getPlayer().getUniqueId(), snapshot, requested);
+            staffReconnects.remember(
+                    event.getPlayer().getUniqueId(),
+                    snapshot,
+                    requested,
+                    Clock.systemUTC().instant()
+            );
             var backend = proxy.getServer(snapshot.serverId());
             if (backend.isEmpty()) {
                 denyServerSwitch(event, "Your staff snapshot belongs to an unavailable backend. Contact an administrator for recovery.");
@@ -1132,21 +1136,6 @@ public final class EnthusiaStaffVelocityPlugin {
             logger.error("Staff snapshot ownership lookup failed during reconnect", exception);
             denyServerSwitch(event, "Staff recovery status could not be verified. Please retry shortly.");
         }
-    }
-
-    private void rememberReconnectTarget(
-            UUID playerId,
-            net.enthusia.staff.domain.staff.StaffSessionSnapshot session,
-            String requested
-    ) {
-        if (session.state() != net.enthusia.staff.domain.staff.StaffSessionState.ACTIVE
-                || session.serverId().equalsIgnoreCase(requested)) {
-            pendingStaffReconnects.remove(playerId);
-            return;
-        }
-        pendingStaffReconnects.put(playerId, new PendingStaffReconnect(
-                session.serverId(), requested, session.sessionId(), Clock.systemUTC().instant().plusSeconds(30)
-        ));
     }
 
     private boolean assetFencesAllowSwitch(
@@ -1250,43 +1239,31 @@ public final class EnthusiaStaffVelocityPlugin {
             return true;
         } catch (java.io.IOException | IllegalArgumentException exception) {
             logger.warn("Rejected malformed Staff Mode readiness message from {}", envelope.serverId());
-            return false;
+            return true;
         }
     }
 
     private void continuePendingReconnect(UUID playerId, UUID sessionId, String owner) {
-        PendingStaffReconnect pending = pendingStaffReconnects.get(playerId);
-        if (!validPendingReconnect(pending, sessionId, owner)) {
-            if (pending != null) {
-                pendingStaffReconnects.remove(playerId, pending);
-            }
-            return;
-        }
         Player player = proxy.getPlayer(playerId).orElse(null);
-        var destination = proxy.getServer(pending.destination()).orElse(null);
-        if (!readyToContinueReconnect(player, owner) || destination == null
-                || !pendingStaffReconnects.remove(playerId, pending)) {
+        if (player == null || player.getCurrentServer().isEmpty()) {
             return;
         }
-        proxy.getScheduler().buildTask(this, () ->
-                player.createConnectionRequest(destination).fireAndForget()).schedule();
-    }
-
-    private static boolean readyToContinueReconnect(Player player, String owner) {
-        return player != null
-                && player.getCurrentServer().isPresent()
-                && player.getCurrentServer().orElseThrow().getServerInfo().getName().equalsIgnoreCase(owner);
-    }
-
-    private static boolean validPendingReconnect(
-            PendingStaffReconnect pending,
-            UUID sessionId,
-            String owner
-    ) {
-        return pending != null
-                && pending.expiresAt().isAfter(Clock.systemUTC().instant())
-                && pending.sessionId().equals(sessionId)
-                && pending.owner().equalsIgnoreCase(owner);
+        String current = player.getCurrentServer().orElseThrow().getServerInfo().getName();
+        Optional<String> destinationName = staffReconnects.claimDestination(
+                playerId,
+                sessionId,
+                owner,
+                current,
+                Clock.systemUTC().instant()
+        );
+        if (destinationName.isEmpty()) {
+            return;
+        }
+        var destination = proxy.getServer(destinationName.orElseThrow()).orElse(null);
+        if (destination != null) {
+            proxy.getScheduler().buildTask(this, () ->
+                    player.createConnectionRequest(destination).fireAndForget()).schedule();
+        }
     }
 
     private void denyServerSwitchWhenActive(ServerPreConnectEvent event, String message) {
@@ -1595,14 +1572,6 @@ public final class EnthusiaStaffVelocityPlugin {
         } catch (RejectedExecutionException exception) {
             source.sendMessage(VelocityMessageStyle.style(Component.text("The bounded work queue is full; alt operation did not start.")));
         }
-    }
-
-    private record PendingStaffReconnect(
-            String owner,
-            String destination,
-            UUID sessionId,
-            Instant expiresAt
-    ) {
     }
 
     final class StatusCommand implements SimpleCommand {
