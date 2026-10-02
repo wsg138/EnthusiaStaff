@@ -97,10 +97,10 @@ class InventoryCursorJournalIntegrationTest {
         UUID actor = UUID.randomUUID();
         UUID smpTarget = UUID.randomUUID();
         UUID hubTarget = UUID.randomUUID();
-        insertPlayer(DATABASE, actor, name("CursorActor", actor), NOW);
-        insertPlayer(DATABASE, smpTarget, name("CursorSmpTarget", smpTarget), NOW);
-        insertPlayer(DATABASE, hubTarget, name("CursorHubTarget", hubTarget), NOW);
         try (MariaDbRuntime runtime = MariaDb.initialize(databaseConfig(DATABASE))) {
+            insertPlayer(DATABASE, actor, name("CursorActor", actor), NOW);
+            insertPlayer(DATABASE, smpTarget, name("CursorSmpTarget", smpTarget), NOW);
+            insertPlayer(DATABASE, hubTarget, name("CursorHubTarget", hubTarget), NOW);
             InventoryJournalStore store = runtime.inventoryJournalStore();
             PreparedCursor smp = prepare(store, smpTarget, actor, SMP, cursor(21, 22));
             PreparedCursor hub = prepare(store, hubTarget, actor, HUB, cursor(31, 32));
@@ -167,9 +167,15 @@ class InventoryCursorJournalIntegrationTest {
     }
 
     private static MariaDbRuntime runtime(UUID target, UUID actor) throws SQLException {
-        insertPlayer(DATABASE, target, name("CursorTarget", target), NOW);
-        insertPlayer(DATABASE, actor, name("CursorActor", actor), NOW);
-        return MariaDb.initialize(databaseConfig(DATABASE));
+        MariaDbRuntime runtime = MariaDb.initialize(databaseConfig(DATABASE));
+        try {
+            insertPlayer(DATABASE, target, name("CursorTarget", target), NOW);
+            insertPlayer(DATABASE, actor, name("CursorActor", actor), NOW);
+            return runtime;
+        } catch (SQLException exception) {
+            runtime.close();
+            throw exception;
+        }
     }
 
     private static String name(String prefix, UUID id) {
