@@ -271,15 +271,19 @@ jobs:
 
               private void resetChamber(Player player, String next) {
                   later(2L, () -> {
-                      Location base = chamberBase;
-                      boolean teleported = base != null && player.teleport(base);
-                      boolean reconciled = teleported && reconcile(player);
-                      evidence("CHAMBER_RESET|next=" + next
-                              + "|teleported=" + teleported
-                              + "|reconciled=" + reconciled);
-                      if (teleported && reconciled) {
-                          marker(player, "PROBE_" + next + ":" + base.getX()
-                                  + ":" + base.getY() + ":" + base.getZ());
+                      try {
+                          Location base = chamberBase;
+                          boolean teleported = base != null && player.teleport(base);
+                          boolean reconciled = teleported && reconcile(player);
+                          evidence("CHAMBER_RESET|next=" + next
+                                  + "|teleported=" + teleported
+                                  + "|reconciled=" + reconciled);
+                          if (teleported && reconciled) {
+                              marker(player, "PROBE_" + next + ":" + base.getX()
+                                      + ":" + base.getY() + ":" + base.getZ());
+                          }
+                      } catch (Exception exception) {
+                          fail("CHAMBER_RESET_" + next, exception);
                       }
                   });
               }
