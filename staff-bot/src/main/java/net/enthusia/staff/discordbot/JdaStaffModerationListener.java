@@ -14,7 +14,9 @@ import net.dv8tion.jda.api.components.selections.StringSelectMenu;
 import net.dv8tion.jda.api.components.textinput.TextInput;
 import net.dv8tion.jda.api.components.textinput.TextInputStyle;
 import net.dv8tion.jda.api.entities.Guild;
+import net.dv8tion.jda.api.entities.Message;
 import net.dv8tion.jda.api.entities.User;
+import net.dv8tion.jda.api.entities.channel.middleman.MessageChannel;
 import net.dv8tion.jda.api.events.interaction.ModalInteractionEvent;
 import net.dv8tion.jda.api.events.interaction.command.MessageContextInteractionEvent;
 import net.dv8tion.jda.api.events.interaction.command.SlashCommandInteractionEvent;
@@ -33,7 +35,7 @@ import net.dv8tion.jda.api.interactions.commands.build.OptionData;
 import net.dv8tion.jda.api.modals.Modal;
 import net.enthusia.staff.domain.auth.DiscordConsequenceType;
 
-/** JDA adapter for D06 reads and D07 confirmed Discord-only moderation actions. */
+/** JDA adapter for private moderation reads, investigations, and confirmed Discord-only actions. */
 final class JdaStaffModerationListener extends ListenerAdapter {
     private static final System.Logger LOGGER = System.getLogger(JdaStaffModerationListener.class.getName());
     private static final long NO_GUILD = 0L;
@@ -83,6 +85,7 @@ final class JdaStaffModerationListener extends ListenerAdapter {
     private final Optional<StaffModerationRuntime> webModeration;
     private volatile ModerationReadRequestAuthorizer webAuthorizer;
     private final Optional<DiscordPunishmentCommandController> punishments;
+    private final Optional<DiscordInvestigationCommandController> investigations;
     private final java.util.concurrent.atomic.AtomicBoolean enabled = new java.util.concurrent.atomic.AtomicBoolean();
 
     JdaStaffModerationListener(
@@ -110,6 +113,7 @@ final class JdaStaffModerationListener extends ListenerAdapter {
         this.workers = workers;
         this.interactions = interactions;
         this.punishments = moderation.punishmentService().map(DiscordPunishmentCommandController::new);
+        this.investigations = moderation.investigationService().map(DiscordInvestigationCommandController::new);
         this.webIssuer = webIssuer;
         this.webModeration = webIssuer.isPresent() ? Optional.of(moderation) : Optional.empty();
         this.controller = new StaffModerationController(
@@ -129,7 +133,7 @@ final class JdaStaffModerationListener extends ListenerAdapter {
         if (webIssuer.isPresent()) {
             webAuthorizer = new ModerationReadRequestAuthorizer(guildId, webModeration.orElseThrow(), jda);
         }
-        List<CommandData> expected = commands(punishments.isPresent(), webIssuer.isPresent());
+        List<CommandData> expected = commands(punishments.isPresent(), investigations.isPresent(), webIssuer.isPresent());
         guild.updateCommands().addCommands(expected).queue(
                 registered -> commandsRegistered(registered, expected.size()),
                 this::commandRegistrationFailed
@@ -161,6 +165,11 @@ final class JdaStaffModerationListener extends ListenerAdapter {
         }
         long actorId = event.getUser().getIdLong();
         String actorName = event.getUser().getName();
+        DiscordInvestigationCommandController investigation = investigations.orElse(null);
+        if (investigation != null && investigation.handlesSlash(event.getName())) {
+            dispatchInvestigation(event, () -> investigation.executeSlash(event, actorId, actorName));
+            return;
+        }
         if (PUNISHMENT_COMMANDS.contains(event.getName())) {
             dispatchQuickPunishment(event, actorId, actorName);
             return;
@@ -327,13 +336,33 @@ final class JdaStaffModerationListener extends ListenerAdapter {
         if (webIssuer.isPresent()) {
             long channel = event.getTarget().getChannelIdLong();
             long message = event.getTarget().getIdLong();
-            dispatchWeb(event, actor, "message:" + channel + ":" + message + ":" + target,
+            dispatchWebMessage(event, actor, target, "message:" + channel + ":" + message + ":" + target,
                     () -> webIssuer.orElseThrow().issueMessageLaunchUri(
                             actor, guildId, channel, message, target));
             return;
         }
-        dispatch(event, () -> withPunish(
-                controller.moderateDiscord(actor, event.getUser().getName(), target), target));
+        dispatch(event, () -> moderateMessage(event, actor, target));
+    }
+
+    private StaffModerationController.Response moderateMessage(
+            MessageContextInteractionEvent event,
+            long actorId,
+            long targetId
+    ) {
+        StaffModerationController.Response response = withPunish(
+                controller.moderateDiscord(actorId, event.getUser().getName(), targetId), targetId);
+        DiscordInvestigationCommandController investigation = investigations.orElse(null);
+        if (investigation == null) {
+            return response;
+        }
+        try {
+            DiscordInvestigationCommandController.MessageCapture capture = investigation.captureMessage(
+                    actorId, event.getUser().getName(), targetId, event.getTarget(), event.getId());
+            return investigation.decorate(response, capture);
+        } catch (RuntimeException exception) {
+            log("discord_evidence_capture_failed", exception);
+            return response;
+        }
     }
 
     @Override
@@ -342,7 +371,7 @@ final class JdaStaffModerationListener extends ListenerAdapter {
             unavailable(event);
             return;
         }
-        if (handlePunishmentButton(event)) {
+        if (handleInvestigationButton(event) || handlePunishmentButton(event)) {
             return;
         }
         long actor = event.getUser().getIdLong();
@@ -352,6 +381,62 @@ final class JdaStaffModerationListener extends ListenerAdapter {
                 event.getComponentId(),
                 Optional.empty()
         ));
+    }
+
+    private boolean handleInvestigationButton(ButtonInteractionEvent event) {
+        DiscordInvestigationCommandController investigation = investigations.orElse(null);
+        if (investigation == null) {
+            return false;
+        }
+        String customId = event.getComponentId();
+        if (DiscordInvestigationCommandController.isCaptureMore(customId)) {
+            DiscordInvestigationCommandController.ContextTarget target =
+                    DiscordInvestigationCommandController.contextTarget(customId);
+            dispatchInvestigation(event, () -> captureMore(event, investigation, target));
+            return true;
+        }
+        if (!DiscordInvestigationAlertControls.handles(customId)) {
+            return false;
+        }
+        dispatchAlertAction(event, investigation, DiscordInvestigationAlertControls.parse(customId));
+        return true;
+    }
+
+    private void dispatchAlertAction(
+            ButtonInteractionEvent event,
+            DiscordInvestigationCommandController investigation,
+            DiscordInvestigationAlertControls.Action action
+    ) {
+        long actorId = event.getUser().getIdLong();
+        String actorName = event.getUser().getName();
+        long targetId = action.targetDiscordId();
+        switch (action.type()) {
+            case LINKED -> dispatch(event, () -> controller.linkedDiscord(actorId, actorName, targetId));
+            case HISTORY -> dispatch(event, () -> controller.historyDiscord(actorId, actorName, targetId));
+            case MODERATE -> dispatch(event, () -> withPunish(
+                    controller.moderateDiscord(actorId, actorName, targetId), targetId));
+            case RESOLVE -> dispatchInvestigation(event, () -> investigation.resolveAlert(
+                    actorId, actorName, targetId, action.alertId().orElseThrow()));
+            default -> throw new IllegalStateException("unsupported linked-alt alert action");
+        }
+    }
+
+    private static DiscordInvestigationCommandController.Mutation captureMore(
+            ButtonInteractionEvent event,
+            DiscordInvestigationCommandController investigation,
+            DiscordInvestigationCommandController.ContextTarget target
+    ) {
+        Guild guild = event.getGuild();
+        if (guild == null) {
+            throw new IllegalArgumentException("capture-more requires a guild");
+        }
+        var channel = guild.getGuildChannelById(target.channelId());
+        if (!(channel instanceof MessageChannel messageChannel)) {
+            throw new IllegalArgumentException("capture-more channel is unavailable");
+        }
+        Message focus = messageChannel.retrieveMessageById(target.messageId()).complete();
+        return investigation.captureMore(
+                event.getUser().getIdLong(), event.getUser().getName(), target, focus, event.getId());
     }
 
     private boolean handlePunishmentButton(ButtonInteractionEvent event) {
@@ -514,6 +599,64 @@ final class JdaStaffModerationListener extends ListenerAdapter {
         }, failure -> interactions.release(interactionId));
     }
 
+    private void dispatchWebMessage(
+            MessageContextInteractionEvent event,
+            long actorId,
+            long targetId,
+            String targetKey,
+            Supplier<URI> issue
+    ) {
+        long interactionId = event.getIdLong();
+        if (!claim(interactionId, event)) {
+            return;
+        }
+        event.deferReply(true).queue(hook -> {
+            boolean scheduled = workers.tryExecute(() ->
+                    executeWebMessage(event, hook, actorId, targetId, targetKey, issue));
+            if (!scheduled) {
+                hook.sendMessage("The moderation read queue is busy. Try again shortly.").queue();
+            }
+        }, failure -> interactions.release(interactionId));
+    }
+
+    private void executeWebMessage(
+            MessageContextInteractionEvent event,
+            InteractionHook hook,
+            long actorId,
+            long targetId,
+            String targetKey,
+            Supplier<URI> issue
+    ) {
+        try {
+            webAuthorizer.authorize(new ModerationReadApiModel.ReadRequest(
+                    Long.toUnsignedString(actorId), Long.toUnsignedString(guildId), targetKey, Optional.empty()));
+            captureWebMessageBestEffort(event, actorId, targetId);
+            URI link = issue.get();
+            hook.sendMessage("Open the private moderation workspace. This link expires in two minutes.")
+                    .addComponents(ActionRow.of(Button.link(link.toString(), "Open Moderation Workspace"))).queue();
+        } catch (RuntimeException exception) {
+            log("moderation_web_launch_denied", exception);
+            hook.sendMessage("Current staff authority could not be verified for this workspace.").queue();
+        }
+    }
+
+    private void captureWebMessageBestEffort(
+            MessageContextInteractionEvent event,
+            long actorId,
+            long targetId
+    ) {
+        DiscordInvestigationCommandController investigation = investigations.orElse(null);
+        if (investigation == null) {
+            return;
+        }
+        try {
+            investigation.captureMessage(
+                    actorId, event.getUser().getName(), targetId, event.getTarget(), event.getId());
+        } catch (RuntimeException exception) {
+            log("discord_evidence_capture_failed", exception);
+        }
+    }
+
     private void dispatchPunishment(
             IReplyCallback event,
             Supplier<DiscordPunishmentCommandController.Prepared> work
@@ -538,6 +681,20 @@ final class JdaStaffModerationListener extends ListenerAdapter {
         }
         event.deferReply(true).queue(
                 hook -> scheduleCommitted(hook, work),
+                failure -> interactions.release(interactionId)
+        );
+    }
+
+    private void dispatchInvestigation(
+            IReplyCallback event,
+            Supplier<DiscordInvestigationCommandController.Mutation> work
+    ) {
+        long interactionId = event.getIdLong();
+        if (!claim(interactionId, event)) {
+            return;
+        }
+        event.deferReply(true).queue(
+                hook -> scheduleInvestigation(hook, work),
                 failure -> interactions.release(interactionId)
         );
     }
@@ -580,6 +737,16 @@ final class JdaStaffModerationListener extends ListenerAdapter {
         }
     }
 
+    private void scheduleInvestigation(
+            InteractionHook hook,
+            Supplier<DiscordInvestigationCommandController.Mutation> work
+    ) {
+        boolean scheduled = workers.tryExecute(() -> executeInvestigation(hook, work));
+        if (!scheduled) {
+            hook.sendMessage("The investigation action queue is busy. Try again shortly.").queue();
+        }
+    }
+
     private void executePunishment(
             InteractionHook hook,
             Supplier<DiscordPunishmentCommandController.Prepared> work
@@ -602,6 +769,18 @@ final class JdaStaffModerationListener extends ListenerAdapter {
             hook.sendMessage(work.get().content()).queue();
         } catch (RuntimeException exception) {
             actionFailure(hook, exception);
+        }
+    }
+
+    private void executeInvestigation(
+            InteractionHook hook,
+            Supplier<DiscordInvestigationCommandController.Mutation> work
+    ) {
+        try {
+            hook.sendMessage(work.get().content()).queue();
+        } catch (RuntimeException exception) {
+            log("discord_investigation_interaction_failed", exception);
+            hook.sendMessage("The private investigation action was rejected or could not be completed safely.").queue();
         }
     }
 
@@ -655,14 +834,22 @@ final class JdaStaffModerationListener extends ListenerAdapter {
     }
 
     static List<CommandData> commands() {
-        return commands(false);
+        return commands(false, false, false);
     }
 
     static List<CommandData> commands(boolean includePunishments) {
-        return commands(includePunishments, false);
+        return commands(includePunishments, false, false);
     }
 
     static List<CommandData> commands(boolean includePunishments, boolean webEnabled) {
+        return commands(includePunishments, false, webEnabled);
+    }
+
+    static List<CommandData> commands(
+            boolean includePunishments,
+            boolean includeInvestigations,
+            boolean webEnabled
+    ) {
         DefaultMemberPermissions discovery = DefaultMemberPermissions.DISABLED;
         List<CommandData> commands = new ArrayList<>(List.of(
                 webEnabled
@@ -686,6 +873,9 @@ final class JdaStaffModerationListener extends ListenerAdapter {
         ));
         if (includePunishments) {
             commands.addAll(punishmentCommands(discovery));
+        }
+        if (includeInvestigations) {
+            commands.addAll(DiscordInvestigationCommandController.commands(discovery));
         }
         return List.copyOf(commands);
     }

@@ -14,6 +14,7 @@ import org.junit.jupiter.api.Test;
 
 class JdaStaffModerationListenerTest {
     private static final String USER_ID_OPTION = "user-id";
+
     @Test
     void staffReadCommandsAreCompleteAndDefaultDisabledForDiscovery() {
         var commands = JdaStaffModerationListener.commands();
@@ -59,6 +60,36 @@ class JdaStaffModerationListenerTest {
         )));
         assertTrue(commands.stream().allMatch(command ->
                 DefaultMemberPermissions.DISABLED.equals(command.getDefaultPermissions())));
+    }
+
+    @Test
+    void investigationRuntimeAddsOnlyTheFourPrivateMutationCommands() {
+        var commands = JdaStaffModerationListener.commands(false, true, false);
+
+        assertEquals(12, commands.size());
+        assertTrue(names(commands).containsAll(Set.of(
+                "case-create", "note-add", "note-edit", "evasion-resolve"
+        )));
+        assertTrue(commands.stream().allMatch(command ->
+                DefaultMemberPermissions.DISABLED.equals(command.getDefaultPermissions())));
+    }
+
+    @Test
+    void combinedRuntimeRegistersAllApprovedCommandsWithoutCollisions() {
+        var commands = JdaStaffModerationListener.commands(true, true, false);
+
+        assertEquals(20, commands.size());
+        assertEquals(20, names(commands).size());
+    }
+
+    @Test
+    void webRuntimeCanRegisterInvestigationCommandsWithoutChangingModerateLaunchShape() {
+        var commands = JdaStaffModerationListener.commands(false, true, true);
+
+        assertEquals(12, commands.size());
+        SlashCommandData moderate = (SlashCommandData) command(commands, "moderate");
+        assertEquals(1, moderate.getOptions().size());
+        assertTrue(names(commands).contains("case-create"));
     }
 
     @Test
