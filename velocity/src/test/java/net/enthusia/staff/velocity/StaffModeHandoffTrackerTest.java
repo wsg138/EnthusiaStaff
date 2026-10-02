@@ -12,8 +12,8 @@ class StaffModeHandoffTrackerTest {
     private static final UUID TRANSFER = UUID.fromString("22222222-2222-2222-2222-222222222222");
     private static final UUID OTHER = UUID.fromString("33333333-3333-3333-3333-333333333333");
     private static final Instant NOW = Instant.parse("2026-10-01T00:00:00Z");
-    private static final String SMP = SMP;
-    private static final String HUB = HUB;
+    private static final String SMP = "SMP";
+    private static final String HUB = "HUB";
 
     @Test
     void oneTransferOwnsThePlayerUntilCompletion() {
