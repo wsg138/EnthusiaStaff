@@ -16,7 +16,7 @@ public final class VanishNoclipController {
     }
 
     public static VanishNoclipController install(JavaPlugin plugin) {
-        return new VanishNoclipController(Paper26VanishClientGameModeAdapter.install(plugin.getLogger()));
+        return new VanishNoclipController(VanishClientGameModeAdapterFactory.install(plugin.getLogger()));
     }
 
     public boolean supportsClientPresentation() { return clientModes.available(); }
