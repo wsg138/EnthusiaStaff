@@ -526,8 +526,25 @@ public final class InventoryCoordinator implements Listener, InventoryLockServic
             return;
         }
         session.removeViewer(holder.viewerId());
+        removeSessionIfRemovable(session);
+    }
+
+    private void finishSessionTransfer(
+            LiveSession session,
+            LiveInventoryTransferExecution transfer
+    ) {
+        session.finishTransfer(transfer);
+        removeSessionIfRemovable(session);
+    }
+
+    private void finishSessionWork(LiveSession session) {
+        session.finishWork();
+        removeSessionIfRemovable(session);
+    }
+
+    private void removeSessionIfRemovable(LiveSession session) {
         if (session.removable()) {
-            liveSessions.remove(holder.targetId(), session);
+            liveSessions.remove(session.targetId(), session);
         }
     }
 
@@ -723,13 +740,13 @@ public final class InventoryCoordinator implements Listener, InventoryLockServic
             return;
         }
         if (!assetLocks.add(transfer.targetId())) {
-            session.finishTransfer(transfer);
+            finishSessionTransfer(session, transfer);
             message(viewer, "Another asset operation already owns this player.");
             return;
         }
         if (viewerTransfers.putIfAbsent(transfer.viewerId(), transfer) != null) {
             assetLocks.remove(transfer.targetId());
-            session.finishTransfer(transfer);
+            finishSessionTransfer(session, transfer);
             message(viewer, "Your previous inventory transfer is still finishing.");
             return;
         }
@@ -1307,7 +1324,7 @@ public final class InventoryCoordinator implements Listener, InventoryLockServic
         loginBlocks.add(transfer.targetId());
         loginBlocks.add(transfer.viewerId());
         viewerTransfers.remove(transfer.viewerId(), transfer);
-        session.finishTransfer(transfer);
+        finishSessionTransfer(session, transfer);
         message(viewer, detail + " Both participants are interaction-blocked for inventory recovery.");
         alertStaff("Inventory safety blocked transfer " + transfer.operationId() + ": " + detail);
         closeTargetViews(transfer.targetId(), "Inventory safety verification requires recovery.");
@@ -1362,7 +1379,7 @@ public final class InventoryCoordinator implements Listener, InventoryLockServic
         if (!hasCursorRecoveryFor(transfer.viewerId())) {
             loginBlocks.remove(transfer.viewerId());
         }
-        session.finishTransfer(transfer);
+        finishSessionTransfer(session, transfer);
     }
 
     private void quarantineTransfer(
@@ -1639,7 +1656,7 @@ public final class InventoryCoordinator implements Listener, InventoryLockServic
         viewerTransfers.remove(patch.actorId());
         LiveSession session = liveSessions.get(patch.playerId());
         if (session != null) {
-            session.finishWork();
+            finishSessionWork(session);
             reconcile(session);
         }
     }
@@ -1894,14 +1911,14 @@ public final class InventoryCoordinator implements Listener, InventoryLockServic
         }
         Player target = plugin.getServer().getPlayer(session.targetId());
         if (target == null) {
-            session.finishWork();
+            finishSessionWork(session);
             closeTargetViews(session.targetId(), "The target is no longer on this backend.");
             return;
         }
         target.getScheduler().execute(
                 plugin,
                 () -> captureReconciliation(target, session),
-                session::finishWork,
+                () -> finishSessionWork(session),
                 1L
         );
     }
@@ -1910,12 +1927,12 @@ public final class InventoryCoordinator implements Listener, InventoryLockServic
         InventoryImage image = codec.capture(target);
         InventoryImageCodec.EncodedImage encoded = codec.encodeWithChecksum(image);
         if (encoded.checksum().equals(session.observation().checksum())) {
-            session.finishWork();
+            finishSessionWork(session);
             return;
         }
         EnumSet<ModerationInventoryHolder.Kind> changedKinds = changedKinds(session.image(), image);
         if (!submit(() -> recordReconciliation(target, session, image, encoded, changedKinds))) {
-            session.finishWork();
+            finishSessionWork(session);
         }
     }
 
@@ -1939,7 +1956,7 @@ public final class InventoryCoordinator implements Listener, InventoryLockServic
         } catch (RuntimeException exception) {
             plugin.getLogger().log(Level.SEVERE, "Live inventory reconciliation failed", exception);
         } finally {
-            session.finishWork();
+            finishSessionWork(session);
         }
     }
 
