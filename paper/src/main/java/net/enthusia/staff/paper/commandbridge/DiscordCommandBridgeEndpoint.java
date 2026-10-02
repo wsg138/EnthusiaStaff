@@ -30,7 +30,6 @@ public final class DiscordCommandBridgeEndpoint implements AutoCloseable {
     private static final Duration SHUTDOWN_TIMEOUT = Duration.ofSeconds(2);
     private static final String POST = "POST";
 
-    private final String credential;
     private final CommandBridgeService service;
     private final CommandBridgeRequestAuthenticator authenticator;
     private final CommandBridgeWireCodec codec = new CommandBridgeWireCodec();
@@ -47,7 +46,6 @@ public final class DiscordCommandBridgeEndpoint implements AutoCloseable {
             Logger logger
     ) throws IOException {
         validateConfiguration(serverId, credential, service, logger);
-        this.credential = credential;
         this.service = service;
         this.logger = logger;
         this.authenticator = new CommandBridgeRequestAuthenticator(
@@ -72,16 +70,7 @@ public final class DiscordCommandBridgeEndpoint implements AutoCloseable {
     private void handle(HttpExchange exchange) throws IOException {
         String responseNonce = null;
         try {
-            if (!exactTarget(exchange)) {
-                respondUnsigned(exchange, 404);
-                return;
-            }
-            if (!POST.equals(exchange.getRequestMethod())) {
-                respondUnsigned(exchange, 405);
-                return;
-            }
-            if (!privatePeer(exchange.getRemoteAddress().getAddress())) {
-                respondUnsigned(exchange, 401);
+            if (rejectEnvelope(exchange)) {
                 return;
             }
             String body = readBody(exchange);
@@ -109,6 +98,22 @@ public final class DiscordCommandBridgeEndpoint implements AutoCloseable {
         } finally {
             exchange.close();
         }
+    }
+
+    private static boolean rejectEnvelope(HttpExchange exchange) throws IOException {
+        if (!exactTarget(exchange)) {
+            respondUnsigned(exchange, 404);
+            return true;
+        }
+        if (!POST.equals(exchange.getRequestMethod())) {
+            respondUnsigned(exchange, 405);
+            return true;
+        }
+        if (!privatePeer(exchange.getRemoteAddress().getAddress())) {
+            respondUnsigned(exchange, 401);
+            return true;
+        }
+        return false;
     }
 
     private CommandBridgeRequestAuthenticator.Result authenticate(HttpExchange exchange, String body) {
