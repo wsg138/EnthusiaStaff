@@ -45,10 +45,8 @@ public final class HelperObserverProtectionListener implements Listener {
     @EventHandler(priority = EventPriority.HIGHEST)
     public void onAirItemUse(PlayerInteractEvent event) {
         ItemStack item = event.getItem();
-        StaffRank rank = rank(event.getPlayer());
         if (HelperObserverPolicy.blocksAirItemUse(
-                staffMode.active(event.getPlayer().getUniqueId()),
-                rank,
+                activeHelper(event.getPlayer()),
                 event.getAction(),
                 item != null && !item.getType().isAir()
         )) {
@@ -68,12 +66,7 @@ public final class HelperObserverProtectionListener implements Listener {
         if (!(event.getHitEntity() instanceof Player player)) {
             return;
         }
-        StaffRank rank = rank(player);
-        if (!HelperObserverPolicy.blocksProjectileCollision(
-                staffMode.active(player.getUniqueId()),
-                rank,
-                true
-        )) {
+        if (!HelperObserverPolicy.blocksProjectileCollision(activeHelper(player), true)) {
             return;
         }
         event.setCancelled(true);
@@ -92,12 +85,7 @@ public final class HelperObserverProtectionListener implements Listener {
                 || !(event.getCollidedWith() instanceof Player player)) {
             return;
         }
-        StaffRank rank = rank(player);
-        if (HelperObserverPolicy.blocksProjectileCollision(
-                staffMode.active(player.getUniqueId()),
-                rank,
-                true
-        )) {
+        if (HelperObserverPolicy.blocksProjectileCollision(activeHelper(player), true)) {
             event.setCancelled(true);
         }
     }
@@ -125,10 +113,8 @@ public final class HelperObserverProtectionListener implements Listener {
 
     @EventHandler(priority = EventPriority.HIGHEST)
     public void onExperienceChange(PlayerExpChangeEvent event) {
-        StaffRank rank = rank(event.getPlayer());
         event.setAmount(HelperObserverPolicy.experienceAmount(
-                staffMode.active(event.getPlayer().getUniqueId()),
-                rank,
+                activeHelper(event.getPlayer()),
                 event.getAmount()
         ));
     }
@@ -209,6 +195,9 @@ public final class HelperObserverProtectionListener implements Listener {
         }
         Mob targetMob = mob;
         targetMob.getScheduler().run(plugin, ignoredMob -> {
+            if (!staffMode.helperObserverActive(targetId)) {
+                return;
+            }
             var currentTarget = targetMob.getTarget();
             if (currentTarget != null && targetId.equals(currentTarget.getUniqueId())) {
                 targetMob.setTarget(null);
