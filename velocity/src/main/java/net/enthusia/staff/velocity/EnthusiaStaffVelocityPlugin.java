@@ -88,6 +88,7 @@ import net.enthusia.staff.persistence.migration.MigrationExecutionReport;
 import net.enthusia.staff.protocol.PersistentChannelServer;
 import net.enthusia.staff.protocol.ProtocolEnvelope;
 import net.enthusia.staff.protocol.TlsContextLoader;
+import net.enthusia.staff.protocol.TransferSnapshotMessages;
 import net.kyori.adventure.text.Component;
 import org.slf4j.Logger;
 
@@ -146,6 +147,8 @@ public final class EnthusiaStaffVelocityPlugin {
             new java.util.concurrent.ConcurrentHashMap<>();
     private final StaffModeReconnectCoordinator staffReconnects = new StaffModeReconnectCoordinator();
     private final StaffModeHandoffTracker staffHandoffs = new StaffModeHandoffTracker();
+    private final StaffTransferSnapshotCache transferSnapshots =
+            new StaffTransferSnapshotCache(Clock.systemUTC());
 
     private volatile ExecutorService workers;
     private volatile VelocityConfiguration configuration;
@@ -367,6 +370,9 @@ public final class EnthusiaStaffVelocityPlugin {
     @Subscribe
     public void onDisconnect(DisconnectEvent event) {
         staffReconnects.disconnected(event.getPlayer().getUniqueId());
+        // Drop any cached transfer snapshot: a disconnect mid-transfer must not leak state
+        // into a later, unrelated transfer.
+        transferSnapshots.evict(event.getPlayer().getUniqueId());
         PlayerDirectory directory = playerDirectory;
         VelocityConfiguration loaded = configuration;
         if (directory == null || loaded == null) {
@@ -748,6 +754,9 @@ public final class EnthusiaStaffVelocityPlugin {
                 ),
                 Clock.systemUTC(),
                 envelope -> {
+                    if (acceptTransferSnapshot(envelope)) {
+                        return true;
+                    }
                     if (networkVerifier.acceptReport(envelope) || acceptStaffModeReady(envelope)) {
                         return true;
                     }
@@ -1228,7 +1237,8 @@ public final class EnthusiaStaffVelocityPlugin {
             return;
         }
         StaffModeBackendHandoffCoordinator coordinator = handoffCoordinator(sessions);
-        var decision = coordinator.transfer(playerId, session, current, requested, transferId);
+        var decision = coordinator.transfer(
+                playerId, session, current, requested, transferId, transferSnapshots::take);
         if (!decision.allowed()) {
             if (decision.reconcile()) {
                 scheduleStaffHandoffTimeout(playerId, transferId);
@@ -1239,6 +1249,35 @@ public final class EnthusiaStaffVelocityPlugin {
             return;
         }
         scheduleStaffHandoffTimeout(playerId, transferId);
+    }
+
+    /**
+     * Caches a cross-server transfer snapshot uploaded by a source backend
+     * (overnight/cross-server). The upload arrives before any database write on the source;
+     * the proxy holds it just long enough to forward it to the destination backend inside
+     * the handoff prepare message, so transfers never wait on persistence.
+     */
+    private boolean acceptTransferSnapshot(ProtocolEnvelope envelope) {
+        if (!TransferSnapshotMessages.UPLOAD.equals(envelope.messageType())) {
+            return false;
+        }
+        try {
+            net.enthusia.staff.domain.staff.StaffTransferSnapshot snapshot =
+                    TransferSnapshotMessages.decode(envelope.payloadJson());
+            if (snapshot == null) {
+                logger.warn("Rejected empty staff transfer snapshot from {}", envelope.serverId());
+                return true;
+            }
+            transferSnapshots.put(snapshot);
+            if (logger.isDebugEnabled()) {
+                logger.debug("Cached staff transfer snapshot for {} (transfer {})",
+                        snapshot.playerId(), snapshot.transferId());
+            }
+            return true;
+        } catch (IllegalArgumentException exception) {
+            logger.warn("Rejected malformed staff transfer snapshot from {}", envelope.serverId());
+            return true;
+        }
     }
 
     private boolean acceptStaffModeReady(ProtocolEnvelope envelope) {

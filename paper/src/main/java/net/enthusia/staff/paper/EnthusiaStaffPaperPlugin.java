@@ -900,7 +900,23 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
                     return reconciler != null && reconciler.reconcile(playerId);
                 },
                 integrations::deliverNetworkPunishment,
-                PaperStaffModeHandoffHandler.forManager(json, runtimeComponents.staffMode())
+                PaperStaffModeHandoffHandler.forManager(
+                        json,
+                        runtimeComponents.staffMode(),
+                        new PaperStaffModeHandoffHandler.TransferSnapshotHook() {
+                            @Override
+                            public void captureAndUpload(UUID playerId, UUID transferId) {
+                                runtimeComponents.transferSnapshots().captureAndUpload(playerId, transferId);
+                            }
+
+                            @Override
+                            public void stashReceived(
+                                    net.enthusia.staff.domain.staff.StaffTransferSnapshot snapshot) {
+                                runtimeComponents.transferSnapshots().stash(snapshot);
+                            }
+                        },
+                        getLogger()
+                )
         );
         PaperPersistentChannelFactory.Settings channel = PaperPersistentChannelFactory.snapshot(
                 configurationSnapshot.restartRequired(),
@@ -918,6 +934,10 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
                 resources.close("persistent Velocity channel opened during shutdown", started);
                 return;
             }
+            // Bind the cross-server transfer snapshot sender (overnight/cross-server): the
+            // source backend uploads its in-memory vanish/staff-mode snapshot to the proxy
+            // over this channel without ever blocking the transfer on it.
+            runtimeComponents.transferSnapshots().bindSender(started::send);
             runtimeComponents.staffMode().setActiveSessionListener(session -> started.send(
                     UUID.randomUUID(),
                     PaperStaffModeHandoffHandler.READY,

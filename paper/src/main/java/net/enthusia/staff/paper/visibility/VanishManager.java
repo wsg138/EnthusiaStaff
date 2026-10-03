@@ -163,6 +163,68 @@ public final class VanishManager implements Listener {
         return visibility.isVanished(playerId);
     }
 
+    /**
+     * Cross-server transfer hook (overnight/cross-server). Read-only: returns the staff
+     * member's selected vanish game mode, if known, for inclusion in a transfer snapshot.
+     * Does not change any vanish state.
+     */
+    public java.util.Optional<GameMode> transferSelectedGameMode(UUID playerId) {
+        if (playerId == null) {
+            return java.util.Optional.empty();
+        }
+        return java.util.Optional.ofNullable(selectedGameModes.get(playerId));
+    }
+
+    /**
+     * Cross-server transfer hook (overnight/cross-server). Applies a vanish state snapshot
+     * carried from the source backend, before the join-message logic runs on arrival.
+     *
+     * <p>The transferred snapshot is authoritative for this session: it is applied
+     * synchronously from in-memory state with no database write. The existing asynchronous
+     * durable-vanish load remains the fallback and reconciles with the database afterwards.
+     * When the snapshot says the player was not vanished this is a no-op.</p>
+     */
+    public void applyTransferSnapshot(
+            Player player,
+            net.enthusia.staff.domain.staff.StaffTransferSnapshot snapshot
+    ) {
+        java.util.Objects.requireNonNull(player, "player");
+        java.util.Objects.requireNonNull(snapshot, "snapshot");
+        if (!snapshot.vanished()) {
+            return;
+        }
+        UUID playerId = player.getUniqueId();
+        if (!snapshot.playerId().equals(playerId)) {
+            throw new IllegalArgumentException("transfer snapshot belongs to a different player");
+        }
+        StaffRank rank = snapshot.rank() != null
+                ? snapshot.rank()
+                : PaperStaffRankResolver.resolve(player::hasPermission).orElse(null);
+        if (rank == null) {
+            plugin.getLogger().warning(
+                    "Ignoring cross-server vanish snapshot for " + playerId
+                            + ": no staff rank available on this backend");
+            return;
+        }
+        durableVanishedRanks.put(playerId, rank);
+        if (snapshot.selectedGameMode() != null) {
+            try {
+                selectedGameModes.put(playerId, GameMode.valueOf(snapshot.selectedGameMode()));
+            } catch (IllegalArgumentException exception) {
+                plugin.getLogger().warning(
+                        "Ignoring invalid transferred vanish selected game mode for " + playerId);
+            }
+        }
+        visibility.setVanished(playerId, rank, true);
+        enforceVanishSpectator(player);
+        audiences.updateGameMode(playerId, player.getGameMode());
+        audiences.refreshViewer(playerId);
+        audiences.refreshTarget(playerId);
+        plugin.getLogger().info(
+                "Applied cross-server vanish snapshot for " + player.getName()
+                        + " from backend " + snapshot.sourceServer());
+    }
+
     public boolean canSee(UUID viewerId, UUID targetId) {
         return visibility.canSee(viewerId, targetId);
     }

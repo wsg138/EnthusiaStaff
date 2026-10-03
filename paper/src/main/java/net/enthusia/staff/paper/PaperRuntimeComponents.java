@@ -33,6 +33,8 @@ import net.enthusia.staff.paper.staff.StaffModeWorldInteractionListener;
 import net.enthusia.staff.paper.staff.StaffStatePresentation;
 import net.enthusia.staff.paper.staff.StaffToolDispatcher;
 import net.enthusia.staff.paper.staff.StaffToolTransferListener;
+import net.enthusia.staff.paper.staff.StaffTransferJoinListener;
+import net.enthusia.staff.paper.staff.StaffTransferSnapshotCoordinator;
 import net.enthusia.staff.paper.tester.CheatTesterCommand;
 import net.enthusia.staff.paper.tester.CheatTesterManager;
 import net.enthusia.staff.paper.tester.CheatTesterSettings;
@@ -60,7 +62,8 @@ record PaperRuntimeComponents(
         DefaultStaffVisibilityService visibility,
         VanishManager vanish,
         InventoryOperationContext inventoryContext,
-        InventoryCoordinator inventory
+        InventoryCoordinator inventory,
+        StaffTransferSnapshotCoordinator transferSnapshots
 ) {
     static PaperRuntimeComponents create(Dependencies dependencies) {
         ReportEvidenceMaintenance evidence = new ReportEvidenceMaintenance(
@@ -82,12 +85,19 @@ record PaperRuntimeComponents(
         registerStaffDutyContext(dependencies, staffMode);
         DefaultStaffVisibilityService visibility = createVisibilityService(dependencies);
         VanishManager vanish = createVanishManager(dependencies, staffMode, visibility);
+        StaffTransferSnapshotCoordinator transferSnapshots = new StaffTransferSnapshotCoordinator(
+                dependencies.environment().plugin(),
+                dependencies.environment().clock(),
+                dependencies.environment().serverId(),
+                staffMode,
+                vanish
+        );
         StaffStatePresentation statePresentation = new StaffStatePresentation(
                 dependencies.environment().plugin(), staffMode, vanish
         );
         registerListener(dependencies.environment().plugin(), statePresentation);
         statePresentation.start();
-        registerOperationalListeners(dependencies, vanish);
+        registerOperationalListeners(dependencies, vanish, transferSnapshots);
         InventoryOperationContext inventoryContext = new InventoryOperationContext(
                 dependencies.environment().clock(),
                 dependencies.environment().inventoryScopeId(),
@@ -123,7 +133,8 @@ record PaperRuntimeComponents(
                 visibility,
                 vanish,
                 inventoryContext,
-                inventory
+                inventory,
+                transferSnapshots
         );
     }
 
@@ -290,7 +301,11 @@ record PaperRuntimeComponents(
         }
     }
 
-    private static void registerOperationalListeners(Dependencies dependencies, VanishManager vanish) {
+    private static void registerOperationalListeners(
+            Dependencies dependencies,
+            VanishManager vanish,
+            StaffTransferSnapshotCoordinator transferSnapshots
+    ) {
         JavaPlugin plugin = dependencies.environment().plugin();
         registerListener(plugin, new PaperPresenceListener(
                 plugin,
@@ -301,6 +316,7 @@ record PaperRuntimeComponents(
         ));
         registerListener(plugin, new VanishBroadcastListener(vanish));
         registerListener(plugin, new PrivateMessagePresenceListener(plugin, vanish));
+        registerListener(plugin, new StaffTransferJoinListener(plugin, transferSnapshots, vanish));
     }
 
     private static FakeBaseManager createFakeBaseManager(
