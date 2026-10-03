@@ -52,7 +52,7 @@ final class AiReviewGuiController implements Listener {
     private final Clock clock = Clock.systemUTC();
     private final AtomicLong generation = new AtomicLong();
     private final Map<UUID, Long> activeGeneration = new ConcurrentHashMap<>();
-    private final Map<UUID, UUID> pendingLoads = new ConcurrentHashMap<>();
+    private final AiReviewLoadFence loadFence = new AiReviewLoadFence();
 
     AiReviewGuiController(JavaPlugin plugin, AiReviewSubsystem subsystem) {
         this.plugin = plugin;
@@ -152,7 +152,7 @@ final class AiReviewGuiController implements Listener {
     @EventHandler(priority = EventPriority.MONITOR)
     public void onQuit(PlayerQuitEvent event) {
         UUID viewerId = event.getPlayer().getUniqueId();
-        pendingLoads.remove(viewerId);
+        loadFence.retire(viewerId);
         activeGeneration.remove(viewerId);
     }
 
@@ -364,14 +364,12 @@ final class AiReviewGuiController implements Listener {
     }
 
     private boolean validAgainstFresh(AiReviewGuiState.Confirm state, EventDetails fresh) {
-        if (state.proposalId() == null) {
-            return fresh.acceptedCorrection() == null;
-        }
-        Correction pending = fresh.pendingCorrection(state.proposalId());
-        if (pending == null) {
-            return false;
-        }
-        return state.kind() != WriteKind.CORRECT || pending.corrected().equals(state.decision());
+        return AiReviewWriteFence.valid(
+                state.kind(),
+                state.proposalId(),
+                state.decision(),
+                fresh
+        );
     }
 
     private void write(
@@ -504,14 +502,12 @@ final class AiReviewGuiController implements Listener {
     }
 
     private UUID beginLoad(Player viewer) {
-        UUID token = UUID.randomUUID();
-        pendingLoads.put(viewer.getUniqueId(), token);
-        return token;
+        return loadFence.begin(viewer.getUniqueId());
     }
 
     private boolean loadCurrent(Player viewer, UUID token) {
         return viewer.isOnline()
-                && token.equals(pendingLoads.remove(viewer.getUniqueId()));
+                && loadFence.consume(viewer.getUniqueId(), token);
     }
 
     private void loadFailed(Player viewer, UUID token, String issue) {

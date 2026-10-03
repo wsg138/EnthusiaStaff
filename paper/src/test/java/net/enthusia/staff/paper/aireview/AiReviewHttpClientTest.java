@@ -18,6 +18,8 @@ import java.time.Duration;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
@@ -96,6 +98,114 @@ class AiReviewHttpClientTest {
             );
             assertEquals(AiReviewModels.CorrectionStatus.REJECTED, correction.status());
             assertEquals("/v1/review-corrections/proposal-1/reject", server.awaitRequest().target());
+        }
+    }
+
+    @Test
+    void twoDistinctStaffApprovalsAndDuplicateReviewerRemainCentralSemantics() throws Exception {
+        Set<String> reviewers = ConcurrentHashMap.newKeySet();
+        try (MiniServer server = new MiniServer(request -> {
+            try {
+                var body = json.readTree(request.body());
+                String reviewer = body.get("reviewer_id").asText();
+                String authority = body.get("authority").asText();
+                if ("ADMIN".equals(authority)) {
+                    return Response.json(201, correctionJson("ACCEPTED", 1, 0));
+                }
+                reviewers.add(reviewer);
+                int approvals = reviewers.size();
+                return Response.json(
+                        201,
+                        correctionJson(
+                                approvals >= 2 ? "ACCEPTED" : "PENDING_CONFIRMATION",
+                                approvals,
+                                0
+                        )
+                );
+            } catch (IOException exception) {
+                throw new IllegalStateException(exception);
+            }
+        })) {
+            AiReviewHttpClient client = client(server, 64 * 1024, 2_000);
+            var first = client.correct(
+                    "event-1", "staff-a", CorrectionAuthority.STAFF, decision(), null
+            );
+            var duplicate = client.correct(
+                    "event-1", "staff-a", CorrectionAuthority.STAFF, decision(), null
+            );
+            var second = client.correct(
+                    "event-1", "staff-b", CorrectionAuthority.STAFF, decision(), null
+            );
+            assertEquals(AiReviewModels.CorrectionStatus.PENDING_CONFIRMATION, first.status());
+            assertEquals(1, first.approvals());
+            assertEquals(AiReviewModels.CorrectionStatus.PENDING_CONFIRMATION, duplicate.status());
+            assertEquals(1, duplicate.approvals());
+            assertEquals(AiReviewModels.CorrectionStatus.ACCEPTED, second.status());
+            assertEquals(2, second.approvals());
+        }
+    }
+
+    @Test
+    void adminCorrectionAuthorityIsPropagatedAndCentralResponseMayAcceptImmediately() throws Exception {
+        try (MiniServer server = new MiniServer(request -> Response.json(
+                201,
+                correctionJson("ACCEPTED", 1, 0)
+        ))) {
+            var result = client(server, 64 * 1024, 2_000).correct(
+                    "event-1",
+                    "admin-a",
+                    CorrectionAuthority.ADMIN,
+                    decision(),
+                    null
+            );
+            assertEquals(AiReviewModels.CorrectionStatus.ACCEPTED, result.status());
+            var body = json.readTree(server.awaitRequest().body());
+            assertEquals("ADMIN", body.get("authority").asText());
+        }
+    }
+
+    @Test
+    void staffRejectVotesRequireDistinctReviewersWhileAdminRejectMayResolveImmediately() throws Exception {
+        Set<String> reviewers = ConcurrentHashMap.newKeySet();
+        try (MiniServer server = new MiniServer(request -> {
+            try {
+                var body = json.readTree(request.body());
+                if ("ADMIN".equals(body.get("authority").asText())) {
+                    return Response.json(200, correctionJson("REJECTED", 0, 1));
+                }
+                reviewers.add(body.get("reviewer_id").asText());
+                int rejections = reviewers.size();
+                return Response.json(
+                        200,
+                        correctionJson(
+                                rejections >= 2 ? "REJECTED" : "PENDING_CONFIRMATION",
+                                0,
+                                rejections
+                        )
+                );
+            } catch (IOException exception) {
+                throw new IllegalStateException(exception);
+            }
+        })) {
+            AiReviewHttpClient client = client(server, 64 * 1024, 2_000);
+            var first = client.reject(
+                    "proposal-1", "staff-a", CorrectionAuthority.STAFF, null
+            );
+            var duplicate = client.reject(
+                    "proposal-1", "staff-a", CorrectionAuthority.STAFF, null
+            );
+            var second = client.reject(
+                    "proposal-1", "staff-b", CorrectionAuthority.STAFF, null
+            );
+            var admin = client.reject(
+                    "proposal-1", "admin-a", CorrectionAuthority.ADMIN, null
+            );
+            assertEquals(AiReviewModels.CorrectionStatus.PENDING_CONFIRMATION, first.status());
+            assertEquals(1, first.rejections());
+            assertEquals(1, duplicate.rejections());
+            assertEquals(AiReviewModels.CorrectionStatus.REJECTED, second.status());
+            assertEquals(2, second.rejections());
+            assertEquals(AiReviewModels.CorrectionStatus.REJECTED, admin.status());
         }
     }
 
@@ -331,6 +441,19 @@ class AiReviewHttpClientTest {
                 .replace("\"PENDING_CONFIRMATION\"", "\"REJECTED\"")
                 .replace("\"rejections\":0", "\"rejections\":2")
                 .replace("\"resolved_at\":null", "\"resolved_at\":\"2026-10-03T20:00:02Z\"");
+    }
+
+    private static String correctionJson(String status, int approvals, int rejections) {
+        return correctionJson()
+                .replace("\"PENDING_CONFIRMATION\"", "\"" + status + "\"")
+                .replace("\"approvals\":1", "\"approvals\":" + approvals)
+                .replace("\"rejections\":0", "\"rejections\":" + rejections)
+                .replace(
+                        "\"resolved_at\":null",
+                        "PENDING_CONFIRMATION".equals(status)
+                                ? "\"resolved_at\":null"
+                                : "\"resolved_at\":\"2026-10-03T20:00:02Z\""
+                );
     }
 
     private record Request(String method, String target, Map<String, String> headers, String body) {
