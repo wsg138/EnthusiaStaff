@@ -124,6 +124,19 @@ public final class StaffModeManager implements Listener {
     }
 
     /**
+     * Returns whether the currently applied Staff Mode profile is the Helper observer profile.
+     *
+     * <p>This deliberately reads the session's cached rank instead of live permissions so Helper
+     * protections remain fail-closed while a rank removal/change is being reconciled. The backing
+     * maps are concurrent, so callers may safely use this from another entity scheduler.</p>
+     */
+    boolean helperObserverActive(UUID playerId) {
+        return playerId != null
+                && active.containsKey(playerId)
+                && ranks.get(playerId) == StaffRank.HELPER;
+    }
+
+    /**
      * Returns the authoritative Staff Mode session rank, or null if the player
      * has no active session or the rank is currently being reconciled.
      * Callers must treat null as fail-closed while Staff Mode is active.
