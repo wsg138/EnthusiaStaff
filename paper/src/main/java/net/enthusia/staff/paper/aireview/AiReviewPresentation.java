@@ -50,17 +50,47 @@ final class AiReviewPresentation {
         lines.add("Model: " + bounded(details.decision().localModelVersion(), 80)
                 + " policy=" + bounded(details.decision().policyVersion(), 40));
         boundedEntries(details.decision().scores(), config.maximumScores(), "Scores", lines);
+        if (details.decision().confidence() != null) {
+            lines.add("Confidence: " + String.format(
+                    java.util.Locale.ROOT,
+                    "%.3f",
+                    details.decision().confidence()
+            ));
+        }
+        List<String> rules = details.decision().ruleHits().stream()
+                .limit(config.maximumReasonCodes())
+                .toList();
+        if (!rules.isEmpty()) {
+            lines.add("Rules: " + bounded(String.join(", ", rules), 240));
+        }
         List<String> reasons = details.decision().reasonCodes().stream()
                 .limit(config.maximumReasonCodes())
                 .toList();
         if (!reasons.isEmpty()) {
             lines.add("Reasons: " + bounded(String.join(", ", reasons), 240));
         }
+        AiReviewModels.IncidentSummary incident = details.decision().incident();
+        if (incident != null) {
+            lines.add("Incident: " + bounded(incident.incidentId(), 64)
+                    + " kind=" + incident.kind()
+                    + " severity=" + incident.severity()
+                    + " coordinated=" + incident.coordinated());
+            lines.add("Incident participants/targets: "
+                    + incident.participantIds().size() + "/" + incident.targetIds().size());
+        }
         Advisory advisory = details.advisory();
         if (advisory != null) {
             lines.add("Advisory: " + advisory.status()
                     + (advisory.model() == null ? "" : " model=" + bounded(advisory.model(), 60)));
             boundedEntries(advisory.scores(), config.maximumScores(), "Advisory scores", lines);
+            if (!advisory.categories().isEmpty()) {
+                String categories = advisory.categories().entrySet().stream()
+                        .sorted(Map.Entry.comparingByKey())
+                        .limit(config.maximumScores())
+                        .map(entry -> entry.getKey() + "=" + entry.getValue())
+                        .collect(java.util.stream.Collectors.joining(", "));
+                lines.add("Advisory categories: " + bounded(categories, 240));
+            }
         }
         int contextLimit = Math.min(config.maximumContextItems(), details.contextEvidence().size());
         for (int index = 0; index < contextLimit; index++) {

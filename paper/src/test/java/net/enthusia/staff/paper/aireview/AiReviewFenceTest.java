@@ -139,6 +139,7 @@ class AiReviewFenceTest {
                 0.9,
                 List.of("rule"),
                 List.of("reason"),
+                null,
                 "model-v1",
                 "v1"
         );

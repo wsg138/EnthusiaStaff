@@ -243,8 +243,34 @@ final class AiReviewHttpClient implements AiReviewClient {
                 optionalDouble(node, "confidence"),
                 textArray(node, "rule_hits", 32),
                 textArray(node, "reason_codes", 32),
+                parseIncident(node.get("incident")),
                 requiredText(node, "local_model_version"),
                 requiredText(node, "policy_version")
+        );
+    }
+
+    private AiReviewModels.IncidentSummary parseIncident(JsonNode node) {
+        if (node == null || node.isNull()) {
+            return null;
+        }
+        if (!node.isObject()) {
+            throw new AiReviewClientException(Category.MALFORMED);
+        }
+        int severity = requiredNonNegativeInteger(node, "severity");
+        if (severity > 100) {
+            throw new AiReviewClientException(Category.MALFORMED);
+        }
+        JsonNode coordinated = node.get("coordinated");
+        if (coordinated == null || !coordinated.isBoolean()) {
+            throw new AiReviewClientException(Category.MALFORMED);
+        }
+        return new AiReviewModels.IncidentSummary(
+                requiredText(node, "incident_id"),
+                enumValue(AiReviewModels.IncidentKind.class, node, "kind"),
+                severity,
+                coordinated.booleanValue(),
+                textArray(node, "participant_ids", 64),
+                textArray(node, "target_ids", 64)
         );
     }
 

@@ -14,6 +14,7 @@ public final class AiReviewModels {
     public enum StrikeRecommendation { NONE, EVIDENCE, STRIKE }
     public enum Containment { NONE, MUTE }
     public enum SupportFlow { NONE, SELF_HARM_CHECK, TARGET_SAFETY_CHECK }
+    public enum IncidentKind { HARASSMENT, DOGPILE, THREAT, DOXXING, BLACKMAIL, GROOMING, SAFETY, OTHER }
     public enum CorrectionAuthority { STAFF, ADMIN }
     public enum CorrectionStatus { PENDING_CONFIRMATION, ACCEPTED, REJECTED }
 
@@ -53,6 +54,25 @@ public final class AiReviewModels {
         }
     }
 
+    public record IncidentSummary(
+            String incidentId,
+            IncidentKind kind,
+            int severity,
+            boolean coordinated,
+            List<String> participantIds,
+            List<String> targetIds
+    ) {
+        public IncidentSummary {
+            incidentId = required(incidentId, "incidentId");
+            kind = Objects.requireNonNull(kind, "kind");
+            if (severity < 0 || severity > 100) {
+                throw new IllegalArgumentException("incident severity must be between 0 and 100");
+            }
+            participantIds = List.copyOf(participantIds == null ? List.of() : participantIds);
+            targetIds = List.copyOf(targetIds == null ? List.of() : targetIds);
+        }
+    }
+
     public record Decision(
             MessageAction messageAction,
             String semanticLabel,
@@ -65,6 +85,7 @@ public final class AiReviewModels {
             Double confidence,
             List<String> ruleHits,
             List<String> reasonCodes,
+            IncidentSummary incident,
             String localModelVersion,
             String policyVersion
     ) {

@@ -57,6 +57,9 @@ class AiReviewHttpClientTest {
             assertEquals("event-1", details.eventId());
             assertEquals("hello", details.text());
             assertEquals(MessageAction.ALLOW, details.decision().messageAction());
+            assertEquals("incident-1", details.decision().incident().incidentId());
+            assertEquals(AiReviewModels.IncidentKind.THREAT, details.decision().incident().kind());
+            assertEquals(72, details.decision().incident().severity());
             assertEquals(1, details.contextEvidence().size());
             assertEquals(1, details.corrections().size());
         }
@@ -365,7 +368,14 @@ class AiReviewHttpClientTest {
                     "reason_codes":["reason"],
                     "related_message_ids":[],
                     "related_messages":[],
-                    "incident":null,
+                    "incident":{
+                      "incident_id":"incident-1",
+                      "kind":"THREAT",
+                      "severity":72,
+                      "coordinated":false,
+                      "participant_ids":["player-a"],
+                      "target_ids":["player-b"]
+                    },
                     "local_model_version":"w12",
                     "policy_version":"v1",
                     "advisory_status":"DISABLED",

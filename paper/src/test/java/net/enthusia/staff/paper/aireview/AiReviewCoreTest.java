@@ -312,6 +312,7 @@ class AiReviewCoreTest {
                 0.9,
                 List.of("rule-a"),
                 List.of("reason-a"),
+                null,
                 "model-v1",
                 "v1"
         );
