@@ -187,8 +187,10 @@ final class PaperStaffModeHandoffHandler {
                     transferSnapshots.stashReceived(snapshot);
                 }
             } catch (RuntimeException exception) {
-                logger.log(Level.WARNING,
-                        "Ignoring invalid transfer snapshot in prepare payload for " + playerId, exception);
+                if (logger.isLoggable(Level.WARNING)) {
+                    logger.log(Level.WARNING,
+                            "Ignoring invalid transfer snapshot in prepare payload for " + playerId, exception);
+                }
             }
         }
         return prepared;
