@@ -158,9 +158,10 @@ discord:
 # only this subsystem; they never disable normal EnthusiaStaff startup or moderation.
 ai-review:
   enabled: false
-  base-url: http://127.0.0.1:8787
+  base-url: ""
   client-id: enthusiastaff-paper
   token-environment: ES_AI_REVIEW_TOKEN
+  notification-permission: enthusiastaff.ai-review.queue
   connect-timeout-millis: 1000
   request-timeout-millis: 2000
   poll-interval-millis: 10000
