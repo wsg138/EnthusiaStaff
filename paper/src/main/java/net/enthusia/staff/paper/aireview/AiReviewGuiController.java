@@ -80,11 +80,11 @@ final class AiReviewGuiController implements Listener {
         openQueueState(viewer, page, snapshot);
         if (refreshIfStale) {
             UUID token = beginLoad(viewer);
-            subsystem.refreshQueue(true, () -> {
+            subsystem.refreshQueue(true, () -> onEntity(viewer, () -> {
                 if (loadCurrent(viewer, token) && AiReviewPermissions.queue(viewer)) {
                     openQueueState(viewer, page, subsystem.snapshot());
                 }
-            });
+            }));
         }
     }
 
@@ -97,7 +97,7 @@ final class AiReviewGuiController implements Listener {
         message(viewer, "Loading central review event…", NamedTextColor.GRAY);
         subsystem.loadEvent(
                 eventId,
-                details -> {
+                details -> onEntity(viewer, () -> {
                     if (loadCurrent(viewer, token) && AiReviewPermissions.detail(viewer)) {
                         open(viewer, new AiReviewGuiState.Detail(
                                 viewer.getUniqueId(),
@@ -106,7 +106,7 @@ final class AiReviewGuiController implements Listener {
                                 returnPage
                         ));
                     }
-                },
+                }),
                 issue -> loadFailed(viewer, token, issue)
         );
     }
@@ -346,7 +346,7 @@ final class AiReviewGuiController implements Listener {
         message(viewer, "Revalidating central correction state…", NamedTextColor.GRAY);
         subsystem.loadEvent(
                 state.details().eventId(),
-                fresh -> {
+                fresh -> onEntity(viewer, () -> {
                     if (!loadCurrent(viewer, token) || !AiReviewPermissions.correct(viewer)) {
                         return;
                     }
@@ -358,7 +358,7 @@ final class AiReviewGuiController implements Listener {
                         return;
                     }
                     write(viewer, state, fresh, authority);
-                },
+                }),
                 issue -> loadFailed(viewer, token, issue)
         );
     }
@@ -405,25 +405,32 @@ final class AiReviewGuiController implements Listener {
     }
 
     private void writeComplete(Player viewer, Correction correction, int returnPage) {
-        message(
-                viewer,
-                "Central correction " + correction.status()
-                        + " · approvals=" + correction.approvals()
-                        + " rejections=" + correction.rejections() + '.',
-                correction.status() == AiReviewModels.CorrectionStatus.ACCEPTED
-                        ? NamedTextColor.GREEN : NamedTextColor.GOLD
-        );
-        subsystem.refreshQueue(false, () -> openQueue(viewer, returnPage, false));
+        onEntity(viewer, () -> {
+            message(
+                    viewer,
+                    "Central correction " + correction.status()
+                            + " · approvals=" + correction.approvals()
+                            + " rejections=" + correction.rejections() + '.',
+                    correction.status() == AiReviewModels.CorrectionStatus.ACCEPTED
+                            ? NamedTextColor.GREEN : NamedTextColor.GOLD
+            );
+            subsystem.refreshQueue(
+                    false,
+                    () -> onEntity(viewer, () -> openQueue(viewer, returnPage, false))
+            );
+        });
     }
 
     private void writeFailed(Player viewer, EventDetails fresh, int returnPage, String issue) {
-        message(viewer, "No correction was committed: " + issue + '.', NamedTextColor.YELLOW);
-        open(viewer, new AiReviewGuiState.Detail(
-                viewer.getUniqueId(),
-                nextGeneration(viewer),
-                fresh,
-                returnPage
-        ));
+        onEntity(viewer, () -> {
+            message(viewer, "No correction was committed: " + issue + '.', NamedTextColor.YELLOW);
+            open(viewer, new AiReviewGuiState.Detail(
+                    viewer.getUniqueId(),
+                    nextGeneration(viewer),
+                    fresh,
+                    returnPage
+            ));
+        });
     }
 
     private void openConfirm(
@@ -478,11 +485,17 @@ final class AiReviewGuiController implements Listener {
     }
 
     private void open(Player viewer, AiReviewGuiState state) {
-        if (!viewer.isOnline()) {
-            return;
-        }
-        AiReviewGuiRenderer renderer = new AiReviewGuiRenderer(subsystem.configuration());
-        viewer.openInventory(renderer.render(state, clock.instant(), adminAvailable(viewer)));
+        onEntity(viewer, () -> {
+            if (!viewer.isOnline() || !AiReviewPermissions.queue(viewer)) {
+                return;
+            }
+            if (!(state instanceof AiReviewGuiState.Queue)
+                    && !AiReviewPermissions.detail(viewer)) {
+                return;
+            }
+            AiReviewGuiRenderer renderer = new AiReviewGuiRenderer(subsystem.configuration());
+            viewer.openInventory(renderer.render(state, clock.instant(), adminAvailable(viewer)));
+        });
     }
 
     private boolean adminAvailable(Player viewer) {
@@ -502,9 +515,11 @@ final class AiReviewGuiController implements Listener {
     }
 
     private void loadFailed(Player viewer, UUID token, String issue) {
-        if (loadCurrent(viewer, token)) {
-            message(viewer, "AI review unavailable: " + issue + ". No write was made.", NamedTextColor.YELLOW);
-        }
+        onEntity(viewer, () -> {
+            if (loadCurrent(viewer, token)) {
+                message(viewer, "AI review unavailable: " + issue + ". No write was made.", NamedTextColor.YELLOW);
+            }
+        });
     }
 
     private long nextGeneration(Player viewer) {
@@ -513,11 +528,19 @@ final class AiReviewGuiController implements Listener {
         return next;
     }
 
-    private static void deny(Player viewer, String permission) {
+    private void deny(Player viewer, String permission) {
         message(viewer, "AI review permission denied: " + permission, NamedTextColor.RED);
     }
 
-    private static void message(Player viewer, String text, NamedTextColor color) {
-        viewer.sendMessage(StaffMessageStyle.style(Component.text(text, color)));
+    private void message(Player viewer, String text, NamedTextColor color) {
+        onEntity(viewer, () -> {
+            if (viewer.isOnline()) {
+                viewer.sendMessage(StaffMessageStyle.style(Component.text(text, color)));
+            }
+        });
+    }
+
+    private void onEntity(Player viewer, Runnable operation) {
+        viewer.getScheduler().execute(plugin, operation, null, 1L);
     }
 }
