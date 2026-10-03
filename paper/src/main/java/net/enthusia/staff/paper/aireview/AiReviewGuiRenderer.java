@@ -246,21 +246,51 @@ final class AiReviewGuiRenderer {
 
     private List<String> contextLore(EventDetails details) {
         List<String> lines = new ArrayList<>();
-        lines.add("Message: " + AiReviewPresentation.bounded(
-                details.text(),
-                Math.min(configuration.maximumMessageCharacters(), 320)
-        ));
+        appendWrapped(
+                lines,
+                "Message: ",
+                AiReviewPresentation.bounded(
+                        details.text(),
+                        Math.min(configuration.maximumMessageCharacters(), 800)
+                ),
+                72,
+                10
+        );
         int limit = Math.min(configuration.maximumContextItems(), details.contextEvidence().size());
-        for (int index = 0; index < limit; index++) {
-            lines.add((index + 1) + ": " + AiReviewPresentation.bounded(
-                    details.contextEvidence().get(index).text(),
-                    180
-            ));
+        for (int index = 0; index < limit && lines.size() < 22; index++) {
+            appendWrapped(
+                    lines,
+                    (index + 1) + ": ",
+                    AiReviewPresentation.bounded(details.contextEvidence().get(index).text(), 240),
+                    72,
+                    3
+            );
         }
-        if (details.contextEvidence().size() > limit) {
+        if (details.contextEvidence().size() > limit && lines.size() < 24) {
             lines.add("+" + (details.contextEvidence().size() - limit) + " more bounded evidence item(s)");
         }
         return List.copyOf(lines);
+    }
+
+    private static void appendWrapped(
+            List<String> lines,
+            String prefix,
+            String value,
+            int width,
+            int maximumLines
+    ) {
+        String remaining = value == null ? "" : value;
+        int emitted = 0;
+        while (!remaining.isEmpty() && emitted < maximumLines && lines.size() < 24) {
+            int take = Math.min(width, remaining.length());
+            String chunk = remaining.substring(0, take);
+            lines.add((emitted == 0 ? prefix : "  ") + chunk);
+            remaining = remaining.substring(take);
+            emitted++;
+        }
+        if (!remaining.isEmpty() && lines.size() < 24) {
+            lines.add("  …");
+        }
     }
 
     private static Component title(AiReviewGuiState state) {

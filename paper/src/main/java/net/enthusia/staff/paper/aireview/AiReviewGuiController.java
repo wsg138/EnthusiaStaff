@@ -450,6 +450,10 @@ final class AiReviewGuiController implements Listener {
     private void writeFailed(Player viewer, EventDetails fresh, int returnPage, String issue) {
         onEntity(viewer, () -> {
             message(viewer, "No correction was committed: " + issue + '.', NamedTextColor.YELLOW);
+            if ("central review conflict".equals(issue)) {
+                openEvent(viewer, fresh.eventId(), returnPage);
+                return;
+            }
             open(viewer, new AiReviewGuiState.Detail(
                     viewer.getUniqueId(),
                     nextGeneration(viewer),

@@ -209,7 +209,7 @@ final class AiReviewCommand implements CommandExecutor, TabCompleter {
             subsystem.correct(
                     details.eventId(), reviewer, authority, pending.corrected(), note,
                     correction -> result(player, correction),
-                    issue -> failed(player, issue)
+                    issue -> writeFailure(player, details.eventId(), issue)
             );
             return;
         }
@@ -222,7 +222,7 @@ final class AiReviewCommand implements CommandExecutor, TabCompleter {
             subsystem.reject(
                     pending.proposalId(), reviewer, authority, note,
                     correction -> result(player, correction),
-                    issue -> failed(player, issue)
+                    issue -> writeFailure(player, details.eventId(), issue)
             );
             return;
         }
@@ -277,8 +277,28 @@ final class AiReviewCommand implements CommandExecutor, TabCompleter {
         );
     }
 
-    private void failed(CommandSender sender, String issue) {
-        send(sender, "No correction was committed: " + issue, NamedTextColor.YELLOW);
+    private void writeFailure(Player player, String eventId, String issue) {
+        send(player, "No correction was committed: " + issue, NamedTextColor.YELLOW);
+        if (!"central review conflict".equals(issue)) {
+            return;
+        }
+        subsystem.loadEvent(
+                eventId,
+                details -> onPlayer(player, () -> {
+                    if (!player.isOnline() || !AiReviewPermissions.detail(player)) {
+                        return;
+                    }
+                    send(player, "Central state refreshed after the conflict:", NamedTextColor.GRAY);
+                    AiReviewPresentation.detailLines(details, subsystem.configuration()).stream()
+                            .limit(12)
+                            .forEach(line -> send(player, line, NamedTextColor.GRAY));
+                }),
+                refreshIssue -> send(
+                        player,
+                        "Central state refresh failed: " + refreshIssue,
+                        NamedTextColor.YELLOW
+                )
+        );
     }
 
     private void usage(CommandSender sender) {

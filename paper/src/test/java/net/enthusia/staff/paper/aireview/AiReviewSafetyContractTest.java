@@ -65,6 +65,25 @@ class AiReviewSafetyContractTest {
     }
 
     @Test
+    void conflictsRefreshAuthoritativeStateAndDoNotMasqueradeAsOutages() throws IOException {
+        String subsystem = Files.readString(SOURCE.resolve("AiReviewSubsystem.java"));
+        String gui = Files.readString(SOURCE.resolve("AiReviewGuiController.java"));
+        assertTrue(subsystem.contains("exception.category() == AiReviewClientException.Category.CONFLICT"));
+        assertTrue(subsystem.contains("failure.accept(\"central review conflict\")"));
+        assertTrue(gui.contains("\"central review conflict\".equals(issue)"));
+        assertTrue(gui.contains("openEvent(viewer, fresh.eventId(), returnPage)"));
+    }
+
+    @Test
+    void messageAndContextLoreAreBoundedAndWrapped() throws IOException {
+        String source = Files.readString(SOURCE.resolve("AiReviewGuiRenderer.java"));
+        assertTrue(source.contains("appendWrapped("));
+        assertTrue(source.contains("configuration.maximumMessageCharacters()"));
+        assertTrue(source.contains("configuration.maximumContextItems()"));
+        assertTrue(source.contains("lines.size() < 24"));
+    }
+
+    @Test
     void detailGuiKeepsCorrectionHistoryOnADedicatedBoundedSurface() throws IOException {
         String source = Files.readString(SOURCE.resolve("AiReviewGuiRenderer.java"));
         assertTrue(source.contains("\"Correction history\""));

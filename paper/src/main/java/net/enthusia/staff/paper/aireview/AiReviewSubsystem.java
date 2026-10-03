@@ -280,15 +280,24 @@ public final class AiReviewSubsystem implements AutoCloseable, Listener {
                         }
                     });
                 } catch (AiReviewClientException exception) {
-                    java.time.Duration delay = backoff.failure(clock.instant());
-                    String issue = "central review "
-                            + exception.category().name().toLowerCase(java.util.Locale.ROOT)
-                            + "; retry backoff " + Math.max(1L, delay.toSeconds()) + "s";
-                    schedule(() -> {
-                        if (!closed.get()) {
-                            failure.accept(issue);
-                        }
-                    });
+                    if (exception.category() == AiReviewClientException.Category.CONFLICT) {
+                        backoff.success();
+                        schedule(() -> {
+                            if (!closed.get()) {
+                                failure.accept("central review conflict");
+                            }
+                        });
+                    } else {
+                        java.time.Duration delay = backoff.failure(clock.instant());
+                        String issue = "central review "
+                                + exception.category().name().toLowerCase(java.util.Locale.ROOT)
+                                + "; retry backoff " + Math.max(1L, delay.toSeconds()) + "s";
+                        schedule(() -> {
+                            if (!closed.get()) {
+                                failure.accept(issue);
+                            }
+                        });
+                    }
                 } catch (RuntimeException exception) {
                     java.time.Duration delay = backoff.failure(clock.instant());
                     plugin.getLogger().log(Level.WARNING, "AI review operation failed", exception);
