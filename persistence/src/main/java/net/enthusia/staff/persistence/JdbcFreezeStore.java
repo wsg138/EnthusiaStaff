@@ -369,7 +369,7 @@ public final class JdbcFreezeStore implements FreezeStore {
         try (PreparedStatement statement = connection.prepareStatement("""
                 INSERT INTO discord_outbox(message_id, idempotency_key, destination, event_type,
                     payload_json, available_at, created_at)
-                VALUES (?, ?, 'logs-staffmode', ?, ?, ?, ?)
+                VALUES (?, ?, 'punishments', ?, ?, ?, ?)
                 """)) {
             UUID messageId = UUID.randomUUID();
             statement.setBytes(1, UuidBytes.toBytes(messageId));

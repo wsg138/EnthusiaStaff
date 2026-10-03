@@ -9,13 +9,16 @@ final class PunishmentApprovalRules {
     private PunishmentApprovalRules() {
     }
 
+    /**
+     * Helpers are request-only: every punishment they propose routes to Mod-or-above approval,
+     * regardless of sanction severity. They can never issue a punishment directly.
+     */
     static boolean requiresApproval(StaffRank actorRank, List<SanctionSpec> sanctions) {
         Objects.requireNonNull(actorRank);
         Objects.requireNonNull(sanctions);
         if (actorRank == StaffRank.DEVELOPER) {
             return true;
         }
-        return actorRank == StaffRank.HELPER && sanctions.stream()
-                .anyMatch(specification -> specification.length().isPermanent());
+        return actorRank == StaffRank.HELPER;
     }
 }

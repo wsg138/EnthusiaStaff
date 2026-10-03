@@ -27,8 +27,8 @@ final class PunishmentApprovalRulesTest {
     }
 
     @Test
-    void helperActionsOnlyRequireApprovalForPermanentSanctions() {
-        assertFalse(PunishmentApprovalRules.requiresApproval(StaffRank.HELPER, TEMPORARY));
+    void helperActionsAlwaysRequireApprovalRegardlessOfSeverity() {
+        assertTrue(PunishmentApprovalRules.requiresApproval(StaffRank.HELPER, TEMPORARY));
         assertTrue(PunishmentApprovalRules.requiresApproval(StaffRank.HELPER, PERMANENT));
     }
 

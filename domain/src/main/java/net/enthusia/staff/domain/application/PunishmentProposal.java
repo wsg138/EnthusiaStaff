@@ -45,10 +45,6 @@ public record PunishmentProposal(
         if (!escalation.selectedStep().sanctions().equals(sanctions)) {
             throw new IllegalArgumentException("punishment proposal sanctions must match its frozen escalation step");
         }
-        if (requester.rank() == StaffRank.HELPER
-                && sanctions.stream().noneMatch(specification -> specification.length().isPermanent())) {
-            throw new IllegalArgumentException("Helper punishment proposals must include a permanent sanction");
-        }
     }
 
     public static PunishmentProposal from(

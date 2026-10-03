@@ -147,3 +147,9 @@ visibility:
     DEVELOPER: [HELPER, MOD, DEVELOPER, ADMIN]
     ADMIN: [HELPER, MOD, DEVELOPER, ADMIN]
     FOUNDER: [HELPER, MOD, DEVELOPER, ADMIN, FOUNDER]
+
+discord:
+  # Outside the current /estaff reload scope; restart to apply changes.
+  # The Discord bot forwards staff-action audit lines (destination "staff-action-log") to this
+  # channel. Empty disables forwarding; the per-server file log always keeps recording.
+  log-forward-channel: ""

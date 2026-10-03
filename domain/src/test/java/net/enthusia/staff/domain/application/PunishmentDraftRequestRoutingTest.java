@@ -80,18 +80,19 @@ class PunishmentDraftRequestRoutingTest {
     }
 
     @Test
-    void helperTemporaryConfirmationStillAppliesDirectly() {
+    void helperTemporaryConfirmationRoutesToRequest() {
         Fixture fixture = fixture(SanctionLength.temporary(Duration.ofHours(6)));
         prepare(fixture, StaffRank.HELPER);
 
-        PunishmentDraftConfirmation.Applied applied = assertInstanceOf(
-                PunishmentDraftConfirmation.Applied.class,
+        // Helpers are request-only: temporary drafts route to approval like any other.
+        PunishmentDraftConfirmation.Requested requested = assertInstanceOf(
+                PunishmentDraftConfirmation.Requested.class,
                 fixture.workflow().confirmRouted(DRAFT_ID, actor(StaffRank.HELPER), OperationalMode.ACTIVE)
         );
 
-        assertEquals(new CaseId("TESTCASE00000002"), applied.accepted().caseId());
-        assertEquals(1, fixture.moderation().plans.size());
-        assertTrue(fixture.requests().entries.isEmpty());
+        assertEquals(StaffRank.HELPER, requested.submitted().request().proposal().requester().rank());
+        assertEquals(PunishmentRequestStatus.PENDING, requested.submitted().request().status());
+        assertTrue(fixture.moderation().plans.isEmpty());
     }
 
     @Test

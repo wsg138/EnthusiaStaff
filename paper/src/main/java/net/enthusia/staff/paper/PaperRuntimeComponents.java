@@ -6,6 +6,7 @@ import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.function.Supplier;
 import java.util.logging.Level;
+import javax.sql.DataSource;
 import net.enthusia.staff.domain.OperationalMode;
 import net.enthusia.staff.domain.ports.CheatTesterJournalStore;
 import net.enthusia.staff.domain.ports.FakeBaseAuditStore;
@@ -21,6 +22,8 @@ import net.enthusia.staff.paper.api.InventoryLockService;
 import net.enthusia.staff.paper.api.StaffModeQueryService;
 import net.enthusia.staff.paper.api.StaffSessionService;
 import net.enthusia.staff.paper.api.StaffVisibilityService;
+import net.enthusia.staff.paper.audit.StaffActionAuditListener;
+import net.enthusia.staff.paper.audit.StaffActionLogger;
 import net.enthusia.staff.paper.freeze.FreezeManager;
 import net.enthusia.staff.paper.freeze.FreezeNetworkReconciler;
 import net.enthusia.staff.paper.freeze.FreezeNoticeService;
@@ -63,7 +66,8 @@ record PaperRuntimeComponents(
         VanishManager vanish,
         InventoryOperationContext inventoryContext,
         InventoryCoordinator inventory,
-        StaffTransferSnapshotCoordinator transferSnapshots
+        StaffTransferSnapshotCoordinator transferSnapshots,
+        StaffActionLogger staffActionLogger
 ) {
     static PaperRuntimeComponents create(Dependencies dependencies) {
         ReportEvidenceMaintenance evidence = new ReportEvidenceMaintenance(
@@ -85,6 +89,7 @@ record PaperRuntimeComponents(
         registerStaffDutyContext(dependencies, staffMode);
         DefaultStaffVisibilityService visibility = createVisibilityService(dependencies);
         VanishManager vanish = createVanishManager(dependencies, staffMode, visibility);
+        StaffActionLogger staffActionLogger = createStaffActionLogger(dependencies, staffMode, vanish);
         StaffTransferSnapshotCoordinator transferSnapshots = new StaffTransferSnapshotCoordinator(
                 dependencies.environment().plugin(),
                 dependencies.environment().clock(),
@@ -134,7 +139,8 @@ record PaperRuntimeComponents(
                 vanish,
                 inventoryContext,
                 inventory,
-                transferSnapshots
+                transferSnapshots,
+                staffActionLogger
         );
     }
 
@@ -264,8 +270,37 @@ record PaperRuntimeComponents(
                 dependencies.environment().workers()
         );
         staffMode.setExitListener(vanish::staffModeExited);
+        staffMode.setGameModeTransitionGuard(
+                vanish::beginPluginGameModeApplication,
+                vanish::endPluginGameModeApplication
+        );
         registerListener(plugin, vanish);
         return vanish;
+    }
+
+    /**
+     * Builds and wires the staff-action audit pipeline (overnight permission model):
+     * per-server JSON-lines file log, Discord-bot outbox file, best-effort {@code discord_outbox}
+     * insert, plus the vanished/on-duty command+teleport+gamemode audit listener.
+     */
+    private static StaffActionLogger createStaffActionLogger(
+            Dependencies dependencies,
+            StaffModeManager staffMode,
+            VanishManager vanish
+    ) {
+        JavaPlugin plugin = dependencies.environment().plugin();
+        StaffActionLogger logger = new StaffActionLogger(
+                plugin.getLogger(),
+                dependencies.environment().workers(),
+                dependencies.stores().dataSource(),
+                dependencies.environment().serverId(),
+                plugin.getConfig().getString("discord.log-forward-channel", ""),
+                plugin.getDataFolder().toPath()
+        );
+        staffMode.setActionLogger(logger);
+        staffMode.setVanishedLookup(vanish::isVanished);
+        registerListener(plugin, new StaffActionAuditListener(logger, staffMode, vanish));
+        return logger;
     }
 
     private static void scheduleVanishTargetingReconciliation(
@@ -460,7 +495,8 @@ record PaperRuntimeComponents(
             Supplier<StaffSessionStore> staffSessionStore,
             Supplier<VanishStore> vanishStore,
             Supplier<InventoryJournalStore> inventoryJournalStore,
-            Supplier<PlayerDirectory> playerDirectory
+            Supplier<PlayerDirectory> playerDirectory,
+            Supplier<DataSource> dataSource
     ) {
     }
 }

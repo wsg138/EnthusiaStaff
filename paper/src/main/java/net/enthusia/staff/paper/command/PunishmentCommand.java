@@ -22,6 +22,7 @@ import net.enthusia.staff.domain.application.PunishmentRequestDraftCleanupExcept
 import net.enthusia.staff.domain.auth.Actor;
 import net.enthusia.staff.domain.auth.AuthorizationPolicy;
 import net.enthusia.staff.domain.auth.ModerationAction;
+import net.enthusia.staff.domain.auth.StaffRank;
 import net.enthusia.staff.domain.casefile.CaseVisibility;
 import net.enthusia.staff.domain.player.PlayerIdentity;
 import net.enthusia.staff.domain.ports.PlayerDirectory;
@@ -48,6 +49,8 @@ public final class PunishmentCommand implements CommandExecutor, TabCompleter {
     private static final String RESUME_SUBCOMMAND = "resume";
     private static final String CENTRAL_COMMAND = "punish";
     private static final String MUTE_COMMAND = "mute";
+    private static final String BAN_COMMAND = "ban";
+    private static final String IP_BAN_COMMAND = "ipban";
     private static final String PERMISSION = "enthusiastaff.punish.configured";
     private static final String PRIVATE_FLAG = "--private";
     private static final Set<String> LEGACY_MUTE_UNITS = Set.of(
@@ -117,6 +120,15 @@ public final class PunishmentCommand implements CommandExecutor, TabCompleter {
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
         Actor actor = PaperActorResolver.resolve(sender).orElse(null);
         String route = CommandRoute.canonicalName(command);
+        if (isBanRoute(route) && !isFounder(actor)) {
+            // Security: /ban and /ipban are Founder-only by code, not just by LuckPerms config.
+            // Console resolves to the FOUNDER rank (PaperActorResolver) and keeps working.
+            sender.sendMessage(StaffMessageStyle.style(Component.text(
+                    "Bans can only be issued by the Founder.",
+                    NamedTextColor.RED
+            )));
+            return true;
+        }
         if (requestCommands.handles(route, args)) {
             requestCommands.execute(sender, args, actor);
             return true;
@@ -157,6 +169,14 @@ public final class PunishmentCommand implements CommandExecutor, TabCompleter {
             return;
         }
         submit(sender, () -> prepareStoredDraft(sender, actor, route, label, args));
+    }
+
+    private static boolean isBanRoute(String route) {
+        return BAN_COMMAND.equals(route) || IP_BAN_COMMAND.equals(route);
+    }
+
+    private static boolean isFounder(Actor actor) {
+        return actor != null && StaffRank.FOUNDER == actor.rank();
     }
 
     private boolean openTargetOnlyGui(CommandSender sender, String route, String[] args) {

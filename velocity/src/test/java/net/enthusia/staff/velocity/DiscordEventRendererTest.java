@@ -53,9 +53,9 @@ final class DiscordEventRendererTest {
     }
 
     @Test
-    void staffLogTextIsNormalizedAndBounded() {
+    void freezeEventsRenderUnderPunishmentsWithReason() {
         String rendered = renderer.render(message(
-                "logs-staffmode",
+                "punishments",
                 "PLAYER_FROZEN",
                 "{\"targetId\":\"target\",\"reason\":\"line1\\nline2 `code`\"}"
         ));
@@ -68,7 +68,7 @@ final class DiscordEventRendererTest {
     void fieldTruncationDoesNotSplitSurrogatePair() {
         String reason = "a".repeat(178) + "😀" + "z";
         String rendered = renderer.render(message(
-                "logs-staffmode",
+                "punishments",
                 "PLAYER_FROZEN",
                 "{\"reason\":\"" + reason + "\"}"
         ));

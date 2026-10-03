@@ -27,6 +27,8 @@ import net.enthusia.staff.paper.api.StaffVisibilityService;
 import net.enthusia.staff.paper.enforcement.MuteEnforcementListener;
 import net.enthusia.staff.paper.freeze.FreezeManager;
 import net.enthusia.staff.paper.report.ChatContextBuffer;
+import org.bukkit.Bukkit;
+import org.bukkit.entity.Player;
 import org.bukkit.plugin.ServicesManager;
 import org.bukkit.plugin.java.JavaPlugin;
 
@@ -308,7 +310,6 @@ public final class RoseChatIntegration implements AutoCloseable {
 
     private static final class StaffBridge implements RoseChatModerationBridge {
         private static final Logger log = Logger.getLogger(StaffBridge.class.getName());
-
         private final StaffChannelConfiguration channels;
         private final Supplier<OperationalMode> mode;
         private final Supplier<MuteEnforcementListener> mutes;
@@ -341,9 +342,7 @@ public final class RoseChatIntegration implements AutoCloseable {
             }
             MuteEnforcementListener enforcement = mutes.get();
             if (enforcement == null) {
-                return ModerationDecision.block(
-                        "Your moderation status is still being verified. Please try again shortly."
-                );
+                return unverifiedDecision(context);
             }
             return switch (enforcement.cachedStatus(context.senderId())) {
                 case CLEAR -> ModerationDecision.allow();
@@ -453,7 +452,7 @@ public final class RoseChatIntegration implements AutoCloseable {
          */
         private ModerationDecision unverifiedDecision(TransmissionContext context) {
             UUID senderId = context.senderId();
-            Player sender = senderId == null ? null : playerLookup.apply(senderId);
+            Player sender = senderId == null ? null : Bukkit.getPlayer(senderId);
             if (sender != null
                     && sender.hasPermission(MuteEnforcementListener.VERIFICATION_OVERRIDE_PERMISSION)) {
                 String senderName = sender.getName();

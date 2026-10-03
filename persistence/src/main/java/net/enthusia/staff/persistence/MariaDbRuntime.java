@@ -153,6 +153,9 @@ public final class MariaDbRuntime implements AutoCloseable {
     }
 
     public ModerationStore moderationStore() { return moderationStore; }
+
+    /** Exposes the pooled datasource for best-effort audit sinks (never for gameplay queries). */
+    public javax.sql.DataSource dataSource() { return dataSource; }
     public PunishmentRequestStore punishmentRequestStore() { return punishmentRequestStore; }
     public PunishmentRequestAlertStore punishmentRequestAlertStore() { return punishmentRequestAlertStore; }
     public OperationalStateStore operationalStateStore() { return operationalStateStore; }

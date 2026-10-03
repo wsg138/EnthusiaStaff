@@ -8,11 +8,23 @@ Last updated: 2026-10-03 (owner spec: rich punishment logging in #in-game-punish
 | Outbox Destination | Discord Channel | Status | Purpose |
 |---|---|---|---|
 | `punishments` | #in-game-punishments | ✅ ACTIVE | **Central punishment log.** Every punishment from every source with rich details. |
-| `logs-staffmode` | #staff-logs | ✅ ACTIVE | Staff mode enter/exit, vanish changes, freeze/unfreeze events. |
+| `logs-staffmode` | #staff-logs | ✅ ACTIVE | Staff mode enter/exit, vanish changes. |
 | `reports` | #reports | ⚠️ DEPRECATED | Owner authorized deletion/repurposing of #reports (stale since Sep 2025). Destination retained in code but should not be configured with a webhook. |
 | `alerts` | *(unassigned)* | ❌ UNUSED | No producer writes to this destination. Reserved for future use. |
 
 ## What Gets Logged to #in-game-punishments
+
+### Event: `PLAYER_FROZEN` / `PLAYER_UNFROZEN`
+Fired for every freeze/unfreeze from **every** source (staff `/freeze` command, API, network
+reconciliation). These are punishments: they land in #in-game-punishments with the target,
+the acting staffer, and the freeze reason.
+
+**Rich fields included:**
+| Field | Description |
+|---|---|
+| `targetId` | Frozen player's UUID |
+| `actorId` | Staff member who froze/unfroze |
+| `reason` | Freeze reason |
 
 ### Event: `PUNISHMENT_CREATED`
 Fired for every new punishment from **every** source:
@@ -60,7 +72,6 @@ Helper punishment request workflow (not final punishments):
 |---|---|---|
 | `STAFF_MODE_ENTERED` / `STAFF_MODE_EXITED` | JdbcStaffSessionStore | staffId, actorId, sessionId, rank, active, reason, serverId |
 | `VANISH_CHANGED` | JdbcVanishStore | staffId, actorId, rank, vanished |
-| `FREEZE_APPLIED` / `FREEZE_RELEASED` | JdbcFreezeStore | playerId, actorId, reason |
 
 ## Punishment Sources — Coverage Status
 
@@ -69,7 +80,7 @@ Helper punishment request workflow (not final punishments):
 | Staff `/punish` command | PunishmentService | ✅ Yes |
 | Staff `/ban` (Founder only) | PunishmentService | ✅ Yes |
 | Staff `/mute`, `/kick`, `/warn` | PunishmentService | ✅ Yes |
-| Staff `/freeze` | FreezeStore → logs-staffmode | ✅ Yes (in #staff-logs) |
+| Staff `/freeze` | FreezeStore → punishments | ✅ Yes (in #in-game-punishments) |
 | RoseChat AI moderation | RoseChatAutomatedModerationProvider → PunishmentService | ✅ Yes (with message content) |
 | Polar anticheat | **No integration** | ❌ Not logged |
 | Other automated systems | **No integration** | ❌ Not logged |

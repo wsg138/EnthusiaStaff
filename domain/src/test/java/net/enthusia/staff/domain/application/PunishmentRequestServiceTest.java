@@ -72,18 +72,19 @@ class PunishmentRequestServiceTest {
     }
 
     @Test
-    void helperTemporaryOutcomeUsesDirectPunishmentFlow() {
+    void helperTemporaryOutcomeUsesRequestOnlyFlow() {
         Fixture fixture = fixture(
                 StaffRank.MOD,
                 SanctionLength.temporary(Duration.ofHours(6))
         );
 
-        PunishmentRequestResult.Rejected rejected = assertInstanceOf(
-                PunishmentRequestResult.Rejected.class,
+        // Helpers are request-only: temporary proposals route to approval like any other.
+        PunishmentRequestResult.Submitted submitted = assertInstanceOf(
+                PunishmentRequestResult.Submitted.class,
                 fixture.service().submit(request(HELPER), OperationalMode.ACTIVE)
         );
 
-        assertEquals("APPROVAL_NOT_REQUIRED", rejected.code());
+        assertEquals(PunishmentRequestStatus.PENDING, submitted.request().status());
     }
 
     @Test

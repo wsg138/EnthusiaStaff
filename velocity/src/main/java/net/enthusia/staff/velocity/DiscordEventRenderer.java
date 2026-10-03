@@ -24,6 +24,9 @@ final class DiscordEventRenderer {
                     "requestId", "actorId", "actorName", "actorRank",
                     "action", "status", "previousStatus", "resultingStatus",
                     "previousExpiration", "resultingExpiration",
+                    // Freeze/unfreeze events land here too (see JdbcFreezeStore): keep their
+                    // free-form reason visible in #in-game-punishments.
+                    "reason",
                     STATE, "type", "decision", "outcome"
             ),
             "reports", List.of("reportId", TARGET_ID, "reasonId", "serverId", "status", STATE, "actorId"),

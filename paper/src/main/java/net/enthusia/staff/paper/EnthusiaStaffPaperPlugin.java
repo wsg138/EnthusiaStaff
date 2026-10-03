@@ -169,6 +169,8 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
         }
         resources.close("mute enforcement", muteEnforcement);
         resources.close("inventory coordinator", runtimeComponents == null ? null : runtimeComponents.inventory());
+        resources.close("staff action audit logger",
+                runtimeComponents == null ? null : runtimeComponents.staffActionLogger());
         if (integrations != null) {
             integrations.closeEconomyResources();
         }
@@ -833,7 +835,8 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
                         () -> storageValue(PaperStorageBindings::staffSessionStore),
                         () -> storageValue(PaperStorageBindings::vanishStore),
                         () -> storageValue(PaperStorageBindings::inventoryJournalStore),
-                        () -> storageValue(PaperStorageBindings::playerDirectory)
+                        () -> storageValue(PaperStorageBindings::playerDirectory),
+                        () -> storageValue(bindings -> bindings.runtime().dataSource())
                 ),
                 featureIssues
         ));

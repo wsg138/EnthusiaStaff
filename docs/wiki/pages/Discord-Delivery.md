@@ -66,9 +66,9 @@ A failed attempt receives bounded exponential backoff. Repeated destination fail
 
 ## Current routes/events
 
-- `punishments`: punishment creation, sanction change/inheritance, punishment-request lifecycle.
+- `punishments`: punishment creation, sanction change/inheritance, punishment-request lifecycle, freeze/unfreeze.
 - `reports`: report creation and report state lifecycle.
-- `logs-staffmode`: freeze/unfreeze, vanish, staff-mode enter/exit.
+- `logs-staffmode`: vanish, staff-mode enter/exit.
 - `alerts`: reserved approved webhook route; channel-health failures remain internal staff alerts rather than recursively enqueueing another Discord notification.
 
 ## Relationship to StaffBot

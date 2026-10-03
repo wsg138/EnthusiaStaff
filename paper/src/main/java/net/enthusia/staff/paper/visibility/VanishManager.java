@@ -4,6 +4,7 @@ import net.enthusia.staff.paper.presentation.StaffMessageStyle;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -291,6 +292,20 @@ public final class VanishManager implements Listener {
 
     public void staffModeExited(UUID playerId) {
         audiences.onOwner(playerId, player -> disableAfterStaffModeExit(playerId, player));
+    }
+
+    /**
+     * Marks a game-mode change as plugin-initiated so {@link #onGameModeChange} does not cancel
+     * it for vanished staff (C1: staff-mode profile transitions, e.g. forcing a vanished Mod to
+     * Survival on duty-enter, must not be mistaken for the player leaving vanish-spectator).
+     */
+    public void beginPluginGameModeApplication(UUID playerId) {
+        vanishGameModeApplications.add(Objects.requireNonNull(playerId, "playerId"));
+    }
+
+    /** Clears the plugin-initiated game-mode marker installed by {@link #beginPluginGameModeApplication}. */
+    public void endPluginGameModeApplication(UUID playerId) {
+        vanishGameModeApplications.remove(playerId);
     }
 
     private void disableAfterStaffModeExit(UUID playerId, Player player) {

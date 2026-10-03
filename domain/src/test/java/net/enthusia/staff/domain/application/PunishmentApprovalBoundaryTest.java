@@ -33,13 +33,15 @@ class PunishmentApprovalBoundaryTest {
     private static final Instant NOW = Instant.parse("2026-07-30T09:00:00Z");
 
     @Test
-    void helperMayApplyConfiguredTemporaryPunishment() {
+    void helperTemporaryPunishmentRequiresApproval() {
         PunishmentService service = service(SanctionLength.temporary(Duration.ofDays(7)));
 
-        assertInstanceOf(
-                PunishmentEvaluation.Allowed.class,
+        // Helpers are request-only: even temporary punishments route to approval.
+        PunishmentEvaluation.Rejected rejected = assertInstanceOf(
+                PunishmentEvaluation.Rejected.class,
                 service.evaluate(request(StaffRank.HELPER), OperationalMode.ACTIVE)
         );
+        assertEquals("APPROVAL_REQUIRED", rejected.code());
     }
 
     @Test

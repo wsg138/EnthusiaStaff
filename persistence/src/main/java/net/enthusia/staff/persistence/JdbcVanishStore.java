@@ -122,6 +122,7 @@ public final class JdbcVanishStore implements VanishStore {
             try {
                 return setTransaction(
                         connection,
+                        dataSource,
                         staffId,
                         rank,
                         vanished,
@@ -143,6 +144,7 @@ public final class JdbcVanishStore implements VanishStore {
 
     private static WriteResult setTransaction(
             Connection connection,
+            DataSource dataSource,
             UUID staffId,
             StaffRank rank,
             boolean vanished,
@@ -168,6 +170,8 @@ public final class JdbcVanishStore implements VanishStore {
                 session,
                 changes);
         connection.commit();
+        writeAuditAndOutboxBestEffort(
+                dataSource, staffId, actorId, rank, vanished, now, changes.stateChanged());
         return WriteResult.COMMITTED;
     }
 
@@ -199,7 +203,8 @@ public final class JdbcVanishStore implements VanishStore {
         updateSessionMirrorIfChanged(connection, session, write.vanished());
     }
 
-    private void writeAuditAndOutboxBestEffort(
+    private static void writeAuditAndOutboxBestEffort(
+            DataSource dataSource,
             UUID staffId,
             UUID actorId,
             StaffRank rank,

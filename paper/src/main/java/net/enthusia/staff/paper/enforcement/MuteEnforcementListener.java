@@ -37,6 +37,13 @@ import org.bukkit.plugin.Plugin;
 import org.bukkit.plugin.java.JavaPlugin;
 
 public final class MuteEnforcementListener implements Listener, AutoCloseable {
+    /**
+     * Operator override for mute verification (M1): a sender holding this permission may chat
+     * while their moderation status is still unverified, so a sanction-storage outage does not
+     * silence the whole server.
+     */
+    public static final String VERIFICATION_OVERRIDE_PERMISSION = "enthusiastaff.override.mute-verification";
+
     private static final Duration CACHE_TTL = Duration.ofSeconds(45);
     private static final Set<SanctionType> MUTE_TYPES = Set.of(SanctionType.MUTE, SanctionType.PUBLIC_MUTE);
     private static final long NEXT_TICK = 1L;
