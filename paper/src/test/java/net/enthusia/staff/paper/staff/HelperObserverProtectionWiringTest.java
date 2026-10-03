@@ -74,6 +74,43 @@ class HelperObserverProtectionWiringTest {
         );
     }
 
+    @Test
+    void helperObserverAuthorityUsesAppliedSessionRankInsteadOfLivePermissionResolution() throws IOException {
+        String manager = Files.readString(paperModule().resolve(
+                "src/main/java/net/enthusia/staff/paper/staff/StaffModeManager.java"
+        ));
+        String listener = Files.readString(paperModule().resolve(
+                "src/main/java/net/enthusia/staff/paper/staff/HelperObserverProtectionListener.java"
+        ));
+
+        assertTrue(
+                manager.contains("boolean helperObserverActive(UUID playerId)")
+                        && manager.contains("ranks.get(playerId) == StaffRank.HELPER"),
+                "Helper observer authority must remain bound to the applied Staff Mode rank snapshot"
+        );
+        assertTrue(
+                listener.contains("return staffMode.helperObserverActive(player.getUniqueId());"),
+                "Helper protections must use Staff Mode's authoritative cached profile"
+        );
+        assertFalse(
+                listener.contains("PaperStaffRankResolver"),
+                "The observer listener must not fail open when live rank permissions temporarily disappear"
+        );
+    }
+
+    @Test
+    void queuedMobTargetClearRevalidatesObserverProfileAtMutationTime() throws IOException {
+        String listener = Files.readString(paperModule().resolve(
+                "src/main/java/net/enthusia/staff/paper/staff/HelperObserverProtectionListener.java"
+        ));
+
+        assertTrue(
+                listener.contains("targetMob.getScheduler().run(plugin, ignoredMob -> {\n"
+                        + "            if (!staffMode.helperObserverActive(targetId))"),
+                "A queued mob target clear must be abandoned after Helper observer mode ends or changes rank"
+        );
+    }
+
     private static Path paperModule() {
         Path current = Path.of("").toAbsolutePath().normalize();
         if (Files.exists(current.resolve("src/main/java/net/enthusia/staff/paper/PaperRuntimeComponents.java"))) {
