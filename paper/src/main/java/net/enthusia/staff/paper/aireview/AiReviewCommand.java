@@ -123,17 +123,15 @@ final class AiReviewCommand implements CommandExecutor, TabCompleter {
             send(sender, "AI review detail permission denied.", NamedTextColor.RED);
             return;
         }
-        String eventId = arguments[1];
-        if (sender instanceof Player player) {
-            gui.openEvent(player, eventId, 0);
+        if (!(sender instanceof Player player)) {
+            send(
+                    sender,
+                    "AI review message/context detail is available only to an authorized in-game reviewer.",
+                    NamedTextColor.RED
+            );
             return;
         }
-        subsystem.loadEvent(
-                eventId,
-                details -> AiReviewPresentation.detailLines(details, subsystem.configuration())
-                        .forEach(line -> send(sender, line, NamedTextColor.GRAY)),
-                issue -> send(sender, "AI review unavailable: " + issue, NamedTextColor.YELLOW)
-        );
+        gui.openEvent(player, arguments[1], 0);
     }
 
     private void textWrite(CommandSender sender, String[] arguments) {

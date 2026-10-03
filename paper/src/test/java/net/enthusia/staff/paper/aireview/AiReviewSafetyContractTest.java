@@ -53,6 +53,16 @@ class AiReviewSafetyContractTest {
     }
 
     @Test
+    void sensitiveEventDetailIsNotDumpedToServerConsole() throws IOException {
+        String source = Files.readString(SOURCE.resolve("AiReviewCommand.java"));
+        int view = source.indexOf("private void view");
+        int playerGate = source.indexOf("if (!(sender instanceof Player player))", view);
+        int guiOpen = source.indexOf("gui.openEvent(player, arguments[1], 0)", playerGate);
+        assertTrue(view >= 0 && playerGate > view && guiOpen > playerGate);
+        assertFalse(source.substring(view, guiOpen).contains("AiReviewPresentation.detailLines"));
+    }
+
+    @Test
     void textFallbackRequiresExplicitConfirmationAndStablePlayerIdentity() throws IOException {
         String source = Files.readString(SOURCE.resolve("AiReviewCommand.java"));
         assertTrue(source.contains("Append the exact word CONFIRM"));
