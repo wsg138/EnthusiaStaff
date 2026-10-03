@@ -153,3 +153,27 @@ discord:
   # The Discord bot forwards staff-action audit lines (destination "staff-action-log") to this
   # channel. Empty disables forwarding; the per-server file log always keeps recording.
   log-forward-channel: ""
+
+# Optional central AI moderation review workflow. Invalid/missing AI settings disable
+# only this subsystem; they never disable normal EnthusiaStaff startup or moderation.
+ai-review:
+  enabled: false
+  base-url: ""
+  client-id: enthusiastaff-paper
+  token-environment: ES_AI_REVIEW_TOKEN
+  notification-permission: enthusiastaff.ai-review.queue
+  connect-timeout-millis: 1000
+  request-timeout-millis: 2000
+  poll-interval-millis: 10000
+  cache-stale-after-millis: 30000
+  review-limit: 100
+  worker-threads: 2
+  queue-capacity: 32
+  response-max-bytes: 262144
+  notified-cache-size: 512
+  page-size: 21
+  maximum-message-characters: 800
+  maximum-context-items: 8
+  maximum-reason-codes: 12
+  maximum-scores: 10
+  admin-override-enabled: false

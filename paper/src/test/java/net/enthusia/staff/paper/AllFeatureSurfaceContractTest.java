@@ -50,6 +50,7 @@ final class AllFeatureSurfaceContractTest {
             "unwarn",
             "report",
             "reports",
+            "aireview",
             "freeze",
             "unfreeze",
             "staff",
@@ -99,7 +100,10 @@ final class AllFeatureSurfaceContractTest {
         String runtime = Files.readString(moduleRoot.resolve(
                 "src/main/java/net/enthusia/staff/paper/PaperRuntimeComponents.java"
         ));
-        String wiring = registrar + "\n" + runtime;
+        String aiReview = Files.readString(moduleRoot.resolve(
+                "src/main/java/net/enthusia/staff/paper/aireview/AiReviewSubsystem.java"
+        ));
+        String wiring = registrar + "\n" + runtime + "\n" + aiReview;
 
         for (String command : EXPECTED_COMMANDS) {
             assertTrue(
@@ -175,6 +179,10 @@ final class AllFeatureSurfaceContractTest {
         assertGranted(permissions, RANK_HELPER, "enthusiastaff.staffwho");
         assertGranted(permissions, RANK_MOD, "enthusiastaff.remove");
         assertGranted(permissions, RANK_MOD, "enthusiastaff.inventory.edit");
+        assertGranted(permissions, RANK_MOD, "enthusiastaff.ai-review.queue");
+        assertGranted(permissions, RANK_MOD, "enthusiastaff.ai-review.detail");
+        assertGranted(permissions, RANK_MOD, "enthusiastaff.ai-review.correct");
+        assertGranted(permissions, RANK_ADMIN, "enthusiastaff.ai-review.admin");
         assertGranted(permissions, RANK_ADMIN, "enthusiastaff.cheattester.cancel-any");
         assertGranted(permissions, RANK_FOUNDER, "enthusiastaff.owner.recovery");
     }
@@ -229,6 +237,7 @@ final class AllFeatureSurfaceContractTest {
         markers.put("inspection/confiscation", List.of("inspect", "confiscation"));
         markers.put("case/recovery", List.of("case", "recovery"));
         markers.put("account linking", List.of("accountlink", "linking"));
+        markers.put("AI review", List.of("aireview"));
         markers.put("Discord moderation", List.of("discord"));
         markers.put("network identity/alts", List.of("alt", "identity"));
         markers.put("persistence/migrations", List.of("jdbc", "migration", "mariadb"));
