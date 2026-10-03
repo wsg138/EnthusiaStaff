@@ -1,6 +1,8 @@
 package net.enthusia.staff.paper.aireview;
 
 final class AiReviewClientException extends RuntimeException {
+    private static final long serialVersionUID = 1L;
+
     enum Category {
         TIMEOUT,
         CONFLICT,
