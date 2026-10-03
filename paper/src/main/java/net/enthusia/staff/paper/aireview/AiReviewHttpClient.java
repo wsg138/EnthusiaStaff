@@ -446,7 +446,7 @@ final class AiReviewHttpClient implements AiReviewClient {
             throw new AiReviewClientException(Category.MALFORMED);
         }
         Map<String, Double> values = new LinkedHashMap<>();
-        object.fields().forEachRemaining(entry -> {
+        object.properties().forEach(entry -> {
             JsonNode value = entry.getValue();
             if (!value.isNumber() || !Double.isFinite(value.doubleValue())) {
                 throw new AiReviewClientException(Category.MALFORMED);
@@ -461,7 +461,7 @@ final class AiReviewHttpClient implements AiReviewClient {
             throw new AiReviewClientException(Category.MALFORMED);
         }
         Map<String, Boolean> values = new LinkedHashMap<>();
-        object.fields().forEachRemaining(entry -> {
+        object.properties().forEach(entry -> {
             JsonNode value = entry.getValue();
             if (!value.isBoolean()) {
                 throw new AiReviewClientException(Category.MALFORMED);
