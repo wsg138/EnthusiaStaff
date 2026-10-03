@@ -64,6 +64,7 @@ final class AllFeatureSurfaceContractTest {
             "endersee",
             "inspect",
             "case",
+            "marketcase",
             "link",
             "unlink"
     );
@@ -173,7 +174,9 @@ final class AllFeatureSurfaceContractTest {
         assertGranted(permissions, RANK_HELPER, "enthusiastaff.staffwho");
         assertGranted(permissions, RANK_MOD, "enthusiastaff.remove");
         assertGranted(permissions, RANK_MOD, "enthusiastaff.inventory.edit");
+        assertGranted(permissions, RANK_ADMIN, "enthusiastaff.market.restrict");
         assertGranted(permissions, RANK_ADMIN, "enthusiastaff.cheattester.cancel-any");
+        assertGranted(permissions, RANK_FOUNDER, "enthusiastaff.market.restore");
         assertGranted(permissions, RANK_FOUNDER, "enthusiastaff.owner.recovery");
     }
 
@@ -226,6 +229,7 @@ final class AllFeatureSurfaceContractTest {
         markers.put("inventory/ender chest", List.of("inventory"));
         markers.put("inspection/confiscation", List.of("inspect", "confiscation"));
         markers.put("case/recovery", List.of("case", "recovery"));
+        markers.put("market compliance", List.of("marketcase", "marketcompliance", "marketintegration"));
         markers.put("account linking", List.of("accountlink", "linking"));
         markers.put("Discord moderation", List.of("discord"));
         markers.put("network identity/alts", List.of("alt", "identity"));

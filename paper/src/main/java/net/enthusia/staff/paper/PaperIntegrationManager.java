@@ -1,11 +1,13 @@
 package net.enthusia.staff.paper;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.papermc.paper.threadedregions.scheduler.ScheduledTask;
 import java.time.Clock;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
 import java.util.logging.Level;
 import net.enthusia.staff.domain.OperationalMode;
@@ -13,8 +15,10 @@ import net.enthusia.staff.domain.application.PunishmentService;
 import net.enthusia.staff.domain.auth.AuthorizationPolicy;
 import net.enthusia.staff.domain.evidence.IntegrationAvailability;
 import net.enthusia.staff.domain.ports.AtomicReasonPolicyRepository;
+import net.enthusia.staff.domain.ports.CaseLookup;
 import net.enthusia.staff.domain.ports.EconomyJournalStore;
 import net.enthusia.staff.domain.ports.InventoryJournalStore;
+import net.enthusia.staff.domain.ports.MarketComplianceStore;
 import net.enthusia.staff.paper.auth.DiscordStaffAuthorityEndpoint;
 import net.enthusia.staff.paper.automod.AutomodListener;
 import net.enthusia.staff.paper.automod.StrictVariantMatcher;
@@ -36,6 +40,8 @@ import net.enthusia.staff.paper.integration.RoseChatIntegration;
 import net.enthusia.staff.paper.inventory.ConfiscationCoordinator;
 import net.enthusia.staff.paper.inventory.InventoryCoordinator;
 import net.enthusia.staff.paper.inventory.InventoryOperationContext;
+import net.enthusia.staff.paper.market.MarketComplianceCoordinator;
+import net.enthusia.staff.paper.market.MarketCoordinatorRuntime;
 import net.enthusia.staff.paper.report.ChatContextBuffer;
 import net.enthusia.staff.paper.visibility.DefaultStaffVisibilityService;
 import org.bukkit.event.EventHandler;
@@ -67,6 +73,8 @@ final class PaperIntegrationManager implements Listener {
     private MuteCommandFallbackListener muteFallback;
     private boolean roseChatLifecycleRegistered;
     private MarketIntegration market;
+    private MarketComplianceCoordinator marketCompliance;
+    private ScheduledTask marketMaintenance;
     private ReputationIntegration reputation;
     private ReputationRestrictionSynchronizer reputationRestrictions;
     private PaperPunishmentCommitEffects punishmentEffects;
@@ -127,6 +135,18 @@ final class PaperIntegrationManager implements Listener {
         );
         recordProviderIssue(MARKET, market.availability(), market.issue());
         recordProviderIssue(REPUTATION, reputation.availability(), reputation.issue());
+        marketCompliance = new MarketComplianceCoordinator(
+                new MarketCoordinatorRuntime(
+                        clock(),
+                        dependencies.policy().writeMode(),
+                        dependencies.policy().authorization(),
+                        dependencies.stores().marketCompliance(),
+                        dependencies.stores().cases(),
+                        workers()
+                ),
+                market,
+                java.util.UUID::randomUUID
+        );
         if (reputation.availability() == IntegrationAvailability.AVAILABLE) {
             reputationRestrictions = new ReputationRestrictionSynchronizer(
                     plugin(),
@@ -212,6 +232,10 @@ final class PaperIntegrationManager implements Listener {
         return market;
     }
 
+    MarketComplianceCoordinator marketCompliance() {
+        return marketCompliance;
+    }
+
     ReputationIntegration reputation() {
         return reputation;
     }
@@ -231,8 +255,40 @@ final class PaperIntegrationManager implements Listener {
     }
 
     void closeEconomyResources() {
+        if (marketMaintenance != null) {
+            marketMaintenance.cancel();
+        }
         resources.close("economy coordinator", economy);
         resources.close("confiscation coordinator", confiscation);
+    }
+
+    void storageReady() {
+        if (marketCompliance == null) {
+            return;
+        }
+        runMarketMaintenance();
+        marketMaintenance = plugin().getServer().getAsyncScheduler().runAtFixedRate(
+                plugin(),
+                ignored -> runMarketMaintenance(),
+                1L,
+                5L,
+                TimeUnit.MINUTES
+        );
+    }
+
+    private void runMarketMaintenance() {
+        marketCompliance.recoverPending().whenComplete((count, failure) -> {
+            if (failure != null) {
+                plugin().getLogger().log(Level.SEVERE, "Market journal recovery failed safely", failure);
+            } else if (count > 0) {
+                plugin().getLogger().info("Reconciled " + count + " durable market operation(s)");
+            }
+        });
+        marketCompliance.emitDueReviewAlerts().whenComplete((count, failure) -> {
+            if (failure != null) {
+                plugin().getLogger().log(Level.WARNING, "Market review alert scan failed", failure);
+            }
+        });
     }
 
     private void registerRoseChatLifecycle() {
@@ -453,7 +509,9 @@ final class PaperIntegrationManager implements Listener {
             Supplier<net.enthusia.staff.domain.application.PunishmentDraftWorkflow> punishmentDraftWorkflow,
             Supplier<net.enthusia.staff.domain.ports.PlayerDirectory> players,
             Supplier<EconomyJournalStore> economyJournal,
-            Supplier<InventoryJournalStore> inventoryJournal
+            Supplier<InventoryJournalStore> inventoryJournal,
+            Supplier<MarketComplianceStore> marketCompliance,
+            Supplier<CaseLookup> cases
     ) {
     }
 

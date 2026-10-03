@@ -514,6 +514,7 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
                     exception);
         }
         if (!lifecycle.stopping()) {
+            integrations.storageReady();
             registerOperationalStateTask();
         }
     }
@@ -817,6 +818,7 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
                         integrations::confiscation,
                         integrations::roseChat,
                         integrations::market,
+                        integrations::marketCompliance,
                         integrations::reputation
                 ),
                 new PaperCommandRegistrar.EvidenceComponents(chatContext, clientEvidenceCollector)
@@ -857,7 +859,9 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
                         () -> storageValue(PaperStorageBindings::punishmentDraftWorkflow),
                         () -> storageValue(PaperStorageBindings::playerDirectory),
                         () -> storageValue(PaperStorageBindings::economyJournalStore),
-                        () -> storageValue(PaperStorageBindings::inventoryJournalStore)
+                        () -> storageValue(PaperStorageBindings::inventoryJournalStore),
+                        () -> storageValue(PaperStorageBindings::marketComplianceStore),
+                        () -> storageValue(PaperStorageBindings::caseLookup)
                 ),
                 new PaperIntegrationManager.PlayerComponents(
                         runtimeComponents.freeze(),
