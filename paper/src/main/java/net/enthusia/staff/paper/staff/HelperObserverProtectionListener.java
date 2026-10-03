@@ -4,7 +4,6 @@ import com.destroystokyo.paper.event.entity.ProjectileCollideEvent;
 import com.destroystokyo.paper.event.player.PlayerPickupExperienceEvent;
 import java.util.Objects;
 import java.util.UUID;
-import net.enthusia.staff.domain.auth.StaffRank;
 import org.bukkit.entity.Firework;
 import org.bukkit.entity.Mob;
 import org.bukkit.entity.Player;
@@ -169,14 +168,7 @@ public final class HelperObserverProtectionListener implements Listener {
     }
 
     private boolean activeHelper(Player player) {
-        return HelperObserverPolicy.applies(staffMode.active(player.getUniqueId()), rank(player));
-    }
-
-    private StaffRank rank(Player player) {
-        // Use Staff Mode's authoritative session rank, not live permissions.
-        // During rank transition windows the session rank is null; the policy
-        // treats null as fail-closed (protections apply) while active.
-        return staffMode.sessionRank(player.getUniqueId());
+        return staffMode.helperObserverActive(player.getUniqueId());
     }
 
     private void clearMobTarget(Object damager, Player target) {
