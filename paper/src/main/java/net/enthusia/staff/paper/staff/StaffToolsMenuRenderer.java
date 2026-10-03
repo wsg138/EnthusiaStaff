@@ -1,5 +1,6 @@
 package net.enthusia.staff.paper.staff;
 
+import java.util.ArrayList;
 import java.util.List;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
@@ -68,18 +69,17 @@ final class StaffToolsMenuRenderer {
         inventory.setItem(CLOSE_SLOT, item(
                 Material.BARRIER,
                 "Exit Staff Mode",
-                List.of(Component.text("Restores your saved state through the normal staff-mode exit.", NamedTextColor.RED))
+                List.of(Component.text("Leaves staff mode and restores your saved inventory, location, and game state.", NamedTextColor.RED))
         ));
     }
 
     private static List<Component> toolLore(StaffToolDefinition tool) {
+        List<Component> lore = new ArrayList<>();
+        lore.add(Component.text(tool.description(), NamedTextColor.GRAY));
         if (tool.targetRequired()) {
-            return List.of(
-                    Component.text("Choose an online player.", NamedTextColor.GRAY),
-                    Component.text("The target is checked again before the action runs.", NamedTextColor.DARK_GRAY)
-            );
+            lore.add(Component.text("The target is checked again before the action runs.", NamedTextColor.DARK_GRAY));
         }
-        return List.of(Component.text("Click to use this staff action.", NamedTextColor.GRAY));
+        return List.copyOf(lore);
     }
 
     private static void renderLoading(Inventory inventory, StaffToolsMenuView.Loading loading) {

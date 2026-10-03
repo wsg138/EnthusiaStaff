@@ -15,7 +15,8 @@ enum StaffToolDefinition {
             "enthusiastaff.stafftools.teleport",
             false,
             false,
-            CooldownClass.RANDOM
+            CooldownClass.RANDOM,
+            "Right-click to teleport to a random online player."
     ),
     PLAYER_INSPECTOR(
             "player-inspector",
@@ -25,7 +26,8 @@ enum StaffToolDefinition {
             "enthusiastaff.inspect",
             true,
             false,
-            CooldownClass.TARGET
+            CooldownClass.TARGET,
+            "Right-click a player to inspect their inventory and ender chest."
     ),
     FREEZE(
             "freeze",
@@ -35,7 +37,8 @@ enum StaffToolDefinition {
             "enthusiastaff.freeze",
             true,
             false,
-            CooldownClass.TARGET
+            CooldownClass.TARGET,
+            "Right-click a player to freeze them for investigation."
     ),
     REPORTS(
             "reports",
@@ -45,7 +48,8 @@ enum StaffToolDefinition {
             "enthusiastaff.reports.manage",
             false,
             false,
-            CooldownClass.TOGGLE
+            CooldownClass.TOGGLE,
+            "Right-click to open the report queue and review player reports."
     ),
     CHEAT_TESTER(
             "cheat-tester",
@@ -55,7 +59,8 @@ enum StaffToolDefinition {
             "enthusiastaff.cheattester",
             false,
             true,
-            CooldownClass.TOGGLE
+            CooldownClass.TOGGLE,
+            "Right-click to cycle the probe. Sneak + right-click for options. Hit a player to run the selected probe."
     ),
     SPECTATE(
             "spectate",
@@ -65,7 +70,8 @@ enum StaffToolDefinition {
             "enthusiastaff.stafftools.spectate",
             true,
             false,
-            CooldownClass.TARGET
+            CooldownClass.TARGET,
+            "Right-click a player to follow them in spectator mode."
     ),
     VANISH(
             "vanish",
@@ -75,7 +81,8 @@ enum StaffToolDefinition {
             "enthusiastaff.vanish",
             false,
             false,
-            CooldownClass.TOGGLE
+            CooldownClass.TOGGLE,
+            "Right-click to toggle vanish. Hidden from players and the tab list."
     ),
     STAFF_CHAT(
             "staff-chat",
@@ -85,7 +92,8 @@ enum StaffToolDefinition {
             "enthusiastaff.staffchat",
             false,
             false,
-            CooldownClass.TOGGLE
+            CooldownClass.TOGGLE,
+            "Right-click to toggle staff chat. Messages go only to staff."
     ),
     STAFF_TOOLS(
             "staff-tools",
@@ -95,7 +103,8 @@ enum StaffToolDefinition {
             "enthusiastaff.stafftools.menu",
             false,
             false,
-            CooldownClass.MENU
+            CooldownClass.MENU,
+            "Right-click to open the staff tools menu."
     );
 
     enum CooldownClass {
@@ -113,6 +122,7 @@ enum StaffToolDefinition {
     private final boolean targetRequired;
     private final boolean advancedOnly;
     private final CooldownClass cooldownClass;
+    private final String description;
 
     StaffToolDefinition(
             String id,
@@ -122,7 +132,8 @@ enum StaffToolDefinition {
             String permission,
             boolean targetRequired,
             boolean advancedOnly,
-            CooldownClass cooldownClass
+            CooldownClass cooldownClass,
+            String description
     ) {
         this.id = id;
         this.material = material;
@@ -132,6 +143,7 @@ enum StaffToolDefinition {
         this.targetRequired = targetRequired;
         this.advancedOnly = advancedOnly;
         this.cooldownClass = cooldownClass;
+        this.description = description;
     }
 
     String id() {
@@ -144,6 +156,10 @@ enum StaffToolDefinition {
 
     String displayName() {
         return displayName;
+    }
+
+    String description() {
+        return description;
     }
 
     int slot() {
