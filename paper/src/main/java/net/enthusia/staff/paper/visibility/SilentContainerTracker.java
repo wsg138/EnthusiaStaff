@@ -10,16 +10,16 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Predicate;
 import org.bukkit.Location;
-import org.bukkit.block.BlockState;
+import org.bukkit.block.Block;
+import org.bukkit.block.BlockFace;
+import org.bukkit.block.data.type.Chest;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.inventory.InventoryCloseEvent;
 import org.bukkit.event.inventory.InventoryOpenEvent;
-import org.bukkit.inventory.DoubleChest;
 import org.bukkit.inventory.Inventory;
-import org.bukkit.inventory.InventoryHolder;
 
 /**
  * Tracks container blocks opened by vanished staff so that the
@@ -161,42 +161,60 @@ public final class SilentContainerTracker implements Listener {
     /**
      * Extracts the animated container block positions for an inventory.
      * Double chests report both halves since each half animates independently.
-     * Returns an empty list for non-block holders (player inventories, etc.).
+     * Returns an empty list for inventories without a block location.
      */
     static List<BlockKey> containerPositions(Inventory inventory) {
-        InventoryHolder holder = inventory.getHolder();
-        if (holder instanceof DoubleChest doubleChest) {
-            List<BlockKey> keys = new ArrayList<>(2);
-            addHolderPosition(keys, doubleChest.getLeftSide());
-            addHolderPosition(keys, doubleChest.getRightSide());
-            return List.copyOf(keys);
+        Location location = inventory.getLocation();
+        if (location == null || location.getWorld() == null) {
+            return List.of();
         }
-        if (holder instanceof BlockState state) {
-            BlockKey key = blockKey(state.getLocation());
-            return key == null ? List.of() : List.of(key);
-        }
-        return List.of();
-    }
+        UUID worldId = location.getWorld().getUID();
+        List<BlockKey> keys = new ArrayList<>();
+        keys.add(new BlockKey(worldId, location.getBlockX(), location.getBlockY(), location.getBlockZ()));
 
-    private static void addHolderPosition(List<BlockKey> keys, InventoryHolder holder) {
-        if (holder instanceof BlockState state) {
-            BlockKey key = blockKey(state.getLocation());
-            if (key != null && !keys.contains(key)) {
-                keys.add(key);
+        // Double chests animate both halves; locate the connected half via block data.
+        Block block = location.getBlock();
+        if (block.getBlockData() instanceof Chest chestData) {
+            Chest.Type type = chestData.getType();
+            if (type != Chest.Type.SINGLE) {
+                BlockFace towardPartner = type == Chest.Type.LEFT
+                        ? clockwise(chestData.getFacing())
+                        : counterClockwise(chestData.getFacing());
+                Block partner = block.getRelative(towardPartner);
+                if (partner.getBlockData() instanceof Chest) {
+                    Location partnerLoc = partner.getLocation();
+                    BlockKey partnerKey = new BlockKey(
+                            worldId,
+                            partnerLoc.getBlockX(),
+                            partnerLoc.getBlockY(),
+                            partnerLoc.getBlockZ());
+                    if (!keys.contains(partnerKey)) {
+                        keys.add(partnerKey);
+                    }
+                }
             }
         }
+        return List.copyOf(keys);
     }
 
-    private static BlockKey blockKey(Location location) {
-        if (location == null || location.getWorld() == null) {
-            return null;
-        }
-        return new BlockKey(
-                location.getWorld().getUID(),
-                location.getBlockX(),
-                location.getBlockY(),
-                location.getBlockZ()
-        );
+    private static BlockFace clockwise(BlockFace facing) {
+        return switch (facing) {
+            case NORTH -> BlockFace.EAST;
+            case EAST -> BlockFace.SOUTH;
+            case SOUTH -> BlockFace.WEST;
+            case WEST -> BlockFace.NORTH;
+            default -> facing;
+        };
+    }
+
+    private static BlockFace counterClockwise(BlockFace facing) {
+        return switch (facing) {
+            case NORTH -> BlockFace.WEST;
+            case WEST -> BlockFace.SOUTH;
+            case SOUTH -> BlockFace.EAST;
+            case EAST -> BlockFace.NORTH;
+            default -> facing;
+        };
     }
 
     /**
