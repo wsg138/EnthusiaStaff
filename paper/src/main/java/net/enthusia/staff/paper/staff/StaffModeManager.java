@@ -123,6 +123,19 @@ public final class StaffModeManager implements Listener {
                 && !transitions.contains(playerId);
     }
 
+    /**
+     * Returns whether the currently applied Staff Mode profile is the Helper observer profile.
+     *
+     * <p>This deliberately reads the session's cached rank instead of live permissions so Helper
+     * protections remain fail-closed while a rank removal/change is being reconciled. The backing
+     * maps are concurrent, so callers may safely use this from another entity scheduler.</p>
+     */
+    boolean helperObserverActive(UUID playerId) {
+        return playerId != null
+                && active.containsKey(playerId)
+                && ranks.get(playerId) == StaffRank.HELPER;
+    }
+
     public CombatStatusAdapter combat() {
         return combat;
     }
