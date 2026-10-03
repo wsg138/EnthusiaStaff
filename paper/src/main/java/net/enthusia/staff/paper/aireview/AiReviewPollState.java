@@ -19,6 +19,7 @@ final class AiReviewPollState {
 
     private final int notifiedLimit;
     private final Set<String> notified = new LinkedHashSet<>();
+    private boolean initialized;
     private final AtomicReference<Snapshot> snapshot =
             new AtomicReference<>(new Snapshot(List.of(), null, false, "not refreshed"));
 
@@ -34,10 +35,12 @@ final class AiReviewPollState {
         ordered.sort(ORDER);
         List<ReviewItem> newItems = new ArrayList<>();
         for (ReviewItem item : ordered) {
-            if (notified.add(item.eventId())) {
+            boolean firstSeen = notified.add(item.eventId());
+            if (initialized && firstSeen) {
                 newItems.add(item);
             }
         }
+        initialized = true;
         trimNotified();
         Snapshot current = new Snapshot(List.copyOf(ordered), fetchedAt, true, null);
         snapshot.set(current);
