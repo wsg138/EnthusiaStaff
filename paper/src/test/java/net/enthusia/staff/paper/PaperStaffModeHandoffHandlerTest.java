@@ -59,17 +59,17 @@ class PaperStaffModeHandoffHandlerTest {
     }
 
     @Test
-    void timedOutOperationCancelsUnderlyingFuture() {
+    void timedOutExitIsFailOpen() {
         RecordingOperations operations = new RecordingOperations();
         ImmediateTimeoutFuture future = new ImmediateTimeoutFuture();
         operations.closeFuture = future;
         PaperStaffModeHandoffHandler handler = new PaperStaffModeHandoffHandler(new ObjectMapper(), operations);
 
-        assertFalse(handler.handle(envelope(
+        assertTrue(handler.handle(envelope(
                 PaperStaffModeHandoffHandler.EXIT_REQUEST,
                 exitPayload()
         )));
-        assertTrue(future.isCancelled());
+        assertFalse(future.isCancelled());
     }
 
     @Test
