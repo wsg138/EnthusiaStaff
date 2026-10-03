@@ -227,7 +227,12 @@ public final class PunishmentCommand implements CommandExecutor, TabCompleter {
             send(sender, Component.text(rejected.code() + ": " + rejected.message(), NamedTextColor.RED));
             return;
         }
-        sendPrepared(sender, target, (PunishmentDraftEvaluation.Prepared) evaluation);
+        PunishmentDraftEvaluation.Prepared prepared = (PunishmentDraftEvaluation.Prepared) evaluation;
+        if (sender instanceof Player player) {
+            gui.showPreparedDraft(player, target, route, actor, prepared);
+        } else {
+            sendPrepared(sender, target, prepared);
+        }
     }
 
     private static PreparePunishmentDraftRequest prepareRequest(
@@ -542,7 +547,9 @@ public final class PunishmentCommand implements CommandExecutor, TabCompleter {
                 NamedTextColor.YELLOW
         )));
         sender.sendMessage(StaffMessageStyle.style(Component.text(
-                "Draft controls: /punish resume <target> | /punish confirm <draft-id>",
+                sender instanceof Player
+                        ? "Draft controls: /punish resume <target> opens the confirmation menu."
+                        : "Draft controls: /punish resume <target> | /punish confirm <draft-id>",
                 NamedTextColor.GRAY
         )));
         if (CENTRAL_COMMAND.equals(route)) {

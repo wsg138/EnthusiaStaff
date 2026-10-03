@@ -146,6 +146,16 @@ public final class PunishmentGuiController implements Listener {
         }));
     }
 
+    public void showPreparedDraft(
+            Player viewer,
+            PlayerIdentity target,
+            String commandName,
+            Actor actor,
+            PunishmentDraftEvaluation.Prepared prepared
+    ) {
+        showPrepared(viewer, target, commandName, actor, prepared);
+    }
+
     @EventHandler(priority = EventPriority.HIGHEST)
     public void onClick(InventoryClickEvent event) {
         if (!(event.getWhoClicked() instanceof Player viewer)
