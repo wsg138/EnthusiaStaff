@@ -403,19 +403,31 @@ public final class JdbcModerationStore implements ModerationStore {
     }
 
     private static String formatDuration(java.time.Duration duration) {
-        long days = duration.toDays();
-        if (days > 0 && duration.equals(java.time.Duration.ofDays(days))) {
-            return days + (days == 1 ? " day" : " days");
+        if (isExactDays(duration)) {
+            return pluralize(duration.toDays(), "day");
         }
-        long hours = duration.toHours();
-        if (hours > 0 && duration.equals(java.time.Duration.ofHours(hours))) {
-            return hours + (hours == 1 ? " hour" : " hours");
+        if (isExactHours(duration)) {
+            return pluralize(duration.toHours(), "hour");
         }
         long minutes = duration.toMinutes();
         if (minutes > 0) {
-            return minutes + (minutes == 1 ? " minute" : " minutes");
+            return pluralize(minutes, "minute");
         }
         return duration.getSeconds() + " seconds";
+    }
+
+    private static boolean isExactDays(java.time.Duration duration) {
+        long days = duration.toDays();
+        return days > 0 && duration.equals(java.time.Duration.ofDays(days));
+    }
+
+    private static boolean isExactHours(java.time.Duration duration) {
+        long hours = duration.toHours();
+        return hours > 0 && duration.equals(java.time.Duration.ofHours(hours));
+    }
+
+    private static String pluralize(long amount, String unit) {
+        return amount + " " + unit + (amount == 1 ? "" : "s");
     }
 
     private static String truncateExplanation(String explanation) {
