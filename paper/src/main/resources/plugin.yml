@@ -84,6 +84,10 @@ commands:
     description: Open staff report management
     usage: /reports
     permission: enthusiastaff.reports.manage
+  aireview:
+    description: Review central AI moderation decisions and corrections
+    usage: /aireview [list|refresh|view|allow|block|review|label|approve|reject]
+    permission: enthusiastaff.ai-review.queue
   freeze:
     description: Manage and inspect durable player freezes
     usage: /freeze <player> <reason> | /freeze keep <player> <reason> CONFIRM | /freeze status <player|uuid> | /freeze list
@@ -208,6 +212,14 @@ permissions:
   enthusiastaff.reports.manage:
     default: false
   enthusiastaff.reports.evidence:
+    default: false
+  enthusiastaff.ai-review.queue:
+    default: false
+  enthusiastaff.ai-review.detail:
+    default: false
+  enthusiastaff.ai-review.correct:
+    default: false
+  enthusiastaff.ai-review.admin:
     default: false
   enthusiastaff.alerts:
     default: false
@@ -343,6 +355,9 @@ permissions:
       enthusiastaff.sanction.end: true
       enthusiastaff.sanction.revoke: true
       enthusiastaff.reports.evidence: true
+      enthusiastaff.ai-review.queue: true
+      enthusiastaff.ai-review.detail: true
+      enthusiastaff.ai-review.correct: true
       enthusiastaff.inventory.edit: true
       enthusiastaff.confiscate.economy: true
       enthusiastaff.confiscate.items: true
@@ -361,6 +376,7 @@ permissions:
       enthusiastaff.remove.approve-overturn: true
       enthusiastaff.sanction.overturn: true
       enthusiastaff.sanction.overturn.appeal: true
+      enthusiastaff.ai-review.admin: true
       enthusiastaff.market.restrict: true
       enthusiastaff.reputation.restrict: true
       enthusiastaff.cheattester.cancel-any: true
