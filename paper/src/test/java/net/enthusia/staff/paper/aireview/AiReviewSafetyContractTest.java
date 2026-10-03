@@ -39,11 +39,15 @@ class AiReviewSafetyContractTest {
         int correctionGate = source.indexOf("AiReviewPermissions.correct(viewer)", confirm);
         int refresh = source.indexOf("private void prewriteRefresh");
         int load = source.indexOf("subsystem.loadEvent(", refresh);
-        int write = source.indexOf("write(viewer, state, fresh, authority)", load);
+        int authorityRecheck = source.indexOf("AiReviewPermissions.authority(", load);
+        int write = source.indexOf("write(viewer, state, fresh, currentAuthority)", authorityRecheck);
 
         assertTrue(click >= 0 && queueGate > click);
         assertTrue(confirm >= 0 && correctionGate > confirm);
-        assertTrue(refresh >= 0 && load > refresh && write > load);
+        assertTrue(refresh >= 0 && load > refresh);
+        assertTrue(authorityRecheck > load && write > authorityRecheck);
+        assertTrue(source.contains("AiReviewPermissions.detail(viewer)"));
+        assertTrue(source.contains("AiReviewPermissions.correct(viewer)"));
         assertTrue(source.contains("activeGeneration.getOrDefault"));
         assertTrue(source.contains("AiReviewWriteFence.valid"));
     }
