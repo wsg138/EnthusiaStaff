@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import io.papermc.paper.threadedregions.scheduler.ScheduledTask;
 import java.time.Clock;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -44,6 +45,8 @@ public final class AiReviewSubsystem implements AutoCloseable, Listener {
     private final AiReviewClient client;
     private final AiReviewPollState pollState;
     private final AiReviewBackoff backoff;
+    private final Object pollLock = new Object();
+    private final ArrayBlockingQueue<Runnable> pollWaiters;
     private final AtomicBoolean pollRunning = new AtomicBoolean();
     private final AtomicBoolean closed = new AtomicBoolean();
     private volatile ScheduledTask pollTask;
@@ -71,6 +74,9 @@ public final class AiReviewSubsystem implements AutoCloseable, Listener {
         this.backoff = new AiReviewBackoff(
                 java.time.Duration.ofMillis(initialBackoffMillis),
                 java.time.Duration.ofSeconds(60)
+        );
+        this.pollWaiters = new ArrayBlockingQueue<>(
+                configuration == null ? 8 : Math.max(8, configuration.queueCapacity())
         );
     }
 
@@ -158,30 +164,59 @@ public final class AiReviewSubsystem implements AutoCloseable, Listener {
     }
 
     void refreshQueue(boolean userRequested, Runnable completion) {
-        if (!enabled() || !pollRunning.compareAndSet(false, true)) {
-            if (userRequested && completion != null) {
+        if (!enabled()) {
+            if (completion != null) {
                 schedule(completion);
             }
             return;
         }
+
+        Runnable overflow = null;
+        boolean startPoll = false;
+        synchronized (pollLock) {
+            if (completion != null && !pollWaiters.offer(completion)) {
+                overflow = completion;
+            }
+            if (!pollRunning.get()) {
+                pollRunning.set(true);
+                startPoll = true;
+            }
+        }
+
+        if (overflow != null) {
+            pollState.failure(
+                    userRequested
+                            ? "AI review refresh waiter queue is full"
+                            : "AI review refresh completion queue is full",
+                    clock.instant()
+            );
+            schedule(overflow);
+        }
+        if (!startPoll) {
+            return;
+        }
+
         submit(
                 () -> client.listReviews(configuration.reviewLimit()),
                 items -> {
-                    pollRunning.set(false);
                     AiReviewPollState.Update update = pollState.success(items, clock.instant());
                     notifyNewItems(update.newlyDiscovered());
-                    if (completion != null) {
-                        completion.run();
-                    }
+                    finishPoll();
                 },
                 issue -> {
-                    pollRunning.set(false);
                     pollState.failure(issue, clock.instant());
-                    if (completion != null) {
-                        completion.run();
-                    }
+                    finishPoll();
                 }
         );
+    }
+
+    private void finishPoll() {
+        List<Runnable> completions = new ArrayList<>();
+        synchronized (pollLock) {
+            pollRunning.set(false);
+            pollWaiters.drainTo(completions);
+        }
+        completions.forEach(Runnable::run);
     }
 
     void loadEvent(
@@ -370,6 +405,10 @@ public final class AiReviewSubsystem implements AutoCloseable, Listener {
             } catch (RuntimeException exception) {
                 plugin.getLogger().log(Level.FINE, "AI review poll cancellation failed", exception);
             }
+        }
+        synchronized (pollLock) {
+            pollRunning.set(false);
+            pollWaiters.clear();
         }
         if (executor == null) {
             return;
