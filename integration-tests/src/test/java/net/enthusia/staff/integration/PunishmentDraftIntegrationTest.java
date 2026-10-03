@@ -89,7 +89,8 @@ class PunishmentDraftIntegrationTest {
                         List.of(new SanctionSpec(
                                 SanctionType.MUTE,
                                 SanctionLength.temporary(Duration.ofDays(1))
-                        ))
+                        )),
+                        false
                 ),
                 NOW,
                 expiresAt

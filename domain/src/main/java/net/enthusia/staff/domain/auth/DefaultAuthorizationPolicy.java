@@ -20,7 +20,7 @@ public final class DefaultAuthorizationPolicy implements AuthorizationPolicy {
             case ADMIN -> switch (action) {
                 case ISSUE_POLICY_SANCTION, REQUEST_POLICY_SANCTION, APPROVE_POLICY_SANCTION,
                         LOWER_RECOMMENDATION, RAISE_RECOMMENDATION,
-                        USE_CUSTOM_DURATION, END_SANCTION, REVOKE_SANCTION, FULL_OVERTURN,
+                        REQUEST_CUSTOM_DURATION, END_SANCTION, REVOKE_SANCTION, FULL_OVERTURN,
                         REQUEST_FULL_OVERTURN, APPROVE_OVERTURN, ACCEPT_APPEAL,
                         APPLY_CASE_CONFISCATION, MODIFY_MARKET_RESTRICTION,
                         MODIFY_REPUTATION_RESTRICTION, MANAGE_ACCOUNT_LINKS -> true;

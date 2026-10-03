@@ -199,6 +199,11 @@ public final class PunishmentDraftWorkflow {
     }
 
     private static boolean requiresRequest(Actor actor, PunishmentExpectation expectation) {
+        // Owner-mandated: Admins using custom durations require Founder approval.
+        if (actor.rank() == net.enthusia.staff.domain.auth.StaffRank.ADMIN
+                && expectation.customDuration()) {
+            return true;
+        }
         return PunishmentApprovalRules.requiresApproval(actor.rank(), expectation.sanctions());
     }
 

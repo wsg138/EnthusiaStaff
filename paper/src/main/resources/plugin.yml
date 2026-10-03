@@ -265,14 +265,24 @@ permissions:
     default: false
   enthusiastaff.identity.helper:
     default: false
+    children:
+      enthusiastaff.rank.helper: true
   enthusiastaff.identity.mod:
     default: false
+    children:
+      enthusiastaff.rank.mod: true
   enthusiastaff.identity.admin:
     default: false
+    children:
+      enthusiastaff.rank.admin: true
   enthusiastaff.identity.owner:
     default: false
+    children:
+      enthusiastaff.rank.founder: true
   enthusiastaff.identity.developer:
     default: false
+    children:
+      enthusiastaff.rank.developer: true
   enthusiastaff.rank.helper:
     default: false
     children:
