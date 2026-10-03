@@ -458,10 +458,18 @@ class AiReviewHttpClientTest {
         }
 
         @Override
-        public void close() throws Exception {
+        public void close() {
             closed = true;
-            server.close();
-            thread.join(1_000);
+            try {
+                server.close();
+            } catch (IOException ignored) {
+                // Best-effort test fixture cleanup.
+            }
+            try {
+                thread.join(1_000);
+            } catch (InterruptedException exception) {
+                Thread.currentThread().interrupt();
+            }
         }
     }
 }
