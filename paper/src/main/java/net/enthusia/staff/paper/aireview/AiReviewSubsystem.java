@@ -43,6 +43,7 @@ public final class AiReviewSubsystem implements AutoCloseable, Listener {
     private final ThreadPoolExecutor executor;
     private final AiReviewClient client;
     private final AiReviewPollState pollState;
+    private final AiReviewBackoff backoff;
     private final AtomicBoolean pollRunning = new AtomicBoolean();
     private final AtomicBoolean closed = new AtomicBoolean();
     private volatile ScheduledTask pollTask;
@@ -64,6 +65,13 @@ public final class AiReviewSubsystem implements AutoCloseable, Listener {
         this.executor = executor;
         this.client = client;
         this.pollState = pollState;
+        long initialBackoffMillis = configuration == null
+                ? 5_000L
+                : Math.max(1_000L, Math.min(5_000L, configuration.pollInterval().toMillis()));
+        this.backoff = new AiReviewBackoff(
+                java.time.Duration.ofMillis(initialBackoffMillis),
+                java.time.Duration.ofSeconds(60)
+        );
     }
 
     public static AiReviewSubsystem create(
@@ -112,7 +120,7 @@ public final class AiReviewSubsystem implements AutoCloseable, Listener {
         gui = new AiReviewGuiController(plugin, this);
         plugin.getServer().getPluginManager().registerEvents(gui, plugin);
         plugin.getServer().getPluginManager().registerEvents(this, plugin);
-        AiReviewCommand handler = new AiReviewCommand(this, gui);
+        AiReviewCommand handler = new AiReviewCommand(plugin, this, gui);
         command.setExecutor(handler);
         command.setTabCompleter(handler);
         if (!enabled()) {
@@ -220,27 +228,41 @@ public final class AiReviewSubsystem implements AutoCloseable, Listener {
             schedule(() -> failure.accept(disabledReason()));
             return;
         }
+        java.time.Duration remaining = backoff.remaining(clock.instant());
+        if (!remaining.isZero()) {
+            long seconds = Math.max(1L, (remaining.toMillis() + 999L) / 1_000L);
+            schedule(() -> failure.accept("central review backing off for " + seconds + "s"));
+            return;
+        }
         try {
             executor.execute(() -> {
                 try {
                     T result = work.get();
+                    backoff.success();
                     schedule(() -> {
                         if (!closed.get()) {
                             success.accept(result);
                         }
                     });
                 } catch (AiReviewClientException exception) {
-                    String issue = "central review " + exception.category().name().toLowerCase(java.util.Locale.ROOT);
+                    java.time.Duration delay = backoff.failure(clock.instant());
+                    String issue = "central review "
+                            + exception.category().name().toLowerCase(java.util.Locale.ROOT)
+                            + "; retry backoff " + Math.max(1L, delay.toSeconds()) + "s";
                     schedule(() -> {
                         if (!closed.get()) {
                             failure.accept(issue);
                         }
                     });
                 } catch (RuntimeException exception) {
+                    java.time.Duration delay = backoff.failure(clock.instant());
                     plugin.getLogger().log(Level.WARNING, "AI review operation failed", exception);
                     schedule(() -> {
                         if (!closed.get()) {
-                            failure.accept("central review internal error");
+                            failure.accept(
+                                    "central review internal error; retry backoff "
+                                            + Math.max(1L, delay.toSeconds()) + "s"
+                            );
                         }
                     });
                 }
@@ -275,15 +297,25 @@ public final class AiReviewSubsystem implements AutoCloseable, Listener {
                 urgent > 0 ? NamedTextColor.RED : NamedTextColor.GOLD
         );
         for (Player player : plugin.getServer().getOnlinePlayers()) {
-            if (AiReviewPermissions.queue(player)) {
-                player.sendMessage(StaffMessageStyle.style(message));
+            if (!AiReviewPermissions.queue(player)
+                    || !player.hasPermission(configuration.notificationPermission())) {
+                continue;
             }
+            player.getScheduler().execute(plugin, () -> {
+                if (player.isOnline()
+                        && AiReviewPermissions.queue(player)
+                        && player.hasPermission(configuration.notificationPermission())) {
+                    player.sendMessage(StaffMessageStyle.style(message));
+                }
+            }, null, 1L);
         }
     }
 
     @EventHandler(priority = EventPriority.MONITOR)
     public void onJoin(PlayerJoinEvent event) {
-        if (!enabled() || !AiReviewPermissions.queue(event.getPlayer())) {
+        if (!enabled()
+                || !AiReviewPermissions.queue(event.getPlayer())
+                || !event.getPlayer().hasPermission(configuration.notificationPermission())) {
             return;
         }
         Player player = event.getPlayer();
@@ -305,7 +337,7 @@ public final class AiReviewSubsystem implements AutoCloseable, Listener {
         refreshQueue(false, null);
     }
 
-    private static ThreadPoolExecutor createExecutor(int threads, int queueCapacity) {
+    static ThreadPoolExecutor createExecutor(int threads, int queueCapacity) {
         AtomicInteger sequence = new AtomicInteger();
         ThreadFactory factory = runnable -> {
             Thread thread = new Thread(
