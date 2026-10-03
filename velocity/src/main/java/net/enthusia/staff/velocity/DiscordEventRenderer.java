@@ -18,9 +18,13 @@ final class DiscordEventRenderer {
     private static final String STATE = "state";
     private static final Map<String, List<String>> ALLOWED_FIELDS = Map.of(
             "punishments", List.of(
-                    "caseId", TARGET_ID, "reasonId", "sanctionId", "sanctionIds",
-                    "requestId", "actorId", "action", "sanctionType", "status", STATE, "type",
-                    "decision", "outcome"
+                    "caseId", TARGET_ID, "subjectId", "reasonId", "family",
+                    "publicReason", "internalExplanation", "issuedAt",
+                    "sanctionId", "sanctionIds", "sanctionType", "sanctionTypes", "sanctionDetails",
+                    "requestId", "actorId", "actorName", "actorRank",
+                    "action", "status", "previousStatus", "resultingStatus",
+                    "previousExpiration", "resultingExpiration",
+                    STATE, "type", "decision", "outcome"
             ),
             "reports", List.of("reportId", TARGET_ID, "reasonId", "serverId", "status", STATE, "actorId"),
             "logs-staffmode", List.of(

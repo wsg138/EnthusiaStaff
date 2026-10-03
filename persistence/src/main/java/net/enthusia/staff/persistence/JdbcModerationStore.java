@@ -342,9 +342,14 @@ public final class JdbcModerationStore implements ModerationStore {
         payload.put("caseId", plan.caseId().value());
         payload.put("targetId", plan.targetId().toString());
         payload.put("reasonId", plan.reasonId());
+        payload.put("family", plan.family());
         payload.put("publicReason", plan.publicReason());
+        payload.put("internalExplanation", truncateExplanation(plan.internalExplanation()));
         payload.put("issuedAt", plan.issuedAt().toString());
+        payload.put("actorName", plan.actor().displayName());
+        payload.put("actorRank", plan.actor().rank().name());
         payload.put("sanctionTypes", plan.sanctions().stream().map(spec -> spec.type().name()).toList());
+        payload.put("sanctionDetails", plan.sanctions().stream().map(JdbcModerationStore::describeSanction).toList());
         payload.put("sanctionIds", sanctionIds.stream().map(UUID::toString).toList());
         String serialized = json.writeValueAsString(payload);
         try (PreparedStatement network = connection.prepareStatement("""
@@ -384,6 +389,44 @@ public final class JdbcModerationStore implements ModerationStore {
                 alert.executeUpdate();
             }
         }
+    }
+
+    private static String describeSanction(SanctionSpec spec) {
+        String duration = switch (spec.length().kind()) {
+            case INSTANT -> "instant";
+            case PERMANENT -> "permanent";
+            case TEMPORARY -> spec.length().temporary()
+                    .map(JdbcModerationStore::formatDuration)
+                    .orElse("temporary");
+        };
+        return spec.type().name() + " (" + duration + ")";
+    }
+
+    private static String formatDuration(java.time.Duration duration) {
+        long days = duration.toDays();
+        if (days > 0 && duration.equals(java.time.Duration.ofDays(days))) {
+            return days + (days == 1 ? " day" : " days");
+        }
+        long hours = duration.toHours();
+        if (hours > 0 && duration.equals(java.time.Duration.ofHours(hours))) {
+            return hours + (hours == 1 ? " hour" : " hours");
+        }
+        long minutes = duration.toMinutes();
+        if (minutes > 0) {
+            return minutes + (minutes == 1 ? " minute" : " minutes");
+        }
+        return duration.getSeconds() + " seconds";
+    }
+
+    private static String truncateExplanation(String explanation) {
+        if (explanation == null) {
+            return null;
+        }
+        final int max = 1_000;
+        if (explanation.length() <= max) {
+            return explanation;
+        }
+        return explanation.substring(0, max - 1) + "…";
     }
 
     private static CaseId existingCase(Connection connection, String idempotencyKey) throws SQLException {
