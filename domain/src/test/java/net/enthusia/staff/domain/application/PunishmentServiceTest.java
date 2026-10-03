@@ -154,7 +154,7 @@ class PunishmentServiceTest {
     }
 
     @Test
-    void adminMayCustomizeConfiguredTypesButNotCreateArbitraryCombination() {
+    void adminCustomDurationRequiresFounderApproval() {
         List<PunishmentStep> steps = standardSteps();
         PunishmentService service = service(
                 new AtomicReasonPolicyRepository("v1", List.of(policy(StaffRank.MOD, steps))),
@@ -167,10 +167,13 @@ class PunishmentServiceTest {
                 new SanctionSpec(SanctionType.NETWORK_BAN, SanctionLength.temporary(Duration.ofDays(3)))
         );
 
-        assertInstanceOf(
-                PunishmentEvaluation.Allowed.class,
+        // Owner-mandated: Admins may request custom durations but cannot apply them
+        // directly — Founder approval is required via the request flow.
+        PunishmentEvaluation.Rejected adminCustom = assertInstanceOf(
+                PunishmentEvaluation.Rejected.class,
                 service.evaluate(request(StaffRank.ADMIN, customDuration), OperationalMode.ACTIVE)
         );
+        assertEquals("APPROVAL_REQUIRED", adminCustom.code());
         assertInstanceOf(
                 PunishmentEvaluation.Rejected.class,
                 service.evaluate(request(StaffRank.ADMIN, arbitrary), OperationalMode.ACTIVE)
