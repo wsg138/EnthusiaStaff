@@ -19,15 +19,18 @@ import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
 import org.bukkit.command.TabCompleter;
 import org.bukkit.entity.Player;
+import org.bukkit.plugin.java.JavaPlugin;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 final class AiReviewCommand implements CommandExecutor, TabCompleter {
+    private final JavaPlugin plugin;
     private final AiReviewSubsystem subsystem;
     private final AiReviewGuiController gui;
     private final Clock clock = Clock.systemUTC();
 
-    AiReviewCommand(AiReviewSubsystem subsystem, AiReviewGuiController gui) {
+    AiReviewCommand(JavaPlugin plugin, AiReviewSubsystem subsystem, AiReviewGuiController gui) {
+        this.plugin = plugin;
         this.subsystem = subsystem;
         this.gui = gui;
     }
@@ -169,7 +172,10 @@ final class AiReviewCommand implements CommandExecutor, TabCompleter {
         String eventId = arguments[1];
         subsystem.loadEvent(
                 eventId,
-                details -> performTextWrite(player, action, arguments, details, authority),
+                details -> onPlayer(
+                        player,
+                        () -> performTextWrite(player, action, arguments, details, authority)
+                ),
                 issue -> send(sender, "No change was made: " + issue, NamedTextColor.YELLOW)
         );
     }
@@ -263,7 +269,7 @@ final class AiReviewCommand implements CommandExecutor, TabCompleter {
         subsystem.refreshQueue(false, null);
     }
 
-    private static void stale(CommandSender sender) {
+    private void stale(CommandSender sender) {
         send(
                 sender,
                 "The central review state changed or the proposal is no longer pending; no write was made.",
@@ -271,11 +277,11 @@ final class AiReviewCommand implements CommandExecutor, TabCompleter {
         );
     }
 
-    private static void failed(CommandSender sender, String issue) {
+    private void failed(CommandSender sender, String issue) {
         send(sender, "No correction was committed: " + issue, NamedTextColor.YELLOW);
     }
 
-    private static void usage(CommandSender sender) {
+    private void usage(CommandSender sender) {
         send(sender, "Usage: /aireview [list|refresh|view <event-id>]", NamedTextColor.GRAY);
         send(sender, "       /aireview <allow|block|review> <event-id> [CONFIRM]", NamedTextColor.GRAY);
         send(sender, "       /aireview label <event-id> <SEMANTIC_LABEL> [CONFIRM]", NamedTextColor.GRAY);
@@ -283,8 +289,19 @@ final class AiReviewCommand implements CommandExecutor, TabCompleter {
         send(sender, "       /aireview <adminapprove|adminreject> <event-id> <proposal-id> [CONFIRM]", NamedTextColor.GRAY);
     }
 
-    private static void send(CommandSender sender, String text, NamedTextColor color) {
-        sender.sendMessage(StaffMessageStyle.style(Component.text(text, color)));
+    private void send(CommandSender sender, String text, NamedTextColor color) {
+        Runnable delivery = () -> sender.sendMessage(
+                StaffMessageStyle.style(Component.text(text, color))
+        );
+        if (sender instanceof Player player) {
+            onPlayer(player, delivery);
+            return;
+        }
+        plugin.getServer().getGlobalRegionScheduler().execute(plugin, delivery);
+    }
+
+    private void onPlayer(Player player, Runnable operation) {
+        player.getScheduler().execute(plugin, operation, null, 1L);
     }
 
     @Override
@@ -294,7 +311,7 @@ final class AiReviewCommand implements CommandExecutor, TabCompleter {
             @NotNull String alias,
             @NotNull String[] arguments
     ) {
-        if (!AiReviewPermissions.queue(sender)) {
+        if (!AiReviewPermissions.queue(sender) || !subsystem.enabled()) {
             return List.of();
         }
         if (arguments.length == 1) {
