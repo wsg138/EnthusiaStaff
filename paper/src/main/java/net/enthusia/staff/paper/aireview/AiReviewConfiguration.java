@@ -12,6 +12,7 @@ public record AiReviewConfiguration(
         URI baseUri,
         String clientId,
         String bearerToken,
+        String notificationPermission,
         Duration connectTimeout,
         Duration requestTimeout,
         Duration pollInterval,
@@ -34,6 +35,7 @@ public record AiReviewConfiguration(
         Objects.requireNonNull(baseUri, "baseUri");
         Objects.requireNonNull(clientId, "clientId");
         Objects.requireNonNull(bearerToken, "bearerToken");
+        Objects.requireNonNull(notificationPermission, "notificationPermission");
         Objects.requireNonNull(connectTimeout, "connectTimeout");
         Objects.requireNonNull(requestTimeout, "requestTimeout");
         Objects.requireNonNull(pollInterval, "pollInterval");
@@ -60,6 +62,10 @@ public record AiReviewConfiguration(
                     baseUri,
                     clientId,
                     token,
+                    required(
+                            section.getString("notification-permission", AiReviewPermissions.QUEUE),
+                            "notification-permission"
+                    ),
                     Duration.ofMillis(boundedLong(section, "connect-timeout-millis", 1_000, 100, 5_000)),
                     Duration.ofMillis(boundedLong(section, "request-timeout-millis", 2_000, 250, 10_000)),
                     Duration.ofMillis(boundedLong(section, "poll-interval-millis", 10_000, 1_000, 300_000)),
