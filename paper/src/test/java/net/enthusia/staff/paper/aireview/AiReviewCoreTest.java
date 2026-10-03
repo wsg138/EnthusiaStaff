@@ -13,6 +13,10 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 import net.enthusia.staff.paper.aireview.AiReviewModels.Containment;
 import net.enthusia.staff.paper.aireview.AiReviewModels.CorrectionAuthority;
 import net.enthusia.staff.paper.aireview.AiReviewModels.CorrectionDecision;
@@ -77,6 +81,7 @@ class AiReviewCoreTest {
         );
         assertTrue(loaded.enabled());
         assertEquals("runtime-only-token", loaded.configuration().orElseThrow().bearerToken());
+        assertEquals(AiReviewPermissions.QUEUE, loaded.configuration().orElseThrow().notificationPermission());
         assertEquals(100, loaded.configuration().orElseThrow().reviewLimit());
     }
 
@@ -129,6 +134,52 @@ class AiReviewCoreTest {
         state.success(List.of(), now);
         assertTrue(state.snapshot().fresh(now.plusSeconds(29), Duration.ofSeconds(30)));
         assertFalse(state.snapshot().fresh(now.plusSeconds(31), Duration.ofSeconds(30)));
+    }
+
+    @Test
+    void boundedBackoffOpensExponentiallyAndResetsOnSuccess() {
+        AiReviewBackoff backoff = new AiReviewBackoff(
+                Duration.ofSeconds(2),
+                Duration.ofSeconds(8)
+        );
+        Instant now = Instant.parse("2026-10-03T20:00:00Z");
+        assertEquals(Duration.ZERO, backoff.remaining(now));
+        assertEquals(Duration.ofSeconds(2), backoff.failure(now));
+        assertTrue(backoff.remaining(now.plusSeconds(1)).compareTo(Duration.ZERO) > 0);
+        assertEquals(Duration.ofSeconds(4), backoff.failure(now.plusSeconds(2)));
+        assertEquals(Duration.ofSeconds(8), backoff.failure(now.plusSeconds(6)));
+        assertEquals(Duration.ofSeconds(8), backoff.failure(now.plusSeconds(14)));
+        backoff.success();
+        assertEquals(Duration.ZERO, backoff.remaining(now.plusSeconds(14)));
+        assertEquals(0, backoff.consecutiveFailures());
+    }
+
+    @Test
+    void reviewExecutorHasBoundedQueueAndCleanShutdown() throws Exception {
+        ThreadPoolExecutor executor = AiReviewSubsystem.createExecutor(1, 1);
+        CountDownLatch release = new CountDownLatch(1);
+        CountDownLatch started = new CountDownLatch(1);
+        try {
+            executor.execute(() -> {
+                started.countDown();
+                try {
+                    release.await();
+                } catch (InterruptedException exception) {
+                    Thread.currentThread().interrupt();
+                }
+            });
+            assertTrue(started.await(2, TimeUnit.SECONDS));
+            executor.execute(() -> {
+                // Occupies the one bounded queue slot.
+            });
+            assertThrows(RejectedExecutionException.class, () -> executor.execute(() -> {
+                // Third task must be rejected rather than making the queue unbounded.
+            }));
+        } finally {
+            release.countDown();
+            executor.shutdownNow();
+            assertTrue(executor.awaitTermination(2, TimeUnit.SECONDS));
+        }
     }
 
     @Test
@@ -215,6 +266,7 @@ class AiReviewCoreTest {
                 URI.create("http://127.0.0.1:8787"),
                 "test",
                 "token",
+                AiReviewPermissions.QUEUE,
                 Duration.ofSeconds(1),
                 Duration.ofSeconds(2),
                 Duration.ofSeconds(10),
