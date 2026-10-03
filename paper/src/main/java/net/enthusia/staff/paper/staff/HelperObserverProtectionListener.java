@@ -4,7 +4,6 @@ import com.destroystokyo.paper.event.entity.ProjectileCollideEvent;
 import com.destroystokyo.paper.event.player.PlayerPickupExperienceEvent;
 import java.util.Objects;
 import java.util.UUID;
-import net.enthusia.staff.domain.auth.StaffRank;
 import org.bukkit.entity.Firework;
 import org.bukkit.entity.Mob;
 import org.bukkit.entity.Player;
@@ -45,10 +44,8 @@ public final class HelperObserverProtectionListener implements Listener {
     @EventHandler(priority = EventPriority.HIGHEST)
     public void onAirItemUse(PlayerInteractEvent event) {
         ItemStack item = event.getItem();
-        StaffRank rank = rank(event.getPlayer());
         if (HelperObserverPolicy.blocksAirItemUse(
-                staffMode.active(event.getPlayer().getUniqueId()),
-                rank,
+                activeHelper(event.getPlayer()),
                 event.getAction(),
                 item != null && !item.getType().isAir()
         )) {
@@ -68,12 +65,7 @@ public final class HelperObserverProtectionListener implements Listener {
         if (!(event.getHitEntity() instanceof Player player)) {
             return;
         }
-        StaffRank rank = rank(player);
-        if (!HelperObserverPolicy.blocksProjectileCollision(
-                staffMode.active(player.getUniqueId()),
-                rank,
-                true
-        )) {
+        if (!HelperObserverPolicy.blocksProjectileCollision(activeHelper(player), true)) {
             return;
         }
         event.setCancelled(true);
@@ -92,12 +84,7 @@ public final class HelperObserverProtectionListener implements Listener {
                 || !(event.getCollidedWith() instanceof Player player)) {
             return;
         }
-        StaffRank rank = rank(player);
-        if (HelperObserverPolicy.blocksProjectileCollision(
-                staffMode.active(player.getUniqueId()),
-                rank,
-                true
-        )) {
+        if (HelperObserverPolicy.blocksProjectileCollision(activeHelper(player), true)) {
             event.setCancelled(true);
         }
     }
@@ -125,10 +112,8 @@ public final class HelperObserverProtectionListener implements Listener {
 
     @EventHandler(priority = EventPriority.HIGHEST)
     public void onExperienceChange(PlayerExpChangeEvent event) {
-        StaffRank rank = rank(event.getPlayer());
         event.setAmount(HelperObserverPolicy.experienceAmount(
-                staffMode.active(event.getPlayer().getUniqueId()),
-                rank,
+                activeHelper(event.getPlayer()),
                 event.getAmount()
         ));
     }
@@ -183,14 +168,7 @@ public final class HelperObserverProtectionListener implements Listener {
     }
 
     private boolean activeHelper(Player player) {
-        return HelperObserverPolicy.applies(staffMode.active(player.getUniqueId()), rank(player));
-    }
-
-    private StaffRank rank(Player player) {
-        // Use Staff Mode's authoritative session rank, not live permissions.
-        // During rank transition windows the session rank is null; the policy
-        // treats null as fail-closed (protections apply) while active.
-        return staffMode.sessionRank(player.getUniqueId());
+        return staffMode.helperObserverActive(player.getUniqueId());
     }
 
     private void clearMobTarget(Object damager, Player target) {
@@ -209,6 +187,9 @@ public final class HelperObserverProtectionListener implements Listener {
         }
         Mob targetMob = mob;
         targetMob.getScheduler().run(plugin, ignoredMob -> {
+            if (!staffMode.helperObserverActive(targetId)) {
+                return;
+            }
             var currentTarget = targetMob.getTarget();
             if (currentTarget != null && targetId.equals(currentTarget.getUniqueId())) {
                 targetMob.setTarget(null);
