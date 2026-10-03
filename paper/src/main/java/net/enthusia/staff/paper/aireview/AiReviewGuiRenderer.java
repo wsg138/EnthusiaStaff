@@ -99,7 +99,12 @@ final class AiReviewGuiRenderer {
         inventory.setItem(13, item(
                 Material.PAPER,
                 "Event " + AiReviewPresentation.bounded(details.eventId(), 24),
-                bounded.stream().limit(18).toList()
+                bounded.stream()
+                        .filter(line -> !line.startsWith("Context "))
+                        .filter(line -> !line.startsWith("Correction "))
+                        .filter(line -> !line.startsWith("Accepted correction:"))
+                        .limit(5)
+                        .toList()
         ));
         inventory.setItem(11, item(
                 Material.WRITABLE_BOOK,
@@ -109,7 +114,18 @@ final class AiReviewGuiRenderer {
         inventory.setItem(15, item(
                 Material.COMPARATOR,
                 "Decision & evidence",
-                bounded.stream().skip(Math.min(5, bounded.size())).limit(18).toList()
+                bounded.stream()
+                        .filter(line -> !line.startsWith("Context "))
+                        .filter(line -> !line.startsWith("Correction "))
+                        .filter(line -> !line.startsWith("Accepted correction:"))
+                        .skip(Math.min(5, bounded.size()))
+                        .limit(20)
+                        .toList()
+        ));
+        inventory.setItem(29, item(
+                Material.BOOKSHELF,
+                "Correction history",
+                correctionLore(details)
         ));
         inventory.setItem(ALLOW, item(Material.LIME_DYE, "Should allow", List.of(
                 "Preserves every other decision dimension.",
@@ -203,6 +219,29 @@ final class AiReviewGuiRenderer {
         ));
         inventory.setItem(BACK, item(Material.ARROW, "Back — no change", List.of()));
         inventory.setItem(CLOSE, item(Material.BARRIER, "Close — no change", List.of()));
+    }
+
+    private List<String> correctionLore(EventDetails details) {
+        List<String> lines = new ArrayList<>();
+        details.corrections().stream()
+                .sorted(java.util.Comparator.comparing(Correction::createdAt).reversed())
+                .limit(10)
+                .forEach(correction -> lines.add(
+                        AiReviewPresentation.bounded(correction.proposalId(), 28)
+                                + " · " + correction.status()
+                                + " · +" + correction.approvals()
+                                + "/-" + correction.rejections()
+                ));
+        if (details.acceptedCorrection() != null) {
+            lines.add("Accepted: " + AiReviewPresentation.bounded(
+                    details.acceptedCorrection().proposalId(),
+                    40
+            ));
+        }
+        if (lines.isEmpty()) {
+            lines.add("No correction proposals yet.");
+        }
+        return List.copyOf(lines);
     }
 
     private List<String> contextLore(EventDetails details) {

@@ -61,6 +61,15 @@ class AiReviewSafetyContractTest {
     }
 
     @Test
+    void detailGuiKeepsCorrectionHistoryOnADedicatedBoundedSurface() throws IOException {
+        String source = Files.readString(SOURCE.resolve("AiReviewGuiRenderer.java"));
+        assertTrue(source.contains("\"Correction history\""));
+        assertTrue(source.contains("correctionLore(details)"));
+        assertTrue(source.contains("details.acceptedCorrection()"));
+        assertTrue(source.contains(".limit(10)"));
+    }
+
+    @Test
     void permissionTreeKeepsReviewerAndAdminAuthoritySeparate() throws IOException {
         String manifest = Files.readString(Path.of("src/main/resources/plugin.yml"));
         int mod = manifest.indexOf("enthusiastaff.rank.mod:");
