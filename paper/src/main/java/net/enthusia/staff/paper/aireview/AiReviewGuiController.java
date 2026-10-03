@@ -131,6 +131,17 @@ final class AiReviewGuiController implements Listener {
             viewer.closeInventory();
             return;
         }
+        if (!(state instanceof AiReviewGuiState.Queue)
+                && !AiReviewPermissions.detail(viewer)) {
+            viewer.closeInventory();
+            return;
+        }
+        if ((state instanceof AiReviewGuiState.LabelPicker
+                || state instanceof AiReviewGuiState.Confirm)
+                && !AiReviewPermissions.correct(viewer)) {
+            viewer.closeInventory();
+            return;
+        }
         if (state instanceof AiReviewGuiState.Queue queue) {
             queueClick(viewer, queue, slot);
         } else if (state instanceof AiReviewGuiState.Detail detail) {
@@ -334,20 +345,37 @@ final class AiReviewGuiController implements Listener {
             viewer.closeInventory();
             return;
         }
-        prewriteRefresh(viewer, state, authority);
+        prewriteRefresh(viewer, state);
     }
 
     private void prewriteRefresh(
             Player viewer,
-            AiReviewGuiState.Confirm state,
-            CorrectionAuthority authority
+            AiReviewGuiState.Confirm state
     ) {
         UUID token = beginLoad(viewer);
         message(viewer, "Revalidating central correction state…", NamedTextColor.GRAY);
         subsystem.loadEvent(
                 state.details().eventId(),
                 fresh -> onEntity(viewer, () -> {
-                    if (!loadCurrent(viewer, token) || !AiReviewPermissions.correct(viewer)) {
+                    if (!loadCurrent(viewer, token)
+                            || !AiReviewPermissions.queue(viewer)
+                            || !AiReviewPermissions.detail(viewer)
+                            || !AiReviewPermissions.correct(viewer)) {
+                        return;
+                    }
+                    CorrectionAuthority currentAuthority;
+                    try {
+                        currentAuthority = AiReviewPermissions.authority(
+                                viewer,
+                                subsystem.configuration(),
+                                state.adminRequested()
+                        );
+                    } catch (SecurityException exception) {
+                        message(
+                                viewer,
+                                "AI review authority changed; no write was made.",
+                                NamedTextColor.RED
+                        );
                         return;
                     }
                     if (!validAgainstFresh(state, fresh)) {
@@ -357,7 +385,7 @@ final class AiReviewGuiController implements Listener {
                         ));
                         return;
                     }
-                    write(viewer, state, fresh, authority);
+                    write(viewer, state, fresh, currentAuthority);
                 }),
                 issue -> loadFailed(viewer, token, issue)
         );
@@ -489,6 +517,11 @@ final class AiReviewGuiController implements Listener {
             }
             if (!(state instanceof AiReviewGuiState.Queue)
                     && !AiReviewPermissions.detail(viewer)) {
+                return;
+            }
+            if ((state instanceof AiReviewGuiState.LabelPicker
+                    || state instanceof AiReviewGuiState.Confirm)
+                    && !AiReviewPermissions.correct(viewer)) {
                 return;
             }
             AiReviewGuiRenderer renderer = new AiReviewGuiRenderer(subsystem.configuration());
