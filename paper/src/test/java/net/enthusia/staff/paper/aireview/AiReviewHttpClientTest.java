@@ -176,6 +176,7 @@ class AiReviewHttpClientTest {
                 server.uri(),
                 "staff-test",
                 "super-secret",
+                AiReviewPermissions.QUEUE,
                 Duration.ofMillis(250),
                 Duration.ofMillis(timeoutMillis),
                 Duration.ofSeconds(10),
