@@ -236,10 +236,29 @@ public final class PunishmentRequestService {
             PunishmentAssessment assessment
     ) {
         Instant now = clock.instant();
+        PunishmentProposal proposal = PunishmentProposal.from(request, assessment);
+        // Owner-mandated: Admin custom durations require Founder approval.
+        // Override the required rank if this is an Admin custom-duration request.
+        if (request.actor().rank() == net.enthusia.staff.domain.auth.StaffRank.ADMIN
+                && PunishmentApprovalRules.isCustomDuration(assessment.sanctions(), assessment.policy())) {
+            proposal = new PunishmentProposal(
+                    proposal.targetId(),
+                    proposal.requester(),
+                    proposal.reasonId(),
+                    proposal.family(),
+                    proposal.publicReason(),
+                    proposal.internalExplanation(),
+                    proposal.configurationVersion(),
+                    proposal.visibility(),
+                    net.enthusia.staff.domain.auth.StaffRank.FOUNDER,
+                    proposal.escalation(),
+                    proposal.sanctions()
+            );
+        }
         PunishmentApprovalRequest pending = PunishmentApprovalRequest.pending(
                 Objects.requireNonNull(requestIds.get(), "generated punishment request identifier"),
                 request.idempotencyKey(),
-                PunishmentProposal.from(request, assessment),
+                proposal,
                 now,
                 now.plus(requestLifetime)
         );

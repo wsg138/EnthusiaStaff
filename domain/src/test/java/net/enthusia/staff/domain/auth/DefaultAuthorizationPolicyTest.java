@@ -39,7 +39,7 @@ class DefaultAuthorizationPolicyTest {
                 ModerationAction.APPROVE_POLICY_SANCTION,
                 ModerationAction.LOWER_RECOMMENDATION,
                 ModerationAction.RAISE_RECOMMENDATION,
-                ModerationAction.USE_CUSTOM_DURATION,
+                ModerationAction.REQUEST_CUSTOM_DURATION,
                 ModerationAction.END_SANCTION,
                 ModerationAction.REVOKE_SANCTION,
                 ModerationAction.FULL_OVERTURN,

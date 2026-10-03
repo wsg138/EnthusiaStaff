@@ -218,7 +218,27 @@ public final class PunishmentService {
     public boolean requiresApproval(Actor actor, PunishmentAssessment assessment) {
         Objects.requireNonNull(actor);
         Objects.requireNonNull(assessment);
+        // Owner-mandated: Admins using custom durations require Founder approval.
+        boolean customDuration = PunishmentApprovalRules.isCustomDuration(
+                assessment.sanctions(), assessment.policy());
+        StaffRank required = PunishmentApprovalRules.requiredApprovalRank(actor.rank(), customDuration);
+        if (required != null) {
+            return true;
+        }
         return PunishmentApprovalRules.requiresApproval(actor.rank(), assessment.sanctions());
+    }
+
+    /**
+     * Returns the minimum rank required to approve the given assessment,
+     * or null if no approval is required. Owner-mandated: Admin custom
+     * durations require Founder approval.
+     */
+    public StaffRank requiredApprovalRank(Actor actor, PunishmentAssessment assessment) {
+        Objects.requireNonNull(actor);
+        Objects.requireNonNull(assessment);
+        boolean customDuration = PunishmentApprovalRules.isCustomDuration(
+                assessment.sanctions(), assessment.policy());
+        return PunishmentApprovalRules.requiredApprovalRank(actor.rank(), customDuration);
     }
 
     private PunishmentEvaluation evaluate(
@@ -335,9 +355,17 @@ public final class PunishmentService {
         boolean configuredTypes = policy.steps().stream()
                 .map(PunishmentStep::sanctions)
                 .anyMatch(configured -> sameTypeShape(configured, requested));
-        ModerationAction action = configuredTypes
-                ? ModerationAction.USE_CUSTOM_DURATION
-                : ModerationAction.USE_CUSTOM_COMBINATION;
+        if (configuredTypes) {
+            // Owner-mandated: Admins may REQUEST custom durations (Founder approval
+            // required); Founders may apply directly. Allow the sanction through if
+            // the actor has either permission; the approval routing decides whether
+            // it is applied or queued as a request.
+            return authorization.permits(request.actor(), ModerationAction.USE_CUSTOM_DURATION)
+                    || authorization.permits(request.actor(), ModerationAction.REQUEST_CUSTOM_DURATION)
+                    ? requested
+                    : null;
+        }
+        ModerationAction action = ModerationAction.USE_CUSTOM_COMBINATION;
         return authorization.permits(request.actor(), action) ? requested : null;
     }
 

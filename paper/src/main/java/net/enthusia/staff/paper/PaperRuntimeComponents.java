@@ -32,6 +32,8 @@ import net.enthusia.staff.paper.inventory.InventoryOperationContext;
 import net.enthusia.staff.paper.inventory.InventoryRecoveryGuard;
 import net.enthusia.staff.paper.report.ReportEvidenceMaintenance;
 import net.enthusia.staff.paper.staff.HelperObserverProtectionListener;
+import net.enthusia.staff.paper.staff.StaffCombatProtectionListener;
+import net.enthusia.staff.paper.staff.StaffDoubleCrouchListener;
 import net.enthusia.staff.paper.staff.StaffModeDeathListener;
 import net.enthusia.staff.paper.staff.StaffModeManager;
 import net.enthusia.staff.paper.staff.StaffModeWorldInteractionListener;
@@ -105,6 +107,13 @@ record PaperRuntimeComponents(
         registerListener(dependencies.environment().plugin(), statePresentation);
         statePresentation.start();
         registerOperationalListeners(dependencies, vanish, transferSnapshots);
+        // Owner-mandated: no staff member may ever be combat-tagged while on duty or vanished.
+        new StaffCombatProtectionListener(
+                dependencies.environment().plugin(),
+                staffMode,
+                vanish,
+                staffMode.combat()
+        ).start();
         InventoryOperationContext inventoryContext = new InventoryOperationContext(
                 dependencies.environment().clock(),
                 dependencies.environment().inventoryScopeId(),
@@ -215,6 +224,7 @@ record PaperRuntimeComponents(
         registerListener(plugin, new HelperObserverProtectionListener(staffMode));
         registerListener(plugin, new StaffModeDeathListener(staffMode));
         registerListener(plugin, new StaffModeWorldInteractionListener(staffMode));
+        registerListener(plugin, new StaffDoubleCrouchListener(plugin, staffMode));
         registerListener(plugin, staffMode);
         return staffMode;
     }

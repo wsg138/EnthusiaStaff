@@ -48,8 +48,39 @@ final class StaffModeWorldInteractionPolicy {
         if (action == Action.LEFT_CLICK_AIR || action == Action.RIGHT_CLICK_AIR) {
             return false;
         }
-        // Helpers stay fully locked down; Mod and Admin+ may interact with the world
-        // (containers included) and every such interaction is audit-logged by the caller.
+        // Helpers may open containers for viewing (silent open); Mod and Admin+ may
+        // interact with the world (containers included) and every such interaction
+        // is audit-logged by the caller. Non-container block interactions stay
+        // blocked for Helpers.
         return tier == null || tier == StaffDutyTier.HELPER;
+    }
+
+    /**
+     * Whether a Helper-tier staffer may open (but not edit) a container block.
+     * Owner-mandated: Helpers get silent open + view, but no insert/remove/move.
+     */
+    static boolean allowsContainerView(StaffDutyTier tier) {
+        return tier == StaffDutyTier.HELPER;
+    }
+
+    /**
+     * Whether container inventory edits (insert/remove/move items) must be cancelled.
+     * Helpers can view but never edit; Mod+ can edit but every edit is logged.
+     */
+    static boolean blocksContainerEdit(StaffDutyTier tier) {
+        return tier == null || tier == StaffDutyTier.HELPER;
+    }
+
+    /**
+     * Whether item-frame and armor-stand edits must be cancelled. These count as
+     * containers: Helpers can view but not edit; Mod+ can edit but it is logged.
+     */
+    static boolean blocksContainerEntityEdit(StaffDutyTier tier) {
+        return tier == null || tier == StaffDutyTier.HELPER;
+    }
+
+    /** Whether a container edit by an allowed tier must be written to the staff audit log. */
+    static boolean logsContainerEdit(StaffDutyTier tier) {
+        return tier == StaffDutyTier.MOD || tier == StaffDutyTier.ADMIN;
     }
 }

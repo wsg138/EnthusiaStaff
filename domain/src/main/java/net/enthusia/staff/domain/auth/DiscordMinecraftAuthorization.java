@@ -45,7 +45,8 @@ final class DiscordMinecraftAuthorization {
 
     private boolean customAuthority(Actor actor, DiscordConsequenceIntent intent) {
         boolean durationAllowed = !intent.customDuration()
-                || authorization.permits(actor, ModerationAction.USE_CUSTOM_DURATION);
+                || authorization.permits(actor, ModerationAction.USE_CUSTOM_DURATION)
+                || authorization.permits(actor, ModerationAction.REQUEST_CUSTOM_DURATION);
         boolean consequenceAllowed = !intent.customConsequence()
                 || authorization.permits(actor, ModerationAction.USE_CUSTOM_COMBINATION);
         return durationAllowed && consequenceAllowed;

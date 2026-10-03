@@ -35,8 +35,9 @@ public record PunishmentProposal(
         publicReason = Checks.nonBlank(publicReason, "publicReason", 160);
         internalExplanation = Checks.nonBlank(internalExplanation, "internalExplanation", 4_000);
         configurationVersion = Checks.nonBlank(configurationVersion, "configurationVersion", 128);
-        if (requester.rank() != StaffRank.HELPER && requester.rank() != StaffRank.DEVELOPER) {
-            throw new IllegalArgumentException("only Helper or Developer may submit punishment proposals");
+        if (requester.rank() != StaffRank.HELPER && requester.rank() != StaffRank.DEVELOPER
+                && requester.rank() != StaffRank.ADMIN) {
+            throw new IllegalArgumentException("only Helper, Developer, or Admin may submit punishment proposals");
         }
         if (requiredRank == StaffRank.DEVELOPER || requiredRank == StaffRank.SYSTEM) {
             throw new IllegalArgumentException("punishment proposal requires a moderation approval rank");

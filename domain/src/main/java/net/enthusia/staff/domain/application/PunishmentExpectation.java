@@ -7,7 +7,8 @@ public record PunishmentExpectation(
         String configurationVersion,
         int stepOrdinal,
         String stepLabel,
-        List<SanctionSpec> sanctions
+        List<SanctionSpec> sanctions,
+        boolean customDuration
 ) {
     public PunishmentExpectation {
         if (configurationVersion == null || configurationVersion.isBlank()
@@ -24,11 +25,14 @@ public record PunishmentExpectation(
         if (assessment == null) {
             throw new IllegalArgumentException("assessment must be present");
         }
+        boolean customDuration = PunishmentApprovalRules.isCustomDuration(
+                assessment.sanctions(), assessment.policy());
         return new PunishmentExpectation(
                 assessment.configurationVersion(),
                 assessment.escalation().selectedStep().ordinal(),
                 assessment.escalation().selectedStep().label(),
-                assessment.sanctions()
+                assessment.sanctions(),
+                customDuration
         );
     }
 

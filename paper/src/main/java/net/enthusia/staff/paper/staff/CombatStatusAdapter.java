@@ -88,4 +88,85 @@ public final class CombatStatusAdapter {
 
     private record Binding(Object receiver, Method method, Class<?> parameterType) {
     }
+
+    /**
+     * Removes any CombatLogX combat tag from the player. Used to grant staff
+     * combat bypass while on duty or vanished — no staff member should ever be
+     * put in combat in those states.
+     *
+     * @return true if the untag was attempted (CombatLogX present and API available)
+     */
+    public boolean untag(Player player) {
+        if (!combatPluginPresent) {
+            return false;
+        }
+        try {
+            Method managerAccessor = owner.getServer().getPluginManager()
+                    .getPlugin("CombatLogX").getClass().getMethod("getCombatManager");
+            Object manager = managerAccessor.invoke(
+                    owner.getServer().getPluginManager().getPlugin("CombatLogX"));
+            if (manager == null) {
+                return false;
+            }
+            Method untag = findUntagMethod(manager.getClass());
+            if (untag == null) {
+                return false;
+            }
+            Class<?>[] params = untag.getParameterTypes();
+            if (params.length == 1) {
+                untag.invoke(manager, player);
+            } else if (params.length == 2) {
+                // Second param is typically UntagReason; pass null and let CombatLogX default it,
+                // or find the enum constant. Try null first.
+                try {
+                    untag.invoke(manager, player, (Object) null);
+                } catch (InvocationTargetException | IllegalArgumentException e) {
+                    // Null reason rejected; try to find a suitable enum constant.
+                    Object reason = findUntagReason(params[1]);
+                    if (reason == null) {
+                        return false;
+                    }
+                    untag.invoke(manager, player, reason);
+                }
+            } else {
+                return false;
+            }
+            return true;
+        } catch (ReflectiveOperationException | RuntimeException exception) {
+            owner.getLogger().fine("CombatLogX untag failed: " + exception.getMessage());
+            return false;
+        }
+    }
+
+    private static Method findUntagMethod(Class<?> managerType) {
+        for (String name : new String[]{"untag", "remove", "untagPlayer"}) {
+            for (Method method : managerType.getMethods()) {
+                if (!method.getName().equals(name)) {
+                    continue;
+                }
+                Class<?>[] params = method.getParameterTypes();
+                if (params.length >= 1 && params.length <= 2
+                        && params[0].isAssignableFrom(Player.class)) {
+                    return method;
+                }
+            }
+        }
+        return null;
+    }
+
+    private static Object findUntagReason(Class<?> reasonType) {
+        if (!reasonType.isEnum()) {
+            return null;
+        }
+        for (Object constant : reasonType.getEnumConstants()) {
+            String name = ((Enum<?>) constant).name();
+            if (name.equalsIgnoreCase("PLUGIN") || name.equalsIgnoreCase("CUSTOM")
+                    || name.equalsIgnoreCase("UNKNOWN")) {
+                return constant;
+            }
+        }
+        // Fall back to the first constant.
+        Object[] constants = reasonType.getEnumConstants();
+        return constants.length > 0 ? constants[0] : null;
+    }
 }
