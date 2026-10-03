@@ -254,7 +254,7 @@ public final class AiReviewSubsystem implements AutoCloseable, Listener {
         if (closed.get()) {
             return;
         }
-        plugin.getServer().getGlobalRegionScheduler().execute(plugin, ignored -> {
+        plugin.getServer().getGlobalRegionScheduler().execute(plugin, () -> {
             if (!closed.get()) {
                 action.run();
             }
