@@ -254,7 +254,7 @@ final class AiReviewCommand implements CommandExecutor, TabCompleter {
         subsystem.correct(
                 details.eventId(), reviewer, authority, decision, note,
                 correction -> result(player, correction),
-                issue -> failed(player, issue)
+                issue -> writeFailure(player, details.eventId(), issue)
         );
     }
 
