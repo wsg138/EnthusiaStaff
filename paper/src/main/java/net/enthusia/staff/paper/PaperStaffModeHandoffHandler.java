@@ -160,8 +160,11 @@ final class PaperStaffModeHandoffHandler {
             try {
                 transferSnapshots.captureAndUpload(playerId, transferId);
             } catch (RuntimeException exception) {
-                logger.log(Level.WARNING,
-                        "Transfer snapshot capture threw for " + playerId + "; continuing with the close", exception);
+                if (logger.isLoggable(Level.WARNING)) {
+                    logger.log(Level.WARNING,
+                            "Transfer snapshot capture threw for " + playerId + "; continuing with the close",
+                            exception);
+                }
             }
         }
         return awaitExitFailOpen(operations.close(
@@ -231,13 +234,15 @@ final class PaperStaffModeHandoffHandler {
             Thread.currentThread().interrupt();
             return false;
         } catch (java.util.concurrent.TimeoutException exception) {
-            logger.log(Level.SEVERE,
-                    "CROSS-SERVER TRANSFER FAIL-OPEN for player " + playerId
-                            + ": the staff snapshot persist did not complete within "
-                            + EXIT_SNAPSHOT_FAILOPEN_TIMEOUT.toSeconds()
-                            + "s, so the transfer is proceeding on the in-memory transfer snapshot. "
-                            + "The persist was NOT cancelled and continues in the background retry queue; "
-                            + "verify staff state on both backends if this repeats.");
+            if (logger.isLoggable(Level.SEVERE)) {
+                logger.log(Level.SEVERE,
+                        "CROSS-SERVER TRANSFER FAIL-OPEN for player " + playerId
+                                + ": the staff snapshot persist did not complete within "
+                                + EXIT_SNAPSHOT_FAILOPEN_TIMEOUT.toSeconds()
+                                + "s, so the transfer is proceeding on the in-memory transfer snapshot. "
+                                + "The persist was NOT cancelled and continues in the background retry queue; "
+                                + "verify staff state on both backends if this repeats.");
+            }
             return true;
         } catch (java.util.concurrent.ExecutionException exception) {
             return false;

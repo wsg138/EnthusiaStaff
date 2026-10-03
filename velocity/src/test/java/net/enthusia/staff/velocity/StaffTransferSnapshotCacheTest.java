@@ -18,10 +18,11 @@ class StaffTransferSnapshotCacheTest {
     private static final UUID PLAYER = UUID.fromString("11111111-1111-1111-1111-111111111111");
     private static final UUID TRANSFER = UUID.fromString("33333333-3333-3333-3333-333333333333");
     private static final UUID OTHER_TRANSFER = UUID.fromString("44444444-4444-4444-4444-444444444444");
+    private static final String FIXED_INSTANT = "2026-10-03T00:00:00Z";
 
     @Test
     void takeConsumesTheSnapshot() {
-        StaffTransferSnapshotCache cache = cacheAt(Instant.parse("2026-10-03T00:00:00Z"));
+        StaffTransferSnapshotCache cache = cacheAt(Instant.parse(FIXED_INSTANT));
         cache.put(snapshot());
 
         assertEquals(snapshot(), cache.take(PLAYER, TRANSFER).orElseThrow());
@@ -30,7 +31,7 @@ class StaffTransferSnapshotCacheTest {
 
     @Test
     void takeWithMismatchedTransferIdIsEmpty() {
-        StaffTransferSnapshotCache cache = cacheAt(Instant.parse("2026-10-03T00:00:00Z"));
+        StaffTransferSnapshotCache cache = cacheAt(Instant.parse(FIXED_INSTANT));
         cache.put(snapshot());
 
         assertTrue(cache.take(PLAYER, OTHER_TRANSFER).isEmpty());
@@ -38,7 +39,7 @@ class StaffTransferSnapshotCacheTest {
 
     @Test
     void expiredSnapshotIsNotReturned() {
-        MutableClock clock = new MutableClock(Instant.parse("2026-10-03T00:00:00Z"));
+        MutableClock clock = new MutableClock(Instant.parse(FIXED_INSTANT));
         StaffTransferSnapshotCache cache = new StaffTransferSnapshotCache(clock);
         cache.put(snapshot());
 
@@ -49,7 +50,7 @@ class StaffTransferSnapshotCacheTest {
 
     @Test
     void snapshotWithinTtlIsReturned() {
-        MutableClock clock = new MutableClock(Instant.parse("2026-10-03T00:00:00Z"));
+        MutableClock clock = new MutableClock(Instant.parse(FIXED_INSTANT));
         StaffTransferSnapshotCache cache = new StaffTransferSnapshotCache(clock);
         cache.put(snapshot());
 
@@ -60,7 +61,7 @@ class StaffTransferSnapshotCacheTest {
 
     @Test
     void evictDropsTheSnapshot() {
-        StaffTransferSnapshotCache cache = cacheAt(Instant.parse("2026-10-03T00:00:00Z"));
+        StaffTransferSnapshotCache cache = cacheAt(Instant.parse(FIXED_INSTANT));
         cache.put(snapshot());
 
         cache.evict(PLAYER);
@@ -70,14 +71,14 @@ class StaffTransferSnapshotCacheTest {
 
     @Test
     void takeWithoutUploadIsEmpty() {
-        StaffTransferSnapshotCache cache = cacheAt(Instant.parse("2026-10-03T00:00:00Z"));
+        StaffTransferSnapshotCache cache = cacheAt(Instant.parse(FIXED_INSTANT));
 
         assertTrue(cache.take(PLAYER, TRANSFER).isEmpty());
     }
 
     @Test
     void takeWithNullIdsIsEmpty() {
-        StaffTransferSnapshotCache cache = cacheAt(Instant.parse("2026-10-03T00:00:00Z"));
+        StaffTransferSnapshotCache cache = cacheAt(Instant.parse(FIXED_INSTANT));
         cache.put(snapshot());
 
         assertTrue(cache.take(null, TRANSFER).isEmpty());
@@ -86,7 +87,7 @@ class StaffTransferSnapshotCacheTest {
 
     @Test
     void putIgnoresNullSnapshot() {
-        StaffTransferSnapshotCache cache = cacheAt(Instant.parse("2026-10-03T00:00:00Z"));
+        StaffTransferSnapshotCache cache = cacheAt(Instant.parse(FIXED_INSTANT));
 
         cache.put(null);
 

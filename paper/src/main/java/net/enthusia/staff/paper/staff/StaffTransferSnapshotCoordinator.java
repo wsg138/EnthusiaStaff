@@ -88,37 +88,68 @@ public final class StaffTransferSnapshotCoordinator {
         }
         ChannelSender current = sender;
         if (current == null) {
+            logSkippedUpload(playerId);
+            return;
+        }
+        StaffTransferSnapshot snapshot = captureOrNull(playerId, transferId);
+        if (snapshot == null) {
+            return;
+        }
+        String payload = encodeOrNull(snapshot, playerId);
+        if (payload == null) {
+            return;
+        }
+        uploadSnapshot(current, playerId, payload);
+    }
+
+    private void logSkippedUpload(UUID playerId) {
+        if (logger.isLoggable(Level.FINE)) {
             logger.fine("Transfer snapshot upload skipped for " + playerId + ": channel sender is not bound");
-            return;
         }
-        StaffTransferSnapshot snapshot;
+    }
+
+    private StaffTransferSnapshot captureOrNull(UUID playerId, UUID transferId) {
         try {
-            snapshot = capture(playerId, transferId);
+            return capture(playerId, transferId);
         } catch (RuntimeException exception) {
-            logger.log(Level.WARNING,
-                    "Cross-server transfer snapshot capture failed for " + playerId
-                            + "; the transfer continues and the destination falls back to the database",
-                    exception);
-            return;
+            if (logger.isLoggable(Level.WARNING)) {
+                logger.log(Level.WARNING,
+                        "Cross-server transfer snapshot capture failed for " + playerId
+                                + "; the transfer continues and the destination falls back to the database",
+                        exception);
+            }
+            return null;
         }
-        String payload;
+    }
+
+    private String encodeOrNull(StaffTransferSnapshot snapshot, UUID playerId) {
         try {
-            payload = TransferSnapshotMessages.encode(snapshot);
+            return TransferSnapshotMessages.encode(snapshot);
         } catch (RuntimeException exception) {
-            logger.log(Level.WARNING, "Cross-server transfer snapshot encoding failed for " + playerId, exception);
-            return;
+            if (logger.isLoggable(Level.WARNING)) {
+                logger.log(Level.WARNING,
+                        "Cross-server transfer snapshot encoding failed for " + playerId, exception);
+            }
+            return null;
         }
+    }
+
+    private void uploadSnapshot(ChannelSender current, UUID playerId, String payload) {
         try {
             current.send(UUID.randomUUID(), TransferSnapshotMessages.UPLOAD, payload, UPLOAD_TIMEOUT)
                     .whenComplete((acknowledged, failure) -> {
                         if (failure != null || !Boolean.TRUE.equals(acknowledged)) {
-                            logger.log(Level.WARNING,
-                                    "Cross-server transfer snapshot upload was not acknowledged for " + playerId
-                                            + "; the destination will fall back to the database");
+                            if (logger.isLoggable(Level.WARNING)) {
+                                logger.log(Level.WARNING,
+                                        "Cross-server transfer snapshot upload was not acknowledged for " + playerId
+                                                + "; the destination will fall back to the database");
+                            }
                         }
                     });
         } catch (RuntimeException exception) {
-            logger.log(Level.WARNING, "Cross-server transfer snapshot upload failed for " + playerId, exception);
+            if (logger.isLoggable(Level.WARNING)) {
+                logger.log(Level.WARNING, "Cross-server transfer snapshot upload failed for " + playerId, exception);
+            }
         }
     }
 

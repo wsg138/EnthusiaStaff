@@ -1265,7 +1265,9 @@ public final class EnthusiaStaffVelocityPlugin {
             net.enthusia.staff.domain.staff.StaffTransferSnapshot snapshot =
                     TransferSnapshotMessages.decode(envelope.payloadJson());
             if (snapshot == null) {
-                logger.warn("Rejected empty staff transfer snapshot from {}", envelope.serverId());
+                if (logger.isWarnEnabled()) {
+                    logger.warn("Rejected empty staff transfer snapshot from {}", envelope.serverId());
+                }
                 return true;
             }
             transferSnapshots.put(snapshot);
@@ -1275,7 +1277,9 @@ public final class EnthusiaStaffVelocityPlugin {
             }
             return true;
         } catch (IllegalArgumentException exception) {
-            logger.warn("Rejected malformed staff transfer snapshot from {}", envelope.serverId());
+            if (logger.isWarnEnabled()) {
+                logger.warn("Rejected malformed staff transfer snapshot from {}", envelope.serverId());
+            }
             return true;
         }
     }
