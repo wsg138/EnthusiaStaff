@@ -8,6 +8,7 @@ import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import javax.sql.DataSource;
 import net.enthusia.staff.domain.auth.StaffRank;
@@ -51,6 +52,30 @@ public final class JdbcVanishStore implements VanishStore {
             }
         } catch (SQLException | IllegalArgumentException exception) {
             throw new ModerationPersistenceException("Unable to load active vanish states", exception);
+        }
+    }
+
+    @Override
+    public Optional<Boolean> preferred(UUID staffId) {
+        if (staffId == null) {
+            throw new IllegalArgumentException("staffId must be present");
+        }
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement("""
+                     SELECT preferred_active
+                     FROM staff_vanish_states
+                     WHERE staff_id = ?
+                     """)) {
+            statement.setBytes(1, UuidBytes.toBytes(staffId));
+            try (ResultSet result = statement.executeQuery()) {
+                if (!result.next()) {
+                    return Optional.empty();
+                }
+                boolean preference = result.getBoolean("preferred_active");
+                return result.wasNull() ? Optional.empty() : Optional.of(preference);
+            }
+        } catch (SQLException exception) {
+            throw new ModerationPersistenceException("Unable to load vanish preference", exception);
         }
     }
 
@@ -102,12 +127,25 @@ public final class JdbcVanishStore implements VanishStore {
             connection.rollback();
             return WriteResult.STAFF_SESSION_NOT_ACTIVE;
         }
-        ChangeSet changes = changes(current, session, rank, vanished);
+        Boolean preferred = requireActiveStaffSession
+                ? vanished
+                : current == null ? null : current.preferred();
+        ChangeSet changes = changes(current, session, rank, vanished, preferred);
         if (!changes.changed()) {
             connection.rollback();
             return WriteResult.UNCHANGED;
         }
-        persistChanges(connection, staffId, actorId, rank, vanished, now, session, changes);
+        persistChanges(
+                connection,
+                staffId,
+                actorId,
+                rank,
+                vanished,
+                preferred,
+                now,
+                session,
+                changes
+        );
         connection.commit();
         return WriteResult.COMMITTED;
     }
@@ -116,10 +154,12 @@ public final class JdbcVanishStore implements VanishStore {
             VanishState current,
             SessionMirror session,
             StaffRank rank,
-            boolean vanished
+            boolean vanished,
+            Boolean preferred
     ) {
         return new ChangeSet(
-                !matches(current, rank, vanished),
+                !matchesLiveState(current, rank, vanished),
+                !matchesPreference(current, preferred),
                 session != null && session.vanished() != vanished
         );
     }
@@ -130,18 +170,24 @@ public final class JdbcVanishStore implements VanishStore {
             UUID actorId,
             StaffRank rank,
             boolean vanished,
+            Boolean preferred,
             Instant now,
             SessionMirror session,
             ChangeSet changes
     ) throws SQLException {
-        if (!changes.stateChanged()) {
-            updateSessionMirror(connection, session.sessionId(), vanished);
+        if (changes.stateChanged()) {
+            writeState(connection, staffId, actorId, rank, vanished, preferred, now);
+            updateSessionMirrorIfChanged(connection, session, vanished);
+            insertAudit(connection, staffId, actorId, rank, vanished, now);
+            insertDiscord(connection, staffId, actorId, rank, vanished, now);
             return;
         }
-        writeState(connection, staffId, actorId, rank, vanished, now);
-        updateSessionMirrorIfChanged(connection, session, vanished);
-        insertAudit(connection, staffId, actorId, rank, vanished, now);
-        insertDiscord(connection, staffId, actorId, rank, vanished, now);
+        if (changes.preferenceChanged()) {
+            updatePreference(connection, staffId, actorId, preferred, now);
+        }
+        if (changes.sessionChanged()) {
+            updateSessionMirror(connection, session.sessionId(), vanished);
+        }
     }
 
     private static void updateSessionMirrorIfChanged(
@@ -162,16 +208,22 @@ public final class JdbcVanishStore implements VanishStore {
 
     private static VanishState lockVanishState(Connection connection, UUID staffId) throws SQLException {
         try (PreparedStatement statement = connection.prepareStatement("""
-                SELECT active, staff_rank
+                SELECT active, preferred_active, staff_rank
                 FROM staff_vanish_states
                 WHERE staff_id = ?
                 FOR UPDATE
                 """)) {
             statement.setBytes(1, UuidBytes.toBytes(staffId));
             try (ResultSet result = statement.executeQuery()) {
-                return result.next()
-                        ? new VanishState(result.getBoolean("active"), StaffRank.valueOf(result.getString("staff_rank")))
-                        : null;
+                if (!result.next()) {
+                    return null;
+                }
+                Boolean preference = nullableBoolean(result, "preferred_active");
+                return new VanishState(
+                        result.getBoolean("active"),
+                        preference,
+                        StaffRank.valueOf(result.getString("staff_rank"))
+                );
             }
         }
     }
@@ -200,8 +252,17 @@ public final class JdbcVanishStore implements VanishStore {
         }
     }
 
-    private static boolean matches(VanishState current, StaffRank rank, boolean vanished) {
+    private static Boolean nullableBoolean(ResultSet result, String column) throws SQLException {
+        boolean value = result.getBoolean(column);
+        return result.wasNull() ? null : value;
+    }
+
+    private static boolean matchesLiveState(VanishState current, StaffRank rank, boolean vanished) {
         return current != null && current.vanished() == vanished && current.rank() == rank;
+    }
+
+    private static boolean matchesPreference(VanishState current, Boolean preferred) {
+        return current != null && java.util.Objects.equals(current.preferred(), preferred);
     }
 
     private static void writeState(
@@ -210,20 +271,55 @@ public final class JdbcVanishStore implements VanishStore {
             UUID actorId,
             StaffRank rank,
             boolean vanished,
+            Boolean preferred,
             Instant now
     ) throws SQLException {
         try (PreparedStatement state = connection.prepareStatement("""
-                INSERT INTO staff_vanish_states(staff_id, active, staff_rank, updated_by, updated_at)
-                VALUES (?, ?, ?, ?, ?)
-                ON DUPLICATE KEY UPDATE active = VALUES(active), staff_rank = VALUES(staff_rank),
+                INSERT INTO staff_vanish_states(
+                    staff_id, active, preferred_active, staff_rank, updated_by, updated_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?)
+                ON DUPLICATE KEY UPDATE active = VALUES(active),
+                    preferred_active = VALUES(preferred_active), staff_rank = VALUES(staff_rank),
                     updated_by = VALUES(updated_by), updated_at = VALUES(updated_at), revision = revision + 1
                 """)) {
             state.setBytes(1, UuidBytes.toBytes(staffId));
             state.setBoolean(2, vanished);
-            state.setString(3, rank.name());
-            state.setBytes(4, UuidBytes.toBytes(actorId));
-            state.setTimestamp(5, Timestamp.from(now));
+            setNullableBoolean(state, 3, preferred);
+            state.setString(4, rank.name());
+            state.setBytes(5, UuidBytes.toBytes(actorId));
+            state.setTimestamp(6, Timestamp.from(now));
             state.executeUpdate();
+        }
+    }
+
+    private static void updatePreference(
+            Connection connection,
+            UUID staffId,
+            UUID actorId,
+            Boolean preferred,
+            Instant now
+    ) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement("""
+                UPDATE staff_vanish_states
+                SET preferred_active = ?, updated_by = ?, updated_at = ?, revision = revision + 1
+                WHERE staff_id = ?
+                """)) {
+            setNullableBoolean(statement, 1, preferred);
+            statement.setBytes(2, UuidBytes.toBytes(actorId));
+            statement.setTimestamp(3, Timestamp.from(now));
+            statement.setBytes(4, UuidBytes.toBytes(staffId));
+            if (statement.executeUpdate() != SINGLE_ROW_UPDATE) {
+                throw new SQLException("locked vanish state disappeared before preference update");
+            }
+        }
+    }
+
+    private static void setNullableBoolean(PreparedStatement statement, int index, Boolean value) throws SQLException {
+        if (value == null) {
+            statement.setNull(index, java.sql.Types.BOOLEAN);
+        } else {
+            statement.setBoolean(index, value);
         }
     }
 
@@ -304,15 +400,15 @@ public final class JdbcVanishStore implements VanishStore {
         }
     }
 
-    private record VanishState(boolean vanished, StaffRank rank) {
+    private record VanishState(boolean vanished, Boolean preferred, StaffRank rank) {
     }
 
     private record SessionMirror(UUID sessionId, boolean vanished) {
     }
 
-    private record ChangeSet(boolean stateChanged, boolean sessionChanged) {
+    private record ChangeSet(boolean stateChanged, boolean preferenceChanged, boolean sessionChanged) {
         private boolean changed() {
-            return stateChanged || sessionChanged;
+            return stateChanged || preferenceChanged || sessionChanged;
         }
     }
 }
