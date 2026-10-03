@@ -13,6 +13,7 @@ import net.enthusia.staff.domain.website.PunishmentCodeBinding;
 import net.enthusia.staff.domain.website.PunishmentCodeDisplay;
 import net.enthusia.staff.domain.website.WebsiteAppealCandidate;
 import net.enthusia.staff.domain.website.WebsiteAppealDecisionPreparation;
+import net.enthusia.staff.domain.website.WebsiteAppealMutation;
 import net.enthusia.staff.domain.website.WebsiteAppealPage;
 import net.enthusia.staff.domain.website.WebsiteAppealSubmission;
 import net.enthusia.staff.domain.website.WebsiteModerationException;
@@ -78,6 +79,40 @@ public interface WebsiteModerationStore {
             String accountId,
             String username,
             String reason,
+            String idempotencyKey,
+            Instant now
+    ) {
+        throw unavailableAppealWorkflow();
+    }
+
+    default WebsiteAppealMutation editAppeal(
+            UUID appealId,
+            long expectedVersion,
+            String accountId,
+            String reason,
+            String idempotencyKey,
+            Instant now
+    ) {
+        throw unavailableAppealWorkflow();
+    }
+
+    default WebsiteAppealMutation claimAppeal(
+            UUID appealId,
+            long expectedVersion,
+            UUID reviewerAccountId,
+            String reviewerRank,
+            String idempotencyKey,
+            Instant now
+    ) {
+        throw unavailableAppealWorkflow();
+    }
+
+    default WebsiteAppealMutation reopenAppeal(
+            UUID appealId,
+            long expectedVersion,
+            UUID reviewerAccountId,
+            String reviewerRank,
+            String note,
             String idempotencyKey,
             Instant now
     ) {
