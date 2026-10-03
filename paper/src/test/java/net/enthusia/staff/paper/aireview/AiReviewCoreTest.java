@@ -86,6 +86,14 @@ class AiReviewCoreTest {
     }
 
     @Test
+    void configurationStringRepresentationRedactsBearerToken() {
+        AiReviewConfiguration configuration = configuration(false);
+        String rendered = configuration.toString();
+        assertFalse(rendered.contains(configuration.bearerToken()));
+        assertTrue(rendered.contains("bearerToken=<redacted>"));
+    }
+
+    @Test
     void initialPollSeedsDedupeWithoutRestartNotificationSpam() {
         AiReviewPollState state = new AiReviewPollState(10);
         Instant now = Instant.parse("2026-10-03T20:00:00Z");

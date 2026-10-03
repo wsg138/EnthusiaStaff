@@ -42,6 +42,30 @@ public record AiReviewConfiguration(
         Objects.requireNonNull(cacheStaleAfter, "cacheStaleAfter");
     }
 
+    @Override
+    public String toString() {
+        return "AiReviewConfiguration[baseUri=" + baseUri
+                + ", clientId=" + clientId
+                + ", bearerToken=<redacted>"
+                + ", notificationPermission=" + notificationPermission
+                + ", connectTimeout=" + connectTimeout
+                + ", requestTimeout=" + requestTimeout
+                + ", pollInterval=" + pollInterval
+                + ", cacheStaleAfter=" + cacheStaleAfter
+                + ", reviewLimit=" + reviewLimit
+                + ", workerThreads=" + workerThreads
+                + ", queueCapacity=" + queueCapacity
+                + ", responseMaxBytes=" + responseMaxBytes
+                + ", notifiedCacheSize=" + notifiedCacheSize
+                + ", pageSize=" + pageSize
+                + ", maximumMessageCharacters=" + maximumMessageCharacters
+                + ", maximumContextItems=" + maximumContextItems
+                + ", maximumReasonCodes=" + maximumReasonCodes
+                + ", maximumScores=" + maximumScores
+                + ", adminOverrideEnabled=" + adminOverrideEnabled
+                + "]";
+    }
+
     public static LoadResult load(ConfigurationSection section, Function<String, String> environment) {
         Objects.requireNonNull(environment, "environment");
         if (section == null || !section.getBoolean("enabled", false)) {
