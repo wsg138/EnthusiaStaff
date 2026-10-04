@@ -99,7 +99,10 @@ import org.slf4j.Logger;
         version = "0.1.0-SNAPSHOT",
         description = "Enthusia Network staff and moderation runtime for Velocity",
         authors = {"P2wn"},
-        dependencies = {@Dependency(id = "velocitab", optional = true)}
+        dependencies = {
+                @Dependency(id = "velocitab", optional = true),
+                @Dependency(id = "luckperms", optional = true)
+        }
 )
 public final class EnthusiaStaffVelocityPlugin {
     private static final DateTimeFormatter TIMESTAMP = DateTimeFormatter.ISO_OFFSET_DATE_TIME.withZone(ZoneOffset.UTC);
@@ -154,6 +157,7 @@ public final class EnthusiaStaffVelocityPlugin {
     private volatile VelocityConfiguration configuration;
     private volatile MariaDbRuntime databaseRuntime;
     private VelocitabStaffBridge staffTabBridge;
+    private VelocityStaffDutyContext staffDutyContext;
     private volatile SanctionLookup sanctionLookup;
     private volatile PlayerDirectory playerDirectory;
     private volatile FreezeStore freezeStore;
@@ -198,6 +202,9 @@ public final class EnthusiaStaffVelocityPlugin {
     public void onProxyInitialization(ProxyInitializeEvent ignored) {
         workers = createWorkers();
         staffTabBridge = VelocitabStaffBridge.start(this, proxy, logger, () -> databaseRuntime, workers).orElse(null);
+        staffDutyContext = VelocityStaffDutyContext.start(
+                this, proxy, logger, () -> staffSessionStore
+        ).orElse(null);
         registerCommands();
         health.update(OperationalMode.BOOTSTRAP, Map.of("bootstrap", "MariaDB initialization is in progress"));
         VelocityBootstrapCoordinator coordinator = new VelocityBootstrapCoordinator(
@@ -314,6 +321,9 @@ public final class EnthusiaStaffVelocityPlugin {
         closeChannelServer();
         if (staffTabBridge != null) {
             staffTabBridge.close();
+        }
+        if (staffDutyContext != null) {
+            staffDutyContext.close();
         }
         workers.shutdown();
         try {
@@ -1654,10 +1664,39 @@ public final class EnthusiaStaffVelocityPlugin {
                 : "";
     }
 
+    private boolean requireActiveStaffDuty(CommandSource source) {
+        if (!(source instanceof Player player)) {
+            return true;
+        }
+        StaffSessionStore store = staffSessionStore;
+        String backend = player.getCurrentServer()
+                .map(connection -> connection.getServerInfo().getName())
+                .orElse(null);
+        boolean active = false;
+        if (store != null && backend != null) {
+            try {
+                active = VelocityStaffDutyContext.matchesActiveSession(
+                        store.active(player.getUniqueId()), backend
+                );
+            } catch (RuntimeException exception) {
+                logger.warn("Unable to verify Staff Mode session for proxy command", exception);
+            }
+        }
+        if (!active) {
+            source.sendMessage(VelocityMessageStyle.style(Component.text(
+                    "That command requires active staff mode. Use /staff on a backend first."
+            )));
+        }
+        return active;
+    }
+
     private final class AltsCommand implements SimpleCommand {
         @Override
         public void execute(Invocation invocation) {
             CommandSource source = invocation.source();
+            if (!requireActiveStaffDuty(source)) {
+                return;
+            }
             String[] arguments = invocation.arguments();
             if (arguments.length != SINGLE_OPERATION_ARGUMENT) {
                 source.sendMessage(VelocityMessageStyle.style(Component.text("Usage: /alts <player>")));
@@ -1711,6 +1750,9 @@ public final class EnthusiaStaffVelocityPlugin {
         @Override
         public void execute(Invocation invocation) {
             CommandSource source = invocation.source();
+            if (!requireActiveStaffDuty(source)) {
+                return;
+            }
             String[] arguments = invocation.arguments();
             if (arguments.length < MINIMUM_ALT_ARGUMENTS) {
                 source.sendMessage(VelocityMessageStyle.style(Component.text(
@@ -1782,6 +1824,9 @@ public final class EnthusiaStaffVelocityPlugin {
         try {
             workers.execute(() -> {
                 try {
+                    if (!requireActiveStaffDuty(source)) {
+                        return;
+                    }
                     operation.run();
                 } catch (RuntimeException exception) {
                     logger.error("Alt command failed", exception);
@@ -1797,6 +1842,9 @@ public final class EnthusiaStaffVelocityPlugin {
         @Override
         public void execute(Invocation invocation) {
             CommandSource source = invocation.source();
+            if (!requireActiveStaffDuty(source)) {
+                return;
+            }
             String[] arguments = invocation.arguments();
             switch (normalizedArgument(arguments, ROOT_OPERATION_INDEX)) {
                 case "reload" -> executeReload(source, arguments);

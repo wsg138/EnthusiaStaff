@@ -12,10 +12,12 @@ dependencies {
     implementation("com.fasterxml.jackson.core:jackson-databind:2.20.1")
     compileOnly(velocityApi)
     compileOnly(miniPlaceholdersApi)
+    compileOnly("net.luckperms:api:5.4")
     annotationProcessor(velocityApi)
     compileOnly("org.slf4j:slf4j-api:2.0.17")
     testImplementation(velocityApi)
     testImplementation(miniPlaceholdersApi)
+    testImplementation("net.luckperms:api:5.4")
     testImplementation("org.slf4j:slf4j-api:2.0.17")
 }
 

@@ -66,13 +66,14 @@ class StaffModeAccessPolicyTest {
     }
 
     @Test
-    void adminAndFounderCanSelectOnlyTheThreeSupportedVanillaModes() {
-        for (StaffRank rank : new StaffRank[]{StaffRank.ADMIN, StaffRank.FOUNDER}) {
-            assertTrue(StaffModeAccessPolicy.allowsGameMode(rank, GameMode.SURVIVAL));
-            assertTrue(StaffModeAccessPolicy.allowsGameMode(rank, GameMode.CREATIVE));
-            assertTrue(StaffModeAccessPolicy.allowsGameMode(rank, GameMode.SPECTATOR));
-            assertFalse(StaffModeAccessPolicy.allowsGameMode(rank, GameMode.ADVENTURE));
+    void founderCanSelectEveryGameModeWhileAdminKeepsTheThreeSupportedModes() {
+        for (GameMode mode : GameMode.values()) {
+            assertTrue(StaffModeAccessPolicy.allowsGameMode(StaffRank.FOUNDER, mode));
         }
+        assertTrue(StaffModeAccessPolicy.allowsGameMode(StaffRank.ADMIN, GameMode.SURVIVAL));
+        assertTrue(StaffModeAccessPolicy.allowsGameMode(StaffRank.ADMIN, GameMode.CREATIVE));
+        assertTrue(StaffModeAccessPolicy.allowsGameMode(StaffRank.ADMIN, GameMode.SPECTATOR));
+        assertFalse(StaffModeAccessPolicy.allowsGameMode(StaffRank.ADMIN, GameMode.ADVENTURE));
     }
 
     @Test

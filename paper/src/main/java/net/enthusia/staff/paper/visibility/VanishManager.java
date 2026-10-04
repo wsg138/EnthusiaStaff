@@ -793,7 +793,9 @@ public final class VanishManager implements Listener {
                 selectedGameModes.put(playerId, event.getNewGameMode());
                 persistSelectedGameMode(playerId, rank, event.getNewGameMode());
             }
-            if (event.getNewGameMode() != GameMode.SPECTATOR) {
+            if (event.getNewGameMode() != GameMode.SPECTATOR
+                    && rank != StaffRank.ADMIN
+                    && rank != StaffRank.FOUNDER) {
                 event.setCancelled(true);
                 return;
             }
@@ -1136,13 +1138,20 @@ public final class VanishManager implements Listener {
     }
 
     private static boolean isSelectableGameMode(StaffRank rank, GameMode mode) {
-        if (rank == StaffRank.ADMIN || rank == StaffRank.FOUNDER) {
+        if (rank == StaffRank.FOUNDER) {
+            return true;
+        }
+        if (rank == StaffRank.ADMIN) {
             return mode == GameMode.SURVIVAL || mode == GameMode.CREATIVE || mode == GameMode.SPECTATOR;
         }
         return rank != null && rank != StaffRank.SYSTEM && mode == GameMode.SPECTATOR;
     }
 
     private void enforceVanishSpectator(Player player) {
+        StaffRank rank = resolveLiveRank(player);
+        if (rank == StaffRank.ADMIN || rank == StaffRank.FOUNDER) {
+            return;
+        }
         if (player.getGameMode() == GameMode.SPECTATOR) {
             return;
         }

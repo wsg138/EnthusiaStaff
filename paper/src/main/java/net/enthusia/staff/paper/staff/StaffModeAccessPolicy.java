@@ -58,7 +58,10 @@ final class StaffModeAccessPolicy {
 
     static boolean allowsGameMode(StaffRank rank, GameMode gameMode) {
         Objects.requireNonNull(gameMode, "gameMode");
-        if (rank == StaffRank.ADMIN || rank == StaffRank.FOUNDER) {
+        if (rank == StaffRank.FOUNDER) {
+            return true;
+        }
+        if (rank == StaffRank.ADMIN) {
             return gameMode == GameMode.SURVIVAL
                     || gameMode == GameMode.CREATIVE
                     || gameMode == GameMode.SPECTATOR;
