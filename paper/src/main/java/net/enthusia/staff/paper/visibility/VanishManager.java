@@ -66,6 +66,8 @@ public final class VanishManager implements Listener {
     private final AtomicInteger rankReconciliationPass = new AtomicInteger();
     private final VanishAudienceCoordinator<Player> audiences;
     private final SpectatorTabPacketAdapter spectatorTabPackets;
+    private final SilentContainerTracker silentContainers;
+    private final SilentContainerPacketAdapter silentContainerPackets;
     private volatile PresenceTransitionSink presenceTransitionSink = (subjectId, viewerId, vanished) -> {
     };
 
@@ -87,6 +89,16 @@ public final class VanishManager implements Listener {
         this.workers = workers;
         this.audiences = new VanishAudienceCoordinator<>(this::onEntity, this::refreshPair);
         this.spectatorTabPackets = installSpectatorTabPackets();
+        this.silentContainers = new SilentContainerTracker(visibility::isVanished, clock);
+        this.silentContainerPackets = installSilentContainerPackets();
+    }
+
+    /**
+     * Tracker for silent container opens by vanished staff. Register as a
+     * Bukkit listener so container open/close events are observed.
+     */
+    public SilentContainerTracker silentContainerTracker() {
+        return silentContainers;
     }
 
     public void initialize() {
@@ -906,6 +918,7 @@ public final class VanishManager implements Listener {
     public void onPluginDisable(PluginDisableEvent event) {
         if (event.getPlugin().equals(plugin) || event.getPlugin().getName().equals("ProtocolLib")) {
             spectatorTabPackets.close();
+            silentContainerPackets.close();
             if (!event.getPlugin().equals(plugin)) {
                 packetMaskFailed();
             }
@@ -1025,6 +1038,31 @@ public final class VanishManager implements Listener {
             ));
         }
         player.sendMessage(prompt);
+    }
+
+    private SilentContainerPacketAdapter installSilentContainerPackets() {
+        if (!plugin.getServer().getPluginManager().isPluginEnabled("ProtocolLib")) {
+            plugin.getLogger().warning(
+                    "ProtocolLib is unavailable; vanished container opens will animate normally"
+            );
+            return SilentContainerPacketAdapter.unavailable();
+        }
+        try {
+            return ProtocolLibSilentContainerPacketAdapter.install(
+                    plugin, silentContainers, clock, this::silentContainerPacketsFailed);
+        } catch (RuntimeException | LinkageError failure) {
+            plugin.getLogger().log(
+                    Level.SEVERE,
+                    "ProtocolLib silent-container adapter could not start; container animations will not be suppressed",
+                    failure
+            );
+            return SilentContainerPacketAdapter.unavailable();
+        }
+    }
+
+    private void silentContainerPacketsFailed() {
+        plugin.getLogger().warning(
+                "Silent-container packet adapter disabled after failure; container animations will play normally");
     }
 
     private SpectatorTabPacketAdapter installSpectatorTabPackets() {
