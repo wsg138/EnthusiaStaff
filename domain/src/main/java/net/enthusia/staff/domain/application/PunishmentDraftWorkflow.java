@@ -219,7 +219,9 @@ public final class PunishmentDraftWorkflow {
                 draft.reasonId(),
                 draft.internalExplanation(),
                 draft.visibility(),
-                draft.expectation().sanctions()
+                draft.expectation().customDuration()
+                        ? draft.expectation().sanctions()
+                        : List.of()
         );
     }
 
