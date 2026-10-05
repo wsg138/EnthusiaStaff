@@ -20,7 +20,7 @@ public final class JdbcPunishmentDraftStore implements PunishmentDraftStore {
     private static final String COLUMNS = """
             draft_id, actor_id, target_id, reason_id, internal_explanation, visibility,
             command_name, configuration_version, step_ordinal, step_label, sanctions_json,
-            created_at, expires_at
+            custom_duration, created_at, expires_at
             """;
 
     private final DataSource dataSource;
@@ -45,14 +45,15 @@ public final class JdbcPunishmentDraftStore implements PunishmentDraftStore {
                      INSERT INTO punishment_drafts(
                          draft_id, actor_id, target_id, reason_id, internal_explanation, visibility,
                          command_name, configuration_version, step_ordinal, step_label, sanctions_json,
-                         created_at, updated_at, expires_at
-                     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                         custom_duration, created_at, updated_at, expires_at
+                     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                      ON DUPLICATE KEY UPDATE
                          draft_id = VALUES(draft_id), reason_id = VALUES(reason_id),
                          internal_explanation = VALUES(internal_explanation), visibility = VALUES(visibility),
                          command_name = VALUES(command_name), configuration_version = VALUES(configuration_version),
                          step_ordinal = VALUES(step_ordinal), step_label = VALUES(step_label),
-                         sanctions_json = VALUES(sanctions_json), created_at = VALUES(created_at),
+                         sanctions_json = VALUES(sanctions_json), custom_duration = VALUES(custom_duration),
+                         created_at = VALUES(created_at),
                          updated_at = VALUES(updated_at), expires_at = VALUES(expires_at)
                      """)) {
             statement.setBytes(1, UuidBytes.toBytes(draft.draftId()));
@@ -66,9 +67,10 @@ public final class JdbcPunishmentDraftStore implements PunishmentDraftStore {
             statement.setInt(9, draft.expectation().stepOrdinal());
             statement.setString(10, draft.expectation().stepLabel());
             statement.setString(11, sanctions.encode(draft.expectation().sanctions()));
-            statement.setTimestamp(12, Timestamp.from(draft.createdAt()));
+            statement.setBoolean(12, draft.expectation().customDuration());
             statement.setTimestamp(13, Timestamp.from(draft.createdAt()));
-            statement.setTimestamp(14, Timestamp.from(draft.expiresAt()));
+            statement.setTimestamp(14, Timestamp.from(draft.createdAt()));
+            statement.setTimestamp(15, Timestamp.from(draft.expiresAt()));
             statement.executeUpdate();
         } catch (SQLException | JsonProcessingException exception) {
             throw new ModerationPersistenceException("Unable to save punishment draft", exception);
@@ -151,7 +153,8 @@ public final class JdbcPunishmentDraftStore implements PunishmentDraftStore {
                     result.getString("configuration_version"),
                     result.getInt("step_ordinal"),
                     result.getString("step_label"),
-                    sanctions.decode(result.getString("sanctions_json"))
+                    sanctions.decode(result.getString("sanctions_json")),
+                    result.getBoolean("custom_duration")
             );
             return new PunishmentDraft(
                     UuidBytes.fromBytes(result.getBytes("draft_id")),
