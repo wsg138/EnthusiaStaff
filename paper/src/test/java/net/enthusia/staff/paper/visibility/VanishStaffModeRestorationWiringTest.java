@@ -66,6 +66,23 @@ class VanishStaffModeRestorationWiringTest {
     }
 
     @Test
+    void adminAndFounderSelectedModesAreAppliedEvenWhileVanished() throws IOException {
+        String method = method(
+                "public boolean selectGameplayMode",
+                "/**\n     * Cross-server transfer hook"
+        );
+
+        int rankGate = method.indexOf("rank == StaffRank.ADMIN || rank == StaffRank.FOUNDER");
+        int setMode = method.indexOf("player.setGameMode(selected)", rankGate);
+        int lowerRankFallback = method.indexOf("enforceVanishSpectator(player)", setMode);
+
+        assertTrue(rankGate >= 0);
+        assertTrue(setMode > rankGate);
+        assertTrue(lowerRankFallback > setMode);
+        assertTrue(method.contains("persistSelectedGameMode(playerId, rank, selected)"));
+    }
+
+    @Test
     void independentVanishIsReenforcedAfterStaffModeExit() throws IOException {
         String method = method(
                 "private void disableAfterStaffModeExit",
