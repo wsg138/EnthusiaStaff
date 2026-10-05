@@ -14,11 +14,11 @@ final class StaffModeAccessPolicy {
     }
 
     static boolean blocksEnderChestOpen(StaffRank rank) {
-        return rank != StaffRank.ADMIN && rank != StaffRank.FOUNDER;
+        return rank != StaffRank.DEVELOPER && rank != StaffRank.ADMIN && rank != StaffRank.FOUNDER;
     }
 
     static boolean blocksEnderChestMutation(StaffRank rank) {
-        return rank != StaffRank.FOUNDER;
+        return rank != StaffRank.DEVELOPER && rank != StaffRank.FOUNDER;
     }
 
     static boolean blocksInventoryMutation(StaffRank rank, boolean enderChestView) {
@@ -45,12 +45,10 @@ final class StaffModeAccessPolicy {
     }
 
     static GameMode initialGameMode(StaffRank rank) {
-        if (rank == StaffRank.ADMIN || rank == StaffRank.FOUNDER) {
+        if (rank == StaffRank.DEVELOPER || rank == StaffRank.ADMIN || rank == StaffRank.FOUNDER) {
             return GameMode.CREATIVE;
         }
-        if (rank == StaffRank.MOD || rank == StaffRank.DEVELOPER) {
-            // Mods (and Developer, which rides the Mod tier) must work in Survival while on
-            // duty: Spectator cannot interact with containers or items.
+        if (rank == StaffRank.MOD) {
             return GameMode.SURVIVAL;
         }
         return GameMode.SPECTATOR;
@@ -58,12 +56,11 @@ final class StaffModeAccessPolicy {
 
     static boolean allowsGameMode(StaffRank rank, GameMode gameMode) {
         Objects.requireNonNull(gameMode, "gameMode");
-        if (rank == StaffRank.ADMIN || rank == StaffRank.FOUNDER) {
-            // Admin/Founder have unrestricted real vanilla game-mode choice while on duty.
+        if (rank == StaffRank.DEVELOPER || rank == StaffRank.ADMIN || rank == StaffRank.FOUNDER) {
+            // Technical Developer and administrative ranks have unrestricted real game-mode choice.
             return true;
         }
-        if (rank == StaffRank.HELPER || rank == StaffRank.MOD || rank == StaffRank.DEVELOPER) {
-            // Lower staff may switch between the protected Survival profile and real Spectator.
+        if (rank == StaffRank.HELPER || rank == StaffRank.MOD) {
             return gameMode == GameMode.SURVIVAL || gameMode == GameMode.SPECTATOR;
         }
         // SYSTEM and any other non-player rank keep the historical spectator-only grant.
