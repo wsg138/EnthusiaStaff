@@ -42,6 +42,20 @@ class StaffModeWorldInteractionPolicyTest {
     }
 
     @Test
+    void developerTierIsUnrestrictedButLoggedForTechnicalTesting() {
+        assertFalse(StaffModeWorldInteractionPolicy.blocksBlockEdit(StaffDutyTier.DEVELOPER));
+        assertFalse(StaffModeWorldInteractionPolicy.blocksWorldUse(StaffDutyTier.DEVELOPER));
+        assertTrue(StaffModeWorldInteractionPolicy.logsWorldInteraction(StaffDutyTier.DEVELOPER));
+        assertFalse(StaffModeWorldInteractionPolicy.allowsContainerView(StaffDutyTier.DEVELOPER));
+        assertFalse(StaffModeWorldInteractionPolicy.blocksContainerEdit(StaffDutyTier.DEVELOPER));
+        assertFalse(StaffModeWorldInteractionPolicy.blocksContainerEntityEdit(StaffDutyTier.DEVELOPER));
+        assertTrue(StaffModeWorldInteractionPolicy.logsContainerEdit(StaffDutyTier.DEVELOPER));
+        for (Action action : Action.values()) {
+            assertFalse(StaffModeWorldInteractionPolicy.blocksBlockInteraction(StaffDutyTier.DEVELOPER, action));
+        }
+    }
+
+    @Test
     void adminTierIsUnrestrictedButLogged() {
         assertFalse(StaffModeWorldInteractionPolicy.blocksBlockEdit(StaffDutyTier.ADMIN));
         assertFalse(StaffModeWorldInteractionPolicy.blocksWorldUse(StaffDutyTier.ADMIN));
