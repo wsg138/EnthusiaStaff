@@ -34,13 +34,12 @@ public record PunishmentExpectation(
         if (assessment == null) {
             throw new IllegalArgumentException("assessment must be present");
         }
-        List<SanctionSpec> selected = assessment.escalation().selectedStep().sanctions();
         return new PunishmentExpectation(
                 assessment.configurationVersion(),
                 assessment.escalation().selectedStep().ordinal(),
                 assessment.escalation().selectedStep().label(),
                 assessment.sanctions(),
-                PunishmentApprovalRules.isCustomDuration(selected, assessment.sanctions())
+                PunishmentApprovalRules.isCustomDuration(assessment.policy(), assessment.sanctions())
         );
     }
 
@@ -53,6 +52,8 @@ public record PunishmentExpectation(
                 && stepOrdinal == assessment.escalation().selectedStep().ordinal()
                 && stepLabel.equals(assessment.escalation().selectedStep().label())
                 && sanctions.equals(assessment.sanctions())
-                && customDuration == PunishmentApprovalRules.isCustomDuration(selected, assessment.sanctions());
+                && customDuration == PunishmentApprovalRules.isCustomDuration(
+                        assessment.policy(), assessment.sanctions()
+                );
     }
 }
