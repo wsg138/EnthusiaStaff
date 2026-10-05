@@ -1246,7 +1246,7 @@ public final class VanishManager implements Listener {
     }
 
     private static GameMode defaultSelectedGameMode(StaffRank rank) {
-        return rank == StaffRank.ADMIN || rank == StaffRank.FOUNDER
+        return rank == StaffRank.DEVELOPER || rank == StaffRank.ADMIN || rank == StaffRank.FOUNDER
                 ? GameMode.CREATIVE
                 : GameMode.SPECTATOR;
     }
