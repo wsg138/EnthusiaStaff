@@ -390,9 +390,8 @@ public final class VanishManager implements Listener {
     }
 
     /**
-     * Marks a game-mode change as plugin-initiated so {@link #onGameModeChange} does not cancel
-     * it for vanished staff (C1: staff-mode profile transitions, e.g. forcing a vanished Mod to
-     * Survival on duty-enter, must not be mistaken for the player leaving vanish-spectator).
+     * Marks a game-mode change as plugin-initiated so {@link #onGameModeChange} can distinguish
+     * Staff Mode profile transitions from player-selected changes while vanish is active.
      */
     public void beginPluginGameModeApplication(UUID playerId) {
         vanishGameModeApplications.add(Objects.requireNonNull(playerId, "playerId"));
@@ -412,10 +411,9 @@ public final class VanishManager implements Listener {
         }
         if (!requiresStaffMode(rank)) {
             pendingStaffModeExitDisables.remove(playerId);
-            // Admin/Founder vanish is independent of Staff Mode. Saved-state restoration is
-            // allowed to restore the exact pre-staff game mode for checksum verification while
-            // visibility remains vanished; only after the Staff Mode session closes do we force
-            // the authoritative server-side Spectator state again.
+            // Admin/Founder vanish and real game mode are independent. Saved-state restoration
+            // may restore the exact pre-staff mode while visibility remains vanished; reconciliation
+            // must preserve that real mode rather than forcing Spectator.
             reconcileVanishGameMode(player);
             return;
         }
