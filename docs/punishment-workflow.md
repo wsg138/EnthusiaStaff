@@ -6,7 +6,7 @@ Every command, GUI click, automation event, website action, and API request must
 
 - Mod may apply the authoritative configured step, lower a recommendation, end or revoke a sanction while retaining history, and request a full overturn.
 - Developer may read punishment, case, report, and diagnostic data but cannot create or modify punishment state.
-- Admin may apply configured steps, raise or lower a recommendation, use custom durations with configured sanction types, fully overturn, and decide overturn requests.
+- Admin may apply configured steps and raise or lower a recommendation. A custom duration using configured sanction types is submitted as a durable request requiring Founder approval; Admin may still fully overturn and decide ordinary overturn requests.
 - Founder has full punishment and recovery authority.
 
 Historical cases keep the original actor and rank. A current policy change never deletes or rewrites a historical Developer-issued case.
