@@ -91,6 +91,17 @@ record PaperRuntimeComponents(
         registerStaffDutyContext(dependencies, staffMode);
         DefaultStaffVisibilityService visibility = createVisibilityService(dependencies);
         VanishManager vanish = createVanishManager(dependencies, staffMode, visibility);
+        StaffCombatProtectionListener combatProtection = new StaffCombatProtectionListener(
+                dependencies.environment().plugin(),
+                staffMode,
+                vanish,
+                staffMode.combat()
+        );
+        combatProtection.start();
+        staffMode.setEntryListener(player -> {
+            vanish.staffModeEntered(player);
+            combatProtection.protect(player);
+        });
         StaffActionLogger staffActionLogger = createStaffActionLogger(dependencies, staffMode, vanish);
         StaffTransferSnapshotCoordinator transferSnapshots = new StaffTransferSnapshotCoordinator(
                 dependencies.environment().plugin(),
