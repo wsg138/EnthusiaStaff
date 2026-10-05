@@ -45,7 +45,7 @@ try {
     try {
         $env:MODERATION_WEB_ENVIRONMENT = 'production'
         $env:CLOUDFLARE_ACCOUNT_ID = '83982f6d6277634f57d216e6a7f24125'
-        npm run build
+        & npm.cmd run build
         if ($LASTEXITCODE -ne 0) { throw 'Production website build failed.' }
         if ($DryRun) {
             & $wrangler deploy --config wrangler.production.jsonc --secrets-file $secretsFile --dry-run
