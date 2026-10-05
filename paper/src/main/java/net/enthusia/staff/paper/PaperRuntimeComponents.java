@@ -33,6 +33,8 @@ import net.enthusia.staff.paper.inventory.InventoryRecoveryGuard;
 import net.enthusia.staff.paper.report.ReportEvidenceMaintenance;
 import net.enthusia.staff.paper.staff.HelperObserverProtectionListener;
 import net.enthusia.staff.paper.staff.StaffModeDeathListener;
+import net.enthusia.staff.paper.staff.StaffCombatProtectionListener;
+import net.enthusia.staff.paper.staff.StaffDoubleCrouchListener;
 import net.enthusia.staff.paper.staff.StaffModeManager;
 import net.enthusia.staff.paper.staff.StaffModeWorldInteractionListener;
 import net.enthusia.staff.paper.staff.StaffStatePresentation;
@@ -91,6 +93,10 @@ record PaperRuntimeComponents(
         registerStaffDutyContext(dependencies, staffMode);
         DefaultStaffVisibilityService visibility = createVisibilityService(dependencies);
         VanishManager vanish = createVanishManager(dependencies, staffMode, visibility);
+        registerListener(
+                dependencies.environment().plugin(),
+                new StaffDoubleCrouchListener(dependencies.environment().plugin(), staffMode, vanish)
+        );
         StaffCombatProtectionListener combatProtection = new StaffCombatProtectionListener(
                 dependencies.environment().plugin(),
                 staffMode,
