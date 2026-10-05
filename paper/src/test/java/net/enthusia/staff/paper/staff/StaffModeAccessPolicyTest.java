@@ -41,6 +41,16 @@ class StaffModeAccessPolicyTest {
     }
 
     @Test
+    void onlyDeveloperGetsCombatTestingExceptionWithoutModerationAuthority() {
+        assertTrue(StaffModeAccessPolicy.allowsCombatTesting(StaffRank.DEVELOPER));
+        assertFalse(StaffModeAccessPolicy.allowsCombatTesting(StaffRank.HELPER));
+        assertFalse(StaffModeAccessPolicy.allowsCombatTesting(StaffRank.MOD));
+        assertFalse(StaffModeAccessPolicy.allowsCombatTesting(StaffRank.ADMIN));
+        assertFalse(StaffModeAccessPolicy.allowsCombatTesting(StaffRank.FOUNDER));
+        assertFalse(StaffRank.DEVELOPER.canApprovePunishmentRequests());
+    }
+
+    @Test
     void modCannotOpenOrMutateEnderChestInStaffMode() {
         assertFalse(StaffModeAccessPolicy.blocksInventoryMutation(StaffRank.MOD, false));
         assertTrue(StaffModeAccessPolicy.blocksInventoryMutation(StaffRank.MOD, true));
