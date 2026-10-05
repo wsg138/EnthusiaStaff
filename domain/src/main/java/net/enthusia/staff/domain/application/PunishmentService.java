@@ -198,7 +198,7 @@ public final class PunishmentService {
         if (requiresApproval(request.actor(), allowed.assessment())) {
             return new PunishmentEvaluation.Rejected(
                     "APPROVAL_REQUIRED",
-                    "This punishment must be approved by a moderator or higher before it can be applied"
+                    "This punishment requires approval before it can be applied"
             );
         }
         return allowed;
