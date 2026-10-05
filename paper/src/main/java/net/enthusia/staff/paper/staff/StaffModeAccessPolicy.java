@@ -67,6 +67,10 @@ final class StaffModeAccessPolicy {
         return rank == StaffRank.SYSTEM && gameMode == GameMode.SPECTATOR;
     }
 
+    static boolean allowsCombatTesting(StaffRank rank) {
+        return rank == StaffRank.DEVELOPER;
+    }
+
     static GameMode reconciledGameMode(StaffRank rank, GameMode currentGameMode) {
         Objects.requireNonNull(currentGameMode, "currentGameMode");
         return allowsGameMode(rank, currentGameMode)
