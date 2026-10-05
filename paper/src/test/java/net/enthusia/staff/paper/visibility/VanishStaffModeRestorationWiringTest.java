@@ -48,6 +48,24 @@ class VanishStaffModeRestorationWiringTest {
     }
 
     @Test
+    void adminAndFounderVanishDoNotForceOrCancelGameplayMode() throws IOException {
+        String change = method(
+                "public void onGameModeChange",
+                "@EventHandler(priority = EventPriority.HIGHEST)\n    public void onJoin"
+        );
+        assertTrue(change.contains("rank != StaffRank.ADMIN"));
+        assertTrue(change.contains("rank != StaffRank.FOUNDER"));
+
+        String enforce = method(
+                "private void enforceVanishSpectator",
+                "private void restoreSelectedGameMode"
+        );
+        assertTrue(enforce.contains("rank == StaffRank.ADMIN || rank == StaffRank.FOUNDER"));
+        assertTrue(enforce.indexOf("rank == StaffRank.ADMIN || rank == StaffRank.FOUNDER")
+                < enforce.indexOf("player.setGameMode(GameMode.SPECTATOR)"));
+    }
+
+    @Test
     void independentVanishIsReenforcedAfterStaffModeExit() throws IOException {
         String method = method(
                 "private void disableAfterStaffModeExit",
