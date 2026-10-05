@@ -157,22 +157,22 @@ Registered at `EventPriority.HIGHEST`.
 
 Registered at `EventPriority.HIGHEST` with cancelled changes ignored.
 
-- While full vanish is active, the player's authoritative server-side game mode
-  remains `SPECTATOR`.
-- Admin and Founder requests for Survival, Creative, or Spectator update the
-  independent logical gameplay mode that will be restored when vanish is
-  disabled; non-Spectator transitions are cancelled before they can replace the
-  authoritative Spectator state.
-- Lower ranks keep Spectator as their only selectable Staff Mode game mode.
-- The bounded Staff Mode snapshot-restoration phase releases the vanish game-mode
-  guard before #280 restores the pre-Staff state.
+- Admin and Founder keep the real authoritative game mode they select while
+  vanished: Survival, Creative, or Spectator. Vanish does not rewrite that mode.
+- Unsupported Admin/Founder modes such as Adventure remain rejected by Staff Mode
+  policy without changing vanish state.
+- Lower-rank game-mode restrictions remain rank-policy controlled and may require
+  real Spectator while vanished.
+- The bounded Staff Mode snapshot-restoration phase preserves the exact pre-Staff
+  mode while visibility state is reconciled independently.
 - Re-resolves live viewer rank, re-evaluates spectator-tab policy, updates the
   coordinator's cached game mode, and refreshes affected audience state.
 
-Vanish therefore uses vanilla/Paper Spectator behavior for block phasing instead
-of `noPhysics`, NMS/reflection, or a client-only fake game mode. The logical mode
-to restore is tracked separately from the authoritative Spectator mode and is
-persisted with durable vanish state. The manager does not directly listen for
+When the real mode is Spectator, vanish uses normal vanilla/Paper spectator
+phasing; it does not use `noPhysics`, NMS/reflection, or a client-only fake game
+mode. Admin/Founder Survival and Creative remain real Survival and Creative while
+vanished. The selected real mode is persisted with durable vanish state. The
+manager does not directly listen for
 chat, command completion, sound, particle, inventory, pickup, advancement,
 scoreboard, or voice events.
 
@@ -245,10 +245,9 @@ spectator staff remain unlisted.
 
 Do not extend that claim to entity-destroy, spawn-player, metadata, equipment, or
 other visibility packets. ProtocolLib is limited to observer-facing player-info
-masking; EnthusiaStaff does not send a self-only fake game-mode packet. During
-full vanish, the player's authoritative Bukkit/Paper game mode is real
-`SPECTATOR`; the selected gameplay mode is separate state restored when vanish
-ends.
+masking; EnthusiaStaff does not send a self-only fake game-mode packet. For
+Admin/Founder, the authoritative Bukkit/Paper game mode while vanished is the
+actual selected Survival, Creative, or Spectator mode.
 
 ## What is not currently intercepted
 
@@ -309,12 +308,12 @@ provider integrations that trigger additional scans.
 - Failed durable session verification leaves current visibility unchanged and
   retries after backoff.
 - A persisted vanish record restores visibility/privacy state and its selected
-  gameplay mode on startup/reconnect, then re-enforces authoritative Spectator
-  while vanish remains active.
-- Vanish-off restores the independently selected gameplay mode; Staff Mode exit
-  instead gives #280's pre-Staff snapshot restoration precedence.
-- Full vanish always uses real Spectator, so vanilla/Paper supplies block phasing
-  without a version-specific noclip layer.
+  gameplay mode on startup/reconnect.
+- For Admin/Founder, vanish-on/off preserves the real selected Survival, Creative,
+  or Spectator mode; Staff Mode exit still gives exact pre-Staff snapshot
+  restoration precedence.
+- Spectator phasing is provided only by real Spectator mode; vanish itself does
+  not claim noclip in Survival or Creative.
 - Complete visual and integration coverage still requires staging.
 
 ## Review and staging checklist
@@ -331,10 +330,11 @@ Reviewers should verify:
 - normal players never seeing vanished staff;
 - self-visibility;
 - tab list and entity visibility on each supported Paper version;
-- real server-side Spectator throughout full vanish on every supported runtime;
-- independent Admin/Founder Survival/Creative selection while vanished and exact
-  restoration of that selected mode when vanish is disabled;
-- wall, floor, and ceiling phasing while vanished through real Spectator behavior;
+- Admin/Founder real Survival, Creative, and Spectator modes remain unchanged
+  when vanish is toggled on or off;
+- Admin/Founder mode changes while vanished preserve vanish and Staff Mode state;
+- wall, floor, and ceiling phasing while vanished when the real mode is Spectator,
+  with no phasing claim in Survival or Creative;
 - ProtocolLib present, absent, incompatible, and runtime failure paths;
 - RoseChat, voice, `/seen`, commands, player counts, and public APIs;
 - sounds, particles, containers, damage, pickup, and other observable effects;
