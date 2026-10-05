@@ -42,6 +42,22 @@ final class StaffModeWorldInteractionPolicy {
         return tier == StaffDutyTier.MOD || tier == StaffDutyTier.ADMIN;
     }
 
+    static boolean allowsContainerView(StaffDutyTier tier) {
+        return tier == StaffDutyTier.HELPER;
+    }
+
+    static boolean blocksContainerEdit(StaffDutyTier tier) {
+        return tier == null || tier == StaffDutyTier.HELPER;
+    }
+
+    static boolean blocksContainerEntityEdit(StaffDutyTier tier) {
+        return tier == null || tier == StaffDutyTier.HELPER;
+    }
+
+    static boolean logsContainerEdit(StaffDutyTier tier) {
+        return tier == StaffDutyTier.MOD || tier == StaffDutyTier.ADMIN;
+    }
+
     /** Whether a {@link PlayerInteractEvent} block interaction must be cancelled. */
     static boolean blocksBlockInteraction(StaffDutyTier tier, Action action) {
         Objects.requireNonNull(action, "action");
