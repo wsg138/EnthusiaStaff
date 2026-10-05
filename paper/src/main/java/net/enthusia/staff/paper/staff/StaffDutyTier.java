@@ -9,7 +9,7 @@ import net.enthusia.staff.domain.auth.StaffRank;
  * <ul>
  *   <li>HELPER — tightly restricted trial rank: survival/spectator only, full lockdown.</li>
  *   <li>MOD — Helper base plus extras that are <em>logged instead of blocked</em> (pickup/drop,
- *   staff/empty inventory toggle, container use). Never creative.</li>
+ *   staff/empty inventory toggle, container use). Protected Survival or Spectator; never Creative.</li>
  *   <li>ADMIN — Admin/Founder: no restrictions, but every action is logged.</li>
  * </ul>
  *
