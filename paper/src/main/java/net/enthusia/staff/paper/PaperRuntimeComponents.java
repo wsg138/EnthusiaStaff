@@ -280,6 +280,7 @@ record PaperRuntimeComponents(
                 vanish::endPluginGameModeApplication
         );
         registerListener(plugin, vanish);
+        registerListener(plugin, vanish.silentContainerTracker());
         return vanish;
     }
 
