@@ -1,8 +1,10 @@
 package net.enthusia.staff.paper.staff;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import net.enthusia.staff.domain.auth.StaffRank;
 import org.bukkit.event.block.Action;
 import org.junit.jupiter.api.Test;
 
@@ -39,6 +41,11 @@ class StaffModeWorldInteractionPolicyTest {
                 StaffDutyTier.MOD, Action.RIGHT_CLICK_BLOCK));
         assertFalse(StaffModeWorldInteractionPolicy.blocksBlockInteraction(
                 StaffDutyTier.MOD, Action.PHYSICAL));
+    }
+
+    @Test
+    void developerRankMapsToDedicatedTechnicalTier() {
+        assertEquals(StaffDutyTier.DEVELOPER, StaffDutyTier.of(StaffRank.DEVELOPER));
     }
 
     @Test
