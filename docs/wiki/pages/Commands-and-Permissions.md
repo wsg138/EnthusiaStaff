@@ -190,13 +190,13 @@ Legacy aggregate rank nodes remain relevant during transition/configuration comp
 
 ## Active Staff Mode context
 
-Paper publishes an active LuckPerms context:
+Paper and Velocity publish the same active LuckPerms context:
 
 ```text
 enthusiastaff-duty=active
 ```
 
-This represents current on-duty Staff Mode state. It is not a replacement for permanent identity and it is not used as a universal Discord/website authority flag.
+Paper uses the local authoritative session; Velocity requires a durable ACTIVE session owned by the player's current backend. This represents current on-duty Staff Mode state. It is not a replacement for permanent identity and it is not used as a universal Discord/website authority flag.
 
 See [[Rank Authority]].
 
