@@ -92,6 +92,29 @@ public final class JdbcVanishStore implements VanishStore {
         }
     }
 
+    @Override
+    public Optional<Boolean> preferred(UUID staffId) {
+        if (staffId == null) {
+            throw new IllegalArgumentException("staffId must be present");
+        }
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement("""
+                     SELECT preferred_active
+                     FROM staff_vanish_states
+                     WHERE staff_id = ?
+                     """)) {
+            statement.setBytes(1, UuidBytes.toBytes(staffId));
+            try (ResultSet result = statement.executeQuery()) {
+                if (!result.next()) {
+                    return Optional.empty();
+                }
+                boolean preferred = result.getBoolean("preferred_active");
+                return result.wasNull() ? Optional.empty() : Optional.of(preferred);
+            }
+        } catch (SQLException exception) {
+            throw new ModerationPersistenceException("Unable to load vanish preference", exception);
+        }
+    }
 
     @Override
     public WriteResult set(
@@ -102,7 +125,16 @@ public final class JdbcVanishStore implements VanishStore {
             Instant now,
             boolean requireActiveStaffSession
     ) {
-        return set(staffId, rank, vanished, actorId, now, requireActiveStaffSession, null);
+        return set(
+                staffId,
+                rank,
+                vanished,
+                actorId,
+                now,
+                requireActiveStaffSession,
+                null,
+                PreferenceUpdate.KEEP
+        );
     }
 
     @Override
@@ -115,8 +147,34 @@ public final class JdbcVanishStore implements VanishStore {
             boolean requireActiveStaffSession,
             String selectedGameMode
     ) {
+        return set(
+                staffId,
+                rank,
+                vanished,
+                actorId,
+                now,
+                requireActiveStaffSession,
+                selectedGameMode,
+                PreferenceUpdate.KEEP
+        );
+    }
+
+    @Override
+    public WriteResult set(
+            UUID staffId,
+            StaffRank rank,
+            boolean vanished,
+            UUID actorId,
+            Instant now,
+            boolean requireActiveStaffSession,
+            String selectedGameMode,
+            PreferenceUpdate preferenceUpdate
+    ) {
         validateWrite(staffId, rank, actorId, now);
         validateSelectedGameMode(selectedGameMode);
+        if (preferenceUpdate == null) {
+            throw new IllegalArgumentException("preferenceUpdate must be present");
+        }
         try (Connection connection = dataSource.getConnection()) {
             connection.setAutoCommit(false);
             try {
@@ -129,7 +187,8 @@ public final class JdbcVanishStore implements VanishStore {
                         actorId,
                         now,
                         requireActiveStaffSession,
-                        selectedGameMode
+                        selectedGameMode,
+                        preferenceUpdate
                 );
             } catch (SQLException exception) {
                 rollback(connection, exception);
@@ -151,7 +210,8 @@ public final class JdbcVanishStore implements VanishStore {
             UUID actorId,
             Instant now,
             boolean requireActiveStaffSession,
-            String selectedGameMode
+            String selectedGameMode,
+            PreferenceUpdate preferenceUpdate
     ) throws SQLException {
         VanishState current = lockVanishState(connection, staffId);
         SessionMirror session = lockActiveSession(connection, staffId);
@@ -159,14 +219,17 @@ public final class JdbcVanishStore implements VanishStore {
             connection.rollback();
             return WriteResult.STAFF_SESSION_NOT_ACTIVE;
         }
-        ChangeSet changes = changes(current, session, rank, vanished, selectedGameMode);
+        Boolean preferred = preferenceUpdate == PreferenceUpdate.SET
+                ? vanished
+                : current == null ? null : current.preferred();
+        ChangeSet changes = changes(current, session, rank, vanished, selectedGameMode, preferred);
         if (!changes.changed()) {
             connection.rollback();
             return WriteResult.UNCHANGED;
         }
         persistChanges(
                 connection,
-                new VanishWrite(staffId, actorId, rank, vanished, now, selectedGameMode),
+                new VanishWrite(staffId, actorId, rank, vanished, preferred, now, selectedGameMode),
                 session,
                 changes);
         connection.commit();
@@ -180,10 +243,12 @@ public final class JdbcVanishStore implements VanishStore {
             SessionMirror session,
             StaffRank rank,
             boolean vanished,
-            String selectedGameMode
+            String selectedGameMode,
+            Boolean preferred
     ) {
         return new ChangeSet(
                 !matches(current, rank, vanished, selectedGameMode),
+                current == null || !java.util.Objects.equals(current.preferred(), preferred),
                 session != null && session.vanished() != vanished
         );
     }
@@ -194,13 +259,26 @@ public final class JdbcVanishStore implements VanishStore {
             SessionMirror session,
             ChangeSet changes
     ) throws SQLException {
-        if (!changes.stateChanged()) {
-            updateSessionMirror(connection, session.sessionId(), write.vanished());
+        if (changes.stateChanged()) {
+            writeState(
+                    connection,
+                    write.staffId(),
+                    write.actorId(),
+                    write.rank(),
+                    write.vanished(),
+                    write.preferred(),
+                    write.now(),
+                    write.selectedGameMode()
+            );
+            updateSessionMirrorIfChanged(connection, session, write.vanished());
             return;
         }
-        writeState(connection, write.staffId(), write.actorId(), write.rank(), write.vanished(), write.now(),
-                write.selectedGameMode());
-        updateSessionMirrorIfChanged(connection, session, write.vanished());
+        if (changes.preferenceChanged()) {
+            updatePreference(connection, write.staffId(), write.actorId(), write.preferred(), write.now());
+        }
+        if (changes.sessionChanged()) {
+            updateSessionMirror(connection, session.sessionId(), write.vanished());
+        }
     }
 
     private static void writeAuditAndOutboxBestEffort(
@@ -254,7 +332,7 @@ public final class JdbcVanishStore implements VanishStore {
 
     private static VanishState lockVanishState(Connection connection, UUID staffId) throws SQLException {
         try (PreparedStatement statement = connection.prepareStatement("""
-                SELECT active, staff_rank, selected_game_mode
+                SELECT active, preferred_active, staff_rank, selected_game_mode
                 FROM staff_vanish_states
                 WHERE staff_id = ?
                 FOR UPDATE
@@ -264,6 +342,7 @@ public final class JdbcVanishStore implements VanishStore {
                 return result.next()
                         ? new VanishState(
                                 result.getBoolean("active"),
+                                nullableBoolean(result, "preferred_active"),
                                 StaffRank.valueOf(result.getString("staff_rank")),
                                 result.getString("selected_game_mode")
                         )
@@ -296,6 +375,11 @@ public final class JdbcVanishStore implements VanishStore {
         }
     }
 
+    private static Boolean nullableBoolean(ResultSet result, String column) throws SQLException {
+        boolean value = result.getBoolean(column);
+        return result.wasNull() ? null : value;
+    }
+
     private static boolean matches(
             VanishState current,
             StaffRank rank,
@@ -314,25 +398,63 @@ public final class JdbcVanishStore implements VanishStore {
             UUID actorId,
             StaffRank rank,
             boolean vanished,
+            Boolean preferred,
             Instant now,
             String selectedGameMode
     ) throws SQLException {
         try (PreparedStatement state = connection.prepareStatement("""
                 INSERT INTO staff_vanish_states(
-                    staff_id, active, staff_rank, selected_game_mode, updated_by, updated_at
+                    staff_id, active, preferred_active, staff_rank, selected_game_mode, updated_by, updated_at
                 )
-                VALUES (?, ?, ?, ?, ?, ?)
-                ON DUPLICATE KEY UPDATE active = VALUES(active), staff_rank = VALUES(staff_rank),
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                ON DUPLICATE KEY UPDATE active = VALUES(active),
+                    preferred_active = VALUES(preferred_active),
+                    staff_rank = VALUES(staff_rank),
                     selected_game_mode = VALUES(selected_game_mode),
                     updated_by = VALUES(updated_by), updated_at = VALUES(updated_at), revision = revision + 1
                 """)) {
             state.setBytes(1, UuidBytes.toBytes(staffId));
             state.setBoolean(2, vanished);
-            state.setString(3, rank.name());
-            state.setString(4, selectedGameMode);
-            state.setBytes(5, UuidBytes.toBytes(actorId));
-            state.setTimestamp(6, Timestamp.from(now));
+            setNullableBoolean(state, 3, preferred);
+            state.setString(4, rank.name());
+            state.setString(5, selectedGameMode);
+            state.setBytes(6, UuidBytes.toBytes(actorId));
+            state.setTimestamp(7, Timestamp.from(now));
             state.executeUpdate();
+        }
+    }
+
+    private static void updatePreference(
+            Connection connection,
+            UUID staffId,
+            UUID actorId,
+            Boolean preferred,
+            Instant now
+    ) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement("""
+                UPDATE staff_vanish_states
+                SET preferred_active = ?, updated_by = ?, updated_at = ?, revision = revision + 1
+                WHERE staff_id = ?
+                """)) {
+            setNullableBoolean(statement, 1, preferred);
+            statement.setBytes(2, UuidBytes.toBytes(actorId));
+            statement.setTimestamp(3, Timestamp.from(now));
+            statement.setBytes(4, UuidBytes.toBytes(staffId));
+            if (statement.executeUpdate() != SINGLE_ROW_UPDATE) {
+                throw new SQLException("locked vanish state disappeared before preference update");
+            }
+        }
+    }
+
+    private static void setNullableBoolean(
+            PreparedStatement statement,
+            int index,
+            Boolean value
+    ) throws SQLException {
+        if (value == null) {
+            statement.setNull(index, java.sql.Types.BOOLEAN);
+        } else {
+            statement.setBoolean(index, value);
         }
     }
 
@@ -413,15 +535,15 @@ public final class JdbcVanishStore implements VanishStore {
         }
     }
 
-    private record VanishState(boolean vanished, StaffRank rank, String selectedGameMode) {
+    private record VanishState(boolean vanished, Boolean preferred, StaffRank rank, String selectedGameMode) {
     }
 
     private record SessionMirror(UUID sessionId, boolean vanished) {
     }
 
-    private record ChangeSet(boolean stateChanged, boolean sessionChanged) {
+    private record ChangeSet(boolean stateChanged, boolean preferenceChanged, boolean sessionChanged) {
         private boolean changed() {
-            return stateChanged || sessionChanged;
+            return stateChanged || preferenceChanged || sessionChanged;
         }
     }
 
@@ -434,6 +556,7 @@ public final class JdbcVanishStore implements VanishStore {
             UUID actorId,
             StaffRank rank,
             boolean vanished,
+            Boolean preferred,
             Instant now,
             String selectedGameMode) {
     }

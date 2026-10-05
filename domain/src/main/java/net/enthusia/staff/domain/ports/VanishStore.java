@@ -14,6 +14,11 @@ public interface VanishStore {
         STAFF_SESSION_NOT_ACTIVE
     }
 
+    enum PreferenceUpdate {
+        KEEP,
+        SET
+    }
+
     List<VanishRecord> active(int limit);
 
     default Optional<VanishRecord> active(UUID staffId) {
@@ -23,6 +28,13 @@ public interface VanishStore {
         return active(10_000).stream()
                 .filter(record -> record.staffId().equals(staffId))
                 .findFirst();
+    }
+
+    default Optional<Boolean> preferred(UUID staffId) {
+        if (staffId == null) {
+            throw new IllegalArgumentException("staffId must be present");
+        }
+        return Optional.empty();
     }
 
     WriteResult set(
@@ -44,5 +56,21 @@ public interface VanishStore {
             String selectedGameMode
     ) {
         return set(staffId, rank, vanished, actorId, now, requireActiveStaffSession);
+    }
+
+    default WriteResult set(
+            UUID staffId,
+            StaffRank rank,
+            boolean vanished,
+            UUID actorId,
+            Instant now,
+            boolean requireActiveStaffSession,
+            String selectedGameMode,
+            PreferenceUpdate preferenceUpdate
+    ) {
+        if (preferenceUpdate == null) {
+            throw new IllegalArgumentException("preferenceUpdate must be present");
+        }
+        return set(staffId, rank, vanished, actorId, now, requireActiveStaffSession, selectedGameMode);
     }
 }

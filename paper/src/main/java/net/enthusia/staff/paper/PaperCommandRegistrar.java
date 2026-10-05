@@ -43,6 +43,7 @@ import net.enthusia.staff.paper.command.SanctionLifecycleCommand;
 import net.enthusia.staff.paper.command.StaffApiCommand;
 import net.enthusia.staff.paper.command.StaffChatCommand;
 import net.enthusia.staff.paper.command.StaffModeCommand;
+import net.enthusia.staff.paper.command.StaffModeVanishEntryCoordinator;
 import net.enthusia.staff.paper.command.StaffWhoCommand;
 import net.enthusia.staff.paper.command.VanishCommand;
 import net.enthusia.staff.paper.config.ModerationFeatureSettings;
@@ -278,7 +279,20 @@ final class PaperCommandRegistrar {
         );
         bindCompleting("freeze", freezes, freezes);
         bindCompleting("unfreeze", freezes, freezes);
-        bind("staff", new StaffModeCommand(writeMode(), dependencies.players().staffMode()));
+        StaffModeVanishEntryCoordinator staffEntry = new StaffModeVanishEntryCoordinator(
+                plugin(),
+                writeMode(),
+                dependencies.players().staffMode(),
+                dependencies.players().vanish(),
+                storage(PaperStorageBindings::vanishStore),
+                workers()
+        );
+        StaffModeCommand staffMode = new StaffModeCommand(
+                writeMode(),
+                dependencies.players().staffMode(),
+                staffEntry
+        );
+        bindCompleting("staff", staffMode, staffMode);
         bind("vanish", new VanishCommand(writeMode(), dependencies.players().vanish()));
         bind("staffchat", new StaffChatCommand(dependencies.integrations().roseChat()));
         bind("staffwho", new StaffWhoCommand(

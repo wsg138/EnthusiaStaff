@@ -33,8 +33,9 @@ paper/src/main/java/net/enthusia/staff/paper/auth/PaperStaffRankResolver.java
 
 `VanishManager` owns lifecycle, persistence coordination, live rank
 reconciliation, and Bukkit application. `DefaultStaffVisibilityService` owns the
-current in-memory visibility decision. `JdbcVanishStore` persists whether a staff
-member should remain vanished and the rank used for visibility hierarchy.
+current in-memory visibility decision. `JdbcVanishStore` persists the current
+live vanish state, the rank used for visibility hierarchy, the selected real game
+mode where applicable, and a separate nullable remembered vanish preference.
 
 ## State and startup
 
@@ -52,11 +53,12 @@ Each audience registration receives a monotonically increasing session identifie
 Queued owner callbacks verify that identifier before running, so a disconnect and
 reconnect cannot apply work through the retired `Player` handle.
 
-Startup staff-mode recovery is asynchronous. Helper, Mod, and Developer vanish is
+Startup staff-mode recovery is asynchronous. Vanish for every player staff rank is
 therefore not disabled merely because the in-memory staff-mode cache is not ready.
 When required, vanish checks the durable `StaffSessionStore` on the bounded worker
-executor. An open durable staff session preserves the vanish state while recovery
-continues; a confirmed missing session disables it.
+executor. An open durable staff session preserves the live vanish state while
+recovery continues; a confirmed missing session disables it without overwriting
+the remembered next-entry preference.
 
 ## Toggle flow
 
@@ -66,11 +68,12 @@ The current flow is:
 
 1. Resolve the player's explicit EnthusiaStaff rank from permissions.
 2. Reject the request when no supported rank can be resolved.
-3. Require active staff mode for Helper, Mod, and Developer.
-4. Calculate the opposite of the current vanish state.
+3. Require active Staff Mode for every player staff rank.
+4. Calculate the opposite of the current live vanish state.
 5. Permit only one state write for that player.
-6. Persist the new state asynchronously in `VanishStore`.
-7. When staff mode is active, update the staff-session vanish mirror too.
+6. Persist the new live state asynchronously in `VanishStore` and mark the change as
+   an intentional preference update.
+7. Update the active staff-session vanish mirror in the same durable transaction.
 8. Update the concurrent viewer-rank and vanished-state maps.
 9. Return to the current player's entity scheduler through the session-fenced
    audience coordinator.
@@ -103,19 +106,21 @@ have only one queued entity check. The entity check:
 5. compares the vanished target's live rank with the durable rank;
 6. updates target classification and persists a changed rank;
 7. disables vanish after rank removal or invalid `SYSTEM` resolution;
-8. verifies lower-rank staff-session authority durably when in-memory recovery is
-   not yet established.
+8. verifies staff-session authority durably for every player staff rank when
+   in-memory recovery is not yet established.
 
 Durable staff-session checks are bounded to one in-flight check per player. Each
 check has a unique token; disconnect invalidates that token, so an old result
 cannot mutate a replacement session. Failed checks back off before retrying.
 
-Helper, Mod, and Developer normally leave vanish when staff mode exits. If that
-cleanup collides with another state write or fails, a pending cleanup marker keeps
-the disable operation eligible for retry. A later restart also detects the closed
-staff session through durable verification, covering the crash window between
-staff-session closure and vanish disable. Transient cleanup markers are removed on
-quit; reconnect re-establishes authority from durable storage.
+Every player staff rank leaves the live vanish state when Staff Mode exits. That
+automatic cleanup uses `PreferenceUpdate.KEEP`, so the last intentional choice is
+retained for the next entry. If cleanup collides with another state write or fails,
+a pending cleanup marker keeps the disable operation eligible for retry. A later
+restart also detects the closed staff session through durable verification,
+covering the crash window between staff-session closure and vanish disable.
+Transient cleanup markers are removed on quit; reconnect re-establishes authority
+from durable storage.
 
 Viewer authority and target classification are separate:
 
@@ -127,9 +132,10 @@ Viewer authority and target classification are separate:
 ## Staff-mode exit
 
 `StaffModeManager` calls `VanishManager.staffModeExited(UUID)` only after verified
-durable staff-session closure. If the current live rank requires staff mode,
-vanish is disabled through the normal persisted path. Admin and Founder may remain
-vanished independently.
+durable staff-session closure. Every player staff rank requires Staff Mode for
+normal vanish, so exit disables the live state through the normal persisted path
+while preserving the remembered next-entry preference. This does not restrict the
+real game-mode freedom of Developer/Admin/Founder while Staff Mode is active.
 
 ## Events handled directly
 

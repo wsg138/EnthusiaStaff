@@ -91,8 +91,8 @@ commands:
     usage: /unfreeze <player> <reason> CONFIRM
     permission: enthusiastaff.freeze
   staff:
-    description: Enter or exit durable staff mode
-    usage: /staff
+    description: Enter or exit durable staff mode, recover snapshots, or choose entry visibility
+    usage: /staff [recover|-v|vanish|-nv|visible]
     aliases: [sm, staffmode]
     permission: enthusiastaff.staffmode
   stafftools:

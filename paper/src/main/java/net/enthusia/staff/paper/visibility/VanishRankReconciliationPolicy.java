@@ -52,7 +52,7 @@ final class VanishRankReconciliationPolicy {
     }
 
     static boolean requiresStaffMode(StaffRank rank) {
-        return rank == StaffRank.HELPER || rank == StaffRank.MOD || rank == StaffRank.DEVELOPER;
+        return isPlayerRank(rank);
     }
 
     static boolean isPlayerRank(StaffRank rank) {

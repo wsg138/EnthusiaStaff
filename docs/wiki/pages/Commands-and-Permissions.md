@@ -92,7 +92,7 @@ Do not manually edit link rows to recover a normal user flow. See [[Discord Mode
 | --- | --- | --- |
 | `/freeze <player> <reason>` | durable investigation freeze | `enthusiastaff.freeze` |
 | `/unfreeze <player> <reason> CONFIRM` | release freeze | `enthusiastaff.freeze` |
-| `/staff` | enter/leave durable Staff Mode | `enthusiastaff.staffmode` |
+| `/staff [recover|-v|vanish|-nv|visible]` | enter/leave durable Staff Mode, recover a snapshot, or choose entry visibility | `enthusiastaff.staffmode` |
 | `/stafftools` | Staff Tools menu and supported direct sub-actions | `enthusiastaff.stafftools.menu` plus action node |
 | `/fakebase ...` | bounded fake-base tester workflow | `enthusiastaff.cheattester.fake-base` |
 | `/vanish` | toggle vanish / supported tab options | `enthusiastaff.vanish` |

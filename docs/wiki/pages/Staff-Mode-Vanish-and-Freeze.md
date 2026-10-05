@@ -35,13 +35,23 @@ Enter or leave with:
 
 ```text
 /staff
+/staff -v
+/staff vanish
+/staff -nv
+/staff visible
+/staff recover
 ```
+
+Bare `/staff` restores the remembered vanish preference. `-v` / `vanish` enters vanished, while
+`-nv` / `visible` enters visible. `/staff recover` retains its existing durable snapshot-recovery role.
 
 Staff mode durably records the normal player state **before** applying the temporary staff profile. That saved state is the recovery authority for inventory, armor, offhand, XP, health/hunger, effects, location/server, game mode, flight and other owned state.
 
 Entry should fail closed when combat safety, storage, worker capacity, or durable snapshot creation cannot be proved. A reconnect or restart recovers the existing durable session rather than creating a new “normal” snapshot from temporary staff state.
 
-The pending investigation-tools PR makes fresh Staff Mode entry enable vanish automatically. An already vanished staff member stays vanished. If vanish cannot be saved, the same fresh session leaves Staff Mode through normal snapshot restoration; failed restoration retains the existing recovery protections. Recovery and cross-server resumes preserve their prior visibility choice. This proposal does not change the existing rank-specific vanish behavior on exit.
+Fresh Staff Mode entry resolves visibility in this order: explicit command override, remembered preference, then first-use default of vanish ON. The preference is loaded before Staff Mode activation and the resolved choice is staged for the normal serialized vanish path. If the visibility choice cannot be persisted/applied, the fresh session leaves Staff Mode through normal snapshot restoration; failed restoration retains the existing recovery protections. Recovery and cross-server resume paths preserve their existing visibility state rather than inventing a new preference.
+
+All player staff ranks require an active Staff Mode session for normal vanish. Leaving Staff Mode disables the live vanish state but preserves the staff member's last intentional vanish preference for the next entry.
 
 ### Before entering
 
@@ -134,7 +144,7 @@ Toggle with:
 /vanish
 ```
 
-Use vanish only when visible staff presence would interfere with a legitimate investigation. Vanish is separately durable from staff mode and uses a rank-aware visibility policy.
+Use vanish only when visible staff presence would interfere with a legitimate investigation. Live vanish is session-bound for every player staff rank and uses a rank-aware visibility policy. An intentional `/vanish` change updates the durable preference used by the next bare `/staff` entry; automatic exit/rank reconciliation must not overwrite that preference.
 
 Important limitation: hiding an entity through Paper does not automatically prove invisibility from every plugin, command suggestion, tab implementation, voice/chat provider, sound/particle effect, analytics surface or external API. Those are separate integration surfaces.
 
