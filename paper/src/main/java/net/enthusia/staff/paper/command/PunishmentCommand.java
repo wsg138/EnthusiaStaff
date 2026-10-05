@@ -51,7 +51,6 @@ public final class PunishmentCommand implements CommandExecutor, TabCompleter {
     private static final String MUTE_COMMAND = "mute";
     private static final String BAN_COMMAND = "ban";
     private static final String IP_BAN_COMMAND = "ipban";
-    private static final String PERMISSION = "enthusiastaff.punish.configured";
     private static final String PRIVATE_FLAG = "--private";
     private static final Set<String> LEGACY_MUTE_UNITS = Set.of(
             "second",
@@ -166,7 +165,7 @@ public final class PunishmentCommand implements CommandExecutor, TabCompleter {
     }
 
     private boolean requireDraftPermission(CommandSender sender, Actor actor) {
-        if (sender.hasPermission(PERMISSION) && permitsPunishmentDraft(actor)) {
+        if (permitsPunishmentDraft(actor)) {
             return true;
         }
         sender.sendMessage(StaffMessageStyle.style(Component.text(
