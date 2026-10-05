@@ -35,8 +35,8 @@ import org.bukkit.inventory.InventoryHolder;
  *
  * <p>Helpers are observational: they may silently open world containers to inspect them, but
  * every inventory mutation path is cancelled while that container is open. Mod may edit
- * containers and ordinary blocks with audit logging. Admin/Founder world interactions are
- * unrestricted but audited.</p>
+ * containers and ordinary blocks with audit logging. Developer/Admin/Founder world interactions
+ * are unrestricted but audited; Developer remains separate from moderation authority.</p>
  */
 public final class StaffModeWorldInteractionListener implements Listener {
     private final StaffModeManager staffMode;
