@@ -3,10 +3,12 @@ const STAFF_API_ORIGIN = "https://staff-api.enthusia.info";
 const STAFF_API_TIMEOUT_MS = 7000;
 const STATIC_ROUTES = new Set([
   "/v1/website/appeals/eligible",
+  "/v1/website/appeals/mine",
   "/v1/website/appeals/submit",
   "/v1/website/appeals/reviewer/list"
 ]);
-const DECISION_ROUTE = /^\/v1\/website\/appeals\/reviewer\/[0-9a-f-]{36}\/decision$/i;
+const PLAYER_EDIT_ROUTE = /^\/v1\/website\/appeals\/[0-9a-f-]{36}\/edit$/i;
+const REVIEW_ACTION_ROUTE = /^\/v1\/website\/appeals\/reviewer\/[0-9a-f-]{36}\/(?:claim|decision|reopen)$/i;
 
 function base64Url(bytes) {
   let binary = "";
@@ -37,7 +39,7 @@ function staffApiConfiguration(env) {
 }
 
 function staffRoute(path) {
-  if (!STATIC_ROUTES.has(path) && !DECISION_ROUTE.test(path)) {
+  if (!STATIC_ROUTES.has(path) && !PLAYER_EDIT_ROUTE.test(path) && !REVIEW_ACTION_ROUTE.test(path)) {
     throw new Error("Invalid Staff API route");
   }
   return path;

@@ -1,7 +1,7 @@
-import { authenticateRequest, canReview } from "../../../lib/auth.js";
-import { forbidden, json, methodNotAllowed, serviceUnavailable, unauthorized } from "../../../lib/responses.js";
+import { json, methodNotAllowed, serviceUnavailable } from "../../../lib/responses.js";
 import { boundedIdempotencyKey, requireSameOrigin } from "../../../lib/security.js";
-import { reviewerRank, signedStaffRequest, staffApiResponse } from "../../../lib/staff-api.js";
+import { signedStaffRequest, staffApiResponse } from "../../../lib/staff-api.js";
+import { authenticatedReviewer } from "../../../lib/reviewer-auth.js";
 import { isCanonicalUuid } from "../../../lib/validation.js";
 
 const DECISIONS = new Set(["approve", "deny", "request_information"]);
@@ -22,18 +22,6 @@ function sanitizeDecision(input) {
   return { decision, expectedVersion, note, idempotencyKey };
 }
 
-async function authenticatedReviewer(context) {
-  let session;
-  try {
-    session = await authenticateRequest(context.request, context.env);
-  } catch {
-    return { error: unauthorized() };
-  }
-  if (!canReview(session, context.env)) return { error: forbidden() };
-  const actorRank = reviewerRank(session);
-  return actorRank ? { session, actorRank } : { error: forbidden() };
-}
-
 async function requestDecision(context, appealId, reviewer, decision) {
   const upstream = await signedStaffRequest(
     context.env,
@@ -52,7 +40,7 @@ async function requestDecision(context, appealId, reviewer, decision) {
 
 export async function onRequestPost(context) {
   if (!requireSameOrigin(context.request)) return json({ error: "invalid_origin" }, 403);
-  const reviewer = await authenticatedReviewer(context);
+  const reviewer = await authenticatedReviewer(context.request, context.env);
   if (reviewer.error) return reviewer.error;
   let decision;
   try {

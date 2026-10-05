@@ -1,13 +1,11 @@
-import { authenticateRequest, canReview } from "../../lib/auth.js";
-import { forbidden, methodNotAllowed, serviceUnavailable, unauthorized } from "../../lib/responses.js";
-import { reviewerRank, signedStaffRequest, staffApiResponse } from "../../lib/staff-api.js";
+import { methodNotAllowed, serviceUnavailable } from "../../lib/responses.js";
+import { authenticatedReviewer } from "../../lib/reviewer-auth.js";
+import { signedStaffRequest, staffApiResponse } from "../../lib/staff-api.js";
 
 export async function onRequestGet(context) {
-  let session;
-  try { session = await authenticateRequest(context.request, context.env); } catch { return unauthorized(); }
-  if (!canReview(session, context.env)) return forbidden();
-  const actorRank = reviewerRank(session);
-  if (!actorRank) return forbidden();
+  const reviewer = await authenticatedReviewer(context.request, context.env);
+  if (reviewer.error) return reviewer.error;
+  const { session, actorRank } = reviewer;
 
   const url = new URL(context.request.url);
   const status = url.searchParams.get("status")?.slice(0, 32) || "OPEN";

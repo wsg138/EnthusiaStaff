@@ -3,6 +3,9 @@ import test from "node:test";
 import { buildSession, canReview } from "../functions/lib/auth.js";
 import { buildAppealPayload, sanitizeSubmission } from "../functions/api/appeals.js";
 import { sanitizeDecision } from "../functions/api/reviewer/appeals/[id].js";
+import { sanitizeEdit } from "../functions/api/appeals/[id]/edit.js";
+import { sanitizeClaim } from "../functions/api/reviewer/appeals/[id]/claim.js";
+import { sanitizeReopen } from "../functions/api/reviewer/appeals/[id]/reopen.js";
 import { boundedIdempotencyKey, requireSameOrigin } from "../functions/lib/security.js";
 import { reviewerRank, signedStaffRequest, staffRoute } from "../functions/lib/staff-api.js";
 import { isCanonicalUuid } from "../functions/lib/validation.js";
@@ -108,6 +111,37 @@ test("review decisions require version, bounded note, and replay key", () => {
   assert.equal(boundedIdempotencyKey("short"), null);
 });
 
+test("appeal lifecycle mutations require bounded versions and replay keys", () => {
+  assert.deepEqual(sanitizeEdit({
+    expectedVersion: 3,
+    reason: "Updated appeal explanation.",
+    idempotencyKey: "edit-request-123"
+  }), {
+    expectedVersion: 3,
+    reason: "Updated appeal explanation.",
+    idempotencyKey: "edit-request-123"
+  });
+  assert.deepEqual(sanitizeClaim({
+    expectedVersion: 4,
+    idempotencyKey: "claim-request-123"
+  }), {
+    expectedVersion: 4,
+    idempotencyKey: "claim-request-123"
+  });
+  assert.deepEqual(sanitizeReopen({
+    expectedVersion: 5,
+    note: "New evidence warrants another review.",
+    idempotencyKey: "reopen-request-123"
+  }), {
+    expectedVersion: 5,
+    note: "New evidence warrants another review.",
+    idempotencyKey: "reopen-request-123"
+  });
+  assert.equal(sanitizeEdit({ expectedVersion: 0, reason: "Long enough reason", idempotencyKey: "edit-request-123" }), null);
+  assert.equal(sanitizeClaim({ expectedVersion: 1, idempotencyKey: "short" }), null);
+  assert.equal(sanitizeReopen({ expectedVersion: 1, note: "x", idempotencyKey: "reopen-request-123" }), null);
+});
+
 test("strict UUID validation supports Java and Floodgate identities", () => {
   assert.equal(isCanonicalUuid("123e4567-e89b-12d3-a456-426614174099"), true);
   assert.equal(isCanonicalUuid("00000000-0000-0000-0009-01f64f65c7c3"), true);
@@ -148,10 +182,20 @@ test("private Staff API requests carry a valid replay-protected signature", asyn
   }
 });
 
-test("private Staff API rejects routes outside the appeal allowlist", () => {
+test("private Staff API restricts lifecycle requests to the explicit appeal allowlist", () => {
+  const appealId = "123e4567-e89b-12d3-a456-426614174099";
   assert.throws(() => staffRoute("/v1/public/punishments"), /Invalid Staff API route/);
-  assert.equal(
-    staffRoute("/v1/website/appeals/reviewer/123e4567-e89b-12d3-a456-426614174099/decision"),
-    "/v1/website/appeals/reviewer/123e4567-e89b-12d3-a456-426614174099/decision"
+  assert.equal(staffRoute("/v1/website/appeals/mine"), "/v1/website/appeals/mine");
+  for (const path of [
+    `/v1/website/appeals/${appealId}/edit`,
+    `/v1/website/appeals/reviewer/${appealId}/claim`,
+    `/v1/website/appeals/reviewer/${appealId}/decision`,
+    `/v1/website/appeals/reviewer/${appealId}/reopen`
+  ]) {
+    assert.equal(staffRoute(path), path);
+  }
+  assert.throws(
+    () => staffRoute(`/v1/website/appeals/reviewer/${appealId}/delete`),
+    /Invalid Staff API route/
   );
 });
