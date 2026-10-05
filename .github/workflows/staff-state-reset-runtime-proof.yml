@@ -221,6 +221,7 @@ jobs:
               return 1
             }
           }
+          # Admin/Founder vanish must preserve the selected real mode; phasing is asserted only in Spectator.
           for name in leaf115 paper128 paper129 paper134; do
             evidence="$root/$name/server/staff-state-reset-proof.txt"
             client="$root/$name/client.log"
