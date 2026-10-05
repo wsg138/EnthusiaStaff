@@ -13,7 +13,7 @@ class StaffCombatProtectionDeveloperWiringTest {
     );
 
     @Test
-    void onDutyDeveloperSkipsAutomaticCombatUntagProtection() throws IOException {
+    void developerRankIsNotResolvedBeforeEntitySchedulerHandoff() throws IOException {
         String source = Files.readString(SOURCE).replace("\r\n", "\n");
         int start = source.indexOf("private void scheduleProtection");
         int end = source.indexOf("private void reconcile", start);
@@ -22,10 +22,8 @@ class StaffCombatProtectionDeveloperWiringTest {
         }
         String method = source.substring(start, end);
 
-        assertTrue(method.contains("staffMode.active(player.getUniqueId())"));
-        assertTrue(method.contains("staffMode.dutyTier(player) == StaffDutyTier.DEVELOPER"));
-        assertTrue(method.indexOf("StaffDutyTier.DEVELOPER")
-                < method.indexOf("player.getScheduler().execute"));
+        assertTrue(method.contains("player.getScheduler().execute"));
+        org.junit.jupiter.api.Assertions.assertFalse(method.contains("staffMode.dutyTier(player)"));
     }
 
     @Test
