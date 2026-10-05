@@ -78,19 +78,18 @@ class VanishStaffModeRestorationWiringTest {
     }
 
     @Test
-    void independentVanishIsReconciledAfterStaffModeExit() throws IOException {
+    void everyPlayerRankDisablesLiveVanishAfterStaffModeExitWithoutOverwritingPreference() throws IOException {
         String method = method(
                 "private void disableAfterStaffModeExit",
                 "private static boolean requiresStaffMode"
         );
 
-        int independent = method.indexOf("if (!requiresStaffMode(rank))");
-        int reconcile = method.indexOf("reconcileVanishGameMode(player)", independent);
-        int exit = method.indexOf("return;", reconcile);
-
-        assertTrue(independent >= 0);
-        assertTrue(reconcile > independent);
-        assertTrue(exit > reconcile);
+        assertFalse(method.contains("if (!requiresStaffMode(rank))"));
+        assertTrue(method.contains("pendingStaffModeExitDisables.add(playerId)"));
+        assertTrue(method.contains(
+                "set(player, rank, false, false, VanishStore.PreferenceUpdate.KEEP)"
+        ));
+        assertFalse(method.contains("reconcileVanishGameMode(player)"));
     }
 
     private static String method(String startMarker, String endMarker) throws IOException {
