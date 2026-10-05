@@ -101,10 +101,8 @@ public final class StaffCombatProtectionListener implements Listener {
         if (player == null || !protectedState(player.getUniqueId())) {
             return;
         }
-        if (staffMode.active(player.getUniqueId())
-                && staffMode.dutyTier(player) == StaffDutyTier.DEVELOPER) {
-            return;
-        }
+        // Rank/permission reads belong on the player's owning entity thread.
+        // The Developer testing exemption is therefore checked in reconcile(), not here.
         try {
             player.getScheduler().execute(
                     plugin,
