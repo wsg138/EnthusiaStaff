@@ -96,6 +96,41 @@ class PunishmentDraftRequestRoutingTest {
     }
 
     @Test
+    void adminCustomDurationIsFrozenAndRoutesToFounderApproval() {
+        Fixture fixture = fixture(SanctionLength.temporary(Duration.ofDays(1)));
+        List<SanctionSpec> custom = List.of(
+                new SanctionSpec(SanctionType.MUTE, SanctionLength.temporary(Duration.ofDays(3)))
+        );
+
+        PunishmentDraftEvaluation.Prepared prepared = assertInstanceOf(
+                PunishmentDraftEvaluation.Prepared.class,
+                fixture.workflow().prepare(
+                        new PreparePunishmentDraftRequest(
+                                TARGET_ID,
+                                actor(StaffRank.ADMIN),
+                                "chat.request-routing",
+                                "Admin requested a custom duration",
+                                CaseVisibility.PUBLIC,
+                                "punish",
+                                custom
+                        ),
+                        OperationalMode.ACTIVE
+                )
+        );
+        assertTrue(prepared.draft().expectation().customDuration());
+        assertEquals(custom, prepared.draft().expectation().sanctions());
+
+        PunishmentDraftConfirmation.Requested requested = assertInstanceOf(
+                PunishmentDraftConfirmation.Requested.class,
+                fixture.workflow().confirmRouted(DRAFT_ID, actor(StaffRank.ADMIN), OperationalMode.ACTIVE)
+        );
+
+        assertEquals(StaffRank.FOUNDER, requested.submitted().request().proposal().requiredRank());
+        assertEquals(custom, requested.submitted().request().proposal().sanctions());
+        assertTrue(fixture.moderation().plans.isEmpty());
+    }
+
+    @Test
     void changedRecommendationRetainsDraftAndCreatesNoRequest() {
         Fixture fixture = fixture(SanctionLength.temporary(Duration.ofDays(1)));
         prepare(fixture, StaffRank.DEVELOPER);
