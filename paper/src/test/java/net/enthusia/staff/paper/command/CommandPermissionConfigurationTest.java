@@ -22,12 +22,6 @@ class CommandPermissionConfigurationTest {
     private static final String INVENTORY_VIEW_PERMISSION = "enthusiastaff.inventory.view";
     private static final Map<String, String> EXPECTED_PERMISSIONS = Map.ofEntries(
             Map.entry("history", HistoryCommand.VIEW_PERMISSION),
-            Map.entry("punish", PUNISH_PERMISSION),
-            Map.entry("ban", PUNISH_PERMISSION),
-            Map.entry("mute", PUNISH_PERMISSION),
-            Map.entry("warn", PUNISH_PERMISSION),
-            Map.entry("kick", PUNISH_PERMISSION),
-            Map.entry("ipban", "enthusiastaff.punish.ip"),
             Map.entry("removepunishment", REMOVE_PERMISSION),
             Map.entry("unban", REMOVE_PERMISSION),
             Map.entry("unmute", REMOVE_PERMISSION),
@@ -56,6 +50,26 @@ class CommandPermissionConfigurationTest {
                     commands.path(expected.getKey()).path(PERMISSION_FIELD).asText(),
                     expected.getKey()
             );
+        }
+    }
+
+    @Test
+    void punishmentCommandsDelegateToActiveDomainAuthority() throws IOException {
+        JsonNode metadata = pluginMetadata();
+        JsonNode commands = metadata.path(COMMANDS_FIELD);
+        for (String command : List.of("punish", "ban", "mute", "warn", "kick", "ipban")) {
+            assertTrue(commands.path(command).path(PERMISSION_FIELD).isMissingNode(), command);
+        }
+
+        JsonNode permissions = metadata.path("permissions");
+        for (String permission : List.of(
+                PUNISH_PERMISSION,
+                "enthusiastaff.punish.configured",
+                "enthusiastaff.punish.ip",
+                "enthusiastaff.punishment.requests.review"
+        )) {
+            assertTrue(permissions.has(permission), permission);
+            assertFalse(permissions.path(permission).path("default").asBoolean(), permission);
         }
     }
 
