@@ -12,6 +12,7 @@ import net.enthusia.staff.common.IdempotencyKey;
 import net.enthusia.staff.domain.OperationalMode;
 import net.enthusia.staff.domain.auth.Actor;
 import net.enthusia.staff.domain.ports.PunishmentDraftStore;
+import net.enthusia.staff.domain.sanction.SanctionSpec;
 
 public final class PunishmentDraftWorkflow {
     private static final Duration MAXIMUM_LIFETIME = Duration.ofDays(7);
@@ -83,7 +84,8 @@ public final class PunishmentDraftWorkflow {
                 request.actor(),
                 request.reasonId(),
                 request.internalExplanation(),
-                request.visibility()
+                request.visibility(),
+                request.overrideSanctions()
         );
         PunishmentEvaluation evaluation = punishments.evaluateRequestProposal(punishmentRequest, mode);
         if (evaluation instanceof PunishmentEvaluation.Rejected rejected) {
@@ -199,7 +201,7 @@ public final class PunishmentDraftWorkflow {
     }
 
     private static boolean requiresRequest(Actor actor, PunishmentExpectation expectation) {
-        return PunishmentApprovalRules.requiresApproval(actor.rank(), expectation.sanctions());
+        return PunishmentApprovalRules.requiresApproval(actor.rank(), expectation.customDuration());
     }
 
     private static PunishmentResult.Rejected draftNotFound() {
@@ -216,7 +218,8 @@ public final class PunishmentDraftWorkflow {
                 actor,
                 draft.reasonId(),
                 draft.internalExplanation(),
-                draft.visibility()
+                draft.visibility(),
+                draft.expectation().sanctions()
         );
     }
 
@@ -226,7 +229,8 @@ public final class PunishmentDraftWorkflow {
             Actor actor,
             String reasonId,
             String explanation,
-            net.enthusia.staff.domain.casefile.CaseVisibility visibility
+            net.enthusia.staff.domain.casefile.CaseVisibility visibility,
+            List<SanctionSpec> overrideSanctions
     ) {
         return new CreatePunishmentRequest(
                 new IdempotencyKey("punishment-draft:" + draftId),
@@ -235,7 +239,7 @@ public final class PunishmentDraftWorkflow {
                 reasonId,
                 explanation,
                 visibility,
-                List.of()
+                overrideSanctions
         );
     }
 }
