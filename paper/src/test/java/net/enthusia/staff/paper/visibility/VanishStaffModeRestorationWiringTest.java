@@ -83,7 +83,7 @@ class VanishStaffModeRestorationWiringTest {
     }
 
     @Test
-    void independentVanishIsReenforcedAfterStaffModeExit() throws IOException {
+    void independentVanishIsReconciledAfterStaffModeExit() throws IOException {
         String method = method(
                 "private void disableAfterStaffModeExit",
                 "private static boolean requiresStaffMode"
