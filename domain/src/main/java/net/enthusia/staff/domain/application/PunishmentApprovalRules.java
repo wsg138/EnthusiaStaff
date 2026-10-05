@@ -23,6 +23,14 @@ final class PunishmentApprovalRules {
         return requiresApproval(actorRank, isCustomDuration(selectedStepSanctions, sanctions));
     }
 
+    /**
+     * Compatibility overload for configured sanctions, which carry no custom-duration intent.
+     */
+    static boolean requiresApproval(StaffRank actorRank, List<SanctionSpec> configuredSanctions) {
+        Objects.requireNonNull(configuredSanctions);
+        return requiresApproval(actorRank, false);
+    }
+
     static boolean requiresApproval(StaffRank actorRank, boolean customDuration) {
         Objects.requireNonNull(actorRank);
         if (actorRank == StaffRank.DEVELOPER || actorRank == StaffRank.HELPER) {
