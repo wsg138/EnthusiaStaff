@@ -13,10 +13,7 @@ function sanitizeReopen(input) {
   return { expectedVersion, note, idempotencyKey };
 }
 
-export async function onRequestPost(context) {
-  if (!requireSameOrigin(context.request)) return json({ error: "invalid_origin" }, 403);
-  const reviewer = await authenticatedReviewer(context.request, context.env);
-  if (reviewer.error) return reviewer.error;
+async function parseReopenRequest(context, reviewer) {
   let reopen;
   try {
     reopen = sanitizeReopen(await context.request.json());
@@ -24,24 +21,38 @@ export async function onRequestPost(context) {
     reopen = null;
   }
   const appealId = String(context.params.id ?? "").trim();
-  if (!reopen || !isCanonicalUuid(appealId)) return json({ error: "invalid_reopen" }, 400);
+  if (!reopen || !isCanonicalUuid(appealId)) {
+    return { response: json({ error: "invalid_reopen" }, 400) };
+  }
+  return { reviewer, reopen, appealId };
+}
 
+async function sendReopen(context, request) {
   try {
     const upstream = await signedStaffRequest(
       context.env,
-      `/v1/website/appeals/reviewer/${appealId}/reopen`,
+      `/v1/website/appeals/reviewer/${request.appealId}/reopen`,
       {
-        actorAccountId: reviewer.session.player.uuid,
-        actorRank: reviewer.actorRank,
-        expectedVersion: reopen.expectedVersion,
-        note: reopen.note,
-        idempotencyKey: reopen.idempotencyKey
+        actorAccountId: request.reviewer.session.player.uuid,
+        actorRank: request.reviewer.actorRank,
+        expectedVersion: request.reopen.expectedVersion,
+        note: request.reopen.note,
+        idempotencyKey: request.reopen.idempotencyKey
       }
     );
     return staffApiResponse(upstream);
   } catch {
     return serviceUnavailable();
   }
+}
+
+export async function onRequestPost(context) {
+  if (!requireSameOrigin(context.request)) return json({ error: "invalid_origin" }, 403);
+  const reviewer = await authenticatedReviewer(context.request, context.env);
+  if (reviewer.error) return reviewer.error;
+  const request = await parseReopenRequest(context, reviewer);
+  if (request.response) return request.response;
+  return sendReopen(context, request);
 }
 
 export function onRequest() { return methodNotAllowed(["POST"]); }
