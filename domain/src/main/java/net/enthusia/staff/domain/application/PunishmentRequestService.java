@@ -237,7 +237,7 @@ public final class PunishmentRequestService {
     ) {
         Instant now = clock.instant();
         boolean customDuration = PunishmentApprovalRules.isCustomDuration(
-                assessment.escalation().selectedStep().sanctions(),
+                assessment.policy(),
                 assessment.sanctions()
         );
         StaffRank requiredApprovalRank = PunishmentApprovalRules.requiredApprovalRank(
