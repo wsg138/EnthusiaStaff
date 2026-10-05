@@ -154,8 +154,15 @@ class WebsiteAppealLifecycleIntegrationTest {
                     appealId, 1, ADMIN, ADMIN_RANK, "first-claim-0002", NOW.plusSeconds(4)
             ));
             assertError("APPEAL_ALREADY_CLAIMED", () -> store.claimAppeal(
-                    appealId, 2, ADMIN, ADMIN_RANK, "second-claim-0002", NOW.plusSeconds(5)
+                    appealId, 2, uuid(952), MODERATOR_RANK,
+                    "second-mod-claim-0002", NOW.plusSeconds(5)
             ));
+            WebsiteAppealMutation reassigned = store.claimAppeal(
+                    appealId, 2, ADMIN, ADMIN_RANK,
+                    "admin-recovery-claim-0002", NOW.plusSeconds(6)
+            );
+            assertTrue(reassigned.claimed());
+            assertEquals(3, reassigned.appeal().version());
         }
     }
 
