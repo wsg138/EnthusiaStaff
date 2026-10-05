@@ -18,7 +18,7 @@ import org.bukkit.plugin.java.JavaPlugin;
  * <p>Runs at {@link EventPriority#LOW}, after {@link StaffModeManager}'s LOWEST handoff-resume
  * capture but before {@link VanishManager}'s HIGHEST join handler. This preserves the
  * destination backend's native pre-staff game mode/inventory snapshot before transferred vanish
- * can force Spectator, while still suppressing join presence for vanished staff.</p>
+ * state is applied, while still suppressing join presence for vanished staff.</p>
  */
 public final class StaffTransferJoinListener implements Listener {
     private final JavaPlugin plugin;
