@@ -27,4 +27,20 @@ class StaffCombatProtectionDeveloperWiringTest {
         assertTrue(method.indexOf("StaffDutyTier.DEVELOPER")
                 < method.indexOf("player.getScheduler().execute"));
     }
+
+    @Test
+    void developerIsRecheckedBeforeDelayedUntagRuns() throws IOException {
+        String source = Files.readString(SOURCE).replace("\r\n", "\n");
+        int start = source.indexOf("private void reconcile");
+        int end = source.indexOf("private boolean protectedState", start);
+        if (start < 0 || end <= start) {
+            throw new IllegalStateException("Could not locate reconcile");
+        }
+        String method = source.substring(start, end);
+
+        assertTrue(method.contains("staffMode.active(playerId)"));
+        assertTrue(method.contains("staffMode.dutyTier(player) == StaffDutyTier.DEVELOPER"));
+        assertTrue(method.indexOf("StaffDutyTier.DEVELOPER")
+                < method.indexOf("combat.status(player)"));
+    }
 }
