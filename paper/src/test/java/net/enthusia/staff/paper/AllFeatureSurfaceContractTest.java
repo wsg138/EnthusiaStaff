@@ -78,7 +78,13 @@ final class AllFeatureSurfaceContractTest {
             "unlink",
             "staffchat",
             "staffapi",
-            "staffflags"
+            "staffflags",
+            "punish",
+            "ban",
+            "mute",
+            "warn",
+            "kick",
+            "ipban"
     );
 
     private static final Map<String, List<String>> FEATURE_TEST_MARKERS = featureTestMarkers();
