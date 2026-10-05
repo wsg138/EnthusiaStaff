@@ -16,6 +16,7 @@ import net.enthusia.staff.domain.website.WebsiteAppealDecisionPreparation;
 import net.enthusia.staff.domain.website.WebsiteAppealMutation;
 import net.enthusia.staff.domain.website.WebsiteAppealPage;
 import net.enthusia.staff.domain.website.WebsiteAppealSubmission;
+import net.enthusia.staff.domain.website.WebsiteAppealView;
 import net.enthusia.staff.domain.website.WebsiteModerationException;
 
 public interface WebsiteModerationStore {
@@ -67,6 +68,14 @@ public interface WebsiteModerationStore {
     void completeAppealAcceptance(UUID appealId, String state, String outcomeCode, Instant now);
 
     default List<WebsiteAppealCandidate> eligibleAppeals(
+            String accountId,
+            int limit,
+            Instant now
+    ) {
+        throw unavailableAppealWorkflow();
+    }
+
+    default List<WebsiteAppealView> playerAppeals(
             String accountId,
             int limit,
             Instant now

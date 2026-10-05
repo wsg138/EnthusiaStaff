@@ -75,6 +75,17 @@ final class WebsiteAppealWorkflowEndpoint {
         );
     }
 
+    Object mine(ObjectNode input) {
+        String accountId = decoder.uuidText(input, "accountId");
+        return Map.of(
+                "appeals",
+                store.playerAppeals(accountId, 100, clock.instant())
+                        .stream()
+                        .map(WebsiteApiResponses::appeal)
+                        .toList()
+        );
+    }
+
     Object submit(ObjectNode input) {
         UUID punishmentId = decoder.uuid(input, "punishmentId");
         String accountId = decoder.uuidText(input, "accountId");

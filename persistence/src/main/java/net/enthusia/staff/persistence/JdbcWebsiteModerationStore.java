@@ -24,6 +24,7 @@ import net.enthusia.staff.domain.website.WebsiteAppealDecisionPreparation;
 import net.enthusia.staff.domain.website.WebsiteAppealMutation;
 import net.enthusia.staff.domain.website.WebsiteAppealPage;
 import net.enthusia.staff.domain.website.WebsiteAppealSubmission;
+import net.enthusia.staff.domain.website.WebsiteAppealView;
 import net.enthusia.staff.domain.website.WebsiteModerationException;
 
 public final class JdbcWebsiteModerationStore implements WebsiteModerationStore {
@@ -195,6 +196,15 @@ public final class JdbcWebsiteModerationStore implements WebsiteModerationStore 
             Instant now
     ) {
         return appealWorkflow.eligible(accountId, limit, now);
+    }
+
+    @Override
+    public List<WebsiteAppealView> playerAppeals(
+            String accountId,
+            int limit,
+            Instant now
+    ) {
+        return appealWorkflow.mine(accountId, limit, now);
     }
 
     @Override

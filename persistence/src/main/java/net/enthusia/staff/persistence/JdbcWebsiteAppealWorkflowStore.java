@@ -128,6 +128,32 @@ final class JdbcWebsiteAppealWorkflowStore {
         }
     }
 
+    List<WebsiteAppealView> mine(String accountId, int limit, Instant now) {
+        validateAccountRequest(accountId, limit, now);
+        byte[] accountToken = accountToken(accountId);
+        String sql = APPEAL_SELECT + """
+                WHERE a.player_account_token = ?
+                  AND a.player_account_id = ?
+                ORDER BY a.updated_at DESC, a.appeal_id DESC
+                LIMIT ?
+                """;
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setBytes(1, accountToken);
+            statement.setString(2, accountId);
+            statement.setInt(3, limit);
+            try (ResultSet result = statement.executeQuery()) {
+                List<WebsiteAppealView> appeals = new ArrayList<>();
+                while (result.next()) {
+                    appeals.add(view(readAppeal(result)));
+                }
+                return List.copyOf(appeals);
+            }
+        } catch (SQLException exception) {
+            throw persistence("Unable to list player website appeals", exception);
+        }
+    }
+
     WebsiteAppealSubmission submit(
             UUID punishmentId,
             String accountId,

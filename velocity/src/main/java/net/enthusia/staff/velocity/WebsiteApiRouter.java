@@ -41,6 +41,7 @@ final class WebsiteApiRouter {
     private static final String APPEAL_PREFIX = "/v1/website/appeals/";
     private static final String ACCEPT_APPEAL_PATH = APPEAL_PREFIX + "accept";
     private static final String ELIGIBLE_APPEALS_PATH = APPEAL_PREFIX + "eligible";
+    private static final String MINE_APPEALS_PATH = APPEAL_PREFIX + "mine";
     private static final String SUBMIT_APPEAL_PATH = APPEAL_PREFIX + "submit";
     private static final String EDIT_APPEAL_SUFFIX = "/edit";
     private static final String REVIEW_PREFIX = APPEAL_PREFIX + "reviewer/";
@@ -58,6 +59,7 @@ final class WebsiteApiRouter {
             ACTOR_ACCOUNT_ID, ACTOR_RANK, "reason"
     );
     private static final Set<String> ELIGIBLE_FIELDS = Set.of(ACCOUNT_ID);
+    private static final Set<String> MINE_FIELDS = Set.of(ACCOUNT_ID);
     private static final Set<String> SUBMIT_FIELDS = Set.of(
             PUNISHMENT_ID, ACCOUNT_ID, "username", "reason", IDEMPOTENCY_KEY
     );
@@ -147,6 +149,9 @@ final class WebsiteApiRouter {
         requireNoQuery(query);
         if (ELIGIBLE_APPEALS_PATH.equals(path)) {
             return appealWorkflow.eligible(decoder.jsonBody(headers, body, ELIGIBLE_FIELDS));
+        }
+        if (MINE_APPEALS_PATH.equals(path)) {
+            return appealWorkflow.mine(decoder.jsonBody(headers, body, MINE_FIELDS));
         }
         if (SUBMIT_APPEAL_PATH.equals(path)) {
             return appealWorkflow.submit(decoder.jsonBody(headers, body, SUBMIT_FIELDS));
