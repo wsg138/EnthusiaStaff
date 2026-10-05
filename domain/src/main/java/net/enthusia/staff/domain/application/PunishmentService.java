@@ -218,7 +218,11 @@ public final class PunishmentService {
     public boolean requiresApproval(Actor actor, PunishmentAssessment assessment) {
         Objects.requireNonNull(actor);
         Objects.requireNonNull(assessment);
-        return PunishmentApprovalRules.requiresApproval(actor.rank(), assessment.sanctions());
+        return PunishmentApprovalRules.requiresApproval(
+                actor.rank(),
+                assessment.sanctions(),
+                assessment.escalation().selectedStep().sanctions()
+        );
     }
 
     private PunishmentEvaluation evaluate(
@@ -335,10 +339,14 @@ public final class PunishmentService {
         boolean configuredTypes = policy.steps().stream()
                 .map(PunishmentStep::sanctions)
                 .anyMatch(configured -> sameTypeShape(configured, requested));
-        ModerationAction action = configuredTypes
-                ? ModerationAction.USE_CUSTOM_DURATION
-                : ModerationAction.USE_CUSTOM_COMBINATION;
-        return authorization.permits(request.actor(), action) ? requested : null;
+        if (configuredTypes) {
+            boolean allowed = authorization.permits(request.actor(), ModerationAction.USE_CUSTOM_DURATION)
+                    || authorization.permits(request.actor(), ModerationAction.REQUEST_CUSTOM_DURATION);
+            return allowed ? requested : null;
+        }
+        return authorization.permits(request.actor(), ModerationAction.USE_CUSTOM_COMBINATION)
+                ? requested
+                : null;
     }
 
     private static boolean sameTypeShape(List<SanctionSpec> left, List<SanctionSpec> right) {
