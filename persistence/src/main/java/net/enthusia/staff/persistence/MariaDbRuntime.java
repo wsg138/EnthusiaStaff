@@ -20,6 +20,7 @@ import net.enthusia.staff.domain.ports.CaseLookup;
 import net.enthusia.staff.domain.ports.CaseReviewStore;
 import net.enthusia.staff.domain.ports.CheatTesterJournalStore;
 import net.enthusia.staff.domain.ports.ClientEvidenceStore;
+import net.enthusia.staff.domain.ports.CommandBridgeAuditStore;
 import net.enthusia.staff.domain.ports.DiscordModerationPersistenceStore;
 import net.enthusia.staff.domain.ports.DiscordOutboxStore;
 import net.enthusia.staff.domain.ports.EconomyJournalStore;
@@ -181,6 +182,7 @@ public final class MariaDbRuntime implements AutoCloseable {
     public DiscordModerationPersistenceStore discordModerationPersistenceStore() { return discordModerationPersistenceStore; }
     public AccountLinkingStore accountLinkingStore() { return accountLinkingStore; }
     public AccountLinkAuditStore accountLinkAuditStore() { return accountLinkAuditStore; }
+    public CommandBridgeAuditStore commandBridgeAuditStore() { return new JdbcCommandBridgeAuditStore(dataSource); }
 
     public WebsiteModerationStore websiteModerationStore(PunishmentCodeProtector codeProtector) {
         return new JdbcWebsiteModerationStore(dataSource, codeProtector, jsonMapper());

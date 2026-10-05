@@ -7,9 +7,10 @@ import java.time.Duration;
 import java.util.Map;
 import java.util.Optional;
 import net.dv8tion.jda.api.JDA;
+import net.enthusia.staff.persistence.DiscordRoleSyncPersistenceRuntime;
 import net.enthusia.staff.persistence.DiscordStaffReadRuntime;
 
-/** Owns every D06/D07/D16 database, authority, component, and enforcement resource. */
+/** Owns every D06/D07/D13/D16 database, authority, component, enforcement, and role-sync resource. */
 final class StaffModerationRuntime implements AutoCloseable {
     private final DiscordStaffReadRuntime data;
     private final StaffModerationReadService readService;
@@ -17,6 +18,9 @@ final class StaffModerationRuntime implements AutoCloseable {
     private final StaffReadAuthorization readAuthorization;
     private final SignedComponentCodec componentCodec;
     private final MinecraftProfileLookup minecraftProfiles;
+    private final Optional<DiscordRoleSyncService> roleSyncService;
+    private final Optional<DiscordRoleSyncPersistenceRuntime> roleSyncPersistence;
+    private final Optional<DiscordCommandBridgeCoordinator> commandBridge;
     private final Optional<DiscordPunishmentRuntime> punishments;
     private final HttpStaffAuthorityClient authority;
 
@@ -27,6 +31,9 @@ final class StaffModerationRuntime implements AutoCloseable {
             StaffReadAuthorization authorization,
             SignedComponentCodec components,
             MinecraftProfileLookup profiles,
+            Optional<DiscordRoleSyncService> roleSync,
+            Optional<DiscordRoleSyncPersistenceRuntime> rolePersistence,
+            Optional<DiscordCommandBridgeCoordinator> console,
             Optional<DiscordPunishmentRuntime> punishments,
             HttpStaffAuthorityClient authority
     ) {
@@ -36,6 +43,9 @@ final class StaffModerationRuntime implements AutoCloseable {
         this.readAuthorization = authorization;
         this.componentCodec = components;
         this.minecraftProfiles = profiles;
+        this.roleSyncService = roleSync;
+        this.roleSyncPersistence = rolePersistence;
+        this.commandBridge = console;
         this.punishments = punishments;
         this.authority = authority;
     }
@@ -52,12 +62,15 @@ final class StaffModerationRuntime implements AutoCloseable {
         Optional<StaffModerationConfiguration> configuration = StaffModerationConfiguration.fromEnvironment(values);
         Optional<DiscordPunishmentConfiguration> punishmentConfiguration =
                 DiscordPunishmentConfiguration.fromEnvironment(values);
-        if (configuration.isEmpty() && punishmentConfiguration.isPresent()) {
-            throw new IllegalArgumentException("Discord enforcement requires the staff moderation runtime");
+        Optional<DiscordCommandBridgeConfiguration> commandConfiguration =
+                DiscordCommandBridgeConfiguration.fromEnvironment(values);
+        if (configuration.isEmpty() && (punishmentConfiguration.isPresent() || commandConfiguration.isPresent())) {
+            throw new IllegalArgumentException("Discord actions require the staff moderation runtime");
         }
         return configuration.map(value -> open(
                 value,
                 punishmentConfiguration,
+                commandConfiguration,
                 guildId,
                 interactionCapacity,
                 interactionTtl
@@ -67,6 +80,7 @@ final class StaffModerationRuntime implements AutoCloseable {
     private static StaffModerationRuntime open(
             StaffModerationConfiguration configuration,
             Optional<DiscordPunishmentConfiguration> punishmentConfiguration,
+            Optional<DiscordCommandBridgeConfiguration> commandConfiguration,
             long guildId,
             int interactionCapacity,
             Duration interactionTtl
@@ -74,6 +88,7 @@ final class StaffModerationRuntime implements AutoCloseable {
         Clock clock = Clock.systemUTC();
         DiscordStaffReadRuntime data = DiscordStaffReadRuntime.open(configuration.database(), clock);
         MinecraftProfileLookup profiles = null;
+        DiscordRoleSyncPersistenceRuntime rolePersistence = null;
         Optional<DiscordPunishmentRuntime> punishments = Optional.empty();
         try {
             StaffModerationReadService reads = new StaffModerationReadService(data, clock);
@@ -92,6 +107,18 @@ final class StaffModerationRuntime implements AutoCloseable {
             LinkedStaffActorResolver actors = new LinkedStaffActorResolver(reads, authority);
             StaffReadAuthorization authorization = new StaffReadAuthorization();
             profiles = MinecraftProfileLookup.mojang();
+            Optional<DiscordRoleSyncService> roleSync = Optional.empty();
+            if (configuration.roleSync().isPresent()) {
+                rolePersistence = DiscordRoleSyncPersistenceRuntime.open(configuration.roleSyncDatabase().orElseThrow());
+                roleSync = Optional.of(new DiscordRoleSyncService(
+                        rolePersistence, authority, configuration.roleSync().orElseThrow(), clock));
+            }
+            Optional<DiscordCommandBridgeCoordinator> console = commandConfiguration.map(value ->
+                    new DiscordCommandBridgeCoordinator(
+                            new DiscordCommandActorResolver(data::subjectForDiscord),
+                            new HttpMinecraftCommandBridgeClient(
+                                    value.endpoints(), value.credential(), value.timeout())
+                    ));
             punishments = punishmentConfiguration.map(value -> DiscordPunishmentRuntime.open(
                     configuration.database(),
                     value,
@@ -102,10 +129,14 @@ final class StaffModerationRuntime implements AutoCloseable {
                     interactionTtl
             ));
             return new StaffModerationRuntime(
-                    data, reads, actors, authorization, components, profiles, punishments, authority
+                    data, reads, actors, authorization, components, profiles,
+                    roleSync, Optional.ofNullable(rolePersistence), console, punishments, authority
             );
         } catch (RuntimeException exception) {
             punishments.ifPresent(DiscordPunishmentRuntime::close);
+            if (rolePersistence != null) {
+                rolePersistence.close();
+            }
             if (profiles != null) {
                 profiles.close();
             }
@@ -140,6 +171,14 @@ final class StaffModerationRuntime implements AutoCloseable {
         return minecraftProfiles;
     }
 
+    Optional<DiscordRoleSyncService> roleSync() {
+        return roleSyncService;
+    }
+
+    Optional<DiscordCommandBridgeCoordinator> commandBridge() {
+        return commandBridge;
+    }
+
     Optional<DiscordPunishmentService> punishmentService() {
         return punishments.map(DiscordPunishmentRuntime::service);
     }
@@ -162,9 +201,13 @@ final class StaffModerationRuntime implements AutoCloseable {
             punishments.ifPresent(DiscordPunishmentRuntime::close);
         } finally {
             try {
-                minecraftProfiles.close();
+                roleSyncPersistence.ifPresent(DiscordRoleSyncPersistenceRuntime::close);
             } finally {
-                data.close();
+                try {
+                    minecraftProfiles.close();
+                } finally {
+                    data.close();
+                }
             }
         }
     }

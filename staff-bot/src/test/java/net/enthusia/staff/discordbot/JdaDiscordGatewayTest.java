@@ -2,6 +2,7 @@ package net.enthusia.staff.discordbot;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.Set;
@@ -13,6 +14,20 @@ class JdaDiscordGatewayTest {
     @Test
     void restrictionRuntimeEnablesOnlyMemberOverrideCache() {
         assertEquals(Set.of(CacheFlag.MEMBER_OVERRIDES), JdaDiscordGateway.requiredCacheFlags());
+    }
+
+    @Test
+    void productionRoleSyncEnforcementIsRejectedWhileSafeModesRemainAllowed() {
+        assertFalse(JdaDiscordGateway.roleSyncModeAllowed(
+                StaffBotEnvironment.PRODUCTION, DiscordRoleSyncConfiguration.Mode.ENFORCE));
+        assertTrue(JdaDiscordGateway.roleSyncModeAllowed(
+                StaffBotEnvironment.PRODUCTION, DiscordRoleSyncConfiguration.Mode.SHADOW));
+        assertTrue(JdaDiscordGateway.roleSyncModeAllowed(
+                StaffBotEnvironment.STAGING, DiscordRoleSyncConfiguration.Mode.ENFORCE));
+        assertThrows(IllegalArgumentException.class, () -> JdaDiscordGateway.roleSyncModeAllowed(
+                null, DiscordRoleSyncConfiguration.Mode.SHADOW));
+        assertThrows(IllegalArgumentException.class, () -> JdaDiscordGateway.roleSyncModeAllowed(
+                StaffBotEnvironment.STAGING, null));
     }
 
     @Test

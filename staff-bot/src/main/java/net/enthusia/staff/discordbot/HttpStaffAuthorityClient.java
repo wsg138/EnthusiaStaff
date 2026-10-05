@@ -11,13 +11,16 @@ import java.security.SecureRandom;
 import java.time.Clock;
 import java.time.Duration;
 import java.util.Base64;
+import java.util.LinkedHashSet;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
+import java.util.regex.Pattern;
 import net.enthusia.staff.domain.auth.StaffRank;
 import net.enthusia.staff.protocol.StaffAuthorityHttpSigning;
 
 /** Authenticated client for Paper's current LuckPerms-backed staff-rank resolver. */
-final class HttpStaffAuthorityClient implements StaffAuthorityClient {
+final class HttpStaffAuthorityClient implements StaffAuthorityClient, MinecraftRoleEligibilityClient {
     private static final int HTTP_BAD_REQUEST = 400;
     private static final int HTTP_FORBIDDEN = 403;
     private static final Duration CONNECT_TIMEOUT = Duration.ofSeconds(2);
@@ -25,6 +28,9 @@ final class HttpStaffAuthorityClient implements StaffAuthorityClient {
     private static final int HTTP_OK = 200;
     private static final int HTTP_NOT_FOUND = 404;
     private static final int NONCE_BYTES = 24;
+    private static final int MAX_ROLE_GROUPS = 128;
+    private static final String ROLE_ELIGIBILITY_PATH = "/v1/role-eligibility";
+    private static final Pattern GROUP = Pattern.compile("[a-z0-9_.-]{1,64}");
 
     private final URI endpoint;
     private final String credential;
@@ -72,13 +78,18 @@ final class HttpStaffAuthorityClient implements StaffAuthorityClient {
 
     @Override
     public Optional<StaffRank> rank(UUID playerId) {
-        if (playerId == null) {
-            throw new IllegalArgumentException("playerId must be present");
-        }
-        RequestCall call = request(playerId);
+        RequestCall call = request(playerId, endpoint.getRawPath());
         HttpResponse<String> response = send(call.request());
         verifySignedResponse(call, response);
-        return decode(response);
+        return decodeRank(response);
+    }
+
+    @Override
+    public Set<String> groups(UUID playerId) {
+        RequestCall call = request(playerId, ROLE_ELIGIBILITY_PATH);
+        HttpResponse<String> response = send(call.request());
+        verifySignedResponse(call, response);
+        return decodeGroups(response);
     }
 
     com.fasterxml.jackson.databind.JsonNode punishment(String operation, java.util.Map<String, Object> input) {
@@ -115,9 +126,12 @@ final class HttpStaffAuthorityClient implements StaffAuthorityClient {
         }
     }
 
-    private RequestCall request(UUID playerId) {
+    private RequestCall request(UUID playerId, String path) {
+        if (playerId == null) {
+            throw new IllegalArgumentException("playerId must be present");
+        }
         String encodedPlayer = URLEncoder.encode(playerId.toString(), StandardCharsets.UTF_8);
-        String target = endpoint.getRawPath() + "?player=" + encodedPlayer;
+        String target = path + "?player=" + encodedPlayer;
         URI requestEndpoint = transport == StaffModerationConfiguration.AuthorityTransport.BLOOM_PRIVATE_SPLIT
                 ? privateResolver.resolve(endpoint)
                 : endpoint;
@@ -172,7 +186,7 @@ final class HttpStaffAuthorityClient implements StaffAuthorityClient {
         }
     }
 
-    private static Optional<StaffRank> decode(HttpResponse<String> response) {
+    private static Optional<StaffRank> decodeRank(HttpResponse<String> response) {
         if (response.statusCode() == HTTP_NOT_FOUND) {
             return Optional.empty();
         }
@@ -180,6 +194,26 @@ final class HttpStaffAuthorityClient implements StaffAuthorityClient {
             throw new UnavailableException("staff authority request was not successful");
         }
         return Optional.of(parseRank(response.body()));
+    }
+
+    private static Set<String> decodeGroups(HttpResponse<String> response) {
+        if (response.statusCode() != HTTP_OK) {
+            throw new UnavailableException("role eligibility request was not successful");
+        }
+        if (response.body().isBlank()) {
+            return Set.of();
+        }
+        Set<String> groups = new LinkedHashSet<>();
+        for (String line : response.body().split("\\R", -1)) {
+            String group = line.trim().toLowerCase(java.util.Locale.ROOT);
+            if (!GROUP.matcher(group).matches() || !groups.add(group)) {
+                throw new UnavailableException("role eligibility response was invalid");
+            }
+            if (groups.size() > MAX_ROLE_GROUPS) {
+                throw new UnavailableException("role eligibility response exceeded its bounded limit");
+            }
+        }
+        return Set.copyOf(groups);
     }
 
     private static StaffRank parseRank(String body) {
