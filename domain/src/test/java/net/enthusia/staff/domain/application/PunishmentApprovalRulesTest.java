@@ -6,6 +6,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.time.Duration;
 import java.util.List;
 import net.enthusia.staff.domain.auth.StaffRank;
+import net.enthusia.staff.domain.escalation.PunishmentStep;
+import net.enthusia.staff.domain.escalation.ReasonPolicy;
 import net.enthusia.staff.domain.sanction.SanctionLength;
 import net.enthusia.staff.domain.sanction.SanctionSpec;
 import net.enthusia.staff.domain.sanction.SanctionType;
@@ -30,6 +32,34 @@ final class PunishmentApprovalRulesTest {
     void helperActionsAlwaysRequireApprovalRegardlessOfSeverity() {
         assertTrue(PunishmentApprovalRules.requiresApproval(StaffRank.HELPER, TEMPORARY));
         assertTrue(PunishmentApprovalRules.requiresApproval(StaffRank.HELPER, PERMANENT));
+    }
+
+    @Test
+    void customDurationIsDetectedAgainstEveryConfiguredStepNotOnlySelectedShape() {
+        List<SanctionSpec> sevenDayMute = List.of(new SanctionSpec(
+                SanctionType.MUTE,
+                SanctionLength.temporary(Duration.ofDays(7))
+        ));
+        ReasonPolicy policy = new ReasonPolicy(
+                "chat.test",
+                "chat",
+                "Test reason",
+                10,
+                false,
+                List.of(
+                        new PunishmentStep(0, "Warning", List.of(
+                                new SanctionSpec(SanctionType.WARNING, SanctionLength.instant())
+                        )),
+                        new PunishmentStep(1, "Seven day mute", sevenDayMute)
+                )
+        );
+        List<SanctionSpec> threeDayMute = List.of(new SanctionSpec(
+                SanctionType.MUTE,
+                SanctionLength.temporary(Duration.ofDays(3))
+        ));
+
+        assertTrue(PunishmentApprovalRules.isCustomDuration(policy, threeDayMute));
+        assertFalse(PunishmentApprovalRules.isCustomDuration(policy, sevenDayMute));
     }
 
     @Test
