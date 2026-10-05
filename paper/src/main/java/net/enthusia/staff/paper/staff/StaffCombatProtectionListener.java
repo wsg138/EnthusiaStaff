@@ -123,6 +123,9 @@ public final class StaffCombatProtectionListener implements Listener {
         if (!player.isOnline() || !protectedState(playerId)) {
             return;
         }
+        if (staffMode.active(playerId) && staffMode.dutyTier(player) == StaffDutyTier.DEVELOPER) {
+            return;
+        }
         CombatStatusAdapter.Status status = combat.status(player);
         if (status != CombatStatusAdapter.Status.TAGGED) {
             return;
