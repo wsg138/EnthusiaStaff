@@ -744,7 +744,7 @@ Exit removes all staff items, restores exact state/location/server where safe, v
 
 Crash/reconnect resumes until normal exit, preserves original snapshot, resumes vanish, and prevents staff-item leakage.
 
-Staff-mode/vanished players cannot be combat tagged or tag others.
+Staff-mode/vanished players cannot be combat tagged or tag others, except Developer while actively on duty: Developer may exercise real combat mechanics for technical testing, and those actions must be audit-logged.
 
 Rank profiles:
 
