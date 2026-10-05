@@ -34,7 +34,6 @@ import org.bukkit.plugin.java.JavaPlugin;
 
 public final class PunishmentRequestGuiController implements Listener {
     private static final int MAXIMUM_REQUESTS = 500;
-    private static final String REVIEW_PERMISSION = "enthusiastaff.punishment.requests.review";
     private static final String NOT_READY_MESSAGE = "Punishment request storage is not ready.";
 
     private final Plugin plugin;
@@ -417,10 +416,6 @@ public final class PunishmentRequestGuiController implements Listener {
     }
 
     private Actor authorizedActor(Player player) {
-        if (!player.hasPermission(REVIEW_PERMISSION)) {
-            player.sendMessage(StaffMessageStyle.style(Component.text("You do not have permission to review requests.", NamedTextColor.RED)));
-            return null;
-        }
         Actor actor = PaperActorResolver.resolve(player).orElse(null);
         if (actor == null
                 || !authorization.permits(actor, ModerationAction.APPROVE_POLICY_SANCTION)
