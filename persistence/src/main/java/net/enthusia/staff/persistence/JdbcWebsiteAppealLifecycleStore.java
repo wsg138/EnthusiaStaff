@@ -1,5 +1,13 @@
 package net.enthusia.staff.persistence;
 
+import static net.enthusia.staff.persistence.JdbcWebsiteAppealLifecycleSupport.conflict;
+import static net.enthusia.staff.persistence.JdbcWebsiteAppealLifecycleSupport.invalid;
+import static net.enthusia.staff.persistence.JdbcWebsiteAppealLifecycleSupport.notFound;
+import static net.enthusia.staff.persistence.JdbcWebsiteAppealLifecycleSupport.persistence;
+import static net.enthusia.staff.persistence.JdbcWebsiteAppealLifecycleSupport.validateEdit;
+import static net.enthusia.staff.persistence.JdbcWebsiteAppealLifecycleSupport.validateReviewerMutation;
+import static net.enthusia.staff.persistence.JdbcWebsiteAppealLifecycleSupport.validLength;
+
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.security.MessageDigest;
@@ -18,7 +26,6 @@ import net.enthusia.staff.common.CaseId;
 import net.enthusia.staff.common.security.PunishmentCodeProtector;
 import net.enthusia.staff.domain.website.WebsiteAppealMutation;
 import net.enthusia.staff.domain.website.WebsiteAppealView;
-import net.enthusia.staff.domain.website.WebsiteModerationException;
 
 final class JdbcWebsiteAppealLifecycleStore {
     private static final int EXPECTED_UPDATE_COUNT = 1;
@@ -439,49 +446,6 @@ final class JdbcWebsiteAppealLifecycleStore {
         }
     }
 
-    private static void validateEdit(
-            UUID appealId,
-            long expectedVersion,
-            String accountId,
-            String reason,
-            String idempotencyKey,
-            Instant now
-    ) {
-        if (appealId == null || expectedVersion < 1 || !validLength(accountId, 1, 128)
-                || !validLength(reason, 10, 1_000) || !validIdempotencyKey(idempotencyKey)
-                || now == null) {
-            throw invalid("INVALID_APPEAL_EDIT", "The appeal edit request is invalid");
-        }
-    }
-
-    private static void validateReviewerMutation(
-            UUID appealId,
-            long expectedVersion,
-            UUID reviewerAccountId,
-            String reviewerRank,
-            String idempotencyKey,
-            Instant now,
-            boolean reopen
-    ) {
-        boolean validRank = reopen
-                ? List.of("ADMIN", "FOUNDER").contains(reviewerRank)
-                : List.of("MOD", "ADMIN", "FOUNDER").contains(reviewerRank);
-        if (appealId == null || expectedVersion < 1 || reviewerAccountId == null
-                || !validRank || !validIdempotencyKey(idempotencyKey) || now == null) {
-            throw invalid("INVALID_APPEAL_REVIEW_ACTION", "The appeal review action is invalid");
-        }
-    }
-
-    private static boolean validLength(String value, int minimum, int maximum) {
-        return value != null && !value.isBlank()
-                && value.length() >= minimum && value.length() <= maximum;
-    }
-
-    private static boolean validIdempotencyKey(String value) {
-        return value != null && value.length() >= 8 && value.length() <= 128
-                && value.chars().allMatch(character -> character >= 0x21 && character <= 0x7e);
-    }
-
     private <T> T transaction(String message, SqlWork<T> work) {
         try (Connection connection = dataSource.getConnection()) {
             connection.setAutoCommit(false);
@@ -521,24 +485,6 @@ final class JdbcWebsiteAppealLifecycleStore {
         } catch (SQLException ignored) {
             // Closing the connection is the final cleanup boundary.
         }
-    }
-
-    private static WebsiteModerationException invalid(String code, String message) {
-        return new WebsiteModerationException(WebsiteModerationException.Kind.INVALID, code, message);
-    }
-
-    private static WebsiteModerationException notFound(String code, String message) {
-        return new WebsiteModerationException(WebsiteModerationException.Kind.NOT_FOUND, code, message);
-    }
-
-    private static WebsiteModerationException conflict(String code, String message) {
-        return new WebsiteModerationException(WebsiteModerationException.Kind.CONFLICT, code, message);
-    }
-
-    private static ModerationPersistenceException persistence(String message, Exception exception) {
-        return exception instanceof ModerationPersistenceException persistenceException
-                ? persistenceException
-                : new ModerationPersistenceException(message, exception);
     }
 
     @FunctionalInterface
