@@ -17,9 +17,9 @@ import org.bukkit.plugin.java.JavaPlugin;
 /**
  * Admin/Founder double-crouch gameplay-mode selector.
  *
- * <p>The later Staff Mode/vanish reset keeps lower ranks spectator-only and makes full vanish
- * authoritative server-side spectator. This listener therefore toggles only the independent
- * Admin/Founder selected mode; vanished staff remain spectator until vanish is disabled.</p>
+ * <p>Staff Mode, vanish, and game mode are independent. This listener toggles the real
+ * Admin/Founder gameplay mode between Creative and Spectator without changing vanish. Lower
+ * ranks keep their separate Staff Mode game-mode policy.</p>
  */
 public final class StaffDoubleCrouchListener implements Listener {
     private static final long DOUBLE_CROUCH_WINDOW_MILLIS = 500L;
