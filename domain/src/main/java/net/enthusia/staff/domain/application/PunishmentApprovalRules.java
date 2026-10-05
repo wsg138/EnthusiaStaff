@@ -5,6 +5,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import net.enthusia.staff.domain.auth.StaffRank;
+import net.enthusia.staff.domain.escalation.PunishmentStep;
+import net.enthusia.staff.domain.escalation.ReasonPolicy;
 import net.enthusia.staff.domain.sanction.SanctionSpec;
 import net.enthusia.staff.domain.sanction.SanctionType;
 
@@ -50,6 +52,20 @@ final class PunishmentApprovalRules {
             return StaffRank.FOUNDER;
         }
         return policyRequiredRank;
+    }
+
+    static boolean isCustomDuration(ReasonPolicy policy, List<SanctionSpec> requested) {
+        Objects.requireNonNull(policy);
+        Objects.requireNonNull(requested);
+        boolean exactConfiguredStep = policy.steps().stream()
+                .map(PunishmentStep::sanctions)
+                .anyMatch(requested::equals);
+        if (exactConfiguredStep) {
+            return false;
+        }
+        return policy.steps().stream()
+                .map(PunishmentStep::sanctions)
+                .anyMatch(configured -> sameTypeShape(configured, requested));
     }
 
     static boolean isCustomDuration(
