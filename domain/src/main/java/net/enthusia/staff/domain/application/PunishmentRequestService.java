@@ -236,10 +236,19 @@ public final class PunishmentRequestService {
             PunishmentAssessment assessment
     ) {
         Instant now = clock.instant();
+        boolean customDuration = PunishmentApprovalRules.isCustomDuration(
+                assessment.escalation().selectedStep().sanctions(),
+                assessment.sanctions()
+        );
+        StaffRank requiredApprovalRank = PunishmentApprovalRules.requiredApprovalRank(
+                request.actor().rank(),
+                assessment.policy().requiredRank(),
+                customDuration
+        );
         PunishmentApprovalRequest pending = PunishmentApprovalRequest.pending(
                 Objects.requireNonNull(requestIds.get(), "generated punishment request identifier"),
                 request.idempotencyKey(),
-                PunishmentProposal.from(request, assessment),
+                PunishmentProposal.from(request, assessment, requiredApprovalRank),
                 now,
                 now.plus(requestLifetime)
         );
