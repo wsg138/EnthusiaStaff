@@ -227,7 +227,7 @@ public final class StaffModeManager implements Listener {
 
     /**
      * Writes one staff-action audit line for an allowed on-duty world/inventory interaction
-     * (Mod logged-not-blocked, Admin/Founder unrestricted-but-logged). Never throws.
+     * (Mod logged-not-blocked, Developer/Admin/Founder unrestricted-but-logged). Never throws.
      */
     public void logStaffAction(Player player, String action, String detail) {
         try {
@@ -1042,7 +1042,7 @@ public final class StaffModeManager implements Listener {
             return;
         }
         StaffRank rank = rankForAction(player);
-        if (rank == StaffRank.DEVELOPER) {
+        if (StaffModeAccessPolicy.allowsCombatTesting(rank)) {
             audit(player, rank, "damage-received",
                     event.getCause() + " damage=" + event.getFinalDamage());
             return;
@@ -1063,7 +1063,7 @@ public final class StaffModeManager implements Listener {
             return;
         }
         StaffRank rank = rankForAction(actor);
-        if (rank == StaffRank.DEVELOPER) {
+        if (StaffModeAccessPolicy.allowsCombatTesting(rank)) {
             audit(actor, rank, "damage-dealt",
                     event.getEntityType() + " damage=" + event.getFinalDamage());
             return;
