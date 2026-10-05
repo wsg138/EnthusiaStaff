@@ -219,9 +219,10 @@ public final class JdbcVanishStore implements VanishStore {
             connection.rollback();
             return WriteResult.STAFF_SESSION_NOT_ACTIVE;
         }
-        Boolean preferred = preferenceUpdate == PreferenceUpdate.SET
-                ? vanished
-                : current == null ? null : current.preferred();
+        Boolean preferred = current == null ? null : current.preferred();
+        if (preferenceUpdate == PreferenceUpdate.SET) {
+            preferred = Boolean.valueOf(vanished);
+        }
         ChangeSet changes = changes(current, session, rank, vanished, selectedGameMode, preferred);
         if (!changes.changed()) {
             connection.rollback();
