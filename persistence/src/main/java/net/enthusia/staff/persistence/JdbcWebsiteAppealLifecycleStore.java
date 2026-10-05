@@ -127,8 +127,16 @@ final class JdbcWebsiteAppealLifecycleStore {
         requireEditable(current);
         long revision = current.revision() + 1;
         updateReason(connection, current, reason, revision, now);
-        audit.write(connection, appealId, EDIT, idempotencyKey, EDITED_EVENT, null,
-                current.caseId(), editDetails(accountId, reason, revision), now);
+        audit.write(connection, new JdbcWebsiteAppealLifecycleAudit.WriteRequest(
+                appealId,
+                EDIT,
+                idempotencyKey,
+                EDITED_EVENT,
+                null,
+                current.caseId(),
+                editDetails(accountId, reason, revision),
+                now
+        ));
         return mutation(requireAppeal(select(connection, appealId, false)), false);
     }
 
@@ -154,8 +162,16 @@ final class JdbcWebsiteAppealLifecycleStore {
         requireClaimable(current);
         long revision = current.revision() + 1;
         updateClaim(connection, current, reviewerAccountId, reviewerRank, revision, now);
-        audit.write(connection, appealId, CLAIM, idempotencyKey, CLAIMED_EVENT,
-                reviewerAccountId, current.caseId(), reviewerDetails(reviewerRank, null, revision), now);
+        audit.write(connection, new JdbcWebsiteAppealLifecycleAudit.WriteRequest(
+                appealId,
+                CLAIM,
+                idempotencyKey,
+                CLAIMED_EVENT,
+                reviewerAccountId,
+                current.caseId(),
+                reviewerDetails(reviewerRank, null, revision),
+                now
+        ));
         return mutation(requireAppeal(select(connection, appealId, false)), false);
     }
 
@@ -179,8 +195,16 @@ final class JdbcWebsiteAppealLifecycleStore {
         requireReopenable(current);
         long revision = current.revision() + 1;
         updateReopen(connection, current, revision, now);
-        audit.write(connection, appealId, REOPEN, idempotencyKey, REOPENED_EVENT,
-                reviewerAccountId, current.caseId(), reviewerDetails(reviewerRank, note, revision), now);
+        audit.write(connection, new JdbcWebsiteAppealLifecycleAudit.WriteRequest(
+                appealId,
+                REOPEN,
+                idempotencyKey,
+                REOPENED_EVENT,
+                reviewerAccountId,
+                current.caseId(),
+                reviewerDetails(reviewerRank, note, revision),
+                now
+        ));
         return mutation(requireAppeal(select(connection, appealId, false)), false);
     }
 
