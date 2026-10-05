@@ -10,17 +10,18 @@ import net.enthusia.staff.domain.auth.StaffRank;
  *   <li>HELPER — tightly restricted trial rank: survival/spectator only, full lockdown.</li>
  *   <li>MOD — Helper base plus extras that are <em>logged instead of blocked</em> (pickup/drop,
  *   staff/empty inventory toggle, container use). Protected Survival or Spectator; never Creative.</li>
- *   <li>ADMIN — Admin/Founder: no restrictions, but every action is logged.</li>
+ *   <li>DEVELOPER — technical testing tier: unrestricted world/gameplay interaction with audit
+ *   logging, without inheriting moderation approval authority.</li>
+ *   <li>ADMIN — Admin/Founder operational tier: unrestricted, but every action is logged.</li>
  * </ul>
  *
- * <p><strong>Flagged for owner review:</strong> {@link StaffRank#DEVELOPER} is mapped to the MOD
- * tier per the overnight owner directive. ENTHUSIASTAFF-GOALS.md §17 states Developer "is never
- * treated as Mod or higher"; if the owner confirms that, change the DEVELOPER branch below to a
- * dedicated restricted tier.
+ * <p>Developer remains a separate technical role. This operational tier controls only Staff Mode
+ * interaction restrictions and auditing; it does not alter punishment, appeal, or approval policy.
  */
 enum StaffDutyTier {
     HELPER,
     MOD,
+    DEVELOPER,
     ADMIN;
 
     static StaffDutyTier of(StaffRank rank) {
@@ -29,7 +30,8 @@ enum StaffDutyTier {
         }
         return switch (rank) {
             case HELPER -> HELPER;
-            case MOD, DEVELOPER -> MOD;
+            case MOD -> MOD;
+            case DEVELOPER -> DEVELOPER;
             case ADMIN, FOUNDER -> ADMIN;
             case SYSTEM -> null;
         };
