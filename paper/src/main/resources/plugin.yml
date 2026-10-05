@@ -33,30 +33,24 @@ commands:
   punish:
     description: Open the central punishment GUI or execute an explicit automation path
     usage: /punish [player] or /punish resume <player>
-    permission: enthusiastaff.punish
   ban:
     description: Open a ban-filtered central punishment workflow
     usage: /ban <player> [reason-id]
-    permission: enthusiastaff.punish
   mute:
     description: Open a mute-filtered central punishment workflow
     usage: /mute <player> [reason-id]
-    permission: enthusiastaff.punish
   warn:
     description: Open a warning-filtered central punishment workflow
     usage: /warn <player> [reason-id]
-    permission: enthusiastaff.punish
   kick:
     description: Open a kick-filtered central punishment workflow
     usage: /kick <player> [reason-id]
-    permission: enthusiastaff.punish
   staffapi:
     description: Console-only API for automated systems (anticheat) to issue punishments. Hardcoded console check; no permission node.
     usage: /staffapi punish <player> <ban|kick|mute|warn> [reason...] [--checks=<detail>]
   ipban:
     description: Open a network-ban-filtered central punishment workflow
     usage: /ipban <player> [reason-id]
-    permission: enthusiastaff.punish.ip
   removepunishment:
     description: Change, revoke, or overturn a punishment while retaining audit history
     usage: /removepunishment <player|case> <action> [expiration] <reason> [CONFIRM]
