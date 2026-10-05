@@ -59,17 +59,12 @@ final class StaffModeAccessPolicy {
     static boolean allowsGameMode(StaffRank rank, GameMode gameMode) {
         Objects.requireNonNull(gameMode, "gameMode");
         if (rank == StaffRank.ADMIN || rank == StaffRank.FOUNDER) {
-            return gameMode == GameMode.SURVIVAL
-                    || gameMode == GameMode.CREATIVE
-                    || gameMode == GameMode.SPECTATOR;
+            // Admin/Founder have unrestricted real vanilla game-mode choice while on duty.
+            return true;
         }
-        if (rank == StaffRank.HELPER) {
-            // Helpers choose between Survival and Spectator while on duty.
+        if (rank == StaffRank.HELPER || rank == StaffRank.MOD || rank == StaffRank.DEVELOPER) {
+            // Lower staff may switch between the protected Survival profile and real Spectator.
             return gameMode == GameMode.SURVIVAL || gameMode == GameMode.SPECTATOR;
-        }
-        if (rank == StaffRank.MOD || rank == StaffRank.DEVELOPER) {
-            // Mods must stay in Survival while on duty so container/item interactions work.
-            return gameMode == GameMode.SURVIVAL;
         }
         // SYSTEM and any other non-player rank keep the historical spectator-only grant.
         return rank == StaffRank.SYSTEM && gameMode == GameMode.SPECTATOR;
