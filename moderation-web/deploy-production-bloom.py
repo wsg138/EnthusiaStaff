@@ -223,10 +223,15 @@ def connected_client(host: str, port: int, username: str, password: str) -> Any:
     host_keys = paramiko.HostKeys()
     host_keys.load(str(HOST_KEYS_FILE))
     host_label = f"[{host}]:{port}"
-    if host_keys.lookup(host_label) is None:
-        raise RuntimeError("Trusted Bloom host key is unavailable")
+    matching = host_keys.lookup(host_label)
+    if matching is None:
+        aliases = [name for name in host_keys.keys() if name.lower() == host_label.lower()]
+        if len(aliases) != 1:
+            raise RuntimeError("Trusted Bloom host key is unavailable")
+        matching = host_keys[aliases[0]]
     client = paramiko.SSHClient()
-    client.load_host_keys(str(HOST_KEYS_FILE))
+    for key_type, key in matching.items():
+        client.get_host_keys().add(host_label, key_type, key)
     client.set_missing_host_key_policy(paramiko.RejectPolicy())
     client.connect(host, port=port, username=username, password=password,
                    look_for_keys=False, allow_agent=False, timeout=20)
