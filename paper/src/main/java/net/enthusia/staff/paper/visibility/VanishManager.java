@@ -215,8 +215,8 @@ public final class VanishManager implements Listener {
     /**
      * Updates the staff member's real selected gameplay mode independently from vanish.
      *
-     * <p>Vanish is only a visibility/privacy state. Admin/Founder may use any real vanilla game
-     * mode; Helper/Mod/Developer may use protected Survival or real Spectator.</p>
+     * <p>Vanish is only a visibility/privacy state. Developer/Admin/Founder may use any real
+     * vanilla game mode; Helper/Mod may use protected Survival or real Spectator.</p>
      */
     public boolean selectGameplayMode(Player player, GameMode selected) {
         Objects.requireNonNull(player, "player");
@@ -1252,10 +1252,10 @@ public final class VanishManager implements Listener {
     }
 
     private static boolean isSelectableGameMode(StaffRank rank, GameMode mode) {
-        if (rank == StaffRank.ADMIN || rank == StaffRank.FOUNDER) {
+        if (rank == StaffRank.DEVELOPER || rank == StaffRank.ADMIN || rank == StaffRank.FOUNDER) {
             return true;
         }
-        if (rank == StaffRank.HELPER || rank == StaffRank.MOD || rank == StaffRank.DEVELOPER) {
+        if (rank == StaffRank.HELPER || rank == StaffRank.MOD) {
             return mode == GameMode.SURVIVAL || mode == GameMode.SPECTATOR;
         }
         return rank == StaffRank.SYSTEM && mode == GameMode.SPECTATOR;
