@@ -20,12 +20,12 @@ The existing `enthusiastaff.rank.*` bundles remain a compatibility fallback duri
 
 ## Active-duty LuckPerms context
 
-While a local Staff Mode session is active, EnthusiaStaff supplies:
+While an authoritative Staff Mode session is active, EnthusiaStaff supplies the same LuckPerms context on Paper and Velocity:
 
 - context key: `enthusiastaff-duty`
 - context value: `active`
 
-This lets deployment configuration make groups such as `active-helper`, `active-mod`, `active-admin`, and `active-owner` conditional on Staff Mode without hard-coding those LuckPerms group names into Java.
+Paper derives it from the local authoritative Staff Mode session. Velocity verifies the durable session is `ACTIVE` and owned by the player's current backend before publishing the context. This lets deployment configuration make groups such as `active-helper`, `active-mod`, `active-admin`, and `active-owner` conditional on Staff Mode without hard-coding those LuckPerms group names into Java.
 
 The context is an inheritance/input mechanism only. It is not sufficient authorization for destructive operations. Authority v2 sensitive mutations must also revalidate the authoritative Staff Mode session immediately before commit so stale permission caches, stale GUIs, or accidental direct grants cannot authorize a mutation.
 
