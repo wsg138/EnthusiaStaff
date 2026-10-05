@@ -588,7 +588,7 @@ Historical Developer-issued cases remain valid and preserve original actor/rank.
 
 ### Admin
 
-May apply configured punishments, raise/lower, use custom durations with configured types, fully overturn, approve/deny punishment and overturn requests, and reopen appeals as configured.
+May apply configured punishments, raise/lower, and request custom durations with configured types. Admin custom-duration requests require Founder approval before application. Admin may fully overturn, approve/deny ordinary punishment and overturn requests, and reopen appeals as configured.
 
 ### Founder/Owner
 
