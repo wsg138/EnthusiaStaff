@@ -169,9 +169,15 @@ class PunishmentServiceTest {
                 new SanctionSpec(SanctionType.NETWORK_BAN, SanctionLength.temporary(Duration.ofDays(3)))
         );
 
+        CreatePunishmentRequest adminCustom = request(StaffRank.ADMIN, customDuration);
+        PunishmentEvaluation.Rejected direct = assertInstanceOf(
+                PunishmentEvaluation.Rejected.class,
+                service.evaluate(adminCustom, OperationalMode.ACTIVE)
+        );
+        assertEquals("APPROVAL_REQUIRED", direct.code());
         assertInstanceOf(
                 PunishmentEvaluation.Allowed.class,
-                service.evaluate(request(StaffRank.ADMIN, customDuration), OperationalMode.ACTIVE)
+                service.evaluateRequestProposal(adminCustom, OperationalMode.ACTIVE)
         );
         assertInstanceOf(
                 PunishmentEvaluation.Rejected.class,
