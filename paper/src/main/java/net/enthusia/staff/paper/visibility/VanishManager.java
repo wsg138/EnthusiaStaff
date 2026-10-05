@@ -213,6 +213,32 @@ public final class VanishManager implements Listener {
     }
 
     /**
+     * Updates the staff member's selected gameplay mode without weakening full vanish.
+     *
+     * <p>When vanished, the selected mode is persisted for restoration but the player remains
+     * authoritative server-side spectator. When visible, the selected mode is applied directly.</p>
+     */
+    public boolean selectGameplayMode(Player player, GameMode selected) {
+        Objects.requireNonNull(player, "player");
+        Objects.requireNonNull(selected, "selected");
+        UUID playerId = player.getUniqueId();
+        StaffRank rank = resolveLiveRank(player);
+        if (!staffMode.active(playerId) || !isSelectableGameMode(rank, selected)) {
+            return false;
+        }
+        selectedGameModes.put(playerId, selected);
+        if (visibility.isVanished(playerId)) {
+            persistSelectedGameMode(playerId, rank, selected);
+            enforceVanishSpectator(player);
+            return true;
+        }
+        if (player.getGameMode() != selected) {
+            player.setGameMode(selected);
+        }
+        return player.getGameMode() == selected;
+    }
+
+    /**
      * Cross-server transfer hook (overnight/cross-server). Applies a vanish state snapshot
      * carried from the source backend, before the join-message logic runs on arrival.
      *
