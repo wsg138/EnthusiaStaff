@@ -326,6 +326,15 @@ final class JdbcWebsiteAppealWorkflowStore {
         if (!OPEN.equals(existing.state()) && !INFORMATION_REQUESTED.equals(existing.state())) {
             throw conflict("APPEAL_STATE_CONFLICT", "The appeal is no longer reviewable");
         }
+        if (existing.reviewerAccountId() == null) {
+            throw conflict("APPEAL_NOT_CLAIMED", "Claim the appeal before recording a decision");
+        }
+        if (!request.reviewerAccountId().equals(existing.reviewerAccountId())) {
+            throw conflict(
+                    "APPEAL_CLAIM_OWNED_BY_OTHER",
+                    "Another staff member owns this appeal claim"
+            );
+        }
     }
 
     private static DecisionTransition decisionTransition(AppealRow existing, String decision) {

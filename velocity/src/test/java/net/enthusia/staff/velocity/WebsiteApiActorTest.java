@@ -3,6 +3,8 @@ package net.enthusia.staff.velocity;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
+import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import net.enthusia.staff.domain.auth.Actor;
 import net.enthusia.staff.domain.auth.StaffRank;
@@ -10,26 +12,55 @@ import org.junit.jupiter.api.Test;
 
 final class WebsiteApiActorTest {
     @Test
-    void mapsEverySupportedWebsiteRankWithoutEscalatingDeveloper() {
+    void currentAuthorityOverridesTheSiteRoleClaim() {
         UUID actorId = UUID.randomUUID();
+        WebsiteReviewerAuthority authority =
+                new WebsiteReviewerAuthority(ignored -> Optional.of(StaffRank.MOD));
 
-        assertEquals(StaffRank.MOD, actor(actorId, "MOD").rank());
-        assertEquals(StaffRank.DEVELOPER, actor(actorId, "DEVELOPER").rank());
-        assertEquals(StaffRank.ADMIN, actor(actorId, "ADMIN").rank());
-        assertEquals(StaffRank.FOUNDER, actor(actorId, "FOUNDER").rank());
-        assertEquals(actorId, actor(actorId, "DEVELOPER").id());
+        Actor actor = authority.resolve(actorId, "FOUNDER");
+
+        assertEquals(actorId, actor.id());
+        assertEquals(StaffRank.MOD, actor.rank());
     }
 
     @Test
-    void rejectsServiceAndUnmappedRoleNames() {
-        UUID actorId = UUID.randomUUID();
+    void permanentIdentityPrecedesLegacyRankBundles() {
+        Set<String> permissions = Set.of(
+                "enthusiastaff.identity.developer",
+                "enthusiastaff.rank.admin"
+        );
 
-        assertThrows(WebsiteApiException.class, () -> actor(actorId, "SYSTEM"));
-        assertThrows(WebsiteApiException.class, () -> actor(actorId, "MODERATOR"));
-        assertThrows(WebsiteApiException.class, () -> actor(actorId, ""));
+        assertEquals(
+                Optional.of(StaffRank.DEVELOPER),
+                WebsiteReviewerAuthority.resolveRank(permissions::contains)
+        );
     }
 
-    private static Actor actor(UUID actorId, String rank) {
-        return WebsiteAppealEndpoint.websiteActor(actorId, rank);
+    @Test
+    void rejectsUnknownSiteRoleAndMissingCurrentAuthority() {
+        UUID actorId = UUID.randomUUID();
+        WebsiteReviewerAuthority currentMod =
+                new WebsiteReviewerAuthority(ignored -> Optional.of(StaffRank.MOD));
+        WebsiteReviewerAuthority removed =
+                new WebsiteReviewerAuthority(ignored -> Optional.empty());
+
+        assertThrows(WebsiteApiException.class, () -> currentMod.resolve(actorId, "SYSTEM"));
+        assertThrows(WebsiteApiException.class, () -> currentMod.resolve(actorId, "MODERATOR"));
+        assertThrows(WebsiteApiException.class, () -> removed.resolve(actorId, "MOD"));
+    }
+
+    @Test
+    void lookupFailureFailsClosedAsServiceUnavailable() {
+        WebsiteReviewerAuthority unavailable = new WebsiteReviewerAuthority(ignored -> {
+            throw new IllegalStateException("provider unavailable");
+        });
+
+        WebsiteApiException error = assertThrows(
+                WebsiteApiException.class,
+                () -> unavailable.resolve(UUID.randomUUID(), "ADMIN")
+        );
+
+        assertEquals(503, error.status());
+        assertEquals("REVIEW_AUTHORITY_UNAVAILABLE", error.code());
     }
 }

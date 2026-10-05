@@ -141,11 +141,16 @@ final class WebsiteAppealEndpointTest {
     void rejectsReadOnlyReviewerBeforePreparingMutation() {
         AppealStore store = new AppealStore();
         RecordingMutationStore mutations = new RecordingMutationStore(applied(false));
-        WebsiteAppealEndpoint endpoint = endpoint(store, mutations, OperationalMode.ACTIVE);
+        WebsiteAppealEndpoint endpoint = endpoint(
+                store,
+                mutations,
+                OperationalMode.ACTIVE,
+                net.enthusia.staff.domain.auth.StaffRank.DEVELOPER
+        );
 
         WebsiteApiException error = assertThrows(
                 WebsiteApiException.class,
-                () -> endpoint.accept(headers(), input("DEVELOPER"))
+                () -> endpoint.accept(headers(), input("MOD"))
         );
 
         assertEquals(403, error.status());
@@ -264,6 +269,20 @@ final class WebsiteAppealEndpointTest {
             RecordingMutationStore mutations,
             OperationalMode mode
     ) {
+        return endpoint(
+                store,
+                mutations,
+                mode,
+                net.enthusia.staff.domain.auth.StaffRank.MOD
+        );
+    }
+
+    private static WebsiteAppealEndpoint endpoint(
+            AppealStore store,
+            RecordingMutationStore mutations,
+            OperationalMode mode,
+            net.enthusia.staff.domain.auth.StaffRank currentRank
+    ) {
         DefaultAuthorizationPolicy authorization = new DefaultAuthorizationPolicy();
         return new WebsiteAppealEndpoint(
                 store,
@@ -271,7 +290,8 @@ final class WebsiteAppealEndpointTest {
                 new SanctionChangeService(authorization, mutations),
                 () -> mode,
                 CLOCK,
-                new WebsiteApiRequestDecoder()
+                new WebsiteApiRequestDecoder(),
+                new WebsiteReviewerAuthority(ignored -> java.util.Optional.of(currentRank))
         );
     }
 

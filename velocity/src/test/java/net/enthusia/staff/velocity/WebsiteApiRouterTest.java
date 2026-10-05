@@ -221,7 +221,12 @@ final class WebsiteApiRouterTest {
                         request -> new net.enthusia.staff.domain.sanction.SanctionChangeResult.Applied(1, false)
                 ),
                 () -> OperationalMode.ACTIVE,
-                CLOCK
+                CLOCK,
+                new WebsiteReviewerAuthority(
+                        ignored -> java.util.Optional.of(
+                                net.enthusia.staff.domain.auth.StaffRank.FOUNDER
+                        )
+                )
         );
     }
 

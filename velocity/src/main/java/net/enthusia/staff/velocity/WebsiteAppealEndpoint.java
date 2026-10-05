@@ -42,6 +42,7 @@ final class WebsiteAppealEndpoint {
     private final Supplier<OperationalMode> authorityMode;
     private final Clock clock;
     private final WebsiteApiRequestDecoder decoder;
+    private final WebsiteReviewerAuthority reviewerAuthority;
 
     WebsiteAppealEndpoint(
             WebsiteModerationStore store,
@@ -49,10 +50,12 @@ final class WebsiteAppealEndpoint {
             SanctionChangeService sanctionChanges,
             Supplier<OperationalMode> authorityMode,
             Clock clock,
-            WebsiteApiRequestDecoder decoder
+            WebsiteApiRequestDecoder decoder,
+            WebsiteReviewerAuthority reviewerAuthority
     ) {
         if (store == null || authorization == null || sanctionChanges == null
-                || authorityMode == null || clock == null || decoder == null) {
+                || authorityMode == null || clock == null || decoder == null
+                || reviewerAuthority == null) {
             throw new IllegalArgumentException("Website appeal endpoint dependencies are required");
         }
         this.store = store;
@@ -61,6 +64,7 @@ final class WebsiteAppealEndpoint {
         this.authorityMode = authorityMode;
         this.clock = clock;
         this.decoder = decoder;
+        this.reviewerAuthority = reviewerAuthority;
     }
 
     Object accept(Headers headers, ObjectNode input) {
@@ -70,7 +74,10 @@ final class WebsiteAppealEndpoint {
         CaseId caseId = caseId(input);
         String playerAccountId = decoder.uuidText(input, "playerAccountId");
         UUID reviewerAccountId = decoder.uuid(input, "actorAccountId");
-        Actor reviewer = websiteActor(reviewerAccountId, decoder.text(input, "actorRank", 16));
+        Actor reviewer = reviewerAuthority.resolve(
+                reviewerAccountId,
+                decoder.text(input, "actorRank", 16)
+        );
         requireMutationAccess(reviewer);
         String reason = decoder.text(input, "reason", MAXIMUM_REASON_LENGTH).trim();
         if (reason.length() < MINIMUM_REASON_LENGTH) {
@@ -126,20 +133,6 @@ final class WebsiteAppealEndpoint {
                 idempotencyKey,
                 mode
         );
-    }
-
-    static Actor websiteActor(UUID actorId, String rankName) {
-        if (actorId == null || rankName == null) {
-            throw badRequest("INVALID_ACTOR", "The website reviewer identity is invalid");
-        }
-        StaffRank rank = switch (rankName) {
-            case "MOD" -> StaffRank.MOD;
-            case "DEVELOPER" -> StaffRank.DEVELOPER;
-            case "ADMIN" -> StaffRank.ADMIN;
-            case "FOUNDER" -> StaffRank.FOUNDER;
-            default -> throw badRequest("INVALID_ACTOR_RANK", "The website reviewer rank is invalid");
-        };
-        return new Actor(actorId, "Website Reviewer", rank);
     }
 
     private Object applyChange(

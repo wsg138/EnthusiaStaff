@@ -884,7 +884,14 @@ public final class EnthusiaStaffVelocityPlugin {
                         Duration.ofSeconds(loaded.websiteApiTimestampSkewSeconds()),
                         store
                 ),
-                new WebsiteApiRouter(store, authorization, sanctionChanges, authorityMode::get, apiClock),
+                new WebsiteApiRouter(
+                        store,
+                        authorization,
+                        sanctionChanges,
+                        authorityMode::get,
+                        apiClock,
+                        WebsiteReviewerAuthority.production(logger)
+                ),
                 apiClock,
                 (message, failure) -> logger.error(message, failure)
         );

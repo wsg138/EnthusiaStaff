@@ -12,8 +12,10 @@ import java.util.UUID;
 import net.enthusia.staff.domain.auth.Actor;
 import net.enthusia.staff.domain.auth.AuthorizationPolicy;
 import net.enthusia.staff.domain.auth.ModerationAction;
+import net.enthusia.staff.domain.auth.StaffRank;
 import net.enthusia.staff.domain.ports.WebsiteModerationStore;
 import net.enthusia.staff.domain.website.WebsiteAppealDecisionPreparation;
+import net.enthusia.staff.domain.website.WebsiteAppealMutation;
 import net.enthusia.staff.domain.website.WebsiteAppealPage;
 import net.enthusia.staff.domain.website.WebsiteAppealSubmission;
 
@@ -22,6 +24,8 @@ final class WebsiteAppealWorkflowEndpoint {
     private static final int MAX_APPEAL_REASON_LENGTH = 1_000;
     private static final int MIN_DECISION_NOTE_LENGTH = 3;
     private static final int MAX_DECISION_NOTE_LENGTH = 1_000;
+    private static final String EXPECTED_VERSION = "expectedVersion";
+    private static final String IDEMPOTENCY_KEY = "idempotencyKey";
     private static final Set<String> REVIEWER_STATES = Set.of(
             "ALL",
             "OPEN",
@@ -37,6 +41,7 @@ final class WebsiteAppealWorkflowEndpoint {
     private final Clock clock;
     private final WebsiteApiRequestDecoder decoder;
     private final WebsiteAppealEndpoint acceptance;
+    private final WebsiteReviewerAuthority reviewerAuthority;
     private final ObjectMapper json = new ObjectMapper();
 
     WebsiteAppealWorkflowEndpoint(
@@ -44,10 +49,11 @@ final class WebsiteAppealWorkflowEndpoint {
             AuthorizationPolicy authorization,
             Clock clock,
             WebsiteApiRequestDecoder decoder,
-            WebsiteAppealEndpoint acceptance
+            WebsiteAppealEndpoint acceptance,
+            WebsiteReviewerAuthority reviewerAuthority
     ) {
         if (store == null || authorization == null || clock == null
-                || decoder == null || acceptance == null) {
+                || decoder == null || acceptance == null || reviewerAuthority == null) {
             throw new IllegalArgumentException("Website appeal workflow dependencies are required");
         }
         this.store = store;
@@ -55,6 +61,7 @@ final class WebsiteAppealWorkflowEndpoint {
         this.clock = clock;
         this.decoder = decoder;
         this.acceptance = acceptance;
+        this.reviewerAuthority = reviewerAuthority;
     }
 
     Object eligible(ObjectNode input) {
@@ -72,11 +79,8 @@ final class WebsiteAppealWorkflowEndpoint {
         UUID punishmentId = decoder.uuid(input, "punishmentId");
         String accountId = decoder.uuidText(input, "accountId");
         String username = decoder.minecraftUsername(input, "username");
-        String reason = decoder.text(input, "reason", MAX_APPEAL_REASON_LENGTH).trim();
-        if (reason.length() < MIN_APPEAL_REASON_LENGTH) {
-            throw badRequest("INVALID_REASON", "The appeal reason is too short");
-        }
-        String idempotencyKey = decoder.text(input, "idempotencyKey", 128);
+        String reason = appealReason(input);
+        String idempotencyKey = decoder.text(input, IDEMPOTENCY_KEY, 128);
         WebsiteAppealSubmission submission = store.submitAppeal(
                 punishmentId,
                 accountId,
@@ -90,6 +94,53 @@ final class WebsiteAppealWorkflowEndpoint {
         );
         response.put("replayed", submission.replayed());
         return response;
+    }
+
+    Object edit(UUID appealId, ObjectNode input) {
+        String accountId = decoder.uuidText(input, "accountId");
+        int expectedVersion = decoder.integer(input, EXPECTED_VERSION, 1, Integer.MAX_VALUE);
+        WebsiteAppealMutation mutation = store.editAppeal(
+                appealId,
+                expectedVersion,
+                accountId,
+                appealReason(input),
+                decoder.text(input, IDEMPOTENCY_KEY, 128),
+                clock.instant()
+        );
+        return mutationResponse(mutation);
+    }
+
+    Object claim(UUID appealId, ObjectNode input) {
+        Actor reviewer = reviewer(input);
+        requireReviewAccess(reviewer);
+        WebsiteAppealMutation mutation = store.claimAppeal(
+                appealId,
+                decoder.integer(input, EXPECTED_VERSION, 1, Integer.MAX_VALUE),
+                reviewer.id(),
+                reviewer.rank().name(),
+                decoder.text(input, IDEMPOTENCY_KEY, 128),
+                clock.instant()
+        );
+        return mutationResponse(mutation);
+    }
+
+    Object reopen(UUID appealId, ObjectNode input) {
+        Actor reviewer = reviewer(input);
+        requireReopenAccess(reviewer);
+        String note = decoder.text(input, "note", MAX_DECISION_NOTE_LENGTH).trim();
+        if (note.length() < MIN_DECISION_NOTE_LENGTH) {
+            throw badRequest("INVALID_REOPEN_NOTE", "The appeal reopen note is too short");
+        }
+        WebsiteAppealMutation mutation = store.reopenAppeal(
+                appealId,
+                decoder.integer(input, EXPECTED_VERSION, 1, Integer.MAX_VALUE),
+                reviewer.id(),
+                reviewer.rank().name(),
+                note,
+                decoder.text(input, IDEMPOTENCY_KEY, 128),
+                clock.instant()
+        );
+        return mutationResponse(mutation);
     }
 
     Object list(ObjectNode input) {
@@ -117,12 +168,12 @@ final class WebsiteAppealWorkflowEndpoint {
         Actor reviewer = reviewer(input);
         requireReviewAccess(reviewer);
         String decision = decoder.text(input, "decision", 32);
-        int expectedVersion = decoder.integer(input, "expectedVersion", 1, Integer.MAX_VALUE);
+        int expectedVersion = decoder.integer(input, EXPECTED_VERSION, 1, Integer.MAX_VALUE);
         String note = decoder.text(input, "note", MAX_DECISION_NOTE_LENGTH).trim();
         if (note.length() < MIN_DECISION_NOTE_LENGTH) {
             throw badRequest("INVALID_DECISION_NOTE", "The appeal decision note is too short");
         }
-        String idempotencyKey = decoder.text(input, "idempotencyKey", 128);
+        String idempotencyKey = decoder.text(input, IDEMPOTENCY_KEY, 128);
         WebsiteAppealDecisionPreparation preparation = store.prepareAppealDecision(
                 appealId,
                 expectedVersion,
@@ -164,10 +215,18 @@ final class WebsiteAppealWorkflowEndpoint {
         return acceptance.accept(headers, input);
     }
 
+    private String appealReason(ObjectNode input) {
+        String reason = decoder.text(input, "reason", MAX_APPEAL_REASON_LENGTH).trim();
+        if (reason.length() < MIN_APPEAL_REASON_LENGTH) {
+            throw badRequest("INVALID_REASON", "The appeal reason is too short");
+        }
+        return reason;
+    }
+
     private Actor reviewer(ObjectNode input) {
         UUID actorAccountId = decoder.uuid(input, "actorAccountId");
         String actorRank = decoder.text(input, "actorRank", 16);
-        return WebsiteAppealEndpoint.websiteActor(actorAccountId, actorRank);
+        return reviewerAuthority.resolve(actorAccountId, actorRank);
     }
 
     private void requireReviewAccess(Actor reviewer) {
@@ -178,6 +237,23 @@ final class WebsiteAppealWorkflowEndpoint {
                     "The website reviewer is not authorized to review appeals"
             );
         }
+    }
+
+    private static void requireReopenAccess(Actor reviewer) {
+        if (reviewer.rank() != StaffRank.ADMIN && reviewer.rank() != StaffRank.FOUNDER) {
+            throw new WebsiteApiException(
+                    403,
+                    "APPEAL_REOPEN_FORBIDDEN",
+                    "Only Admin or Founder reviewers may reopen appeals"
+            );
+        }
+    }
+
+    private static Map<String, Object> mutationResponse(WebsiteAppealMutation mutation) {
+        Map<String, Object> response = new LinkedHashMap<>(WebsiteApiResponses.appeal(mutation.appeal()));
+        response.put("replayed", mutation.replayed());
+        response.put("claimed", mutation.claimed());
+        return response;
     }
 
     private static String optionalText(ObjectNode input, String field, int maximumLength) {

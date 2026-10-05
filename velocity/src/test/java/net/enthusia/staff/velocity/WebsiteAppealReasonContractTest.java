@@ -88,7 +88,12 @@ final class WebsiteAppealReasonContractTest {
                 new SanctionChangeService(authorization, mutationStore),
                 () -> OperationalMode.ACTIVE,
                 Clock.fixed(NOW, ZoneOffset.UTC),
-                new WebsiteApiRequestDecoder()
+                new WebsiteApiRequestDecoder(),
+                new WebsiteReviewerAuthority(
+                        ignored -> java.util.Optional.of(
+                                net.enthusia.staff.domain.auth.StaffRank.MOD
+                        )
+                )
         );
     }
 
