@@ -246,8 +246,9 @@ spectator staff remain unlisted.
 Do not extend that claim to entity-destroy, spawn-player, metadata, equipment, or
 other visibility packets. ProtocolLib is limited to observer-facing player-info
 masking; EnthusiaStaff does not send a self-only fake game-mode packet. For
-Admin/Founder, the authoritative Bukkit/Paper game mode while vanished is the
-actual selected Survival, Creative, or Spectator mode.
+Developer/Admin/Founder, the authoritative Bukkit/Paper game mode while vanished
+is the actual selected vanilla mode, including Survival, Creative, Adventure, or
+Spectator.
 
 ## What is not currently intercepted
 
