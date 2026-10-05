@@ -1,9 +1,11 @@
 package net.enthusia.staff.domain.application;
 
+import java.util.List;
 import java.util.UUID;
 import net.enthusia.staff.common.Checks;
 import net.enthusia.staff.domain.auth.Actor;
 import net.enthusia.staff.domain.casefile.CaseVisibility;
+import net.enthusia.staff.domain.sanction.SanctionSpec;
 
 public record PreparePunishmentDraftRequest(
         UUID targetId,
@@ -11,10 +13,22 @@ public record PreparePunishmentDraftRequest(
         String reasonId,
         String internalExplanation,
         CaseVisibility visibility,
-        String commandName
+        String commandName,
+        List<SanctionSpec> overrideSanctions
 ) {
+    public PreparePunishmentDraftRequest(
+            UUID targetId,
+            Actor actor,
+            String reasonId,
+            String internalExplanation,
+            CaseVisibility visibility,
+            String commandName
+    ) {
+        this(targetId, actor, reasonId, internalExplanation, visibility, commandName, List.of());
+    }
+
     public PreparePunishmentDraftRequest {
-        if (targetId == null || actor == null || visibility == null) {
+        if (targetId == null || actor == null || visibility == null || overrideSanctions == null) {
             throw new IllegalArgumentException("punishment draft request fields must be present");
         }
         reasonId = Checks.nonBlank(reasonId, "reasonId", 96);
@@ -26,5 +40,6 @@ public record PreparePunishmentDraftRequest(
             throw new IllegalArgumentException("internalExplanation exceeds 4000 characters");
         }
         commandName = Checks.nonBlank(commandName, "commandName", 32);
+        overrideSanctions = List.copyOf(overrideSanctions);
     }
 }
