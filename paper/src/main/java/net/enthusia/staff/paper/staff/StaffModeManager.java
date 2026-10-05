@@ -1472,9 +1472,10 @@ public final class StaffModeManager implements Listener {
             player.setHealth(maximumHealth.getValue());
             player.setFireTicks(0);
             player.setFallDistance(0);
-            player.setInvulnerable(true);
-            player.setCollidable(false);
-            player.setCanPickupItems(false);
+            boolean technicalTesting = rank == StaffRank.DEVELOPER;
+            player.setInvulnerable(!technicalTesting);
+            player.setCollidable(technicalTesting);
+            player.setCanPickupItems(technicalTesting);
             gameModeTransitionGuardBegin.accept(playerId);
             try {
                 player.setGameMode(targetGameMode);
