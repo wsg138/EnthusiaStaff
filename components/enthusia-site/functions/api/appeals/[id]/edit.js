@@ -14,13 +14,12 @@ function sanitizeEdit(input) {
   return { expectedVersion, reason, idempotencyKey };
 }
 
-export async function onRequestPost(context) {
-  if (!requireSameOrigin(context.request)) return json({ error: "invalid_origin" }, 403);
+async function parseEditRequest(context) {
   let session;
   try {
     session = await authenticateRequest(context.request, context.env);
   } catch {
-    return unauthorized();
+    return { response: unauthorized() };
   }
   let edit;
   try {
@@ -29,23 +28,35 @@ export async function onRequestPost(context) {
     edit = null;
   }
   const appealId = String(context.params.id ?? "").trim();
-  if (!edit || !isCanonicalUuid(appealId)) return json({ error: "invalid_appeal_edit" }, 400);
+  if (!edit || !isCanonicalUuid(appealId)) {
+    return { response: json({ error: "invalid_appeal_edit" }, 400) };
+  }
+  return { session, edit, appealId };
+}
 
+async function sendEdit(context, request) {
   try {
     const upstream = await signedStaffRequest(
       context.env,
-      `/v1/website/appeals/${appealId}/edit`,
+      `/v1/website/appeals/${request.appealId}/edit`,
       {
-        accountId: session.player.uuid,
-        expectedVersion: edit.expectedVersion,
-        reason: edit.reason,
-        idempotencyKey: edit.idempotencyKey
+        accountId: request.session.player.uuid,
+        expectedVersion: request.edit.expectedVersion,
+        reason: request.edit.reason,
+        idempotencyKey: request.edit.idempotencyKey
       }
     );
     return staffApiResponse(upstream, "private, no-store");
   } catch {
     return serviceUnavailable();
   }
+}
+
+export async function onRequestPost(context) {
+  if (!requireSameOrigin(context.request)) return json({ error: "invalid_origin" }, 403);
+  const request = await parseEditRequest(context);
+  if (request.response) return request.response;
+  return sendEdit(context, request);
 }
 
 export function onRequest() { return methodNotAllowed(["POST"]); }
