@@ -2,6 +2,7 @@ package net.enthusia.staff.domain.application;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.security.SecureRandom;
@@ -207,7 +208,7 @@ class PunishmentServiceTest {
                 PunishmentEvaluation.Allowed.class,
                 service.evaluate(founderRequest, OperationalMode.ACTIVE)
         ).assessment();
-        assertTrue(!service.requiresApproval(founderRequest.actor(), founderAssessment));
+        assertFalse(service.requiresApproval(founderRequest.actor(), founderAssessment));
     }
 
     @Test
