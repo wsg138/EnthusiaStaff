@@ -55,13 +55,16 @@ Staff mode must never be used to escape combat, travel for normal play, protect 
 ### Game mode while Staff Mode is active
 
 Staff Mode, vanish, and real game mode are separate states. The entry profile starts
-Admin/Founder in Creative, Mod/Developer in protected Survival, and Helper in
+Developer/Admin/Founder in Creative, Mod in protected Survival, and Helper in
 Spectator. After activation:
 
-- Admin and Founder may freely use any normal Bukkit/Paper game mode, including
-  Survival, Creative, Adventure, and Spectator.
-- Helper, Mod, and Developer may use only protected Survival or Spectator; they
-  cannot enter Creative or Adventure while Staff Mode is active.
+- Developer, Admin, and Founder may freely use any normal Bukkit/Paper game mode,
+  including Survival, Creative, Adventure, and Spectator.
+- Helper and Mod may use only protected Survival or Spectator; they cannot enter
+  Creative or Adventure while Staff Mode is active.
+- Developer is a technical testing role: world/container interaction, Ender
+  mutation, and combat testing remain available while on duty and are audit-logged.
+  This does not elevate Developer into Mod/Admin punishment or approval authority.
 
 Changing game mode does not enter/leave Staff Mode and does not toggle vanish.
 The selected mode is the real Bukkit/Paper game mode. Spectator block phasing comes
