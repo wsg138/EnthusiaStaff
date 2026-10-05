@@ -161,7 +161,8 @@ public final class CombatStatusAdapter {
         Object[] constants = reasonType.getEnumConstants();
         for (Object constant : constants) {
             String name = ((Enum<?>) constant).name();
-            if (name.equalsIgnoreCase("PLUGIN")
+            if (name.equalsIgnoreCase("EXPIRE")
+                    || name.equalsIgnoreCase("PLUGIN")
                     || name.equalsIgnoreCase("CUSTOM")
                     || name.equalsIgnoreCase("UNKNOWN")
                     || name.equalsIgnoreCase("FORCE")) {
