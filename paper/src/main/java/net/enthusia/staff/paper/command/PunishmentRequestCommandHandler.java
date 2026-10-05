@@ -26,7 +26,6 @@ import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
 
 public final class PunishmentRequestCommandHandler {
-    public static final String REVIEW_PERMISSION = "enthusiastaff.punishment.requests.review";
     private static final int CONSOLE_QUEUE_LIMIT = 45;
     private static final int NO_ARGUMENTS = 0;
     private static final int SINGLE_ARGUMENT_COUNT = 1;
@@ -87,8 +86,7 @@ public final class PunishmentRequestCommandHandler {
     }
 
     private boolean authorizedReviewer(CommandSender sender, Actor actor) {
-        if (!sender.hasPermission(REVIEW_PERMISSION)
-                || actor == null
+        if (actor == null
                 || !authorization.permits(actor, ModerationAction.APPROVE_POLICY_SANCTION)
                 || !actor.rank().canApprovePunishmentRequests()) {
             sender.sendMessage(StaffMessageStyle.style(Component.text(
