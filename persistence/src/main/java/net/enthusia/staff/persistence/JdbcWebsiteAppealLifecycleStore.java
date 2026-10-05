@@ -148,6 +148,9 @@ final class JdbcWebsiteAppealLifecycleStore {
         );
         if (replay.isPresent()) return replay.orElseThrow();
         requireVersion(current, expectedVersion);
+        if (OPEN.equals(current.state()) && reviewerAccountId.equals(current.reviewerAccountId())) {
+            return mutation(current, true);
+        }
         requireClaimable(current);
         long revision = current.revision() + 1;
         updateClaim(connection, current, reviewerAccountId, reviewerRank, revision, now);
