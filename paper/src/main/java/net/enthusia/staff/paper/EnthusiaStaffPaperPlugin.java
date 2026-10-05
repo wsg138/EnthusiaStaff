@@ -26,6 +26,7 @@ import net.enthusia.staff.domain.ports.ModerationStore;
 import net.enthusia.staff.domain.ports.AtomicReasonPolicyRepository;
 import net.enthusia.staff.domain.ports.OperationalStateStore;
 import net.enthusia.staff.domain.runtime.OperationalStateSnapshot;
+import net.enthusia.staff.paper.aireview.AiReviewSubsystem;
 import net.enthusia.staff.paper.alert.PunishmentRequestAlertController;
 import net.enthusia.staff.paper.alert.PunishmentRequestAlertLifecycle;
 import net.enthusia.staff.paper.alert.PunishmentRequestAlertWorkerSettings;
@@ -63,6 +64,7 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
             new PaperRuntimeLifecycle<>();
 
     private ExecutorService workers;
+    private AiReviewSubsystem aiReview;
     private AtomicReasonPolicyRepository reasonPolicies;
     private MuteEnforcementListener muteEnforcement;
     private final AtomicBoolean channelConnected = new AtomicBoolean();
@@ -124,6 +126,15 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
         integrations.initializeEconomy();
         clientEvidenceCollector = ClientEvidenceCollector.discover(this, Clock.systemUTC());
         integrations.initializeModerationProviders();
+        aiReview = AiReviewSubsystem.create(
+                this,
+                json,
+                System::getenv,
+                runtimeComponents.staffMode()::authorityActive,
+                runtimeComponents.staffMode()::activeSessionId,
+                runtimeComponents.staffMode()::sessionRank
+        );
+        aiReview.start();
         if (!runtimeComponents.staffMode().combat().availableWhenRequired()) {
             featureIssues.put("combatlogx", "CombatLogX is present but its combat-query API is unavailable");
         }
@@ -174,6 +185,7 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
         if (integrations != null) {
             integrations.closeChatBridge();
         }
+        resources.close("AI review subsystem", aiReview);
         resources.close("mute enforcement", muteEnforcement);
         resources.close("inventory coordinator", runtimeComponents == null ? null : runtimeComponents.inventory());
         resources.close("staff action audit logger",

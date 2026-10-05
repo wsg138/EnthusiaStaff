@@ -28,7 +28,7 @@ public final class StaffDutyCommandGate implements Listener {
     private static final Set<String> ON_DUTY_COMMANDS = Set.of(
             "punish", "ban", "mute", "warn", "kick", "ipban",
             "removepunishment", "unban", "unmute", "removewarning", "unwarn",
-            "reports", "inspect", "invsee", "endersee",
+            "reports", "aireview", "inspect", "invsee", "endersee",
             "alts", "alt", "client", "freeze", "unfreeze",
             "case", "fakebase", "cheattester", "stafftools", "staffwho");
 
