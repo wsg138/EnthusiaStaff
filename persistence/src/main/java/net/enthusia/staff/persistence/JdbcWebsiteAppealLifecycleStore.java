@@ -166,9 +166,13 @@ final class JdbcWebsiteAppealLifecycleStore {
         if (OPEN.equals(current.state()) && reviewerAccountId.equals(current.reviewerAccountId())) {
             return mutation(current, true);
         }
-        requireClaimable(current);
+        requireClaimable(current, reviewerRank);
         long revision = current.revision() + 1;
         updateClaim(connection, current, reviewerAccountId, reviewerRank, revision, now);
+        Map<String, Object> details = reviewerDetails(reviewerRank, null, revision);
+        if (current.reviewerAccountId() != null) {
+            details.put("previousReviewerAccountId", current.reviewerAccountId().toString());
+        }
         audit.write(connection, new JdbcWebsiteAppealLifecycleAudit.WriteRequest(
                 appealId,
                 CLAIM,
@@ -176,7 +180,7 @@ final class JdbcWebsiteAppealLifecycleStore {
                 CLAIMED_EVENT,
                 reviewerAccountId,
                 current.caseId(),
-                reviewerDetails(reviewerRank, null, revision),
+                details,
                 now
         ));
         return mutation(requireAppeal(select(connection, appealId, false)), false);
@@ -318,7 +322,6 @@ final class JdbcWebsiteAppealLifecycleStore {
                 UPDATE website_appeal_requests
                 SET reviewer_account_id = ?, reviewer_rank = ?, revision = ?, updated_at = ?
                 WHERE appeal_id = ? AND revision = ? AND state = 'OPEN'
-                  AND reviewer_account_id IS NULL
                 """)) {
             statement.setBytes(1, UuidBytes.toBytes(reviewerAccountId));
             statement.setString(2, reviewerRank);
@@ -426,9 +429,14 @@ final class JdbcWebsiteAppealLifecycleStore {
         }
     }
 
-    private static void requireClaimable(AppealRow row) {
-        if (!OPEN.equals(row.state()) || row.reviewerAccountId() != null) {
+    private static void requireClaimable(AppealRow row, String reviewerRank) {
+        if (!OPEN.equals(row.state())) {
             throw conflict("APPEAL_ALREADY_CLAIMED", "The appeal is no longer available to claim");
+        }
+        if (row.reviewerAccountId() != null
+                && !"ADMIN".equals(reviewerRank)
+                && !"FOUNDER".equals(reviewerRank)) {
+            throw conflict("APPEAL_ALREADY_CLAIMED", "The appeal is already claimed by another reviewer");
         }
     }
 
