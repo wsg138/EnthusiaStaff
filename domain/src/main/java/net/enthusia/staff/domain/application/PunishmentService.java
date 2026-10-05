@@ -220,8 +220,7 @@ public final class PunishmentService {
         Objects.requireNonNull(assessment);
         return PunishmentApprovalRules.requiresApproval(
                 actor.rank(),
-                assessment.sanctions(),
-                assessment.escalation().selectedStep().sanctions()
+                PunishmentApprovalRules.isCustomDuration(assessment.policy(), assessment.sanctions())
         );
     }
 
