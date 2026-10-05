@@ -35,15 +35,22 @@ public record PunishmentProposal(
         publicReason = Checks.nonBlank(publicReason, "publicReason", 160);
         internalExplanation = Checks.nonBlank(internalExplanation, "internalExplanation", 4_000);
         configurationVersion = Checks.nonBlank(configurationVersion, "configurationVersion", 128);
-        if (requester.rank() != StaffRank.HELPER && requester.rank() != StaffRank.DEVELOPER) {
-            throw new IllegalArgumentException("only Helper or Developer may submit punishment proposals");
+        if (requester.rank() != StaffRank.HELPER
+                && requester.rank() != StaffRank.DEVELOPER
+                && requester.rank() != StaffRank.ADMIN) {
+            throw new IllegalArgumentException("only Helper, Developer, or Admin may submit punishment proposals");
         }
         if (requiredRank == StaffRank.DEVELOPER || requiredRank == StaffRank.SYSTEM) {
             throw new IllegalArgumentException("punishment proposal requires a moderation approval rank");
         }
         sanctions = List.copyOf(sanctions);
-        if (!escalation.selectedStep().sanctions().equals(sanctions)) {
-            throw new IllegalArgumentException("punishment proposal sanctions must match its frozen escalation step");
+        boolean exactStep = escalation.selectedStep().sanctions().equals(sanctions);
+        boolean founderApprovedAdminDuration = requester.rank() == StaffRank.ADMIN
+                && requiredRank == StaffRank.FOUNDER
+                && PunishmentApprovalRules.isCustomDuration(escalation.selectedStep().sanctions(), sanctions);
+        if (!exactStep && !founderApprovedAdminDuration) {
+            throw new IllegalArgumentException(
+                    "punishment proposal sanctions must match its frozen step or an Admin custom-duration request");
         }
     }
 
@@ -51,8 +58,16 @@ public record PunishmentProposal(
             CreatePunishmentRequest request,
             PunishmentAssessment assessment
     ) {
-        if (request == null || assessment == null) {
-            throw new IllegalArgumentException("request and assessment must be present");
+        return from(request, assessment, assessment == null ? null : assessment.policy().requiredRank());
+    }
+
+    static PunishmentProposal from(
+            CreatePunishmentRequest request,
+            PunishmentAssessment assessment,
+            StaffRank requiredApprovalRank
+    ) {
+        if (request == null || assessment == null || requiredApprovalRank == null) {
+            throw new IllegalArgumentException("request, assessment, and approval rank must be present");
         }
         return new PunishmentProposal(
                 request.targetId(),
@@ -63,7 +78,7 @@ public record PunishmentProposal(
                 request.internalExplanation(),
                 assessment.configurationVersion(),
                 request.visibility(),
-                assessment.policy().requiredRank(),
+                requiredApprovalRank,
                 assessment.escalation(),
                 assessment.sanctions()
         );
