@@ -35,7 +35,7 @@ class VanishStaffModeRestorationWiringTest {
 
         assertTrue(method.contains("staffMode.transitioning(playerId)"));
         assertTrue(method.indexOf("staffMode.transitioning(playerId)")
-                < method.indexOf("enforceVanishSpectator(player)"));
+                < method.indexOf("reconcileVanishedGameMode(player)"));
     }
 
     @Test
@@ -44,42 +44,37 @@ class VanishStaffModeRestorationWiringTest {
 
         assertTrue(method.contains("!staffMode.transitioning(playerId)"));
         assertTrue(method.indexOf("!staffMode.transitioning(playerId)")
-                < method.indexOf("enforceVanishSpectator(player)"));
+                < method.indexOf("reconcileVanishedGameMode(player)"));
     }
 
     @Test
-    void adminAndFounderVanishDoNotForceOrCancelGameplayMode() throws IOException {
+    void vanishUsesRankAllowedRealModesInsteadOfForcingSpectator() throws IOException {
         String change = method(
                 "public void onGameModeChange",
                 "@EventHandler(priority = EventPriority.HIGHEST)\n    public void onJoin"
         );
-        assertTrue(change.contains("rank != StaffRank.ADMIN"));
-        assertTrue(change.contains("rank != StaffRank.FOUNDER"));
+        assertTrue(change.contains("!isSelectableGameMode(rank, event.getNewGameMode())"));
 
-        String enforce = method(
-                "private void enforceVanishSpectator",
+        String reconcile = method(
+                "private void reconcileVanishedGameMode",
                 "private void restoreSelectedGameMode"
         );
-        assertTrue(enforce.contains("rank == StaffRank.ADMIN || rank == StaffRank.FOUNDER"));
-        assertTrue(enforce.indexOf("rank == StaffRank.ADMIN || rank == StaffRank.FOUNDER")
-                < enforce.indexOf("player.setGameMode(GameMode.SPECTATOR)"));
+        assertTrue(reconcile.contains("selectedGameModeForEnable(player, rank)"));
+        assertTrue(reconcile.contains("player.setGameMode(selected)"));
+        assertFalse(reconcile.contains("player.setGameMode(GameMode.SPECTATOR)"));
     }
 
     @Test
-    void adminAndFounderSelectedModesAreAppliedEvenWhileVanished() throws IOException {
+    void selectedRankAllowedModeIsAppliedEvenWhileVanished() throws IOException {
         String method = method(
                 "public boolean selectGameplayMode",
                 "/**\n     * Cross-server transfer hook"
         );
 
-        int rankGate = method.indexOf("rank == StaffRank.ADMIN || rank == StaffRank.FOUNDER");
-        int setMode = method.indexOf("player.setGameMode(selected)", rankGate);
-        int lowerRankFallback = method.indexOf("enforceVanishSpectator(player)", setMode);
-
-        assertTrue(rankGate >= 0);
-        assertTrue(setMode > rankGate);
-        assertTrue(lowerRankFallback > setMode);
+        assertTrue(method.contains("!isSelectableGameMode(rank, selected)"));
         assertTrue(method.contains("persistSelectedGameMode(playerId, rank, selected)"));
+        assertTrue(method.contains("player.setGameMode(selected)"));
+        assertFalse(method.contains("GameMode.SPECTATOR;"));
     }
 
     @Test
