@@ -12,6 +12,7 @@ import org.bukkit.event.block.Action;
  *   pickup/drop, and container/block interaction are allowed but written to the staff audit
  *   log. Other world uses (buckets, harvest, shearing, fishing, consuming, entity
  *   manipulation) stay blocked like Helper.</li>
+ *   <li>DEVELOPER — unrestricted technical testing, with every interaction written to the audit log.</li>
  *   <li>ADMIN — unrestricted, but every interaction is still written to the staff audit log.</li>
  * </ul>
  *
@@ -31,7 +32,7 @@ final class StaffModeWorldInteractionPolicy {
     /**
      * Whether general world uses (buckets, harvesting, shearing, fishing, consuming,
      * entity/armor-stand manipulation) must be cancelled. Mod keeps the Helper-base block here;
-     * only the ADMIN tier is unrestricted.
+     * Developer and Admin are unrestricted.
      */
     static boolean blocksWorldUse(StaffDutyTier tier) {
         return tier == null || tier == StaffDutyTier.HELPER || tier == StaffDutyTier.MOD;
@@ -39,7 +40,9 @@ final class StaffModeWorldInteractionPolicy {
 
     /** Whether an allowed world interaction must be written to the staff audit log. */
     static boolean logsWorldInteraction(StaffDutyTier tier) {
-        return tier == StaffDutyTier.MOD || tier == StaffDutyTier.ADMIN;
+        return tier == StaffDutyTier.MOD
+                || tier == StaffDutyTier.DEVELOPER
+                || tier == StaffDutyTier.ADMIN;
     }
 
     static boolean allowsContainerView(StaffDutyTier tier) {
@@ -55,7 +58,9 @@ final class StaffModeWorldInteractionPolicy {
     }
 
     static boolean logsContainerEdit(StaffDutyTier tier) {
-        return tier == StaffDutyTier.MOD || tier == StaffDutyTier.ADMIN;
+        return tier == StaffDutyTier.MOD
+                || tier == StaffDutyTier.DEVELOPER
+                || tier == StaffDutyTier.ADMIN;
     }
 
     /** Whether a {@link PlayerInteractEvent} block interaction must be cancelled. */
