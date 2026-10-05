@@ -79,8 +79,9 @@ class DiscordConsequenceAuthorizationTest {
     @Test
     void minecraftCustomAuthorityRemainsOwnedByExistingPolicy() {
         DiscordModerationAuthorizationService service = service();
-        assertAllowed(service, actor(StaffRank.ADMIN), issue(minecraft(
-                DiscordConsequenceType.MUTE, SanctionLength.temporary(Duration.ofDays(45)), true, false)));
+        assertDenied(service, actor(StaffRank.ADMIN), issue(minecraft(
+                        DiscordConsequenceType.MUTE, SanctionLength.temporary(Duration.ofDays(45)), true, false)),
+                DiscordAuthorizationDenial.MINECRAFT_AUTHORIZATION_DENIED);
         assertDenied(service, actor(StaffRank.ADMIN), issue(minecraft(
                         DiscordConsequenceType.MUTE, SanctionLength.temporary(Duration.ofDays(45)), false, true)),
                 DiscordAuthorizationDenial.MINECRAFT_AUTHORIZATION_DENIED);
