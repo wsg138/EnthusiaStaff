@@ -424,7 +424,7 @@ public final class StaffModeManager implements Listener {
     }
 
     // Handoff resume must snapshot the destination backend's native player state before
-    // transferred vanish can force spectator later in the same join event.
+    // transferred vanish state is applied later in the same join event.
     @EventHandler(priority = EventPriority.LOWEST)
     public void onJoin(PlayerJoinEvent event) {
         Player player = event.getPlayer();
