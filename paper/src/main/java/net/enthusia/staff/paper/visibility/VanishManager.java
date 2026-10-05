@@ -213,10 +213,10 @@ public final class VanishManager implements Listener {
     }
 
     /**
-     * Updates the staff member's selected gameplay mode without weakening full vanish.
+     * Updates the staff member's real selected gameplay mode independently from vanish.
      *
-     * <p>When vanished, the selected mode is persisted for restoration but the player remains
-     * authoritative server-side spectator. When visible, the selected mode is applied directly.</p>
+     * <p>Admin/Founder may use Survival, Creative, or Spectator while vanished. Vanish remains
+     * a visibility/privacy state; only lower-rank policy may require real Spectator.</p>
      */
     public boolean selectGameplayMode(Player player, GameMode selected) {
         Objects.requireNonNull(player, "player");
@@ -229,13 +229,15 @@ public final class VanishManager implements Listener {
         selectedGameModes.put(playerId, selected);
         if (visibility.isVanished(playerId)) {
             persistSelectedGameMode(playerId, rank, selected);
-            enforceVanishSpectator(player);
-            return true;
         }
-        if (player.getGameMode() != selected) {
-            player.setGameMode(selected);
+        if (rank == StaffRank.ADMIN || rank == StaffRank.FOUNDER) {
+            if (player.getGameMode() != selected) {
+                player.setGameMode(selected);
+            }
+            return player.getGameMode() == selected;
         }
-        return player.getGameMode() == selected;
+        enforceVanishSpectator(player);
+        return player.getGameMode() == GameMode.SPECTATOR;
     }
 
     /**
@@ -885,7 +887,9 @@ public final class VanishManager implements Listener {
                 selectedGameModes.put(playerId, event.getNewGameMode());
                 persistSelectedGameMode(playerId, rank, event.getNewGameMode());
             }
-            if (event.getNewGameMode() != GameMode.SPECTATOR) {
+            if (event.getNewGameMode() != GameMode.SPECTATOR
+                    && rank != StaffRank.ADMIN
+                    && rank != StaffRank.FOUNDER) {
                 event.setCancelled(true);
                 return;
             }
@@ -1263,6 +1267,10 @@ public final class VanishManager implements Listener {
     }
 
     private void enforceVanishSpectator(Player player) {
+        StaffRank rank = resolveLiveRank(player);
+        if (rank == StaffRank.ADMIN || rank == StaffRank.FOUNDER) {
+            return;
+        }
         if (player.getGameMode() == GameMode.SPECTATOR) {
             return;
         }
