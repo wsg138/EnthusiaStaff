@@ -34,8 +34,11 @@ class StaffModeAccessPolicyTest {
         assertTrue(StaffModeAccessPolicy.blocksEnderChestOpen(StaffRank.DEVELOPER));
         assertTrue(StaffModeAccessPolicy.blocksEnderChestMutation(StaffRank.DEVELOPER));
         assertTrue(StaffModeAccessPolicy.hasAdvancedStaffTools(StaffRank.DEVELOPER));
-        // Developer rides the Mod tier: Survival-only while on duty.
+        // Developer rides the Mod tier: protected Survival by default, with Spectator also allowed.
         assertEquals(GameMode.SURVIVAL, StaffModeAccessPolicy.initialGameMode(StaffRank.DEVELOPER));
+        assertTrue(StaffModeAccessPolicy.allowsGameMode(StaffRank.DEVELOPER, GameMode.SURVIVAL));
+        assertTrue(StaffModeAccessPolicy.allowsGameMode(StaffRank.DEVELOPER, GameMode.SPECTATOR));
+        assertFalse(StaffModeAccessPolicy.allowsGameMode(StaffRank.DEVELOPER, GameMode.CREATIVE));
     }
 
     @Test
@@ -44,8 +47,11 @@ class StaffModeAccessPolicyTest {
         assertTrue(StaffModeAccessPolicy.blocksInventoryMutation(StaffRank.MOD, true));
         assertTrue(StaffModeAccessPolicy.blocksEnderChestOpen(StaffRank.MOD));
         assertTrue(StaffModeAccessPolicy.blocksEnderChestMutation(StaffRank.MOD));
-        // Mods must work in Survival while on duty so container/item interactions function.
+        // Mods start in protected Survival but may switch to real Spectator.
         assertEquals(GameMode.SURVIVAL, StaffModeAccessPolicy.initialGameMode(StaffRank.MOD));
+        assertTrue(StaffModeAccessPolicy.allowsGameMode(StaffRank.MOD, GameMode.SURVIVAL));
+        assertTrue(StaffModeAccessPolicy.allowsGameMode(StaffRank.MOD, GameMode.SPECTATOR));
+        assertFalse(StaffModeAccessPolicy.allowsGameMode(StaffRank.MOD, GameMode.CREATIVE));
     }
 
     @Test
@@ -66,12 +72,11 @@ class StaffModeAccessPolicyTest {
     }
 
     @Test
-    void adminAndFounderCanSelectOnlyTheThreeSupportedVanillaModes() {
+    void adminAndFounderCanSelectAnyVanillaGameMode() {
         for (StaffRank rank : new StaffRank[]{StaffRank.ADMIN, StaffRank.FOUNDER}) {
-            assertTrue(StaffModeAccessPolicy.allowsGameMode(rank, GameMode.SURVIVAL));
-            assertTrue(StaffModeAccessPolicy.allowsGameMode(rank, GameMode.CREATIVE));
-            assertTrue(StaffModeAccessPolicy.allowsGameMode(rank, GameMode.SPECTATOR));
-            assertFalse(StaffModeAccessPolicy.allowsGameMode(rank, GameMode.ADVENTURE));
+            for (GameMode gameMode : GameMode.values()) {
+                assertTrue(StaffModeAccessPolicy.allowsGameMode(rank, gameMode));
+            }
         }
     }
 
@@ -84,10 +89,10 @@ class StaffModeAccessPolicyTest {
     }
 
     @Test
-    void modAndDeveloperAreSurvivalOnlyOnDuty() {
+    void modAndDeveloperChooseBetweenProtectedSurvivalAndSpectator() {
         for (StaffRank rank : new StaffRank[]{StaffRank.MOD, StaffRank.DEVELOPER}) {
             assertTrue(StaffModeAccessPolicy.allowsGameMode(rank, GameMode.SURVIVAL));
-            assertFalse(StaffModeAccessPolicy.allowsGameMode(rank, GameMode.SPECTATOR));
+            assertTrue(StaffModeAccessPolicy.allowsGameMode(rank, GameMode.SPECTATOR));
             assertFalse(StaffModeAccessPolicy.allowsGameMode(rank, GameMode.CREATIVE));
             assertFalse(StaffModeAccessPolicy.allowsGameMode(rank, GameMode.ADVENTURE));
         }
@@ -108,7 +113,7 @@ class StaffModeAccessPolicyTest {
                 StaffModeAccessPolicy.reconciledGameMode(StaffRank.MOD, GameMode.CREATIVE)
         );
         assertEquals(
-                GameMode.SURVIVAL,
+                GameMode.SPECTATOR,
                 StaffModeAccessPolicy.reconciledGameMode(StaffRank.MOD, GameMode.SPECTATOR)
         );
     }
