@@ -15,9 +15,11 @@ import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.projectiles.ProjectileSource;
 
 /**
- * Keeps on-duty or vanished staff clear of CombatLogX combat state.
+ * Keeps protected on-duty or vanished staff clear of CombatLogX combat state.
  *
- * <p>Damage edges are rechecked one entity tick after the event so CombatLogX has completed its
+ * <p>Developer is intentionally exempt while on duty so technical combat testing is not
+ * suppressed; those actions are audit-logged by Staff Mode. Damage edges for protected ranks
+ * are rechecked one entity tick after the event so CombatLogX has completed its
  * own tagging work. A Folia-safe periodic reconciliation remains as recovery for integrations
  * that tag outside Bukkit damage events.</p>
  */
@@ -97,6 +99,10 @@ public final class StaffCombatProtectionListener implements Listener {
 
     private void scheduleProtection(Player player, boolean logRemoval) {
         if (player == null || !protectedState(player.getUniqueId())) {
+            return;
+        }
+        if (staffMode.active(player.getUniqueId())
+                && staffMode.dutyTier(player) == StaffDutyTier.DEVELOPER) {
             return;
         }
         try {
