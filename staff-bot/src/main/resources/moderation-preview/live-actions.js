@@ -1,5 +1,6 @@
 'use strict';
 
+const LIVE_ACTION_TIMEOUT_MS = 12000;
 let liveActionCapabilities = null;
 const actionLoadSession = window.loadSession;
 window.loadSession = async function () {
@@ -35,11 +36,26 @@ function actionRequestOptions(input) {
 
 function requestActionProof(operation, options) {
   switch (operation) {
-    case 'capabilities': return fetch('/api/actions/capabilities', options);
-    case 'prepare': return fetch('/api/actions/prepare', options);
-    case 'confirm': return fetch('/api/actions/confirm', options);
-    case 'status': return fetch('/api/actions/status', options);
+    case 'capabilities': return timedActionFetch('/api/actions/capabilities', options);
+    case 'prepare': return timedActionFetch('/api/actions/prepare', options);
+    case 'confirm': return timedActionFetch('/api/actions/confirm', options);
+    case 'status': return timedActionFetch('/api/actions/status', options);
     default: throw new Error('Session unavailable');
+  }
+}
+
+async function timedActionFetch(url, options) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), LIVE_ACTION_TIMEOUT_MS);
+  try {
+    return await fetch(url, {...options, signal:controller.signal});
+  } catch (error) {
+    if (error?.name === 'AbortError') {
+      throw new Error('Moderation service timed out. Retry preparation.');
+    }
+    throw error;
+  } finally {
+    clearTimeout(timer);
   }
 }
 
@@ -52,10 +68,10 @@ function requireValidActionProof(proof, operation) {
 
 function submitActionProof(operation, request) {
   switch (operation) {
-    case 'capabilities': return fetch('https://moderation-read-staging.enthusia.info/v1/moderation/actions/capabilities', request);
-    case 'prepare': return fetch('https://moderation-read-staging.enthusia.info/v1/moderation/actions/prepare', request);
-    case 'confirm': return fetch('https://moderation-read-staging.enthusia.info/v1/moderation/actions/confirm', request);
-    case 'status': return fetch('https://moderation-read-staging.enthusia.info/v1/moderation/actions/status', request);
+    case 'capabilities': return timedActionFetch('https://moderation-read-staging.enthusia.info/v1/moderation/actions/capabilities', request);
+    case 'prepare': return timedActionFetch('https://moderation-read-staging.enthusia.info/v1/moderation/actions/prepare', request);
+    case 'confirm': return timedActionFetch('https://moderation-read-staging.enthusia.info/v1/moderation/actions/confirm', request);
+    case 'status': return timedActionFetch('https://moderation-read-staging.enthusia.info/v1/moderation/actions/status', request);
     default: throw new Error('Session unavailable');
   }
 }
@@ -121,30 +137,52 @@ const simulationReviewStep = window.renderReviewStep;
 window.renderReviewStep = function () {
   simulationReviewStep();
   if (state.session?.staging !== false) return;
-  const w = state.workflow;
-  const confirm = $('[data-confirm]');
-  if (confirm) { confirm.disabled = true; confirm.textContent = 'Preparing live action…'; }
-  w.livePrepared = null;
-  try {
-    const input = liveActionInput(w);
-    requestModerationAction('prepare', input).then(prepared => {
-      if (state.workflow !== w || w.step !== 'review') return;
-      w.livePrepared = {...prepared, targetKey:input.targetKey};
-      $('#workflowBody').appendChild(element('div',{className:'alert warning'},
-        element('strong',{text:'Server-prepared live action'}),
-        element('span',{text:`${prepared.intent.type} · ${prepared.targetUserId} · ${prepared.intent.length.kind}. Target notifications are included. Authority is checked again on confirmation.`})));
-      if (confirm) { confirm.disabled = false; confirm.textContent = 'Confirm live action'; }
-    }).catch(error => { if (state.workflow === w) showToast(error.message, true); });
-  } catch (error) {
-    if (confirm) confirm.textContent = 'Live action unavailable';
-    $('#workflowBody').appendChild(element('div',{className:'alert warning',text:error.message}));
-  }
+  prepareLiveAction(state.workflow, $('[data-confirm]'));
 };
+
+function prepareLiveAction(workflow, confirm) {
+  if (!workflow || workflow.step !== 'review') return;
+  if (confirm) {
+    confirm.disabled = true;
+    confirm.textContent = 'Preparing…';
+  }
+  workflow.livePrepared = null;
+  workflow.livePrepareFailed = false;
+  try {
+    const input = liveActionInput(workflow);
+    requestModerationAction('prepare', input).then(prepared => {
+      if (state.workflow !== workflow || workflow.step !== 'review') return;
+      workflow.livePrepared = {...prepared, targetKey:input.targetKey};
+      workflow.livePrepareFailed = false;
+      if (confirm) {
+        confirm.disabled = false;
+        confirm.textContent = 'Confirm action';
+      }
+    }).catch(error => livePreparationFailed(workflow, confirm, error));
+  } catch (error) {
+    livePreparationFailed(workflow, confirm, error);
+  }
+}
+
+function livePreparationFailed(workflow, confirm, error) {
+  if (state.workflow !== workflow || workflow.step !== 'review') return;
+  workflow.livePrepared = null;
+  workflow.livePrepareFailed = true;
+  if (confirm) {
+    confirm.disabled = false;
+    confirm.textContent = 'Retry preparation';
+  }
+  showToast(error.message || 'Live action could not be prepared.', true);
+}
 
 const simulationConfirm = window.confirmSimulation;
 window.confirmSimulation = async function () {
   if (state.session?.staging !== false) return simulationConfirm();
   const workflow = state.workflow;
+  if (workflow?.livePrepareFailed && !workflow.livePrepared) {
+    renderWorkflow();
+    return;
+  }
   if (!readyForLiveConfirmation(workflow)) return;
   await submitLiveConfirmation(workflow);
 };

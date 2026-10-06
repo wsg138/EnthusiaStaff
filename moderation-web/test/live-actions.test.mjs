@@ -53,3 +53,12 @@ test('disabled backend cannot enter a live action and client approval cannot gra
   assert.equal(context.workflowApprovalRequired({...workflow,approvalConfirmed:true}),false);
   assert.match(context.approvalReviewText(workflow),/server/);
 });
+
+test('live action preparation is bounded and exposes a retry state instead of hanging forever', () => {
+  assert.match(source,/LIVE_ACTION_TIMEOUT_MS = 12000/);
+  assert.match(source,/AbortController/);
+  assert.match(source,/Moderation service timed out\. Retry preparation\./);
+  assert.match(source,/Retry preparation/);
+  assert.match(source,/workflow\.livePrepareFailed/);
+  assert.doesNotMatch(source,/Server-prepared live action/);
+});

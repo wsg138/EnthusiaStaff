@@ -90,7 +90,9 @@ test('safe Discord renderer handles headings, inline code, and custom emoji with
 });
 
 test('final review requires explanation and appropriate evidence while allowing outside-Discord evidence', async () => {
-  const [review, policy] = await Promise.all([readFile(REVIEW, 'utf8'), readFile(POLICY, 'utf8')]);
+  const [review, policy, record] = await Promise.all([
+    readFile(REVIEW, 'utf8'), readFile(POLICY, 'utf8'), readFile(RECORD, 'utf8')
+  ]);
 
   assert.match(review, /Outside-Discord evidence reference/);
   assert.match(review, /Staff explanation/);
@@ -100,7 +102,10 @@ test('final review requires explanation and appropriate evidence while allowing 
   assert.match(review, /Enthusia\.info\/appeal/);
   assert.doesNotMatch(review, /Enthusia moderation:/);
   assert.doesNotMatch(review, /text:'DM preview'/);
-  assert.match(review, /Case readiness/);
+  assert.doesNotMatch(record, /Case readiness/);
+  assert.doesNotMatch(record, /Review every item before confirming the action/);
+  assert.doesNotMatch(record, /testEnvironmentBoundary\(\)/);
+  assert.match(record, /className:'review-details'/);
   assert.match(policy, /length >= 10/);
   assert.match(policy, /state\.evidence\.size > 0 \|\| workflowExternalEvidenceReady/);
   assert.match(policy, /Verify the required Admin\+ approval/);

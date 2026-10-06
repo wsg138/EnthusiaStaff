@@ -92,7 +92,11 @@
 .review-evidence-groups>div,.staff-reason,.dm-preview,.simulation-boundary{padding:11px;border:1px solid var(--b);border-radius:9px;background:#13171c}
 .review-evidence-groups h4,.staff-reason span,.dm-preview span,.simulation-boundary strong{display:block;margin:0 0 5px;font-size:11px}
 .review-evidence-groups p,.staff-reason p,.dm-preview p{margin:0;font-size:12px;line-height:1.45}
-.notification-preview-body{display:grid;gap:8px}.notification-preview-title{display:block;font-size:15px}.notification-preview-body p{white-space:pre-wrap}
+.review-details{display:grid;gap:10px;margin-top:11px}
+.review-details>.review-evidence-groups,.review-details>.staff-reason,.review-details>.dm-preview{margin:0}
+.notification-preview-body{display:grid;gap:8px}
+.notification-preview-title{display:block;font-size:15px}
+.notification-preview-body p{white-space:pre-wrap}
 .simulation-boundary{display:grid;gap:4px;margin-top:12px;border-color:rgba(112,133,255,.35);background:var(--as)}
 .simulation-boundary span{font-size:11px;color:#c8d0dc}
 .discord-custom-emoji{display:inline-block;width:1.35em;height:1.35em;vertical-align:-.28em;object-fit:contain}

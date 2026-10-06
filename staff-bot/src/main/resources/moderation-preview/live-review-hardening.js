@@ -133,21 +133,31 @@ function focusFirstMissingReviewField(status) {
 }
 
 function hardenedReviewGridNode(w, recommendation) {
+  const evidence = reviewEvidenceCountText(w);
   const items = [
     ['Target',`${identity.displayName} · ${identity.minecraft}`],
     ['Offense',w.offense.label],
-    ['Ladder recommendation',`${recommendation.action} · ${recommendation.duration}`],
     ['Action',`${w.actual.action}${w.custom ? ' · Custom override' : ''}`],
-    ['Scope / platform',w.scope],
-    ['Discord evidence',String(state.evidence.size)],
-    ['Outside-Discord evidence',workflowExternalEvidenceReady(w) ? 'Referenced' : 'None'],
-    ['Messages to delete',String(state.deleting.size)],
-    ['DM',w.dm ? 'Included' : 'Not included'],
-    ['Approval',approvalReviewText(w)]
+    ['Platform',w.scope],
+    ['Evidence',evidence],
+    ['Player notification',w.dm ? 'Included' : 'Not included']
   ];
-  if (w.exactReasonId) items.splice(2,0,['Configured reason ID',w.exactReasonId]);
-  if (w.duration !== '—') items.splice(w.exactReasonId ? 6 : 5,0,['Duration',w.duration]);
+  if (w.duration !== '—') items.splice(3,0,['Duration',w.duration]);
+  if (w.custom) {
+    const duration = recommendation.duration && recommendation.duration !== '—'
+      ? ' · ' + recommendation.duration : '';
+    items.splice(2,0,['Recommended',recommendation.action + duration]);
+  }
+  if (state.deleting.size) items.push(['Messages to delete',String(state.deleting.size)]);
+  if (workflowApprovalRequired(w)) items.push(['Approval',approvalReviewText(w)]);
   return element('div',{className:'review-grid'},items.map(([label,value]) => reviewItemNode(label,value)));
+}
+
+function reviewEvidenceCountText(workflow) {
+  const parts = [];
+  if (state.evidence.size) parts.push(`${state.evidence.size} Discord message${state.evidence.size === 1 ? '' : 's'}`);
+  if (workflowExternalEvidenceReady(workflow)) parts.push('Outside reference');
+  return parts.length ? parts.join(' + ') : 'None';
 }
 
 function approvalReviewText(w) {
@@ -209,7 +219,8 @@ function punishmentNotificationPreview(w) {
 }
 
 function notificationPreviewAction(w) {
-  return String(w.actual?.action || 'action').toLowerCase();
+  const actions = {Warning:'warned',Mute:'muted',Kick:'kicked',Ban:'banned',Restrict:'restricted'};
+  return actions[w.actual?.action] || String(w.actual?.action || 'action').toLowerCase();
 }
 
 function notificationPreviewDuration(w) {

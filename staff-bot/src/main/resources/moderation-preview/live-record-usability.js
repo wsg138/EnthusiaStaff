@@ -83,14 +83,19 @@ function hardenedAccountsNode() {
 
 function productReviewEvidenceNode(workflow) {
   const status = workflowReviewStatus(workflow);
-  return element('section',{className:'card review-evidence'},
-    sectionHeadingNode('Case readiness','Review every item before confirming the action.'),
-    readinessChecklistNode(workflow),
-    reviewValidationAlert(status),
-    reviewEvidenceSummaryNode(workflow),
-    staffExplanationNode(workflow),
-    productNotificationMessageNode(workflow),
-    testEnvironmentBoundary());
+  const children = [];
+  if (!status.ready) children.push(reviewValidationAlert(status));
+  const evidence = productEvidenceDetailsNode(workflow);
+  if (evidence) children.push(evidence);
+  children.push(staffExplanationNode(workflow));
+  children.push(productNotificationMessageNode(workflow));
+  return element('section',{className:'review-details'},children);
+}
+
+function productEvidenceDetailsNode(workflow) {
+  const outside = String(workflow.externalEvidence || '').trim();
+  if (!state.evidence.size && !outside) return null;
+  return reviewEvidenceSummaryNode(workflow);
 }
 
 function productNotificationMessageNode(workflow) {
