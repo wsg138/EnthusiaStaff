@@ -509,9 +509,8 @@ public final class VanishManager implements Listener {
             persistState(loaded, playerId, rank, vanished, selectedGameMode, preferenceUpdate);
             rememberCommittedState(playerId, rank, vanished, restoreSelectedMode, selectedGameMode);
             boolean viewerChanged = publishViewerRank(playerId, rank);
-            Set<UUID> hiddenBefore = vanished ? Set.of() : hiddenPresenceViewers(playerId);
+            Set<UUID> presenceViewers = presenceViewers(playerId);
             visibility.setVanished(playerId, rank, vanished);
-            Set<UUID> presenceViewers = vanished ? hiddenPresenceViewers(playerId) : hiddenBefore;
             if (vanished) {
                 hiddenSpectators.remove(playerId);
             }
@@ -607,10 +606,9 @@ public final class VanishManager implements Listener {
         player.sendMessage(StaffMessageStyle.style(Component.text(vanished ? "Vanish enabled." : "Vanish disabled.")));
     }
 
-    private Set<UUID> hiddenPresenceViewers(UUID subjectId) {
+    private Set<UUID> presenceViewers(UUID subjectId) {
         return Set.copyOf(audiences.playerIds().stream()
                 .filter(viewerId -> !viewerId.equals(subjectId))
-                .filter(viewerId -> !visibility.canSee(viewerId, subjectId))
                 .toList());
     }
 
