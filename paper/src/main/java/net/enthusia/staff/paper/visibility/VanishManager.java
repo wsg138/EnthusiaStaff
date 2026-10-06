@@ -1026,6 +1026,14 @@ public final class VanishManager implements Listener {
             VanishAudienceCoordinator.OnlineEntity<Player> targetEntry,
             boolean canSee
     ) {
+        if (viewer.getUniqueId().equals(target.getUniqueId())) {
+            try {
+                viewer.listPlayer(target);
+            } catch (IllegalStateException exception) {
+                plugin.getLogger().log(Level.FINE, "Self tab listing raced with disconnect", exception);
+            }
+            return;
+        }
         if (!shouldList(targetEntry, canSee)) {
             unlistSafely(viewer, target);
             return;
