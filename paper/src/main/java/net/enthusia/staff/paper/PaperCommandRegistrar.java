@@ -290,7 +290,8 @@ final class PaperCommandRegistrar {
         StaffModeCommand staffMode = new StaffModeCommand(
                 writeMode(),
                 dependencies.players().staffMode(),
-                staffEntry
+                staffEntry,
+                dependencies.players().vanish()
         );
         bindCompleting("staff", staffMode, staffMode);
         bind("vanish", new VanishCommand(writeMode(), dependencies.players().vanish()));
