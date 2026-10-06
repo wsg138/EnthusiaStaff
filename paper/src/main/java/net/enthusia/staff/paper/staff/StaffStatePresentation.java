@@ -15,7 +15,7 @@ import org.bukkit.event.player.PlayerGameModeChangeEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.plugin.java.JavaPlugin;
 
-/** Keeps staff/vanish state visible to the actor and reconciles vanished self-tab presentation. */
+/** Keeps staff/vanish state visible to the actor without mutating the actor's own PlayerInfo entry. */
 public final class StaffStatePresentation implements Listener {
     private static final long REFRESH_TICKS = 10L;
 
@@ -53,9 +53,6 @@ public final class StaffStatePresentation implements Listener {
         boolean staffActive = staffMode.active(playerId);
         boolean vanished = vanish.isVanished(playerId);
 
-        if (vanished) {
-            unlistSelf(player);
-        }
         if (!staffActive && !vanished) {
             if (indicatorVisible.remove(playerId)) {
                 player.sendActionBar(Component.empty());
@@ -64,14 +61,6 @@ public final class StaffStatePresentation implements Listener {
         }
         indicatorVisible.add(playerId);
         player.sendActionBar(indicator(staffActive, vanished));
-    }
-
-    private static void unlistSelf(Player player) {
-        try {
-            player.unlistPlayer(player);
-        } catch (IllegalStateException ignored) {
-            // A disconnect can race a presentation refresh; the next session reconciles normally.
-        }
     }
 
     static Component indicator(boolean staffActive, boolean vanished) {
