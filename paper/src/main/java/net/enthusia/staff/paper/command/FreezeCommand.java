@@ -19,7 +19,7 @@ import net.enthusia.staff.domain.freeze.FreezeRecord;
 import net.enthusia.staff.domain.player.PlayerIdentity;
 import net.enthusia.staff.domain.ports.FreezeStore;
 import net.enthusia.staff.domain.ports.PlayerDirectory;
-import net.enthusia.staff.paper.api.StaffSessionService;
+import net.enthusia.staff.paper.api.StaffAuthorityService;
 import net.enthusia.staff.paper.auth.LuckPermsStaffTargetGuard;
 import net.enthusia.staff.paper.auth.PaperActorResolver;
 import net.enthusia.staff.paper.auth.StaffTargetGuard;
@@ -401,8 +401,8 @@ public final class FreezeCommand implements CommandExecutor, TabCompleter {
 
     private static Predicate<UUID> runtimeActiveDuty(JavaPlugin plugin) {
         return playerId -> {
-            StaffSessionService sessions = plugin.getServer().getServicesManager().load(StaffSessionService.class);
-            return sessions != null && sessions.hasActiveSession(playerId);
+            StaffAuthorityService authority = plugin.getServer().getServicesManager().load(StaffAuthorityService.class);
+            return authority != null && authority.hasAuthority(playerId);
         };
     }
 
