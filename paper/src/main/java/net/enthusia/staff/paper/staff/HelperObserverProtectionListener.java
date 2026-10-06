@@ -168,7 +168,8 @@ public final class HelperObserverProtectionListener implements Listener {
     }
 
     private boolean activeHelper(Player player) {
-        return staffMode.helperObserverActive(player.getUniqueId());
+        return !staffMode.isUnrestricted(player)
+                && staffMode.helperObserverActive(player.getUniqueId());
     }
 
     private void clearMobTarget(Object damager, Player target) {
@@ -187,7 +188,9 @@ public final class HelperObserverProtectionListener implements Listener {
         }
         Mob targetMob = mob;
         targetMob.getScheduler().run(plugin, ignoredMob -> {
-            if (!staffMode.helperObserverActive(targetId)) {
+            if (!staffMode.helperObserverActive(targetId)
+                    || staffMode.authorityActiveOrUnrestricted(targetId)
+                            && !staffMode.authorityActive(targetId)) {
                 return;
             }
             var currentTarget = targetMob.getTarget();
