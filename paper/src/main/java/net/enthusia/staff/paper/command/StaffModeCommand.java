@@ -19,6 +19,8 @@ public final class StaffModeCommand implements CommandExecutor, TabCompleter {
     private static final String PERMISSION = "enthusiastaff.staffmode";
     private static final String RECOVER = "recover";
     private static final String TAB = "tab";
+    private static final String INVENTORY = "inventory";
+    private static final String INVENTORY_SHORT = "inv";
     private static final String TOGGLE_VANISH = "togglevanish";
     private static final String SHOW = "show";
     private static final String HIDE = "hide";
@@ -26,7 +28,7 @@ public final class StaffModeCommand implements CommandExecutor, TabCompleter {
     private static final int TARGETED_RECOVERY_ARGUMENTS = 2;
     private static final int TAB_ARGUMENTS = 2;
     private static final List<String> ENTRY_OPTIONS =
-            List.of("recover", "-v", "vanish", "-nv", "visible", "tab");
+            List.of("recover", "-v", "vanish", "-nv", "visible", "tab", INVENTORY, INVENTORY_SHORT);
     private static final List<String> TAB_OPTIONS = List.of(SHOW, HIDE);
 
     private final Supplier<OperationalMode> mode;
@@ -60,6 +62,10 @@ public final class StaffModeCommand implements CommandExecutor, TabCompleter {
         }
         if (spectatorTabRequested(arguments)) {
             return configureSpectatorTab(player, arguments[1]);
+        }
+        if (inventoryToggleRequested(arguments)) {
+            manager.toggleToolInventory(player);
+            return true;
         }
         if (vanishToggleRequested(arguments)) {
             vanish.toggle(player);
@@ -108,7 +114,7 @@ public final class StaffModeCommand implements CommandExecutor, TabCompleter {
         StaffModeVanishEntryOption option = StaffModeVanishEntryOption.parse(arguments).orElse(null);
         if (option == null) {
             player.sendMessage(StaffMessageStyle.usage(
-                    "Usage: /staff [recover|-v|vanish|-nv|visible|tab <show|hide>]"
+                    "Usage: /staff [recover|-v|vanish|-nv|visible|inventory|tab <show|hide>]"
             ));
             return true;
         }
@@ -172,6 +178,12 @@ public final class StaffModeCommand implements CommandExecutor, TabCompleter {
 
     private static boolean spectatorTabRequested(String[] arguments) {
         return arguments.length == TAB_ARGUMENTS && TAB.equalsIgnoreCase(arguments[0]);
+    }
+
+    private static boolean inventoryToggleRequested(String[] arguments) {
+        return arguments.length == SINGLE_ARGUMENT
+                && (INVENTORY.equalsIgnoreCase(arguments[0])
+                        || INVENTORY_SHORT.equalsIgnoreCase(arguments[0]));
     }
 
     private static boolean vanishToggleRequested(String[] arguments) {
