@@ -1,5 +1,6 @@
 name: Dump Codacy annotations
 
+# Temporary W1 diagnostic trigger; removed before the final branch state.
 on:
   pull_request:
     types: [opened, synchronize, reopened]
