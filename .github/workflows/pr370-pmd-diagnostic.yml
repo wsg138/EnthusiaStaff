@@ -1,0 +1,29 @@
+name: PR370 PMD Diagnostic
+
+on:
+  push:
+    branches:
+      - diagnostic/370-pmd-2
+
+permissions:
+  contents: read
+
+jobs:
+  pmd:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run repository PMD rules on chat migration Java
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          curl --fail --location --silent --show-error             "https://github.com/pmd/pmd/releases/download/pmd_releases%2F6.55.0/pmd-bin-6.55.0.zip"             -o /tmp/pmd.zip
+          unzip -q /tmp/pmd.zip -d /tmp
+          set +e
+          /tmp/pmd-bin-6.55.0/bin/run.sh pmd             -d integration-contracts/src/main/java,paper/src/main/java,paper/src/test/java,protocol/src/main/java,protocol/src/test/java,velocity/src/main/java,velocity/src/test/java             -R ruleset.xml             -f text             -r /tmp/pmd.txt
+          pmd_status=$?
+          set -e
+          cat /tmp/pmd.txt
+          if [ "$pmd_status" -ne 0 ] && [ "$pmd_status" -ne 4 ]; then
+            exit "$pmd_status"
+          fi
