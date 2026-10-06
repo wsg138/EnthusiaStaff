@@ -20,8 +20,10 @@ class StaffInventoryPreferenceWiringTest {
         String method = source.substring(start, end);
 
         assertTrue(method.contains("transitioning(playerId)"));
+        assertTrue(method.contains("toolPreferenceWrites.add(playerId)"));
         assertTrue(method.contains("loaded.toolInventoryEnabled(playerId)"));
         assertTrue(method.contains("loaded.setToolInventoryEnabled(playerId, next, clock.instant())"));
+        assertTrue(method.contains("toolPreferenceWrites.remove(playerId)"));
     }
 
     @Test
