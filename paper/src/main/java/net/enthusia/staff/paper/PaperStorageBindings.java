@@ -34,6 +34,7 @@ import net.enthusia.staff.domain.ports.PunishmentRequestAlertStore;
 import net.enthusia.staff.domain.ports.PunishmentRequestStore;
 import net.enthusia.staff.domain.ports.ReportStore;
 import net.enthusia.staff.domain.ports.SanctionLookup;
+import net.enthusia.staff.domain.ports.StaffPreferenceStore;
 import net.enthusia.staff.domain.ports.StaffSessionStore;
 import net.enthusia.staff.domain.ports.VanishStore;
 import net.enthusia.staff.paper.account.PaperAccountLinkRuntime;
@@ -68,6 +69,7 @@ record PaperStorageBindings(
         AssetStores assets = new AssetStores(
                 runtime.freezeStore(),
                 runtime.staffSessionStore(),
+                runtime.staffPreferenceStore(),
                 runtime.vanishStore(),
                 runtime.inventoryJournalStore(),
                 runtime.inventoryRecoveryStore(),
@@ -168,6 +170,7 @@ record PaperStorageBindings(
     PunishmentRequestStore punishmentRequestStore() { return moderation.punishmentRequestStore(); }
     FreezeStore freezeStore() { return assets.freezeStore(); }
     StaffSessionStore staffSessionStore() { return assets.staffSessionStore(); }
+    StaffPreferenceStore staffPreferenceStore() { return assets.staffPreferenceStore(); }
     VanishStore vanishStore() { return assets.vanishStore(); }
     InventoryJournalStore inventoryJournalStore() { return assets.inventoryJournalStore(); }
     InventoryRecoveryStore inventoryRecoveryStore() { return assets.inventoryRecoveryStore(); }
@@ -194,6 +197,7 @@ record PaperStorageBindings(
     record AssetStores(
             FreezeStore freezeStore,
             StaffSessionStore staffSessionStore,
+            StaffPreferenceStore staffPreferenceStore,
             VanishStore vanishStore,
             InventoryJournalStore inventoryJournalStore,
             InventoryRecoveryStore inventoryRecoveryStore,
