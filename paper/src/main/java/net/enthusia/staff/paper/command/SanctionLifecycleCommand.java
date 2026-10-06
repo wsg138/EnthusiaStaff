@@ -25,7 +25,7 @@ import net.enthusia.staff.domain.auth.Actor;
 import net.enthusia.staff.domain.sanction.ExactSanctionChangeRequest;
 import net.enthusia.staff.domain.sanction.ExactSanctionChangeResult;
 import net.enthusia.staff.domain.sanction.SanctionChangeAction;
-import net.enthusia.staff.paper.api.StaffSessionService;
+import net.enthusia.staff.paper.api.StaffAuthorityService;
 import net.enthusia.staff.paper.auth.PaperActorResolver;
 import net.enthusia.staff.paper.config.ModerationFeatureSettings;
 import net.kyori.adventure.text.Component;
@@ -192,8 +192,8 @@ public final class SanctionLifecycleCommand {
     }
 
     private boolean activeDuty(UUID actorId) {
-        StaffSessionService sessions = plugin.getServer().getServicesManager().load(StaffSessionService.class);
-        return sessions != null && sessions.hasActiveSession(actorId);
+        StaffAuthorityService authority = plugin.getServer().getServicesManager().load(StaffAuthorityService.class);
+        return authority != null && authority.hasAuthority(actorId);
     }
 
     private static List<Component> render(
