@@ -82,6 +82,7 @@ public record IncidentAttributeDefinition(
             case INTEGER -> validateIntegerShape(allowed, minimum, maximum, maxLength);
             case ENUM -> validateEnumShape(allowed, minimum, maximum, maxLength);
             case TEXT -> validateTextShape(allowed, minimum, maximum, maxLength);
+            default -> throw new IllegalArgumentException("unsupported attribute kind " + kind);
         }
     }
 
