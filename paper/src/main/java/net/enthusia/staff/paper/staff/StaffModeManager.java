@@ -52,6 +52,7 @@ import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.plugin.java.JavaPlugin;
 
 public final class StaffModeManager implements Listener {
+    private static final String INVENTORY_EDIT_ACTION = "inventory-edit";
     public static final String UNRESTRICTED_PERMISSION = "enthusiastaff.identity.unrestricted";
     private static final String RANK_REMOVED_MESSAGE =
             "Your explicit staff rank is no longer assigned; restoring your saved state.";
@@ -1172,7 +1173,7 @@ public final class StaffModeManager implements Listener {
         StaffRank rank = rankForAction(player);
         boolean ender = event.getView().getTopInventory().getType() == InventoryType.ENDER_CHEST;
         if (isUnrestricted(player)) {
-            audit(player, rank, "inventory-edit",
+            audit(player, rank, INVENTORY_EDIT_ACTION,
                     event.getClick() + " container=" + event.getView().getTopInventory().getType()
                             + " item=" + describe(event.getCurrentItem()));
             return;
@@ -1183,7 +1184,7 @@ public final class StaffModeManager implements Listener {
         }
         StaffDutyTier tier = StaffDutyTier.of(rank);
         if (tier == StaffDutyTier.MOD || tier == StaffDutyTier.DEVELOPER || tier == StaffDutyTier.ADMIN) {
-            audit(player, rank, "inventory-edit",
+            audit(player, rank, INVENTORY_EDIT_ACTION,
                     event.getClick() + " container=" + event.getView().getTopInventory().getType()
                             + " item=" + describe(event.getCurrentItem()));
         }
@@ -1197,7 +1198,7 @@ public final class StaffModeManager implements Listener {
         StaffRank rank = rankForAction(player);
         boolean ender = event.getView().getTopInventory().getType() == InventoryType.ENDER_CHEST;
         if (isUnrestricted(player)) {
-            audit(player, rank, "inventory-edit",
+            audit(player, rank, INVENTORY_EDIT_ACTION,
                     "drag container=" + event.getView().getTopInventory().getType()
                             + " cursor=" + describe(event.getOldCursor()));
             return;
@@ -1210,7 +1211,7 @@ public final class StaffModeManager implements Listener {
         }
         StaffDutyTier tier = StaffDutyTier.of(rank);
         if (tier == StaffDutyTier.MOD || tier == StaffDutyTier.DEVELOPER || tier == StaffDutyTier.ADMIN) {
-            audit(player, rank, "inventory-edit",
+            audit(player, rank, INVENTORY_EDIT_ACTION,
                     "drag container=" + event.getView().getTopInventory().getType()
                             + " cursor=" + describe(event.getOldCursor()));
         }
