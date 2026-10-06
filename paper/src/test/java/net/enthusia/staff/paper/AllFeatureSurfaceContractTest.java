@@ -54,6 +54,7 @@ final class AllFeatureSurfaceContractTest {
             "freeze",
             "unfreeze",
             "staff",
+            "staffinv",
             "stafftools",
             "staffflags",
             "cheattester",
