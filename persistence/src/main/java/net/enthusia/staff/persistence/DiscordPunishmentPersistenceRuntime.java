@@ -1,10 +1,16 @@
 package net.enthusia.staff.persistence;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.zaxxer.hikari.HikariDataSource;
 import java.time.Instant;
 import net.enthusia.staff.domain.moderation.DiscordUserId;
 import net.enthusia.staff.domain.moderation.ModerationSubjectId;
+import net.enthusia.staff.domain.ports.CrossPlatformIdentityLookup;
+import net.enthusia.staff.domain.ports.CrossPlatformPunishmentStore;
 import net.enthusia.staff.domain.ports.DiscordPunishmentRepository;
+import net.enthusia.staff.persistence.migration.FencedCrossPlatformPunishmentStore;
 
 /**
  * Narrow read/write D07 runtime for the isolated staff bot.
@@ -17,12 +23,25 @@ public final class DiscordPunishmentPersistenceRuntime implements AutoCloseable 
     private final JdbcDiscordPunishmentRepository punishments;
     private final JdbcDiscordModerationPersistenceStore identities;
     private final JdbcMinecraftBanDiscordNotificationStore minecraftBanNotifications;
+    private final CrossPlatformPunishmentStore crossPlatformPunishments;
+    private final CrossPlatformIdentityLookup crossPlatformIdentities;
+    private final JdbcCrossPlatformPunishmentStatusReader crossPlatformStatus;
 
     private DiscordPunishmentPersistenceRuntime(HikariDataSource dataSource) {
         this.dataSource = dataSource;
+        ObjectMapper json = new ObjectMapper()
+                .registerModule(new JavaTimeModule())
+                .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
         this.punishments = new JdbcDiscordPunishmentRepository(dataSource);
         this.identities = new JdbcDiscordModerationPersistenceStore(dataSource);
         this.minecraftBanNotifications = new JdbcMinecraftBanDiscordNotificationStore(dataSource);
+        JdbcModerationStore moderation = new JdbcModerationStore(dataSource, json);
+        this.crossPlatformPunishments = new FencedCrossPlatformPunishmentStore(
+                dataSource,
+                new JdbcCrossPlatformPunishmentStore(dataSource, moderation, punishments)
+        );
+        this.crossPlatformIdentities = new DiscordCrossPlatformIdentityLookup(identities);
+        this.crossPlatformStatus = new JdbcCrossPlatformPunishmentStatusReader(dataSource);
     }
 
     public static DiscordPunishmentPersistenceRuntime open(DatabaseConfig database) {
@@ -42,6 +61,18 @@ public final class DiscordPunishmentPersistenceRuntime implements AutoCloseable 
 
     public JdbcMinecraftBanDiscordNotificationStore minecraftBanNotifications() {
         return minecraftBanNotifications;
+    }
+
+    public CrossPlatformPunishmentStore crossPlatformPunishments() {
+        return crossPlatformPunishments;
+    }
+
+    public CrossPlatformIdentityLookup crossPlatformIdentities() {
+        return crossPlatformIdentities;
+    }
+
+    public JdbcCrossPlatformPunishmentStatusReader crossPlatformStatus() {
+        return crossPlatformStatus;
     }
 
     @Override

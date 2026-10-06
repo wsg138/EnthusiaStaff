@@ -66,3 +66,49 @@ test('uncertain confirmation retains its draft for status recovery and blocks ov
   assert.equal(context.fixture.uncertain,false);
   assert.equal(context.fixture.result.caseId,'CASE-2');
 });
+
+
+test('Both scope sends separate Discord and Minecraft intents and immutable confirmation', async () => {
+  const calls = [];
+  const context = runtime(async (operation,input) => {
+    calls.push({operation,input});
+    if (operation === 'prepare') {
+      return {
+        confirmationId:'33333333-2222-4333-8444-555555555555',
+        minecraftTargetId:'11111111-2222-4333-8444-555555555555',
+        reasonId:'chat.spam',
+        reason:'Chat spam',
+        minecraftConsequences:[{type:'MUTE',lengthKind:'TEMPORARY',durationSeconds:3600}],
+        discordIntent:{type:'MUTE',length:{kind:'TEMPORARY'}},
+        expiresAt:'2026-10-06T05:00:00Z'
+      };
+    }
+    return {
+      state:'PENDING',
+      caseId:'CASE-BOTH-1',
+      minecraftState:'PENDING',
+      minecraftAttempts:0,
+      discordState:'PENDING_APPLY',
+      discordExternalApplied:false,
+      discordDmOutcome:'NOT_ATTEMPTED'
+    };
+  });
+  context.liveActionCapabilities.bothEnabled = true;
+  context.liveActionCapabilities.configuredReasons = [{
+    id:'chat.spam', family:'chat', label:'Chat spam',
+    ladder:[{ordinal:0,label:'Mute',consequences:[{type:'MUTE',duration:'1 hour'}]}]
+  }];
+  context.fixture.scope = 'BOTH';
+  const preparedPayload = context.minecraftActionPayload(context.fixture,'prepare');
+  assert.equal(preparedPayload.scope,'BOTH');
+  assert.equal(preparedPayload.minecraftIntent.reasonId,'chat.spam');
+  assert.equal(preparedPayload.intent.type,'MUTE');
+  assert.equal(preparedPayload.intent.duration,'1h');
+  await context.performMinecraftAction('prepare');
+  assert.equal(calls.length,1);
+  assert.equal(calls[0].input.scope,'BOTH');
+  await context.performMinecraftAction('confirm');
+  assert.deepEqual(Object.keys(calls[1].input).sort(),['confirmationId','scope','targetKey']);
+  assert.equal(calls[1].input.scope,'BOTH');
+  assert.equal(context.fixture.result.caseId,'CASE-BOTH-1');
+});

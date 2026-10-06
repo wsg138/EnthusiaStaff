@@ -17,7 +17,7 @@ window.renderWorkflow = function () {
 window.openWorkflow = function () {
   if (state.session?.staging !== false || !liveActionCapabilities?.minecraftEnabled) return originalLiveOpenWorkflow();
   if (state.deleting.size) return showToast('Clear message deletion selections before issuing a Minecraft punishment.', true);
-  minecraftWorkflow = {target:'', family:'', reason:'', explanation:'', prepared:null, result:null, busy:false, uncertain:false};
+  minecraftWorkflow = {scope:'MINECRAFT', target:'', family:'', reason:'', explanation:'', prepared:null, result:null, busy:false, uncertain:false};
   state.workflow = {minecraft:true};
   const accounts = liveModeration.bootstrap?.linkedAccounts || [];
   if (accounts.length === 1) minecraftWorkflow.target = accounts[0].playerId;
@@ -33,16 +33,28 @@ window.openWorkflow = function () {
 function renderScopeChoice() {
   $('#workflowTitle').textContent = 'Choose punishment scope';
   $('#workflowSteps').replaceChildren();
-  $('#workflowBody').replaceChildren(element('p',{text:'Choose the account and service this punishment applies to.'}));
-  const minecraft = buttonNode('Minecraft','button primary',{});
-  minecraft.addEventListener('click',renderMinecraftPunishment);
+  $('#workflowBody').replaceChildren(element('p',{text:'Choose exactly where this punishment applies. Both uses one atomic case and separate platform consequences.'}));
   const discord = buttonNode('Discord','button secondary',{});
   discord.addEventListener('click',() => {
     minecraftWorkflow = null;
     $('#punishmentDialog').close();
     originalLiveOpenWorkflow();
   });
-  $('#workflowFooter').replaceChildren(minecraft,discord);
+  const minecraft = buttonNode('Minecraft','button secondary',{});
+  minecraft.addEventListener('click',() => {
+    minecraftWorkflow.scope = 'MINECRAFT';
+    renderMinecraftPunishment();
+  });
+  const buttons = [discord,minecraft];
+  if (liveActionCapabilities?.bothEnabled) {
+    const both = buttonNode('Both','button primary',{});
+    both.addEventListener('click',() => {
+      minecraftWorkflow.scope = 'BOTH';
+      renderMinecraftPunishment();
+    });
+    buttons.push(both);
+  }
+  $('#workflowFooter').replaceChildren(...buttons);
   $('#punishmentDialog').showModal();
 }
 
@@ -55,10 +67,64 @@ $('#punishmentDialog').addEventListener('close', () => {
 });
 
 function minecraftActionPayload(workflow, operation) {
-  const payload = {targetKey:liveModeration.bootstrap?.targetKey, minecraftTarget:workflow.prepared?.targetId || workflow.target};
+  if (workflow.scope === 'BOTH') {
+    const payload = {targetKey:liveModeration.bootstrap?.targetKey, scope:'BOTH'};
+    if (operation === 'prepare') {
+      payload.minecraftTarget = workflow.target;
+      payload.minecraftIntent = {reasonId:workflow.reason, explanation:workflow.explanation};
+      payload.intent = bothDiscordIntent(workflow);
+    } else {
+      payload.confirmationId = workflow.prepared.confirmationId;
+    }
+    return payload;
+  }
+  const payload = {
+    targetKey:liveModeration.bootstrap?.targetKey,
+    scope:'MINECRAFT',
+    minecraftTarget:workflow.prepared?.targetId || workflow.target
+  };
   if (operation === 'prepare') payload.minecraftIntent = {reasonId:workflow.reason, explanation:workflow.explanation};
   else payload.confirmationId = workflow.prepared.confirmationId;
   return payload;
+}
+
+function bothDiscordIntent(workflow) {
+  const reasons = Array.isArray(liveActionCapabilities?.configuredReasons)
+    ? liveActionCapabilities.configuredReasons : [];
+  const reason = reasons.find(value => value.id === workflow.reason);
+  if (!reason) throw new Error('Configured reason is unavailable.');
+  const first = Array.isArray(reason.ladder) ? reason.ladder[0] : null;
+  const consequence = (first?.consequences || []).find(value =>
+    ['WARNING','KICK','MUTE','PUBLIC_MUTE','BAN','NETWORK_BAN','NETWORK_IDENTITY_BAN'].includes(value.type));
+  if (!consequence) throw new Error('This configured reason has no Discord-compatible consequence.');
+  const type = bothDiscordType(consequence.type);
+  return {
+    type,
+    duration:bothDiscordDuration(type, consequence.duration),
+    reason:reason.label,
+    explanation:workflow.explanation || '',
+    restriction:null
+  };
+}
+
+function bothDiscordType(type) {
+  if (type === 'WARNING') return 'WARNING';
+  if (type === 'KICK') return 'KICK';
+  if (type === 'MUTE' || type === 'PUBLIC_MUTE') return 'MUTE';
+  return 'BAN';
+}
+
+function bothDiscordDuration(type, value) {
+  if (type === 'WARNING' || type === 'KICK') return 'instant';
+  const normalized = String(value || '').trim().toLowerCase();
+  if (normalized === 'permanent') return 'permanent';
+  const match = /^([1-9][0-9]*)\s+(minutes?|hours?|days?|months?)$/.exec(normalized);
+  if (!match) throw new Error('Configured Discord consequence has an unsupported duration.');
+  const amount = Number(match[1]);
+  if (match[2].startsWith('minute')) return amount + 'm';
+  if (match[2].startsWith('hour')) return amount + 'h';
+  if (match[2].startsWith('month')) return amount * 30 + 'd';
+  return amount + 'd';
 }
 
 async function performMinecraftAction(operation) {
@@ -80,7 +146,9 @@ async function performMinecraftAction(operation) {
 
 function applyMinecraftResult(workflow, operation, result) {
   if (operation === 'prepare') {
-    workflow.prepared = result;
+    workflow.prepared = workflow.scope === 'BOTH'
+      ? {...result, targetId:result.minecraftTargetId, targetName:workflow.target, consequences:result.minecraftConsequences}
+      : result;
     return;
   }
   workflow.result = result;
@@ -119,7 +187,9 @@ function prepareMinecraftFrame(workflow, body, footer) {
   $('#punishmentDialog').setAttribute('aria-busy', String(workflow.busy));
   body.replaceChildren();
   footer.replaceChildren();
-  body.appendChild(element('p',{className:'muted',text:'Uses the network’s configured reasons, escalation rules, and current staff authority. Discord enforcement stays separate.'}));
+  body.appendChild(element('p',{className:'muted',text:workflow.scope === 'BOTH'
+    ? 'Both uses one case: Minecraft policy is prepared by Paper and the Discord consequence is persisted atomically with it.'
+    : 'Uses the network’s configured reasons, escalation rules, and current staff authority. Discord enforcement stays separate.'}));
 }
 
 function renderMinecraftPrepare(workflow, body, footer) {
@@ -212,9 +282,33 @@ function renderMinecraftReasonChoices(workflow, body, reasons) {
 
 function renderPreparedMinecraftSummary(workflow, body) {
   const prepared = workflow.prepared;
-  body.appendChild(summaryList([['Minecraft player',prepared.targetName],['Player UUID',prepared.targetId],['Reason',prepared.reason],
-    ['Consequences',(prepared.consequences || []).map(value => value.type + ' · ' + value.duration).join(', ')],
-    ['Internal explanation',prepared.explanation || 'None']]));
+  const minecraftConsequences = (prepared.consequences || []).map(value => formatMinecraftConsequence(value)).join(', ');
+  const rows = [
+    ['Scope',workflow.scope === 'BOTH' ? 'Discord + Minecraft' : 'Minecraft'],
+    ['Minecraft player',prepared.targetName],
+    ['Player UUID',prepared.targetId],
+    ['Reason',prepared.reason],
+    ['Minecraft consequences',minecraftConsequences || 'None'],
+    ['Internal explanation',prepared.explanation || workflow.explanation || 'None']
+  ];
+  if (workflow.scope === 'BOTH') {
+    rows.push(['Discord consequence',formatDiscordIntent(prepared.discordIntent)]);
+  }
+  body.appendChild(summaryList(rows));
+}
+
+function formatMinecraftConsequence(value) {
+  if (value.duration) return value.type + ' · ' + value.duration;
+  if (value.durationSeconds != null) return value.type + ' · ' + value.durationSeconds + ' seconds';
+  return value.type + ' · ' + String(value.lengthKind || 'configured').toLowerCase();
+}
+
+function formatDiscordIntent(intent) {
+  if (!intent) return 'Unavailable';
+  const length = intent.length || {};
+  let duration = String(length.kind || 'configured').toLowerCase();
+  if (length.temporary != null) duration = String(length.temporary);
+  return intent.type + ' · ' + duration;
 }
 
 function completedMinecraftResult(workflow) {
@@ -222,9 +316,26 @@ function completedMinecraftResult(workflow) {
 }
 
 function renderMinecraftResult(workflow, body, footer) {
-  body.appendChild(element('h3',{text:workflow.result.state === 'APPLIED' ? 'Punishment committed' : 'Approval requested'}));
-  body.appendChild(element('p',{text:workflow.result.state === 'APPLIED' ? 'Case: ' + workflow.result.caseId
-    : 'Request: ' + workflow.result.requestId + '. No punishment is applied until an authorized reviewer approves it.'}));
+  if (workflow.scope === 'BOTH') {
+    body.appendChild(element('h3',{text:workflow.result.state === 'APPLIED'
+      ? 'Both-platform punishment applied'
+      : workflow.result.state === 'PARTIAL_FAILURE' ? 'Partial failure — recovery required' : 'Both-platform punishment pending'}));
+    body.appendChild(summaryList([
+      ['Case',workflow.result.caseId || 'Unknown'],
+      ['Minecraft delivery',workflow.result.minecraftState || 'Unknown'],
+      ['Minecraft attempts',String(workflow.result.minecraftAttempts ?? 0)],
+      ['Discord state',workflow.result.discordState || 'Unknown'],
+      ['Discord external effect',workflow.result.discordExternalApplied ? 'Confirmed' : 'Not yet confirmed'],
+      ['Discord notification',workflow.result.discordDmOutcome || 'Unknown']
+    ]));
+    if (workflow.result.minecraftError) {
+      body.appendChild(element('div',{className:'alert warning',text:'Minecraft delivery error: ' + workflow.result.minecraftError}));
+    }
+  } else {
+    body.appendChild(element('h3',{text:workflow.result.state === 'APPLIED' ? 'Punishment committed' : 'Approval requested'}));
+    body.appendChild(element('p',{text:workflow.result.state === 'APPLIED' ? 'Case: ' + workflow.result.caseId
+      : 'Request: ' + workflow.result.requestId + '. No punishment is applied until an authorized reviewer approves it.'}));
+  }
   const done = buttonNode('Done','button primary',{});
   done.addEventListener('click',closeWorkflow);
   footer.appendChild(done);
@@ -238,7 +349,9 @@ function renderMinecraftConfirmation(workflow, body, footer) {
   status.disabled = workflow.busy;
   status.addEventListener('click',() => performMinecraftAction('status'));
   footer.appendChild(status);
-  const confirm = buttonNode(workflow.busy ? 'Working…' : 'Confirm Minecraft punishment','button primary',{});
+  const confirm = buttonNode(
+    workflow.busy ? 'Working…' : workflow.scope === 'BOTH' ? 'Confirm Both-platform punishment' : 'Confirm Minecraft punishment',
+    'button primary',{});
   confirm.disabled = workflow.busy || workflow.uncertain;
   confirm.addEventListener('click',() => performMinecraftAction('confirm'));
   footer.appendChild(confirm);

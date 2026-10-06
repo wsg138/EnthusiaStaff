@@ -113,4 +113,28 @@ class DiscordStaffAuthorityAuthenticatorTest {
         assertFalse(replayed.accepted());
         assertNull(authenticator.responseSignature(replayed, 401, ""));
     }
+    @Test
+    void privateSplitBodyAuthenticationBindsBodyAndRejectsReplay() throws Exception {
+        Clock clock = Clock.fixed(NOW, ZoneOffset.UTC);
+        DiscordStaffAuthorityAuthenticator authenticator = new DiscordStaffAuthorityAuthenticator(
+                CREDENTIAL, true, clock, new ReplayGuard(8, Duration.ofMinutes(2)));
+        String target = "/v1/cross-platform/minecraft-prepare";
+        String body = "{\"caseId\":\"0123456789ABCDEF\"}";
+        StaffAuthorityHttpSigning.RequestProof proof = StaffAuthorityHttpSigning.signBodyRequest(
+                CREDENTIAL, "POST", target, body, NOW, NONCE);
+
+        assertFalse(authenticator.authenticateBody(
+                InetAddress.getByName("10.0.0.2"), "POST", target, body + "x", null,
+                proof.timestamp(), proof.nonce(), proof.signature()
+        ).accepted());
+        assertTrue(authenticator.authenticateBody(
+                InetAddress.getByName("10.0.0.2"), "POST", target, body, null,
+                proof.timestamp(), proof.nonce(), proof.signature()
+        ).accepted());
+        assertFalse(authenticator.authenticateBody(
+                InetAddress.getByName("10.0.0.2"), "POST", target, body, null,
+                proof.timestamp(), proof.nonce(), proof.signature()
+        ).accepted());
+    }
+
 }
