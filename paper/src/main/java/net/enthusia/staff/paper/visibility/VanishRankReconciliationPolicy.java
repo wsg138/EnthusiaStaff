@@ -29,13 +29,23 @@ final class VanishRankReconciliationPolicy {
             StaffRank liveRank,
             StaffModeState staffModeState
     ) {
+        return vanishAction(vanished, durableRank, liveRank, staffModeState, false);
+    }
+
+    static VanishAction vanishAction(
+            boolean vanished,
+            StaffRank durableRank,
+            StaffRank liveRank,
+            StaffModeState staffModeState,
+            boolean unrestricted
+    ) {
         if (!vanished) {
             return durableRank == null ? VanishAction.NONE : VanishAction.DISABLE;
         }
         if (!isPlayerRank(liveRank)) {
             return VanishAction.DISABLE;
         }
-        VanishAction sessionAction = requiresStaffMode(liveRank)
+        VanishAction sessionAction = requiresStaffMode(liveRank) && !unrestricted
                 ? staffModeAction(staffModeState)
                 : null;
         return sessionAction != null
