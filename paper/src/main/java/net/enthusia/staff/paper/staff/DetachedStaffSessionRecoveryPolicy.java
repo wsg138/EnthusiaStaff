@@ -20,6 +20,7 @@ final class DetachedStaffSessionRecoveryPolicy {
             case EXITING, RECOVERY_REQUIRED -> Action.RETIRE_RESTORED_LEASE;
             case ENTERING -> Action.HOLD_INVALID_TRANSITION;
             case CLOSED -> Action.CLEAR_CLOSED;
+            default -> throw new IllegalStateException("Unsupported detached Staff session state: " + state);
         };
     }
 }
