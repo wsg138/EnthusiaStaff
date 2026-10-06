@@ -21,6 +21,7 @@ import net.enthusia.staff.domain.report.ReportPolicy;
 import net.enthusia.staff.domain.report.ReportPolicyRuntime;
 import net.enthusia.staff.paper.api.InventoryLockService;
 import net.enthusia.staff.paper.api.StaffModeQueryService;
+import net.enthusia.staff.paper.api.StaffAuthorityService;
 import net.enthusia.staff.paper.api.StaffSessionService;
 import net.enthusia.staff.paper.api.StaffVisibilityService;
 import net.enthusia.staff.paper.audit.StaffActionAuditListener;
@@ -186,6 +187,12 @@ record PaperRuntimeComponents(
         plugin.getServer().getServicesManager().register(
                 StaffSessionService.class,
                 staffMode::authorityActive,
+                plugin,
+                ServicePriority.Normal
+        );
+        plugin.getServer().getServicesManager().register(
+                StaffAuthorityService.class,
+                staffMode::authorityActiveOrUnrestricted,
                 plugin,
                 ServicePriority.Normal
         );
