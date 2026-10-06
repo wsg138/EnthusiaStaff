@@ -46,6 +46,8 @@ final class PunishmentGuiRenderer {
     static final int VISIBILITY_SLOT = 37;
     static final int NOTE_SLOT = 39;
     static final int SCOPE_SLOT = 40;
+    static final int DISCORD_ACTION_SLOT = 42;
+    static final int DISCORD_DURATION_SLOT = 44;
 
     private static final int TARGET_SLOT = 4;
     private static final int ACTIVE_SANCTIONS_SLOT = 6;
@@ -244,6 +246,10 @@ final class PunishmentGuiRenderer {
         inventory.setItem(NOTE_SLOT, noteItem(draft));
         inventory.setItem(SCOPE_SLOT, scopeItem(state));
         inventory.setItem(41, historySummaryItem(state));
+        if (state.scope() != PaperPunishmentScope.MINECRAFT) {
+            inventory.setItem(DISCORD_ACTION_SLOT, discordActionItem(state));
+            inventory.setItem(DISCORD_DURATION_SLOT, discordDurationItem(state));
+        }
         inventory.setItem(43, authorityItem(actor, policy));
 
         inventory.setItem(BACK_SLOT, button(Material.ARROW, "Back · Reasons", NamedTextColor.AQUA));
@@ -585,6 +591,54 @@ final class PunishmentGuiRenderer {
         }
         lore.add(Component.text("Click to change: Minecraft → Discord → Both.", NamedTextColor.YELLOW));
         return item(Material.COMPASS, "Scope · " + state.scope().label(), NamedTextColor.AQUA, lore);
+    }
+
+    private static ItemStack discordActionItem(PunishmentGuiState.Review state) {
+        if (state.discordIntent().isEmpty()) {
+            return item(
+                    Material.GRAY_DYE,
+                    "Discord Action Unavailable",
+                    NamedTextColor.RED,
+                    List.of(Component.text("Choose another scope or configured reason.", NamedTextColor.YELLOW))
+            );
+        }
+        net.enthusia.staff.domain.discord.DiscordPunishmentIntent intent = state.discordIntent().orElseThrow();
+        return item(
+                Material.PAPER,
+                "Discord Action · " + humanize(intent.type().name()),
+                NamedTextColor.AQUA,
+                List.of(
+                        Component.text("Independent from the Minecraft consequence.", NamedTextColor.GRAY),
+                        Component.text("Click to cycle Warning → Mute → Kick → Ban.", NamedTextColor.YELLOW)
+                )
+        );
+    }
+
+    private static ItemStack discordDurationItem(PunishmentGuiState.Review state) {
+        if (state.discordIntent().isEmpty()) {
+            return item(Material.GRAY_DYE, "Discord Duration Unavailable", NamedTextColor.GRAY, List.of());
+        }
+        net.enthusia.staff.domain.discord.DiscordPunishmentIntent intent = state.discordIntent().orElseThrow();
+        boolean instant = intent.type() == net.enthusia.staff.domain.auth.DiscordConsequenceType.WARNING
+                || intent.type() == net.enthusia.staff.domain.auth.DiscordConsequenceType.KICK;
+        if (instant) {
+            return item(
+                    Material.GRAY_DYE,
+                    "Discord Duration · Instant",
+                    NamedTextColor.GRAY,
+                    List.of(Component.text("Warnings and kicks have no duration.", NamedTextColor.DARK_GRAY))
+            );
+        }
+        return item(
+                Material.CLOCK,
+                "Discord Duration · " + describeLength(intent.length()),
+                NamedTextColor.AQUA,
+                List.of(
+                        Component.text("This duration is independent from Minecraft.", NamedTextColor.GRAY),
+                        Component.text("Click to cycle allowed duration choices.", NamedTextColor.YELLOW),
+                        Component.text("Current staff ceilings are checked at confirmation.", NamedTextColor.GRAY)
+                )
+        );
     }
 
     private static String describeLength(SanctionLength length) {
