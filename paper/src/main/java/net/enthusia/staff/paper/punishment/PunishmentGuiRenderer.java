@@ -591,8 +591,26 @@ final class PunishmentGuiRenderer {
         return switch (length.kind()) {
             case INSTANT -> "Instant";
             case PERMANENT -> "Permanent";
-            case TEMPORARY -> length.temporary().map(PunishmentGuiRenderer::formatDuration).orElse("Temporary");
+            case TEMPORARY -> length.temporary().map(PunishmentGuiRenderer::durationLabel).orElse("Temporary");
         };
+    }
+
+    private static String durationLabel(Duration duration) {
+        long seconds = duration.getSeconds();
+        if (seconds % 86_400 == 0) {
+            return unitLabel(seconds / 86_400, "day");
+        }
+        if (seconds % 3_600 == 0) {
+            return unitLabel(seconds / 3_600, "hour");
+        }
+        if (seconds % 60 == 0) {
+            return unitLabel(seconds / 60, "minute");
+        }
+        return unitLabel(seconds, "second");
+    }
+
+    private static String unitLabel(long amount, String unit) {
+        return amount + " " + unit + (amount == 1 ? "" : "s");
     }
 
     private static ItemStack noteItem(PunishmentDraft draft) {
