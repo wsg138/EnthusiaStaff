@@ -908,6 +908,7 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
                         () -> storageValue(PaperStorageBindings::reportStore),
                         () -> storageValue(PaperStorageBindings::freezeStore),
                         () -> storageValue(PaperStorageBindings::staffSessionStore),
+                        () -> storageValue(PaperStorageBindings::staffPreferenceStore),
                         () -> storageValue(PaperStorageBindings::vanishStore),
                         () -> storageValue(PaperStorageBindings::inventoryJournalStore),
                         () -> storageValue(PaperStorageBindings::playerDirectory),
