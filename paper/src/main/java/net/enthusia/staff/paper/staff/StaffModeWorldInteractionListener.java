@@ -39,6 +39,8 @@ import org.bukkit.inventory.InventoryHolder;
  * are unrestricted but audited; Developer remains separate from moderation authority.</p>
  */
 public final class StaffModeWorldInteractionListener implements Listener {
+    private static final String CONTAINER_EDIT_ACTION = CONTAINER_EDIT_ACTION;
+
     private final StaffModeManager staffMode;
 
     public StaffModeWorldInteractionListener(StaffModeManager staffMode) {
@@ -102,14 +104,27 @@ public final class StaffModeWorldInteractionListener implements Listener {
         if (!onDuty(player)) {
             return;
         }
-        Action action = event.getAction();
         if (staffMode.isUnrestricted(player)) {
-            if (action != Action.LEFT_CLICK_AIR && action != Action.RIGHT_CLICK_AIR) {
-                staffMode.logStaffAction(player, "block-interact",
-                        action + " " + describe(event.getClickedBlock()));
-            }
+            auditUnrestrictedInteraction(player, event);
             return;
         }
+        enforceRankedInteraction(player, event);
+    }
+
+    private void auditUnrestrictedInteraction(Player player, PlayerInteractEvent event) {
+        Action action = event.getAction();
+        if (action == Action.LEFT_CLICK_AIR || action == Action.RIGHT_CLICK_AIR) {
+            return;
+        }
+        staffMode.logStaffAction(
+                player,
+                "block-interact",
+                action + " " + describe(event.getClickedBlock())
+        );
+    }
+
+    private void enforceRankedInteraction(Player player, PlayerInteractEvent event) {
+        Action action = event.getAction();
         StaffDutyTier tier = staffMode.dutyTier(player);
         if (action == Action.RIGHT_CLICK_BLOCK
                 && isContainer(event.getClickedBlock())
@@ -124,8 +139,11 @@ public final class StaffModeWorldInteractionListener implements Listener {
         if (StaffModeWorldInteractionPolicy.logsWorldInteraction(tier)
                 && action != Action.LEFT_CLICK_AIR
                 && action != Action.RIGHT_CLICK_AIR) {
-            staffMode.logStaffAction(player, "block-interact",
-                    action + " " + describe(event.getClickedBlock()));
+            staffMode.logStaffAction(
+                    player,
+                    "block-interact",
+                    action + " " + describe(event.getClickedBlock())
+            );
         }
     }
 
@@ -139,7 +157,7 @@ public final class StaffModeWorldInteractionListener implements Listener {
             return;
         }
         if (staffMode.isUnrestricted(player)) {
-            staffMode.logStaffAction(player, "container-edit",
+            staffMode.logStaffAction(player, CONTAINER_EDIT_ACTION,
                     top.getType() + " raw-slot=" + event.getRawSlot() + " action=" + event.getAction());
             return;
         }
@@ -152,7 +170,7 @@ public final class StaffModeWorldInteractionListener implements Listener {
             return;
         }
         if (StaffModeWorldInteractionPolicy.logsContainerEdit(tier)) {
-            staffMode.logStaffAction(player, "container-edit",
+            staffMode.logStaffAction(player, CONTAINER_EDIT_ACTION,
                     top.getType() + " raw-slot=" + event.getRawSlot() + " action=" + event.getAction());
         }
     }
@@ -169,7 +187,7 @@ public final class StaffModeWorldInteractionListener implements Listener {
         if (staffMode.isUnrestricted(player)) {
             boolean touchesContainer = event.getRawSlots().stream().anyMatch(slot -> slot < top.getSize());
             if (touchesContainer) {
-                staffMode.logStaffAction(player, "container-edit", top.getType() + " drag");
+                staffMode.logStaffAction(player, CONTAINER_EDIT_ACTION, top.getType() + " drag");
             }
             return;
         }
@@ -180,7 +198,7 @@ public final class StaffModeWorldInteractionListener implements Listener {
         }
         boolean touchesProtectedContainer = event.getRawSlots().stream().anyMatch(slot -> slot < top.getSize());
         if (touchesProtectedContainer && StaffModeWorldInteractionPolicy.logsContainerEdit(tier)) {
-            staffMode.logStaffAction(player, "container-edit", top.getType() + " drag");
+            staffMode.logStaffAction(player, CONTAINER_EDIT_ACTION, top.getType() + " drag");
         }
     }
 
