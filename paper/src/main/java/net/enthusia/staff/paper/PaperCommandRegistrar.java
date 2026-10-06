@@ -24,6 +24,7 @@ import net.enthusia.staff.domain.ports.ReportStore;
 import net.enthusia.staff.domain.ports.SanctionLookup;
 import net.enthusia.staff.paper.account.PaperOnlinePlayerVerifier;
 import net.enthusia.staff.paper.auth.ActiveDutyAuthorizationPolicy;
+import net.enthusia.staff.paper.auth.LuckPermsStaffActorLookup;
 import net.enthusia.staff.paper.client.ClientEvidenceCollector;
 import net.enthusia.staff.paper.command.AccountLinkCommand;
 import net.enthusia.staff.paper.command.CaseCommand;
@@ -62,6 +63,8 @@ import net.enthusia.staff.paper.integration.RoseChatIntegration;
 import net.enthusia.staff.paper.inventory.ConfiscationCoordinator;
 import net.enthusia.staff.paper.inventory.InventoryCoordinator;
 import net.enthusia.staff.paper.inventory.InventoryRecoveryCoordinator;
+import net.enthusia.staff.paper.punishment.PaperCrossPlatformConfiguration;
+import net.enthusia.staff.paper.punishment.PaperCrossPlatformPunishmentService;
 import net.enthusia.staff.paper.punishment.PunishmentGuiController;
 import net.enthusia.staff.paper.punishment.PunishmentRequestGuiController;
 import net.enthusia.staff.paper.report.ChatContextBuffer;
@@ -175,6 +178,12 @@ final class PaperCommandRegistrar {
         Supplier<SanctionLookup> sanctions = storage(PaperStorageBindings::sanctionLookup);
         Supplier<ReportStore> reports = storage(PaperStorageBindings::reportStore);
         AuthorizationPolicy activeAuthorization = activeAuthorization();
+        Optional<PaperCrossPlatformConfiguration> crossPlatformConfiguration =
+                PaperCrossPlatformConfiguration.fromSystemEnvironment();
+        java.util.function.Function<java.util.UUID, Optional<net.enthusia.staff.domain.auth.Actor>> targetStaff =
+                LuckPermsStaffActorLookup.discover(plugin());
+        Supplier<PaperCrossPlatformPunishmentService> crossPlatform =
+                crossPlatformPunishments(crossPlatformConfiguration, activeAuthorization, targetStaff);
         PunishmentGuiController punishmentGui = new PunishmentGuiController(
                 new PunishmentGuiController.Dependencies(
                         plugin(),
@@ -189,6 +198,7 @@ final class PaperCommandRegistrar {
                         sanctions,
                         reports,
                         moderationSettings::current,
+                        crossPlatform,
                         workers()
                 )
         );
@@ -377,6 +387,34 @@ final class PaperCommandRegistrar {
                 plugin().getCommand(name),
                 name + " command is missing from plugin.yml"
         );
+    }
+
+    private Supplier<PaperCrossPlatformPunishmentService> crossPlatformPunishments(
+            Optional<PaperCrossPlatformConfiguration> configuration,
+            AuthorizationPolicy activeAuthorization,
+            java.util.function.Function<java.util.UUID, Optional<net.enthusia.staff.domain.auth.Actor>> targetStaff
+    ) {
+        return () -> {
+            PaperCrossPlatformConfiguration active = configuration.orElse(null);
+            PaperStorageBindings bindings = dependencies.storage().get().orElse(null);
+            if (active == null || bindings == null) {
+                return null;
+            }
+            return new PaperCrossPlatformPunishmentService(
+                    clock(),
+                    writeMode(),
+                    bindings.punishmentService(),
+                    reasons(),
+                    bindings.runtime().discordModerationPersistenceStore(),
+                    bindings.runtime().crossPlatformPunishmentStore(),
+                    bindings.runtime().crossPlatformIdentityLookup(),
+                    bindings.runtime().discordPunishmentRepository(),
+                    bindings.runtime().crossPlatformPunishmentStatus(),
+                    active,
+                    activeAuthorization,
+                    targetStaff
+            );
+        };
     }
 
     private <T> Supplier<T> storage(Function<PaperStorageBindings, T> selector) {
