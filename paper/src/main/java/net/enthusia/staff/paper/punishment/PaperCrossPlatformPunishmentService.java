@@ -126,8 +126,14 @@ public final class PaperCrossPlatformPunishmentService {
         ));
     }
 
-    Outcome confirm(PaperPunishmentScope scope, Actor actor, PunishmentDraft draft) {
-        if (scope == null || scope == PaperPunishmentScope.MINECRAFT || actor == null || draft == null) {
+    Outcome confirm(
+            PaperPunishmentScope scope,
+            Actor actor,
+            PunishmentDraft draft,
+            DiscordPunishmentIntent selectedDiscordIntent
+    ) {
+        if (scope == null || scope == PaperPunishmentScope.MINECRAFT || actor == null || draft == null
+                || selectedDiscordIntent == null) {
             throw new IllegalArgumentException("Discord/Both confirmation fields must be present");
         }
         if (!actor.id().equals(draft.actorId()) || draft.expiredAt(clock.instant())) {
@@ -145,9 +151,14 @@ public final class PaperCrossPlatformPunishmentService {
         if (replay.isPresent()) {
             return recovered(scope, replay.orElseThrow().punishment());
         }
+        DiscordPunishmentIntent currentDiscordIntent =
+                currentIntent(draft, selectedDiscordIntent).orElse(null);
+        if (currentDiscordIntent == null) {
+            return unsupportedDiscordConsequence();
+        }
         return scope == PaperPunishmentScope.BOTH
-                ? confirmBoth(actor, draft, link, punishmentId)
-                : confirmDiscord(actor, draft, link, punishmentId);
+                ? confirmBoth(actor, draft, link, punishmentId, currentDiscordIntent)
+                : confirmDiscord(actor, draft, link, punishmentId, currentDiscordIntent);
     }
 
     Outcome status(PaperPunishmentScope scope, UUID punishmentId) {
@@ -163,7 +174,8 @@ public final class PaperCrossPlatformPunishmentService {
             Actor actor,
             PunishmentDraft draft,
             TargetLink link,
-            UUID punishmentId
+            UUID punishmentId,
+            DiscordPunishmentIntent selectedDiscordIntent
     ) {
         CaseId evaluationCase = caseId(draft.draftId());
         CreatePunishmentRequest minecraftRequest = request(draft, actor, "d08:paper-discord:" + draft.draftId());
@@ -176,12 +188,7 @@ public final class PaperCrossPlatformPunishmentService {
         if (!draft.expectation().matches(current)) {
             return recommendationChanged();
         }
-        DiscordPunishmentIntent intent = intent(
-                current.sanctions(),
-                draft.expectation().customDuration(),
-                current.publicReason(),
-                draft.internalExplanation()
-        ).orElse(null);
+        DiscordPunishmentIntent intent = currentIntent(draft, selectedDiscordIntent).orElse(null);
         if (intent == null) {
             return unsupportedDiscordConsequence();
         }
@@ -224,9 +231,10 @@ public final class PaperCrossPlatformPunishmentService {
             Actor actor,
             PunishmentDraft draft,
             TargetLink link,
-            UUID punishmentId
+            UUID punishmentId,
+            DiscordPunishmentIntent selectedDiscordIntent
     ) {
-        DiscordPunishmentIntent intent = previewIntent(draft).orElse(null);
+        DiscordPunishmentIntent intent = currentIntent(draft, selectedDiscordIntent).orElse(null);
         if (intent == null) {
             return unsupportedDiscordConsequence();
         }
@@ -294,6 +302,26 @@ public final class PaperCrossPlatformPunishmentService {
                 punishment.state().name(),
                 punishment.externalApplied(),
                 punishment.dmOutcome().name()
+        ));
+    }
+
+    Optional<DiscordPunishmentIntent> currentIntent(
+            PunishmentDraft draft,
+            DiscordPunishmentIntent selected
+    ) {
+        if (draft == null || selected == null || draft.internalExplanation().length() > DISCORD_EXPLANATION_LIMIT) {
+            return Optional.empty();
+        }
+        return policies.find(draft.reasonId()).map(policy -> new DiscordPunishmentIntent(
+                selected.type(),
+                selected.length(),
+                selected.customDuration(),
+                selected.customConsequence(),
+                selected.restriction(),
+                policy.publicReason(),
+                draft.internalExplanation(),
+                selected.messageDeleteSeconds(),
+                selected.notifyTarget()
         ));
     }
 
