@@ -72,6 +72,7 @@ public final class StaffModeManager implements Listener {
     private final Map<UUID, StaffRank> ranks = new ConcurrentHashMap<>();
     private final Map<UUID, String> toolSessions = new ConcurrentHashMap<>();
     private final Map<UUID, Boolean> toolInventoryPreferences = new ConcurrentHashMap<>();
+    private final java.util.Set<UUID> unrestrictedIdentities = ConcurrentHashMap.newKeySet();
     private final java.util.Set<UUID> transitions = ConcurrentHashMap.newKeySet();
     private final java.util.Set<UUID> handoffGaps = ConcurrentHashMap.newKeySet();
     private final StaffModeRecoveryGate recoveryGate = new StaffModeRecoveryGate(transitions);
@@ -143,6 +144,16 @@ public final class StaffModeManager implements Listener {
         return playerId != null
                 && active.containsKey(playerId)
                 && !transitions.contains(playerId);
+    }
+
+    /**
+     * Player-originated Staff actions may treat explicitly unrestricted identities as permanently
+     * on duty. The identity cache is refreshed from the live LuckPerms permission context while
+     * the player is online; it does not grant anything to an unknown/offline UUID.
+     */
+    public boolean authorityActiveOrUnrestricted(UUID playerId) {
+        return authorityActive(playerId)
+                || (playerId != null && unrestrictedIdentities.contains(playerId));
     }
 
     /**
@@ -439,6 +450,7 @@ public final class StaffModeManager implements Listener {
     public void onJoin(PlayerJoinEvent event) {
         Player player = event.getPlayer();
         UUID playerId = player.getUniqueId();
+        isUnrestricted(player);
         if (handoffResumes.consume(playerId).isPresent()) {
             StaffRank rank = PaperStaffRankResolver.resolve(player::hasPermission).orElse(null);
             if (rank == null) {
@@ -974,6 +986,8 @@ public final class StaffModeManager implements Listener {
         snapshotRestorations.remove(playerId);
         pendingRankChecks.remove(playerId);
         handoffGaps.remove(playerId);
+        unrestrictedIdentities.remove(playerId);
+        toolInventoryPreferences.remove(playerId);
     }
 
     private void detachUnappliedLease(
@@ -1037,6 +1051,9 @@ public final class StaffModeManager implements Listener {
         if (!protectedMode(playerId) || profileApplications.contains(playerId)) {
             return;
         }
+        if (isUnrestricted(player)) {
+            return;
+        }
         StaffRank rank = rankForAction(player);
         if (rank == null || !StaffModeAccessPolicy.allowsGameMode(rank, event.getNewGameMode())) {
             event.setCancelled(true);
@@ -1054,7 +1071,7 @@ public final class StaffModeManager implements Listener {
             return;
         }
         StaffRank rank = rankForAction(player);
-        if (StaffModeAccessPolicy.allowsCombatTesting(rank)) {
+        if (isUnrestricted(player) || StaffModeAccessPolicy.allowsCombatTesting(rank)) {
             audit(player, rank, "damage-received",
                     event.getCause() + " damage=" + event.getFinalDamage());
             return;
@@ -1075,7 +1092,7 @@ public final class StaffModeManager implements Listener {
             return;
         }
         StaffRank rank = rankForAction(actor);
-        if (StaffModeAccessPolicy.allowsCombatTesting(rank)) {
+        if (isUnrestricted(actor) || StaffModeAccessPolicy.allowsCombatTesting(rank)) {
             audit(actor, rank, "damage-dealt",
                     event.getEntityType() + " damage=" + event.getFinalDamage());
             return;
@@ -1090,6 +1107,10 @@ public final class StaffModeManager implements Listener {
             return;
         }
         StaffRank rank = rankForAction(player);
+        if (isUnrestricted(player)) {
+            audit(player, rank, "item-drop", describe(event.getItemDrop().getItemStack()));
+            return;
+        }
         StaffDutyTier tier = StaffDutyTier.of(rank);
         if (tier == null || tier == StaffDutyTier.HELPER) {
             event.setCancelled(true);
@@ -1105,6 +1126,10 @@ public final class StaffModeManager implements Listener {
             return;
         }
         StaffRank rank = rankForAction(player);
+        if (isUnrestricted(player)) {
+            audit(player, rank, "item-pickup", describe(event.getItem().getItemStack()));
+            return;
+        }
         StaffDutyTier tier = StaffDutyTier.of(rank);
         if (tier == null || tier == StaffDutyTier.HELPER) {
             event.setCancelled(true);
@@ -1121,6 +1146,11 @@ public final class StaffModeManager implements Listener {
             return;
         }
         StaffRank rank = rankForAction(player);
+        if (isUnrestricted(player)) {
+            audit(player, rank, "inventory-swap-hands",
+                    describe(event.getMainHandItem()) + " <-> " + describe(event.getOffHandItem()));
+            return;
+        }
         StaffDutyTier tier = StaffDutyTier.of(rank);
         if (tier == null || tier == StaffDutyTier.HELPER) {
             event.setCancelled(true);
@@ -1138,6 +1168,12 @@ public final class StaffModeManager implements Listener {
         }
         StaffRank rank = rankForAction(player);
         boolean ender = event.getView().getTopInventory().getType() == InventoryType.ENDER_CHEST;
+        if (isUnrestricted(player)) {
+            audit(player, rank, "inventory-edit",
+                    event.getClick() + " container=" + event.getView().getTopInventory().getType()
+                            + " item=" + describe(event.getCurrentItem()));
+            return;
+        }
         if (rank == null || StaffModeAccessPolicy.blocksInventoryMutation(rank, ender)) {
             event.setCancelled(true);
             return;
@@ -1157,6 +1193,12 @@ public final class StaffModeManager implements Listener {
         }
         StaffRank rank = rankForAction(player);
         boolean ender = event.getView().getTopInventory().getType() == InventoryType.ENDER_CHEST;
+        if (isUnrestricted(player)) {
+            audit(player, rank, "inventory-edit",
+                    "drag container=" + event.getView().getTopInventory().getType()
+                            + " cursor=" + describe(event.getOldCursor()));
+            return;
+        }
         if (rank == null
                 || StaffModeAccessPolicy.blocksInventoryMutation(rank, ender)
                 || isStaffTool(event.getOldCursor())) {
@@ -1175,6 +1217,9 @@ public final class StaffModeManager implements Listener {
     public void onInventoryOpen(InventoryOpenEvent event) {
         if (!(event.getPlayer() instanceof Player player) || !protectedMode(player.getUniqueId())
                 || event.getInventory().getType() != InventoryType.ENDER_CHEST) {
+            return;
+        }
+        if (isUnrestricted(player)) {
             return;
         }
         StaffRank rank = rankForAction(player);
@@ -1516,7 +1561,17 @@ public final class StaffModeManager implements Listener {
     }
 
     public boolean isUnrestricted(Player player) {
-        return player != null && player.hasPermission(UNRESTRICTED_PERMISSION);
+        if (player == null) {
+            return false;
+        }
+        UUID playerId = player.getUniqueId();
+        boolean unrestricted = player.hasPermission(UNRESTRICTED_PERMISSION);
+        if (unrestricted) {
+            unrestrictedIdentities.add(playerId);
+        } else {
+            unrestrictedIdentities.remove(playerId);
+        }
+        return unrestricted;
     }
 
     public boolean toolInventoryEnabled(UUID playerId) {
