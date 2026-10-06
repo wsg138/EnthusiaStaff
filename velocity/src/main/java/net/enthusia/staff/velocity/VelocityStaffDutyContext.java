@@ -100,8 +100,13 @@ final class VelocityStaffDutyContext implements ContextCalculator<Player>, AutoC
                 online.add(playerId);
                 boolean current;
                 try {
-                    current = player.hasPermission(UNRESTRICTED_PERMISSION)
-                            || (hasStaffIdentity(player) && hasActiveSession(player));
+                    boolean unrestricted = player.hasPermission(UNRESTRICTED_PERMISSION);
+                    boolean staffIdentity = hasStaffIdentity(player);
+                    current = shouldPublishContext(
+                            unrestricted,
+                            staffIdentity,
+                            staffIdentity && hasActiveSession(player)
+                    );
                 } catch (RuntimeException exception) {
                     if (lookupFailureLogged.compareAndSet(false, true)) {
                         logger.warn("Unable to calculate proxy Staff Mode permission context", exception);
@@ -149,6 +154,14 @@ final class VelocityStaffDutyContext implements ContextCalculator<Player>, AutoC
             }
             return false;
         }
+    }
+
+    static boolean shouldPublishContext(
+            boolean unrestricted,
+            boolean staffIdentity,
+            boolean activeSession
+    ) {
+        return unrestricted || (staffIdentity && activeSession);
     }
 
     static boolean matchesActiveSession(Optional<StaffSessionSnapshot> session, String backend) {
