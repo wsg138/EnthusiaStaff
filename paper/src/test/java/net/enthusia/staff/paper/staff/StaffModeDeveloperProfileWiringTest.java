@@ -22,9 +22,9 @@ class StaffModeDeveloperProfileWiringTest {
         }
         String method = source.substring(start, end);
 
-        assertTrue(method.contains("boolean technicalTesting = rank == StaffRank.DEVELOPER"));
-        assertTrue(method.contains("player.setInvulnerable(!technicalTesting)"));
-        assertTrue(method.contains("player.setCollidable(technicalTesting)"));
-        assertTrue(method.contains("player.setCanPickupItems(technicalTesting)"));
+        assertTrue(method.contains("boolean unrestrictedInteraction = unrestricted || rank == StaffRank.DEVELOPER"));
+        assertTrue(method.contains("player.setInvulnerable(!unrestrictedInteraction)"));
+        assertTrue(method.contains("player.setCollidable(unrestrictedInteraction)"));
+        assertTrue(method.contains("player.setCanPickupItems(unrestrictedInteraction)"));
     }
 }
