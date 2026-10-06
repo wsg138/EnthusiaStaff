@@ -100,7 +100,8 @@ public final class JdbcStaffSessionStore implements StaffSessionStore {
             connection.rollback();
             if (!existing.serverId().equalsIgnoreCase(serverId)) {
                 throw new SQLException(
-                        "active staff session is still owned by backend " + existing.serverId()
+                        "staff session ownership conflict: server=" + existing.serverId()
+                                + " state=" + existing.state()
                 );
             }
             return existing;
