@@ -6,6 +6,8 @@ import net.enthusia.staff.domain.auth.StaffRank;
 import net.enthusia.staff.domain.sanction.SanctionSpec;
 
 public sealed interface PolicyAction permits PolicyAction.Exact, PolicyAction.Bounded, PolicyAction.RequiresReview {
+    int MIN_BOUNDED_OPTIONS = 2;
+
     record Exact(List<SanctionSpec> sanctions) implements PolicyAction {
         public Exact {
             if (sanctions == null || sanctions.isEmpty()
@@ -19,7 +21,7 @@ public sealed interface PolicyAction permits PolicyAction.Exact, PolicyAction.Bo
 
     record Bounded(List<List<SanctionSpec>> allowedOptions, StaffRank minimumRank) implements PolicyAction {
         public Bounded {
-            if (allowedOptions == null || allowedOptions.size() < 2 || minimumRank == null) {
+            if (allowedOptions == null || allowedOptions.size() < MIN_BOUNDED_OPTIONS || minimumRank == null) {
                 throw new IllegalArgumentException("bounded discretion requires options and an authority rank");
             }
             if (minimumRank != StaffRank.MOD && minimumRank != StaffRank.ADMIN && minimumRank != StaffRank.FOUNDER) {
@@ -35,7 +37,7 @@ public sealed interface PolicyAction permits PolicyAction.Exact, PolicyAction.Bo
                 copied.add(List.copyOf(option));
             }
             allowedOptions = List.copyOf(copied);
-            if (allowedOptions.stream().distinct().count() < 2) {
+            if (allowedOptions.stream().distinct().count() < MIN_BOUNDED_OPTIONS) {
                 throw new IllegalArgumentException("bounded discretion requires distinct options");
             }
         }

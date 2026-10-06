@@ -13,10 +13,12 @@ import net.enthusia.staff.domain.sanction.SanctionType;
 import org.junit.jupiter.api.Test;
 
 class PolicyConfigurationValidatorTest {
+    private static final String SPAM = "chat.spam";
+
     @Test
     void rejectsUnknownRelationshipTargets() {
         OffensePolicy offense = PolicyV2TestFixtures.offense(
-                "chat.spam",
+                SPAM,
                 Map.of("missing.offense", 1.0),
                 DecayPolicy.nonDecaying()
         );
@@ -42,11 +44,11 @@ class PolicyConfigurationValidatorTest {
                 List.of()
         );
         OffensePolicy offense = new OffensePolicy(
-                "chat.spam",
+                SPAM,
                 "Spam",
-                "chat.spam",
+                SPAM,
                 List.of(),
-                new HistoryPolicy(Map.of("chat.spam", 1.0), DecayPolicy.nonDecaying()),
+                new HistoryPolicy(Map.of(SPAM, 1.0), DecayPolicy.nonDecaying()),
                 List.of(first, second)
         );
 
@@ -76,11 +78,11 @@ class PolicyConfigurationValidatorTest {
                 List.of()
         );
         OffensePolicy offense = new OffensePolicy(
-                "chat.spam",
+                SPAM,
                 "Spam",
-                "chat.spam",
+                SPAM,
                 List.of(severity),
-                new HistoryPolicy(Map.of("chat.spam", 1.0), DecayPolicy.nonDecaying()),
+                new HistoryPolicy(Map.of(SPAM, 1.0), DecayPolicy.nonDecaying()),
                 List.of(rule)
         );
 
@@ -119,12 +121,12 @@ class PolicyConfigurationValidatorTest {
     void revisionTypesKeepSanctionAndFindingChangesDistinct() {
         CaseRevision sanction = new CaseRevision.SanctionRevision("leniency", List.of());
         CaseRevision finding = new CaseRevision.FindingReclassification(
-                "chat.spam",
+                SPAM,
                 "chat.flood",
                 "facts corrected"
         );
         CaseRevision overturn = new CaseRevision.FindingOverturn(
-                "chat.spam",
+                SPAM,
                 "finding unsupported"
         );
 

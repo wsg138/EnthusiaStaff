@@ -32,11 +32,11 @@ public record BehavioralHistoryEntry(
             }
             return null;
         }
-        effective = PolicyIds.require(effective, "effective offense id");
-        boolean reclassified = !original.equals(effective);
+        String normalizedEffective = PolicyIds.require(effective, "effective offense id");
+        boolean reclassified = !original.equals(normalizedEffective);
         if ((state == FindingState.RECLASSIFIED) != reclassified) {
             throw new IllegalArgumentException("finding state must match original/effective offense identity");
         }
-        return effective;
+        return normalizedEffective;
     }
 }

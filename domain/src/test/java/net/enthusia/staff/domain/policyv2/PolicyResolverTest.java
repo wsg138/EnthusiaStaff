@@ -16,18 +16,19 @@ import org.junit.jupiter.api.Test;
 
 class PolicyResolverTest {
     private static final Instant INCIDENT_AT = Instant.parse("2026-10-06T20:00:00Z");
+    private static final String SPAM = "chat.spam";
 
     @Test
     void sameInputsProduceEqualResolution() {
         PolicySnapshot snapshot = new PolicySnapshot("v2.test.1", List.of(
                 PolicyV2TestFixtures.offense(
-                        "chat.spam",
-                        Map.of("chat.spam", 1.0),
+                        SPAM,
+                        Map.of(SPAM, 1.0),
                         PolicyV2TestFixtures.tenDayDecay()
                 )
         ));
-        IncidentFinding finding = new IncidentFinding("chat.spam", Map.of());
-        List<BehavioralHistoryEntry> history = List.of(confirmed("case-1", "chat.spam"));
+        IncidentFinding finding = new IncidentFinding(SPAM, Map.of());
+        List<BehavioralHistoryEntry> history = List.of(confirmed("case-1", SPAM));
         PolicyResolver resolver = new PolicyResolver();
 
         assertEquals(
@@ -39,11 +40,11 @@ class PolicyResolverTest {
     @Test
     void unknownAndUncoveredFindingsFailClosedToReview() {
         OffensePolicy known = new OffensePolicy(
-                "chat.spam",
+                SPAM,
                 "Spam",
-                "chat.spam",
+                SPAM,
                 List.of(),
-                new HistoryPolicy(Map.of("chat.spam", 1.0), DecayPolicy.nonDecaying()),
+                new HistoryPolicy(Map.of(SPAM, 1.0), DecayPolicy.nonDecaying()),
                 List.of(new ResolutionRule(
                         "repeat-only",
                         new RuleCondition(Map.of(), HistoryWindow.atLeast(1.0)),
@@ -62,7 +63,7 @@ class PolicyResolverTest {
         );
         PolicyResolution uncovered = resolver.resolve(
                 snapshot,
-                new IncidentFinding("chat.spam", Map.of()),
+                new IncidentFinding(SPAM, Map.of()),
                 INCIDENT_AT,
                 List.of()
         );
@@ -116,18 +117,18 @@ class PolicyResolverTest {
                 Set.of("low", "high")
         );
         OffensePolicy offense = new OffensePolicy(
-                "chat.spam",
+                SPAM,
                 "Spam",
-                "chat.spam",
+                SPAM,
                 List.of(severity),
-                new HistoryPolicy(Map.of("chat.spam", 1.0), DecayPolicy.nonDecaying()),
+                new HistoryPolicy(Map.of(SPAM, 1.0), DecayPolicy.nonDecaying()),
                 List.of(PolicyV2TestFixtures.catchAll("all", PolicyV2TestFixtures.exactWarning()))
         );
         PolicySnapshot snapshot = new PolicySnapshot("v2.test.1", List.of(offense));
 
         PolicyResolution result = new PolicyResolver().resolve(
                 snapshot,
-                new IncidentFinding("chat.spam", Map.of()),
+                new IncidentFinding(SPAM, Map.of()),
                 INCIDENT_AT,
                 List.of()
         );

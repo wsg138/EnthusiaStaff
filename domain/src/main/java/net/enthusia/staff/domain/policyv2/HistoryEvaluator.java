@@ -8,6 +8,7 @@ import java.util.List;
 
 public final class HistoryEvaluator {
     private static final double LOG_TWO = Math.log(2.0);
+    private static final double UNRELATED_WEIGHT = 0.0;
 
     public HistoryAssessment assess(
             OffensePolicy current,
@@ -42,8 +43,9 @@ public final class HistoryEvaluator {
             throw new IllegalArgumentException("history entry occurs after incident time");
         }
         String effectiveId = entry.contributingOffenseId().orElse(null);
-        double relationshipWeight = effectiveId == null ? 0.0 : current.historyPolicy().weightFor(effectiveId);
-        if (relationshipWeight == 0.0) {
+        double relationshipWeight = effectiveId == null ? UNRELATED_WEIGHT
+                : current.historyPolicy().weightFor(effectiveId);
+        if (relationshipWeight == UNRELATED_WEIGHT) {
             return java.util.Optional.empty();
         }
         OffensePolicy priorPolicy = snapshot.offense(effectiveId)
@@ -80,7 +82,7 @@ public final class HistoryEvaluator {
                 continue;
             }
             String candidateId = candidate.contributingOffenseId().orElse(null);
-            if (candidateId != null && priorPolicy.historyPolicy().weightFor(candidateId) > 0.0) {
+            if (candidateId != null && priorPolicy.historyPolicy().weightFor(candidateId) > UNRELATED_WEIGHT) {
                 count++;
             }
         }

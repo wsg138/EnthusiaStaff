@@ -11,6 +11,8 @@ public record IncidentAttributeDefinition(
         Long maximum,
         Integer maximumLength
 ) {
+    private static final int MIN_TEXT_LENGTH = 1;
+
     public enum Kind { BOOLEAN, INTEGER, ENUM, TEXT }
 
     public IncidentAttributeDefinition {
@@ -40,34 +42,94 @@ public record IncidentAttributeDefinition(
 
     public boolean accepts(IncidentAttributeValue value) {
         return switch (kind) {
-            case BOOLEAN -> value instanceof IncidentAttributeValue.BooleanValue;
-            case INTEGER -> value instanceof IncidentAttributeValue.IntegerValue integer
-                    && integer.value() >= minimum && integer.value() <= maximum;
-            case ENUM -> value instanceof IncidentAttributeValue.EnumValue enumValue
-                    && allowedValues.contains(enumValue.value());
-            case TEXT -> value instanceof IncidentAttributeValue.TextValue text
-                    && text.value().length() <= maximumLength;
+            case BOOLEAN -> acceptsBoolean(value);
+            case INTEGER -> acceptsInteger(value);
+            case ENUM -> acceptsEnum(value);
+            case TEXT -> acceptsText(value);
         };
     }
 
-    private static void validateShape(Kind kind, Set<String> allowed, Long minimum, Long maximum, Integer maxLength) {
-        if (kind == Kind.ENUM && allowed.isEmpty()) {
+    private boolean acceptsBoolean(IncidentAttributeValue value) {
+        return value instanceof IncidentAttributeValue.BooleanValue;
+    }
+
+    private boolean acceptsInteger(IncidentAttributeValue value) {
+        if (!(value instanceof IncidentAttributeValue.IntegerValue integer)) {
+            return false;
+        }
+        return integer.value() >= minimum && integer.value() <= maximum;
+    }
+
+    private boolean acceptsEnum(IncidentAttributeValue value) {
+        return value instanceof IncidentAttributeValue.EnumValue enumValue
+                && allowedValues.contains(enumValue.value());
+    }
+
+    private boolean acceptsText(IncidentAttributeValue value) {
+        return value instanceof IncidentAttributeValue.TextValue text
+                && text.value().length() <= maximumLength;
+    }
+
+    private static void validateShape(
+            Kind kind,
+            Set<String> allowed,
+            Long minimum,
+            Long maximum,
+            Integer maxLength
+    ) {
+        switch (kind) {
+            case BOOLEAN -> validateBooleanShape(allowed, minimum, maximum, maxLength);
+            case INTEGER -> validateIntegerShape(allowed, minimum, maximum, maxLength);
+            case ENUM -> validateEnumShape(allowed, minimum, maximum, maxLength);
+            case TEXT -> validateTextShape(allowed, minimum, maximum, maxLength);
+        }
+    }
+
+    private static void validateBooleanShape(Set<String> allowed, Long minimum, Long maximum, Integer maxLength) {
+        requireNoAllowedValues(allowed);
+        requireNoNumericBounds(minimum, maximum);
+        requireNoMaximumLength(maxLength);
+    }
+
+    private static void validateIntegerShape(Set<String> allowed, Long minimum, Long maximum, Integer maxLength) {
+        requireNoAllowedValues(allowed);
+        if (minimum == null || maximum == null || minimum > maximum) {
+            throw new IllegalArgumentException("integer attributes require an ordered range");
+        }
+        requireNoMaximumLength(maxLength);
+    }
+
+    private static void validateEnumShape(Set<String> allowed, Long minimum, Long maximum, Integer maxLength) {
+        if (allowed.isEmpty()) {
             throw new IllegalArgumentException("enum attributes require allowed values");
         }
         allowed.forEach(value -> PolicyIds.require(value, "allowed enum value"));
-        if (kind == Kind.INTEGER && (minimum == null || maximum == null || minimum > maximum)) {
-            throw new IllegalArgumentException("integer attributes require an ordered range");
-        }
-        if (kind == Kind.TEXT && (maxLength == null || maxLength < 1)) {
+        requireNoNumericBounds(minimum, maximum);
+        requireNoMaximumLength(maxLength);
+    }
+
+    private static void validateTextShape(Set<String> allowed, Long minimum, Long maximum, Integer maxLength) {
+        requireNoAllowedValues(allowed);
+        requireNoNumericBounds(minimum, maximum);
+        if (maxLength == null || maxLength < MIN_TEXT_LENGTH) {
             throw new IllegalArgumentException("text attributes require a positive maximum length");
         }
-        if (kind != Kind.ENUM && !allowed.isEmpty()) {
+    }
+
+    private static void requireNoAllowedValues(Set<String> allowed) {
+        if (!allowed.isEmpty()) {
             throw new IllegalArgumentException("allowed values apply only to enum attributes");
         }
-        if (kind != Kind.INTEGER && (minimum != null || maximum != null)) {
+    }
+
+    private static void requireNoNumericBounds(Long minimum, Long maximum) {
+        if (minimum != null || maximum != null) {
             throw new IllegalArgumentException("numeric bounds apply only to integer attributes");
         }
-        if (kind != Kind.TEXT && maxLength != null) {
+    }
+
+    private static void requireNoMaximumLength(Integer maxLength) {
+        if (maxLength != null) {
             throw new IllegalArgumentException("maximum length applies only to text attributes");
         }
     }
