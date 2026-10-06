@@ -1652,7 +1652,7 @@ public final class StaffModeManager implements Listener {
         toolInventoryPreferences.put(playerId, enabled);
     }
 
-    private static GameMode unrestrictedEntryGameMode(GameMode current) {
+    static GameMode unrestrictedEntryGameMode(GameMode current) {
         return current == GameMode.CREATIVE || current == GameMode.SPECTATOR
                 ? current
                 : GameMode.CREATIVE;
