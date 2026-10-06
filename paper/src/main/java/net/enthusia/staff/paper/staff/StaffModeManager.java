@@ -562,22 +562,23 @@ public final class StaffModeManager implements Listener {
             StaffSessionSnapshot session,
             StaffSessionStore loaded
     ) {
-        switch (session.state()) {
-            case ACTIVE -> onEntity(
+        switch (DetachedStaffSessionRecoveryPolicy.decide(session.state())) {
+            case REBIND -> onEntity(
                     playerId,
                     current -> resumeDetachedSession(playerId, loaded, current)
             );
-            case EXITING, RECOVERY_REQUIRED -> retireRestoredDetachedSession(
+            case RETIRE_RESTORED_LEASE -> retireRestoredDetachedSession(
                     playerId,
                     session,
                     loaded
             );
-            case ENTERING -> {
+            case HOLD_INVALID_TRANSITION -> {
                 recoveryGate.retry(playerId);
                 plugin.getLogger().warning(
-                        "Detached Staff Mode session has invalid transitional state ENTERING"
+                        "Detached Staff Mode session has invalid transitional state"
                                 + " staff=" + playerId
                                 + " session=" + session.sessionId()
+                                + " state=" + session.state()
                                 + " server=" + session.serverId()
                 );
                 safeMessage(
@@ -586,7 +587,7 @@ public final class StaffModeManager implements Listener {
                                 + " contact an administrator."
                 );
             }
-            case CLOSED -> recoveryGate.clear(playerId);
+            case CLEAR_CLOSED -> recoveryGate.clear(playerId);
         }
     }
 
