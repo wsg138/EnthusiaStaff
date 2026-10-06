@@ -12,6 +12,15 @@ import org.junit.jupiter.api.Test;
 
 final class VelocityStaffDutyContextTest {
     @Test
+    void unrestrictedIdentityPublishesContextWithoutStaffSession() {
+        assertTrue(VelocityStaffDutyContext.shouldPublishContext(true, true, false));
+        assertTrue(VelocityStaffDutyContext.shouldPublishContext(true, false, false));
+        assertTrue(VelocityStaffDutyContext.shouldPublishContext(false, true, true));
+        assertFalse(VelocityStaffDutyContext.shouldPublishContext(false, true, false));
+        assertFalse(VelocityStaffDutyContext.shouldPublishContext(false, false, true));
+    }
+
+    @Test
     void grantsContextOnlyForActiveSessionOnCurrentBackend() {
         assertTrue(VelocityStaffDutyContext.matchesActiveSession(
                 Optional.of(session(StaffSessionState.ACTIVE)), "smp"
