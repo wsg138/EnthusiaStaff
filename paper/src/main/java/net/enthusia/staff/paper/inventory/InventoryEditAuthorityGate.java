@@ -6,7 +6,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
-import net.enthusia.staff.paper.api.StaffSessionService;
+import net.enthusia.staff.paper.api.StaffAuthorityService;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
 
@@ -81,10 +81,11 @@ final class InventoryEditAuthorityGate {
 
         @Override
         public boolean hasEditPermission() {
-            StaffSessionService session = plugin.getServer().getServicesManager().load(StaffSessionService.class);
+            StaffAuthorityService authority =
+                    plugin.getServer().getServicesManager().load(StaffAuthorityService.class);
             return viewer.hasPermission(EDIT_PERMISSION)
-                    && session != null
-                    && session.hasActiveSession(viewer.getUniqueId());
+                    && authority != null
+                    && authority.hasAuthority(viewer.getUniqueId());
         }
     }
 }
