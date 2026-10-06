@@ -120,7 +120,7 @@ public final class CrossPlatformPunishmentService {
         DiscordConsequenceType type = switch (supported.type()) {
             case WARNING -> DiscordConsequenceType.WARNING;
             case KICK -> DiscordConsequenceType.KICK;
-            case MUTE -> DiscordConsequenceType.MUTE;
+            case MUTE, PUBLIC_MUTE -> DiscordConsequenceType.MUTE;
             case BAN, NETWORK_BAN, NETWORK_IDENTITY_BAN -> DiscordConsequenceType.BAN;
             default -> throw new IllegalStateException("authorization representative must be Discord-compatible");
         };
@@ -133,6 +133,7 @@ public final class CrossPlatformPunishmentService {
         return sanction.type() == SanctionType.WARNING
                 || sanction.type() == SanctionType.KICK
                 || sanction.type() == SanctionType.MUTE
+                || sanction.type() == SanctionType.PUBLIC_MUTE
                 || sanction.type().isBan();
     }
 
