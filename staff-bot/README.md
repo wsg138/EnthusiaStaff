@@ -97,6 +97,15 @@ Optional safe tuning:
 - `ENTHUSIA_STAFF_BOT_DB_POOL_SIZE` (default `4`, range `2..16`)
 - `ENTHUSIA_STAFF_BOT_DB_TIMEOUT_MILLIS` (default `3000`, range `250..60000`)
 
+Optional read-only Enthusia AI moderation-state service:
+
+- `ENTHUSIA_STAFF_BOT_AI_READ_ENABLED` (default `false`);
+- `ENTHUSIA_STAFF_BOT_AI_READ_HOST` (default `127.0.0.1`; use only an approved private bind when AI is in another container);
+- `ENTHUSIA_STAFF_BOT_AI_READ_PORT` (default `8767`);
+- `ENTHUSIA_STAFF_BOT_AI_READ_BEARER_TOKEN` (required when enabled; minimum 32 characters).
+
+The AI read surface is GET/POST-independent from staff/browser sessions and exposes only a bounded Minecraft resolution plus active sanction/recent-case identifiers needed for duplicate review correlation. It exposes no staff notes, Discord identity graph, private evidence, internal explanations, mutation route, punishment command, or database access. Use a credential independent of the Discord bot token and website/read signing material.
+
 See `runtime.env.example` for a placeholder-only inventory.
 
 ## MariaDB and Paper authority
