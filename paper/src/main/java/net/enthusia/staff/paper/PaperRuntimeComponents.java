@@ -14,6 +14,7 @@ import net.enthusia.staff.domain.ports.FreezeStore;
 import net.enthusia.staff.domain.ports.InventoryJournalStore;
 import net.enthusia.staff.domain.ports.PlayerDirectory;
 import net.enthusia.staff.domain.ports.ReportStore;
+import net.enthusia.staff.domain.ports.StaffPreferenceStore;
 import net.enthusia.staff.domain.ports.StaffSessionStore;
 import net.enthusia.staff.domain.ports.VanishStore;
 import net.enthusia.staff.domain.report.ReportPolicy;
@@ -226,6 +227,7 @@ record PaperRuntimeComponents(
                 dependencies.environment().clock(),
                 dependencies.environment().serverId(),
                 dependencies.stores().staffSessionStore(),
+                dependencies.stores().staffPreferenceStore(),
                 dependencies.environment().workers()
         );
         registerListener(plugin, new StaffToolTransferListener(plugin, staffMode));
@@ -516,6 +518,7 @@ record PaperRuntimeComponents(
             Supplier<ReportStore> reportStore,
             Supplier<FreezeStore> freezeStore,
             Supplier<StaffSessionStore> staffSessionStore,
+            Supplier<StaffPreferenceStore> staffPreferenceStore,
             Supplier<VanishStore> vanishStore,
             Supplier<InventoryJournalStore> inventoryJournalStore,
             Supplier<PlayerDirectory> playerDirectory,
