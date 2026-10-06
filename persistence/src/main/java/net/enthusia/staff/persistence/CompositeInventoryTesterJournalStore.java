@@ -206,6 +206,11 @@ public final class CompositeInventoryTesterJournalStore
     }
 
     @Override
+    public boolean resolveAbandonedOfflineEdit(UUID playerId, String owningServerId, Instant now) {
+        return inventory.resolveAbandonedOfflineEdit(playerId, owningServerId, now);
+    }
+
+    @Override
     public CheatTesterJournalRecord start(CheatTesterJournalStart start) {
         return testers.start(start);
     }

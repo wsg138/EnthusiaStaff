@@ -151,4 +151,19 @@ public interface InventoryJournalStore {
     boolean isLocked(UUID playerId, String scopeId, Instant now);
 
     Optional<String> lockedOwningServer(UUID playerId, Instant now);
+
+    /**
+     * Safely terminalizes one abandoned offline edit owned by an unavailable backend.
+     *
+     * <p>Implementations must only resolve work that is still entirely in the prepared
+     * before-state, has no live lease, has exceeded the implementation's recovery
+     * grace period, and has not begun application. Ambiguous or destructive states
+     * must remain blocked for explicit recovery.</p>
+     */
+    boolean resolveAbandonedOfflineEdit(
+            UUID playerId,
+            String owningServerId,
+            Instant now
+    );
 }
+

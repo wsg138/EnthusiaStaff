@@ -246,6 +246,11 @@ public final class PlayerRowEnsuringInventoryJournalStore implements InventoryJo
         return delegate.lockedOwningServer(playerId, now);
     }
 
+    @Override
+    public boolean resolveAbandonedOfflineEdit(UUID playerId, String owningServerId, Instant now) {
+        return delegate.resolveAbandonedOfflineEdit(playerId, owningServerId, now);
+    }
+
     private boolean advanceCursorPhase(
             Connection connection,
             UUID patchId,

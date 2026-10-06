@@ -212,6 +212,71 @@ class AssetJournalIntegrationTest {
     }
 
     @Test
+    void expiredUntouchedOfflineEditCanBeSafelyTerminalizedForUnavailableOwner() throws SQLException {
+        UUID targetId = UUID.randomUUID();
+        UUID actorId = UUID.randomUUID();
+        byte[] before = {11, 12, 13};
+        byte[] replacement = {21, 22, 23};
+        String scopeId = "TEMP";
+        String ownerId = "TEMP";
+
+        try (MariaDbRuntime runtime = MariaDb.initialize(databaseConfig(DATABASE))) {
+            insertPlayer(DATABASE, targetId, "AbandonedOfflineTarget", NOW);
+            insertPlayer(DATABASE, actorId, "AbandonedOfflineActor", NOW);
+            InventoryJournalStore store = runtime.inventoryJournalStore();
+            InventoryObservation observation = store.recordObservation(
+                    targetId,
+                    scopeId,
+                    ownerId,
+                    checksum(before),
+                    before,
+                    NOW
+            );
+            UUID operationId = UUID.randomUUID();
+            InventoryPrepareRequest request = new InventoryPrepareRequest(
+                    operationId,
+                    "inventory:offline:" + operationId,
+                    targetId,
+                    scopeId,
+                    ownerId,
+                    actorId,
+                    Optional.empty(),
+                    "OFFLINE_EDIT",
+                    observation.revision(),
+                    checksum(before),
+                    before,
+                    checksum(replacement),
+                    replacement,
+                    java.util.List.of(0),
+                    true,
+                    Optional.empty()
+            );
+
+            assertEquals(
+                    InventoryPreparation.Status.PREPARED,
+                    store.prepare(request, LEASE, NOW.plusSeconds(1)).status()
+            );
+            assertEquals(Optional.of(ownerId), store.lockedOwningServer(targetId, NOW.plusSeconds(2)));
+            assertFalse(store.resolveAbandonedOfflineEdit(targetId, ownerId, NOW.plusSeconds(2)));
+            assertEquals("PENDING", patchState(operationId));
+            assertEquals(1L, leaseCount(targetId, scopeId));
+
+            assertFalse(store.resolveAbandonedOfflineEdit(targetId, ownerId, NOW.plusSeconds(122)));
+            assertEquals("PENDING", patchState(operationId));
+            assertEquals(1L, leaseCount(targetId, scopeId));
+
+            assertTrue(store.resolveAbandonedOfflineEdit(targetId, ownerId, NOW.plusSeconds(602)));
+
+            assertEquals("CONFLICT", patchState(operationId));
+            assertEquals("CONFLICT", inventoryOperationState(operationId));
+            assertEquals(0L, leaseCount(targetId, scopeId));
+            assertTrue(store.lockedOwningServer(targetId, NOW.plusSeconds(603)).isEmpty());
+            assertEquals(1L, auditCount(operationId, "INVENTORY_OFFLINE_EDIT_ABANDONED"));
+            assertFalse(store.resolveAbandonedOfflineEdit(targetId, ownerId, NOW.plusSeconds(604)));
+        }
+    }
+
+    @Test
     void inventoryFinalizationFailsClosedWhenPairedJournalRowsDiverge() throws SQLException {
         UUID targetId = UUID.randomUUID();
         UUID actorId = UUID.randomUUID();

@@ -36,6 +36,7 @@ import net.enthusia.staff.common.CaseId;
 
 public final class JdbcInventoryJournalStore implements InventoryJournalStore {
     private static final Duration SNAPSHOT_RETENTION = Duration.ofDays(30);
+    private static final Duration ABANDONED_OFFLINE_EDIT_GRACE = Duration.ofMinutes(10);
     private static final String CONFISCATION_OPERATION_TYPE = "CONFISCATION";
     private static final String RESTORATION_OPERATION_TYPE = "RESTORE_CONFISCATED";
     private static final String STATE_COLUMN = "state";
@@ -1184,6 +1185,187 @@ public final class JdbcInventoryJournalStore implements InventoryJournalStore {
             return patchTransitions.isLocked(connection, playerId, scopeId, now);
         } catch (SQLException exception) {
             throw failure("Unable to inspect the inventory operation lock", exception);
+        }
+    }
+
+    @Override
+    public boolean resolveAbandonedOfflineEdit(
+            UUID playerId,
+            String owningServerId,
+            Instant now
+    ) {
+        if (playerId == null || owningServerId == null || owningServerId.isBlank() || now == null) {
+            throw new IllegalArgumentException("abandoned offline edit identity is invalid");
+        }
+        return transaction(connection ->
+                resolveAbandonedOfflineEdit(connection, playerId, owningServerId, now)
+        );
+    }
+
+    private boolean resolveAbandonedOfflineEdit(
+            Connection connection,
+            UUID playerId,
+            String owningServerId,
+            Instant now
+    ) throws SQLException {
+        List<AbandonedOfflineEditCandidate> candidates = abandonedOfflineEditCandidates(
+                connection,
+                playerId,
+                owningServerId,
+                now.minus(ABANDONED_OFFLINE_EDIT_GRACE)
+        );
+        if (candidates.size() != 1) {
+            return false;
+        }
+        AbandonedOfflineEditCandidate candidate = candidates.getFirst();
+        if (!candidate.beforeStateIntact()
+                || abandonedOfflineEditLeaseBlocks(connection, playerId, candidate, now)) {
+            return false;
+        }
+        markAbandonedOfflineEditConflict(connection, candidate, now);
+        releaseAbandonedOfflineEditLease(connection, playerId, candidate);
+        insertAudit(
+                connection,
+                candidate.operationId(),
+                candidate.actorId(),
+                playerId,
+                Optional.empty(),
+                "INVENTORY_OFFLINE_EDIT_ABANDONED",
+                "CONFLICT",
+                Map.of(
+                        "scopeId", candidate.scopeId(),
+                        "owningServerId", owningServerId,
+                        "reason", "Owning backend is unavailable after the operation lease expired and the edit exceeded the recovery grace period"
+                ),
+                "inventory:abandoned-offline:" + candidate.operationId(),
+                now
+        );
+        return true;
+    }
+
+    private static List<AbandonedOfflineEditCandidate> abandonedOfflineEditCandidates(
+            Connection connection,
+            UUID playerId,
+            String owningServerId,
+            Instant staleBefore
+    ) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement("""
+                SELECT q.patch_id, q.operation_id, q.expected_revision, q.fencing_token,
+                    q.expected_checksum, p.scope_id, p.current_revision,
+                    o.actor_id, obs.revision AS observed_revision, obs.checksum AS observed_checksum
+                FROM inventory_pending_patches q
+                JOIN inventory_operations o ON o.operation_id = q.operation_id
+                JOIN inventory_profiles p ON p.profile_id = q.profile_id
+                JOIN inventory_observations obs ON obs.profile_id = p.profile_id
+                WHERE p.player_id = ? AND p.owning_server_id = ?
+                    AND o.operation_type = 'OFFLINE_EDIT' AND o.case_id IS NULL
+                    AND o.state = 'PENDING' AND q.state = 'PENDING'
+                    AND o.updated_at <= ?
+                ORDER BY q.created_at
+                LIMIT 2
+                FOR UPDATE
+                """)) {
+            statement.setBytes(1, UuidBytes.toBytes(playerId));
+            statement.setString(2, owningServerId);
+            statement.setTimestamp(3, Timestamp.from(staleBefore));
+            try (ResultSet result = statement.executeQuery()) {
+                List<AbandonedOfflineEditCandidate> candidates = new ArrayList<>();
+                while (result.next()) {
+                    candidates.add(new AbandonedOfflineEditCandidate(
+                            UuidBytes.fromBytes(result.getBytes("patch_id")),
+                            UuidBytes.fromBytes(result.getBytes("operation_id")),
+                            UuidBytes.fromBytes(result.getBytes("actor_id")),
+                            result.getString("scope_id"),
+                            result.getLong("expected_revision"),
+                            result.getLong("fencing_token"),
+                            result.getString("expected_checksum"),
+                            result.getLong("current_revision"),
+                            result.getLong("observed_revision"),
+                            result.getString("observed_checksum")
+                    ));
+                }
+                return List.copyOf(candidates);
+            }
+        }
+    }
+
+    private static boolean abandonedOfflineEditLeaseBlocks(
+            Connection connection,
+            UUID playerId,
+            AbandonedOfflineEditCandidate candidate,
+            Instant now
+    ) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement("""
+                SELECT owner_id, fencing_token, lease_until
+                FROM operation_leases
+                WHERE resource_key = ?
+                FOR UPDATE
+                """)) {
+            statement.setString(1, resourceKey(playerId, candidate.scopeId()));
+            try (ResultSet result = statement.executeQuery()) {
+                if (!result.next()) {
+                    return false;
+                }
+                Instant leaseUntil = result.getTimestamp("lease_until").toInstant();
+                return leaseUntil.isAfter(now)
+                        || !result.getString("owner_id").equals(candidate.operationId().toString())
+                        || result.getLong("fencing_token") != candidate.fencingToken();
+            }
+        }
+    }
+
+    private static void markAbandonedOfflineEditConflict(
+            Connection connection,
+            AbandonedOfflineEditCandidate candidate,
+            Instant now
+    ) throws SQLException {
+        try (PreparedStatement patch = connection.prepareStatement("""
+                UPDATE inventory_pending_patches
+                SET state = 'CONFLICT',
+                    conflict_code = 'ABANDONED_OFFLINE_OWNER',
+                    conflict_detail = 'Owning backend unavailable after lease expiry; queued edit was never applied'
+                WHERE patch_id = ? AND operation_id = ?
+                    AND state = 'PENDING' AND fencing_token = ?
+                """);
+             PreparedStatement operation = connection.prepareStatement("""
+                UPDATE inventory_operations
+                SET state = 'CONFLICT', updated_at = ?
+                WHERE operation_id = ? AND state = 'PENDING' AND fencing_token = ?
+                """)) {
+            patch.setBytes(1, UuidBytes.toBytes(candidate.patchId()));
+            patch.setBytes(2, UuidBytes.toBytes(candidate.operationId()));
+            patch.setLong(3, candidate.fencingToken());
+            JdbcTransactionSupport.requireSingleUpdate(
+                    patch.executeUpdate(),
+                    "Abandoned offline edit patch changed before recovery"
+            );
+
+            operation.setTimestamp(1, Timestamp.from(now));
+            operation.setBytes(2, UuidBytes.toBytes(candidate.operationId()));
+            operation.setLong(3, candidate.fencingToken());
+            JdbcTransactionSupport.requireSingleUpdate(
+                    operation.executeUpdate(),
+                    "Abandoned offline edit operation changed before recovery"
+            );
+        }
+    }
+
+    private static void releaseAbandonedOfflineEditLease(
+            Connection connection,
+            UUID playerId,
+            AbandonedOfflineEditCandidate candidate
+    ) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement("""
+                DELETE FROM operation_leases
+                WHERE resource_key = ? AND owner_id = ? AND fencing_token = ?
+                """)) {
+            statement.setString(1, resourceKey(playerId, candidate.scopeId()));
+            statement.setString(2, candidate.operationId().toString());
+            statement.setLong(3, candidate.fencingToken());
+            JdbcTransactionSupport.requireOptionalSingleUpdate(
+                    statement.executeUpdate(),
+                    "Multiple abandoned offline edit leases matched one fence"
+            );
         }
     }
 
@@ -2466,6 +2648,25 @@ public final class JdbcInventoryJournalStore implements InventoryJournalStore {
             String owningServerId,
             long revision
     ) {
+    }
+
+    private record AbandonedOfflineEditCandidate(
+            UUID patchId,
+            UUID operationId,
+            UUID actorId,
+            String scopeId,
+            long expectedRevision,
+            long fencingToken,
+            String expectedChecksum,
+            long currentRevision,
+            long observedRevision,
+            String observedChecksum
+    ) {
+        private boolean beforeStateIntact() {
+            return currentRevision == expectedRevision
+                    && observedRevision == expectedRevision
+                    && expectedChecksum.equals(observedChecksum);
+        }
     }
 
     private record RestorationOperationBinding(
