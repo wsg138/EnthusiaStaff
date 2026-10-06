@@ -42,6 +42,7 @@ import net.enthusia.staff.paper.command.SanctionChangeCommand;
 import net.enthusia.staff.paper.command.SanctionLifecycleCommand;
 import net.enthusia.staff.paper.command.StaffApiCommand;
 import net.enthusia.staff.paper.command.StaffChatCommand;
+import net.enthusia.staff.paper.command.StaffInventoryCommand;
 import net.enthusia.staff.paper.command.StaffModeCommand;
 import net.enthusia.staff.paper.command.StaffModeVanishEntryCoordinator;
 import net.enthusia.staff.paper.command.StaffWhoCommand;
@@ -294,6 +295,7 @@ final class PaperCommandRegistrar {
                 dependencies.players().vanish()
         );
         bindCompleting("staff", staffMode, staffMode);
+        bind("staffinv", new StaffInventoryCommand(dependencies.players().staffMode()));
         bind("vanish", new VanishCommand(writeMode(), dependencies.players().vanish()));
         bind("staffchat", new StaffChatCommand(dependencies.integrations().roseChat()));
         bind("staffwho", new StaffWhoCommand(
