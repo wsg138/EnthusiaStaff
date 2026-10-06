@@ -305,8 +305,12 @@ public final class VanishManager implements Listener {
             player.sendMessage(StaffMessageStyle.style(Component.text("An explicit EnthusiaStaff rank is required before using vanish.")));
             return;
         }
-        if (requiresStaffMode(rank) && !staffMode.active(player.getUniqueId())) {
-            player.sendMessage(StaffMessageStyle.style(Component.text("Your rank requires active staff mode before vanishing.")));
+        if (requiresStaffMode(rank)
+                && !staffMode.active(player.getUniqueId())
+                && !isUnrestricted(player)) {
+            player.sendMessage(StaffMessageStyle.style(Component.text(
+                    "Enter Staff Mode before using vanish."
+            )));
             return;
         }
         boolean next = !visibility.isVanished(player.getUniqueId());
@@ -436,6 +440,10 @@ public final class VanishManager implements Listener {
 
     private void disableAfterStaffModeExit(UUID playerId, Player player) {
         durableStaffSessionPresence.put(playerId, false);
+        if (isUnrestricted(player)) {
+            pendingStaffModeExitDisables.remove(playerId);
+            return;
+        }
         StaffRank rank = resolveAndPublishRank(player);
         if (rank == null) {
             pendingStaffModeExitDisables.remove(playerId);
@@ -447,6 +455,10 @@ public final class VanishManager implements Listener {
         } else {
             pendingStaffModeExitDisables.remove(playerId);
         }
+    }
+
+    private static boolean isUnrestricted(Player player) {
+        return player.hasPermission(StaffModeManager.UNRESTRICTED_PERMISSION);
     }
 
     private static boolean requiresStaffMode(StaffRank rank) {
@@ -644,7 +656,8 @@ public final class VanishManager implements Listener {
                 vanished,
                 durableRank,
                 liveRank,
-                staffModeState
+                staffModeState,
+                isUnrestricted(player)
         );
         applyVanishAction(player, action, cachedRank, liveRank, durableRank, vanished);
         reconcileVanishGameMode(player);
@@ -925,11 +938,13 @@ public final class VanishManager implements Listener {
                 && !restoringStaffState
                 && !vanishGameModeApplications.contains(playerId)) {
             StaffRank rank = resolveLiveRank(player);
-            if (isSelectableGameMode(rank, event.getNewGameMode())) {
+            boolean unrestricted = isUnrestricted(player);
+            if (isSelectableGameMode(rank, event.getNewGameMode())
+                    && event.getNewGameMode() != GameMode.ADVENTURE) {
                 selectedGameModes.put(playerId, event.getNewGameMode());
                 persistSelectedGameMode(playerId, rank, event.getNewGameMode());
             }
-            if (!isSelectableGameMode(rank, event.getNewGameMode())) {
+            if (!unrestricted && !isSelectableGameMode(rank, event.getNewGameMode())) {
                 event.setCancelled(true);
                 return;
             }
