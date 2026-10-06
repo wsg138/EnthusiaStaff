@@ -36,6 +36,7 @@ final class JdaDiscordGateway implements DiscordGateway {
     private JdaStaffModerationListener moderationListener;
     private JdaModerationUiPreviewListener previewListener;
     private ModerationReadApiServer productionReadApi;
+    private AiModerationReadApiServer aiModerationReadApi;
     private DiscordRoleSyncCoordinator roleSyncCoordinator;
     private ManagedRoleShadowCoordinator managedRoleShadowCoordinator;
 
@@ -63,6 +64,9 @@ final class JdaDiscordGateway implements DiscordGateway {
         }
         if (configuration.uiPreviewEnabled() && interactions == null) {
             throw new IllegalArgumentException("UI preview requires replay protection");
+        }
+        if (configuration.aiReadToken().isPresent() && moderation.isEmpty()) {
+            throw new IllegalArgumentException("AI moderation read API requires moderation runtime");
         }
     }
 
@@ -155,6 +159,19 @@ final class JdaDiscordGateway implements DiscordGateway {
                     throw new IllegalStateException("production moderation read API failed to start", exception);
                 }
             }
+            if (configuration.aiReadToken().isPresent() && aiModerationReadApi == null) {
+                try {
+                    AiModerationReadApiService service =
+                            new AiModerationReadApiService(moderation.orElseThrow());
+                    aiModerationReadApi = new AiModerationReadApiServer(
+                            configuration.aiReadToken().orElseThrow(),
+                            service
+                    );
+                    aiModerationReadApi.start();
+                } catch (java.io.IOException exception) {
+                    throw new IllegalStateException("AI moderation read API failed to start", exception);
+                }
+            }
             if (previewListener != null) {
                 previewListener.enable(jda);
             } else if (moderationListener != null) {
@@ -211,6 +228,10 @@ final class JdaDiscordGateway implements DiscordGateway {
                 productionReadApi.close();
                 productionReadApi = null;
             }
+            if (aiModerationReadApi != null) {
+                aiModerationReadApi.close();
+                aiModerationReadApi = null;
+            }
         }
     }
 
@@ -249,6 +270,10 @@ final class JdaDiscordGateway implements DiscordGateway {
         if (productionReadApi != null) {
             productionReadApi.close();
             productionReadApi = null;
+        }
+        if (aiModerationReadApi != null) {
+            aiModerationReadApi.close();
+            aiModerationReadApi = null;
         }
         if (moderationListener != null) {
             moderationListener.disable();
