@@ -588,6 +588,9 @@ public final class StaffModeManager implements Listener {
                 );
             }
             case CLEAR_CLOSED -> recoveryGate.clear(playerId);
+            default -> throw new IllegalStateException(
+                    "Unsupported detached Staff session recovery action for " + session.state()
+            );
         }
     }
 
