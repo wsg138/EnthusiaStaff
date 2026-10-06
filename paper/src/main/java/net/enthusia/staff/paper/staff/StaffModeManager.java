@@ -81,6 +81,7 @@ public final class StaffModeManager implements Listener {
     private final java.util.Set<UUID> profileApplications = ConcurrentHashMap.newKeySet();
     private final java.util.Set<UUID> snapshotRestorations = ConcurrentHashMap.newKeySet();
     private final java.util.Set<UUID> pendingRankChecks = ConcurrentHashMap.newKeySet();
+    private final java.util.Set<UUID> scheduledRecoveryRetries = ConcurrentHashMap.newKeySet();
     private final StaffModeHandoffIntentRegistry handoffResumes;
     private final StaffModeSourceHandoffRegistry sourceHandoffs = new StaffModeSourceHandoffRegistry();
     private final StaffModeActivationCoordinator activation;
@@ -511,7 +512,7 @@ public final class StaffModeManager implements Listener {
                     return;
                 }
                 if (StaffSessionOwnership.detached(session.serverId())) {
-                    onEntity(playerId, current -> resumeDetachedSession(playerId, loaded, current));
+                    recoverDetachedSession(playerId, session, loaded);
                     return;
                 }
                 if (!session.serverId().equalsIgnoreCase(serverId)) {
@@ -553,6 +554,85 @@ public final class StaffModeManager implements Listener {
         })) {
             recoveryGate.retry(playerId);
             message(playerId, "The bounded work queue is full; staff session recovery did not start.");
+        }
+    }
+
+    private void recoverDetachedSession(
+            UUID playerId,
+            StaffSessionSnapshot session,
+            StaffSessionStore loaded
+    ) {
+        switch (session.state()) {
+            case ACTIVE -> onEntity(
+                    playerId,
+                    current -> resumeDetachedSession(playerId, loaded, current)
+            );
+            case EXITING, RECOVERY_REQUIRED -> retireRestoredDetachedSession(
+                    playerId,
+                    session,
+                    loaded
+            );
+            case ENTERING -> {
+                recoveryGate.retry(playerId);
+                plugin.getLogger().warning(
+                        "Detached Staff Mode session has invalid transitional state ENTERING"
+                                + " staff=" + playerId
+                                + " session=" + session.sessionId()
+                                + " server=" + session.serverId()
+                );
+                safeMessage(
+                        playerId,
+                        "Your Staff Mode recovery is paused because its detached session state is invalid;"
+                                + " contact an administrator."
+                );
+            }
+            case CLOSED -> recoveryGate.clear(playerId);
+        }
+    }
+
+    private void retireRestoredDetachedSession(
+            UUID playerId,
+            StaffSessionSnapshot session,
+            StaffSessionStore loaded
+    ) {
+        try {
+            StaffSessionSnapshot exiting = session.state() == StaffSessionState.RECOVERY_REQUIRED
+                    ? loaded.beginExit(playerId, clock.instant()).orElseThrow(() ->
+                            new IllegalStateException(
+                                    "detached recovery-required Staff Mode session disappeared during closure"
+                            ))
+                    : session;
+            if (!loaded.completeExit(exiting.sessionId(), exiting.checksum(), clock.instant())) {
+                recoveryGate.retry(playerId);
+                safeMessage(
+                        playerId,
+                        "Your detached Staff Mode session could not be closed safely; contact an administrator."
+                );
+                return;
+            }
+
+            // A DETACHED marker is written only after the source backend restored and checksum-
+            // verified its native snapshot. Never restore that source snapshot on this backend.
+            completeRuntimeExit(playerId);
+            safeMessage(
+                    playerId,
+                    "Recovered an interrupted detached Staff Mode session without replacing your current inventory."
+            );
+        } catch (RuntimeException exception) {
+            recoveryGate.retry(playerId);
+            plugin.getLogger().log(
+                    Level.SEVERE,
+                    "Detached Staff Mode terminal recovery failed"
+                            + " staff=" + playerId
+                            + " session=" + session.sessionId()
+                            + " state=" + session.state()
+                            + " server=" + session.serverId(),
+                    exception
+            );
+            safeMessage(
+                    playerId,
+                    "Your detached Staff Mode session could not be recovered automatically; contact an administrator."
+            );
         }
     }
 
@@ -641,12 +721,16 @@ public final class StaffModeManager implements Listener {
     }
 
     private void scheduleRecoveryRetry(UUID playerId) {
+        if (!scheduledRecoveryRetries.add(playerId)) {
+            return;
+        }
         plugin.getServer().getGlobalRegionScheduler().runDelayed(plugin, ignored -> {
+            scheduledRecoveryRetries.remove(playerId);
             Player player = plugin.getServer().getPlayer(playerId);
             if (player != null) {
                 recover(player);
             }
-        }, 10L);
+        }, 20L);
     }
 
     private boolean staleFromPriorRuntime(StaffSessionSnapshot session) {
@@ -990,6 +1074,7 @@ public final class StaffModeManager implements Listener {
         profileApplications.remove(playerId);
         snapshotRestorations.remove(playerId);
         pendingRankChecks.remove(playerId);
+        scheduledRecoveryRetries.remove(playerId);
         handoffGaps.remove(playerId);
         unrestrictedIdentities.remove(playerId);
         toolInventoryPreferences.remove(playerId);
@@ -1477,6 +1562,7 @@ public final class StaffModeManager implements Listener {
     private void completeRuntimeExit(UUID playerId) {
         removeRuntimeState(playerId);
         recoveryGate.clear(playerId);
+        scheduledRecoveryRetries.remove(playerId);
         handoffGaps.remove(playerId);
         try {
             exitListener.accept(playerId);
