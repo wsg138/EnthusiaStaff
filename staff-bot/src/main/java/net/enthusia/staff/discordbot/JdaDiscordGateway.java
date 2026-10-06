@@ -31,11 +31,13 @@ final class JdaDiscordGateway implements DiscordGateway {
     private final StaffBotWorkerPool workers;
     private final InteractionReplayGuard interactions;
     private final Optional<StaffModerationRuntime> moderation;
+    private final Optional<AiModerationReadConfiguration> aiReadConfiguration;
     private final Object lifecycleLock = new Object();
     private JDA jda;
     private JdaStaffModerationListener moderationListener;
     private JdaModerationUiPreviewListener previewListener;
     private ModerationReadApiServer productionReadApi;
+    private AiModerationReadApiServer aiReadApi;
     private DiscordRoleSyncCoordinator roleSyncCoordinator;
     private ManagedRoleShadowCoordinator managedRoleShadowCoordinator;
 
@@ -53,6 +55,7 @@ final class JdaDiscordGateway implements DiscordGateway {
         this.workers = workers;
         this.interactions = interactions;
         this.moderation = moderation == null ? Optional.empty() : moderation;
+        this.aiReadConfiguration = AiModerationReadConfiguration.fromSystemEnvironment();
         validateInteractionResources();
         validateRoleSyncBoundary();
     }
@@ -144,6 +147,7 @@ final class JdaDiscordGateway implements DiscordGateway {
                 return;
             }
             moderation.ifPresent(runtime -> runtime.resumePunishments(jda));
+            ensureAiReadApi();
             if (configuration.moderationWebUri().isPresent() && productionReadApi == null) {
                 try {
                     ModerationReadApiService service = new ModerationReadApiService(
@@ -162,6 +166,19 @@ final class JdaDiscordGateway implements DiscordGateway {
             }
             enableRoleSync();
             enableManagedRoleShadow();
+        }
+    }
+
+    private void ensureAiReadApi() {
+        if (aiReadApi != null || aiReadConfiguration.isEmpty() || moderation.isEmpty()) {
+            return;
+        }
+        try {
+            aiReadApi = new AiModerationReadApiServer(
+                    aiReadConfiguration.orElseThrow(), moderation.orElseThrow().reads());
+            aiReadApi.start();
+        } catch (java.io.IOException exception) {
+            throw new IllegalStateException("AI moderation read API failed to start", exception);
         }
     }
 
@@ -249,6 +266,10 @@ final class JdaDiscordGateway implements DiscordGateway {
         if (productionReadApi != null) {
             productionReadApi.close();
             productionReadApi = null;
+        }
+        if (aiReadApi != null) {
+            aiReadApi.close();
+            aiReadApi = null;
         }
         if (moderationListener != null) {
             moderationListener.disable();
