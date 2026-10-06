@@ -3,6 +3,7 @@ package net.enthusia.staff.paper.punishment;
 import io.papermc.paper.event.player.AsyncChatEvent;
 import java.time.Clock;
 import java.time.Instant;
+import java.time.Duration;
 import java.time.ZoneId;
 import java.util.EnumSet;
 import java.util.List;
@@ -27,9 +28,11 @@ import net.enthusia.staff.domain.application.PunishmentDraftWorkflow;
 import net.enthusia.staff.domain.application.PunishmentRequestDraftCleanupException;
 import net.enthusia.staff.domain.auth.Actor;
 import net.enthusia.staff.domain.auth.AuthorizationPolicy;
+import net.enthusia.staff.domain.auth.DiscordConsequenceType;
 import net.enthusia.staff.domain.auth.ModerationAction;
 import net.enthusia.staff.domain.casefile.CaseReview;
 import net.enthusia.staff.domain.casefile.CaseVisibility;
+import net.enthusia.staff.domain.discord.DiscordPunishmentIntent;
 import net.enthusia.staff.domain.escalation.ReasonPolicy;
 import net.enthusia.staff.domain.history.HistoryQueryOptions;
 import net.enthusia.staff.domain.history.ModerationHistoryPage;
@@ -41,6 +44,7 @@ import net.enthusia.staff.domain.ports.ReasonPolicyRepository;
 import net.enthusia.staff.domain.ports.ReportStore;
 import net.enthusia.staff.domain.ports.SanctionLookup;
 import net.enthusia.staff.domain.sanction.ActiveSanction;
+import net.enthusia.staff.domain.sanction.SanctionLength;
 import net.enthusia.staff.domain.sanction.SanctionType;
 import net.enthusia.staff.paper.auth.LuckPermsStaffTargetGuard;
 import net.enthusia.staff.paper.auth.PaperActorResolver;
@@ -71,6 +75,15 @@ public final class PunishmentGuiController implements Listener {
     private static final int OVERVIEW_REPORT_LIMIT = 100;
     private static final int HISTORY_PAGE_SIZE = 36;
     private static final ZoneId FALLBACK_TIMEZONE = ZoneId.of("UTC");
+    private static final List<SanctionLength> DISCORD_DURATIONS = List.of(
+            SanctionLength.temporary(Duration.ofMinutes(10)),
+            SanctionLength.temporary(Duration.ofHours(1)),
+            SanctionLength.temporary(Duration.ofDays(1)),
+            SanctionLength.temporary(Duration.ofDays(3)),
+            SanctionLength.temporary(Duration.ofDays(7)),
+            SanctionLength.temporary(Duration.ofDays(30)),
+            SanctionLength.permanent()
+    );
 
     private final JavaPlugin plugin;
     private final Clock clock;
@@ -84,6 +97,7 @@ public final class PunishmentGuiController implements Listener {
     private final Supplier<SanctionLookup> sanctions;
     private final Supplier<ReportStore> reports;
     private final Supplier<ModerationFeatureSettings> settings;
+    private final Supplier<PaperCrossPlatformPunishmentService> crossPlatform;
     private final ExecutorService workers;
     private final StaffTargetGuard targetGuard;
     private final PunishmentGuiCatalog catalog;
@@ -115,6 +129,7 @@ public final class PunishmentGuiController implements Listener {
         this.sanctions = checked.sanctions();
         this.reports = checked.reports();
         this.settings = checked.settings();
+        this.crossPlatform = checked.crossPlatform();
         this.workers = checked.workers();
         this.targetGuard = java.util.Objects.requireNonNull(targetGuard, "targetGuard");
         this.catalog = new PunishmentGuiCatalog(this.policies, this.authorization);
@@ -181,6 +196,8 @@ public final class PunishmentGuiController implements Listener {
                     draft.commandName(),
                     overview,
                     draft,
+                    Optional.empty(),
+                    PaperPunishmentScope.MINECRAFT,
                     Optional.empty()
             ));
         });
@@ -194,7 +211,9 @@ public final class PunishmentGuiController implements Listener {
             PunishmentDraftEvaluation.Prepared prepared
     ) {
         PunishmentGuiOverview overview = loadOverview(target.playerId());
-        showPrepared(viewer, target, commandName, actor, overview, prepared);
+        showPrepared(
+                viewer, target, commandName, actor, overview, prepared,
+                PaperPunishmentScope.MINECRAFT, Optional.empty());
     }
 
     @EventHandler(priority = EventPriority.HIGHEST)
@@ -256,6 +275,10 @@ public final class PunishmentGuiController implements Listener {
         }
         if (state instanceof PunishmentGuiState.Review review) {
             reviewClick(viewer, actor, review, slot);
+            return;
+        }
+        if (state instanceof PunishmentGuiState.CrossPlatformStatus status) {
+            crossPlatformStatusClick(viewer, status, slot);
             return;
         }
         if (state instanceof PunishmentGuiState.History history) {
@@ -496,6 +519,20 @@ public final class PunishmentGuiController implements Listener {
             reprepare(viewer, actor, state, state.draft().internalExplanation(), next);
             return;
         }
+        if (slot == PunishmentGuiRenderer.SCOPE_SLOT) {
+            changeScope(viewer, state);
+            return;
+        }
+        if (slot == PunishmentGuiRenderer.DISCORD_ACTION_SLOT
+                && state.scope() != PaperPunishmentScope.MINECRAFT) {
+            changeDiscordAction(viewer, state);
+            return;
+        }
+        if (slot == PunishmentGuiRenderer.DISCORD_DURATION_SLOT
+                && state.scope() != PaperPunishmentScope.MINECRAFT) {
+            changeDiscordDuration(viewer, state);
+            return;
+        }
         if (slot == PunishmentGuiRenderer.NOTE_SLOT) {
             noteCaptures.put(viewer.getUniqueId(), new NoteCapture(state));
             suppressedClosures.add(viewer.getUniqueId());
@@ -510,8 +547,143 @@ public final class PunishmentGuiController implements Listener {
                 message(viewer, "That saved reason is no longer available. Go back and choose another reason.");
                 return;
             }
+            if (state.scope() != PaperPunishmentScope.MINECRAFT && state.discordIntent().isEmpty()) {
+                message(viewer, "That Discord scope is not currently available. Choose Minecraft or another reason.");
+                return;
+            }
             confirm(viewer, actor, state);
         }
+    }
+
+    private void changeDiscordAction(Player viewer, PunishmentGuiState.Review state) {
+        DiscordPunishmentIntent current = state.discordIntent().orElse(null);
+        if (current == null) {
+            message(viewer, "This configured reason has no Discord consequence to edit.");
+            return;
+        }
+        DiscordConsequenceType next = switch (current.type()) {
+            case WARNING -> DiscordConsequenceType.MUTE;
+            case MUTE -> DiscordConsequenceType.KICK;
+            case KICK -> DiscordConsequenceType.BAN;
+            case BAN, CHANNEL_RESTRICTION -> DiscordConsequenceType.WARNING;
+        };
+        SanctionLength length = next == DiscordConsequenceType.WARNING || next == DiscordConsequenceType.KICK
+                ? SanctionLength.instant()
+                : current.length().isInstant()
+                        ? SanctionLength.temporary(Duration.ofDays(1))
+                        : current.length();
+        selectedDiscordIntent(state, next, length, !length.isInstant())
+                .ifPresentOrElse(
+                        intent -> openState(viewer, state.withScope(state.scope(), Optional.of(intent))),
+                        () -> message(viewer, "The Discord consequence could not be rebuilt from current policy.")
+                );
+    }
+
+    private void changeDiscordDuration(Player viewer, PunishmentGuiState.Review state) {
+        DiscordPunishmentIntent current = state.discordIntent().orElse(null);
+        if (current == null) {
+            message(viewer, "This configured reason has no Discord consequence to edit.");
+            return;
+        }
+        if (current.type() == DiscordConsequenceType.WARNING || current.type() == DiscordConsequenceType.KICK) {
+            message(viewer, "Warnings and kicks are instant Discord actions.");
+            return;
+        }
+        int currentIndex = DISCORD_DURATIONS.indexOf(current.length());
+        SanctionLength next = DISCORD_DURATIONS.get((currentIndex + 1) % DISCORD_DURATIONS.size());
+        selectedDiscordIntent(state, current.type(), next, true)
+                .ifPresentOrElse(
+                        intent -> openState(viewer, state.withScope(state.scope(), Optional.of(intent))),
+                        () -> message(viewer, "The Discord duration could not be rebuilt from current policy.")
+                );
+    }
+
+    private Optional<DiscordPunishmentIntent> selectedDiscordIntent(
+            PunishmentGuiState.Review state,
+            DiscordConsequenceType type,
+            SanctionLength length,
+            boolean customDuration
+    ) {
+        return policies.find(state.draft().reasonId()).map(policy -> new DiscordPunishmentIntent(
+                type,
+                length,
+                customDuration,
+                false,
+                Optional.empty(),
+                policy.publicReason(),
+                state.draft().internalExplanation(),
+                0,
+                true
+        ));
+    }
+
+    private void changeScope(Player viewer, PunishmentGuiState.Review state) {
+        PaperPunishmentScope next = switch (state.scope()) {
+            case MINECRAFT -> PaperPunishmentScope.DISCORD;
+            case DISCORD -> PaperPunishmentScope.BOTH;
+            case BOTH -> PaperPunishmentScope.MINECRAFT;
+        };
+        if (next == PaperPunishmentScope.MINECRAFT) {
+            openState(viewer, state.withScope(next, Optional.empty()));
+            return;
+        }
+        PaperCrossPlatformPunishmentService service = crossPlatform.get();
+        if (service == null) {
+            message(viewer, "Discord and Both scopes are not enabled on this server.");
+            return;
+        }
+        submit(viewer, () -> {
+            if (service.linkedTarget(state.target().playerId()).isEmpty()) {
+                message(viewer, "Discord and Both require exactly one current linked Discord account.");
+                return;
+            }
+            Optional<net.enthusia.staff.domain.discord.DiscordPunishmentIntent> intent =
+                    service.previewIntent(state.draft());
+            if (intent.isEmpty()) {
+                message(viewer, "This configured punishment step has no supported Discord consequence.");
+                return;
+            }
+            openState(viewer, state.withScope(next, intent));
+        });
+    }
+
+    private void crossPlatformStatusClick(
+            Player viewer,
+            PunishmentGuiState.CrossPlatformStatus state,
+            int slot
+    ) {
+        if (openHistoryFromControl(viewer, state, slot)) {
+            return;
+        }
+        if (slot == PunishmentGuiRenderer.CLOSE_SLOT) {
+            viewer.closeInventory();
+            return;
+        }
+        if (slot != PunishmentGuiRenderer.CONFIRM_SLOT) {
+            return;
+        }
+        PaperCrossPlatformPunishmentService service = crossPlatform.get();
+        if (service == null) {
+            message(viewer, "Cross-platform status is unavailable on this server.");
+            return;
+        }
+        submit(viewer, () -> {
+            PaperCrossPlatformPunishmentService.Outcome outcome =
+                    service.status(state.status().scope(), state.status().discordPunishmentId());
+            if (outcome instanceof PaperCrossPlatformPunishmentService.Outcome.Accepted accepted) {
+                openState(viewer, new PunishmentGuiState.CrossPlatformStatus(
+                        state.viewerId(),
+                        state.target(),
+                        state.commandName(),
+                        loadOverview(state.target().playerId()),
+                        accepted.status()
+                ));
+                return;
+            }
+            PaperCrossPlatformPunishmentService.Outcome.Rejected rejected =
+                    (PaperCrossPlatformPunishmentService.Outcome.Rejected) outcome;
+            message(viewer, rejected.code() + ": " + rejected.message());
+        });
     }
 
     private void historyClick(Player viewer, PunishmentGuiState.History state, int slot) {
@@ -635,7 +807,9 @@ public final class PunishmentGuiController implements Listener {
                     state.commandName(),
                     actor,
                     state.overview(),
-                    evaluation
+                    evaluation,
+                    PaperPunishmentScope.MINECRAFT,
+                    Optional.empty()
             );
         });
     }
@@ -673,7 +847,9 @@ public final class PunishmentGuiController implements Listener {
                     state.commandName(),
                     actor,
                     state.overview(),
-                    evaluation
+                    evaluation,
+                    state.scope(),
+                    state.discordIntent()
             );
         });
     }
@@ -684,7 +860,9 @@ public final class PunishmentGuiController implements Listener {
             String commandName,
             Actor actor,
             PunishmentGuiOverview overview,
-            PunishmentDraftEvaluation evaluation
+            PunishmentDraftEvaluation evaluation,
+            PaperPunishmentScope scope,
+            Optional<DiscordPunishmentIntent> priorDiscordIntent
     ) {
         if (evaluation instanceof PunishmentDraftEvaluation.Rejected rejected) {
             message(viewer, rejected.code() + ": " + rejected.message());
@@ -707,7 +885,9 @@ public final class PunishmentGuiController implements Listener {
                 commandName,
                 overview,
                 prepared.draft(),
-                Optional.of(assessment)
+                Optional.of(assessment),
+                scope,
+                discordIntent(scope, prepared.draft(), priorDiscordIntent)
         ));
     }
 
@@ -747,8 +927,84 @@ public final class PunishmentGuiController implements Listener {
             message(viewer, "Moderation storage is not ready; no action was taken.");
             return;
         }
+        if (state.scope() != PaperPunishmentScope.MINECRAFT) {
+            confirmCrossPlatform(viewer, actor, state, workflow);
+            return;
+        }
         Optional<PunishmentDraftConfirmation> result = confirmDraft(viewer, actor, state, workflow);
         result.ifPresent(value -> handleConfirmation(viewer, actor, state, value));
+    }
+
+    private void confirmCrossPlatform(
+            Player viewer,
+            Actor actor,
+            PunishmentGuiState.Review state,
+            PunishmentDraftWorkflow workflow
+    ) {
+        PaperCrossPlatformPunishmentService service = crossPlatform.get();
+        if (service == null) {
+            message(viewer, "Discord and Both scopes are not enabled on this server.");
+            return;
+        }
+        PaperCrossPlatformPunishmentService.Outcome outcome =
+                service.confirm(
+                        state.scope(),
+                        actor,
+                        state.draft(),
+                        state.discordIntent().orElseThrow()
+                );
+        if (outcome instanceof PaperCrossPlatformPunishmentService.Outcome.Rejected rejected) {
+            if ("RECOMMENDATION_CHANGED".equals(rejected.code())) {
+                message(viewer, "The recommendation changed. A fresh review is being opened; no new intent was created.");
+                reprepare(
+                        viewer,
+                        actor,
+                        state,
+                        state.draft().internalExplanation(),
+                        state.draft().visibility()
+                );
+                return;
+            }
+            message(viewer, rejected.code() + ": " + rejected.message());
+            return;
+        }
+        PaperCrossPlatformPunishmentService.Status status =
+                ((PaperCrossPlatformPunishmentService.Outcome.Accepted) outcome).status();
+        try {
+            workflow.discard(state.draft().draftId(), actor.id());
+        } catch (RuntimeException exception) {
+            plugin.getLogger().log(
+                    Level.SEVERE,
+                    "Cross-platform punishment committed but draft cleanup failed " + status.discordPunishmentId(),
+                    exception
+            );
+            message(viewer, "The punishment intent committed, but draft cleanup failed. Status recovery remains safe.");
+        }
+        openState(viewer, new PunishmentGuiState.CrossPlatformStatus(
+                state.viewerId(),
+                state.target(),
+                state.commandName(),
+                loadOverview(state.target().playerId()),
+                status
+        ));
+    }
+
+    private Optional<DiscordPunishmentIntent> discordIntent(
+            PaperPunishmentScope scope,
+            PunishmentDraft draft,
+            Optional<DiscordPunishmentIntent> prior
+    ) {
+        if (scope == PaperPunishmentScope.MINECRAFT) {
+            return Optional.empty();
+        }
+        PaperCrossPlatformPunishmentService service = crossPlatform.get();
+        if (service == null) {
+            return Optional.empty();
+        }
+        if (prior != null && prior.isPresent()) {
+            return service.currentIntent(draft, prior.orElseThrow());
+        }
+        return service.previewIntent(draft);
     }
 
     private Optional<PunishmentDraftConfirmation> confirmDraft(
@@ -1121,6 +1377,7 @@ public final class PunishmentGuiController implements Listener {
             Supplier<SanctionLookup> sanctions,
             Supplier<ReportStore> reports,
             Supplier<ModerationFeatureSettings> settings,
+            Supplier<PaperCrossPlatformPunishmentService> crossPlatform,
             ExecutorService workers
     ) {
         public Dependencies {
@@ -1136,6 +1393,7 @@ public final class PunishmentGuiController implements Listener {
             sanctions = java.util.Objects.requireNonNull(sanctions, "sanctions");
             reports = java.util.Objects.requireNonNull(reports, "reports");
             settings = java.util.Objects.requireNonNull(settings, "settings");
+            crossPlatform = java.util.Objects.requireNonNull(crossPlatform, "crossPlatform");
             workers = java.util.Objects.requireNonNull(workers, "workers");
         }
     }

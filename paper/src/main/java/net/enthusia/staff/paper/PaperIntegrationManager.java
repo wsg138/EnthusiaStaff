@@ -142,12 +142,15 @@ final class PaperIntegrationManager implements Listener {
             );
             reputationRestrictions.start();
         }
-        DiscordStaffAuthorityEndpoint.startIfConfigured(plugin(),
+        DiscordStaffAuthorityEndpoint.startIfConfigured(
+                plugin(),
                 new net.enthusia.staff.paper.auth.StaffWebPunishmentService.Dependencies(
                         clock(), dependencies.policy().writeMode(), dependencies.stores().punishmentDraftWorkflow(),
                         dependencies.stores().players(), dependencies.policy().reasons(),
-                        dependencies.policy().authorization()))
-                .ifPresent(endpoint -> discordStaffAuthority = endpoint);
+                        dependencies.policy().authorization()),
+                dependencies.stores().punishmentService(),
+                dependencies.policy().authoritativeMode()
+        ).ifPresent(endpoint -> discordStaffAuthority = endpoint);
     }
 
     void deliverNetworkPunishment(net.enthusia.staff.domain.network.PunishmentCommitNotification notification) {

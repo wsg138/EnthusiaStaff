@@ -43,6 +43,26 @@ public record PunishmentExpectation(
         );
     }
 
+    public static PunishmentExpectation from(PunishmentPlan plan) {
+        if (plan == null) {
+            throw new IllegalArgumentException("punishment plan must be present");
+        }
+        return new PunishmentExpectation(
+                plan.configurationVersion(),
+                plan.escalation().selectedStep().ordinal(),
+                plan.escalation().selectedStep().label(),
+                plan.sanctions()
+        );
+    }
+
+    public boolean matches(PunishmentPlan plan) {
+        return plan != null
+                && configurationVersion.equals(plan.configurationVersion())
+                && stepOrdinal == plan.escalation().selectedStep().ordinal()
+                && stepLabel.equals(plan.escalation().selectedStep().label())
+                && sanctions.equals(plan.sanctions());
+    }
+
     public boolean matches(PunishmentAssessment assessment) {
         if (assessment == null) {
             return false;

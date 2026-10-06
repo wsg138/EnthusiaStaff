@@ -4,6 +4,7 @@ import java.util.Optional;
 import java.util.UUID;
 import net.enthusia.staff.domain.application.PunishmentAssessment;
 import net.enthusia.staff.domain.application.PunishmentDraft;
+import net.enthusia.staff.domain.discord.DiscordPunishmentIntent;
 import net.enthusia.staff.domain.history.ModerationHistoryPage;
 import net.enthusia.staff.domain.player.PlayerIdentity;
 
@@ -50,14 +51,39 @@ sealed interface PunishmentGuiState {
             String commandName,
             PunishmentGuiOverview overview,
             PunishmentDraft draft,
-            Optional<PunishmentAssessment> assessment
+            Optional<PunishmentAssessment> assessment,
+            PaperPunishmentScope scope,
+            Optional<DiscordPunishmentIntent> discordIntent
     ) implements PunishmentGuiState {
         public Review {
             validate(viewerId, target, commandName, overview, 0);
-            if (draft == null || assessment == null
+            if (draft == null || assessment == null || scope == null || discordIntent == null
                     || !draft.actorId().equals(viewerId)
                     || !draft.targetId().equals(target.playerId())) {
                 throw new IllegalArgumentException("punishment review fields must be consistent");
+            }
+            if (scope == PaperPunishmentScope.MINECRAFT && discordIntent.isPresent()) {
+                throw new IllegalArgumentException("Minecraft-only review cannot carry a Discord intent");
+            }
+        }
+
+        Review withScope(PaperPunishmentScope next, Optional<DiscordPunishmentIntent> nextIntent) {
+            return new Review(
+                    viewerId, target, commandName, overview, draft, assessment, next, nextIntent);
+        }
+    }
+
+    record CrossPlatformStatus(
+            UUID viewerId,
+            PlayerIdentity target,
+            String commandName,
+            PunishmentGuiOverview overview,
+            PaperCrossPlatformPunishmentService.Status status
+    ) implements PunishmentGuiState {
+        public CrossPlatformStatus {
+            validate(viewerId, target, commandName, overview, 0);
+            if (status == null) {
+                throw new IllegalArgumentException("cross-platform status must be present");
             }
         }
     }

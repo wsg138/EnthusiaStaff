@@ -1,8 +1,14 @@
 # Discord moderation platform specification
 
-Status: **Planned / approved design; not implemented.**
+Status: **Partially implemented.** Core staff-bot moderation, production workspace enforcement, account-link authority, role-sync foundations, and explicit D08 Discord/Minecraft/Both routing are implemented in the repository. Discord AutoMod replacement, public-bot scope, final migration/cutover, and live acceptance remain separately gated.
 
 This document defines the approved Discord moderation, identity-linking, AutoMod, staff-bot, public-bot, appeal, and migration expansion for EnthusiaStaff. It is intentionally separate from the existing webhook-only Discord delivery implementation in `docs/discord-delivery.md`.
+
+## Implementation note — D08 cross-platform routing
+
+D08 does not make “Both” an implicit side effect. Discord/web origin and Minecraft GUI origin each default to their own platform and require an explicit final scope choice before a cross-platform commit. A Both action stores the Minecraft case and Discord enforcement intent atomically, while external enforcement remains independent: Minecraft delivery uses the durable network outbox and Discord delivery uses the StaffBot punishment worker. The two states are therefore shown separately and are independently recoverable.
+
+The Minecraft GUI’s Discord/Both choices are disabled unless the Paper cross-platform runtime gate is configured and the selected Minecraft identity resolves to exactly one current Discord identity. Confirmation revalidates current policy, hierarchy, identity links, and platform authorization. Restart/lost-response recovery uses stable action identifiers rather than issuing a replacement action.
 
 ## 1. Core authority and topology
 

@@ -21,6 +21,9 @@ import net.enthusia.staff.domain.ports.CaseReviewStore;
 import net.enthusia.staff.domain.ports.CheatTesterJournalStore;
 import net.enthusia.staff.domain.ports.ClientEvidenceStore;
 import net.enthusia.staff.domain.ports.CommandBridgeAuditStore;
+import net.enthusia.staff.domain.ports.CrossPlatformIdentityLookup;
+import net.enthusia.staff.domain.ports.CrossPlatformPunishmentStore;
+import net.enthusia.staff.domain.ports.DiscordPunishmentRepository;
 import net.enthusia.staff.domain.ports.DiscordModerationPersistenceStore;
 import net.enthusia.staff.domain.ports.DiscordOutboxStore;
 import net.enthusia.staff.domain.ports.EconomyJournalStore;
@@ -45,6 +48,7 @@ import net.enthusia.staff.domain.ports.WebsiteModerationStore;
 import net.enthusia.staff.domain.report.ReportPolicy;
 import net.enthusia.staff.domain.report.ReportPolicyRuntime;
 import net.enthusia.staff.persistence.migration.CutoverCoordinator;
+import net.enthusia.staff.persistence.migration.FencedCrossPlatformPunishmentStore;
 import net.enthusia.staff.persistence.migration.FencedModerationStore;
 import net.enthusia.staff.persistence.migration.FencedNetworkIdentityStore;
 import net.enthusia.staff.persistence.migration.FencedPunishmentRequestStore;
@@ -87,6 +91,10 @@ public final class MariaDbRuntime implements AutoCloseable {
     private final DiscordModerationPersistenceStore discordModerationPersistenceStore;
     private final AccountLinkingStore accountLinkingStore;
     private final AccountLinkAuditStore accountLinkAuditStore;
+    private final DiscordPunishmentRepository discordPunishmentRepository;
+    private final CrossPlatformPunishmentStore crossPlatformPunishmentStore;
+    private final CrossPlatformIdentityLookup crossPlatformIdentityLookup;
+    private final JdbcCrossPlatformPunishmentStatusReader crossPlatformPunishmentStatus;
 
     MariaDbRuntime(HikariDataSource dataSource) {
         this(dataSource, ReportPolicyRuntime::current, Clock.systemUTC());
@@ -151,6 +159,13 @@ public final class MariaDbRuntime implements AutoCloseable {
         this.discordModerationPersistenceStore = new JdbcDiscordModerationPersistenceStore(dataSource);
         this.accountLinkingStore = new JdbcAccountLinkingStore(dataSource);
         this.accountLinkAuditStore = new JdbcAccountLinkAuditStore(dataSource);
+        this.discordPunishmentRepository = new JdbcDiscordPunishmentRepository(dataSource);
+        this.crossPlatformPunishmentStore = new FencedCrossPlatformPunishmentStore(
+                dataSource,
+                new JdbcCrossPlatformPunishmentStore(dataSource, moderation, (JdbcDiscordPunishmentRepository) discordPunishmentRepository)
+        );
+        this.crossPlatformIdentityLookup = new DiscordCrossPlatformIdentityLookup(discordModerationPersistenceStore);
+        this.crossPlatformPunishmentStatus = new JdbcCrossPlatformPunishmentStatusReader(dataSource);
     }
 
     public ModerationStore moderationStore() { return moderationStore; }
@@ -182,6 +197,10 @@ public final class MariaDbRuntime implements AutoCloseable {
     public DiscordModerationPersistenceStore discordModerationPersistenceStore() { return discordModerationPersistenceStore; }
     public AccountLinkingStore accountLinkingStore() { return accountLinkingStore; }
     public AccountLinkAuditStore accountLinkAuditStore() { return accountLinkAuditStore; }
+    public DiscordPunishmentRepository discordPunishmentRepository() { return discordPunishmentRepository; }
+    public CrossPlatformPunishmentStore crossPlatformPunishmentStore() { return crossPlatformPunishmentStore; }
+    public CrossPlatformIdentityLookup crossPlatformIdentityLookup() { return crossPlatformIdentityLookup; }
+    public JdbcCrossPlatformPunishmentStatusReader crossPlatformPunishmentStatus() { return crossPlatformPunishmentStatus; }
     public CommandBridgeAuditStore commandBridgeAuditStore() { return new JdbcCommandBridgeAuditStore(dataSource); }
 
     public WebsiteModerationStore websiteModerationStore(PunishmentCodeProtector codeProtector) {

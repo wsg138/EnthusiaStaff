@@ -8,6 +8,7 @@ import java.util.Map;
 import java.util.Optional;
 import net.dv8tion.jda.api.JDA;
 import net.enthusia.staff.persistence.DiscordRoleSyncPersistenceRuntime;
+import net.enthusia.staff.domain.application.CrossPlatformPunishmentService;
 import net.enthusia.staff.persistence.DiscordStaffReadRuntime;
 
 /** Owns every D06/D07/D13/D16 database, authority, component, enforcement, and role-sync resource. */
@@ -124,6 +125,7 @@ final class StaffModerationRuntime implements AutoCloseable {
                     value,
                     reads,
                     actors,
+                    minecraftPreparer(configuration),
                     guildId,
                     interactionCapacity,
                     interactionTtl
@@ -143,6 +145,14 @@ final class StaffModerationRuntime implements AutoCloseable {
             data.close();
             throw exception;
         }
+    }
+
+    private static HttpMinecraftPunishmentPreparer minecraftPreparer(
+            StaffModerationConfiguration configuration
+    ) {
+        return new HttpMinecraftPunishmentPreparer(
+                configuration.authorityUri(), configuration.authoritySecret(), configuration.authorityTransport()
+        );
     }
 
     StaffModerationReadService reads() {
@@ -185,6 +195,14 @@ final class StaffModerationRuntime implements AutoCloseable {
 
     HttpStaffAuthorityClient authority() {
         return authority;
+    }
+
+    Optional<CrossPlatformPunishmentService> crossPlatformPunishmentService() {
+        return punishments.map(DiscordPunishmentRuntime::crossPlatformService);
+    }
+
+    Optional<CrossPlatformModerationActionService> crossPlatformActions() {
+        return punishments.map(DiscordPunishmentRuntime::crossPlatformActions);
     }
 
     void resumePunishments(JDA jda) {

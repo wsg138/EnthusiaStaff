@@ -22,10 +22,14 @@ record DiscordPunishmentConfiguration(
     static final String MUTE_ROLE_ENV = "ENTHUSIA_STAFF_BOT_DISCORD_MUTE_ROLE_ID";
     static final String SUPPORT_SCOPES_ENV = "ENTHUSIA_STAFF_BOT_DISCORD_SUPPORT_SCOPE_IDS";
     static final String SUPPORT_MESSAGE_ENV = "ENTHUSIA_STAFF_BOT_DISCORD_SUPPORT_MESSAGE";
-    static final String HELPER_MAX_MUTE_ENV = "ENTHUSIA_STAFF_BOT_HELPER_MAX_MUTE_SECONDS";
-    static final String MOD_MAX_MUTE_ENV = "ENTHUSIA_STAFF_BOT_MOD_MAX_MUTE_SECONDS";
-    static final String MOD_MAX_BAN_ENV = "ENTHUSIA_STAFF_BOT_MOD_MAX_BAN_SECONDS";
-    static final String MOD_MAX_RESTRICTION_ENV = "ENTHUSIA_STAFF_BOT_MOD_MAX_RESTRICTION_SECONDS";
+    static final String HELPER_MAX_MUTE_ENV = "ENTHUSIA_STAFF_BOT_DISCORD_HELPER_MAX_MUTE_SECONDS";
+    static final String MOD_MAX_MUTE_ENV = "ENTHUSIA_STAFF_BOT_DISCORD_MOD_MAX_MUTE_SECONDS";
+    static final String MOD_MAX_BAN_ENV = "ENTHUSIA_STAFF_BOT_DISCORD_MOD_MAX_BAN_SECONDS";
+    static final String MOD_MAX_RESTRICTION_ENV = "ENTHUSIA_STAFF_BOT_DISCORD_MOD_MAX_RESTRICTION_SECONDS";
+    private static final String LEGACY_HELPER_MAX_MUTE_ENV = "ENTHUSIA_STAFF_BOT_HELPER_MAX_MUTE_SECONDS";
+    private static final String LEGACY_MOD_MAX_MUTE_ENV = "ENTHUSIA_STAFF_BOT_MOD_MAX_MUTE_SECONDS";
+    private static final String LEGACY_MOD_MAX_BAN_ENV = "ENTHUSIA_STAFF_BOT_MOD_MAX_BAN_SECONDS";
+    private static final String LEGACY_MOD_MAX_RESTRICTION_ENV = "ENTHUSIA_STAFF_BOT_MOD_MAX_RESTRICTION_SECONDS";
     static final String RECONCILE_SECONDS_ENV = "ENTHUSIA_STAFF_BOT_DISCORD_RECONCILE_SECONDS";
     static final String WORKER_MILLIS_ENV = "ENTHUSIA_STAFF_BOT_DISCORD_WORKER_MILLIS";
 
@@ -55,10 +59,10 @@ record DiscordPunishmentConfiguration(
             throw new IllegalArgumentException(ENABLED_ENV + " must be true or false");
         }
         DiscordAuthorizationLimits limits = new DiscordAuthorizationLimits(
-                seconds(values, HELPER_MAX_MUTE_ENV),
-                seconds(values, MOD_MAX_MUTE_ENV),
-                seconds(values, MOD_MAX_BAN_ENV),
-                seconds(values, MOD_MAX_RESTRICTION_ENV)
+                seconds(values, HELPER_MAX_MUTE_ENV, LEGACY_HELPER_MAX_MUTE_ENV),
+                seconds(values, MOD_MAX_MUTE_ENV, LEGACY_MOD_MAX_MUTE_ENV),
+                seconds(values, MOD_MAX_BAN_ENV, LEGACY_MOD_MAX_BAN_ENV),
+                seconds(values, MOD_MAX_RESTRICTION_ENV, LEGACY_MOD_MAX_RESTRICTION_ENV)
         );
         return Optional.of(new DiscordPunishmentConfiguration(
                 limits,
@@ -70,8 +74,23 @@ record DiscordPunishmentConfiguration(
         ));
     }
 
-    private static Duration seconds(Map<String, String> values, String name) {
-        return Duration.ofSeconds(optionalPositive(values, name, -1));
+    private static Duration seconds(Map<String, String> values, String name, String legacyName) {
+        String raw = values.get(name);
+        if (raw == null || raw.isBlank()) {
+            raw = values.get(legacyName);
+        }
+        if (raw == null || raw.isBlank()) {
+            throw new IllegalArgumentException(name + " is required when Discord enforcement is enabled");
+        }
+        try {
+            long value = Long.parseLong(raw.trim());
+            if (value <= 0) {
+                throw new IllegalArgumentException(name + " must be positive");
+            }
+            return Duration.ofSeconds(value);
+        } catch (NumberFormatException exception) {
+            throw new IllegalArgumentException(name + " must be an integer", exception);
+        }
     }
 
     private static long optionalPositive(Map<String, String> values, String name, long fallback) {

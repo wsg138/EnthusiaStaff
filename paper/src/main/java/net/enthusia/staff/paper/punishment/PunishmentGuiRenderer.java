@@ -45,6 +45,9 @@ final class PunishmentGuiRenderer {
     static final int SUMMARY_HISTORY_SLOT = 2;
     static final int VISIBILITY_SLOT = 37;
     static final int NOTE_SLOT = 39;
+    static final int SCOPE_SLOT = 40;
+    static final int DISCORD_ACTION_SLOT = 42;
+    static final int DISCORD_DURATION_SLOT = 44;
 
     private static final int TARGET_SLOT = 4;
     private static final int ACTIVE_SANCTIONS_SLOT = 6;
@@ -87,6 +90,8 @@ final class PunishmentGuiRenderer {
             renderReasons(inventory, reasons, actor);
         } else if (state instanceof PunishmentGuiState.Review review) {
             renderReview(inventory, review, actor);
+        } else if (state instanceof PunishmentGuiState.CrossPlatformStatus status) {
+            renderCrossPlatformStatus(inventory, status);
         } else if (state instanceof PunishmentGuiState.History history) {
             renderHistory(inventory, history);
         }
@@ -239,26 +244,86 @@ final class PunishmentGuiRenderer {
 
         inventory.setItem(VISIBILITY_SLOT, visibilityItem(draft));
         inventory.setItem(NOTE_SLOT, noteItem(draft));
+        inventory.setItem(SCOPE_SLOT, scopeItem(state));
         inventory.setItem(41, historySummaryItem(state));
+        if (state.scope() != PaperPunishmentScope.MINECRAFT) {
+            inventory.setItem(DISCORD_ACTION_SLOT, discordActionItem(state));
+            inventory.setItem(DISCORD_DURATION_SLOT, discordDurationItem(state));
+        }
         inventory.setItem(43, authorityItem(actor, policy));
 
         inventory.setItem(BACK_SLOT, button(Material.ARROW, "Back · Reasons", NamedTextColor.AQUA));
         footerHistory(inventory);
+        boolean platformReady = state.scope() == PaperPunishmentScope.MINECRAFT
+                || state.discordIntent().isPresent();
         inventory.setItem(CONFIRM_SLOT, policy == null
                 ? item(Material.GRAY_DYE, "Reason Unavailable", NamedTextColor.RED,
                         List.of(Component.text("Go back and choose a current reason.", NamedTextColor.YELLOW)))
-                : item(Material.LIME_CONCRETE, "Confirm & Submit", NamedTextColor.GREEN,
-                        List.of(
-                                Component.text("Applies the outcome or requests approval", NamedTextColor.WHITE),
-                                Component.text("depending on your rank.", NamedTextColor.GRAY),
-                                Component.text("The reason and outcome are checked again.", NamedTextColor.GRAY)
-                        )));
+                : !platformReady
+                        ? item(Material.GRAY_DYE, "Scope Unavailable", NamedTextColor.RED,
+                                List.of(Component.text(
+                                        "Choose Minecraft or select a Discord-compatible configured consequence.",
+                                        NamedTextColor.YELLOW)))
+                        : item(Material.LIME_CONCRETE, "Confirm & Submit", NamedTextColor.GREEN,
+                                List.of(
+                                        Component.text("Scope: " + state.scope().label(), NamedTextColor.WHITE),
+                                        Component.text("Each selected platform is shown separately.", NamedTextColor.GRAY),
+                                        Component.text("Authority and current policy are checked again.", NamedTextColor.GRAY)
+                                )));
         inventory.setItem(CLOSE_SLOT, item(
                 Material.BARRIER,
                 "Save & Close",
                 NamedTextColor.RED,
                 List.of(Component.text("The draft remains resumable for its configured lifetime.", NamedTextColor.GRAY))
         ));
+    }
+
+    private void renderCrossPlatformStatus(
+            Inventory inventory,
+            PunishmentGuiState.CrossPlatformStatus state
+    ) {
+        PaperCrossPlatformPunishmentService.Status status = state.status();
+        List<Component> minecraftLore = new ArrayList<>();
+        minecraftLore.add(Component.text("Delivery: " + humanize(status.minecraftDelivery()), NamedTextColor.WHITE));
+        status.caseId().ifPresent(caseId ->
+                minecraftLore.add(Component.text("Case: " + caseId, NamedTextColor.GRAY)));
+        if (status.minecraftError() != null && !status.minecraftError().isBlank()) {
+            minecraftLore.add(Component.text("Last error: " + status.minecraftError(), NamedTextColor.RED));
+        }
+        inventory.setItem(20, item(
+                status.scope() == PaperPunishmentScope.DISCORD ? Material.GRAY_DYE : Material.GRASS_BLOCK,
+                "Minecraft",
+                status.scope() == PaperPunishmentScope.DISCORD ? NamedTextColor.GRAY : NamedTextColor.GREEN,
+                minecraftLore
+        ));
+
+        List<Component> discordLore = new ArrayList<>();
+        discordLore.add(Component.text("State: " + humanize(status.discordState()), NamedTextColor.WHITE));
+        discordLore.add(Component.text(
+                "External effect: " + (status.discordExternalApplied() ? "confirmed" : "not yet confirmed"),
+                status.discordExternalApplied() ? NamedTextColor.GREEN : NamedTextColor.YELLOW));
+        discordLore.add(Component.text(
+                "Notification: " + humanize(status.discordDmOutcome()), NamedTextColor.GRAY));
+        discordLore.add(Component.text("Punishment ID: " + status.discordPunishmentId(), NamedTextColor.DARK_GRAY));
+        inventory.setItem(24, item(
+                Material.PAPER,
+                "Discord",
+                status.discordExternalApplied() ? NamedTextColor.GREEN : NamedTextColor.YELLOW,
+                discordLore
+        ));
+
+        inventory.setItem(31, item(
+                Material.COMPASS,
+                "Selected Scope · " + status.scope().label(),
+                NamedTextColor.AQUA,
+                List.of(
+                        Component.text("Minecraft and Discord keep independent delivery state.", NamedTextColor.GRAY),
+                        Component.text("Refresh until pending external work settles.", NamedTextColor.YELLOW)
+                )
+        ));
+        footerHistory(inventory);
+        inventory.setItem(CONFIRM_SLOT, button(Material.CLOCK, "Refresh Status", NamedTextColor.AQUA));
+        inventory.setItem(CLOSE_SLOT, button(Material.BARRIER, CLOSE_LABEL, NamedTextColor.RED));
     }
 
     private void renderHistory(Inventory inventory, PunishmentGuiState.History state) {
@@ -298,6 +363,7 @@ final class PunishmentGuiRenderer {
         String phase = state instanceof PunishmentGuiState.Categories ? "Categories"
                 : state instanceof PunishmentGuiState.Reasons ? "Exact Reason"
                 : state instanceof PunishmentGuiState.Review ? "Review & Confirm"
+                : state instanceof PunishmentGuiState.CrossPlatformStatus ? "Delivery Status"
                 : "History";
         return item(
                 Material.KNOWLEDGE_BOOK,
@@ -504,6 +570,101 @@ final class PunishmentGuiRenderer {
                         )
                 )
         );
+    }
+
+    private static ItemStack scopeItem(PunishmentGuiState.Review state) {
+        List<Component> lore = new ArrayList<>();
+        boolean minecraft = state.scope() != PaperPunishmentScope.DISCORD;
+        boolean discord = state.scope() != PaperPunishmentScope.MINECRAFT;
+        lore.add(Component.text("Minecraft: " + (minecraft
+                ? describe(state.draft().expectation().sanctions())
+                : "Not selected"), minecraft ? NamedTextColor.WHITE : NamedTextColor.GRAY));
+        if (!discord) {
+            lore.add(Component.text("Discord: Not selected", NamedTextColor.GRAY));
+        } else if (state.discordIntent().isEmpty()) {
+            lore.add(Component.text("Discord: unavailable for this configured step", NamedTextColor.RED));
+        } else {
+            net.enthusia.staff.domain.discord.DiscordPunishmentIntent intent = state.discordIntent().orElseThrow();
+            lore.add(Component.text(
+                    "Discord: " + humanize(intent.type().name()) + " · " + describeLength(intent.length()),
+                    NamedTextColor.WHITE));
+        }
+        lore.add(Component.text("Click to change: Minecraft → Discord → Both.", NamedTextColor.YELLOW));
+        return item(Material.COMPASS, "Scope · " + state.scope().label(), NamedTextColor.AQUA, lore);
+    }
+
+    private static ItemStack discordActionItem(PunishmentGuiState.Review state) {
+        if (state.discordIntent().isEmpty()) {
+            return item(
+                    Material.GRAY_DYE,
+                    "Discord Action Unavailable",
+                    NamedTextColor.RED,
+                    List.of(Component.text("Choose another scope or configured reason.", NamedTextColor.YELLOW))
+            );
+        }
+        net.enthusia.staff.domain.discord.DiscordPunishmentIntent intent = state.discordIntent().orElseThrow();
+        return item(
+                Material.PAPER,
+                "Discord Action · " + humanize(intent.type().name()),
+                NamedTextColor.AQUA,
+                List.of(
+                        Component.text("Independent from the Minecraft consequence.", NamedTextColor.GRAY),
+                        Component.text("Click to cycle Warning → Mute → Kick → Ban.", NamedTextColor.YELLOW)
+                )
+        );
+    }
+
+    private static ItemStack discordDurationItem(PunishmentGuiState.Review state) {
+        if (state.discordIntent().isEmpty()) {
+            return item(Material.GRAY_DYE, "Discord Duration Unavailable", NamedTextColor.GRAY, List.of());
+        }
+        net.enthusia.staff.domain.discord.DiscordPunishmentIntent intent = state.discordIntent().orElseThrow();
+        boolean instant = intent.type() == net.enthusia.staff.domain.auth.DiscordConsequenceType.WARNING
+                || intent.type() == net.enthusia.staff.domain.auth.DiscordConsequenceType.KICK;
+        if (instant) {
+            return item(
+                    Material.GRAY_DYE,
+                    "Discord Duration · Instant",
+                    NamedTextColor.GRAY,
+                    List.of(Component.text("Warnings and kicks have no duration.", NamedTextColor.DARK_GRAY))
+            );
+        }
+        return item(
+                Material.CLOCK,
+                "Discord Duration · " + describeLength(intent.length()),
+                NamedTextColor.AQUA,
+                List.of(
+                        Component.text("This duration is independent from Minecraft.", NamedTextColor.GRAY),
+                        Component.text("Click to cycle allowed duration choices.", NamedTextColor.YELLOW),
+                        Component.text("Current staff ceilings are checked at confirmation.", NamedTextColor.GRAY)
+                )
+        );
+    }
+
+    private static String describeLength(SanctionLength length) {
+        return switch (length.kind()) {
+            case INSTANT -> "Instant";
+            case PERMANENT -> "Permanent";
+            case TEMPORARY -> length.temporary().map(PunishmentGuiRenderer::durationLabel).orElse("Temporary");
+        };
+    }
+
+    private static String durationLabel(Duration duration) {
+        long seconds = duration.getSeconds();
+        if (seconds % 86_400 == 0) {
+            return unitLabel(seconds / 86_400, "day");
+        }
+        if (seconds % 3_600 == 0) {
+            return unitLabel(seconds / 3_600, "hour");
+        }
+        if (seconds % 60 == 0) {
+            return unitLabel(seconds / 60, "minute");
+        }
+        return unitLabel(seconds, "second");
+    }
+
+    private static String unitLabel(long amount, String unit) {
+        return amount + " " + unit + (amount == 1 ? "" : "s");
     }
 
     private static ItemStack noteItem(PunishmentDraft draft) {
@@ -782,6 +943,9 @@ final class PunishmentGuiRenderer {
         }
         if (state instanceof PunishmentGuiState.Review) {
             return Component.text("Review · " + target, NamedTextColor.DARK_AQUA);
+        }
+        if (state instanceof PunishmentGuiState.CrossPlatformStatus) {
+            return Component.text("Status · " + target, NamedTextColor.DARK_AQUA);
         }
         if (state instanceof PunishmentGuiState.History history) {
             return Component.text(
