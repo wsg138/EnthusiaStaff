@@ -241,7 +241,7 @@ final class PaperCommandRegistrar {
             ReportStore loaded = reportStore.get();
             return loaded == null ? null : new net.enthusia.staff.paper.report.ActiveDutyReportStore(
                     loaded,
-                    dependencies.players().staffMode()::authorityActive
+                    dependencies.players().staffMode()::authorityActiveOrUnrestricted
             );
         };
         ReportCommand report = new ReportCommand(
