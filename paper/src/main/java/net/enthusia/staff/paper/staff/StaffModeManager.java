@@ -73,6 +73,7 @@ public final class StaffModeManager implements Listener {
     private final Map<UUID, StaffRank> ranks = new ConcurrentHashMap<>();
     private final Map<UUID, String> toolSessions = new ConcurrentHashMap<>();
     private final Map<UUID, Boolean> toolInventoryPreferences = new ConcurrentHashMap<>();
+    private final java.util.Set<UUID> toolPreferenceWrites = ConcurrentHashMap.newKeySet();
     private final java.util.Set<UUID> unrestrictedIdentities = ConcurrentHashMap.newKeySet();
     private final java.util.Set<UUID> transitions = ConcurrentHashMap.newKeySet();
     private final java.util.Set<UUID> handoffGaps = ConcurrentHashMap.newKeySet();
@@ -1598,6 +1599,12 @@ public final class StaffModeManager implements Listener {
             ));
             return;
         }
+        if (!toolPreferenceWrites.add(playerId)) {
+            player.sendMessage(StaffMessageStyle.warning(
+                    "Your Staff inventory preference is already being saved."
+            ));
+            return;
+        }
         if (!submit(() -> {
             try {
                 StaffPreferenceStore loaded = preferences.get();
@@ -1612,8 +1619,11 @@ public final class StaffModeManager implements Listener {
             } catch (RuntimeException exception) {
                 plugin.getLogger().log(Level.SEVERE, "Staff inventory preference update failed", exception);
                 safeMessage(playerId, "Your Staff inventory preference could not be saved.");
+            } finally {
+                toolPreferenceWrites.remove(playerId);
             }
         })) {
+            toolPreferenceWrites.remove(playerId);
             player.sendMessage(StaffMessageStyle.error(
                     "The bounded work queue is full; your Staff inventory preference was not changed."
             ));
