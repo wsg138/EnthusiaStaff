@@ -7,7 +7,7 @@ import java.util.Optional;
 /** Explicit allowlisted DTOs for the internal Enthusia AI moderation-state reader. */
 interface AiModerationReadApiModel {
     record Request(String target) {
-        Request {
+        public Request {
             if (target == null || !target.matches("^[A-Za-z0-9_]{3,16}$")) {
                 throw new IllegalArgumentException("target must be a Minecraft username");
             }
@@ -15,7 +15,7 @@ interface AiModerationReadApiModel {
     }
 
     record TargetDto(String requested, String playerId, Optional<String> username) {
-        TargetDto {
+        public TargetDto {
             username = username == null ? Optional.empty() : username;
         }
     }
@@ -28,7 +28,7 @@ interface AiModerationReadApiModel {
             Instant issuedAt,
             Optional<Instant> expiresAt
     ) {
-        ActiveSanctionDto {
+        public ActiveSanctionDto {
             expiresAt = expiresAt == null ? Optional.empty() : expiresAt;
         }
     }
@@ -54,7 +54,7 @@ interface AiModerationReadApiModel {
             List<CaseDto> recentCases,
             Instant fetchedAt
     ) {
-        Response {
+        public Response {
             activeSanctions = List.copyOf(activeSanctions);
             recentCases = List.copyOf(recentCases);
         }
