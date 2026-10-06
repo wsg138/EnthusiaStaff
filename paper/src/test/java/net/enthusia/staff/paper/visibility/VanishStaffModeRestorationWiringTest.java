@@ -64,7 +64,9 @@ class VanishStaffModeRestorationWiringTest {
                 "public void onGameModeChange",
                 "@EventHandler(priority = EventPriority.HIGHEST)\n    public void onJoin"
         );
-        assertTrue(change.contains("!isSelectableGameMode(rank, event.getNewGameMode())"));
+        assertTrue(change.contains(
+                "!isSelectableGameMode(rank, event.getNewGameMode(), unrestricted)"
+        ));
 
         String reconcile = method(
                 "private void reconcileVanishedGameMode",
@@ -82,7 +84,9 @@ class VanishStaffModeRestorationWiringTest {
                 "/**\n     * Cross-server transfer hook"
         );
 
-        assertTrue(method.contains("!isSelectableGameMode(rank, selected)"));
+        assertTrue(method.contains(
+                "!isSelectableGameMode(rank, selected, isUnrestricted(player))"
+        ));
         assertTrue(method.contains("persistSelectedGameMode(playerId, rank, selected)"));
         assertTrue(method.contains("player.setGameMode(selected)"));
         assertFalse(method.contains("GameMode.SPECTATOR;"));
