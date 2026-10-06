@@ -5,10 +5,7 @@ import java.util.List;
 import java.util.Optional;
 
 /** Explicit allowlisted DTOs for the internal Enthusia AI moderation-state reader. */
-final class AiModerationReadApiModel {
-    private AiModerationReadApiModel() {
-    }
-
+interface AiModerationReadApiModel {
     record Request(String target) {
         Request {
             if (target == null || !target.matches("^[A-Za-z0-9_]{3,16}$")) {
