@@ -125,6 +125,34 @@ class StaffBotConfigurationTest {
     }
 
     @Test
+    void optionalAiReadTokenIsValidatedAndAlwaysRedacted() {
+        String aiToken = "a".repeat(48);
+        StaffBotConfiguration configuration = StaffBotConfiguration.fromEnvironment(Map.of(
+                StaffBotConfiguration.ENVIRONMENT_KEY, STAGING,
+                StaffBotConfiguration.TOKEN_KEY, DUMMY_TOKEN,
+                StaffBotConfiguration.AI_READ_TOKEN_KEY, aiToken
+        ));
+
+        assertEquals(aiToken, configuration.aiReadToken().orElseThrow());
+        assertTrue(configuration.toString().contains("aiReadToken=<configured>"));
+        assertFalse(configuration.toString().contains(aiToken));
+
+        StaffBotConfiguration without = StaffBotConfiguration.fromEnvironment(Map.of(
+                StaffBotConfiguration.ENVIRONMENT_KEY, STAGING,
+                StaffBotConfiguration.TOKEN_KEY, DUMMY_TOKEN
+        ));
+        assertTrue(without.aiReadToken().isEmpty());
+        assertTrue(without.toString().contains("aiReadToken=<none>"));
+
+        assertThrows(IllegalArgumentException.class, () ->
+                StaffBotConfiguration.fromEnvironment(Map.of(
+                        StaffBotConfiguration.ENVIRONMENT_KEY, STAGING,
+                        StaffBotConfiguration.TOKEN_KEY, DUMMY_TOKEN,
+                        StaffBotConfiguration.AI_READ_TOKEN_KEY, "too-short"
+                )));
+    }
+
+    @Test
     void productionWebUsesOnlyPinnedHttpsOrigin() {
         Map<String, String> values = new HashMap<>();
         values.put(StaffBotConfiguration.ENVIRONMENT_KEY, PRODUCTION);
