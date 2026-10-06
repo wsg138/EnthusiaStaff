@@ -14,9 +14,11 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerCommandPreprocessEvent;
 
 /**
- * Enforces the overnight permission model's core principle: staff hold staff <em>command</em>
- * permissions only while IN staff mode. Off duty they keep default-rank permissions, their staff
- * tag, and staff notifications — but staff-authority commands are rejected until /staff.
+ * Enforces the normal Staff Mode authority boundary for staff commands.
+ *
+ * <p>Ordinary staff need an authoritative Staff Mode session. Explicit unrestricted identities
+ * are the deliberate exception: their permanent duty context also bypasses this defense-in-depth
+ * command gate.</p>
  *
  * <p>This is defense-in-depth alongside the LuckPerms {@code staff-duty} context
  * (LuckPermsStaffDutyContext): it applies even when the permission backend is not
@@ -67,9 +69,11 @@ public final class StaffDutyCommandGate implements Listener {
 
     private boolean requiresOnDuty(String name, String message, Player player) {
         if (ESTAFF_COMMAND.equals(name)) {
-            return isReloadSubcommand(message) && !staffMode.authorityActive(player.getUniqueId());
+            return isReloadSubcommand(message)
+                    && !staffMode.authorityActiveOrUnrestricted(player.getUniqueId());
         }
-        return ON_DUTY_COMMANDS.contains(name) && !staffMode.authorityActive(player.getUniqueId());
+        return ON_DUTY_COMMANDS.contains(name)
+                && !staffMode.authorityActiveOrUnrestricted(player.getUniqueId());
     }
 
     private static void deny(PlayerCommandPreprocessEvent event, Player player) {
