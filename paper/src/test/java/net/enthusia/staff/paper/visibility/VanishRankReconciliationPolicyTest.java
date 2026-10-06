@@ -125,6 +125,32 @@ class VanishRankReconciliationPolicyTest {
     }
 
     @Test
+    void unrestrictedIdentityKeepsVanishWithoutActiveStaffSession() {
+        for (StaffRank rank : playerRanks()) {
+            assertEquals(
+                    VanishRankReconciliationPolicy.VanishAction.NONE,
+                    VanishRankReconciliationPolicy.vanishAction(
+                            true,
+                            rank,
+                            rank,
+                            VanishRankReconciliationPolicy.StaffModeState.INACTIVE,
+                            true
+                    )
+            );
+            assertEquals(
+                    VanishRankReconciliationPolicy.VanishAction.NONE,
+                    VanishRankReconciliationPolicy.vanishAction(
+                            true,
+                            rank,
+                            rank,
+                            VanishRankReconciliationPolicy.StaffModeState.EXITED,
+                            true
+                    )
+            );
+        }
+    }
+
+    @Test
     void everyPlayerRankRequiresStaffMode() {
         for (StaffRank rank : playerRanks()) {
             assertTrue(VanishRankReconciliationPolicy.requiresStaffMode(rank));
