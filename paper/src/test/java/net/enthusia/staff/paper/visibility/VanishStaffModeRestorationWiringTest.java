@@ -40,11 +40,22 @@ class VanishStaffModeRestorationWiringTest {
 
     @Test
     void manualVanishDoesNotForceSpectatorDuringStaffRebind() throws IOException {
-        String method = method("private void finishSet(", "private Set<UUID> hiddenPresenceViewers");
+        String method = method("private void finishSet(", "private Set<UUID> presenceViewers");
 
         assertTrue(method.contains("!staffMode.transitioning(playerId)"));
         assertTrue(method.indexOf("!staffMode.transitioning(playerId)")
                 < method.indexOf("reconcileVanishedGameMode(player)"));
+    }
+
+    @Test
+    void vanishPresenceTargetsEveryOtherOnlinePlayerRegardlessOfVisibility() throws IOException {
+        String method = method(
+                "private Set<UUID> presenceViewers",
+                "private void publishPresenceTransition"
+        );
+
+        assertTrue(method.contains("!viewerId.equals(subjectId)"));
+        assertFalse(method.contains("visibility.canSee"));
     }
 
     @Test
