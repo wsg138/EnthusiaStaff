@@ -89,8 +89,9 @@ class HelperObserverProtectionWiringTest {
                 "Helper observer authority must remain bound to the applied Staff Mode rank snapshot"
         );
         assertTrue(
-                listener.contains("return staffMode.helperObserverActive(player.getUniqueId());"),
-                "Helper protections must use Staff Mode's authoritative cached profile"
+                listener.contains("staffMode.helperObserverActive(player.getUniqueId())")
+                        && listener.contains("!staffMode.isUnrestricted(player)"),
+                "Helper protections must use Staff Mode's authoritative cached profile while exempting explicit unrestricted identities"
         );
         assertFalse(
                 listener.contains("PaperStaffRankResolver"),
@@ -106,8 +107,8 @@ class HelperObserverProtectionWiringTest {
 
         assertTrue(
                 listener.contains("targetMob.getScheduler().run(plugin, ignoredMob -> {\n"
-                        + "            if (!staffMode.helperObserverActive(targetId))"),
-                "A queued mob target clear must be abandoned after Helper observer mode ends or changes rank"
+                        + "            if (!staffMode.helperObserverActive(targetId) || staffMode.unrestricted(targetId))"),
+                "A queued mob target clear must be abandoned after Helper observer mode ends, changes rank, or becomes unrestricted"
         );
     }
 
