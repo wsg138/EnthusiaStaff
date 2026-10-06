@@ -18,7 +18,7 @@ class StaffModeAccessPolicyTest {
         assertTrue(StaffModeAccessPolicy.blocksEnderChestOpen(StaffRank.HELPER));
         assertTrue(StaffModeAccessPolicy.blocksEnderChestMutation(StaffRank.HELPER));
         assertFalse(StaffModeAccessPolicy.hasAdvancedStaffTools(StaffRank.HELPER));
-        assertEquals(GameMode.SPECTATOR, StaffModeAccessPolicy.initialGameMode(StaffRank.HELPER));
+        assertEquals(GameMode.SURVIVAL, StaffModeAccessPolicy.initialGameMode(StaffRank.HELPER));
         // Helpers choose between Survival and Spectator while on duty.
         assertTrue(StaffModeAccessPolicy.allowsGameMode(StaffRank.HELPER, GameMode.SURVIVAL));
         assertTrue(StaffModeAccessPolicy.allowsGameMode(StaffRank.HELPER, GameMode.SPECTATOR));
