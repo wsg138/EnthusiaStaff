@@ -36,6 +36,6 @@ class StaffInventoryPreferenceWiringTest {
         assertTrue(apply.contains("player.getInventory().clear()"));
         assertTrue(apply.contains("if (toolInventoryEnabled(playerId))"));
         assertTrue(source.contains("You have entered Staff Mode with an empty inventory."));
-        assertTrue(source.contains("ClickEvent.runCommand(\"/staffinv\")"));
+        assertTrue(source.contains("ClickEvent.runCommand(\"/staff inventory\")"));
     }
 }

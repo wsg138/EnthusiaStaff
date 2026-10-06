@@ -92,7 +92,7 @@ commands:
     permission: enthusiastaff.freeze
   staff:
     description: Enter or exit durable staff mode, recover snapshots, or choose entry visibility
-    usage: /staff [recover|-v|vanish|-nv|visible]
+    usage: /staff [recover|-v|vanish|-nv|visible|inventory|tab <show|hide>]
     aliases: [sm, staffmode]
     permission: enthusiastaff.staffmode
   staffinv:

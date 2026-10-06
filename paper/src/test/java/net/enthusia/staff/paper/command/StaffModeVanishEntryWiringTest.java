@@ -20,8 +20,9 @@ class StaffModeVanishEntryWiringTest {
         assertTrue(command.contains("entry.enter(player, option)"));
         assertTrue(command.contains("vanish.configureSpectatorTab(player, true)"));
         assertTrue(command.contains("vanish.configureSpectatorTab(player, false)"));
+        assertTrue(command.contains("manager.toggleToolInventory(player)"));
         assertTrue(command.contains("vanish.toggle(player)"));
-        assertTrue(command.contains("List.of(\"recover\", \"-v\", \"vanish\", \"-nv\", \"visible\", \"tab\")"));
+        assertTrue(command.contains("INVENTORY, INVENTORY_SHORT"));
         assertTrue(command.contains("Targeted snapshot recovery is available only from the server console."));
     }
 
