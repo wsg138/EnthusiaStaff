@@ -38,7 +38,7 @@ public final class LuckPermsStaffDutyContext implements AutoCloseable, Listener 
         this.staffMode = Objects.requireNonNull(staffMode, "staffMode");
         this.calculator = new StaffDutyContextCalculator(
                 staffMode::authorityActive,
-                player -> player.hasPermission(StaffModeManager.UNRESTRICTED_PERMISSION)
+                staffMode::unrestricted
         );
     }
 
@@ -68,8 +68,8 @@ public final class LuckPermsStaffDutyContext implements AutoCloseable, Listener 
         for (Player player : plugin.getServer().getOnlinePlayers()) {
             UUID playerId = player.getUniqueId();
             online.add(playerId);
-            boolean active = staffMode.authorityActive(playerId)
-                    || player.hasPermission(StaffModeManager.UNRESTRICTED_PERMISSION);
+            boolean unrestricted = staffMode.isUnrestricted(player);
+            boolean active = staffMode.authorityActive(playerId) || unrestricted;
             boolean wasActive = activeSnapshot.contains(playerId);
             if (active == wasActive) {
                 continue;
