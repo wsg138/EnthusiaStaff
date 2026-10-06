@@ -1,4 +1,5 @@
 name: Dump Codacy annotations
+# Temporary final W1 annotation diagnostic; do not merge.
 
 on:
   pull_request:
