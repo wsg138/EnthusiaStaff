@@ -15,12 +15,15 @@ import java.util.function.Consumer;
 import java.util.function.Supplier;
 import java.util.logging.Level;
 import net.enthusia.staff.domain.auth.StaffRank;
+import net.enthusia.staff.domain.ports.StaffPreferenceStore;
 import net.enthusia.staff.domain.ports.StaffSessionStore;
 import net.enthusia.staff.domain.staff.StaffSessionOwnership;
 import net.enthusia.staff.domain.staff.StaffSessionSnapshot;
 import net.enthusia.staff.domain.staff.StaffSessionState;
 import net.enthusia.staff.paper.auth.PaperStaffRankResolver;
 import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.event.ClickEvent;
+import net.kyori.adventure.text.event.HoverEvent;
 import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.GameMode;
 import org.bukkit.NamespacedKey;
@@ -49,6 +52,7 @@ import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.plugin.java.JavaPlugin;
 
 public final class StaffModeManager implements Listener {
+    public static final String UNRESTRICTED_PERMISSION = "enthusiastaff.identity.unrestricted";
     private static final String RANK_REMOVED_MESSAGE =
             "Your explicit staff rank is no longer assigned; restoring your saved state.";
     private final JavaPlugin plugin;
@@ -56,6 +60,7 @@ public final class StaffModeManager implements Listener {
     private final Instant runtimeStartedAt;
     private final String serverId;
     private final Supplier<StaffSessionStore> store;
+    private final Supplier<StaffPreferenceStore> preferences;
     private final ExecutorService workers;
     private final StaffStateCodec codec = new StaffStateCodec();
     private final CombatStatusAdapter combat;
@@ -66,6 +71,7 @@ public final class StaffModeManager implements Listener {
     private final Map<UUID, StaffSessionSnapshot> pendingLocalSessions = new ConcurrentHashMap<>();
     private final Map<UUID, StaffRank> ranks = new ConcurrentHashMap<>();
     private final Map<UUID, String> toolSessions = new ConcurrentHashMap<>();
+    private final Map<UUID, Boolean> toolInventoryPreferences = new ConcurrentHashMap<>();
     private final java.util.Set<UUID> transitions = ConcurrentHashMap.newKeySet();
     private final java.util.Set<UUID> handoffGaps = ConcurrentHashMap.newKeySet();
     private final StaffModeRecoveryGate recoveryGate = new StaffModeRecoveryGate(transitions);
@@ -94,6 +100,7 @@ public final class StaffModeManager implements Listener {
             Clock clock,
             String serverId,
             Supplier<StaffSessionStore> store,
+            Supplier<StaffPreferenceStore> preferences,
             ExecutorService workers
     ) {
         this.plugin = plugin;
@@ -102,6 +109,7 @@ public final class StaffModeManager implements Listener {
         this.runtimeStartedAt = clock.instant();
         this.serverId = serverId;
         this.store = store;
+        this.preferences = java.util.Objects.requireNonNull(preferences, "preferences");
         this.workers = workers;
         this.handoffResumes = new StaffModeHandoffIntentRegistry(clock);
         this.combat = new CombatStatusAdapter(plugin);
@@ -372,6 +380,7 @@ public final class StaffModeManager implements Listener {
                             "staff session entry returned a snapshot not actively owned by this backend"
                     );
                 }
+                rememberToolInventoryPreference(playerId);
                 pendingLocalSessions.put(playerId, session);
                 onEntity(
                         playerId,
@@ -399,9 +408,10 @@ public final class StaffModeManager implements Listener {
             Player player, StaffRank rank) {
         activateDurableSession(playerId, session, loaded, player, rank,
                 StaffModeActivationCoordinator.ActivationPath.INITIAL_ENTRY,
-                "Staff mode entered after durable snapshot commit; enabling vanish.");
+                "");
         if (active.get(playerId) == session) {
             entryListener.accept(player);
+            sendInventoryEntryMessage(player);
         }
     }
 
@@ -516,6 +526,7 @@ public final class StaffModeManager implements Listener {
                     restoreAndVerify(playerId, exiting, loaded);
                     return;
                 }
+                rememberToolInventoryPreference(playerId);
                 onEntity(playerId, current -> finishActiveRecovery(playerId, session, loaded, current));
             } catch (RuntimeException exception) {
                 recoveryGate.retry(playerId);
@@ -583,6 +594,7 @@ public final class StaffModeManager implements Listener {
                     clock.instant()
             );
             validateDetachedRebind(rebound);
+            rememberToolInventoryPreference(playerId);
             pendingLocalSessions.put(playerId, rebound);
             onEntity(
                     playerId,
@@ -1449,9 +1461,12 @@ public final class StaffModeManager implements Listener {
 
     private void applyStaffState(Player player, StaffRank rank, boolean preserveAllowedGameMode) {
         UUID playerId = player.getUniqueId();
-        GameMode targetGameMode = preserveAllowedGameMode
-                ? StaffModeAccessPolicy.reconciledGameMode(rank, player.getGameMode())
-                : StaffModeAccessPolicy.initialGameMode(rank);
+        boolean unrestricted = isUnrestricted(player);
+        GameMode targetGameMode = unrestricted
+                ? unrestrictedEntryGameMode(player.getGameMode())
+                : preserveAllowedGameMode
+                        ? StaffModeAccessPolicy.reconciledGameMode(rank, player.getGameMode())
+                        : StaffModeAccessPolicy.initialGameMode(rank);
         profileApplications.add(playerId);
         String toolSession = UUID.randomUUID().toString();
         toolSessions.put(playerId, toolSession);
@@ -1472,10 +1487,10 @@ public final class StaffModeManager implements Listener {
             player.setHealth(maximumHealth.getValue());
             player.setFireTicks(0);
             player.setFallDistance(0);
-            boolean technicalTesting = rank == StaffRank.DEVELOPER;
-            player.setInvulnerable(!technicalTesting);
-            player.setCollidable(technicalTesting);
-            player.setCanPickupItems(technicalTesting);
+            boolean unrestrictedInteraction = unrestricted || rank == StaffRank.DEVELOPER;
+            player.setInvulnerable(!unrestrictedInteraction);
+            player.setCollidable(unrestrictedInteraction);
+            player.setCanPickupItems(unrestrictedInteraction);
             gameModeTransitionGuardBegin.accept(playerId);
             try {
                 player.setGameMode(targetGameMode);
@@ -1487,10 +1502,8 @@ public final class StaffModeManager implements Listener {
             }
             player.setAllowFlight(true);
             player.setFlying(true);
-            for (StaffToolDefinition tool : StaffToolDefinition.values()) {
-                if (tool.availableFor(rank)) {
-                    player.getInventory().setItem(toolLayout.slot(tool), item(playerId, toolSession, tool));
-                }
+            if (toolInventoryEnabled(playerId)) {
+                installStaffTools(player, rank, toolSession);
             }
             player.updateInventory();
         } finally {
@@ -1500,6 +1513,110 @@ public final class StaffModeManager implements Listener {
 
     private boolean protectedMode(UUID playerId) {
         return active.containsKey(playerId) || transitions.contains(playerId) || handoffGaps.contains(playerId);
+    }
+
+    public boolean isUnrestricted(Player player) {
+        return player != null && player.hasPermission(UNRESTRICTED_PERMISSION);
+    }
+
+    public boolean toolInventoryEnabled(UUID playerId) {
+        return toolInventoryPreferences.getOrDefault(playerId, true);
+    }
+
+    public void toggleToolInventory(Player player) {
+        java.util.Objects.requireNonNull(player, "player");
+        UUID playerId = player.getUniqueId();
+        StaffRank rank = PaperStaffRankResolver.resolve(player::hasPermission).orElse(null);
+        if (rank == null) {
+            player.sendMessage(StaffMessageStyle.error(
+                    "An explicit EnthusiaStaff rank is required before changing Staff inventory mode."
+            ));
+            return;
+        }
+        if (!submit(() -> {
+            try {
+                StaffPreferenceStore loaded = preferences.get();
+                if (loaded == null) {
+                    throw new IllegalStateException("staff preference storage is not ready");
+                }
+                boolean current = loaded.toolInventoryEnabled(playerId)
+                        .orElse(toolInventoryPreferences.getOrDefault(playerId, true));
+                boolean next = !current;
+                loaded.setToolInventoryEnabled(playerId, next, clock.instant());
+                onEntity(playerId, live -> applyToolInventoryPreference(live, rank, next));
+            } catch (RuntimeException exception) {
+                plugin.getLogger().log(Level.SEVERE, "Staff inventory preference update failed", exception);
+                safeMessage(playerId, "Your Staff inventory preference could not be saved.");
+            }
+        })) {
+            player.sendMessage(StaffMessageStyle.error(
+                    "The bounded work queue is full; your Staff inventory preference was not changed."
+            ));
+        }
+    }
+
+    private void applyToolInventoryPreference(Player player, StaffRank rank, boolean enabled) {
+        UUID playerId = player.getUniqueId();
+        toolInventoryPreferences.put(playerId, enabled);
+        if (authorityActive(playerId)) {
+            player.closeInventory();
+            player.getInventory().clear();
+            if (enabled) {
+                String toolSession = UUID.randomUUID().toString();
+                toolSessions.put(playerId, toolSession);
+                installStaffTools(player, rank, toolSession);
+            } else {
+                toolSessions.remove(playerId);
+            }
+            player.updateInventory();
+        }
+        String state = enabled ? "enabled" : "disabled";
+        String nextUse = authorityActive(playerId)
+                ? ""
+                : " It will be used the next time you enter Staff Mode.";
+        player.sendMessage(StaffMessageStyle.style(Component.text(
+                "Staff inventory " + state + "." + nextUse
+        )));
+    }
+
+    private void rememberToolInventoryPreference(UUID playerId) {
+        StaffPreferenceStore loaded = preferences.get();
+        boolean enabled = true;
+        if (loaded != null) {
+            enabled = loaded.toolInventoryEnabled(playerId).orElse(true);
+        }
+        toolInventoryPreferences.put(playerId, enabled);
+    }
+
+    private static GameMode unrestrictedEntryGameMode(GameMode current) {
+        return current == GameMode.CREATIVE || current == GameMode.SPECTATOR
+                ? current
+                : GameMode.CREATIVE;
+    }
+
+    private void installStaffTools(Player player, StaffRank rank, String toolSession) {
+        UUID playerId = player.getUniqueId();
+        for (StaffToolDefinition tool : StaffToolDefinition.values()) {
+            if (tool.availableFor(rank)) {
+                player.getInventory().setItem(toolLayout.slot(tool), item(playerId, toolSession, tool));
+            }
+        }
+    }
+
+    private void sendInventoryEntryMessage(Player player) {
+        boolean enabled = toolInventoryEnabled(player.getUniqueId());
+        Component message = Component.text(
+                        enabled
+                                ? "You have entered Staff Mode with the Staff inventory. "
+                                : "You have entered Staff Mode with an empty inventory. ",
+                        enabled ? NamedTextColor.GREEN : NamedTextColor.GRAY
+                )
+                .append(Component.text("[Toggle inventory]", NamedTextColor.AQUA)
+                        .clickEvent(ClickEvent.runCommand("/staffinv"))
+                        .hoverEvent(HoverEvent.showText(Component.text(
+                                enabled ? "Use an empty Staff inventory" : "Restore the Staff tools inventory"
+                        ))));
+        player.sendMessage(message);
     }
 
     private ItemStack item(UUID playerId, String toolSession, StaffToolDefinition tool) {
