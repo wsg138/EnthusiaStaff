@@ -1584,6 +1584,12 @@ public final class StaffModeManager implements Listener {
     public void toggleToolInventory(Player player) {
         java.util.Objects.requireNonNull(player, "player");
         UUID playerId = player.getUniqueId();
+        if (transitioning(playerId)) {
+            player.sendMessage(StaffMessageStyle.warning(
+                    "Wait for the current Staff Mode transition to finish before toggling the Staff inventory."
+            ));
+            return;
+        }
         StaffRank rank = PaperStaffRankResolver.resolve(player::hasPermission).orElse(null);
         if (rank == null) {
             player.sendMessage(StaffMessageStyle.error(
