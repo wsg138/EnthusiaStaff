@@ -13,14 +13,20 @@ public final class StaffDutyContextCalculator implements ContextCalculator<Playe
     public static final String ACTIVE_VALUE = "active";
 
     private final Predicate<UUID> activeDuty;
+    private final Predicate<Player> alwaysActive;
 
     public StaffDutyContextCalculator(Predicate<UUID> activeDuty) {
+        this(activeDuty, ignored -> false);
+    }
+
+    public StaffDutyContextCalculator(Predicate<UUID> activeDuty, Predicate<Player> alwaysActive) {
         this.activeDuty = Objects.requireNonNull(activeDuty, "activeDuty");
+        this.alwaysActive = Objects.requireNonNull(alwaysActive, "alwaysActive");
     }
 
     @Override
     public void calculate(Player player, ContextConsumer consumer) {
-        if (activeDuty.test(player.getUniqueId())) {
+        if (alwaysActive.test(player) || activeDuty.test(player.getUniqueId())) {
             consumer.accept(CONTEXT_KEY, ACTIVE_VALUE);
         }
     }
