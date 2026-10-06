@@ -25,6 +25,7 @@ import org.slf4j.Logger;
 final class VelocityStaffDutyContext implements ContextCalculator<Player>, AutoCloseable {
     static final String CONTEXT_KEY = "enthusiastaff-duty";
     static final String ACTIVE_VALUE = "active";
+    static final String UNRESTRICTED_PERMISSION = "enthusiastaff.identity.unrestricted";
     private static final long REFRESH_MILLIS = 500L;
     private static final Set<String> IDENTITY_NODES = Set.of(
             "enthusiastaff.identity.owner",
@@ -99,7 +100,8 @@ final class VelocityStaffDutyContext implements ContextCalculator<Player>, AutoC
                 online.add(playerId);
                 boolean current;
                 try {
-                    current = hasStaffIdentity(player) && hasActiveSession(player);
+                    current = player.hasPermission(UNRESTRICTED_PERMISSION)
+                            || (hasStaffIdentity(player) && hasActiveSession(player));
                 } catch (RuntimeException exception) {
                     if (lookupFailureLogged.compareAndSet(false, true)) {
                         logger.warn("Unable to calculate proxy Staff Mode permission context", exception);
