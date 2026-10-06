@@ -309,7 +309,9 @@ final class PaperCrossPlatformPunishmentService {
                 draft.reasonId(),
                 draft.internalExplanation(),
                 draft.visibility(),
-                List.of()
+                draft.expectation().customDuration()
+                        ? draft.expectation().sanctions()
+                        : List.of()
         );
     }
 
