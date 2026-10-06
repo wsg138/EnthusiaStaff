@@ -1,4 +1,5 @@
 name: Dump Codacy annotations
+# Temporary W1 diagnostics trigger; diagnostic branch only.
 
 on:
   pull_request:
