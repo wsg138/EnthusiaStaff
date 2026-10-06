@@ -39,6 +39,7 @@ import net.enthusia.staff.domain.ports.PunishmentRequestStore;
 import net.enthusia.staff.domain.ports.ReportStore;
 import net.enthusia.staff.domain.ports.SanctionLookup;
 import net.enthusia.staff.domain.ports.SanctionMutationStore;
+import net.enthusia.staff.domain.ports.StaffPreferenceStore;
 import net.enthusia.staff.domain.ports.StaffSessionStore;
 import net.enthusia.staff.domain.ports.VanishStore;
 import net.enthusia.staff.domain.ports.WebsiteModerationStore;
@@ -70,6 +71,7 @@ public final class MariaDbRuntime implements AutoCloseable {
     private final DiscordOutboxStore discordOutboxStore;
     private final FreezeStore freezeStore;
     private final StaffSessionStore staffSessionStore;
+    private final StaffPreferenceStore staffPreferenceStore;
     private final VanishStore vanishStore;
     private final NetworkIdentityStore networkIdentityStore;
     private final ScheduledExecutorService networkIdentityRetentionExecutor;
@@ -118,6 +120,7 @@ public final class MariaDbRuntime implements AutoCloseable {
         this.discordOutboxStore = new JdbcDiscordOutboxStore(dataSource);
         this.freezeStore = new JdbcFreezeStore(dataSource);
         this.staffSessionStore = new JdbcStaffSessionStore(dataSource);
+        this.staffPreferenceStore = new JdbcStaffPreferenceStore(dataSource);
         this.vanishStore = new JdbcVanishStore(dataSource);
         this.networkIdentityStore = new FencedNetworkIdentityStore(
                 dataSource,
@@ -166,6 +169,7 @@ public final class MariaDbRuntime implements AutoCloseable {
     public DiscordOutboxStore discordOutboxStore() { return discordOutboxStore; }
     public FreezeStore freezeStore() { return freezeStore; }
     public StaffSessionStore staffSessionStore() { return staffSessionStore; }
+    public StaffPreferenceStore staffPreferenceStore() { return staffPreferenceStore; }
     public VanishStore vanishStore() { return vanishStore; }
     public NetworkIdentityStore networkIdentityStore() { return networkIdentityStore; }
     public SanctionMutationStore sanctionMutationStore() { return sanctionMutationStore; }
