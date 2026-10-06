@@ -3,6 +3,7 @@ package net.enthusia.staff.paper.punishment;
 import io.papermc.paper.event.player.AsyncChatEvent;
 import java.time.Clock;
 import java.time.Instant;
+import java.time.Duration;
 import java.time.ZoneId;
 import java.util.EnumSet;
 import java.util.List;
@@ -27,9 +28,11 @@ import net.enthusia.staff.domain.application.PunishmentDraftWorkflow;
 import net.enthusia.staff.domain.application.PunishmentRequestDraftCleanupException;
 import net.enthusia.staff.domain.auth.Actor;
 import net.enthusia.staff.domain.auth.AuthorizationPolicy;
+import net.enthusia.staff.domain.auth.DiscordConsequenceType;
 import net.enthusia.staff.domain.auth.ModerationAction;
 import net.enthusia.staff.domain.casefile.CaseReview;
 import net.enthusia.staff.domain.casefile.CaseVisibility;
+import net.enthusia.staff.domain.discord.DiscordPunishmentIntent;
 import net.enthusia.staff.domain.escalation.ReasonPolicy;
 import net.enthusia.staff.domain.history.HistoryQueryOptions;
 import net.enthusia.staff.domain.history.ModerationHistoryPage;
@@ -41,6 +44,7 @@ import net.enthusia.staff.domain.ports.ReasonPolicyRepository;
 import net.enthusia.staff.domain.ports.ReportStore;
 import net.enthusia.staff.domain.ports.SanctionLookup;
 import net.enthusia.staff.domain.sanction.ActiveSanction;
+import net.enthusia.staff.domain.sanction.SanctionLength;
 import net.enthusia.staff.domain.sanction.SanctionType;
 import net.enthusia.staff.paper.auth.LuckPermsStaffTargetGuard;
 import net.enthusia.staff.paper.auth.PaperActorResolver;
@@ -71,6 +75,15 @@ public final class PunishmentGuiController implements Listener {
     private static final int OVERVIEW_REPORT_LIMIT = 100;
     private static final int HISTORY_PAGE_SIZE = 36;
     private static final ZoneId FALLBACK_TIMEZONE = ZoneId.of("UTC");
+    private static final List<SanctionLength> DISCORD_DURATIONS = List.of(
+            SanctionLength.temporary(Duration.ofMinutes(10)),
+            SanctionLength.temporary(Duration.ofHours(1)),
+            SanctionLength.temporary(Duration.ofDays(1)),
+            SanctionLength.temporary(Duration.ofDays(3)),
+            SanctionLength.temporary(Duration.ofDays(7)),
+            SanctionLength.temporary(Duration.ofDays(30)),
+            SanctionLength.permanent()
+    );
 
     private final JavaPlugin plugin;
     private final Clock clock;
@@ -199,7 +212,8 @@ public final class PunishmentGuiController implements Listener {
     ) {
         PunishmentGuiOverview overview = loadOverview(target.playerId());
         showPrepared(
-                viewer, target, commandName, actor, overview, prepared, PaperPunishmentScope.MINECRAFT);
+                viewer, target, commandName, actor, overview, prepared,
+                PaperPunishmentScope.MINECRAFT, Optional.empty());
     }
 
     @EventHandler(priority = EventPriority.HIGHEST)
@@ -509,6 +523,16 @@ public final class PunishmentGuiController implements Listener {
             changeScope(viewer, state);
             return;
         }
+        if (slot == PunishmentGuiRenderer.DISCORD_ACTION_SLOT
+                && state.scope() != PaperPunishmentScope.MINECRAFT) {
+            changeDiscordAction(viewer, state);
+            return;
+        }
+        if (slot == PunishmentGuiRenderer.DISCORD_DURATION_SLOT
+                && state.scope() != PaperPunishmentScope.MINECRAFT) {
+            changeDiscordDuration(viewer, state);
+            return;
+        }
         if (slot == PunishmentGuiRenderer.NOTE_SLOT) {
             noteCaptures.put(viewer.getUniqueId(), new NoteCapture(state));
             suppressedClosures.add(viewer.getUniqueId());
@@ -529,6 +553,68 @@ public final class PunishmentGuiController implements Listener {
             }
             confirm(viewer, actor, state);
         }
+    }
+
+    private void changeDiscordAction(Player viewer, PunishmentGuiState.Review state) {
+        DiscordPunishmentIntent current = state.discordIntent().orElse(null);
+        if (current == null) {
+            message(viewer, "This configured reason has no Discord consequence to edit.");
+            return;
+        }
+        DiscordConsequenceType next = switch (current.type()) {
+            case WARNING -> DiscordConsequenceType.MUTE;
+            case MUTE -> DiscordConsequenceType.KICK;
+            case KICK -> DiscordConsequenceType.BAN;
+            case BAN, CHANNEL_RESTRICTION -> DiscordConsequenceType.WARNING;
+        };
+        SanctionLength length = next == DiscordConsequenceType.WARNING || next == DiscordConsequenceType.KICK
+                ? SanctionLength.instant()
+                : current.length().isInstant()
+                        ? SanctionLength.temporary(Duration.ofDays(1))
+                        : current.length();
+        selectedDiscordIntent(state, next, length, !length.isInstant())
+                .ifPresentOrElse(
+                        intent -> openState(viewer, state.withScope(state.scope(), Optional.of(intent))),
+                        () -> message(viewer, "The Discord consequence could not be rebuilt from current policy.")
+                );
+    }
+
+    private void changeDiscordDuration(Player viewer, PunishmentGuiState.Review state) {
+        DiscordPunishmentIntent current = state.discordIntent().orElse(null);
+        if (current == null) {
+            message(viewer, "This configured reason has no Discord consequence to edit.");
+            return;
+        }
+        if (current.type() == DiscordConsequenceType.WARNING || current.type() == DiscordConsequenceType.KICK) {
+            message(viewer, "Warnings and kicks are instant Discord actions.");
+            return;
+        }
+        int currentIndex = DISCORD_DURATIONS.indexOf(current.length());
+        SanctionLength next = DISCORD_DURATIONS.get((currentIndex + 1) % DISCORD_DURATIONS.size());
+        selectedDiscordIntent(state, current.type(), next, true)
+                .ifPresentOrElse(
+                        intent -> openState(viewer, state.withScope(state.scope(), Optional.of(intent))),
+                        () -> message(viewer, "The Discord duration could not be rebuilt from current policy.")
+                );
+    }
+
+    private Optional<DiscordPunishmentIntent> selectedDiscordIntent(
+            PunishmentGuiState.Review state,
+            DiscordConsequenceType type,
+            SanctionLength length,
+            boolean customDuration
+    ) {
+        return policies.find(state.draft().reasonId()).map(policy -> new DiscordPunishmentIntent(
+                type,
+                length,
+                customDuration,
+                false,
+                Optional.empty(),
+                policy.publicReason(),
+                state.draft().internalExplanation(),
+                0,
+                true
+        ));
     }
 
     private void changeScope(Player viewer, PunishmentGuiState.Review state) {
@@ -722,7 +808,8 @@ public final class PunishmentGuiController implements Listener {
                     actor,
                     state.overview(),
                     evaluation,
-                    PaperPunishmentScope.MINECRAFT
+                    PaperPunishmentScope.MINECRAFT,
+                    Optional.empty()
             );
         });
     }
@@ -761,7 +848,8 @@ public final class PunishmentGuiController implements Listener {
                     actor,
                     state.overview(),
                     evaluation,
-                    state.scope()
+                    state.scope(),
+                    state.discordIntent()
             );
         });
     }
@@ -773,7 +861,8 @@ public final class PunishmentGuiController implements Listener {
             Actor actor,
             PunishmentGuiOverview overview,
             PunishmentDraftEvaluation evaluation,
-            PaperPunishmentScope scope
+            PaperPunishmentScope scope,
+            Optional<DiscordPunishmentIntent> priorDiscordIntent
     ) {
         if (evaluation instanceof PunishmentDraftEvaluation.Rejected rejected) {
             message(viewer, rejected.code() + ": " + rejected.message());
@@ -798,7 +887,7 @@ public final class PunishmentGuiController implements Listener {
                 prepared.draft(),
                 Optional.of(assessment),
                 scope,
-                discordIntent(scope, prepared.draft())
+                discordIntent(scope, prepared.draft(), priorDiscordIntent)
         ));
     }
 
@@ -858,7 +947,12 @@ public final class PunishmentGuiController implements Listener {
             return;
         }
         PaperCrossPlatformPunishmentService.Outcome outcome =
-                service.confirm(state.scope(), actor, state.draft());
+                service.confirm(
+                        state.scope(),
+                        actor,
+                        state.draft(),
+                        state.discordIntent().orElseThrow()
+                );
         if (outcome instanceof PaperCrossPlatformPunishmentService.Outcome.Rejected rejected) {
             if ("RECOMMENDATION_CHANGED".equals(rejected.code())) {
                 message(viewer, "The recommendation changed. A fresh review is being opened; no new intent was created.");
@@ -895,15 +989,22 @@ public final class PunishmentGuiController implements Listener {
         ));
     }
 
-    private Optional<net.enthusia.staff.domain.discord.DiscordPunishmentIntent> discordIntent(
+    private Optional<DiscordPunishmentIntent> discordIntent(
             PaperPunishmentScope scope,
-            PunishmentDraft draft
+            PunishmentDraft draft,
+            Optional<DiscordPunishmentIntent> prior
     ) {
         if (scope == PaperPunishmentScope.MINECRAFT) {
             return Optional.empty();
         }
         PaperCrossPlatformPunishmentService service = crossPlatform.get();
-        return service == null ? Optional.empty() : service.previewIntent(draft);
+        if (service == null) {
+            return Optional.empty();
+        }
+        if (prior != null && prior.isPresent()) {
+            return service.currentIntent(draft, prior.orElseThrow());
+        }
+        return service.previewIntent(draft);
     }
 
     private Optional<PunishmentDraftConfirmation> confirmDraft(
