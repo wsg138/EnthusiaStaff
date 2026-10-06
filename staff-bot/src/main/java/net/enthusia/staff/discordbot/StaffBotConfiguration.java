@@ -14,6 +14,7 @@ public final class StaffBotConfiguration {
     public static final String TOKEN_KEY = "ENTHUSIA_STAFF_BOT_TOKEN";
     public static final String UI_PREVIEW_KEY = "ENTHUSIA_STAFF_BOT_UI_PREVIEW";
     public static final String MODERATION_WEB_URL_KEY = "ENTHUSIA_STAFF_BOT_MODERATION_WEB_URL";
+    public static final String AI_READ_TOKEN_KEY = "ENTHUSIA_STAFF_BOT_AI_READ_TOKEN";
     private static final URI PRODUCTION_MODERATION_WEB_URI = URI.create("https://staff.enthusia.info");
     public static final String HEALTH_HOST_KEY = "ENTHUSIA_STAFF_BOT_HEALTH_HOST";
     public static final String HEALTH_PORT_KEY = "ENTHUSIA_STAFF_BOT_HEALTH_PORT";
@@ -44,6 +45,7 @@ public final class StaffBotConfiguration {
     private final Duration interactionTtl;
     private final ModerationPreviewWebConfig previewWebConfig;
     private final java.util.Optional<URI> moderationWebUri;
+    private final java.util.Optional<String> aiReadToken;
 
     StaffBotConfiguration(
             StaffBotEnvironment environment,
@@ -64,6 +66,7 @@ public final class StaffBotConfiguration {
         this.interactionTtl = Objects.requireNonNull(interactionTtl, "interactionTtl");
         this.previewWebConfig = ModerationPreviewWebConfig.fromEnvironment(Map.of());
         this.moderationWebUri = java.util.Optional.empty();
+        this.aiReadToken = java.util.Optional.empty();
         validateRuntimeBounds();
     }
 
@@ -79,6 +82,7 @@ public final class StaffBotConfiguration {
         this.interactionTtl = source.interactionTtl;
         this.previewWebConfig = Objects.requireNonNull(previewWebConfig, "previewWebConfig");
         this.moderationWebUri = source.moderationWebUri;
+        this.aiReadToken = source.aiReadToken;
     }
 
     private StaffBotConfiguration(StaffBotConfiguration source, URI moderationWebUri) {
@@ -92,6 +96,24 @@ public final class StaffBotConfiguration {
         this.interactionTtl = source.interactionTtl;
         this.previewWebConfig = source.previewWebConfig;
         this.moderationWebUri = java.util.Optional.of(moderationWebUri);
+        this.aiReadToken = source.aiReadToken;
+    }
+
+    private StaffBotConfiguration(
+            StaffBotConfiguration source,
+            java.util.Optional<String> aiReadToken
+    ) {
+        this.environment = source.environment;
+        this.discordToken = source.discordToken;
+        this.uiPreviewEnabled = source.uiPreviewEnabled;
+        this.healthAddress = source.healthAddress;
+        this.workerThreads = source.workerThreads;
+        this.workerQueueCapacity = source.workerQueueCapacity;
+        this.interactionCapacity = source.interactionCapacity;
+        this.interactionTtl = source.interactionTtl;
+        this.previewWebConfig = source.previewWebConfig;
+        this.moderationWebUri = source.moderationWebUri;
+        this.aiReadToken = Objects.requireNonNull(aiReadToken, "aiReadToken");
     }
 
     StaffBotConfiguration(
@@ -167,10 +189,10 @@ public final class StaffBotConfiguration {
     public static StaffBotConfiguration fromEnvironment(Map<String, String> values) {
         Objects.requireNonNull(values, "values");
         StaffBotConfiguration base = baseConfiguration(values);
-        if (base.uiPreviewEnabled) {
-            return new StaffBotConfiguration(base, ModerationPreviewWebConfig.fromEnvironment(values));
-        }
-        return productionWebsiteConfiguration(values, base);
+        StaffBotConfiguration configured = base.uiPreviewEnabled
+                ? new StaffBotConfiguration(base, ModerationPreviewWebConfig.fromEnvironment(values))
+                : productionWebsiteConfiguration(values, base);
+        return new StaffBotConfiguration(configured, optionalSecret(values.get(AI_READ_TOKEN_KEY)));
     }
 
     private static StaffBotConfiguration baseConfiguration(Map<String, String> values) {
@@ -278,6 +300,10 @@ public final class StaffBotConfiguration {
         return moderationWebUri;
     }
 
+    java.util.Optional<String> aiReadToken() {
+        return aiReadToken;
+    }
+
     public int maxReconnectDelaySeconds() {
         return MAX_RECONNECT_DELAY_SECONDS;
     }
@@ -296,6 +322,7 @@ public final class StaffBotConfiguration {
                 + ", interactionCapacity=" + interactionCapacity
                 + ", interactionTtl=" + interactionTtl
                 + ", previewWebPublic=" + (previewWebConfig.publicBaseUri().isPresent() ? "<configured>" : "<none>")
+                + ", aiReadToken=" + (aiReadToken.isPresent() ? "<configured>" : "<none>")
                 + ", discordToken=<redacted>]";
     }
 
@@ -354,6 +381,17 @@ public final class StaffBotConfiguration {
             throw new IllegalArgumentException(key + " is required");
         }
         return value;
+    }
+
+    private static java.util.Optional<String> optionalSecret(String value) {
+        if (value == null || value.isBlank()) {
+            return java.util.Optional.empty();
+        }
+        String trimmed = value.trim();
+        if (trimmed.length() < 32 || trimmed.length() > 512) {
+            throw new IllegalArgumentException(AI_READ_TOKEN_KEY + " must be 32-512 characters");
+        }
+        return java.util.Optional.of(trimmed);
     }
 
     private static String requireSecret(String value) {
