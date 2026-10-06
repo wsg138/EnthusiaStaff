@@ -1777,7 +1777,7 @@ public final class StaffModeManager implements Listener {
                         enabled ? NamedTextColor.GREEN : NamedTextColor.GRAY
                 )
                 .append(Component.text("[Toggle inventory]", NamedTextColor.AQUA)
-                        .clickEvent(ClickEvent.runCommand("/staffinv"))
+                        .clickEvent(ClickEvent.runCommand("/staff inventory"))
                         .hoverEvent(HoverEvent.showText(Component.text(
                                 enabled ? "Use an empty Staff inventory" : "Restore the Staff tools inventory"
                         ))));
