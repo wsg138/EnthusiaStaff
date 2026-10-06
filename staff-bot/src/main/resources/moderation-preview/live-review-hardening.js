@@ -65,10 +65,8 @@ function hardenedCommunicationOptionsNode(w) {
   if (w.approvalConfirmed === undefined) w.approvalConfirmed = false;
   const children = [
     element('label',{className:'checkbox-control prominent'},element('input',{id:'dmUserOption',type:'checkbox',checked:w.dm}),' Include a DM with this action'),
-    fieldLabel('Staff explanation / case note',element('textarea',{id:'reasonInput',text:w.reason,placeholder:'Optional — add any useful context for the player or case',attrs:{rows:'3',maxlength:'300'}})),
-    element('p',{className:'field-help',text:'Optional. If left blank, the record and player notification will state that no additional staff explanation was provided.'}),
-    fieldLabel('Outside-Discord evidence reference',element('textarea',{id:'externalEvidenceInput',text:w.externalEvidence,placeholder:'Ticket, recording, game log, screenshot set, or other evidence location',attrs:{rows:'2',maxlength:'300'}})),
-    element('p',{className:'field-help',text:'Use this when the incident evidence is not a Discord message. A reference is required for most non-warning actions when no Discord evidence is selected.'})
+    fieldLabel('Staff explanation / case note',element('textarea',{id:'reasonInput',text:w.reason,placeholder:'Enter a clear explanation of why this punishment is being issued',attrs:{rows:'3',maxlength:'300'}})),
+    fieldLabel('Outside-Discord evidence reference',element('textarea',{id:'externalEvidenceInput',text:w.externalEvidence,placeholder:'Add a ticket, recording, screenshot, game log, or other evidence reference',attrs:{rows:'2',maxlength:'300'}}))
   ];
   if (workflowApprovalRequired(w)) children.push(approvalConfirmationNode(w));
   return element('section',{className:'card option-section'},children);

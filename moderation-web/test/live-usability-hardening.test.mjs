@@ -10,6 +10,7 @@ const POLICY = new URL('../../staff-bot/src/main/resources/moderation-preview/re
 const CATALOG = new URL('../../staff-bot/src/main/resources/moderation-preview/live-policy-catalog.js', import.meta.url);
 const MINECRAFT = new URL('../../staff-bot/src/main/resources/moderation-preview/live-minecraft-actions.js', import.meta.url);
 const CSS = new URL('../../staff-bot/src/main/resources/moderation-preview/live.css', import.meta.url);
+const BROWSE = new URL('../../staff-bot/src/main/resources/moderation-preview/live-browse-workspace.js', import.meta.url);
 
 test('product chrome removes staging diagnostics while final review keeps one truthful test boundary', async () => {
   const [shell, review] = await Promise.all([readFile(SHELL, 'utf8'), readFile(REVIEW, 'utf8')]);
@@ -28,7 +29,7 @@ test('message investigation uses explicit server-side history search without rer
   const [shell, message] = await Promise.all([readFile(SHELL, 'utf8'), readFile(MESSAGE, 'utf8')]);
 
   assert.match(shell, /Search Discord history/);
-  assert.match(shell, /Server-side Discord history search/);
+  assert.match(shell, /const mode = state\.contextId \? 'Context loaded' : remote \? 'History search' : 'Recent messages'/);
   assert.match(shell, /runDiscordHistorySearch/);
   assert.match(shell, /search\?\.addEventListener\('input'.*state\.search = event\.target\.value/);
   assert.doesNotMatch(shell, /messageSearch'\)\?\.addEventListener\('input'.*renderWorkspace/);
@@ -89,7 +90,7 @@ test('safe Discord renderer handles headings, inline code, and custom emoji with
   assert.doesNotMatch(source, /\.innerHTML|DOMParser|insertAdjacentHTML|createContextualFragment/);
 });
 
-test('final review requires explanation and appropriate evidence while allowing outside-Discord evidence', async () => {
+test('final review keeps explanation optional while still requiring evidence where policy needs it', async () => {
   const [review, policy, record] = await Promise.all([
     readFile(REVIEW, 'utf8'), readFile(POLICY, 'utf8'), readFile(RECORD, 'utf8')
   ]);
@@ -109,8 +110,29 @@ test('final review requires explanation and appropriate evidence while allowing 
   assert.match(policy, /function workflowReasonReady\(\) \{\s*return true;/);
   assert.doesNotMatch(review, /at least 10 characters/);
   assert.match(review, /No additional staff explanation was provided\./);
+  assert.match(review, /Enter a clear explanation of why this punishment is being issued/);
+  assert.doesNotMatch(review, /Optional\. If left blank/);
+  assert.match(review, /Add a ticket, recording, screenshot, game log, or other evidence reference/);
+  assert.doesNotMatch(review, /Use this when the incident evidence is not a Discord message/);
   assert.match(policy, /state\.evidence\.size > 0 \|\| workflowExternalEvidenceReady/);
   assert.match(policy, /Verify the required Admin\+ approval/);
+});
+
+test('workspace keeps player context compact and hides empty status cards behind progressive disclosure', async () => {
+  const [shell, browse, css] = await Promise.all([
+    readFile(SHELL, 'utf8'), readFile(BROWSE, 'utf8'), readFile(CSS, 'utf8')
+  ]);
+
+  assert.match(browse, /#targetHeader \.target-identity/);
+  assert.doesNotMatch(shell, /No active sanctions were returned/);
+  assert.doesNotMatch(shell, /No case record was returned/);
+  assert.doesNotMatch(shell, /No private staff note was returned/);
+  assert.doesNotMatch(shell, /Accounts includes the Discord identity/);
+  assert.match(shell, /coverage-summary/);
+  assert.match(shell, /Recent messages/);
+  assert.match(css, /\.browse-pickers\{display:grid/);
+  assert.match(css, /\.target-header\{padding:14px 16px/);
+  assert.match(css, /\.coverage-summary summary/);
 });
 
 test('punishment catalog uses one server-rules entry point and exposes categories, exact reasons, and ladders', async () => {

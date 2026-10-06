@@ -46,7 +46,7 @@ function setNoPlayerIdentity() {
 function browseRenderTargetHeader() {
   if (liveModeration.targetSelected) {
     browseBaseRenderTargetHeader();
-    $('#targetHeader')?.append(browsePickerNode());
+    $('#targetHeader .target-identity')?.append(browsePickerNode());
   } else {
     renderChannelBrowseHeader();
   }

@@ -77,9 +77,18 @@ function submitActionProof(operation, request) {
 }
 
 function moderationActionError(status) {
+  if (status === 403 && selfTargetSelected()) {
+    return new Error('You cannot issue a punishment to your own staff account. Choose another player or test account.');
+  }
   if (status === 403) return new Error('Current staff authority denied this action.');
   if (status === 400) return new Error('Action rejected. Check the target, duration and permissions, then prepare again.');
   return new Error('Moderation service unavailable. Check status before submitting another action.');
+}
+
+function selfTargetSelected() {
+  const actorId = String(state.session?.actorId || '');
+  const targetId = typeof identity === 'undefined' ? '' : String(identity.discordId || '');
+  return Boolean(actorId && targetId && actorId === targetId);
 }
 
 function liveActionInput(w) {
@@ -93,6 +102,9 @@ function liveActionInput(w) {
 
 function requireLiveActionContext(workflow) {
   if (!liveActionCapabilities?.discordEnabled) throw new Error('Discord enforcement is not enabled yet.');
+  if (selfTargetSelected()) {
+    throw new Error('You cannot issue a punishment to your own staff account. Choose another player or test account.');
+  }
   if (workflow.scope !== 'Discord') throw new Error('Minecraft enforcement has not passed activation checks.');
   if (state.deleting.size) throw new Error('Clear deletion selections. Message deletion is not enabled.');
   if (!workflow.dm) throw new Error('Live actions require a target notification.');

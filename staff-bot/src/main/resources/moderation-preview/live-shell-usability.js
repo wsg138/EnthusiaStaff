@@ -49,23 +49,28 @@ function targetAvatarNode() {
 }
 
 function linkedIdentitySummary() {
-  const minecraftCount = liveModeration.accounts.length;
-  const altCount = identity.alts.length;
-  return `@${identity.username} • Accounts: 1 Discord + ${minecraftCount} Minecraft • ${altCount} linked Minecraft alt${altCount === 1 ? '' : 's'}`;
+  const main = liveModeration.accounts.find((account) => account.main) || liveModeration.accounts[0];
+  const parts = [`@${identity.username}`];
+  if (main) parts.push(`${main.username || main.playerId} · ${friendlyPlatform(main.platform)}`);
+  if (identity.alts.length) parts.push(`${identity.alts.length} alt${identity.alts.length === 1 ? '' : 's'}`);
+  return parts.join(' • ');
 }
 
 function hardenedRenderContextPanel() {
   const sanction = liveModeration.sanctions[0];
   const latestCase = liveModeration.cases[0];
   const latestNote = liveModeration.notes[0];
-  replaceChildrenOf($('#contextPanel'),
-    hardenedContextAccountsSection(),
-    contextSection('Current sanctions', sanction ? statusBadge('Active', 'warning') : null,
-      sanction ? friendlyPlatform(sanction.type) : 'None', sanction ? sanction.reason : 'No active sanctions were returned.'),
-    latestCase ? contextLinkedSection('Latest case', 'cases', latestCase.caseId, `${latestCase.reason} · ${latestCase.actorName}`)
-      : contextSection('Latest case', null, 'None', 'No case record was returned.'),
-    latestNote ? hardenedLatestNoteSection(latestNote) : contextSection('Latest staff note', null, 'None', 'No private staff note was returned.'),
-    contextReadinessSection());
+  const sections = [hardenedContextAccountsSection()];
+  if (sanction) {
+    sections.push(contextSection('Current sanction', statusBadge('Active', 'warning'),
+      friendlyPlatform(sanction.type), sanction.reason));
+  }
+  if (latestCase) {
+    sections.push(contextLinkedSection('Latest case', 'cases', latestCase.caseId,
+      `${latestCase.reason} · ${latestCase.actorName}`));
+  }
+  if (latestNote) sections.push(hardenedLatestNoteSection(latestNote));
+  replaceChildrenOf($('#contextPanel'), sections);
   $$('[data-context-view]').forEach((button) => button.addEventListener('click', () => switchView(button.dataset.contextView)));
 }
 
@@ -77,8 +82,7 @@ function hardenedContextAccountsSection() {
     liveModeration.accounts.forEach((account) => content.push(accountLine(
       account.username || account.playerId, minecraftRelationshipText(account))));
   }
-  content.push(element('p', {className:'muted small', text:'Accounts includes the Discord identity plus linked Minecraft identities. Linked alts counts only alternate Minecraft accounts.'}));
-  return element('div', {className:'context-section'}, content);
+  return element('div', {className:'context-section compact-context'}, content);
 }
 
 function minecraftRelationshipText(account) {
@@ -128,8 +132,8 @@ function overviewInvestigationCard() {
 
 function hardenedMessagesNode() {
   const messages = filteredMessages();
-  const content = [pageHeading('Message investigation', 'Messages & evidence',
-    'Review Discord messages, select evidence, and inspect surrounding context.')];
+  const content = [pageHeading('Messages', 'Messages & evidence',
+    'Select evidence or search older Discord history.')];
   if (state.contextId) content.push(contextAlertNode());
   if (liveModeration.warning) content.push(element('div', {className:'alert info'},
     element('strong',{text:'Discord read notice'}), element('span',{text:liveModeration.warning})));
@@ -145,17 +149,17 @@ function hardenedMessagesNode() {
 function messageCoverageNode() {
   const range = loadedMessageRange();
   const remote = state.remoteSearchActive === true;
-  return element('section', {className:'card coverage-card'},
-    sectionHeading('Search coverage'),
-    summaryList([
-      [remote ? 'Search results loaded' : 'Messages loaded', baseMessages.length],
-      ['Loaded date range', range],
-      ['Text search', remote ? 'Server-side Discord history search' : 'Loaded messages only'],
-      ['Coverage', state.contextId ? 'Complete for the loaded ±2 minute context'
-        : remote ? 'Bounded history search beyond the currently loaded page'
-          : 'Partial until Discord history is paged or searched']
-    ]),
-    element('p', {className:'muted small', text:messageCoverageExplanation()}));
+  const countLabel = remote
+    ? `${baseMessages.length} search result${baseMessages.length === 1 ? '' : 's'}`
+    : `${baseMessages.length} message${baseMessages.length === 1 ? '' : 's'} loaded`;
+  const mode = state.contextId ? 'Context loaded' : remote ? 'History search' : 'Recent messages';
+  return element('details',{className:'coverage-summary'},
+    element('summary',{},
+      element('strong',{text:countLabel}),
+      element('span',{text:mode})),
+    element('div',{className:'coverage-details'},
+      element('div',{className:'muted small',text:range}),
+      element('p',{text:messageCoverageExplanation()})));
 }
 
 function loadedMessageRange() {

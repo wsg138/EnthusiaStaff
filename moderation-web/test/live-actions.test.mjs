@@ -54,6 +54,16 @@ test('disabled backend cannot enter a live action and client approval cannot gra
   assert.match(context.approvalReviewText(workflow),/server/);
 });
 
+test('self-target punishment attempts fail locally with a clear message before backend preparation', () => {
+  const context = runtime();
+  context.state.session.actorId = '999';
+  context.identity = {discordId:'999'};
+  assert.throws(
+    () => context.liveActionInput(workflow),
+    /cannot issue a punishment to your own staff account/
+  );
+});
+
 test('live action preparation is bounded and exposes a retry state instead of hanging forever', () => {
   assert.match(source,/LIVE_ACTION_TIMEOUT_MS = 12000/);
   assert.match(source,/AbortController/);
@@ -61,6 +71,7 @@ test('live action preparation is bounded and exposes a retry state instead of ha
   assert.match(source,/Retry preparation/);
   assert.match(source,/workflow\.livePrepareFailed/);
   assert.match(source,/Action could not be prepared/);
+  assert.match(source,/Choose another player or test account/);
   assert.match(source,/liveActionPrepareError/);
   assert.match(source,/No additional staff explanation was provided\./);
   assert.doesNotMatch(source,/Server-prepared live action/);
