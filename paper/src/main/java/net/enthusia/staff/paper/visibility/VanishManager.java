@@ -407,7 +407,7 @@ public final class VanishManager implements Listener {
             player.sendMessage(StaffMessageStyle.style(Component.text("You now appear normally on tab while remaining in spectator. ",
                             NamedTextColor.GREEN)
                     .append(Component.text("[Hide again]", NamedTextColor.YELLOW)
-                            .clickEvent(ClickEvent.runCommand("/vanish tab hide"))
+                            .clickEvent(ClickEvent.runCommand("/staff tab hide"))
                             .hoverEvent(HoverEvent.showText(Component.text("Remove yourself from tab"))))));
             return;
         }
@@ -1094,12 +1094,12 @@ public final class VanishManager implements Listener {
                         NamedTextColor.GRAY
                 )
                 .append(Component.text("[Vanish]", NamedTextColor.RED)
-                        .clickEvent(ClickEvent.runCommand("/vanish"))
+                        .clickEvent(ClickEvent.runCommand("/staff vanish"))
                         .hoverEvent(HoverEvent.showText(Component.text("Enter full vanish"))));
         if (spectatorTabPackets.available()) {
             prompt = prompt.append(Component.space())
                     .append(Component.text("[Appear normally]", NamedTextColor.GREEN)
-                            .clickEvent(ClickEvent.runCommand("/vanish tab show"))
+                            .clickEvent(ClickEvent.runCommand("/staff tab show"))
                             .hoverEvent(HoverEvent.showText(Component.text(
                                     "Appear on tab as a normal non-spectator entry"
                             ))));
