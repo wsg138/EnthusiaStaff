@@ -188,9 +188,7 @@ public final class HelperObserverProtectionListener implements Listener {
         }
         Mob targetMob = mob;
         targetMob.getScheduler().run(plugin, ignoredMob -> {
-            if (!staffMode.helperObserverActive(targetId)
-                    || staffMode.authorityActiveOrUnrestricted(targetId)
-                            && !staffMode.authorityActive(targetId)) {
+            if (!staffMode.helperObserverActive(targetId) || staffMode.unrestricted(targetId)) {
                 return;
             }
             var currentTarget = targetMob.getTarget();
