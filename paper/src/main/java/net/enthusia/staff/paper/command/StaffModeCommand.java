@@ -19,6 +19,7 @@ public final class StaffModeCommand implements CommandExecutor, TabCompleter {
     private static final String PERMISSION = "enthusiastaff.staffmode";
     private static final String RECOVER = "recover";
     private static final String TAB = "tab";
+    private static final String TOGGLE_VANISH = "togglevanish";
     private static final String SHOW = "show";
     private static final String HIDE = "hide";
     private static final int SINGLE_ARGUMENT = 1;
@@ -59,6 +60,10 @@ public final class StaffModeCommand implements CommandExecutor, TabCompleter {
         }
         if (spectatorTabRequested(arguments)) {
             return configureSpectatorTab(player, arguments[1]);
+        }
+        if (vanishToggleRequested(arguments)) {
+            vanish.toggle(player);
+            return true;
         }
         return handlePlayer(player, arguments);
     }
@@ -117,16 +122,10 @@ public final class StaffModeCommand implements CommandExecutor, TabCompleter {
             return true;
         }
         if (activeSession) {
-            if (option == StaffModeVanishEntryOption.VANISHED) {
-                if (!vanish.isVanished(player.getUniqueId())) {
-                    vanish.toggle(player);
-                }
-                return true;
-            }
-            if (option == StaffModeVanishEntryOption.VISIBLE) {
-                if (vanish.isVanished(player.getUniqueId())) {
-                    vanish.toggle(player);
-                }
+            if (option != StaffModeVanishEntryOption.REMEMBERED) {
+                player.sendMessage(StaffMessageStyle.style(
+                        "Staff mode is already active. Use the vanish control to change visibility before exiting."
+                ));
                 return true;
             }
             manager.exit(player);
@@ -173,6 +172,10 @@ public final class StaffModeCommand implements CommandExecutor, TabCompleter {
 
     private static boolean spectatorTabRequested(String[] arguments) {
         return arguments.length == TAB_ARGUMENTS && TAB.equalsIgnoreCase(arguments[0]);
+    }
+
+    private static boolean vanishToggleRequested(String[] arguments) {
+        return arguments.length == SINGLE_ARGUMENT && TOGGLE_VANISH.equalsIgnoreCase(arguments[0]);
     }
 
     private static boolean targetedRecovery(String[] arguments) {
