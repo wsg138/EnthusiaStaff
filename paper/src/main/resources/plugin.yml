@@ -95,6 +95,11 @@ commands:
     usage: /staff [recover|-v|vanish|-nv|visible]
     aliases: [sm, staffmode]
     permission: enthusiastaff.staffmode
+  staffinv:
+    description: Toggle the persistent Staff Mode tools inventory on or off
+    usage: /staffinv
+    aliases: [staffinventory]
+    permission: enthusiastaff.staffmode
   stafftools:
     description: Use the staff-mode operational tool menu and text fallbacks
     usage: /stafftools | /stafftools help | /stafftools random | /stafftools spectate <player>
@@ -286,6 +291,9 @@ permissions:
   enthusiastaff.reputation.restrict:
     default: false
   enthusiastaff.owner.recovery:
+    default: false
+  enthusiastaff.identity.unrestricted:
+    description: Permanently publishes the active Staff permission context for explicitly trusted identities
     default: false
   enthusiastaff.identity.helper:
     default: false
