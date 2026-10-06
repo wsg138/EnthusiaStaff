@@ -1094,7 +1094,7 @@ public final class VanishManager implements Listener {
                         NamedTextColor.GRAY
                 )
                 .append(Component.text("[Vanish]", NamedTextColor.RED)
-                        .clickEvent(ClickEvent.runCommand("/staff vanish"))
+                        .clickEvent(ClickEvent.runCommand("/staff togglevanish"))
                         .hoverEvent(HoverEvent.showText(Component.text("Enter full vanish"))));
         if (spectatorTabPackets.available()) {
             prompt = prompt.append(Component.space())
