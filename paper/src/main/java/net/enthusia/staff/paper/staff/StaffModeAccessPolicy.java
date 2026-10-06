@@ -48,7 +48,7 @@ final class StaffModeAccessPolicy {
         if (rank == StaffRank.DEVELOPER || rank == StaffRank.ADMIN || rank == StaffRank.FOUNDER) {
             return GameMode.CREATIVE;
         }
-        if (rank == StaffRank.MOD) {
+        if (rank == StaffRank.HELPER || rank == StaffRank.MOD) {
             return GameMode.SURVIVAL;
         }
         return GameMode.SPECTATOR;
