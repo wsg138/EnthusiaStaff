@@ -49,7 +49,7 @@ import net.enthusia.staff.persistence.JdbcCrossPlatformPunishmentStatusReader;
  * Minecraft-origin D08 coordinator. It persists Discord intent only; StaffBot remains the
  * exclusive Discord side-effect runtime.
  */
-final class PaperCrossPlatformPunishmentService {
+public final class PaperCrossPlatformPunishmentService {
     private static final char[] CROCKFORD = "0123456789ABCDEFGHJKMNPQRSTVWXYZ".toCharArray();
     private static final int DISCORD_EXPLANATION_LIMIT = 2_000;
 
@@ -66,7 +66,7 @@ final class PaperCrossPlatformPunishmentService {
     private final DiscordGuildId guildId;
     private final Function<UUID, Optional<Actor>> targetStaff;
 
-    PaperCrossPlatformPunishmentService(
+    public PaperCrossPlatformPunishmentService(
             Clock clock,
             Supplier<OperationalMode> mode,
             PunishmentService minecraft,
