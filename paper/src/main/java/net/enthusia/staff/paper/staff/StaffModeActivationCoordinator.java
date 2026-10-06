@@ -100,7 +100,9 @@ final class StaffModeActivationCoordinator {
         }
 
         transitions.remove(playerId);
-        safeMessage(playerId, session, playerMessage, successMessage);
+        if (!successMessage.isBlank()) {
+            safeMessage(playerId, session, playerMessage, successMessage);
+        }
         return true;
     }
 
