@@ -27,7 +27,13 @@ final class AiModerationReadApiServer implements AutoCloseable {
     private final HttpServer server;
     private final ExecutorService executor;
     private final ObjectMapper json;
-    private final AiModerationReadService service;
+    @FunctionalInterface
+    interface SubjectStateReader {
+        AiModerationReadApiModel.SubjectStateResponse read(
+                AiModerationReadApiModel.SubjectStateRequest request);
+    }
+
+    private final SubjectStateReader service;
     private final byte[] expectedBearerDigest;
     private final AtomicInteger inFlight = new AtomicInteger();
 
@@ -35,19 +41,24 @@ final class AiModerationReadApiServer implements AutoCloseable {
             AiModerationReadConfiguration configuration,
             StaffModerationReadService reads
     ) throws IOException {
-        this(configuration, new AiModerationReadService(reads, Clock.systemUTC()));
+        this(
+                configuration.host(),
+                configuration.port(),
+                configuration.bearerToken(),
+                new AiModerationReadService(reads, Clock.systemUTC())::subjectState
+        );
     }
 
     AiModerationReadApiServer(
-            AiModerationReadConfiguration configuration,
-            AiModerationReadService service
+            String host,
+            int port,
+            String bearerToken,
+            SubjectStateReader service
     ) throws IOException {
-        Objects.requireNonNull(configuration, "configuration");
         this.service = Objects.requireNonNull(service, "service");
-        this.expectedBearerDigest = digest("Bearer " + configuration.bearerToken());
+        this.expectedBearerDigest = digest("Bearer " + Objects.requireNonNull(bearerToken, "bearerToken"));
         this.json = ModerationReadApiServer.jsonMapper();
-        this.server = HttpServer.create(
-                new InetSocketAddress(configuration.host(), configuration.port()), 0);
+        this.server = HttpServer.create(new InetSocketAddress(host, port), 0);
         this.executor = Executors.newFixedThreadPool(WORKER_THREADS, runnable -> {
             Thread thread = new Thread(runnable, "enthusia-ai-moderation-read-api");
             thread.setDaemon(true);
@@ -87,7 +98,7 @@ final class AiModerationReadApiServer implements AutoCloseable {
                     return;
                 }
                 AiModerationReadApiModel.SubjectStateRequest request = parse(body);
-                respond(exchange, 200, service.subjectState(request));
+                respond(exchange, 200, service.read(request));
             } catch (IllegalArgumentException exception) {
                 respond(exchange, 400, error("invalid_request", "Request rejected."));
             } catch (RuntimeException exception) {
