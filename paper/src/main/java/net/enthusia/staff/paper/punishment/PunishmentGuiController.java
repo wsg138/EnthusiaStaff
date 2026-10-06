@@ -84,6 +84,7 @@ public final class PunishmentGuiController implements Listener {
     private final Supplier<SanctionLookup> sanctions;
     private final Supplier<ReportStore> reports;
     private final Supplier<ModerationFeatureSettings> settings;
+    private final Supplier<PaperCrossPlatformPunishmentService> crossPlatform;
     private final ExecutorService workers;
     private final StaffTargetGuard targetGuard;
     private final PunishmentGuiCatalog catalog;
@@ -115,6 +116,7 @@ public final class PunishmentGuiController implements Listener {
         this.sanctions = checked.sanctions();
         this.reports = checked.reports();
         this.settings = checked.settings();
+        this.crossPlatform = checked.crossPlatform();
         this.workers = checked.workers();
         this.targetGuard = java.util.Objects.requireNonNull(targetGuard, "targetGuard");
         this.catalog = new PunishmentGuiCatalog(this.policies, this.authorization);
@@ -181,6 +183,8 @@ public final class PunishmentGuiController implements Listener {
                     draft.commandName(),
                     overview,
                     draft,
+                    Optional.empty(),
+                    PaperPunishmentScope.MINECRAFT,
                     Optional.empty()
             ));
         });
@@ -194,7 +198,8 @@ public final class PunishmentGuiController implements Listener {
             PunishmentDraftEvaluation.Prepared prepared
     ) {
         PunishmentGuiOverview overview = loadOverview(target.playerId());
-        showPrepared(viewer, target, commandName, actor, overview, prepared);
+        showPrepared(
+                viewer, target, commandName, actor, overview, prepared, PaperPunishmentScope.MINECRAFT);
     }
 
     @EventHandler(priority = EventPriority.HIGHEST)
@@ -256,6 +261,10 @@ public final class PunishmentGuiController implements Listener {
         }
         if (state instanceof PunishmentGuiState.Review review) {
             reviewClick(viewer, actor, review, slot);
+            return;
+        }
+        if (state instanceof PunishmentGuiState.CrossPlatformStatus status) {
+            crossPlatformStatusClick(viewer, status, slot);
             return;
         }
         if (state instanceof PunishmentGuiState.History history) {
@@ -496,6 +505,10 @@ public final class PunishmentGuiController implements Listener {
             reprepare(viewer, actor, state, state.draft().internalExplanation(), next);
             return;
         }
+        if (slot == PunishmentGuiRenderer.SCOPE_SLOT) {
+            changeScope(viewer, state);
+            return;
+        }
         if (slot == PunishmentGuiRenderer.NOTE_SLOT) {
             noteCaptures.put(viewer.getUniqueId(), new NoteCapture(state));
             suppressedClosures.add(viewer.getUniqueId());
@@ -510,8 +523,81 @@ public final class PunishmentGuiController implements Listener {
                 message(viewer, "That saved reason is no longer available. Go back and choose another reason.");
                 return;
             }
+            if (state.scope() != PaperPunishmentScope.MINECRAFT && state.discordIntent().isEmpty()) {
+                message(viewer, "That Discord scope is not currently available. Choose Minecraft or another reason.");
+                return;
+            }
             confirm(viewer, actor, state);
         }
+    }
+
+    private void changeScope(Player viewer, PunishmentGuiState.Review state) {
+        PaperPunishmentScope next = switch (state.scope()) {
+            case MINECRAFT -> PaperPunishmentScope.DISCORD;
+            case DISCORD -> PaperPunishmentScope.BOTH;
+            case BOTH -> PaperPunishmentScope.MINECRAFT;
+        };
+        if (next == PaperPunishmentScope.MINECRAFT) {
+            openState(viewer, state.withScope(next, Optional.empty()));
+            return;
+        }
+        PaperCrossPlatformPunishmentService service = crossPlatform.get();
+        if (service == null) {
+            message(viewer, "Discord and Both scopes are not enabled on this server.");
+            return;
+        }
+        submit(viewer, () -> {
+            if (service.linkedTarget(state.target().playerId()).isEmpty()) {
+                message(viewer, "Discord and Both require exactly one current linked Discord account.");
+                return;
+            }
+            Optional<net.enthusia.staff.domain.discord.DiscordPunishmentIntent> intent =
+                    service.previewIntent(state.draft());
+            if (intent.isEmpty()) {
+                message(viewer, "This configured punishment step has no supported Discord consequence.");
+                return;
+            }
+            openState(viewer, state.withScope(next, intent));
+        });
+    }
+
+    private void crossPlatformStatusClick(
+            Player viewer,
+            PunishmentGuiState.CrossPlatformStatus state,
+            int slot
+    ) {
+        if (openHistoryFromControl(viewer, state, slot)) {
+            return;
+        }
+        if (slot == PunishmentGuiRenderer.CLOSE_SLOT) {
+            viewer.closeInventory();
+            return;
+        }
+        if (slot != PunishmentGuiRenderer.CONFIRM_SLOT) {
+            return;
+        }
+        PaperCrossPlatformPunishmentService service = crossPlatform.get();
+        if (service == null) {
+            message(viewer, "Cross-platform status is unavailable on this server.");
+            return;
+        }
+        submit(viewer, () -> {
+            PaperCrossPlatformPunishmentService.Outcome outcome =
+                    service.status(state.status().scope(), state.status().discordPunishmentId());
+            if (outcome instanceof PaperCrossPlatformPunishmentService.Outcome.Accepted accepted) {
+                openState(viewer, new PunishmentGuiState.CrossPlatformStatus(
+                        state.viewerId(),
+                        state.target(),
+                        state.commandName(),
+                        loadOverview(state.target().playerId()),
+                        accepted.status()
+                ));
+                return;
+            }
+            PaperCrossPlatformPunishmentService.Outcome.Rejected rejected =
+                    (PaperCrossPlatformPunishmentService.Outcome.Rejected) outcome;
+            message(viewer, rejected.code() + ": " + rejected.message());
+        });
     }
 
     private void historyClick(Player viewer, PunishmentGuiState.History state, int slot) {
@@ -635,7 +721,8 @@ public final class PunishmentGuiController implements Listener {
                     state.commandName(),
                     actor,
                     state.overview(),
-                    evaluation
+                    evaluation,
+                    PaperPunishmentScope.MINECRAFT
             );
         });
     }
@@ -673,7 +760,8 @@ public final class PunishmentGuiController implements Listener {
                     state.commandName(),
                     actor,
                     state.overview(),
-                    evaluation
+                    evaluation,
+                    state.scope()
             );
         });
     }
@@ -684,7 +772,8 @@ public final class PunishmentGuiController implements Listener {
             String commandName,
             Actor actor,
             PunishmentGuiOverview overview,
-            PunishmentDraftEvaluation evaluation
+            PunishmentDraftEvaluation evaluation,
+            PaperPunishmentScope scope
     ) {
         if (evaluation instanceof PunishmentDraftEvaluation.Rejected rejected) {
             message(viewer, rejected.code() + ": " + rejected.message());
@@ -707,7 +796,9 @@ public final class PunishmentGuiController implements Listener {
                 commandName,
                 overview,
                 prepared.draft(),
-                Optional.of(assessment)
+                Optional.of(assessment),
+                scope,
+                discordIntent(scope, prepared.draft())
         ));
     }
 
@@ -747,8 +838,72 @@ public final class PunishmentGuiController implements Listener {
             message(viewer, "Moderation storage is not ready; no action was taken.");
             return;
         }
+        if (state.scope() != PaperPunishmentScope.MINECRAFT) {
+            confirmCrossPlatform(viewer, actor, state, workflow);
+            return;
+        }
         Optional<PunishmentDraftConfirmation> result = confirmDraft(viewer, actor, state, workflow);
         result.ifPresent(value -> handleConfirmation(viewer, actor, state, value));
+    }
+
+    private void confirmCrossPlatform(
+            Player viewer,
+            Actor actor,
+            PunishmentGuiState.Review state,
+            PunishmentDraftWorkflow workflow
+    ) {
+        PaperCrossPlatformPunishmentService service = crossPlatform.get();
+        if (service == null) {
+            message(viewer, "Discord and Both scopes are not enabled on this server.");
+            return;
+        }
+        PaperCrossPlatformPunishmentService.Outcome outcome =
+                service.confirm(state.scope(), actor, state.draft());
+        if (outcome instanceof PaperCrossPlatformPunishmentService.Outcome.Rejected rejected) {
+            if ("RECOMMENDATION_CHANGED".equals(rejected.code())) {
+                message(viewer, "The recommendation changed. A fresh review is being opened; no new intent was created.");
+                reprepare(
+                        viewer,
+                        actor,
+                        state,
+                        state.draft().internalExplanation(),
+                        state.draft().visibility()
+                );
+                return;
+            }
+            message(viewer, rejected.code() + ": " + rejected.message());
+            return;
+        }
+        PaperCrossPlatformPunishmentService.Status status =
+                ((PaperCrossPlatformPunishmentService.Outcome.Accepted) outcome).status();
+        try {
+            workflow.discard(state.draft().draftId(), actor.id());
+        } catch (RuntimeException exception) {
+            plugin.getLogger().log(
+                    Level.SEVERE,
+                    "Cross-platform punishment committed but draft cleanup failed " + status.discordPunishmentId(),
+                    exception
+            );
+            message(viewer, "The punishment intent committed, but draft cleanup failed. Status recovery remains safe.");
+        }
+        openState(viewer, new PunishmentGuiState.CrossPlatformStatus(
+                state.viewerId(),
+                state.target(),
+                state.commandName(),
+                loadOverview(state.target().playerId()),
+                status
+        ));
+    }
+
+    private Optional<net.enthusia.staff.domain.discord.DiscordPunishmentIntent> discordIntent(
+            PaperPunishmentScope scope,
+            PunishmentDraft draft
+    ) {
+        if (scope == PaperPunishmentScope.MINECRAFT) {
+            return Optional.empty();
+        }
+        PaperCrossPlatformPunishmentService service = crossPlatform.get();
+        return service == null ? Optional.empty() : service.previewIntent(draft);
     }
 
     private Optional<PunishmentDraftConfirmation> confirmDraft(
@@ -1121,6 +1276,7 @@ public final class PunishmentGuiController implements Listener {
             Supplier<SanctionLookup> sanctions,
             Supplier<ReportStore> reports,
             Supplier<ModerationFeatureSettings> settings,
+            Supplier<PaperCrossPlatformPunishmentService> crossPlatform,
             ExecutorService workers
     ) {
         public Dependencies {
@@ -1136,6 +1292,7 @@ public final class PunishmentGuiController implements Listener {
             sanctions = java.util.Objects.requireNonNull(sanctions, "sanctions");
             reports = java.util.Objects.requireNonNull(reports, "reports");
             settings = java.util.Objects.requireNonNull(settings, "settings");
+            crossPlatform = java.util.Objects.requireNonNull(crossPlatform, "crossPlatform");
             workers = java.util.Objects.requireNonNull(workers, "workers");
         }
     }
