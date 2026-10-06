@@ -37,8 +37,27 @@ class StaffDutyContextCalculatorTest {
     }
 
     @Test
+    void unrestrictedPlayerPublishesDutyContextWithoutActiveSession() {
+        StaffDutyContextCalculator calculator = new StaffDutyContextCalculator(
+                ignored -> false,
+                ignored -> true
+        );
+        Map<String, String> contexts = new HashMap<>();
+
+        calculator.calculate(player(), contexts::put);
+
+        assertEquals(
+                StaffDutyContextCalculator.ACTIVE_VALUE,
+                contexts.get(StaffDutyContextCalculator.CONTEXT_KEY)
+        );
+    }
+
+    @Test
     void inactivePlayerGetsNoDutyContext() {
-        StaffDutyContextCalculator calculator = new StaffDutyContextCalculator(ignored -> false);
+        StaffDutyContextCalculator calculator = new StaffDutyContextCalculator(
+                ignored -> false,
+                ignored -> false
+        );
         Map<String, String> contexts = new HashMap<>();
 
         calculator.calculate(player(), contexts::put);
