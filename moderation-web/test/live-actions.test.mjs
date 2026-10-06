@@ -60,5 +60,8 @@ test('live action preparation is bounded and exposes a retry state instead of ha
   assert.match(source,/Moderation service timed out\. Retry preparation\./);
   assert.match(source,/Retry preparation/);
   assert.match(source,/workflow\.livePrepareFailed/);
+  assert.match(source,/Action could not be prepared/);
+  assert.match(source,/liveActionPrepareError/);
+  assert.match(source,/No additional staff explanation was provided\./);
   assert.doesNotMatch(source,/Server-prepared live action/);
 });

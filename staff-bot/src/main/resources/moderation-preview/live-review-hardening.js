@@ -65,8 +65,8 @@ function hardenedCommunicationOptionsNode(w) {
   if (w.approvalConfirmed === undefined) w.approvalConfirmed = false;
   const children = [
     element('label',{className:'checkbox-control prominent'},element('input',{id:'dmUserOption',type:'checkbox',checked:w.dm}),' Include a DM with this action'),
-    fieldLabel('Staff explanation / case note',element('textarea',{id:'reasonInput',text:w.reason,placeholder:'Required: explain what happened and why this action fits',attrs:{rows:'3',maxlength:'300'}})),
-    element('p',{className:'field-help',text:'Required before Final review; use at least 10 characters.'}),
+    fieldLabel('Staff explanation / case note',element('textarea',{id:'reasonInput',text:w.reason,placeholder:'Optional — add any useful context for the player or case',attrs:{rows:'3',maxlength:'300'}})),
+    element('p',{className:'field-help',text:'Optional. If left blank, the record and player notification will state that no additional staff explanation was provided.'}),
     fieldLabel('Outside-Discord evidence reference',element('textarea',{id:'externalEvidenceInput',text:w.externalEvidence,placeholder:'Ticket, recording, game log, screenshot set, or other evidence location',attrs:{rows:'2',maxlength:'300'}})),
     element('p',{className:'field-help',text:'Use this when the incident evidence is not a Discord message. A reference is required for most non-warning actions when no Discord evidence is selected.'})
   ];
@@ -195,7 +195,7 @@ function reviewEvidenceSummaryNode(w) {
 function staffExplanationNode(w) {
   const reason = String(w.reason || '').trim();
   return element('div',{className:'staff-reason'},element('span',{text:'Staff explanation'}),
-    element('p',{text:reason || 'Missing — return to Punishment options and add an explanation.'}));
+    element('p',{text:reason || 'No additional staff explanation was provided.'}));
 }
 
 function dmPreviewNode(w) {
@@ -234,7 +234,7 @@ function notificationPreviewReason(w) {
 }
 
 function notificationPreviewExplanation(w) {
-  const explanation = String(w.reason || '').trim() || 'None provided';
+  const explanation = String(w.reason || '').trim() || 'No additional staff explanation was provided.';
   return element('p',{},element('strong',{text:'Staff explanation: '}),
     document.createTextNode(explanation));
 }

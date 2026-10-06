@@ -106,7 +106,9 @@ test('final review requires explanation and appropriate evidence while allowing 
   assert.doesNotMatch(record, /Review every item before confirming the action/);
   assert.doesNotMatch(record, /testEnvironmentBoundary\(\)/);
   assert.match(record, /className:'review-details'/);
-  assert.match(policy, /length >= 10/);
+  assert.match(policy, /function workflowReasonReady\(\) \{\s*return true;/);
+  assert.doesNotMatch(review, /at least 10 characters/);
+  assert.match(review, /No additional staff explanation was provided\./);
   assert.match(policy, /state\.evidence\.size > 0 \|\| workflowExternalEvidenceReady/);
   assert.match(policy, /Verify the required Admin\+ approval/);
 });

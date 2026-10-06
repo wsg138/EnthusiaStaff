@@ -108,7 +108,8 @@ function liveConsequenceType(action) {
 function liveExplanation(workflow) {
   const evidence = [...state.evidence].map(id => 'Discord message reference: ' + id);
   if (workflow.externalEvidence) evidence.push('External evidence reference: ' + workflow.externalEvidence);
-  const explanation = [workflow.reason, ...evidence].filter(Boolean).join('\n');
+  const stated = String(workflow.reason || '').trim();
+  const explanation = [stated || 'No additional staff explanation was provided.', ...evidence].join('\n');
   if (explanation.length > 2000) throw new Error('Evidence references and explanation exceed 2000 characters.');
   return explanation;
 }
@@ -154,6 +155,8 @@ function prepareLiveAction(workflow, confirm) {
       if (state.workflow !== workflow || workflow.step !== 'review') return;
       workflow.livePrepared = {...prepared, targetKey:input.targetKey};
       workflow.livePrepareFailed = false;
+      workflow.livePrepareError = '';
+      removeLivePreparationError();
       if (confirm) {
         confirm.disabled = false;
         confirm.textContent = 'Confirm action';
@@ -168,11 +171,25 @@ function livePreparationFailed(workflow, confirm, error) {
   if (state.workflow !== workflow || workflow.step !== 'review') return;
   workflow.livePrepared = null;
   workflow.livePrepareFailed = true;
+  workflow.livePrepareError = error?.message || 'Live action could not be prepared.';
   if (confirm) {
     confirm.disabled = false;
     confirm.textContent = 'Retry preparation';
   }
-  showToast(error.message || 'Live action could not be prepared.', true);
+  showLivePreparationError(workflow.livePrepareError);
+}
+
+function showLivePreparationError(message) {
+  removeLivePreparationError();
+  const body = $('#workflowBody');
+  if (!body) return;
+  body.appendChild(element('div',{id:'liveActionPrepareError',className:'alert warning live-action-error'},
+    element('strong',{text:'Action could not be prepared'}),
+    element('span',{text:message})));
+}
+
+function removeLivePreparationError() {
+  $('#liveActionPrepareError')?.remove();
 }
 
 const simulationConfirm = window.confirmSimulation;

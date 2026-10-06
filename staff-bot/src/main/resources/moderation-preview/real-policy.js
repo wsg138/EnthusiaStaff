@@ -115,8 +115,8 @@ function actionNeedsEvidence(workflow) {
   return workflow?.actual?.action !== 'Warning';
 }
 
-function workflowReasonReady(workflow) {
-  return String(workflow?.reason || '').trim().length >= 10;
+function workflowReasonReady() {
+  return true;
 }
 
 function workflowExternalEvidenceReady(workflow) {
@@ -147,7 +147,6 @@ function workflowReviewStatus(workflow) {
   const approvalReady = workflowApprovalReady(workflow);
   const restrictionReady = workflowRestrictionReady(workflow);
   const errors = [];
-  if (!reasonReady) errors.push('Add a staff explanation of at least 10 characters.');
   if (!evidenceReady) errors.push('Attach Discord evidence or add an outside-evidence reference.');
   if (!restrictionReady) errors.push('Choose at least one Discord restriction target.');
   if (!approvalReady) errors.push('Verify the required Admin+ approval before confirmation.');
