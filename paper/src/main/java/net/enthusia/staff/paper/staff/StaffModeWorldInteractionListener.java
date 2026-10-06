@@ -229,7 +229,7 @@ public final class StaffModeWorldInteractionListener implements Listener {
     }
 
     private boolean onDuty(Player player) {
-        return staffMode.active(player.getUniqueId());
+        return staffMode.active(player.getUniqueId()) && !staffMode.isUnrestricted(player);
     }
 
     private void cancelWorldUse(Player player, Cancellable event, String action, String detail) {
