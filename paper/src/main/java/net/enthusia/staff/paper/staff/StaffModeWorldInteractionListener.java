@@ -39,7 +39,7 @@ import org.bukkit.inventory.InventoryHolder;
  * are unrestricted but audited; Developer remains separate from moderation authority.</p>
  */
 public final class StaffModeWorldInteractionListener implements Listener {
-    private static final String CONTAINER_EDIT_ACTION = CONTAINER_EDIT_ACTION;
+    private static final String CONTAINER_EDIT_ACTION = "container-edit";
 
     private final StaffModeManager staffMode;
 
