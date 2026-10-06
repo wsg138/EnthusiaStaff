@@ -152,8 +152,11 @@ public final class StaffModeManager implements Listener {
      * the player is online; it does not grant anything to an unknown/offline UUID.
      */
     public boolean authorityActiveOrUnrestricted(UUID playerId) {
-        return authorityActive(playerId)
-                || (playerId != null && unrestrictedIdentities.contains(playerId));
+        return authorityActive(playerId) || unrestricted(playerId);
+    }
+
+    public boolean unrestricted(UUID playerId) {
+        return playerId != null && unrestrictedIdentities.contains(playerId);
     }
 
     /**
