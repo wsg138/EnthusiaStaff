@@ -939,8 +939,7 @@ public final class VanishManager implements Listener {
                 && !vanishGameModeApplications.contains(playerId)) {
             StaffRank rank = resolveLiveRank(player);
             boolean unrestricted = isUnrestricted(player);
-            if (isSelectableGameMode(rank, event.getNewGameMode())
-                    && event.getNewGameMode() != GameMode.ADVENTURE) {
+            if (isSelectableGameMode(rank, event.getNewGameMode())) {
                 selectedGameModes.put(playerId, event.getNewGameMode());
                 persistSelectedGameMode(playerId, rank, event.getNewGameMode());
             }
