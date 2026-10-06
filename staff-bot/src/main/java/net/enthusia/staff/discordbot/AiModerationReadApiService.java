@@ -17,11 +17,19 @@ final class AiModerationReadApiService {
     private final StaffModerationReadService reads;
     private final Clock clock;
 
+    AiModerationReadApiService(StaffModerationRuntime moderation) {
+        this(moderation, Clock.systemUTC());
+    }
+
     AiModerationReadApiService(StaffModerationRuntime moderation, Clock clock) {
-        if (moderation == null || clock == null) {
+        this(moderation == null ? null : moderation.reads(), clock);
+    }
+
+    AiModerationReadApiService(StaffModerationReadService reads, Clock clock) {
+        if (reads == null || clock == null) {
             throw new IllegalArgumentException("AI moderation read dependencies must be present");
         }
-        this.reads = moderation.reads();
+        this.reads = reads;
         this.clock = clock;
     }
 
