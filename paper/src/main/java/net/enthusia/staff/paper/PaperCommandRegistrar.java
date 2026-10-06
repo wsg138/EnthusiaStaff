@@ -413,7 +413,7 @@ final class PaperCommandRegistrar {
     private AuthorizationPolicy activeAuthorization() {
         return new ActiveDutyAuthorizationPolicy(
                 authorization(),
-                dependencies.players().staffMode()::authorityActive
+                dependencies.players().staffMode()::authorityActiveOrUnrestricted
         );
     }
 
