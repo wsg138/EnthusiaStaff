@@ -68,21 +68,21 @@ class AiModerationReadApiTest {
                 "Valid_Name",
                 AiModerationReadApiServer.parseRequest(
                         json,
-                        "{"target":"Valid_Name"}".getBytes(StandardCharsets.UTF_8)
+                        "{\"target\":\"Valid_Name\"}".getBytes(StandardCharsets.UTF_8)
                 ).target()
         );
         assertThrows(
                 IllegalArgumentException.class,
                 () -> AiModerationReadApiServer.parseRequest(
                         json,
-                        "{"target":"../bad"}".getBytes(StandardCharsets.UTF_8)
+                        "{\"target\":\"../bad\"}".getBytes(StandardCharsets.UTF_8)
                 )
         );
         assertThrows(
                 IllegalArgumentException.class,
                 () -> AiModerationReadApiServer.parseRequest(
                         json,
-                        "{"target":"Valid_Name","mutation":"ban"}".getBytes(StandardCharsets.UTF_8)
+                        "{\"target\":\"Valid_Name\",\"mutation\":\"ban\"}".getBytes(StandardCharsets.UTF_8)
                 )
         );
     }
