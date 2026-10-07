@@ -97,6 +97,7 @@ final class PolicyV2JsonCodec {
     @JsonSubTypes({
         @JsonSubTypes.Type(value = PolicyAction.Exact.class, name = "EXACT"),
         @JsonSubTypes.Type(value = PolicyAction.Bounded.class, name = "BOUNDED"),
+        @JsonSubTypes.Type(value = PolicyAction.NoSanction.class, name = "NO_SANCTION"),
         @JsonSubTypes.Type(value = PolicyAction.RequiresReview.class, name = "REQUIRES_REVIEW")
     })
     private interface PolicyActionMixin {
