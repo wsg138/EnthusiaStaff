@@ -78,6 +78,12 @@ public enum PolicyV2Category {
             Material.LECTERN, NamedTextColor.AQUA,
             Set.of("reports-evidence-cooperation", "reports", "evidence", "staff-cooperation", "staff")
     ),
+    COMPLICITY_ASSISTANCE(
+            "complicity-assistance", "Complicity & Assistance",
+            "Encouraging, assisting, or knowingly benefiting from another player's prohibited conduct",
+            Material.CHAIN, NamedTextColor.GOLD,
+            Set.of("complicity-assistance", "complicity", "assistance")
+    ),
     ECONOMY_MARKET(
             "economy-market", "Economy/Market", "Market, trading, and economy abuse",
             Material.GOLD_INGOT, NamedTextColor.GREEN,
