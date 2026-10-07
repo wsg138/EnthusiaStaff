@@ -55,6 +55,7 @@ class PolicyV2PresentationTest {
                 "Evasion/Alt Abuse",
                 "Profiles/Identity",
                 "Reports/Evidence/Staff Cooperation",
+                "Complicity & Assistance",
                 "Economy/Market",
                 "Reputation",
                 "Policy Gap"
