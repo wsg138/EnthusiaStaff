@@ -13,6 +13,7 @@ import net.enthusia.staff.domain.auth.AuthorizationPolicy;
 import net.enthusia.staff.domain.player.PlayerIdentity;
 import net.enthusia.staff.domain.ports.PlayerDirectory;
 import net.enthusia.staff.domain.policyv2.enforcement.PolicyV2EnforcementStore;
+import net.enthusia.staff.domain.policyv2.legacy.PolicyV1BehavioralHistorySource;
 import net.enthusia.staff.domain.policyv2.persistence.PolicyV2Store;
 import net.enthusia.staff.paper.auth.PaperActorResolver;
 import net.enthusia.staff.paper.command.PolicyV2ShadowAccess;
@@ -60,7 +61,10 @@ public final class PolicyV2ShadowRuntime implements PolicyV2ShadowAccess {
                 new PolicyV2ShadowComplianceListener(plugin, workers, enforcementRuntime),
                 plugin
         );
-        PolicyV2StoreAdapter adapter = new PolicyV2StoreAdapter(storeSuppliers.policyStores());
+        PolicyV2StoreAdapter adapter = new PolicyV2StoreAdapter(
+                storeSuppliers.policyStores(),
+                storeSuppliers.legacyHistorySources()
+        );
         this.workflow = new PolicyV2ManualWorkflow(
                 publications::activeSnapshot,
                 adapter,
@@ -81,12 +85,27 @@ public final class PolicyV2ShadowRuntime implements PolicyV2ShadowAccess {
     public record StoreSuppliers(
             Supplier<PolicyV2Store> policyStores,
             Supplier<PolicyV2EnforcementStore> enforcementStores,
-            Supplier<PlayerDirectory> players
+            Supplier<PlayerDirectory> players,
+            Supplier<PolicyV1BehavioralHistorySource> legacyHistorySources
     ) {
+        public StoreSuppliers(
+                Supplier<PolicyV2Store> policyStores,
+                Supplier<PolicyV2EnforcementStore> enforcementStores,
+                Supplier<PlayerDirectory> players
+        ) {
+            this(
+                    policyStores,
+                    enforcementStores,
+                    players,
+                    () -> PolicyV1BehavioralHistorySource.empty()
+            );
+        }
+
         public StoreSuppliers {
             java.util.Objects.requireNonNull(policyStores, "policyStores");
             java.util.Objects.requireNonNull(enforcementStores, "enforcementStores");
             java.util.Objects.requireNonNull(players, "players");
+            java.util.Objects.requireNonNull(legacyHistorySources, "legacyHistorySources");
         }
     }
 
