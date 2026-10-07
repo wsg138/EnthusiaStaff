@@ -8,6 +8,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.io.ByteArrayInputStream;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import net.enthusia.staff.domain.auth.StaffRank;
 import net.enthusia.staff.domain.policyv2.PolicyAction;
 import net.enthusia.staff.domain.sanction.SanctionType;
 import org.junit.jupiter.api.Test;
@@ -75,6 +76,34 @@ class PolicyV2ConfigurationLoaderTest {
     void remedyOnlyActionRejectsPunitiveSanctionFields() {
         String invalid = validConfiguration("shadow", POLICY_ONE, EXAMPLE_DISPLAY_NAME)
                 .replace("type: exact", "type: remedy-only");
+
+        assertThrows(PolicyV2ConfigurationException.class, () -> load(invalid));
+    }
+
+    @Test
+    void exactWithApprovalParsesFixedSanctionAndMinimumRank() {
+        String yaml = validConfiguration("shadow", POLICY_ONE, EXAMPLE_DISPLAY_NAME)
+                .replaceFirst(
+                        "(?m)^([ \\t]*)type: exact\\R"
+                                + "\\1sanctions:",
+                        "$1type: exact-with-approval\\n"
+                                + "$1minimum-rank: admin\\n"
+                                + "$1sanctions:"
+                );
+
+        PolicyAction.ExactWithApproval action = assertInstanceOf(
+                PolicyAction.ExactWithApproval.class,
+                load(yaml).activeSnapshot().offenses().getFirst().rules().getFirst().action()
+        );
+
+        assertEquals(StaffRank.ADMIN, action.minimumRank());
+        assertEquals(SanctionType.WARNING, action.sanctions().getFirst().type());
+    }
+
+    @Test
+    void exactWithApprovalRequiresMinimumRank() {
+        String invalid = validConfiguration("shadow", POLICY_ONE, EXAMPLE_DISPLAY_NAME)
+                .replaceFirst("(?m)^([ \\t]*)type: exact$", "$1type: exact-with-approval");
 
         assertThrows(PolicyV2ConfigurationException.class, () -> load(invalid));
     }
