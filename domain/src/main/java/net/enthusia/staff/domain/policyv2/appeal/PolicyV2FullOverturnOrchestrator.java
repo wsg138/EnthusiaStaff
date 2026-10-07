@@ -352,7 +352,8 @@ public final class PolicyV2FullOverturnOrchestrator {
         boolean matches = operation.caseId().equals(command.caseId())
                 && operation.appealReference().equals(command.appealReference())
                 && operation.actorId().equals(command.actor().id())
-                && operation.reason().equals(command.reason());
+                && operation.reason().equals(command.reason())
+                && operation.createdAt().equals(command.occurredAt());
         if (!matches) {
             throw new PolicyV2Store.Conflict("Full-overturn operation ID was reused for a different request");
         }
