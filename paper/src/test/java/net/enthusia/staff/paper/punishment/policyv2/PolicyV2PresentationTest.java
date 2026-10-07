@@ -168,6 +168,50 @@ class PolicyV2PresentationTest {
     }
 
     @Test
+    void exactApprovalPresentationShowsFixedOutcomeAndRequiredRank() {
+        PolicyAction.ExactWithApproval action = new PolicyAction.ExactWithApproval(
+                List.of(new SanctionSpec(
+                        SanctionType.NETWORK_BAN,
+                        SanctionLength.permanent()
+                )),
+                StaffRank.ADMIN
+        );
+        OffensePolicy offense = new OffensePolicy(
+                HARASSMENT_ID,
+                "Terminal Safety Finding",
+                "harassment-abuse",
+                List.of(IncidentAttributeDefinition.booleanValue("targeted", true)),
+                new HistoryPolicy(Map.of(HARASSMENT_ID, 1.0), DecayPolicy.nonDecaying()),
+                List.of(new ResolutionRule(
+                        "terminal",
+                        new RuleCondition(Map.of(), HistoryWindow.atLeast(0.0)),
+                        action,
+                        List.of()
+                ))
+        );
+        PolicySnapshot snapshot = new PolicySnapshot("policy-terminal", List.of(offense));
+        PolicyV2ManualWorkflow workflow = new PolicyV2ManualWorkflow(
+                () -> snapshot,
+                (subjectId, at) -> List.of(),
+                (review, key, at) -> UUID.randomUUID(),
+                new DefaultAuthorizationPolicy(),
+                java.time.Clock.systemUTC()
+        );
+        PolicyV2ManualDraft draft = PolicyV2ManualDraft.start(TARGET, NOW)
+                .selectCategory(PolicyV2Category.HARASSMENT_ABUSE)
+                .selectOffense(HARASSMENT_ID);
+        draft = workflow.answer(draft, "targeted", new IncidentAttributeValue.BooleanValue(true));
+
+        PolicyV2ReviewPresentation view = PolicyV2ReviewPresentation.from(
+                workflow.review(new Actor(ACTOR_ID, "Mod", StaffRank.MOD), draft)
+        );
+
+        assertTrue(view.sanctionRecommendation().getFirst().contains("Permanent"));
+        assertTrue(view.why().contains("Admin or higher approval"));
+        assertEquals("Request approval after an explicit Policy v2 cutover", view.approvalRoute());
+    }
+
+    @Test
     void humanizedQuestionLabelsDoNotExposeStableIdsVerbatim() {
         assertEquals("Target Protected", PolicyV2ReviewPresentation.humanize("target.protected"));
         assertEquals("High Severity", PolicyV2ReviewPresentation.humanize("high-severity"));
