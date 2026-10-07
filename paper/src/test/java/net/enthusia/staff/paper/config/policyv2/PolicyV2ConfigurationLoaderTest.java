@@ -8,8 +8,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.io.ByteArrayInputStream;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import net.enthusia.staff.domain.policyv2.PolicyV2RemedyBindingSpec;
 import net.enthusia.staff.domain.auth.StaffRank;
 import net.enthusia.staff.domain.policyv2.PolicyAction;
+import net.enthusia.staff.domain.policyv2.enforcement.PolicyV2RemedyEnforcement.ConditionType;
+import net.enthusia.staff.domain.policyv2.enforcement.PolicyV2RemedyEnforcement.Scope;
 import net.enthusia.staff.domain.sanction.SanctionType;
 import org.junit.jupiter.api.Test;
 
@@ -104,6 +107,39 @@ class PolicyV2ConfigurationLoaderTest {
     void exactWithApprovalRequiresMinimumRank() {
         String invalid = validConfiguration("shadow", POLICY_ONE, EXAMPLE_DISPLAY_NAME)
                 .replaceFirst("(?m)^([ \\t]*)type: exact$", "$1type: exact-with-approval");
+
+        assertThrows(PolicyV2ConfigurationException.class, () -> load(invalid));
+    }
+
+    @Test
+    void remedyEnforcementBindingParsesAndValidatesAgainstW3BContract() {
+        String yaml = validConfiguration("shadow", POLICY_ONE, EXAMPLE_DISPLAY_NAME)
+                .replace(
+                        "description: \"Example only\"",
+                        "description: \"Example only\"\n"
+                                + "                                enforcement:\n"
+                                + "                                  scope: content\n"
+                                + "                                  condition-type: manual"
+                );
+
+        PolicyV2RemedyBindingSpec binding = load(yaml)
+                .activeSnapshot().offenses().getFirst().rules().getFirst()
+                .remedies().getFirst().enforcementBinding().orElseThrow();
+
+        assertEquals(Scope.CONTENT, binding.scope());
+        assertEquals(ConditionType.MANUAL, binding.conditionType());
+    }
+
+    @Test
+    void incompatibleRemedyEnforcementBindingIsRejectedAtLoadTime() {
+        String invalid = validConfiguration("shadow", POLICY_ONE, EXAMPLE_DISPLAY_NAME)
+                .replace(
+                        "description: \"Example only\"",
+                        "description: \"Example only\"\n"
+                                + "                                enforcement:\n"
+                                + "                                  scope: market-access\n"
+                                + "                                  condition-type: manual"
+                );
 
         assertThrows(PolicyV2ConfigurationException.class, () -> load(invalid));
     }
