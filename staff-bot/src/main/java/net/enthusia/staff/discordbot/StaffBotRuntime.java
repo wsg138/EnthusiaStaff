@@ -191,13 +191,14 @@ public final class StaffBotRuntime implements AutoCloseable {
                     PublicChatDiscordConfiguration.fromEnvironment(
                             environmentValues, chatConfiguration.isPresent());
             StaffBotHealthServer healthServer = new StaffBotHealthServer(configuration.healthAddress(), health);
+            Optional<StaffModerationRuntime> openedModeration = moderation;
             JdaDiscordGateway gateway = new JdaDiscordGateway(
-                    configuration, workers, replayGuard, moderation, Optional.empty());
+                    configuration, workers, replayGuard, openedModeration, Optional.empty());
             Optional<JdaDiscordGateway> publicChatGateway = publicChatConfiguration.map(current ->
                     JdaDiscordGateway.publicChat(
                             configuration,
                             current,
-                            moderation,
+                            openedModeration,
                             chatConfiguration.orElseThrow()
                     ));
             chatTransport = publicChatGateway.map(current ->
