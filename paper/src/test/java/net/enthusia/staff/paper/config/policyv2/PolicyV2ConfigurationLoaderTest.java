@@ -113,14 +113,11 @@ class PolicyV2ConfigurationLoaderTest {
 
     @Test
     void remedyEnforcementBindingParsesAndValidatesAgainstW3BContract() {
-        String yaml = validConfiguration("shadow", POLICY_ONE, EXAMPLE_DISPLAY_NAME)
-                .replaceFirst(
-                        "(?m)^([ \\t]*)description: \\"Example only\\"$",
-                        "$1description: \\"Example only\\"\\n"
-                                + "$1enforcement:\\n"
-                                + "$1  scope: content\\n"
-                                + "$1  condition-type: manual"
-                );
+        String yaml = withRemedyEnforcement(
+                validConfiguration("shadow", POLICY_ONE, EXAMPLE_DISPLAY_NAME),
+                "scope: content",
+                "condition-type: manual"
+        );
 
         PolicyV2RemedyBindingSpec binding = load(yaml)
                 .activeSnapshot().offenses().getFirst().rules().getFirst()
@@ -132,46 +129,39 @@ class PolicyV2ConfigurationLoaderTest {
 
     @Test
     void incompatibleRemedyEnforcementBindingIsRejectedAtLoadTime() {
-        String invalid = validConfiguration("shadow", POLICY_ONE, EXAMPLE_DISPLAY_NAME)
-                .replaceFirst(
-                        "(?m)^([ \\t]*)description: \\"Example only\\"$",
-                        "$1description: \\"Example only\\"\\n"
-                                + "$1enforcement:\\n"
-                                + "$1  scope: market-access\\n"
-                                + "$1  condition-type: manual"
-                );
+        String invalid = withRemedyEnforcement(
+                validConfiguration("shadow", POLICY_ONE, EXAMPLE_DISPLAY_NAME),
+                "scope: market-access",
+                "condition-type: manual"
+        );
 
         assertThrows(PolicyV2ConfigurationException.class, () -> load(invalid));
     }
 
     @Test
     void remedyBindingDynamicAttributesMustBeDeclaredAndStringLike() {
-        String undeclared = validConfiguration("shadow", POLICY_ONE, EXAMPLE_DISPLAY_NAME)
-                .replaceFirst(
-                        "(?m)^([ \\t]*)description: \\"Example only\\"$",
-                        "$1description: \\"Example only\\"\\n"
-                                + "$1enforcement:\\n"
-                                + "$1  scope: network-access\\n"
-                                + "$1  condition-type: username\\n"
-                                + "$1  value-attribute-id: prohibited-username"
-                );
+        String undeclared = withRemedyEnforcement(
+                validConfiguration("shadow", POLICY_ONE, EXAMPLE_DISPLAY_NAME),
+                "scope: network-access",
+                "condition-type: username",
+                "value-attribute-id: prohibited-username"
+        );
         assertThrows(PolicyV2ConfigurationException.class, () -> load(undeclared));
 
-        String nonString = validConfiguration("shadow", POLICY_ONE, EXAMPLE_DISPLAY_NAME)
+        String nonStringBase = validConfiguration("shadow", POLICY_ONE, EXAMPLE_DISPLAY_NAME)
                 .replace(
                         "attribute-id: severity\n                            kind: enum",
                         "attribute-id: prohibited-username\n                            kind: integer"
                 )
                 .replace("allowed-values: [low, high]", "minimum: 0\n                            maximum: 100")
-                .replace("severity: [high]", "prohibited-username: [10]")
-                .replace(
-                        "description: \"Example only\"",
-                        "description: \"Example only\"\n"
-                                + "                                enforcement:\n"
-                                + "                                  scope: network-access\n"
-                                + "                                  condition-type: username\n"
-                                + "                                  value-attribute-id: prohibited-username"
-                );
+                .replace("severity: [high]", "prohibited-username: [10]");
+        String nonString = withRemedyEnforcement(
+                nonStringBase,
+                "scope: network-access",
+                "condition-type: username",
+                "value-attribute-id: prohibited-username"
+        );
+
         assertThrows(PolicyV2ConfigurationException.class, () -> load(nonString));
     }
 
@@ -207,6 +197,16 @@ class PolicyV2ConfigurationLoaderTest {
                 .replace("mode: disabled", "mode: disabled\nowner-threshold: 7");
 
         assertThrows(PolicyV2ConfigurationException.class, () -> load(yaml));
+    }
+
+    private static String withRemedyEnforcement(String yaml, String... fields) {
+        String replacement = "$1description: \"Example only\"\n"
+                + "$1enforcement:\n"
+                + "$1  " + String.join("\n$1  ", fields);
+        return yaml.replaceFirst(
+                "(?m)^([ \\t]*)description: \"Example only\"$",
+                replacement
+        );
     }
 
     private PolicyV2Configuration load(String value) {
