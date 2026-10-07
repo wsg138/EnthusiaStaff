@@ -112,7 +112,7 @@ class PolicyV2PresentationTest {
         assertEquals("Targeted Harassment", view.whatHappened());
         assertEquals(List.of("Targeted: Yes"), view.confirmedAttributes());
         assertTrue(view.historyExplanation().contains("Related history"));
-        assertTrue(view.historyExplanation().contains("Repeated related conduct"));
+        assertTrue(view.historyExplanation().contains("recent related pattern"));
         assertFalse(view.historyExplanation().contains("CASE-PRIVATE"));
         assertFalse(view.historyExplanation().matches(".*0\\.[0-9]+.*"));
         assertEquals("policy-test", view.policyVersion());
