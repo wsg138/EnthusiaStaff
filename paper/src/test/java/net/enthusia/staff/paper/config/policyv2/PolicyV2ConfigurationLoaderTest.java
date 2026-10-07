@@ -8,6 +8,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.io.ByteArrayInputStream;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import net.enthusia.staff.domain.auth.StaffRank;
 import net.enthusia.staff.domain.policyv2.PolicyAction;
 import net.enthusia.staff.domain.sanction.SanctionType;
 import org.junit.jupiter.api.Test;
@@ -51,6 +52,34 @@ class PolicyV2ConfigurationLoaderTest {
                 .replaceFirst("(?m)^[ \\t]*half-life: 30d\\R", "")
                 .replaceFirst("(?m)^[ \\t]*repeat-half-life-increase-per-prior: 0.25\\R", "")
                 .replaceFirst("(?m)^[ \\t]*maximum-half-life-multiplier: 2.0\\R", "");
+
+        assertThrows(PolicyV2ConfigurationException.class, () -> load(invalid));
+    }
+
+    @Test
+    void exactWithApprovalParsesFixedSanctionAndMinimumRank() {
+        String yaml = validConfiguration("shadow", POLICY_ONE, EXAMPLE_DISPLAY_NAME)
+                .replace(
+                        "type: exact\n"
+                                + "                              sanctions:",
+                        "type: exact-with-approval\n"
+                                + "                              minimum-rank: admin\n"
+                                + "                              sanctions:"
+                );
+
+        PolicyAction.ExactWithApproval action = assertInstanceOf(
+                PolicyAction.ExactWithApproval.class,
+                load(yaml).activeSnapshot().offenses().getFirst().rules().getFirst().action()
+        );
+
+        assertEquals(StaffRank.ADMIN, action.minimumRank());
+        assertEquals(SanctionType.WARNING, action.sanctions().getFirst().type());
+    }
+
+    @Test
+    void exactWithApprovalRequiresMinimumRank() {
+        String invalid = validConfiguration("shadow", POLICY_ONE, EXAMPLE_DISPLAY_NAME)
+                .replace("type: exact", "type: exact-with-approval");
 
         assertThrows(PolicyV2ConfigurationException.class, () -> load(invalid));
     }
