@@ -135,6 +135,15 @@ class PolicyV2FullOverturnIntegrationTest {
                     command(operationId, fixture, admin, "appeal-different")
             ));
             assertThrows(PolicyV2Store.Conflict.class, () -> runtime.orchestrator().execute(
+                    commandAt(
+                            operationId,
+                            fixture,
+                            admin,
+                            "appeal-original",
+                            OVERTURNED_AT.plusSeconds(1)
+                    )
+            ));
+            assertThrows(PolicyV2Store.Conflict.class, () -> runtime.orchestrator().execute(
                     command(UUID.randomUUID(), fixture, admin, "appeal-second-operation")
             ));
             assertEquals(BehavioralHistoryEntry.FindingState.CONFIRMED,
@@ -476,6 +485,23 @@ class PolicyV2FullOverturnIntegrationTest {
                 actor,
                 "Appeal fully overturned the Policy v2 finding",
                 OVERTURNED_AT
+        );
+    }
+
+    private static PolicyV2FullOverturnOrchestrator.Command commandAt(
+            UUID operationId,
+            Fixture fixture,
+            Actor actor,
+            String appealReference,
+            Instant occurredAt
+    ) {
+        return new PolicyV2FullOverturnOrchestrator.Command(
+                operationId,
+                fixture.caseId(),
+                appealReference,
+                actor,
+                "Appeal fully overturned the Policy v2 finding",
+                occurredAt
         );
     }
 
