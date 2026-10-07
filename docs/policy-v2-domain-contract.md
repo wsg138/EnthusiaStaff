@@ -23,10 +23,12 @@ History is an explainable weighted sum, not an opaque risk score. For each prior
 1. the current offense's configured relationship weight selects how relevant that prior finding is;
 2. the prior offense's decay policy determines how much of that finding remains at `incidentAt`;
 3. exponential policies use `2^(-age/effectiveHalfLife)`;
-4. repeated earlier findings that are related to that prior offense increase its effective half-life by the configured per-prior increment, capped by the configured maximum multiplier;
-5. non-decaying policies always use a decay factor of `1.0`.
+4. earlier related findings build a separate **pattern-memory** signal; each prior pattern contribution decays exponentially using the configured `pattern-half-life`;
+5. the remaining pattern-memory sum increases the later finding's effective direct half-life by the configured repeat increase, capped by the configured maximum multiplier;
+6. because pattern memory also decays, a genuinely long clean period returns the multiplier toward `1.0` instead of leaving a permanent invisible recurrence penalty;
+7. non-decaying policies always use a direct decay factor of `1.0` and do not require adaptive pattern decay.
 
-`HistoryAssessment.Contribution` exposes the relationship weight, decay factor, half-life multiplier, recurrence count, and final contribution for every included case. Rule thresholds operate on the sum of those visible contributions.
+`HistoryAssessment.Contribution` exposes the relationship weight, direct decay factor, half-life multiplier, raw earlier-related count, fading pattern persistence, and final contribution for every included case. Rule thresholds operate on the sum of those visible direct contributions. Rule thresholds operate on the sum of those visible contributions.
 
 ## Fail-closed behavior
 
@@ -42,4 +44,4 @@ The GUI/workflow chooses an offense and collects only that offense's declared at
 
 ## Intentionally unresolved owner policy
 
-This package contains no production punishment durations or owner policy guesses. W0/owners still need to supply the final offense set, navigation grouping, attribute choices, relationship matrix, decay half-lives, recurrence increments/caps, non-decaying offenses, rule thresholds, sanction options, remedy requirements, and any bounded-discretion authority choices. A later configuration loader may map YAML/JSON into these domain types, but the resulting `PolicySnapshot` must pass the same validation before publication.
+Production policy still must supply the final offense set, navigation grouping, attribute choices, relationship matrix, direct and pattern half-lives, recurrence scaling/caps, non-decaying offenses, rule thresholds, sanction options, remedy requirements, and any bounded-discretion authority choices. A later configuration loader may map YAML/JSON into these domain types, but the resulting `PolicySnapshot` must pass the same validation before publication.
