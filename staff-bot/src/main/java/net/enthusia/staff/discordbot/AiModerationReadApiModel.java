@@ -14,9 +14,17 @@ interface AiModerationReadApiModel {
         }
     }
 
-    record TargetDto(String requested, String playerId, Optional<String> username) {
+    record TargetDto(
+            String requested,
+            String playerId,
+            Optional<String> username,
+            Optional<String> moderationSubjectId
+    ) {
         public TargetDto {
             username = username == null ? Optional.empty() : username;
+            moderationSubjectId = moderationSubjectId == null
+                    ? Optional.empty()
+                    : moderationSubjectId;
         }
     }
 
