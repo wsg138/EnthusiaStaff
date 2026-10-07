@@ -1,4 +1,4 @@
-name: W3A Policy v2 PMD Diagnostic
+name: W3A Policy v2 Complexity Diagnostic
 
 on:
   push:
@@ -9,7 +9,7 @@ permissions:
   contents: read
 
 jobs:
-  pmd:
+  analyze:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -19,14 +19,14 @@ jobs:
             "https://github.com/pmd/pmd/releases/download/pmd_releases%2F6.55.0/pmd-bin-6.55.0.zip" \
             -o /tmp/pmd.zip
           unzip -q /tmp/pmd.zip -d /tmp
-          set +e
           /tmp/pmd-bin-6.55.0/bin/run.sh pmd \
             -d paper/src/main/java/net/enthusia/staff/paper/punishment/policyv2,paper/src/test/java/net/enthusia/staff/paper/punishment/policyv2 \
             -R ruleset.xml \
-            -f text \
-            -r /tmp/pmd.txt
-          status=$?
-          set -e
-          cat /tmp/pmd.txt
-          if [ "$status" -ne 0 ] && [ "$status" -ne 4 ]; then exit "$status"; fi
-          test ! -s /tmp/pmd.txt
+            -f text
+      - name: Run Lizard method bounds
+        run: |
+          python -m pip install --quiet lizard==1.23.0
+          lizard \
+            -C 8 -L 50 \
+            paper/src/main/java/net/enthusia/staff/paper/punishment/policyv2 \
+            paper/src/test/java/net/enthusia/staff/paper/punishment/policyv2
