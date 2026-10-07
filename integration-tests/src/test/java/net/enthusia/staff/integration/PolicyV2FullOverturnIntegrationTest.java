@@ -12,6 +12,8 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.zaxxer.hikari.HikariDataSource;
+import java.sql.Connection;
+import java.sql.Statement;
 import java.time.Instant;
 import java.util.HashSet;
 import java.util.List;
@@ -23,6 +25,7 @@ import net.enthusia.staff.domain.auth.DefaultAuthorizationPolicy;
 import net.enthusia.staff.domain.auth.StaffRank;
 import net.enthusia.staff.domain.policyv2.BehavioralHistoryEntry;
 import net.enthusia.staff.domain.policyv2.CaseRevision;
+import net.enthusia.staff.domain.policyv2.RemedySpec;
 import net.enthusia.staff.domain.policyv2.appeal.PolicyV2FullOverturnOrchestrator;
 import net.enthusia.staff.domain.policyv2.appeal.PolicyV2FullOverturnOrchestrator.Checkpoint;
 import net.enthusia.staff.domain.policyv2.appeal.PolicyV2FullOverturnStore;
@@ -39,6 +42,7 @@ import net.enthusia.staff.persistence.JdbcPolicyV2EnforcementStore;
 import net.enthusia.staff.persistence.JdbcPolicyV2FullOverturnStore;
 import net.enthusia.staff.persistence.JdbcPolicyV2Store;
 import net.enthusia.staff.persistence.MariaDb;
+import net.enthusia.staff.persistence.ModerationPersistenceException;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.testcontainers.containers.MariaDBContainer;
@@ -183,6 +187,121 @@ class PolicyV2FullOverturnIntegrationTest {
                     runtime.canonical().findCase(fixture.caseId()).orElseThrow().findingState());
             assertTrue(providers.sanctionEffects.isEmpty());
             assertTrue(providers.remedyEffects.isEmpty());
+        }
+    }
+
+    @Test
+    void enforcedAssetCleanupKeepsFounderRestoreBoundary() throws Exception {
+        Fixture fixture = seed(DATABASE, 434);
+        RecordingProviders providers = new RecordingProviders();
+        UUID operationId = UUID.randomUUID();
+
+        try (HikariDataSource dataSource = open(DATABASE)) {
+            PolicyV2Store canonical = new JdbcPolicyV2Store(dataSource);
+            PolicyV2EnforcementStore enforcement = new JdbcPolicyV2EnforcementStore(dataSource);
+            PolicyV2RemedyService service = new PolicyV2RemedyService(
+                    canonical,
+                    enforcement,
+                    new DefaultAuthorizationPolicy(),
+                    SYSTEM_ACTOR
+            );
+            RemedySpec remedy = new RemedySpec(
+                    "confiscated-assets",
+                    RemedySpec.Type.CONFISCATE,
+                    "Restore confiscated assets after overturn"
+            );
+            PolicyV2EnforcementTestSupport.createPolicyCase(
+                    canonical,
+                    fixture,
+                    "economy.confiscation",
+                    remedy,
+                    "asset-case:434",
+                    OVERTURNED_AT.minusSeconds(3)
+            );
+            Actor admin = actor(fixture.actorId(), StaffRank.ADMIN);
+            PolicyV2RemedyEnforcement required = service.register(
+                    admin,
+                    new PolicyV2RemedyService.RegisterCommand(
+                            fixture.caseId(),
+                            remedy.id(),
+                            fixture.targetId(),
+                            Scope.ASSET,
+                            Condition.manual(),
+                            "asset-register:434",
+                            OVERTURNED_AT.minusSeconds(2)
+                    )
+            );
+            service.enforce(
+                    admin,
+                    fixture.caseId(),
+                    remedy.id(),
+                    required.revision(),
+                    (ignored, providerOperationId) -> { },
+                    "asset-enforce:434",
+                    OVERTURNED_AT.minusSeconds(1)
+            );
+
+            Runtime runtime = runtime(dataSource, providers, checkpoint -> { });
+            assertThrows(SecurityException.class, () -> runtime.orchestrator().execute(
+                    command(operationId, fixture, admin, "appeal-asset")
+            ));
+            assertTrue(runtime.operations().find(operationId).isEmpty());
+            assertTrue(providers.remedyEffects.isEmpty());
+        }
+    }
+
+    @Test
+    void stageAuditFailureRollsBackCheckpointAndRestartRecovers() throws Exception {
+        Fixture fixture = prepare(435);
+        RecordingProviders providers = new RecordingProviders();
+        UUID operationId = UUID.randomUUID();
+        failAt(fixture, operationId, providers, Checkpoint.BEFORE_FINDING_OVERTURN);
+        createFullOverturnAuditFailureTrigger();
+        try {
+            try (HikariDataSource dataSource = open(DATABASE)) {
+                Runtime runtime = runtime(dataSource, providers, checkpoint -> { });
+                assertThrows(
+                        ModerationPersistenceException.class,
+                        () -> runtime.orchestrator().resume(operationId)
+                );
+                assertEquals(
+                        PolicyV2FullOverturnStore.Stage.STARTED,
+                        runtime.operations().find(operationId).orElseThrow().stage()
+                );
+                assertEquals(
+                        BehavioralHistoryEntry.FindingState.OVERTURNED,
+                        runtime.canonical().findCase(fixture.caseId()).orElseThrow().findingState()
+                );
+            }
+        } finally {
+            dropFullOverturnAuditFailureTrigger();
+        }
+
+        recoverAfterRestart(fixture, operationId, providers);
+        assertConverged(fixture, operationId, providers);
+    }
+
+    private static void createFullOverturnAuditFailureTrigger() throws Exception {
+        try (Connection connection = MariaDbIntegrationSupport.connection(DATABASE);
+             Statement statement = connection.createStatement()) {
+            statement.execute("""
+                    CREATE TRIGGER policy_v2_full_overturn_fail_audit
+                    BEFORE INSERT ON policy_v2_audit_events
+                    FOR EACH ROW
+                    BEGIN
+                        IF NEW.event_type = 'FULL_OVERTURN_FINDING_OVERTURNED' THEN
+                            SIGNAL SQLSTATE '45000'
+                                SET MESSAGE_TEXT = 'forced full-overturn audit failure';
+                        END IF;
+                    END
+                    """);
+        }
+    }
+
+    private static void dropFullOverturnAuditFailureTrigger() throws Exception {
+        try (Connection connection = MariaDbIntegrationSupport.connection(DATABASE);
+             Statement statement = connection.createStatement()) {
+            statement.execute("DROP TRIGGER IF EXISTS policy_v2_full_overturn_fail_audit");
         }
     }
 
