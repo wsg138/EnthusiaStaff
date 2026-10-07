@@ -1,0 +1,24 @@
+name: PR381 Base Lizard
+
+on:
+  push:
+    branches:
+      - diagnostic/381-base-lizard
+
+permissions:
+  contents: read
+
+jobs:
+  lizard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Run Lizard on PR381 comparison files
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python -m pip install --disable-pip-version-check --quiet lizard==1.23.0
+          lizard -l java -C 8 -L 50 -a 8             staff-bot/src/main/java/net/enthusia/staff/discordbot/JdaDiscordGateway.java             staff-bot/src/main/java/net/enthusia/staff/discordbot/StaffBotRuntime.java             staff-bot/src/test/java/net/enthusia/staff/discordbot/JdaDiscordGatewayTest.java             staff-bot/src/test/java/net/enthusia/staff/discordbot/StaffBotRuntimeTest.java             velocity/src/main/java/net/enthusia/staff/velocity/EnthusiaStaffVelocityPlugin.java
