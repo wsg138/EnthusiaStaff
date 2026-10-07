@@ -98,6 +98,29 @@ class StaffBotRuntimeTest {
     }
 
     @Test
+    void unexpectedStaffGatewayShutdownFailsProcessAndCannotReenablePublicChat() throws Exception {
+        Fixture fixture = new Fixture(true, true);
+        FakeChatLifecycle chat = new FakeChatLifecycle();
+        FakeGateway publicGateway = new FakeGateway(true, true);
+        try (StaffBotRuntime runtime = fixture.runtime(null, chat, publicGateway)) {
+            runtime.start();
+            fixture.gateway.emitIdentity(validStagingIdentity());
+            publicGateway.emitIdentity(validPublicChatIdentity());
+            assertEquals(1, chat.resumeCount);
+
+            fixture.gateway.emitShutdown();
+
+            assertTrue(runtime.health().failedEver());
+            assertEquals("gateway_shutdown_unexpected", runtime.health().snapshot().reason());
+            assertTrue(publicGateway.shutdownNowRequested);
+            assertEquals(1, chat.pauseCount);
+
+            publicGateway.emitIdentity(validPublicChatIdentity());
+            assertEquals(1, chat.resumeCount);
+        }
+    }
+
+    @Test
     void previewRuntimeCreatesWithoutModerationDependencies() throws Exception {
         StaffBotConfiguration configuration = StaffBotConfiguration.fromEnvironment(Map.of(
                 StaffBotConfiguration.ENVIRONMENT_KEY, "staging",
@@ -438,6 +461,10 @@ class StaffBotRuntimeTest {
 
         private void emitDisconnect() {
             observer.onDisconnected();
+        }
+
+        private void emitShutdown() {
+            observer.onShutdown();
         }
     }
 }
