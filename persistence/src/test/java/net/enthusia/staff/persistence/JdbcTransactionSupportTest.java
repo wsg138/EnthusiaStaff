@@ -41,6 +41,24 @@ final class JdbcTransactionSupportTest {
     }
 
     @Test
+    void explicitIsolationIsAppliedBeforeTransactionWork() {
+        ConnectionState state = new ConnectionState();
+
+        String result = JdbcTransactionSupport.execute(
+                dataSource(state.connection()),
+                TRANSACTION_FAILED,
+                Connection.TRANSACTION_READ_COMMITTED,
+                connection -> COMMITTED
+        );
+
+        assertEquals(COMMITTED, result);
+        assertEquals(1, state.transactionIsolationCalls);
+        assertEquals(Connection.TRANSACTION_READ_COMMITTED, state.lastTransactionIsolation);
+        assertEquals(1, state.autoCommitDisableCalls);
+        assertEquals(1, state.commitCalls);
+    }
+
+    @Test
     void rollsBackRuntimeExceptionsAndPropagatesTheOriginalInstance() {
         ConnectionState state = new ConnectionState();
         IllegalStateException failure = new IllegalStateException("transaction work failed");
@@ -304,6 +322,8 @@ final class JdbcTransactionSupportTest {
         private boolean failRollback;
         private boolean failAutoCommitReset;
         private boolean failClose;
+        private int transactionIsolationCalls;
+        private int lastTransactionIsolation;
         private int autoCommitDisableCalls;
         private int rollbackCalls;
         private int commitCalls;
@@ -317,12 +337,19 @@ final class JdbcTransactionSupportTest {
         @Override
         public Object invoke(Object ignored, Method method, Object[] arguments) throws SQLException {
             return switch (method.getName()) {
+                case "setTransactionIsolation" -> setTransactionIsolation((int) arguments[0]);
                 case "setAutoCommit" -> setAutoCommit((boolean) arguments[0]);
                 case "commit" -> commit();
                 case "rollback" -> rollback();
                 case "close" -> close();
                 default -> throw new UnsupportedOperationException(method.getName());
             };
+        }
+
+        private Object setTransactionIsolation(int isolation) {
+            transactionIsolationCalls++;
+            lastTransactionIsolation = isolation;
+            return null;
         }
 
         private Object setAutoCommit(boolean enabled) throws SQLException {

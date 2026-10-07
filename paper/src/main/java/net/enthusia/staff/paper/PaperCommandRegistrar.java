@@ -34,6 +34,7 @@ import net.enthusia.staff.paper.command.FreezeCommand;
 import net.enthusia.staff.paper.command.HistoryCommand;
 import net.enthusia.staff.paper.command.InspectCommand;
 import net.enthusia.staff.paper.command.InventoryCommand;
+import net.enthusia.staff.paper.command.PolicyV2ShadowAccess;
 import net.enthusia.staff.paper.command.PunishmentCommand;
 import net.enthusia.staff.paper.command.PunishmentRequestCommandHandler;
 import net.enthusia.staff.paper.command.ReportCommand;
@@ -139,9 +140,11 @@ final class PaperCommandRegistrar {
             throw new IllegalStateException("estaff command executor was not registered before feature commands");
         }
         estaff.configureStorageAvailability(() -> dependencies.storage().get().isPresent());
+        estaff.configurePolicyV2Shadow(dependencies.policyV2());
         estaff.addSuccessfulReloadHook(() -> moderationSettings.reloadFrom(
                 dependencies.environment().moderationFeatures().get()
         ));
+        estaff.addSuccessfulReloadHook(dependencies.policyV2()::reload);
         estaff.configureSanctionLifecycle(new SanctionLifecycleCommand(
                 plugin(),
                 clock(),
@@ -427,8 +430,23 @@ final class PaperCommandRegistrar {
             Supplier<Optional<PaperStorageBindings>> storage,
             PlayerComponents players,
             IntegrationSuppliers integrations,
-            EvidenceComponents evidence
+            EvidenceComponents evidence,
+            PolicyV2ShadowAccess policyV2
     ) {
+        Dependencies(
+                Environment environment,
+                Policy policy,
+                Supplier<Optional<PaperStorageBindings>> storage,
+                PlayerComponents players,
+                IntegrationSuppliers integrations,
+                EvidenceComponents evidence
+        ) {
+            this(environment, policy, storage, players, integrations, evidence, PolicyV2ShadowAccess.disabled());
+        }
+
+        Dependencies {
+            policyV2 = Objects.requireNonNull(policyV2, "policyV2");
+        }
     }
 
     record Environment(

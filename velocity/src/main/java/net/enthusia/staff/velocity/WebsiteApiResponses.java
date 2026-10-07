@@ -3,12 +3,15 @@ package net.enthusia.staff.velocity;
 import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import net.enthusia.staff.domain.policyv2.persistence.PolicyV2PublicProjection;
+import net.enthusia.staff.domain.policyv2.publicview.PolicyV2PublicApiAdapter;
 import net.enthusia.staff.domain.website.PublicPunishment;
 import net.enthusia.staff.domain.website.PunishmentCodeBinding;
 import net.enthusia.staff.domain.website.WebsiteAppealCandidate;
 import net.enthusia.staff.domain.website.WebsiteAppealView;
 
 final class WebsiteApiResponses {
+    private static final String CASE_ID = "caseId";
     private WebsiteApiResponses() {
     }
 
@@ -28,15 +31,19 @@ final class WebsiteApiResponses {
                         : null
         );
         response.put("state", punishment.state().name());
-        response.put("caseId", punishment.caseId().value());
+        response.put(CASE_ID, punishment.caseId().value());
         response.put("appealAvailable", punishment.appealAvailable());
         return response;
+    }
+
+    static Map<String, Object> policyV2PublicPunishment(PolicyV2PublicProjection projection) {
+        return PolicyV2PublicApiAdapter.toPublicMap(projection);
     }
 
     static Map<String, Object> binding(PunishmentCodeBinding binding) {
         Map<String, Object> response = new LinkedHashMap<>();
         response.put("punishmentId", binding.punishmentId().toString());
-        response.put("caseId", binding.caseId().value());
+        response.put(CASE_ID, binding.caseId().value());
         response.put("codeGeneration", binding.codeGeneration());
         response.put("punishmentType", binding.punishmentType());
         response.put("boundUsername", binding.boundUsername());
@@ -48,7 +55,7 @@ final class WebsiteApiResponses {
     static Map<String, Object> appealCandidate(WebsiteAppealCandidate candidate) {
         Map<String, Object> response = new LinkedHashMap<>();
         response.put("id", candidate.punishmentId().toString());
-        response.put("caseId", candidate.caseId().value());
+        response.put(CASE_ID, candidate.caseId().value());
         response.put("type", candidate.punishmentType());
         response.put("reason", candidate.publicReason());
         response.put("createdAt", candidate.issuedAt().toString());
@@ -60,7 +67,7 @@ final class WebsiteApiResponses {
         Map<String, Object> response = new LinkedHashMap<>();
         response.put("id", appeal.appealId().toString());
         response.put("punishmentId", appeal.punishmentId().toString());
-        response.put("caseId", appeal.caseId().value());
+        response.put(CASE_ID, appeal.caseId().value());
         response.put("punishmentType", appeal.punishmentType());
         response.put("player", appeal.playerUsername());
         response.put("reason", appeal.reason());

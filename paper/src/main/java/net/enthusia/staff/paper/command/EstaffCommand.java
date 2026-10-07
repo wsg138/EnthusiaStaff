@@ -37,6 +37,8 @@ public final class EstaffCommand implements CommandExecutor, TabCompleter {
     private static final String FULL_VERIFICATION_ARGUMENT = "full";
     private static final String RELOAD_OPERATION = "reload";
     private static final String SANCTION_OPERATION = "sanction";
+    private static final String POLICY_V2_OPERATION = "policyv2";
+    private static final String PUNISH_PERMISSION = "enthusiastaff.punish";
     private static final int NO_ARGUMENTS = 0;
     private static final int SINGLE_ARGUMENT = 1;
     private static final int FULL_VERIFICATION_ARGUMENTS = 2;
@@ -50,6 +52,7 @@ public final class EstaffCommand implements CommandExecutor, TabCompleter {
     private final CopyOnWriteArrayList<Runnable> successfulReloadHooks = new CopyOnWriteArrayList<>();
     private volatile BooleanSupplier storagePublished = () -> false;
     private volatile SanctionLifecycleCommand sanctionLifecycle;
+    private volatile PolicyV2ShadowAccess policyV2Shadow = PolicyV2ShadowAccess.disabled();
 
     public EstaffCommand(RuntimeHealth health) {
         this(
@@ -152,6 +155,10 @@ public final class EstaffCommand implements CommandExecutor, TabCompleter {
         this.storagePublished = Objects.requireNonNull(storagePublished, "storagePublished");
     }
 
+    public void configurePolicyV2Shadow(PolicyV2ShadowAccess access) {
+        policyV2Shadow = Objects.requireNonNull(access, "access");
+    }
+
     @Override
     public boolean onCommand(
             @NotNull CommandSender sender,
@@ -162,6 +169,9 @@ public final class EstaffCommand implements CommandExecutor, TabCompleter {
         SanctionLifecycleCommand lifecycle = sanctionLifecycle;
         if (args.length > 0 && args[0].equalsIgnoreCase(SANCTION_OPERATION) && lifecycle != null) {
             return lifecycle.execute(sender, label, args);
+        }
+        if (args.length > 0 && args[0].equalsIgnoreCase(POLICY_V2_OPERATION) && policyV2Shadow.enabled()) {
+            return executePolicyV2(sender, label, args);
         }
 
         String operation = args.length == NO_ARGUMENTS ? STATUS_OPERATION : args[0].toLowerCase(Locale.ROOT);
@@ -224,6 +234,9 @@ public final class EstaffCommand implements CommandExecutor, TabCompleter {
         if (args.length > 0 && args[0].equalsIgnoreCase(SANCTION_OPERATION) && lifecycle != null) {
             return lifecycle.complete(sender, args);
         }
+        if (args.length > 0 && args[0].equalsIgnoreCase(POLICY_V2_OPERATION) && policyV2Shadow.enabled()) {
+            return List.of();
+        }
         if (args.length == FULL_VERIFICATION_ARGUMENTS && args[0].equalsIgnoreCase(VERIFY_OPERATION)) {
             if (allowedWithoutMessage(sender, VERIFY_PERMISSION)
                     && allowedWithoutMessage(sender, DIAGNOSTICS_PERMISSION)
@@ -244,7 +257,27 @@ public final class EstaffCommand implements CommandExecutor, TabCompleter {
                 && hasAnySanctionPermission(sender)) {
             matches.add(SANCTION_OPERATION);
         }
+        if (policyV2Shadow.enabled() && POLICY_V2_OPERATION.startsWith(prefix)
+                && allowedWithoutMessage(sender, PUNISH_PERMISSION)) {
+            matches.add(POLICY_V2_OPERATION);
+        }
         return List.copyOf(matches);
+    }
+
+    private boolean executePolicyV2(CommandSender sender, String label, String[] args) {
+        if (!requirePermission(
+                sender,
+                PUNISH_PERMISSION,
+                "You do not have permission to use Policy v2 shadow review."
+        )) {
+            return true;
+        }
+        if (args.length != FULL_VERIFICATION_ARGUMENTS) {
+            reportUsage(sender, label);
+            return true;
+        }
+        policyV2Shadow.open(sender, args[1]);
+        return true;
     }
 
     static boolean requirePermission(CommandSender sender, String permission, String denialMessage) {
@@ -312,10 +345,11 @@ public final class EstaffCommand implements CommandExecutor, TabCompleter {
         }
     }
 
-    private static void reportUsage(CommandSender sender, String label) {
-        sender.sendMessage(StaffMessageStyle.usage(
-                "Usage: /" + label + " <status|verify [full]|reload|sanction>"
-        ));
+    private void reportUsage(CommandSender sender, String label) {
+        String operations = policyV2Shadow.enabled()
+                ? "status|verify [full]|reload|sanction|policyv2 <player>"
+                : "status|verify [full]|reload|sanction";
+        sender.sendMessage(StaffMessageStyle.usage("Usage: /" + label + " <" + operations + ">"));
     }
 
     private void reportReload(CommandSender sender, ConfigurationReloadResult result) {

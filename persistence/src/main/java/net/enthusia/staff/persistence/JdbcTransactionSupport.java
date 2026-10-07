@@ -16,7 +16,19 @@ final class JdbcTransactionSupport {
             String failureMessage,
             TransactionWork<T> work
     ) {
+        return execute(dataSource, failureMessage, null, work);
+    }
+
+    static <T> T execute(
+            DataSource dataSource,
+            String failureMessage,
+            Integer transactionIsolation,
+            TransactionWork<T> work
+    ) {
         try (Connection connection = dataSource.getConnection()) {
+            if (transactionIsolation != null) {
+                connection.setTransactionIsolation(transactionIsolation);
+            }
             connection.setAutoCommit(false);
             Throwable transactionFailure = null;
             try {

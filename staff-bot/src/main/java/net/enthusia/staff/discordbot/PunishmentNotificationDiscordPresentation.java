@@ -9,6 +9,8 @@ import net.dv8tion.jda.api.components.buttons.Button;
 import net.dv8tion.jda.api.entities.Guild;
 import net.dv8tion.jda.api.entities.MessageEmbed;
 import net.enthusia.staff.domain.auth.DiscordConsequenceType;
+import net.enthusia.staff.domain.policyv2.persistence.PolicyV2PublicProjection;
+import net.enthusia.staff.domain.policyv2.publicview.PolicyV2PublicDiscordAdapter;
 import net.enthusia.staff.domain.sanction.SanctionType;
 
 /** Branded Discord presentation for player-facing punishment notifications. */
@@ -38,6 +40,20 @@ final class PunishmentNotificationDiscordPresentation {
                 .setColor(color)
                 .setFooter(FOOTER);
         parsed.fields().forEach(field -> builder.addField(field.name(), field.value(), false));
+        if (iconUrl != null && !iconUrl.isBlank()) {
+            builder.setThumbnail(iconUrl);
+        }
+        return builder.build();
+    }
+
+    static MessageEmbed embed(PolicyV2PublicProjection projection, int color, String iconUrl) {
+        PolicyV2PublicDiscordAdapter.Message message = PolicyV2PublicDiscordAdapter.toMessage(projection);
+        EmbedBuilder builder = new EmbedBuilder()
+                .setTitle(message.title())
+                .setDescription(message.description())
+                .setColor(color)
+                .setFooter(FOOTER);
+        message.fields().forEach(field -> builder.addField(field.name(), field.value(), false));
         if (iconUrl != null && !iconUrl.isBlank()) {
             builder.setThumbnail(iconUrl);
         }

@@ -50,8 +50,11 @@ import net.enthusia.staff.paper.discordplatform.PaperManagedRolePlatform;
 import net.enthusia.staff.paper.moderationplatform.PaperPunishmentLifecyclePlatform;
 import net.enthusia.staff.paper.enforcement.MuteEnforcementListener;
 import net.enthusia.staff.paper.integration.PolarSpectatorPhaseCompatibility;
+import net.enthusia.staff.paper.punishment.policyv2.PolicyV2ShadowRuntime;
 import net.enthusia.staff.paper.report.ChatContextBuffer;
 import net.enthusia.staff.persistence.DatabaseConfig;
+import net.enthusia.staff.persistence.JdbcPolicyV2EnforcementStore;
+import net.enthusia.staff.persistence.JdbcPolicyV2Store;
 import net.enthusia.staff.persistence.MariaDb;
 import net.enthusia.staff.persistence.MariaDbRuntime;
 import net.enthusia.staff.protocol.PersistentChannelClient;
@@ -85,6 +88,7 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
     private PaperConfigurationSnapshot configurationSnapshot;
     private PunishmentRequestAlertController alertController;
     private ConfigurationReloadCoordinator reloadCoordinator;
+    private PolicyV2ShadowRuntime policyV2Runtime;
     private PaperDatabaseConfiguration.Settings databaseSettings;
     private PaperOperationalTaskCoordinator operationalTasks;
     private PaperCommandBridgeRuntime commandBridge;
@@ -111,6 +115,10 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
         databaseSettings = PaperDatabaseConfiguration.snapshot(getConfig());
         if (Files.notExists(reasonPolicyFile())) {
             saveResource("reason-policies.yml", false);
+        }
+        Path policyV2File = dataDirectory().resolve("policy-v2.yml");
+        if (Files.notExists(policyV2File)) {
+            saveResource("policy-v2.yml", false);
         }
         boolean policiesReady = loadReasonPolicies();
         RestartRequiredConfiguration bootstrap = configurationSnapshot.restartRequired();
@@ -160,6 +168,7 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
             integrations.initializeAutomod();
         }
         if (policiesReady) {
+            initializePolicyV2Runtime();
             registerCommands();
         } else {
             PaperCommandRegistrar.registerStatus(this, health, reloadAction());
@@ -934,8 +943,37 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
                         integrations::market,
                         integrations::reputation
                 ),
-                new PaperCommandRegistrar.EvidenceComponents(chatContext, clientEvidenceCollector)
+                new PaperCommandRegistrar.EvidenceComponents(chatContext, clientEvidenceCollector),
+                policyV2Runtime
         )).register();
+    }
+
+    private void initializePolicyV2Runtime() {
+        policyV2Runtime = new PolicyV2ShadowRuntime(
+                this,
+                Clock.systemUTC(),
+                getDataFolder().toPath().resolve("policy-v2.yml"),
+                new PolicyV2ShadowRuntime.StoreSuppliers(
+                        () -> storageValue(bindings -> new JdbcPolicyV2Store(bindings.runtime().dataSource())),
+                        () -> storageValue(bindings -> new JdbcPolicyV2EnforcementStore(bindings.runtime().dataSource())),
+                        () -> storageValue(PaperStorageBindings::playerDirectory)
+                ),
+                new PolicyV2ShadowRuntime.RuntimeServices(
+                        new net.enthusia.staff.paper.auth.ActiveDutyAuthorizationPolicy(
+                                authorizationPolicy,
+                                runtimeComponents.staffMode()::authorityActive
+                        ),
+                        workers,
+                        issue -> {
+                            if (issue.isPresent()) {
+                                featureIssues.put("policy-v2", issue.orElseThrow());
+                            } else {
+                                featureIssues.remove("policy-v2");
+                            }
+                            refreshHealth(mode.get());
+                        }
+                )
+        );
     }
 
     private PaperRuntimeComponents createRuntimeComponents() {

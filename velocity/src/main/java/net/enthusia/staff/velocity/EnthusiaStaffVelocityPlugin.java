@@ -80,6 +80,7 @@ import net.enthusia.staff.domain.runtime.OperationalStateSnapshot;
 import net.enthusia.staff.domain.sanction.ActiveSanction;
 import net.enthusia.staff.domain.sanction.SanctionType;
 import net.enthusia.staff.domain.website.PunishmentCodeDisplay;
+import net.enthusia.staff.persistence.JdbcPolicyV2Store;
 import net.enthusia.staff.persistence.MariaDb;
 import net.enthusia.staff.persistence.MariaDbRuntime;
 import net.enthusia.staff.persistence.migration.CutoverOutcome;
@@ -1040,7 +1041,8 @@ public final class EnthusiaStaffVelocityPlugin {
                         sanctionChanges,
                         authorityMode::get,
                         apiClock,
-                        WebsiteReviewerAuthority.production(logger)
+                        WebsiteReviewerAuthority.production(logger),
+                        new PolicyV2PublicWebsiteView(new JdbcPolicyV2Store(runtime.dataSource()))
                 ),
                 apiClock,
                 (message, failure) -> logger.error(message, failure)
