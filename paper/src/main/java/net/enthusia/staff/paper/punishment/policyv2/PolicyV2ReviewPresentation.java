@@ -116,6 +116,9 @@ public record PolicyV2ReviewPresentation(
     }
 
     private static List<String> sanctions(PolicyV2ManualReview review) {
+        if (review.resolution().action() instanceof PolicyAction.NoSanction) {
+            return List.of("No punitive sanction is configured; apply only the listed remedies or compliance conditions.");
+        }
         if (review.resolution().action() instanceof PolicyAction.Exact exact) {
             return exact.sanctions().stream().map(PolicyV2ReviewPresentation::sanction).toList();
         }
@@ -157,6 +160,9 @@ public record PolicyV2ReviewPresentation(
         }
         if (review.resolution().action() instanceof PolicyAction.Bounded) {
             return "Configured policy matched the confirmed conduct and history and allows a limited approved choice.";
+        }
+        if (review.resolution().action() instanceof PolicyAction.NoSanction) {
+            return "Configured policy intentionally requires no punitive sanction; only the listed remedies or compliance conditions apply.";
         }
         return "Configured policy matched the confirmed conduct and current related history.";
     }
