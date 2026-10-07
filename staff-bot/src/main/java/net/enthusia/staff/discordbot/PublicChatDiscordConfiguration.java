@@ -27,8 +27,12 @@ record PublicChatDiscordConfiguration(String token, long applicationId) {
             if (blank(token) && blank(applicationId)) {
                 return Optional.empty();
             }
-            throw new IllegalArgumentException(
-                    "public chat Discord identity is configured while the chat bridge is disabled");
+            if (blank(token) || blank(applicationId)) {
+                throw new IllegalArgumentException(
+                        "public chat Discord token and application ID must be configured together");
+            }
+            new PublicChatDiscordConfiguration(token, parseApplicationId(applicationId));
+            return Optional.empty();
         }
         return Optional.of(new PublicChatDiscordConfiguration(
                 requireToken(token),
