@@ -1,0 +1,35 @@
+name: PR381 Opengrep Diagnostic
+
+on:
+  push:
+    branches:
+      - diagnostic/381-opengrep
+
+permissions:
+  contents: read
+
+jobs:
+  opengrep:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install Opengrep
+        shell: bash
+        run: python -m pip install --disable-pip-version-check opengrep==1.23.0
+      - name: Run Opengrep on PR Java diff
+        shell: bash
+        run: |
+          set +e
+          git diff --name-only origin/main...HEAD | grep -E '^(staff-bot|velocity)/src/(main|test)/java/.*\.java$' > /tmp/files.txt
+          echo "FILES"
+          cat /tmp/files.txt
+          xargs -r opengrep scan --config auto --json < /tmp/files.txt > /tmp/opengrep.json
+          status=$?
+          echo "OPENGREP_EXIT=$status"
+          cat /tmp/opengrep.json
+          exit 0
