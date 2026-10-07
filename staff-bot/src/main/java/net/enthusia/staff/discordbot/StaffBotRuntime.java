@@ -16,6 +16,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 /** Owns every resource in the isolated staff-bot process and provides deterministic shutdown semantics. */
 public final class StaffBotRuntime implements AutoCloseable {
     private static final System.Logger LOGGER = System.getLogger(StaffBotRuntime.class.getName());
+    private static final long MIN_APPLICATION_ID = 1L;
 
     private final StaffBotConfiguration configuration;
     private final StaffBotHealth health;
@@ -140,7 +141,7 @@ public final class StaffBotRuntime implements AutoCloseable {
     record PublicChatRuntime(DiscordGateway gateway, long applicationId) {
         PublicChatRuntime {
             Objects.requireNonNull(gateway, "gateway");
-            if (applicationId <= 0L) {
+            if (applicationId < MIN_APPLICATION_ID) {
                 throw new IllegalArgumentException("public chat application ID must be positive");
             }
         }
@@ -486,7 +487,7 @@ public final class StaffBotRuntime implements AutoCloseable {
 
         @Override
         public void onIdentityResolved(DiscordRuntimeIdentity identity) {
-            if (closed.get()) {
+            if (closed.get() || health.failedEver()) {
                 return;
             }
             DiscordRuntimeIdentityValidator.ValidationResult result =
@@ -599,12 +600,9 @@ public final class StaffBotRuntime implements AutoCloseable {
 
         @Override
         public void onShutdown() {
-            pauseChatQuietly();
             if (!closed.get() && !health.failedEver()) {
-                health.transition(StaffBotHealth.Phase.FAILED, "gateway_shutdown_unexpected");
+                failClosed("gateway_shutdown_unexpected");
             }
-            readiness.complete(false);
-            terminated.countDown();
         }
     }
 }
