@@ -1,0 +1,26 @@
+name: PR381 Chat Relay Diagnostic
+
+on:
+  push:
+    branches:
+      - diagnostic/381-chat-relay-2
+
+permissions:
+  contents: read
+
+jobs:
+  focused:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Run focused chat relay tests
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          chmod +x gradlew
+          ./gradlew             :staff-bot:test             :velocity:test             --no-daemon             --no-build-cache             --no-configuration-cache             --console=plain
