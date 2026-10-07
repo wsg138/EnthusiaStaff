@@ -40,6 +40,7 @@ import net.enthusia.staff.domain.policyv2.enforcement.PolicyV2EnforcementStore;
 import net.enthusia.staff.domain.policyv2.enforcement.PolicyV2RemedyEnforcement;
 import net.enthusia.staff.domain.policyv2.enforcement.PolicyV2RemedyEnforcement.Condition;
 import net.enthusia.staff.domain.policyv2.enforcement.PolicyV2RemedyEnforcement.ConditionType;
+import net.enthusia.staff.domain.policyv2.enforcement.PolicyV2RemedyService;
 import net.enthusia.staff.domain.policyv2.enforcement.PolicyV2RemedyEnforcement.Lifecycle;
 import net.enthusia.staff.domain.policyv2.enforcement.PolicyV2RemedyEnforcement.Scope;
 import net.enthusia.staff.domain.policyv2.persistence.PolicyV2Store;
@@ -191,8 +192,7 @@ class PolicyV2EnforcementIntegrationTest {
 
             PolicyV2RemedyEnforcement configured = runtime.remedies().registerConfigured(
                     admin,
-                    new net.enthusia.staff.domain.policyv2.enforcement.PolicyV2RemedyService
-                            .ConfiguredRegisterCommand(
+                    new PolicyV2RemedyService.ConfiguredRegisterCommand(
                             fixture.caseId(), vpn.id(), fixture.targetId(),
                             "register:bound:309", NOW
                     )
@@ -202,8 +202,7 @@ class PolicyV2EnforcementIntegrationTest {
 
             PolicyV2RemedyEnforcement replay = runtime.remedies().registerConfigured(
                     admin,
-                    new net.enthusia.staff.domain.policyv2.enforcement.PolicyV2RemedyService
-                            .ConfiguredRegisterCommand(
+                    new PolicyV2RemedyService.ConfiguredRegisterCommand(
                             fixture.caseId(), vpn.id(), fixture.targetId(),
                             "register:bound:309", NOW
                     )
