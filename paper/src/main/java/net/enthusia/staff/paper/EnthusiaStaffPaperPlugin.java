@@ -53,6 +53,7 @@ import net.enthusia.staff.paper.integration.PolarSpectatorPhaseCompatibility;
 import net.enthusia.staff.paper.punishment.policyv2.PolicyV2ShadowRuntime;
 import net.enthusia.staff.paper.report.ChatContextBuffer;
 import net.enthusia.staff.persistence.DatabaseConfig;
+import net.enthusia.staff.persistence.JdbcPolicyV1BehavioralHistorySource;
 import net.enthusia.staff.persistence.JdbcPolicyV2EnforcementStore;
 import net.enthusia.staff.persistence.JdbcPolicyV2Store;
 import net.enthusia.staff.persistence.MariaDb;
@@ -956,7 +957,9 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
                 new PolicyV2ShadowRuntime.StoreSuppliers(
                         () -> storageValue(bindings -> new JdbcPolicyV2Store(bindings.runtime().dataSource())),
                         () -> storageValue(bindings -> new JdbcPolicyV2EnforcementStore(bindings.runtime().dataSource())),
-                        () -> storageValue(PaperStorageBindings::playerDirectory)
+                        () -> storageValue(PaperStorageBindings::playerDirectory),
+                        () -> storageValue(bindings ->
+                                new JdbcPolicyV1BehavioralHistorySource(bindings.runtime().dataSource()))
                 ),
                 new PolicyV2ShadowRuntime.RuntimeServices(
                         new net.enthusia.staff.paper.auth.ActiveDutyAuthorizationPolicy(
