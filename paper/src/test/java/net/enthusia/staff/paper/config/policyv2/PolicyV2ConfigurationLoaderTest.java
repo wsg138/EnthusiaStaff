@@ -57,14 +57,38 @@ class PolicyV2ConfigurationLoaderTest {
     }
 
     @Test
+    void remedyOnlyActionParsesWithoutPunitiveFields() {
+        String yaml = validConfiguration("shadow", POLICY_ONE, EXAMPLE_DISPLAY_NAME)
+                .replaceFirst(
+                        "(?m)^([ \\t]*)type: exact\\R"
+                                + "\\1sanctions:\\R"
+                                + "\\1  - type: warning\\R"
+                                + "\\1    duration: instant",
+                        "$1type: remedy-only"
+                );
+
+        PolicyAction action = load(yaml).activeSnapshot().offenses().getFirst().rules().getFirst().action();
+
+        assertInstanceOf(PolicyAction.RemedyOnly.class, action);
+    }
+
+    @Test
+    void remedyOnlyActionRejectsPunitiveSanctionFields() {
+        String invalid = validConfiguration("shadow", POLICY_ONE, EXAMPLE_DISPLAY_NAME)
+                .replace("type: exact", "type: remedy-only");
+
+        assertThrows(PolicyV2ConfigurationException.class, () -> load(invalid));
+    }
+
+    @Test
     void exactWithApprovalParsesFixedSanctionAndMinimumRank() {
         String yaml = validConfiguration("shadow", POLICY_ONE, EXAMPLE_DISPLAY_NAME)
-                .replace(
-                        "type: exact\n"
-                                + "                              sanctions:",
-                        "type: exact-with-approval\n"
-                                + "                              minimum-rank: admin\n"
-                                + "                              sanctions:"
+                .replaceFirst(
+                        "(?m)^([ \\t]*)type: exact\\R"
+                                + "\\1sanctions:",
+                        "$1type: exact-with-approval\\n"
+                                + "$1minimum-rank: admin\\n"
+                                + "$1sanctions:"
                 );
 
         PolicyAction.ExactWithApproval action = assertInstanceOf(
@@ -79,7 +103,7 @@ class PolicyV2ConfigurationLoaderTest {
     @Test
     void exactWithApprovalRequiresMinimumRank() {
         String invalid = validConfiguration("shadow", POLICY_ONE, EXAMPLE_DISPLAY_NAME)
-                .replace("type: exact", "type: exact-with-approval");
+                .replaceFirst("(?m)^([ \\t]*)type: exact$", "$1type: exact-with-approval");
 
         assertThrows(PolicyV2ConfigurationException.class, () -> load(invalid));
     }
