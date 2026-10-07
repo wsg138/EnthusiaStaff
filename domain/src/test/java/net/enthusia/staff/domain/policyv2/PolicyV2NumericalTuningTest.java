@@ -191,8 +191,8 @@ class PolicyV2NumericalTuningTest {
         assertBanDays(resolve(snapshot, freecam, List.of()), 21);
         assertBanDays(resolve(snapshot, xray, List.of(history("prior-xray", xray, 180))), 30);
         assertBanDays(resolve(snapshot, xray, List.of(
-                history("x1", xray, 90),
-                history("f1", freecam, 30)
+                history("x1", xray, 60),
+                history("f1", freecam, 15)
         )), 60);
         assertBanDays(resolve(snapshot, xray, sameHistory(xray, 21L, 14L, 7L)), 90);
 
@@ -303,7 +303,7 @@ class PolicyV2NumericalTuningTest {
         rules.add(rule("chronic", CHRONIC_THRESHOLD, REVIEW_THRESHOLD, cheating ? ban(90) : warning()));
         rules.add(new ResolutionRule(
                 "review",
-                HistoryWindow.atLeast(REVIEW_THRESHOLD),
+                new RuleCondition(Map.of(), HistoryWindow.atLeast(REVIEW_THRESHOLD)),
                 new PolicyAction.RequiresReview("policy-review.chronic-pattern"),
                 List.of()
         ));
