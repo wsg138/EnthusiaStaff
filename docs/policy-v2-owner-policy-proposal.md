@@ -501,12 +501,12 @@ Even if the recommendations above are accepted in principle, these numerical val
 
 ## 6. Required implementation follow-ups if this proposal is approved
 
-Most decisions fit the merged infrastructure. Two recommendations intentionally require additional implementation:
+Most decisions fit the merged infrastructure.
 
-1. **Fading recurrence/pattern persistence.** Replace the current forever-counted recurrence multiplier with a separately decaying pattern signal.
-2. **Legacy v1 history carry-forward adapter.** At cutover, map unambiguous pre-v2 findings into resolver history without fabricating Policy v2 cases or missing incident attributes.
+1. **Fading recurrence/pattern persistence — IMPLEMENTED in #430 / PR #431.** The engine now uses a separately decaying pattern signal so long clean periods clear recurrence pressure while preserving audit history.
+2. **Legacy v1 history carry-forward adapter — STILL REQUIRED.** At cutover, map unambiguous pre-v2 findings into resolver history without fabricating Policy v2 cases or missing incident attributes.
 
-Neither should be implemented as production authority until owners approve the corresponding policy decision.
+Neither implementation changes production authority; Policy v2 remains disabled/shadow-only until a separate approved cutover.
 
 ## 7. Approval state and next steps
 
@@ -514,7 +514,7 @@ Lincoln approved the substantive recommendations in this document on 2026-10-07.
 
 Next steps:
 
-1. implement fading pattern memory as approved in section 2.20;
+1. merge/validate fading pattern memory from #430 / PR #431;
 2. implement the legacy-v1 carry-forward adapter described in section 2.19;
 3. run the simulator matrix over D1/D2/D3 values and recurrence behavior;
 4. tune numerical values only when the simulator exposes surprising behavior;
