@@ -198,7 +198,6 @@ class PolicyV2OwnerSnapshotTest {
     @Test
     void terminalSafetyRulesAreFixedPermanentBansWithAdminApproval() {
         PolicySnapshot snapshot = load().activeSnapshot();
-        PolicyResolver resolver = new PolicyResolver();
 
         for (String offenseId : List.of(
                 "safety.credible-threat",
@@ -211,21 +210,26 @@ class PolicyV2OwnerSnapshotTest {
                 "disruption.server-crash-attempt",
                 "account.theft"
         )) {
-            PolicyAction.ExactWithApproval action = assertInstanceOf(
-                    PolicyAction.ExactWithApproval.class,
-                    resolver.resolve(
-                            snapshot,
-                            new IncidentFinding(offenseId, java.util.Map.of()),
-                            NOW,
-                            List.of()
-                    ).action(),
-                    offenseId
-            );
-            assertEquals(StaffRank.ADMIN, action.minimumRank(), offenseId);
-            assertTrue(action.sanctions().stream().anyMatch(
-                    sanction -> sanction.type() == SanctionType.NETWORK_BAN
-                            && sanction.length().isPermanent()
-            ), offenseId);
+            OffensePolicy offense = snapshot.offense(offenseId).orElseThrow();
+            for (var rule : offense.rules()) {
+                PolicyAction.ExactWithApproval action = assertInstanceOf(
+                        PolicyAction.ExactWithApproval.class,
+                        rule.action(),
+                        offenseId + " / " + rule.id()
+                );
+                assertEquals(
+                        StaffRank.ADMIN,
+                        action.minimumRank(),
+                        offenseId + " / " + rule.id()
+                );
+                assertTrue(
+                        action.sanctions().stream().anyMatch(
+                                sanction -> sanction.type() == SanctionType.NETWORK_BAN
+                                        && sanction.length().isPermanent()
+                        ),
+                        offenseId + " / " + rule.id()
+                );
+            }
         }
     }
 
