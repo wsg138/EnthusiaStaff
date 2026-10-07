@@ -2,13 +2,19 @@ package net.enthusia.staff.persistence;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import java.time.Duration;
 import java.util.List;
+import java.util.Optional;
 import net.enthusia.staff.domain.auth.StaffRank;
 import net.enthusia.staff.domain.policyv2.DecayPolicy;
 import net.enthusia.staff.domain.policyv2.PolicyAction;
+import net.enthusia.staff.domain.policyv2.PolicyV2RemedyBindingSpec;
+import net.enthusia.staff.domain.policyv2.RemedySpec;
+import net.enthusia.staff.domain.policyv2.enforcement.PolicyV2RemedyEnforcement.ConditionType;
+import net.enthusia.staff.domain.policyv2.enforcement.PolicyV2RemedyEnforcement.Scope;
 import net.enthusia.staff.domain.sanction.SanctionSpec;
 import net.enthusia.staff.domain.sanction.SanctionType;
 import net.enthusia.staff.domain.sanction.SanctionLength;
@@ -46,6 +52,30 @@ final class PolicyV2JsonCodecTest {
         String json = codec.write(action);
 
         assertEquals(action, codec.read(json, PolicyAction.class));
+    }
+
+    @Test
+    void remedyEnforcementBindingRoundTripsAndLegacyJsonDefaultsToUnbound() {
+        RemedySpec current = new RemedySpec(
+                "vpn-access",
+                RemedySpec.Type.ACCESS_RESTRICTION,
+                "Disable VPN",
+                Optional.of(new PolicyV2RemedyBindingSpec(
+                        Scope.NETWORK_ACCESS,
+                        ConditionType.VPN_APPROVAL,
+                        Optional.empty(),
+                        Optional.empty(),
+                        Optional.empty()
+                ))
+        );
+
+        assertEquals(current, codec.read(codec.write(current), RemedySpec.class));
+
+        RemedySpec legacy = codec.read(
+                "{\"id\":\"remove-content\",\"type\":\"REMOVE_CONTENT\",\"description\":\"Remove content\"}",
+                RemedySpec.class
+        );
+        assertTrue(legacy.enforcementBinding().isEmpty());
     }
 
     @Test
