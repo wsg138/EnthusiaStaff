@@ -9,15 +9,20 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 import net.enthusia.staff.domain.auth.StaffRank;
 import net.enthusia.staff.domain.policyv2.BehavioralHistoryEntry;
+import net.enthusia.staff.domain.policyv2.IncidentAttributeValue;
 import net.enthusia.staff.domain.policyv2.IncidentFinding;
 import net.enthusia.staff.domain.policyv2.OffensePolicy;
 import net.enthusia.staff.domain.policyv2.PolicyAction;
 import net.enthusia.staff.domain.policyv2.PolicyResolver;
 import net.enthusia.staff.domain.policyv2.PolicySnapshot;
+import net.enthusia.staff.domain.policyv2.RemedySpec;
+import net.enthusia.staff.domain.policyv2.enforcement.PolicyV2RemedyBindingResolver;
+import net.enthusia.staff.domain.policyv2.enforcement.PolicyV2RemedyEnforcement;
 import net.enthusia.staff.domain.policyv2.legacy.PolicyV1HistoryCarryForward;
 import net.enthusia.staff.domain.sanction.SanctionSpec;
 import net.enthusia.staff.domain.sanction.SanctionType;
@@ -25,7 +30,7 @@ import org.junit.jupiter.api.Test;
 
 class PolicyV2OwnerSnapshotTest {
     private static final Instant NOW = Instant.parse("2026-10-07T22:00:00Z");
-    private static final String OWNER_VERSION = "owner.2026-10-07.1";
+    private static final String OWNER_VERSION = "owner.2026-10-07.2";
 
     @Test
     void bundledOwnerSnapshotIsCompleteButRuntimeRemainsDisabled() {
@@ -35,6 +40,8 @@ class PolicyV2OwnerSnapshotTest {
         assertEquals(PolicyV2FeatureMode.DISABLED, configuration.mode());
         assertEquals(OWNER_VERSION, configuration.activeVersion());
         assertEquals(OWNER_VERSION, snapshot.version());
+        assertEquals(3, configuration.snapshots().size());
+        assertTrue(configuration.snapshots().containsKey("owner.2026-10-07.1"));
         assertEquals(85, snapshot.offenses().size());
         assertTrue(snapshot.offenses().stream().noneMatch(
                 offense -> offense.id().contains("grief") || offense.displayName().toLowerCase().contains("grief")
@@ -132,7 +139,7 @@ class PolicyV2OwnerSnapshotTest {
         )) {
             var resolution = resolver.resolve(
                     snapshot,
-                    new IncidentFinding(offenseId, java.util.Map.of()),
+                    new IncidentFinding(offenseId, complianceAttributes(offenseId)),
                     NOW,
                     List.of()
             );
@@ -140,6 +147,115 @@ class PolicyV2OwnerSnapshotTest {
             assertFalse(resolution.remedies().isEmpty(), offenseId);
             assertEquals(0.0, resolution.history().totalContribution(), 0.0, offenseId);
         }
+    }
+
+    @Test
+    void everySupportedRemedyHasVersionedEnforcementMetadataAndResolvesFromPinnedFinding() {
+        PolicySnapshot snapshot = load().activeSnapshot();
+        PolicyV2RemedyBindingResolver bindings = new PolicyV2RemedyBindingResolver();
+        int supported = 0;
+        int manualOnly = 0;
+
+        for (OffensePolicy offense : snapshot.offenses()) {
+            IncidentFinding finding = new IncidentFinding(
+                    offense.id(),
+                    complianceAttributes(offense.id())
+            );
+            for (var rule : offense.rules()) {
+                for (RemedySpec remedy : rule.remedies()) {
+                    if (remedy.type() == RemedySpec.Type.OTHER) {
+                        manualOnly++;
+                        assertTrue(remedy.enforcementBinding().isEmpty(), offense.id());
+                        continue;
+                    }
+                    supported++;
+                    assertTrue(remedy.enforcementBinding().isPresent(),
+                            offense.id() + " / " + rule.id() + " / " + remedy.id());
+                    var binding = bindings.resolve(remedy, finding);
+                    assertEquals(remedy.enforcementBinding().orElseThrow().scope(), binding.scope());
+                }
+            }
+        }
+        assertTrue(supported > 0);
+        assertTrue(manualOnly > 0);
+    }
+
+    @Test
+    void ownerProfileAndVpnRemediesResolveToCorrectTypedConditions() {
+        PolicySnapshot snapshot = load().activeSnapshot();
+        PolicyV2RemedyBindingResolver resolver = new PolicyV2RemedyBindingResolver();
+
+        for (String offenseId : List.of(
+                "profile.inappropriate-username",
+                "profile.inappropriate-skin",
+                "profile.inappropriate-other",
+                "access.vpn-compliance"
+        )) {
+            IncidentFinding finding = new IncidentFinding(offenseId, complianceAttributes(offenseId));
+            RemedySpec remedy = snapshot.offense(offenseId).orElseThrow()
+                    .rules().getFirst().remedies().getFirst();
+            var resolved = resolver.resolve(remedy, finding);
+            assertEquals(
+                    PolicyV2RemedyEnforcement.Scope.NETWORK_ACCESS,
+                    resolved.scope(),
+                    offenseId
+            );
+            var expected = switch (offenseId) {
+                case "profile.inappropriate-username" ->
+                        PolicyV2RemedyEnforcement.Condition.username("BadName");
+                case "profile.inappropriate-skin" ->
+                        PolicyV2RemedyEnforcement.Condition.profileComponent("skin", "skin:bad");
+                case "profile.inappropriate-other" ->
+                        PolicyV2RemedyEnforcement.Condition.profileComponent("cape", "component:bad");
+                default -> PolicyV2RemedyEnforcement.Condition.vpnApproval();
+            };
+            assertEquals(expected, resolved.condition(), offenseId);
+        }
+    }
+
+    @Test
+    void nonBaselineHistoryTiersRetainMandatoryRemediesWithinEachContext() {
+        PolicySnapshot snapshot = load().activeSnapshot();
+
+        for (OffensePolicy offense : snapshot.offenses()) {
+            Map<String, List<String>> baseline = new java.util.HashMap<>();
+            for (var rule : offense.rules()) {
+                if (rule.id().equals("baseline") || rule.id().endsWith("-baseline")) {
+                    String group = rule.id().substring(0, rule.id().length() - "baseline".length());
+                    baseline.put(group, rule.remedies().stream().map(RemedySpec::id).sorted().toList());
+                }
+            }
+            for (var rule : offense.rules()) {
+                String suffix = List.of("related", "pattern", "chronic", "heavy").stream()
+                        .filter(name -> rule.id().equals(name) || rule.id().endsWith("-" + name))
+                        .findFirst().orElse(null);
+                if (suffix == null) {
+                    continue;
+                }
+                String group = rule.id().substring(0, rule.id().length() - suffix.length());
+                if (!baseline.containsKey(group)) {
+                    continue;
+                }
+                assertEquals(
+                        baseline.get(group),
+                        rule.remedies().stream().map(RemedySpec::id).sorted().toList(),
+                        offense.id() + " / " + rule.id()
+                );
+            }
+        }
+    }
+
+    @Test
+    void olderOwnerSnapshotRemainsImmutableAndUnbound() {
+        PolicyV2Configuration config = load();
+        PolicySnapshot archived = config.snapshots().get("owner.2026-10-07.1");
+        assertEquals(85, archived.offenses().size());
+        assertTrue(archived.offense("profile.inappropriate-username")
+                .orElseThrow().attributes().isEmpty());
+        assertTrue(archived.offenses().stream()
+                .flatMap(offense -> offense.rules().stream())
+                .flatMap(rule -> rule.remedies().stream())
+                .allMatch(remedy -> remedy.enforcementBinding().isEmpty()));
     }
 
     @Test
@@ -244,6 +360,19 @@ class PolicyV2OwnerSnapshotTest {
             return bounded.allowedOptions().stream().flatMap(List::stream).toList();
         }
         return List.of();
+    }
+
+    private static Map<String, IncidentAttributeValue> complianceAttributes(String offenseId) {
+        return switch (offenseId) {
+            case "profile.inappropriate-username" -> Map.of(
+                    "prohibited-username", new IncidentAttributeValue.TextValue("BadName"));
+            case "profile.inappropriate-skin" -> Map.of(
+                    "prohibited-value", new IncidentAttributeValue.TextValue("skin:bad"));
+            case "profile.inappropriate-other" -> Map.of(
+                    "prohibited-value", new IncidentAttributeValue.TextValue("component:bad"),
+                    "profile-component", new IncidentAttributeValue.TextValue("cape"));
+            default -> Map.of();
+        };
     }
 
     private static PolicyV2Configuration load() {
