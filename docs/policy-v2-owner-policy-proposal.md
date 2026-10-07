@@ -2,7 +2,7 @@
 
 Tracking: #423  
 Parent: #355  
-Status: **Coordinator recommendation — NOT owner-approved and NOT production policy**
+Status: **Owner-approved direction by Lincoln on 2026-10-07 — still non-production until encoded, simulated, shadow-tested, and cut over separately**
 
 This document converts the unresolved W0/W6 questions into a concrete starting position for owner review. It deliberately does not activate Policy v2, change the bundled disabled example policy, or alter Policy v1 authority.
 
@@ -368,7 +368,7 @@ This preserves the desired behavior:
 - unrelated offenses do not interact;
 - a genuinely long clean period eventually clears the pattern instead of leaving a permanent invisible penalty.
 
-Suggested initial defaults for simulation, not final approval:
+Owner-approved starting defaults for simulation; numerical tuning may still be adjusted if simulator results expose bad behavior:
 
 | Class | Direct half-life | Pattern half-life | Maximum effective half-life |
 | --- | ---: | ---: | ---: |
@@ -508,14 +508,15 @@ Most decisions fit the merged infrastructure. Two recommendations intentionally 
 
 Neither should be implemented as production authority until owners approve the corresponding policy decision.
 
-## 7. Review order
+## 7. Approval state and next steps
 
-Recommended owner review order:
+Lincoln approved the substantive recommendations in this document on 2026-10-07. The policy remains non-production because implementation/simulation/shadow validation still precede authority cutover.
 
-1. approve/reject the 20 substantive decisions in section 2;
-2. approve the response-class model in section 3;
-3. edit the representative anchors in section 4;
-4. run a simulator matrix over D1/D2/D3 values and recurrence behavior;
-5. approve the resulting numerical policy;
-6. encode the first real versioned Policy v2 configuration;
-7. run production shadow mode before any authority cutover.
+Next steps:
+
+1. implement fading pattern memory as approved in section 2.20;
+2. implement the legacy-v1 carry-forward adapter described in section 2.19;
+3. run the simulator matrix over D1/D2/D3 values and recurrence behavior;
+4. tune numerical values only when the simulator exposes surprising behavior;
+5. encode the first real versioned Policy v2 configuration;
+6. run production shadow mode before any authority cutover.
