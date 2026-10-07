@@ -102,6 +102,15 @@ class PolicyConfigurationValidatorTest {
                 IllegalArgumentException.class,
                 () -> DecayPolicy.exponential(Duration.ofDays(1), -0.1, 2.0)
         );
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> DecayPolicy.exponential(
+                        Duration.ofDays(1),
+                        Duration.ZERO,
+                        0.5,
+                        2.0
+                )
+        );
     }
 
     @Test
