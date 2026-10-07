@@ -114,3 +114,26 @@ W4 should:
 
 The Market/Reputation providers remain the authorities for their own durable blacklist state.
 W3B does not write provider tables directly.
+
+## Owner snapshot binding publication
+
+The first disabled owner snapshot (`owner.2026-10-07.1`) remains archived unchanged. The next
+disabled snapshot (`owner.2026-10-07.2`) makes W3B-compatible remedy bindings explicit:
+
+- username compliance: requires the prohibited username as a text finding attribute;
+- skin/profile compliance: requires a prohibited value, plus a typed component name where needed;
+- VPN compliance: binds to the typed VPN approval condition;
+- content removal and confiscation: bind to their existing manual-completion W3B provider scopes.
+
+Required content-removal/confiscation remedies remain attached across the offense's related,
+pattern, chronic, and heavy-history tiers, rather than disappearing after the baseline tier.
+
+`OTHER` remedies (technical cleanup, Market/stall cleanup, restoration, or safety containment)
+remain **unbound** because W3B explicitly disallows them. These need an approved, dedicated
+adapter or an explicit manual workflow before authoritative Policy v2 cutover. A configured
+`manual` condition is still a typed W3B condition, **not** proof that an external provider
+executed anything. The cutover must separately prove provider operations, authorized completion,
+replay/retry behavior, correction satisfaction, and overturn cleanup.
+
+The snapshot's root feature mode remains `disabled`; no remedy bindings execute on the server
+as a consequence of publication.
