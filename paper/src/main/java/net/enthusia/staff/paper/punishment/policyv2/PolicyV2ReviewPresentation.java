@@ -119,6 +119,9 @@ public record PolicyV2ReviewPresentation(
         if (review.resolution().action() instanceof PolicyAction.Exact exact) {
             return exact.sanctions().stream().map(PolicyV2ReviewPresentation::sanction).toList();
         }
+        if (review.resolution().action() instanceof PolicyAction.RemedyOnly) {
+            return List.of("No punitive sanction; complete the required remedy or compliance condition.");
+        }
         if (review.resolution().action() instanceof PolicyAction.Bounded bounded) {
             List<String> options = new ArrayList<>();
             for (int index = 0; index < bounded.allowedOptions().size(); index++) {
