@@ -19,6 +19,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.zaxxer.hikari.HikariDataSource;
 import net.enthusia.staff.integration.PolicyV2PersistenceTestSupport.Fixture;
+import java.sql.Timestamp;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
@@ -403,10 +404,54 @@ class PolicyV2PersistenceIntegrationTest {
                 .map(java.lang.reflect.RecordComponent::getName)
                 .collect(java.util.stream.Collectors.toUnmodifiableSet());
         assertEquals(
-                Set.of("caseId", "publicOffense", "publicReason", "status",
-                        "incidentAt", "sanctions", "revision"),
+                Set.of(
+                        "caseId", "currentPlayerName", "incidentPlayerName", "category",
+                        "publicOffense", "publicReason", "relatedHistorySummary", "status",
+                        "appealStatus", "issuedAt", "expiresAt", "sanctions", "remedies",
+                        "timeline", "policyVersion", "revision"
+                ),
                 publicFields
         );
+    }
+
+    @Test
+    void retainedW2PublicProjectionDecodesThroughCurrentStore() throws Exception {
+        Fixture fixture = seed(DATABASE, 11);
+        try (HikariDataSource dataSource = open(DATABASE)) {
+            PolicyV2Store store = new JdbcPolicyV2Store(dataSource);
+            store.createCase(createRequest(fixture, "create:legacy-public-projection"));
+
+            String legacyJson = """
+                    {"caseId":"%s","publicOffense":"Legacy offense",
+                    "publicReason":"Legacy public reason","status":"RESOLVED",
+                    "incidentAt":"%s","sanctions":[
+                    {"type":"NETWORK_IDENTITY_BAN","status":"COMPLETED","endsAt":null},
+                    {"type":"CONTENT_REMOVAL","status":"COMPLETED","endsAt":null}],
+                    "revision":0}
+                    """.formatted(fixture.caseId(), NOW);
+            try (var connection = dataSource.getConnection();
+                 var statement = connection.prepareStatement("""
+                         INSERT INTO policy_v2_public_projections(
+                             case_id, projection_json, revision, updated_at
+                         ) VALUES (?, ?, 0, ?)
+                         """)) {
+                statement.setString(1, fixture.caseId());
+                statement.setString(2, legacyJson);
+                statement.setTimestamp(3, Timestamp.from(NOW));
+                statement.executeUpdate();
+            }
+
+            PolicyV2PublicProjection projection =
+                    store.publicProjection(fixture.caseId()).orElseThrow();
+            assertEquals(PolicyV2PublicProjection.Status.EXPIRED, projection.status());
+            assertEquals(NOW, projection.issuedAt());
+            assertEquals("Legacy offense", projection.publicOffense());
+            assertEquals(1, projection.sanctions().size());
+            assertEquals(
+                    PolicyV2PublicProjection.PublicSanctionType.BAN,
+                    projection.sanctions().getFirst().type()
+            );
+        }
     }
 
     @Test

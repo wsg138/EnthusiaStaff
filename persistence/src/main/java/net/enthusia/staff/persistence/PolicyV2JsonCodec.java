@@ -5,6 +5,7 @@ import com.fasterxml.jackson.annotation.JsonSubTypes;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.MapperFeature;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.databind.json.JsonMapper;
@@ -50,6 +51,14 @@ final class PolicyV2JsonCodec {
             return json.readValue(value, type);
         } catch (JsonProcessingException exception) {
             throw new ModerationPersistenceException("Unable to decode Policy v2 JSON", exception);
+        }
+    }
+
+    JsonNode readTree(String value) {
+        try {
+            return json.readTree(value);
+        } catch (JsonProcessingException exception) {
+            throw new ModerationPersistenceException("Unable to decode Policy v2 JSON tree", exception);
         }
     }
 

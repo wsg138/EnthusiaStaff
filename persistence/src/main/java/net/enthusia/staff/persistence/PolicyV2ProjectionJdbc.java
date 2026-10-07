@@ -13,9 +13,11 @@ final class PolicyV2ProjectionJdbc {
     private static final String PROJECTION_OPERATION = "PUBLIC_PROJECTION";
 
     private final PolicyV2JdbcSupport support;
+    private final PolicyV2PublicProjectionDecoder decoder;
 
     PolicyV2ProjectionJdbc(PolicyV2JdbcSupport support) {
         this.support = support;
+        this.decoder = new PolicyV2PublicProjectionDecoder(support);
     }
 
     PolicyV2PublicProjection publish(PolicyV2Store.PublishProjectionRequest request) {
@@ -119,10 +121,7 @@ final class PolicyV2ProjectionJdbc {
                 if (!result.next()) {
                     return Optional.empty();
                 }
-                return Optional.of(support.read(
-                        result.getString("projection_json"),
-                        PolicyV2PublicProjection.class
-                ));
+                return Optional.of(decoder.decode(result.getString("projection_json")));
             }
         }
     }

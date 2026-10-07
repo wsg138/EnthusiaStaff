@@ -1,5 +1,6 @@
 package net.enthusia.staff.persistence;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -198,6 +199,10 @@ final class PolicyV2JdbcSupport {
 
     <T> T read(String value, com.fasterxml.jackson.core.type.TypeReference<T> type) {
         return json.read(value, type);
+    }
+
+    JsonNode readTree(String value) {
+        return json.readTree(value);
     }
 
     static boolean isDuplicateKey(SQLException exception) {
