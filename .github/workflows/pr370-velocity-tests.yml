@@ -1,0 +1,22 @@
+name: PR370 Velocity Tests
+
+on:
+  push:
+    branches:
+      - diagnostic/370-velocity-tests
+
+permissions:
+  contents: read
+
+jobs:
+  velocity:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Run Velocity tests
+        run: ./gradlew :velocity:test --no-daemon --stacktrace
