@@ -5,7 +5,7 @@ import java.util.List;
 import net.enthusia.staff.domain.auth.StaffRank;
 import net.enthusia.staff.domain.sanction.SanctionSpec;
 
-public sealed interface PolicyAction permits PolicyAction.Exact, PolicyAction.Bounded, PolicyAction.RemedyOnly, PolicyAction.RequiresReview {
+public sealed interface PolicyAction permits PolicyAction.Exact, PolicyAction.ExactWithApproval, PolicyAction.Bounded, PolicyAction.RemedyOnly, PolicyAction.RequiresReview {
     int MIN_BOUNDED_OPTIONS = 2;
 
     record Exact(List<SanctionSpec> sanctions) implements PolicyAction {
@@ -19,14 +19,24 @@ public sealed interface PolicyAction permits PolicyAction.Exact, PolicyAction.Bo
         }
     }
 
+    record ExactWithApproval(List<SanctionSpec> sanctions, StaffRank minimumRank) implements PolicyAction {
+        public ExactWithApproval {
+            if (sanctions == null || sanctions.isEmpty()
+                    || sanctions.stream().anyMatch(java.util.Objects::isNull)) {
+                throw new IllegalArgumentException("approved exact sanctions must be non-empty");
+            }
+            requireApprovalRank(minimumRank);
+            requirePunitive(sanctions);
+            sanctions = List.copyOf(sanctions);
+        }
+    }
+
     record Bounded(List<List<SanctionSpec>> allowedOptions, StaffRank minimumRank) implements PolicyAction {
         public Bounded {
-            if (allowedOptions == null || allowedOptions.size() < MIN_BOUNDED_OPTIONS || minimumRank == null) {
+            if (allowedOptions == null || allowedOptions.size() < MIN_BOUNDED_OPTIONS) {
                 throw new IllegalArgumentException("bounded discretion requires options and an authority rank");
             }
-            if (minimumRank != StaffRank.MOD && minimumRank != StaffRank.ADMIN && minimumRank != StaffRank.FOUNDER) {
-                throw new IllegalArgumentException("bounded discretion requires MOD, ADMIN, or FOUNDER authority");
-            }
+            requireApprovalRank(minimumRank);
             List<List<SanctionSpec>> copied = new ArrayList<>();
             for (List<SanctionSpec> option : allowedOptions) {
                 if (option == null || option.isEmpty()
@@ -40,6 +50,12 @@ public sealed interface PolicyAction permits PolicyAction.Exact, PolicyAction.Bo
             if (allowedOptions.stream().distinct().count() < MIN_BOUNDED_OPTIONS) {
                 throw new IllegalArgumentException("bounded discretion requires distinct options");
             }
+        }
+    }
+
+    private static void requireApprovalRank(StaffRank minimumRank) {
+        if (minimumRank != StaffRank.MOD && minimumRank != StaffRank.ADMIN && minimumRank != StaffRank.FOUNDER) {
+            throw new IllegalArgumentException("policy approval requires MOD, ADMIN, or FOUNDER authority");
         }
     }
 
