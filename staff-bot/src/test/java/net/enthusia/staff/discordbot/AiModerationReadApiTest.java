@@ -37,6 +37,8 @@ class AiModerationReadApiTest {
     private static final Clock CLOCK = Clock.fixed(NOW, ZoneOffset.UTC);
     private static final UUID PLAYER_ID =
             UUID.fromString("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee");
+    private static final UUID SUBJECT_ID =
+            UUID.fromString("12345678-1234-4234-8234-123456789abc");
     private static final String TOKEN =
             "0123456789abcdef0123456789abcdef0123456789abcdef";
 
@@ -103,7 +105,7 @@ class AiModerationReadApiTest {
         );
         data.subject = Optional.of(new VersionedSubject(
                 new ModerationSubject(
-                        new ModerationSubjectId(UUID.randomUUID()),
+                        new ModerationSubjectId(SUBJECT_ID),
                         Set.of(new MinecraftIdentityRef(PLAYER_ID)),
                         Optional.empty()
                 ),
@@ -129,8 +131,12 @@ class AiModerationReadApiTest {
 
         assertEquals("enthusia-staff", response.service());
         assertEquals("ai-moderation-state", response.api());
-        assertEquals("v1", response.contractVersion());
+        assertEquals("v2", response.contractVersion());
         assertEquals(PLAYER_ID.toString(), response.target().playerId());
+        assertEquals(
+                SUBJECT_ID.toString(),
+                response.target().moderationSubjectId().orElseThrow()
+        );
         assertEquals("chat.harassment", response.recentCases().getFirst().exactReasonId());
         assertEquals("MUTE", response.activeSanctions().getFirst().type());
 
@@ -140,6 +146,31 @@ class AiModerationReadApiTest {
         assertFalse(serialized.contains("ADMIN"));
         assertTrue(serialized.contains("chat.harassment"));
         assertTrue(serialized.contains("Public mute reason"));
+    }
+
+    @Test
+    void resolvedPlayerWithoutAuthoritativeSubjectDoesNotInventSubjectId() {
+        FakeReadData data = new FakeReadData();
+        PlayerIdentity identity = new PlayerIdentity(
+                PLAYER_ID,
+                Optional.of("Unlinked_Player"),
+                PlayerPlatform.JAVA,
+                NOW.minusSeconds(3600),
+                NOW
+        );
+        data.resolution = new PlayerResolution.Resolved(
+                identity,
+                PlayerResolution.MatchKind.CURRENT_USERNAME
+        );
+        data.identity = Optional.of(identity);
+
+        StaffModerationReadService reads = new StaffModerationReadService(data, CLOCK);
+        AiModerationReadApiService service = new AiModerationReadApiService(reads, CLOCK);
+        AiModerationReadApiModel.Response response =
+                service.read(new AiModerationReadApiModel.Request("Unlinked_Player"));
+
+        assertEquals("v2", response.contractVersion());
+        assertTrue(response.target().moderationSubjectId().isEmpty());
     }
 
     @Test
