@@ -87,7 +87,7 @@ final class JdaDiscordGateway implements DiscordGateway, DiscordChatEgress, Disc
     ) {
         this(
                 configuration,
-                discordToken,
+                configuration.discordToken(),
                 true,
                 workers,
                 interactions,
@@ -274,7 +274,7 @@ final class JdaDiscordGateway implements DiscordGateway, DiscordChatEgress, Disc
         moderation.ifPresent(runtime -> {
             moderationListener = new JdaStaffModerationListener(
                     configuration.environment().guildId(), workers, interactions, runtime,
-                    configuration.moderationWebUri(), configuration.discordToken());
+                    configuration.moderationWebUri(), discordToken);
             builder.addEventListeners(moderationListener);
         });
     }
@@ -282,7 +282,7 @@ final class JdaDiscordGateway implements DiscordGateway, DiscordChatEgress, Disc
     @Override
     public void enableInteractions() {
         synchronized (lifecycleLock) {
-            if (jda == null) {
+            if (!staffInteractionsEnabled || jda == null) {
                 return;
             }
             moderation.ifPresent(runtime -> runtime.resumePunishments(jda));
@@ -350,6 +350,9 @@ final class JdaDiscordGateway implements DiscordGateway, DiscordChatEgress, Disc
     private void disableInteractions() {
         synchronized (lifecycleLock) {
             chatSenderIdentities.clear();
+            if (!staffInteractionsEnabled) {
+                return;
+            }
             moderation.ifPresent(StaffModerationRuntime::pausePunishments);
             if (previewListener != null) {
                 previewListener.disable();
@@ -629,6 +632,9 @@ final class JdaDiscordGateway implements DiscordGateway, DiscordChatEgress, Disc
     @SuppressWarnings("PMD.NullAssignment") // Clearing the closed API reference prevents later reuse.
     private void closeListeners() {
         chatSenderIdentities.clear();
+        if (!staffInteractionsEnabled) {
+            return;
+        }
         moderation.ifPresent(StaffModerationRuntime::pausePunishments);
         if (roleSyncCoordinator != null) {
             roleSyncCoordinator.close();
