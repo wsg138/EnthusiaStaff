@@ -23,6 +23,7 @@ import net.enthusia.staff.domain.policyv2.IncidentAttributeValue;
 import net.enthusia.staff.domain.policyv2.OffensePolicy;
 import net.enthusia.staff.domain.policyv2.PolicyAction;
 import net.enthusia.staff.domain.policyv2.PolicySnapshot;
+import net.enthusia.staff.domain.policyv2.RemedySpec;
 import net.enthusia.staff.domain.policyv2.ResolutionRule;
 import net.enthusia.staff.domain.policyv2.RuleCondition;
 import net.enthusia.staff.domain.sanction.SanctionLength;
@@ -117,6 +118,53 @@ class PolicyV2PresentationTest {
         assertFalse(view.historyExplanation().matches(".*0\\.[0-9]+.*"));
         assertEquals("policy-test", view.policyVersion());
         assertTrue(view.authorityNotice().contains("Policy v1 remains authoritative"));
+    }
+
+    @Test
+    void remedyOnlyPresentationClearlySeparatesComplianceFromPunishment() {
+        String offenseId = "access.vpn-compliance";
+        RemedySpec remedy = new RemedySpec(
+                "vpn-access",
+                RemedySpec.Type.ACCESS_RESTRICTION,
+                "Disable the unapproved VPN or obtain approval"
+        );
+        OffensePolicy offense = new OffensePolicy(
+                offenseId,
+                "VPN Compliance",
+                "accounts-vpn-access",
+                List.of(),
+                new HistoryPolicy(Map.of(), DecayPolicy.nonDecaying()),
+                List.of(new ResolutionRule(
+                        "compliance-only",
+                        new RuleCondition(Map.of(), HistoryWindow.atLeast(0.0)),
+                        new PolicyAction.RemedyOnly(),
+                        List.of(remedy)
+                ))
+        );
+        PolicySnapshot snapshot = new PolicySnapshot("policy-remedy-only", List.of(offense));
+        PolicyV2ManualWorkflow workflow = new PolicyV2ManualWorkflow(
+                () -> snapshot,
+                (subjectId, at) -> List.of(),
+                (review, key, at) -> UUID.randomUUID(),
+                new DefaultAuthorizationPolicy(),
+                java.time.Clock.systemUTC()
+        );
+        PolicyV2ManualDraft draft = PolicyV2ManualDraft.start(TARGET, NOW)
+                .selectCategory(PolicyV2Category.ACCOUNTS_VPN_ACCESS)
+                .selectOffense(offenseId);
+
+        PolicyV2ReviewPresentation view = PolicyV2ReviewPresentation.from(
+                workflow.review(new Actor(ACTOR_ID, "Mod", StaffRank.MOD), draft)
+        );
+
+        assertEquals(
+                List.of("No punitive sanction; complete the required remedy or compliance condition."),
+                view.sanctionRecommendation()
+        );
+        assertEquals(
+                List.of("Access restriction: Disable the unapproved VPN or obtain approval"),
+                view.remedies()
+        );
     }
 
     @Test
