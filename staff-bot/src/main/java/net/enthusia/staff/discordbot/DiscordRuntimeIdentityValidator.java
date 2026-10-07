@@ -15,9 +15,20 @@ public final class DiscordRuntimeIdentityValidator {
     }
 
     public static ValidationResult validate(StaffBotEnvironment environment, DiscordRuntimeIdentity identity) {
+        return validate(environment, environment.applicationId(), identity);
+    }
+
+    public static ValidationResult validate(
+            StaffBotEnvironment environment,
+            long expectedApplicationId,
+            DiscordRuntimeIdentity identity
+    ) {
         Objects.requireNonNull(environment, "environment");
         Objects.requireNonNull(identity, "identity");
-        if (identity.applicationId() != environment.applicationId()) {
+        if (expectedApplicationId <= 0L) {
+            throw new IllegalArgumentException("expected Discord application ID must be positive");
+        }
+        if (identity.applicationId() != expectedApplicationId) {
             return ValidationResult.failure(APPLICATION_MISMATCH);
         }
         if (identity.botPublic()) {
