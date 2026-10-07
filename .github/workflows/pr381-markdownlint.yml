@@ -1,0 +1,26 @@
+name: PR381 Markdownlint Diagnostic
+
+on:
+  push:
+    branches:
+      - diagnostic/381-markdownlint
+
+permissions:
+  contents: read
+
+jobs:
+  markdownlint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Run markdownlint on changed docs
+        shell: bash
+        run: |
+          set +e
+          npx --yes markdownlint-cli2@0.18.1 docs/discord-chat-transport.md docs/discord-staff-bot-runtime.md
+          status=$?
+          echo "MARKDOWNLINT_EXIT=$status"
+          exit 0
