@@ -191,6 +191,50 @@ class PolicyV2FullOverturnIntegrationTest {
     }
 
     @Test
+    void terminalCanonicalRemedyWithActiveEnforcementIsStillCleaned() throws Exception {
+        Fixture fixture = prepare(436);
+        UUID operationId = UUID.randomUUID();
+        RecordingProviders providers = new RecordingProviders();
+
+        try (HikariDataSource dataSource = open(DATABASE)) {
+            PolicyV2Store canonical = new JdbcPolicyV2Store(dataSource);
+            PolicyV2Store.CaseRecord policyCase = canonical.findCase(fixture.caseId()).orElseThrow();
+            String remedyId = policyCase.remedies().get(0).remedy().id();
+            canonical.updateRemedy(new PolicyV2Store.RemedyUpdateRequest(
+                    fixture.caseId(),
+                    remedyId,
+                    0L,
+                    PolicyV2Store.RemedyStatus.SATISFIED,
+                    fixture.actorId(),
+                    "Simulate W3B canonical-first completion before restart",
+                    "split-canonical:436",
+                    OVERTURNED_AT.minusMillis(500)
+            ));
+        }
+
+        try (HikariDataSource dataSource = open(DATABASE)) {
+            Runtime runtime = runtime(dataSource, providers, checkpoint -> { });
+            PolicyV2FullOverturnStore.Operation completed = runtime.orchestrator().execute(
+                    command(
+                            operationId,
+                            fixture,
+                            actor(fixture.actorId(), StaffRank.ADMIN),
+                            "appeal-split-remedy"
+                    )
+            );
+            assertTrue(completed.completed());
+            PolicyV2Store.CaseRecord policyCase =
+                    runtime.canonical().findCase(fixture.caseId()).orElseThrow();
+            assertEquals(
+                    PolicyV2Store.RemedyStatus.SATISFIED,
+                    policyCase.remedies().get(0).status()
+            );
+        }
+
+        assertConverged(fixture, operationId, providers);
+    }
+
+    @Test
     void enforcedAssetCleanupKeepsFounderRestoreBoundary() throws Exception {
         Fixture fixture = seed(DATABASE, 434);
         RecordingProviders providers = new RecordingProviders();
