@@ -82,8 +82,8 @@ public record PolicyV2ReviewPresentation(
             return "No related confirmed history affects this recommendation.";
         }
         boolean repeated = assessment.contributions().stream()
-                .anyMatch(contribution -> contribution.priorRelatedCount() > 0
-                        || contribution.halfLifeMultiplier() > 1.0);
+                .anyMatch(contribution -> contribution.patternPersistence() > 0.01
+                        || contribution.halfLifeMultiplier() > 1.01);
         double strongest = assessment.contributions().stream()
                 .mapToDouble(HistoryAssessment.Contribution::decayFactor)
                 .max()
@@ -91,7 +91,9 @@ public record PolicyV2ReviewPresentation(
         String age = strongest >= 0.75 ? "Related history is still strongly relevant."
                 : strongest >= 0.25 ? "Related history has partly decayed."
                 : "Related history is mostly decayed but remains relevant.";
-        return repeated ? age + " Repeated related conduct keeps earlier history relevant longer." : age;
+        return repeated
+                ? age + " A recent related pattern is slowing decay; that pattern also fades during clean time."
+                : age;
     }
 
     private static List<String> remedies(PolicyV2ManualReview review) {
