@@ -9,9 +9,10 @@ import net.enthusia.staff.domain.policyv2.BehavioralHistoryEntry;
 import net.enthusia.staff.domain.policyv2.PolicySnapshot;
 import net.enthusia.staff.domain.policyv2.persistence.PolicyV2PublicProjection;
 import net.enthusia.staff.domain.policyv2.persistence.PolicyV2Store;
+import net.enthusia.staff.domain.policyv2.publicview.PolicyV2PublicProjectionReader;
 
 /** MariaDB implementation of the additive Policy v2 persistence contract. */
-public final class JdbcPolicyV2Store implements PolicyV2Store {
+public final class JdbcPolicyV2Store implements PolicyV2Store, PolicyV2PublicProjectionReader {
     private final PolicyV2CaseJdbc cases;
     private final PolicyV2EvaluationJdbc evaluations;
 

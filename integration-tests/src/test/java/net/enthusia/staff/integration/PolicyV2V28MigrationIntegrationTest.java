@@ -49,7 +49,8 @@ class PolicyV2V28MigrationIntegrationTest {
             MariaDb.migrate(dataSource);
 
             assertTrue(tableExists("policy_v2_cases"));
-            assertEquals("28", latestMigrationVersion());
+            assertTrue(tableExists("policy_v2_remedy_enforcement"));
+            assertEquals("29", latestMigrationVersion());
             assertEquals(1, legacyCaseCount());
             assertEquals(0, policyV2CaseCount());
         }

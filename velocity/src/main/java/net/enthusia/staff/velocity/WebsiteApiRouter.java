@@ -85,6 +85,7 @@ final class WebsiteApiRouter {
     private final WebsiteApiRequestDecoder decoder;
     private final WebsiteAppealEndpoint appeals;
     private final WebsiteAppealWorkflowEndpoint appealWorkflow;
+    private final PolicyV2PublicWebsiteView policyV2Public;
 
     WebsiteApiRouter(
             WebsiteModerationStore store,
@@ -94,11 +95,32 @@ final class WebsiteApiRouter {
             Clock clock,
             WebsiteReviewerAuthority reviewerAuthority
     ) {
-        if (store == null || clock == null || reviewerAuthority == null) {
+        this(
+                store,
+                authorization,
+                sanctionChanges,
+                authorityMode,
+                clock,
+                reviewerAuthority,
+                new PolicyV2PublicWebsiteView(caseId -> Optional.empty())
+        );
+    }
+
+    WebsiteApiRouter(
+            WebsiteModerationStore store,
+            AuthorizationPolicy authorization,
+            SanctionChangeService sanctionChanges,
+            Supplier<OperationalMode> authorityMode,
+            Clock clock,
+            WebsiteReviewerAuthority reviewerAuthority,
+            PolicyV2PublicWebsiteView policyV2Public
+    ) {
+        if (store == null || clock == null || reviewerAuthority == null || policyV2Public == null) {
             throw new IllegalArgumentException("Website API router dependencies are required");
         }
         this.store = store;
         this.clock = clock;
+        this.policyV2Public = policyV2Public;
         this.decoder = new WebsiteApiRequestDecoder();
         this.appeals = new WebsiteAppealEndpoint(
                 store, authorization, sanctionChanges, authorityMode, clock, decoder, reviewerAuthority
@@ -106,6 +128,10 @@ final class WebsiteApiRouter {
         this.appealWorkflow = new WebsiteAppealWorkflowEndpoint(
                 store, authorization, clock, decoder, appeals, reviewerAuthority
         );
+    }
+
+    Optional<Map<String, Object>> policyV2PublicCase(String caseId) {
+        return policyV2Public.find(caseId);
     }
 
     Object route(String method, URI uri, Headers headers, byte[] body) {

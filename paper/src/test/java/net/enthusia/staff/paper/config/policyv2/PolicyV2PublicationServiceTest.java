@@ -1,6 +1,7 @@
 package net.enthusia.staff.paper.config.policyv2;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.nio.file.Files;
@@ -13,13 +14,15 @@ import org.junit.jupiter.api.io.TempDir;
 
 class PolicyV2PublicationServiceTest {
     private static final String POLICY_ONE = "policy.1";
+    private static final String POLICY_FILE = "policy-v2.yml";
+    private static final String STABLE = "Stable";
 
     @TempDir
     Path temp;
 
     @Test
     void failedReloadRetainsLastKnownGoodAndPublishesDiagnostic() throws Exception {
-        Path file = temp.resolve("policy-v2.yml");
+        Path file = temp.resolve(POLICY_FILE);
         Files.writeString(file, PolicyV2ConfigurationLoaderTest.validConfiguration(
                 "shadow", POLICY_ONE, "First"
         ));
@@ -48,7 +51,7 @@ class PolicyV2PublicationServiceTest {
 
     @Test
     void restartRecoversActiveAndHistoricalSnapshotsDeterministically() throws Exception {
-        Path file = temp.resolve("policy-v2.yml");
+        Path file = temp.resolve(POLICY_FILE);
         String configured = """
                 schema-version: 1
                 mode: shadow
@@ -74,10 +77,34 @@ class PolicyV2PublicationServiceTest {
     }
 
     @Test
-    void identicalReloadIsIdempotent() throws Exception {
-        Path file = temp.resolve("policy-v2.yml");
+    void reloadMovesDisabledToShadowAndBackToDisabled() throws Exception {
+        Path file = temp.resolve(POLICY_FILE);
         Files.writeString(file, PolicyV2ConfigurationLoaderTest.validConfiguration(
-                "disabled", POLICY_ONE, "Stable"
+                "disabled", POLICY_ONE, STABLE
+        ));
+        PolicyV2PublicationService service = service(file);
+
+        assertTrue(service.loadInitial().successful());
+        assertFalse(service.shadowEnabled());
+
+        Files.writeString(file, PolicyV2ConfigurationLoaderTest.validConfiguration(
+                "shadow", POLICY_ONE, STABLE
+        ));
+        assertTrue(service.reload().successful());
+        assertTrue(service.shadowEnabled());
+
+        Files.writeString(file, PolicyV2ConfigurationLoaderTest.validConfiguration(
+                "disabled", POLICY_ONE, STABLE
+        ));
+        assertTrue(service.reload().successful());
+        assertFalse(service.shadowEnabled());
+    }
+
+    @Test
+    void identicalReloadIsIdempotent() throws Exception {
+        Path file = temp.resolve(POLICY_FILE);
+        Files.writeString(file, PolicyV2ConfigurationLoaderTest.validConfiguration(
+                "disabled", POLICY_ONE, STABLE
         ));
         PolicyV2PublicationService service = service(file);
 

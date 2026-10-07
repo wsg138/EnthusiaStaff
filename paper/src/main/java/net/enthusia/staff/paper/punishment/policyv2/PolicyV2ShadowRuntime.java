@@ -12,6 +12,7 @@ import net.enthusia.staff.domain.auth.Actor;
 import net.enthusia.staff.domain.auth.AuthorizationPolicy;
 import net.enthusia.staff.domain.player.PlayerIdentity;
 import net.enthusia.staff.domain.ports.PlayerDirectory;
+import net.enthusia.staff.domain.policyv2.enforcement.PolicyV2EnforcementStore;
 import net.enthusia.staff.domain.policyv2.persistence.PolicyV2Store;
 import net.enthusia.staff.paper.auth.PaperActorResolver;
 import net.enthusia.staff.paper.command.PolicyV2ShadowAccess;
@@ -35,6 +36,7 @@ public final class PolicyV2ShadowRuntime implements PolicyV2ShadowAccess {
             Clock clock,
             Path configurationFile,
             Supplier<PolicyV2Store> stores,
+            Supplier<PolicyV2EnforcementStore> enforcementStores,
             Supplier<PlayerDirectory> players,
             AuthorizationPolicy authorization,
             ExecutorService workers,
@@ -49,6 +51,17 @@ public final class PolicyV2ShadowRuntime implements PolicyV2ShadowAccess {
                 issueSink
         );
         publications.loadInitial();
+        PolicyV2ShadowEnforcementRuntime enforcementRuntime = new PolicyV2ShadowEnforcementRuntime(
+                publications::shadowEnabled,
+                stores,
+                enforcementStores,
+                authorization,
+                clock
+        );
+        plugin.getServer().getPluginManager().registerEvents(
+                new PolicyV2ShadowComplianceListener(plugin, workers, enforcementRuntime),
+                plugin
+        );
         PolicyV2StoreAdapter adapter = new PolicyV2StoreAdapter(stores);
         this.workflow = new PolicyV2ManualWorkflow(
                 publications::activeSnapshot,

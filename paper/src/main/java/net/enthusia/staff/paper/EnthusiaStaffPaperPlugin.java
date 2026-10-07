@@ -49,6 +49,7 @@ import net.enthusia.staff.paper.enforcement.MuteEnforcementListener;
 import net.enthusia.staff.paper.punishment.policyv2.PolicyV2ShadowRuntime;
 import net.enthusia.staff.paper.report.ChatContextBuffer;
 import net.enthusia.staff.persistence.DatabaseConfig;
+import net.enthusia.staff.persistence.JdbcPolicyV2EnforcementStore;
 import net.enthusia.staff.persistence.JdbcPolicyV2Store;
 import net.enthusia.staff.persistence.MariaDb;
 import net.enthusia.staff.persistence.MariaDbRuntime;
@@ -910,6 +911,7 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
                 Clock.systemUTC(),
                 getDataFolder().toPath().resolve("policy-v2.yml"),
                 () -> storageValue(bindings -> new JdbcPolicyV2Store(bindings.runtime().dataSource())),
+                () -> storageValue(bindings -> new JdbcPolicyV2EnforcementStore(bindings.runtime().dataSource())),
                 () -> storageValue(PaperStorageBindings::playerDirectory),
                 new net.enthusia.staff.paper.auth.ActiveDutyAuthorizationPolicy(
                         authorizationPolicy,
