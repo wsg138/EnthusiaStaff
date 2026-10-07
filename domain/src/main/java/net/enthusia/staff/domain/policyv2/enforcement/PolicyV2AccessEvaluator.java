@@ -9,6 +9,7 @@ import net.enthusia.staff.domain.policyv2.enforcement.PolicyV2RemedyEnforcement.
 import net.enthusia.staff.domain.policyv2.enforcement.PolicyV2RemedyEnforcement.Scope;
 
 public final class PolicyV2AccessEvaluator {
+    private static final long MINIMUM_REVISION = 0L;
     private final PolicyV2EnforcementStore store;
 
     public PolicyV2AccessEvaluator(PolicyV2EnforcementStore store) {
@@ -108,7 +109,7 @@ public final class PolicyV2AccessEvaluator {
         public Correction {
             caseId = PolicyV2RemedyEnforcement.requireText(caseId, "case id", 64);
             remedyId = PolicyV2RemedyEnforcement.requireText(remedyId, "remedy id", 96);
-            if (expectedRevision < 0L) {
+            if (expectedRevision < MINIMUM_REVISION) {
                 throw new IllegalArgumentException("correction revision must not be negative");
             }
         }

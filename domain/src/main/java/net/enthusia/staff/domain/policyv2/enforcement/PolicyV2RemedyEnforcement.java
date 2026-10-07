@@ -17,6 +17,8 @@ public record PolicyV2RemedyEnforcement(
         long revision,
         Instant updatedAt
 ) {
+    private static final long MINIMUM_REVISION = 0L;
+
     public PolicyV2RemedyEnforcement {
         caseId = requireText(caseId, "case id", 64);
         remedyId = requireText(remedyId, "remedy id", 96);
@@ -26,7 +28,7 @@ public record PolicyV2RemedyEnforcement(
         Objects.requireNonNull(condition, "condition");
         Objects.requireNonNull(lifecycle, "lifecycle");
         Objects.requireNonNull(updatedAt, "updatedAt");
-        if (revision < 0L) {
+        if (revision < MINIMUM_REVISION) {
             throw new IllegalArgumentException("enforcement revision must not be negative");
         }
     }

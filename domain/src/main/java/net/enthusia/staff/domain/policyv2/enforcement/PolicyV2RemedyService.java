@@ -33,13 +33,8 @@ public final class PolicyV2RemedyService {
     }
 
     public PolicyV2RemedyEnforcement register(Actor actor, RegisterCommand command) {
+        requireAuthorized(actor, ModerationAction.ENFORCE_POLICY_REMEDY);
         Objects.requireNonNull(command, "command");
-        requireLifecycleAuthority(
-                actor,
-                ModerationAction.ENFORCE_POLICY_REMEDY,
-                command.scope(),
-                false
-        );
         PolicyV2Store.CaseRecord policyCase = requireCase(command.caseId());
         PolicyV2Store.RemedyRecord remedy = requireRemedy(policyCase, command.remedyId());
         requireRegisterable(policyCase, remedy, command);
@@ -65,25 +60,12 @@ public final class PolicyV2RemedyService {
             String operationKey,
             Instant occurredAt
     ) {
+        requireAuthorized(actor, ModerationAction.ENFORCE_POLICY_REMEDY);
         Objects.requireNonNull(action, "action");
         PolicyV2RemedyEnforcement current = requireEnforcement(caseId, remedyId);
-        requireLifecycleAuthority(
-                actor,
-                ModerationAction.ENFORCE_POLICY_REMEDY,
-                current.scope(),
-                false
-        );
-        String transitionKey = internalOperationKey("enforce", operationKey);
-        if (current.lifecycle() == Lifecycle.ENFORCED && current.revision() == expectedRevision + 1L) {
-            return transition(
-                    current,
-                    expectedRevision,
-                    Lifecycle.ENFORCED,
-                    actor.id(),
-                    "Required remedy enforcement completed",
-                    transitionKey,
-                    occurredAt
-            );
+        PolicyV2RemedyEnforcement replay = completedEnforcementReplay(current, expectedRevision);
+        if (replay != null) {
+            return replay;
         }
         requireEnforcementFence(current, expectedRevision);
         UUID providerOperation = operationId("enforce", operationKey, caseId, remedyId);
@@ -94,7 +76,7 @@ public final class PolicyV2RemedyService {
                 Lifecycle.ENFORCED,
                 actor.id(),
                 "Required remedy enforcement completed",
-                transitionKey,
+                internalOperationKey("enforce", operationKey),
                 occurredAt
         );
     }
@@ -108,17 +90,21 @@ public final class PolicyV2RemedyService {
             String operationKey,
             Instant occurredAt
     ) {
-        PolicyV2RemedyEnforcement current = requireEnforcement(caseId, remedyId);
-        requireLifecycleAuthority(
-                actor,
-                ModerationAction.SATISFY_POLICY_REMEDY,
-                current.scope(),
-                false
-        );
-        return finish(
-                caseId, remedyId, expectedRevision, Lifecycle.SATISFIED,
-                PolicyV2Store.RemedyStatus.SATISFIED, actor.id(), reason, operationKey, occurredAt, null
-        );
+        requireAuthorized(actor, ModerationAction.SATISFY_POLICY_REMEDY);
+        return finish(new CompletionRequest(
+                caseId,
+                remedyId,
+                expectedRevision,
+                new CompletionDetails(
+                        Lifecycle.SATISFIED,
+                        PolicyV2Store.RemedyStatus.SATISFIED,
+                        actor.id(),
+                        reason,
+                        operationKey,
+                        occurredAt,
+                        null
+                )
+        ));
     }
 
     public PolicyV2RemedyEnforcement satisfyWithCleanup(
@@ -131,19 +117,21 @@ public final class PolicyV2RemedyService {
             String operationKey,
             Instant occurredAt
     ) {
-        CompletionAction checkedCleanup = Objects.requireNonNull(cleanup, "cleanup");
-        PolicyV2RemedyEnforcement current = requireEnforcement(caseId, remedyId);
-        requireLifecycleAuthority(
-                actor,
-                ModerationAction.SATISFY_POLICY_REMEDY,
-                current.scope(),
-                true
-        );
-        return finish(
-                caseId, remedyId, expectedRevision, Lifecycle.SATISFIED,
-                PolicyV2Store.RemedyStatus.SATISFIED, actor.id(), reason, operationKey, occurredAt,
-                checkedCleanup
-        );
+        requireAuthorized(actor, ModerationAction.SATISFY_POLICY_REMEDY);
+        return finish(new CompletionRequest(
+                caseId,
+                remedyId,
+                expectedRevision,
+                new CompletionDetails(
+                        Lifecycle.SATISFIED,
+                        PolicyV2Store.RemedyStatus.SATISFIED,
+                        actor.id(),
+                        reason,
+                        operationKey,
+                        occurredAt,
+                        Objects.requireNonNull(cleanup, "cleanup")
+                )
+        ));
     }
 
     public PolicyV2RemedyEnforcement waive(
@@ -155,17 +143,21 @@ public final class PolicyV2RemedyService {
             String operationKey,
             Instant occurredAt
     ) {
-        PolicyV2RemedyEnforcement current = requireEnforcement(caseId, remedyId);
-        requireLifecycleAuthority(
-                actor,
-                ModerationAction.WAIVE_POLICY_REMEDY,
-                current.scope(),
-                false
-        );
-        return finish(
-                caseId, remedyId, expectedRevision, Lifecycle.WAIVED,
-                PolicyV2Store.RemedyStatus.WAIVED, actor.id(), reason, operationKey, occurredAt, null
-        );
+        requireAuthorized(actor, ModerationAction.WAIVE_POLICY_REMEDY);
+        return finish(new CompletionRequest(
+                caseId,
+                remedyId,
+                expectedRevision,
+                new CompletionDetails(
+                        Lifecycle.WAIVED,
+                        PolicyV2Store.RemedyStatus.WAIVED,
+                        actor.id(),
+                        reason,
+                        operationKey,
+                        occurredAt,
+                        null
+                )
+        ));
     }
 
     public PolicyV2RemedyEnforcement waiveWithCleanup(
@@ -178,19 +170,21 @@ public final class PolicyV2RemedyService {
             String operationKey,
             Instant occurredAt
     ) {
-        CompletionAction checkedCleanup = Objects.requireNonNull(cleanup, "cleanup");
-        PolicyV2RemedyEnforcement current = requireEnforcement(caseId, remedyId);
-        requireLifecycleAuthority(
-                actor,
-                ModerationAction.WAIVE_POLICY_REMEDY,
-                current.scope(),
-                true
-        );
-        return finish(
-                caseId, remedyId, expectedRevision, Lifecycle.WAIVED,
-                PolicyV2Store.RemedyStatus.WAIVED, actor.id(), reason, operationKey, occurredAt,
-                checkedCleanup
-        );
+        requireAuthorized(actor, ModerationAction.WAIVE_POLICY_REMEDY);
+        return finish(new CompletionRequest(
+                caseId,
+                remedyId,
+                expectedRevision,
+                new CompletionDetails(
+                        Lifecycle.WAIVED,
+                        PolicyV2Store.RemedyStatus.WAIVED,
+                        actor.id(),
+                        reason,
+                        operationKey,
+                        occurredAt,
+                        Objects.requireNonNull(cleanup, "cleanup")
+                )
+        ));
     }
 
     public PolicyV2RemedyEnforcement satisfyAutomatically(
@@ -201,54 +195,66 @@ public final class PolicyV2RemedyService {
             String operationKey,
             Instant occurredAt
     ) {
-        PolicyV2RemedyEnforcement current = requireEnforcement(caseId, remedyId);
-        if (current.scope() != Scope.NETWORK_ACCESS) {
-            throw new SecurityException("Automatic satisfaction is limited to observed network compliance");
+        return finish(new CompletionRequest(
+                caseId,
+                remedyId,
+                expectedRevision,
+                new CompletionDetails(
+                        Lifecycle.SATISFIED,
+                        PolicyV2Store.RemedyStatus.SATISFIED,
+                        systemActorId,
+                        reason,
+                        operationKey,
+                        occurredAt,
+                        null
+                )
+        ));
+    }
+
+    private PolicyV2RemedyEnforcement finish(CompletionRequest request) {
+        CompletionDetails details = request.details();
+        PolicyV2RemedyEnforcement current = requireEnforcement(request.caseId(), request.remedyId());
+        if (current.lifecycle() == details.lifecycle()) {
+            return current;
         }
-        return finish(
-                caseId, remedyId, expectedRevision, Lifecycle.SATISFIED,
-                PolicyV2Store.RemedyStatus.SATISFIED, systemActorId, reason, operationKey, occurredAt, null
+        requireCompletionFence(current, request.expectedRevision());
+        runCleanup(current, request);
+        updateCanonical(
+                request.caseId(),
+                request.remedyId(),
+                details.canonicalStatus(),
+                details.actorId(),
+                details.reason(),
+                details.operationKey(),
+                details.occurredAt()
+        );
+        return transition(
+                current,
+                request.expectedRevision(),
+                details.lifecycle(),
+                details.actorId(),
+                details.reason(),
+                internalOperationKey("projection", details.operationKey()),
+                details.occurredAt()
         );
     }
 
-    private PolicyV2RemedyEnforcement finish(
-            String caseId,
-            String remedyId,
-            long expectedRevision,
-            Lifecycle lifecycle,
-            PolicyV2Store.RemedyStatus canonicalStatus,
-            UUID actorId,
-            String reason,
-            String operationKey,
-            Instant occurredAt,
-            CompletionAction cleanup
+    private static void runCleanup(
+            PolicyV2RemedyEnforcement current,
+            CompletionRequest request
     ) {
-        PolicyV2RemedyEnforcement current = requireEnforcement(caseId, remedyId);
-        if (current.lifecycle() == lifecycle && current.revision() == expectedRevision + 1L) {
-            return transition(
+        CompletionAction cleanup = request.details().cleanup();
+        if (cleanup != null) {
+            cleanup.apply(
                     current,
-                    expectedRevision,
-                    lifecycle,
-                    actorId,
-                    reason,
-                    internalOperationKey("projection", operationKey),
-                    occurredAt
+                    operationId(
+                            "complete",
+                            request.details().operationKey(),
+                            request.caseId(),
+                            request.remedyId()
+                    )
             );
         }
-        requireCompletionFence(current, expectedRevision);
-        if (cleanup != null) {
-            cleanup.apply(current, operationId("complete", operationKey, caseId, remedyId));
-        }
-        updateCanonical(caseId, remedyId, canonicalStatus, actorId, reason, operationKey, occurredAt);
-        return transition(
-                current,
-                expectedRevision,
-                lifecycle,
-                actorId,
-                reason,
-                internalOperationKey("projection", operationKey),
-                occurredAt
-        );
     }
 
     private void updateCanonical(
@@ -315,6 +321,16 @@ public final class PolicyV2RemedyService {
         }
     }
 
+    private static PolicyV2RemedyEnforcement completedEnforcementReplay(
+            PolicyV2RemedyEnforcement current,
+            long expectedRevision
+    ) {
+        if (current.lifecycle() == Lifecycle.ENFORCED && current.revision() == expectedRevision + 1L) {
+            return current;
+        }
+        return null;
+    }
+
     private static void requireEnforcementFence(PolicyV2RemedyEnforcement current, long expectedRevision) {
         if (current.lifecycle() != Lifecycle.REQUIRED || current.revision() != expectedRevision) {
             throw new PolicyV2Store.Conflict("Policy v2 enforcement command is stale");
@@ -347,28 +363,6 @@ public final class PolicyV2RemedyService {
                 .orElseThrow(() -> new PolicyV2Store.MissingRecord("Policy v2 enforcement record does not exist"));
     }
 
-    private void requireLifecycleAuthority(
-            Actor actor,
-            ModerationAction lifecycleAction,
-            Scope scope,
-            boolean cleanup
-    ) {
-        requireAuthorized(actor, lifecycleAction);
-        ModerationAction scopedAction = scopedAction(scope, cleanup);
-        if (scopedAction != null) {
-            requireAuthorized(actor, scopedAction);
-        }
-    }
-
-    private static ModerationAction scopedAction(Scope scope, boolean cleanup) {
-        return switch (scope) {
-            case MARKET_ACCESS -> ModerationAction.MODIFY_MARKET_RESTRICTION;
-            case REPUTATION_ACCESS -> ModerationAction.MODIFY_REPUTATION_RESTRICTION;
-            case ASSET -> cleanup ? ModerationAction.RESTORE_ASSETS : ModerationAction.APPLY_CASE_CONFISCATION;
-            case NETWORK_ACCESS, REPORT_SUBMISSION, CONTENT -> null;
-        };
-    }
-
     private void requireAuthorized(Actor actor, ModerationAction action) {
         if (actor == null || !authorization.permits(actor, action)) {
             throw new SecurityException("Actor cannot perform Policy v2 remedy lifecycle action " + action);
@@ -383,6 +377,25 @@ public final class PolicyV2RemedyService {
     private static UUID operationId(String phase, String operationKey, String caseId, String remedyId) {
         String value = phase + '|' + operationKey + '|' + caseId + '|' + remedyId;
         return UUID.nameUUIDFromBytes(value.getBytes(StandardCharsets.UTF_8));
+    }
+
+    private record CompletionRequest(
+            String caseId,
+            String remedyId,
+            long expectedRevision,
+            CompletionDetails details
+    ) {
+    }
+
+    private record CompletionDetails(
+            Lifecycle lifecycle,
+            PolicyV2Store.RemedyStatus canonicalStatus,
+            UUID actorId,
+            String reason,
+            String operationKey,
+            Instant occurredAt,
+            CompletionAction cleanup
+    ) {
     }
 
     @FunctionalInterface

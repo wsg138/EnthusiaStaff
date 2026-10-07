@@ -65,6 +65,7 @@ class PolicyV2EnforcementIntegrationTest {
     private static final Instant NOW = Instant.parse("2026-10-07T02:00:00Z");
     private static final UUID SYSTEM_ACTOR = UUID.fromString("00000000-0000-0000-0000-000000000002");
     private static final String PROFILE_OFFENSE = "profile.inappropriate-username";
+    private static final String CONTENT_OFFENSE = "content.inappropriate";
 
     @Container
     private static final MariaDBContainer<?> DATABASE = new MariaDBContainer<>("mariadb:11.8.3")
@@ -85,10 +86,97 @@ class PolicyV2EnforcementIntegrationTest {
         RemedySpec remedy = profileRemedy();
         Actor admin = actor(fixture.actorId(), StaffRank.ADMIN);
 
+        createAndEnforceProfileRemedy(fixture, remedy, admin);
+        verifyProfileCorrectionAfterRestart(fixture, remedy);
+        verifyNoActiveRemedyAfterRestart(fixture);
+    }
+
+    @Test
+    void enforcementFailureRollsBackAndRetryReusesProviderOperation() throws Exception {
+        Fixture fixture = seed(DATABASE, 302);
+        RemedySpec remedy = contentRemedy();
+        Actor admin = actor(fixture.actorId(), StaffRank.ADMIN);
+        Actor helper = actor(fixture.actorId(), StaffRank.HELPER);
+        List<UUID> providerOperations = new ArrayList<>();
+
+        try (HikariDataSource dataSource = open(DATABASE)) {
+            Runtime runtime = runtime(dataSource);
+            PolicyV2RemedyEnforcement required =
+                    registerContentRemedy(runtime, fixture, remedy, admin, "302");
+            assertRegistrationReplay(runtime, fixture, remedy, admin, required);
+            assertUnauthorizedEnforcement(runtime, fixture, remedy, helper);
+            assertEnforcementRollback(runtime, fixture, remedy, admin, providerOperations);
+            retryEnforcement(runtime, fixture, remedy, admin, providerOperations);
+            assertStaleTransitionRejected(runtime, fixture, remedy);
+        }
+    }
+
+    @Test
+    void terminalProjectionRecoversWhenCanonicalUpdateCommittedFirst() throws Exception {
+        Fixture fixture = seed(DATABASE, 303);
+        RemedySpec remedy = contentRemedy();
+        Actor admin = actor(fixture.actorId(), StaffRank.ADMIN);
+
+        try (HikariDataSource dataSource = open(DATABASE)) {
+            Runtime runtime = runtime(dataSource);
+            PolicyV2RemedyEnforcement enforced =
+                    createEnforcedContentRemedy(runtime, fixture, remedy, admin, "303");
+            assertTerminalProjectionRecovery(runtime, fixture, remedy, admin, enforced);
+        }
+    }
+
+    @Test
+    void recurrenceStaysComplianceOnlyAndWaiverRequiresAuthorization() throws Exception {
+        Fixture first = seed(DATABASE, 304);
+        Fixture second = recurrenceFixture(first);
+        RemedySpec remedy = profileRemedy();
+        Actor admin = actor(first.actorId(), StaffRank.ADMIN);
+        Actor moderator = actor(first.actorId(), StaffRank.MOD);
+
+        try (HikariDataSource dataSource = open(DATABASE)) {
+            Runtime runtime = runtime(dataSource);
+            satisfyInitialProfileCase(runtime, first, remedy, admin);
+            PolicyV2RemedyEnforcement recurrence =
+                    registerRecurrence(runtime, first, second, remedy, admin);
+            assertModeratorCannotWaive(runtime, second, remedy, moderator, recurrence);
+            waiveRecurrence(runtime, second, remedy, admin, recurrence);
+            assertComplianceHistorySeparated(runtime, first.targetId());
+        }
+    }
+
+    @Test
+    void registrationOperationCollisionRejectsDifferentCase() throws Exception {
+        Fixture first = seed(DATABASE, 306);
+        Fixture second = seed(DATABASE, 307);
+        RemedySpec remedy = contentRemedy();
+        Actor admin = actor(first.actorId(), StaffRank.ADMIN);
+
+        try (HikariDataSource dataSource = open(DATABASE)) {
+            Runtime runtime = runtime(dataSource);
+            createPolicyCase(runtime.canonical(), first, CONTENT_OFFENSE, remedy, "case:306");
+            createPolicyCase(runtime.canonical(), second, CONTENT_OFFENSE, remedy, "case:307");
+            runtime.remedies().register(
+                    admin,
+                    register(first, remedy, Scope.CONTENT, Condition.manual(), "shared-register")
+            );
+
+            Actor secondAdmin = actor(second.actorId(), StaffRank.ADMIN);
+            assertThrows(PolicyV2Store.Conflict.class, () -> runtime.remedies().register(
+                    secondAdmin,
+                    register(second, remedy, Scope.CONTENT, Condition.manual(), "shared-register")
+            ));
+            assertTrue(runtime.enforcement().find(second.caseId(), remedy.id()).isEmpty());
+        }
+    }
+
+    private static void createAndEnforceProfileRemedy(
+            Fixture fixture,
+            RemedySpec remedy,
+            Actor admin
+    ) throws Exception {
         try (HikariDataSource dataSource = open(DATABASE)) {
             Runtime runtime = runtime(dataSource);
             createPolicyCase(runtime.canonical(), fixture, PROFILE_OFFENSE, remedy, "case:profile:301");
-
             PolicyV2RemedyEnforcement required = runtime.remedies().register(
                     admin,
                     register(fixture, remedy, Scope.NETWORK_ACCESS, Condition.username("BadName"), "register:301")
@@ -104,7 +192,12 @@ class PolicyV2EnforcementIntegrationTest {
             );
             assertEquals(Lifecycle.ENFORCED, enforced.lifecycle());
         }
+    }
 
+    private static void verifyProfileCorrectionAfterRestart(
+            Fixture fixture,
+            RemedySpec remedy
+    ) throws Exception {
         try (HikariDataSource restarted = open(DATABASE)) {
             Runtime runtime = runtime(restarted);
             PolicyV2RemedyEnforcement recovered = runtime.enforcement()
@@ -121,184 +214,230 @@ class PolicyV2EnforcementIntegrationTest {
                     observation(fixture.targetId(), "GoodName"),
                     NOW.plusSeconds(2)
             ).allowed());
-
-            assertEquals(
-                    PolicyV2Store.RemedyStatus.SATISFIED,
-                    remedy(runtime.canonical(), fixture.caseId(), remedy.id()).status()
-            );
-            Set<String> events = runtime.canonical().auditHistory(fixture.caseId(), 100).stream()
-                    .map(PolicyV2Store.AuditEvent::eventType)
-                    .collect(java.util.stream.Collectors.toSet());
-            assertTrue(events.contains("REMEDY_ENFORCEMENT_REQUIRED"));
-            assertTrue(events.contains("REMEDY_ENFORCEMENT_ENFORCED"));
-            assertTrue(events.contains("REMEDY_ENFORCEMENT_SATISFIED"));
-            assertTrue(events.contains("REMEDY_UPDATED"));
-
-            int baselineAuditCount = runtime.canonical().auditHistory(fixture.caseId(), 100).size();
-            for (int index = 0; index < 4; index++) {
-                assertTrue(coordinator.evaluateAndRepair(
-                        observation(fixture.targetId(), "GoodName"),
-                        NOW.plusSeconds(10 + index)
-                ).allowed());
-            }
-            assertEquals(baselineAuditCount, runtime.canonical().auditHistory(fixture.caseId(), 100).size());
+            assertSatisfiedRemedyAndAudit(runtime, fixture, remedy);
+            assertRoutineChecksDoNotPolluteAudit(runtime, fixture, coordinator);
         }
+    }
 
+    private static void assertSatisfiedRemedyAndAudit(
+            Runtime runtime,
+            Fixture fixture,
+            RemedySpec remedy
+    ) {
+        assertEquals(
+                PolicyV2Store.RemedyStatus.SATISFIED,
+                remedy(runtime.canonical(), fixture.caseId(), remedy.id()).status()
+        );
+        Set<String> events = runtime.canonical().auditHistory(fixture.caseId(), 100).stream()
+                .map(PolicyV2Store.AuditEvent::eventType)
+                .collect(java.util.stream.Collectors.toSet());
+        assertTrue(events.contains("REMEDY_ENFORCEMENT_REQUIRED"));
+        assertTrue(events.contains("REMEDY_ENFORCEMENT_ENFORCED"));
+        assertTrue(events.contains("REMEDY_ENFORCEMENT_SATISFIED"));
+        assertTrue(events.contains("REMEDY_UPDATED"));
+    }
+
+    private static void assertRoutineChecksDoNotPolluteAudit(
+            Runtime runtime,
+            Fixture fixture,
+            PolicyV2AccessCoordinator coordinator
+    ) {
+        int baselineAuditCount = runtime.canonical().auditHistory(fixture.caseId(), 100).size();
+        for (int index = 0; index < 4; index++) {
+            assertTrue(coordinator.evaluateAndRepair(
+                    observation(fixture.targetId(), "GoodName"),
+                    NOW.plusSeconds(10 + index)
+            ).allowed());
+        }
+        assertEquals(baselineAuditCount, runtime.canonical().auditHistory(fixture.caseId(), 100).size());
+    }
+
+    private static void verifyNoActiveRemedyAfterRestart(Fixture fixture) throws Exception {
         try (HikariDataSource restartedAgain = open(DATABASE)) {
             Runtime runtime = runtime(restartedAgain);
             assertTrue(runtime.enforcement().activeFor(fixture.targetId()).isEmpty());
         }
     }
 
-    @Test
-    void enforcementFailureRollsBackAndRetryReusesProviderOperation() throws Exception {
-        Fixture fixture = seed(DATABASE, 302);
-        RemedySpec remedy = contentRemedy();
-        Actor admin = actor(fixture.actorId(), StaffRank.ADMIN);
-        Actor helper = actor(fixture.actorId(), StaffRank.HELPER);
-        List<UUID> providerOperations = new ArrayList<>();
+    private static PolicyV2RemedyEnforcement registerContentRemedy(
+            Runtime runtime,
+            Fixture fixture,
+            RemedySpec remedy,
+            Actor admin,
+            String suffix
+    ) {
+        createPolicyCase(
+                runtime.canonical(), fixture, CONTENT_OFFENSE, remedy, "case:content:" + suffix);
+        return runtime.remedies().register(
+                admin,
+                register(
+                        fixture,
+                        remedy,
+                        Scope.CONTENT,
+                        Condition.manual(),
+                        "register:" + suffix
+                )
+        );
+    }
 
-        try (HikariDataSource dataSource = open(DATABASE)) {
-            Runtime runtime = runtime(dataSource);
-            createPolicyCase(runtime.canonical(), fixture, "content.inappropriate", remedy, "case:content:302");
-            PolicyV2RemedyEnforcement required = runtime.remedies().register(
-                    admin,
-                    register(fixture, remedy, Scope.CONTENT, Condition.manual(), "register:302")
-            );
-            PolicyV2RemedyEnforcement replay = runtime.remedies().register(
-                    admin,
-                    register(fixture, remedy, Scope.CONTENT, Condition.manual(), "register:302")
-            );
-            assertEquals(required, replay);
+    private static void assertRegistrationReplay(
+            Runtime runtime,
+            Fixture fixture,
+            RemedySpec remedy,
+            Actor admin,
+            PolicyV2RemedyEnforcement required
+    ) {
+        PolicyV2RemedyEnforcement replay = runtime.remedies().register(
+                admin,
+                register(fixture, remedy, Scope.CONTENT, Condition.manual(), "register:302")
+        );
+        assertEquals(required, replay);
+    }
 
-            AtomicInteger unauthorizedCalls = new AtomicInteger();
-            assertThrows(SecurityException.class, () -> runtime.remedies().enforce(
-                    helper,
+    private static void assertUnauthorizedEnforcement(
+            Runtime runtime,
+            Fixture fixture,
+            RemedySpec remedy,
+            Actor helper
+    ) {
+        AtomicInteger unauthorizedCalls = new AtomicInteger();
+        assertThrows(SecurityException.class, () -> runtime.remedies().enforce(
+                helper,
+                fixture.caseId(),
+                remedy.id(),
+                0L,
+                (ignored, operationId) -> unauthorizedCalls.incrementAndGet(),
+                "unauthorized:302",
+                NOW.plusSeconds(1)
+        ));
+        assertEquals(0, unauthorizedCalls.get());
+    }
+
+    private static void assertEnforcementRollback(
+            Runtime runtime,
+            Fixture fixture,
+            RemedySpec remedy,
+            Actor admin,
+            List<UUID> providerOperations
+    ) throws Exception {
+        createLifecycleAuditFailureTrigger();
+        try {
+            assertThrows(ModerationPersistenceException.class, () -> runtime.remedies().enforce(
+                    admin,
                     fixture.caseId(),
                     remedy.id(),
                     0L,
-                    (ignored, operationId) -> unauthorizedCalls.incrementAndGet(),
-                    "unauthorized:302",
-                    NOW.plusSeconds(1)
+                    (ignored, operationId) -> providerOperations.add(operationId),
+                    "enforce:302",
+                    NOW.plusSeconds(2)
             ));
-            assertEquals(0, unauthorizedCalls.get());
+        } finally {
+            dropLifecycleAuditFailureTrigger();
+        }
+        assertEquals(
+                Lifecycle.REQUIRED,
+                runtime.enforcement().find(fixture.caseId(), remedy.id()).orElseThrow().lifecycle()
+        );
+    }
 
-            createLifecycleAuditFailureTrigger();
-            try {
-                assertThrows(ModerationPersistenceException.class, () -> runtime.remedies().enforce(
-                        admin,
+    private static void retryEnforcement(
+            Runtime runtime,
+            Fixture fixture,
+            RemedySpec remedy,
+            Actor admin,
+            List<UUID> providerOperations
+    ) {
+        PolicyV2RemedyEnforcement enforced = runtime.remedies().enforce(
+                admin,
+                fixture.caseId(),
+                remedy.id(),
+                0L,
+                (ignored, operationId) -> providerOperations.add(operationId),
+                "enforce:302",
+                NOW.plusSeconds(2)
+        );
+        assertEquals(Lifecycle.ENFORCED, enforced.lifecycle());
+        assertEquals(2, providerOperations.size());
+        assertEquals(providerOperations.get(0), providerOperations.get(1));
+    }
+
+    private static void assertStaleTransitionRejected(
+            Runtime runtime,
+            Fixture fixture,
+            RemedySpec remedy
+    ) {
+        assertThrows(PolicyV2Store.Conflict.class, () -> runtime.enforcement().transition(
+                new PolicyV2EnforcementStore.TransitionRequest(
                         fixture.caseId(),
                         remedy.id(),
                         0L,
-                        (ignored, operationId) -> providerOperations.add(operationId),
-                        "enforce:302",
-                        NOW.plusSeconds(2)
-                ));
-            } finally {
-                dropLifecycleAuditFailureTrigger();
-            }
-            assertEquals(Lifecycle.REQUIRED, runtime.enforcement()
-                    .find(fixture.caseId(), remedy.id()).orElseThrow().lifecycle());
-
-            PolicyV2RemedyEnforcement enforced = runtime.remedies().enforce(
-                    admin,
-                    fixture.caseId(),
-                    remedy.id(),
-                    0L,
-                    (ignored, operationId) -> providerOperations.add(operationId),
-                    "enforce:302",
-                    NOW.plusSeconds(2)
-            );
-            assertEquals(Lifecycle.ENFORCED, enforced.lifecycle());
-            assertEquals(2, providerOperations.size());
-            assertEquals(providerOperations.get(0), providerOperations.get(1));
-
-            PolicyV2RemedyEnforcement replayed = runtime.remedies().enforce(
-                    admin,
-                    fixture.caseId(),
-                    remedy.id(),
-                    0L,
-                    (ignored, operationId) -> providerOperations.add(operationId),
-                    "enforce:302",
-                    NOW.plusSeconds(2)
-            );
-            assertEquals(enforced, replayed);
-            assertEquals(2, providerOperations.size());
-
-            assertThrows(PolicyV2Store.Conflict.class, () -> runtime.remedies().enforce(
-                    admin,
-                    fixture.caseId(),
-                    remedy.id(),
-                    0L,
-                    (ignored, operationId) -> providerOperations.add(operationId),
-                    "enforce:different:302",
-                    NOW.plusSeconds(2)
-            ));
-            assertEquals(2, providerOperations.size());
-
-            assertThrows(PolicyV2Store.Conflict.class, () -> runtime.enforcement().transition(
-                    new PolicyV2EnforcementStore.TransitionRequest(
-                            fixture.caseId(),
-                            remedy.id(),
-                            0L,
-                            Lifecycle.SATISFIED,
-                            fixture.actorId(),
-                            "stale transition",
-                            "stale:302",
-                            NOW.plusSeconds(3)
-                    )
-            ));
-        }
+                        Lifecycle.SATISFIED,
+                        fixture.actorId(),
+                        "stale transition",
+                        "stale:302",
+                        NOW.plusSeconds(3)
+                )
+        ));
     }
 
-    @Test
-    void terminalProjectionRecoversWhenCanonicalUpdateCommittedFirst() throws Exception {
-        Fixture fixture = seed(DATABASE, 303);
-        RemedySpec remedy = contentRemedy();
-        Actor admin = actor(fixture.actorId(), StaffRank.ADMIN);
+    private static PolicyV2RemedyEnforcement createEnforcedContentRemedy(
+            Runtime runtime,
+            Fixture fixture,
+            RemedySpec remedy,
+            Actor admin,
+            String suffix
+    ) {
+        PolicyV2RemedyEnforcement required =
+                registerContentRemedy(runtime, fixture, remedy, admin, suffix);
+        return runtime.remedies().enforce(
+                admin,
+                fixture.caseId(),
+                remedy.id(),
+                required.revision(),
+                (ignored, operationId) -> { },
+                "enforce:" + suffix,
+                NOW.plusSeconds(1)
+        );
+    }
 
-        try (HikariDataSource dataSource = open(DATABASE)) {
-            Runtime runtime = runtime(dataSource);
-            createPolicyCase(runtime.canonical(), fixture, "content.inappropriate", remedy, "case:content:303");
-            PolicyV2RemedyEnforcement required = runtime.remedies().register(
-                    admin,
-                    register(fixture, remedy, Scope.CONTENT, Condition.manual(), "register:303")
-            );
-            PolicyV2RemedyEnforcement enforced = runtime.remedies().enforce(
-                    admin,
-                    fixture.caseId(),
-                    remedy.id(),
-                    required.revision(),
-                    (ignored, operationId) -> { },
-                    "enforce:303",
-                    NOW.plusSeconds(1)
-            );
+    private static void assertTerminalProjectionRecovery(
+            Runtime runtime,
+            Fixture fixture,
+            RemedySpec remedy,
+            Actor admin,
+            PolicyV2RemedyEnforcement enforced
+    ) throws Exception {
+        forceTerminalProjectionFailure(runtime, fixture, remedy, admin, enforced);
+        assertEquals(
+                PolicyV2Store.RemedyStatus.SATISFIED,
+                remedy(runtime.canonical(), fixture.caseId(), remedy.id()).status()
+        );
+        assertEquals(
+                Lifecycle.ENFORCED,
+                runtime.enforcement().find(fixture.caseId(), remedy.id()).orElseThrow().lifecycle()
+        );
+        PolicyV2RemedyEnforcement recovered = runtime.remedies().satisfy(
+                admin,
+                fixture.caseId(),
+                remedy.id(),
+                enforced.revision(),
+                "Content removal verified",
+                "satisfy:303",
+                NOW.plusSeconds(2)
+        );
+        assertEquals(Lifecycle.SATISFIED, recovered.lifecycle());
+    }
 
-            createLifecycleAuditFailureTrigger();
-            try {
-                assertThrows(ModerationPersistenceException.class, () -> runtime.remedies().satisfy(
-                        admin,
-                        fixture.caseId(),
-                        remedy.id(),
-                        enforced.revision(),
-                        "Content removal verified",
-                        "satisfy:303",
-                        NOW.plusSeconds(2)
-                ));
-            } finally {
-                dropLifecycleAuditFailureTrigger();
-            }
-
-            assertEquals(
-                    PolicyV2Store.RemedyStatus.SATISFIED,
-                    remedy(runtime.canonical(), fixture.caseId(), remedy.id()).status()
-            );
-            assertEquals(
-                    Lifecycle.ENFORCED,
-                    runtime.enforcement().find(fixture.caseId(), remedy.id()).orElseThrow().lifecycle()
-            );
-
-            PolicyV2RemedyEnforcement recovered = runtime.remedies().satisfy(
+    private static void forceTerminalProjectionFailure(
+            Runtime runtime,
+            Fixture fixture,
+            RemedySpec remedy,
+            Actor admin,
+            PolicyV2RemedyEnforcement enforced
+    ) throws Exception {
+        createLifecycleAuditFailureTrigger();
+        try {
+            assertThrows(ModerationPersistenceException.class, () -> runtime.remedies().satisfy(
                     admin,
                     fixture.caseId(),
                     remedy.id(),
@@ -306,128 +445,102 @@ class PolicyV2EnforcementIntegrationTest {
                     "Content removal verified",
                     "satisfy:303",
                     NOW.plusSeconds(2)
-            );
-            assertEquals(Lifecycle.SATISFIED, recovered.lifecycle());
+            ));
+        } finally {
+            dropLifecycleAuditFailureTrigger();
         }
     }
 
-    @Test
-    void recurrenceStaysComplianceOnlyAndWaiverRequiresAuthorization() throws Exception {
-        Fixture first = seed(DATABASE, 304);
+    private static Fixture recurrenceFixture(Fixture first) throws Exception {
         String secondCaseId = caseId(305);
         insertCase(DATABASE, secondCaseId, first.targetId(), first.actorId(), NOW.plusSeconds(20));
-        Fixture second = new Fixture(secondCaseId, first.targetId(), first.actorId());
-        RemedySpec remedy = profileRemedy();
-        Actor admin = actor(first.actorId(), StaffRank.ADMIN);
-        Actor moderator = actor(first.actorId(), StaffRank.MOD);
-
-        try (HikariDataSource dataSource = open(DATABASE)) {
-            Runtime runtime = runtime(dataSource);
-            createPolicyCase(runtime.canonical(), first, PROFILE_OFFENSE, remedy, "case:profile:304");
-            PolicyV2RemedyEnforcement firstRequired = runtime.remedies().register(
-                    admin,
-                    register(first, remedy, Scope.NETWORK_ACCESS, Condition.username("BadOne"), "register:304")
-            );
-            runtime.remedies().satisfy(
-                    admin,
-                    first.caseId(),
-                    remedy.id(),
-                    firstRequired.revision(),
-                    "Username corrected",
-                    "satisfy:304",
-                    NOW.plusSeconds(1)
-            );
-
-            createPolicyCase(runtime.canonical(), second, PROFILE_OFFENSE, remedy, "case:profile:305");
-            PolicyV2RemedyEnforcement recurrence = runtime.remedies().register(
-                    admin,
-                    register(second, remedy, Scope.NETWORK_ACCESS, Condition.username("BadTwo"), "register:305")
-            );
-            assertEquals(second.caseId(), runtime.enforcement().activeFor(first.targetId()).getFirst().caseId());
-
-            assertThrows(SecurityException.class, () -> runtime.remedies().waive(
-                    moderator,
-                    second.caseId(),
-                    remedy.id(),
-                    recurrence.revision(),
-                    "Moderator cannot waive",
-                    "waive:mod:305",
-                    NOW.plusSeconds(2)
-            ));
-
-            PolicyV2RemedyEnforcement waived = runtime.remedies().waive(
-                    admin,
-                    second.caseId(),
-                    remedy.id(),
-                    recurrence.revision(),
-                    "Authorized compliance waiver",
-                    "waive:admin:305",
-                    NOW.plusSeconds(3)
-            );
-            assertEquals(Lifecycle.WAIVED, waived.lifecycle());
-
-            List<String> offenses = runtime.canonical().history(
-                    first.targetId(),
-                    NOW.plusSeconds(60),
-                    20
-            ).stream().map(entry -> entry.contributingOffenseId().orElse(entry.originalOffenseId())).toList();
-            assertEquals(List.of(PROFILE_OFFENSE, PROFILE_OFFENSE), offenses);
-            assertFalse(offenses.contains("access.vpn-evasion"));
-            assertFalse(offenses.contains("evasion.mute"));
-        }
+        return new Fixture(secondCaseId, first.targetId(), first.actorId());
     }
 
-    @Test
-    void marketRestrictionKeepsExistingAdminAuthorityBoundary() throws Exception {
-        Fixture fixture = seed(DATABASE, 308);
-        RemedySpec remedy = new RemedySpec(
-                "market-access",
-                RemedySpec.Type.ACCESS_RESTRICTION,
-                "Restrict Market access"
+    private static void satisfyInitialProfileCase(
+            Runtime runtime,
+            Fixture first,
+            RemedySpec remedy,
+            Actor admin
+    ) {
+        createPolicyCase(runtime.canonical(), first, PROFILE_OFFENSE, remedy, "case:profile:304");
+        PolicyV2RemedyEnforcement required = runtime.remedies().register(
+                admin,
+                register(first, remedy, Scope.NETWORK_ACCESS, Condition.username("BadOne"), "register:304")
         );
-        Actor moderator = actor(fixture.actorId(), StaffRank.MOD);
-        Actor admin = actor(fixture.actorId(), StaffRank.ADMIN);
-
-        try (HikariDataSource dataSource = open(DATABASE)) {
-            Runtime runtime = runtime(dataSource);
-            createPolicyCase(runtime.canonical(), fixture, "market.stall-compliance", remedy, "case:308");
-
-            assertThrows(SecurityException.class, () -> runtime.remedies().register(
-                    moderator,
-                    register(fixture, remedy, Scope.MARKET_ACCESS, Condition.manual(), "register:mod:308")
-            ));
-
-            PolicyV2RemedyEnforcement registered = runtime.remedies().register(
-                    admin,
-                    register(fixture, remedy, Scope.MARKET_ACCESS, Condition.manual(), "register:admin:308")
-            );
-            assertEquals(Lifecycle.REQUIRED, registered.lifecycle());
-        }
+        runtime.remedies().satisfy(
+                admin,
+                first.caseId(),
+                remedy.id(),
+                required.revision(),
+                "Username corrected",
+                "satisfy:304",
+                NOW.plusSeconds(1)
+        );
     }
 
-    @Test
-    void registrationOperationCollisionRejectsDifferentCase() throws Exception {
-        Fixture first = seed(DATABASE, 306);
-        Fixture second = seed(DATABASE, 307);
-        RemedySpec remedy = contentRemedy();
-        Actor admin = actor(first.actorId(), StaffRank.ADMIN);
+    private static PolicyV2RemedyEnforcement registerRecurrence(
+            Runtime runtime,
+            Fixture first,
+            Fixture second,
+            RemedySpec remedy,
+            Actor admin
+    ) {
+        createPolicyCase(runtime.canonical(), second, PROFILE_OFFENSE, remedy, "case:profile:305");
+        PolicyV2RemedyEnforcement recurrence = runtime.remedies().register(
+                admin,
+                register(second, remedy, Scope.NETWORK_ACCESS, Condition.username("BadTwo"), "register:305")
+        );
+        assertEquals(second.caseId(), runtime.enforcement().activeFor(first.targetId()).getFirst().caseId());
+        return recurrence;
+    }
 
-        try (HikariDataSource dataSource = open(DATABASE)) {
-            Runtime runtime = runtime(dataSource);
-            createPolicyCase(runtime.canonical(), first, "content.inappropriate", remedy, "case:306");
-            createPolicyCase(runtime.canonical(), second, "content.inappropriate", remedy, "case:307");
-            runtime.remedies().register(
-                    admin,
-                    register(first, remedy, Scope.CONTENT, Condition.manual(), "shared-register")
-            );
+    private static void assertModeratorCannotWaive(
+            Runtime runtime,
+            Fixture second,
+            RemedySpec remedy,
+            Actor moderator,
+            PolicyV2RemedyEnforcement recurrence
+    ) {
+        assertThrows(SecurityException.class, () -> runtime.remedies().waive(
+                moderator,
+                second.caseId(),
+                remedy.id(),
+                recurrence.revision(),
+                "Moderator cannot waive",
+                "waive:mod:305",
+                NOW.plusSeconds(2)
+        ));
+    }
 
-            Actor secondAdmin = actor(second.actorId(), StaffRank.ADMIN);
-            assertThrows(PolicyV2Store.Conflict.class, () -> runtime.remedies().register(
-                    secondAdmin,
-                    register(second, remedy, Scope.CONTENT, Condition.manual(), "shared-register")
-            ));
-            assertTrue(runtime.enforcement().find(second.caseId(), remedy.id()).isEmpty());
-        }
+    private static void waiveRecurrence(
+            Runtime runtime,
+            Fixture second,
+            RemedySpec remedy,
+            Actor admin,
+            PolicyV2RemedyEnforcement recurrence
+    ) {
+        PolicyV2RemedyEnforcement waived = runtime.remedies().waive(
+                admin,
+                second.caseId(),
+                remedy.id(),
+                recurrence.revision(),
+                "Authorized compliance waiver",
+                "waive:admin:305",
+                NOW.plusSeconds(3)
+        );
+        assertEquals(Lifecycle.WAIVED, waived.lifecycle());
+    }
+
+    private static void assertComplianceHistorySeparated(Runtime runtime, UUID targetId) {
+        List<String> offenses = runtime.canonical().history(
+                targetId,
+                NOW.plusSeconds(60),
+                20
+        ).stream().map(entry -> entry.contributingOffenseId().orElse(entry.originalOffenseId())).toList();
+        assertEquals(List.of(PROFILE_OFFENSE, PROFILE_OFFENSE), offenses);
+        assertFalse(offenses.contains("access.vpn-evasion"));
+        assertFalse(offenses.contains("evasion.mute"));
     }
 
     private static Runtime runtime(HikariDataSource dataSource) {

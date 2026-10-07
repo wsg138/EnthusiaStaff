@@ -14,6 +14,17 @@ public final class PolicyV2EnforcementPolicy {
             "language.non-english-public-chat",
             "access.vpn-compliance"
     );
+    private static final Set<Binding> ALLOWED_BINDINGS = Set.of(
+            new Binding(RemedySpec.Type.CORRECT_PROFILE, Scope.NETWORK_ACCESS, ConditionType.USERNAME),
+            new Binding(RemedySpec.Type.CORRECT_PROFILE, Scope.NETWORK_ACCESS, ConditionType.PROFILE_COMPONENT),
+            new Binding(RemedySpec.Type.ACCESS_RESTRICTION, Scope.NETWORK_ACCESS, ConditionType.VPN_APPROVAL),
+            new Binding(RemedySpec.Type.ACCESS_RESTRICTION, Scope.NETWORK_ACCESS, ConditionType.MANUAL),
+            new Binding(RemedySpec.Type.ACCESS_RESTRICTION, Scope.REPORT_SUBMISSION, ConditionType.MANUAL),
+            new Binding(RemedySpec.Type.ACCESS_RESTRICTION, Scope.MARKET_ACCESS, ConditionType.MANUAL),
+            new Binding(RemedySpec.Type.ACCESS_RESTRICTION, Scope.REPUTATION_ACCESS, ConditionType.MANUAL),
+            new Binding(RemedySpec.Type.REMOVE_CONTENT, Scope.CONTENT, ConditionType.MANUAL),
+            new Binding(RemedySpec.Type.CONFISCATE, Scope.ASSET, ConditionType.MANUAL)
+    );
 
     private PolicyV2EnforcementPolicy() {
     }
@@ -33,32 +44,14 @@ public final class PolicyV2EnforcementPolicy {
         if (remedy == null || scope == null || condition == null) {
             throw new IllegalArgumentException("remedy enforcement binding must be present");
         }
-        boolean valid = switch (remedy.type()) {
-            case CORRECT_PROFILE -> profileBinding(scope, condition.type());
-            case ACCESS_RESTRICTION -> accessBinding(scope, condition.type());
-            case REMOVE_CONTENT -> scope == Scope.CONTENT && condition.type() == ConditionType.MANUAL;
-            case CONFISCATE -> scope == Scope.ASSET && condition.type() == ConditionType.MANUAL;
-            case OTHER -> false;
-        };
-        if (!valid) {
+        Binding binding = new Binding(remedy.type(), scope, condition.type());
+        if (!ALLOWED_BINDINGS.contains(binding)) {
             throw new IllegalArgumentException(
                     "remedy " + remedy.id() + " cannot use " + scope + " / " + condition.type()
             );
         }
     }
 
-    private static boolean profileBinding(Scope scope, ConditionType condition) {
-        return scope == Scope.NETWORK_ACCESS
-                && (condition == ConditionType.USERNAME || condition == ConditionType.PROFILE_COMPONENT);
-    }
-
-    private static boolean accessBinding(Scope scope, ConditionType condition) {
-        if (scope == Scope.NETWORK_ACCESS) {
-            return condition == ConditionType.VPN_APPROVAL || condition == ConditionType.MANUAL;
-        }
-        return switch (scope) {
-            case REPORT_SUBMISSION, MARKET_ACCESS, REPUTATION_ACCESS -> condition == ConditionType.MANUAL;
-            default -> false;
-        };
+    private record Binding(RemedySpec.Type remedyType, Scope scope, ConditionType conditionType) {
     }
 }
