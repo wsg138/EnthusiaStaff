@@ -1,7 +1,7 @@
 # Policy v2 W5C — recoverable full-overturn orchestration
 
-Tracking: #398  
-Parent: #355  
+Tracking: #398
+Parent: #355
 Audit source: #361 / PR #390
 
 Policy v1 remains authoritative. This work does not deploy, activate, or cut over Policy v2.
