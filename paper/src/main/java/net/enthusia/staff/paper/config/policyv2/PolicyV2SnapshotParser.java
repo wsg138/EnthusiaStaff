@@ -8,6 +8,7 @@ import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import net.enthusia.staff.common.DurationParser;
 import net.enthusia.staff.common.ParsedDuration;
@@ -20,7 +21,10 @@ import net.enthusia.staff.domain.policyv2.IncidentAttributeValue;
 import net.enthusia.staff.domain.policyv2.OffensePolicy;
 import net.enthusia.staff.domain.policyv2.PolicyAction;
 import net.enthusia.staff.domain.policyv2.PolicySnapshot;
+import net.enthusia.staff.domain.policyv2.PolicyV2RemedyBindingSpec;
 import net.enthusia.staff.domain.policyv2.RemedySpec;
+import net.enthusia.staff.domain.policyv2.enforcement.PolicyV2RemedyEnforcement.ConditionType;
+import net.enthusia.staff.domain.policyv2.enforcement.PolicyV2RemedyEnforcement.Scope;
 import net.enthusia.staff.domain.policyv2.ResolutionRule;
 import net.enthusia.staff.domain.policyv2.RuleCondition;
 import net.enthusia.staff.domain.sanction.SanctionLength;
@@ -40,6 +44,7 @@ final class PolicyV2SnapshotParser {
     private static final String MINIMUM_RANK_FIELD = "minimum-rank";
     private static final String REASON_CODE_FIELD = "reason-code";
     private static final String RESOLUTION_RULES_FIELD = "resolution-rules";
+    private static final String ENFORCEMENT_FIELD = "enforcement";
 
     private static final Set<String> SNAPSHOT_FIELDS = Set.of("version", "offenses");
     private static final Set<String> OFFENSE_FIELDS = Set.of(
@@ -60,7 +65,12 @@ final class PolicyV2SnapshotParser {
             ACTION_TYPE_FIELD, SANCTIONS_FIELD, ALLOWED_OPTIONS_FIELD, MINIMUM_RANK_FIELD, REASON_CODE_FIELD
     );
     private static final Set<String> SANCTION_FIELDS = Set.of(ACTION_TYPE_FIELD, "duration");
-    private static final Set<String> REMEDY_FIELDS = Set.of(REMEDY_ID_FIELD, ACTION_TYPE_FIELD, "description");
+    private static final Set<String> REMEDY_FIELDS = Set.of(
+            REMEDY_ID_FIELD, ACTION_TYPE_FIELD, "description", ENFORCEMENT_FIELD
+    );
+    private static final Set<String> REMEDY_ENFORCEMENT_FIELDS = Set.of(
+            "scope", "condition-type", "value-attribute-id", "component", "component-attribute-id"
+    );
 
     private final DurationParser durations = new DurationParser();
 
@@ -423,10 +433,41 @@ final class PolicyV2SnapshotParser {
                             PolicyV2Yaml.text(item, "type", itemPath),
                             itemPath + ".type"
                     ),
-                    PolicyV2Yaml.text(item, "description", itemPath)
+                    PolicyV2Yaml.text(item, "description", itemPath),
+                    parseRemedyBinding(item.get(ENFORCEMENT_FIELD), itemPath + "." + ENFORCEMENT_FIELD)
             ));
         }
         return List.copyOf(parsed);
+    }
+
+    private static Optional<PolicyV2RemedyBindingSpec> parseRemedyBinding(JsonNode node, String path) {
+        if (node == null || node.isNull()) {
+            return Optional.empty();
+        }
+        PolicyV2Yaml.object(node, path);
+        PolicyV2Yaml.rejectUnknown(node, REMEDY_ENFORCEMENT_FIELDS, path);
+        return Optional.of(new PolicyV2RemedyBindingSpec(
+                PolicyV2Yaml.enumValue(
+                        Scope.class,
+                        PolicyV2Yaml.text(node, "scope", path),
+                        path + ".scope"
+                ),
+                PolicyV2Yaml.enumValue(
+                        ConditionType.class,
+                        PolicyV2Yaml.text(node, "condition-type", path),
+                        path + ".condition-type"
+                ),
+                optionalText(node, "value-attribute-id", path),
+                optionalText(node, "component", path),
+                optionalText(node, "component-attribute-id", path)
+        ));
+    }
+
+    private static Optional<String> optionalText(JsonNode node, String field, String path) {
+        if (!node.has(field)) {
+            return Optional.empty();
+        }
+        return Optional.of(PolicyV2Yaml.text(node, field, path));
     }
 
     private static Set<String> stringSet(JsonNode node, String path) {
