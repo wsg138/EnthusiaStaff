@@ -3,6 +3,7 @@ package net.enthusia.staff.discordbot;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
@@ -25,9 +26,11 @@ public final class StaffBotRuntime implements AutoCloseable {
     private final Optional<StaffModerationRuntime> moderationRuntime;
     private final Optional<StagingTunnel> stagingTunnel;
     private final Optional<StaffBotChatLifecycle> chatLifecycle;
+    private final Optional<PublicChatRuntime> publicChatRuntime;
     private final Object startupGate = new Object();
     private final AtomicBoolean started = new AtomicBoolean();
     private final AtomicBoolean gatewayStarted = new AtomicBoolean();
+    private final AtomicBoolean publicChatGatewayStarted = new AtomicBoolean();
     private final AtomicBoolean closed = new AtomicBoolean();
     private final CompletableFuture<Boolean> readiness = new CompletableFuture<>();
     private final CountDownLatch terminated = new CountDownLatch(1);
@@ -108,19 +111,38 @@ public final class StaffBotRuntime implements AutoCloseable {
         RuntimeServices services = Objects.requireNonNull(runtimeServices, "runtimeServices");
         this.stagingTunnel = services.stagingTunnel();
         this.chatLifecycle = services.chatLifecycle();
+        this.publicChatRuntime = services.publicChatRuntime();
     }
 
     record RuntimeServices(
             Optional<StagingTunnel> stagingTunnel,
-            Optional<StaffBotChatLifecycle> chatLifecycle
+            Optional<StaffBotChatLifecycle> chatLifecycle,
+            Optional<PublicChatRuntime> publicChatRuntime
     ) {
         RuntimeServices {
             Objects.requireNonNull(stagingTunnel, "stagingTunnel");
             Objects.requireNonNull(chatLifecycle, "chatLifecycle");
+            Objects.requireNonNull(publicChatRuntime, "publicChatRuntime");
+        }
+
+        RuntimeServices(
+                Optional<StagingTunnel> stagingTunnel,
+                Optional<StaffBotChatLifecycle> chatLifecycle
+        ) {
+            this(stagingTunnel, chatLifecycle, Optional.empty());
         }
 
         static RuntimeServices empty() {
-            return new RuntimeServices(Optional.empty(), Optional.empty());
+            return new RuntimeServices(Optional.empty(), Optional.empty(), Optional.empty());
+        }
+    }
+
+    record PublicChatRuntime(DiscordGateway gateway, long applicationId) {
+        PublicChatRuntime {
+            Objects.requireNonNull(gateway, "gateway");
+            if (applicationId <= 0L) {
+                throw new IllegalArgumentException("public chat application ID must be positive");
+            }
         }
     }
 
