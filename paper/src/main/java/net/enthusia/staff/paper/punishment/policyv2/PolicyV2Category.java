@@ -81,7 +81,7 @@ public enum PolicyV2Category {
     COMPLICITY_ASSISTANCE(
             "complicity-assistance", "Complicity & Assistance",
             "Encouraging, assisting, or knowingly benefiting from another player's prohibited conduct",
-            Material.CHAIN, NamedTextColor.GOLD,
+            Material.IRON_INGOT, NamedTextColor.GOLD,
             Set.of("complicity-assistance", "complicity", "assistance")
     ),
     ECONOMY_MARKET(
