@@ -119,6 +119,39 @@ class PolicyV2ManualWorkflowTest {
     }
 
     @Test
+    void exactApprovalPolicyCannotBypassConfiguredMinimumRank() {
+        PolicyAction action = new PolicyAction.ExactWithApproval(
+                List.of(new SanctionSpec(
+                        SanctionType.NETWORK_BAN,
+                        SanctionLength.permanent()
+                )),
+                StaffRank.ADMIN
+        );
+        PolicySnapshot snapshot = new PolicySnapshot(POLICY_ONE, List.of(offense(
+                HARASSMENT_ID,
+                "Terminal Safety Finding",
+                "harassment-abuse",
+                List.of(IncidentAttributeDefinition.booleanValue(TARGETED_ATTRIBUTE, true)),
+                action
+        )));
+        PolicyV2ManualWorkflow workflow = workflow(snapshot, List.of());
+        PolicyV2ManualDraft draft = answeredHarassment();
+
+        assertEquals(
+                PolicyV2ManualReview.ApprovalRoute.APPROVAL_REQUIRED,
+                workflow.review(actor(StaffRank.MOD), draft).route()
+        );
+        assertEquals(
+                PolicyV2ManualReview.ApprovalRoute.DIRECT_CONFIRM,
+                workflow.review(actor(StaffRank.ADMIN), draft).route()
+        );
+        assertEquals(
+                PolicyV2ManualReview.ApprovalRoute.DIRECT_CONFIRM,
+                workflow.review(actor(StaffRank.FOUNDER), draft).route()
+        );
+    }
+
+    @Test
     void policyGapAlwaysRoutesToAdminFounderReviewAndNeverInventsSanction() {
         PolicyV2ManualWorkflow workflow = workflow(standardSnapshot(POLICY_ONE), List.of());
         PolicyV2ManualDraft gap = PolicyV2ManualDraft.start(TARGET, NOW)
