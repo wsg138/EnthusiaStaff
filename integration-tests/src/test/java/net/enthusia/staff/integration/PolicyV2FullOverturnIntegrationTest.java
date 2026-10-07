@@ -20,6 +20,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import net.enthusia.staff.domain.auth.Actor;
 import net.enthusia.staff.domain.auth.DefaultAuthorizationPolicy;
 import net.enthusia.staff.domain.auth.StaffRank;
@@ -86,6 +87,17 @@ class PolicyV2FullOverturnIntegrationTest {
         failOnceAfterDurableBegin(fixture, operationId, providers, checkpoint);
         recoverAfterRestart(fixture, operationId, providers);
         assertConverged(fixture, operationId, providers);
+        assertProviderRetryShape(checkpoint, providers);
+    }
+
+    private static void assertProviderRetryShape(
+            Checkpoint checkpoint,
+            RecordingProviders providers
+    ) {
+        int sanctionAttempts = checkpoint == Checkpoint.AFTER_SANCTION_TERMINATION ? 2 : 1;
+        int remedyAttempts = checkpoint == Checkpoint.AFTER_REMEDY_CLEANUP ? 2 : 1;
+        assertEquals(sanctionAttempts, providers.sanctionAttempts.get());
+        assertEquals(remedyAttempts, providers.remedyAttempts.get());
     }
 
     @Test
@@ -544,15 +556,19 @@ class PolicyV2FullOverturnIntegrationTest {
     private static final class RecordingProviders {
         private final Set<UUID> sanctionEffects = new HashSet<>();
         private final Set<UUID> remedyEffects = new HashSet<>();
+        private final AtomicInteger sanctionAttempts = new AtomicInteger();
+        private final AtomicInteger remedyAttempts = new AtomicInteger();
 
         void terminateSanctions(UUID operationId, String caseId, List<SanctionSpec> sanctions) {
             assertFalse(caseId.isBlank());
             assertFalse(sanctions.isEmpty());
+            sanctionAttempts.incrementAndGet();
             sanctionEffects.add(operationId);
         }
 
         void cleanupRemedy(UUID operationId, PolicyV2RemedyEnforcement enforcement) {
             assertEquals(Lifecycle.ENFORCED, enforcement.lifecycle());
+            remedyAttempts.incrementAndGet();
             remedyEffects.add(operationId);
         }
     }
