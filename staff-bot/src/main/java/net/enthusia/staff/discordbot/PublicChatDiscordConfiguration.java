@@ -8,10 +8,11 @@ import java.util.Optional;
 record PublicChatDiscordConfiguration(String token, long applicationId) {
     static final String TOKEN_ENV = "ENTHUSIA_STAFF_BOT_PUBLIC_CHAT_TOKEN";
     static final String APPLICATION_ID_ENV = "ENTHUSIA_STAFF_BOT_PUBLIC_CHAT_APPLICATION_ID";
+    private static final long MIN_APPLICATION_ID = 1L;
 
     PublicChatDiscordConfiguration {
         token = requireToken(token);
-        if (applicationId <= 0L) {
+        if (applicationId < MIN_APPLICATION_ID) {
             throw new IllegalArgumentException(APPLICATION_ID_ENV + " must be a positive Discord application ID");
         }
     }
@@ -52,7 +53,7 @@ record PublicChatDiscordConfiguration(String token, long applicationId) {
         }
         try {
             long parsed = Long.parseUnsignedLong(value.trim());
-            if (parsed <= 0L) {
+            if (parsed < MIN_APPLICATION_ID) {
                 throw new IllegalArgumentException(APPLICATION_ID_ENV + " must be positive");
             }
             return parsed;
