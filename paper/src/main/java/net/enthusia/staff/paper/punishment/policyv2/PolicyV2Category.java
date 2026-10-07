@@ -57,6 +57,11 @@ public enum PolicyV2Category {
             Material.REPEATER, NamedTextColor.GOLD,
             Set.of("server-disruption", "disruption", "technical-abuse")
     ),
+    COMPLICITY(
+            "complicity", "Complicity & Assistance", "Encouraging, assisting, or laundering another player’s misconduct",
+            Material.CHAIN, NamedTextColor.GRAY,
+            Set.of("complicity", "assistance")
+    ),
     ACCOUNTS_VPN_ACCESS(
             "accounts-vpn-access", "Accounts/VPN/Access", "Account, VPN, and access-policy violations",
             Material.ENDER_EYE, NamedTextColor.LIGHT_PURPLE,
