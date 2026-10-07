@@ -74,7 +74,7 @@ public record PolicyV2ReviewPresentation(
     private static String history(PolicyV2ManualReview review) {
         if (review.draft().isPolicyGap()) {
             return review.historyInputs().isEmpty()
-                    ? "No stored Policy v2 history is available; no relationship was inferred."
+                    ? "No stored behavioral history is available; no relationship was inferred."
                     : "Stored history exists, but unclassified conduct is not automatically related or scored.";
         }
         HistoryAssessment assessment = review.resolution().history();
