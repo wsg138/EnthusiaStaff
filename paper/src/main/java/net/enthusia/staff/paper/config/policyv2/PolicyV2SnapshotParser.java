@@ -212,7 +212,11 @@ final class PolicyV2SnapshotParser {
                 PolicyV2Yaml.text(node, RULE_ID_FIELD, path),
                 parseCondition(PolicyV2Yaml.required(node, "when", path), path + ".when", attributes),
                 parseAction(PolicyV2Yaml.required(node, "action", path), path + ".action"),
-                parseRemedies(PolicyV2Yaml.required(node, "remedies", path), path + ".remedies")
+                parseRemedies(
+                        PolicyV2Yaml.required(node, "remedies", path),
+                        path + ".remedies",
+                        attributes
+                )
         );
     }
 
@@ -419,7 +423,11 @@ final class PolicyV2SnapshotParser {
                 : SanctionLength.temporary(parsed.temporary().orElseThrow());
     }
 
-    private static List<RemedySpec> parseRemedies(JsonNode node, String path) {
+    private static List<RemedySpec> parseRemedies(
+            JsonNode node,
+            String path,
+            Map<String, IncidentAttributeDefinition> attributes
+    ) {
         PolicyV2Yaml.array(node, path, false);
         List<RemedySpec> parsed = new ArrayList<>();
         for (int index = 0; index < node.size(); index++) {
@@ -434,19 +442,27 @@ final class PolicyV2SnapshotParser {
                             itemPath + ".type"
                     ),
                     PolicyV2Yaml.text(item, "description", itemPath),
-                    parseRemedyBinding(item.get(ENFORCEMENT_FIELD), itemPath + "." + ENFORCEMENT_FIELD)
+                    parseRemedyBinding(
+                            item.get(ENFORCEMENT_FIELD),
+                            itemPath + "." + ENFORCEMENT_FIELD,
+                            attributes
+                    )
             ));
         }
         return List.copyOf(parsed);
     }
 
-    private static Optional<PolicyV2RemedyBindingSpec> parseRemedyBinding(JsonNode node, String path) {
+    private static Optional<PolicyV2RemedyBindingSpec> parseRemedyBinding(
+            JsonNode node,
+            String path,
+            Map<String, IncidentAttributeDefinition> attributes
+    ) {
         if (node == null || node.isNull()) {
             return Optional.empty();
         }
         PolicyV2Yaml.object(node, path);
         PolicyV2Yaml.rejectUnknown(node, REMEDY_ENFORCEMENT_FIELDS, path);
-        return Optional.of(new PolicyV2RemedyBindingSpec(
+        PolicyV2RemedyBindingSpec binding = new PolicyV2RemedyBindingSpec(
                 PolicyV2Yaml.enumValue(
                         Scope.class,
                         PolicyV2Yaml.text(node, "scope", path),
@@ -460,7 +476,27 @@ final class PolicyV2SnapshotParser {
                 optionalText(node, "value-attribute-id", path),
                 optionalText(node, "component", path),
                 optionalText(node, "component-attribute-id", path)
-        ));
+        );
+        binding.valueAttributeId().ifPresent(attributeId ->
+                requireBindingAttribute(attributes, attributeId, path + ".value-attribute-id"));
+        binding.componentAttributeId().ifPresent(attributeId ->
+                requireBindingAttribute(attributes, attributeId, path + ".component-attribute-id"));
+        return Optional.of(binding);
+    }
+
+    private static void requireBindingAttribute(
+            Map<String, IncidentAttributeDefinition> attributes,
+            String attributeId,
+            String path
+    ) {
+        IncidentAttributeDefinition definition = attributes.get(attributeId);
+        if (definition == null) {
+            throw PolicyV2Yaml.invalid(path + " references undeclared attribute " + attributeId);
+        }
+        if (definition.kind() != IncidentAttributeDefinition.Kind.TEXT
+                && definition.kind() != IncidentAttributeDefinition.Kind.ENUM) {
+            throw PolicyV2Yaml.invalid(path + " must reference a text or enum attribute");
+        }
     }
 
     private static Optional<String> optionalText(JsonNode node, String field, String path) {
