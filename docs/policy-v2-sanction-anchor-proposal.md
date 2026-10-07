@@ -2,7 +2,7 @@
 
 Tracking: #423  
 Companion: `docs/policy-v2-owner-policy-proposal.md`  
-Status: **simulation draft — NOT owner-approved**
+Status: **Owner-approved starting anchors by Lincoln on 2026-10-07 — still subject to simulator/shadow validation before production**
 
 These anchors are intended to seed scenario simulation. They are not fixed ladders. The final resolver should select among configured outcomes from current incident facts plus related decayed history.
 
@@ -128,8 +128,8 @@ Cheating should use current-tool facts instead of one generic severity.
 | Conduct | Baseline | Aggravated / related history | Ceiling | Remedies |
 | --- | --- | --- | --- | --- |
 | cheating.hacked-client, broad confirmed client | 30d ban | 60d -> 90d | permanent | confiscate illicit gains if causally linked |
-| cheating.hidden-information: X-ray/ESP with material gain | 30d ban | 60d -> 90d | permanent | confiscate illicit gain |
-| cheating.hidden-information: Freecam used for advantage | 14d ban | 30d -> 60d -> 90d | permanent | confiscate only if causal gain |
+| cheating.hidden-information: X-ray/ESP with material gain | **21d ban** | 30d -> 60d -> 90d | permanent | confiscate illicit gain |
+| cheating.hidden-information: Freecam used for advantage | **21d ban** | 30d -> 60d -> 90d | permanent | confiscate only if causal gain |
 | cheating.hidden-information: prohibited indicator/radar | 3d ban | 7d -> 21d -> 30d/60d | 90d | lower baseline than X-ray |
 | cheating.pathfinding-automation | 14d ban | 30d -> 60d -> 90d | permanent | |
 | cheating.build-automation | warning / require disable | 7d -> 30d -> 60d | 90d | accidental first use can remain warning |
