@@ -86,8 +86,8 @@ class PolicyV2ConfigurationLoaderTest {
                 .replaceFirst(
                         "(?m)^([ \\t]*)type: exact\\R"
                                 + "\\1sanctions:",
-                        "$1type: exact-with-approval\\n"
-                                + "$1minimum-rank: admin\\n"
+                        "$1type: exact-with-approval\n"
+                                + "$1minimum-rank: admin\n"
                                 + "$1sanctions:"
                 );
 
