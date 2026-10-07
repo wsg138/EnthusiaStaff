@@ -1,0 +1,71 @@
+name: PR381 Other Codacy Engines
+
+on:
+  push:
+    branches:
+      - diagnostic/381-other-codacy-engines
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Markdownlint changed docs
+        shell: bash
+        run: |
+          set +e
+          npx --yes markdownlint-cli2@0.18.1             docs/discord-chat-transport.md             docs/discord-staff-bot-runtime.md             > /tmp/markdownlint.txt 2>&1
+          status=$?
+          set -e
+          echo "===== MARKDOWNLINT ====="
+          cat /tmp/markdownlint.txt
+          echo "MARKDOWNLINT_EXIT=$status"
+      - name: Opengrep changed Java
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python -m pip install --disable-pip-version-check --quiet opengrep==1.23.0
+          git diff --name-only origin/main...HEAD             | grep -E '^(staff-bot|velocity)/src/(main|test)/java/.*\.java$'             > /tmp/changed-java.txt || true
+          echo "===== CHANGED JAVA ====="
+          cat /tmp/changed-java.txt
+          if [ -s /tmp/changed-java.txt ]; then
+            set +e
+            xargs -r opengrep scan --config auto --json < /tmp/changed-java.txt > /tmp/opengrep.json 2>/tmp/opengrep.err
+            status=$?
+            set -e
+            echo "===== OPENGREP STDERR ====="
+            cat /tmp/opengrep.err
+            echo "===== OPENGREP JSON ====="
+            python - <<'PY'
+import json
+p="/tmp/opengrep.json"
+try:
+    d=json.load(open(p, encoding="utf-8"))
+except Exception as e:
+    print("JSON_ERROR",e)
+else:
+    for item in d.get("results", []):
+        print(item.get("path"), item.get("start",{}).get("line"),
+              item.get("check_id"), item.get("extra",{}).get("message"))
+PY
+            echo "OPENGREP_EXIT=$status"
+          fi
+      - name: Trivy secret scan changed tree
+        uses: aquasecurity/trivy-action@0.30.0
+        with:
+          scan-type: fs
+          scanners: secret
+          format: table
+          exit-code: '0'
+          hide-progress: true
