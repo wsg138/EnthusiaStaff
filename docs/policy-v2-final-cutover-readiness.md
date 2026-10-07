@@ -39,8 +39,9 @@ This document records the final W6 integration state. Policy v1 remains authorit
 
 - Exponential decay remains continuous and deterministic; non-decaying findings retain factor 1.0.
 - Recurrence half-life growth and configured caps remain versioned policy inputs.
-- Current implementation counts earlier related, non-overturned findings when determining the recurrence multiplier even when an ancient finding's eventual contribution at the later evaluation time is extremely close to zero. Therefore a fully/near-fully decayed ancient incident can still slow decay of a later related incident under the current model.
-- Whether that behavior should remain owner policy is intentionally unresolved; W6 does not change it.
+- Owner-approved fading pattern memory replaces forever-counted recurrence. Earlier related findings now contribute a separately decaying pattern-persistence signal using a configurable pattern half-life.
+- Recent/repeated related findings can still lengthen a later finding's effective direct half-life up to the configured cap, but a genuinely long clean period drives pattern persistence and the multiplier back toward zero/1.0 respectively.
+- Unrelated or overturned history contributes no pattern persistence; reclassified history uses its effective offense. Non-decaying severe findings remain non-decaying.
 
 ### Publication, reload, and shadow mode
 
@@ -167,7 +168,7 @@ These are content/authority decisions, not missing implementation. W6 does not i
 17. **Market compliance** — approve retirement of the generic `market.compliance-failure` selector in favor of explicit compliance facts.
 18. **Legacy v1 mapping** — decide which v1 IDs become canonical aliases and which remain history-only/retired mappings.
 19. **Pre-v2 history carry-forward** — decide whether Policy v1 behavioral history contributes to Policy v2 resolution after cutover.
-20. **Ancient fully-decayed recurrence effect** — decide whether an ancient related incident whose direct contribution has effectively decayed away should still increase recurrence half-life for later incidents.
+20. **Ancient fully-decayed recurrence effect — RESOLVED 2026-10-07.** Owner approved fading pattern memory. Ancient related history remains auditable but its recurrence pressure decays over clean time rather than permanently increasing future half-life.
 
 Until those decisions are approved and encoded in a versioned owner policy, the bundled example policy must remain non-production.
 
