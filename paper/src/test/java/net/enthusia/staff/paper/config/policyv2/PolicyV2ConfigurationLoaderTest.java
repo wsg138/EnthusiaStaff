@@ -114,12 +114,12 @@ class PolicyV2ConfigurationLoaderTest {
     @Test
     void remedyEnforcementBindingParsesAndValidatesAgainstW3BContract() {
         String yaml = validConfiguration("shadow", POLICY_ONE, EXAMPLE_DISPLAY_NAME)
-                .replace(
-                        "description: \"Example only\"",
-                        "description: \"Example only\"\n"
-                                + "                                enforcement:\n"
-                                + "                                  scope: content\n"
-                                + "                                  condition-type: manual"
+                .replaceFirst(
+                        "(?m)^([ \\t]*)description: \\"Example only\\"$",
+                        "$1description: \\"Example only\\"\\n"
+                                + "$1enforcement:\\n"
+                                + "$1  scope: content\\n"
+                                + "$1  condition-type: manual"
                 );
 
         PolicyV2RemedyBindingSpec binding = load(yaml)
@@ -133,12 +133,12 @@ class PolicyV2ConfigurationLoaderTest {
     @Test
     void incompatibleRemedyEnforcementBindingIsRejectedAtLoadTime() {
         String invalid = validConfiguration("shadow", POLICY_ONE, EXAMPLE_DISPLAY_NAME)
-                .replace(
-                        "description: \"Example only\"",
-                        "description: \"Example only\"\n"
-                                + "                                enforcement:\n"
-                                + "                                  scope: market-access\n"
-                                + "                                  condition-type: manual"
+                .replaceFirst(
+                        "(?m)^([ \\t]*)description: \\"Example only\\"$",
+                        "$1description: \\"Example only\\"\\n"
+                                + "$1enforcement:\\n"
+                                + "$1  scope: market-access\\n"
+                                + "$1  condition-type: manual"
                 );
 
         assertThrows(PolicyV2ConfigurationException.class, () -> load(invalid));
@@ -147,13 +147,13 @@ class PolicyV2ConfigurationLoaderTest {
     @Test
     void remedyBindingDynamicAttributesMustBeDeclaredAndStringLike() {
         String undeclared = validConfiguration("shadow", POLICY_ONE, EXAMPLE_DISPLAY_NAME)
-                .replace(
-                        "description: \"Example only\"",
-                        "description: \"Example only\"\n"
-                                + "                                enforcement:\n"
-                                + "                                  scope: network-access\n"
-                                + "                                  condition-type: username\n"
-                                + "                                  value-attribute-id: prohibited-username"
+                .replaceFirst(
+                        "(?m)^([ \\t]*)description: \\"Example only\\"$",
+                        "$1description: \\"Example only\\"\\n"
+                                + "$1enforcement:\\n"
+                                + "$1  scope: network-access\\n"
+                                + "$1  condition-type: username\\n"
+                                + "$1  value-attribute-id: prohibited-username"
                 );
         assertThrows(PolicyV2ConfigurationException.class, () -> load(undeclared));
 
