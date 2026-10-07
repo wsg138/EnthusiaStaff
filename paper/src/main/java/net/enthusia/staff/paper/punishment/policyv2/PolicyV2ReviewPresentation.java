@@ -119,6 +119,9 @@ public record PolicyV2ReviewPresentation(
         if (review.resolution().action() instanceof PolicyAction.Exact exact) {
             return exact.sanctions().stream().map(PolicyV2ReviewPresentation::sanction).toList();
         }
+        if (review.resolution().action() instanceof PolicyAction.ExactWithApproval exact) {
+            return exact.sanctions().stream().map(PolicyV2ReviewPresentation::sanction).toList();
+        }
         if (review.resolution().action() instanceof PolicyAction.RemedyOnly) {
             return List.of("No punitive sanction; complete the required remedy or compliance condition.");
         }
@@ -157,6 +160,10 @@ public record PolicyV2ReviewPresentation(
     private static String why(PolicyV2ManualReview review) {
         if (review.resolution().action() instanceof PolicyAction.RequiresReview) {
             return "Configured policy cannot safely resolve these facts; Admin/Founder review is required.";
+        }
+        if (review.resolution().action() instanceof PolicyAction.ExactWithApproval exact) {
+            return "Configured policy fixes this outcome, but "
+                    + humanize(exact.minimumRank().name()) + " or higher approval is required.";
         }
         if (review.resolution().action() instanceof PolicyAction.Bounded) {
             return "Configured policy matched the confirmed conduct and history and allows a limited approved choice.";
