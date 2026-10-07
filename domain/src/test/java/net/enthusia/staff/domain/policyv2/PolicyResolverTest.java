@@ -110,6 +110,45 @@ class PolicyResolverTest {
     }
 
     @Test
+    void noSanctionOutcomeRemainsDeterministicAndKeepsRemediesSeparate() {
+        RemedySpec access = new RemedySpec(
+                "disable-vpn",
+                RemedySpec.Type.ACCESS_RESTRICTION,
+                "Disable or obtain approval for the VPN before access."
+        );
+        OffensePolicy offense = new OffensePolicy(
+                "access.vpn-compliance",
+                "Unapproved VPN",
+                "accounts-vpn-access",
+                List.of(),
+                new HistoryPolicy(Map.of(), DecayPolicy.exponential(
+                        java.time.Duration.ofDays(30),
+                        java.time.Duration.ofDays(120),
+                        0.5,
+                        2.0
+                )),
+                List.of(new ResolutionRule(
+                        "compliance-only",
+                        new RuleCondition(Map.of(), HistoryWindow.atLeast(0.0)),
+                        new PolicyAction.NoSanction(),
+                        List.of(access)
+                ))
+        );
+        PolicySnapshot snapshot = new PolicySnapshot("v2.test.no-sanction", List.of(offense));
+
+        PolicyResolution resolution = new PolicyResolver().resolve(
+                snapshot,
+                new IncidentFinding("access.vpn-compliance", Map.of()),
+                INCIDENT_AT,
+                List.of()
+        );
+
+        assertInstanceOf(PolicyAction.NoSanction.class, resolution.action());
+        assertEquals(List.of(access), resolution.remedies());
+        assertTrue(!resolution.requiresReview());
+    }
+
+    @Test
     void malformedOffenseSpecificAttributesRequireReview() {
         IncidentAttributeDefinition severity = IncidentAttributeDefinition.enumValue(
                 "severity",
