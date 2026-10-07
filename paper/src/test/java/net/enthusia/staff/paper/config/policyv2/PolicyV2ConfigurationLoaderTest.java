@@ -145,6 +145,37 @@ class PolicyV2ConfigurationLoaderTest {
     }
 
     @Test
+    void remedyBindingDynamicAttributesMustBeDeclaredAndStringLike() {
+        String undeclared = validConfiguration("shadow", POLICY_ONE, EXAMPLE_DISPLAY_NAME)
+                .replace(
+                        "description: \"Example only\"",
+                        "description: \"Example only\"\n"
+                                + "                                enforcement:\n"
+                                + "                                  scope: network-access\n"
+                                + "                                  condition-type: username\n"
+                                + "                                  value-attribute-id: prohibited-username"
+                );
+        assertThrows(PolicyV2ConfigurationException.class, () -> load(undeclared));
+
+        String nonString = validConfiguration("shadow", POLICY_ONE, EXAMPLE_DISPLAY_NAME)
+                .replace(
+                        "attribute-id: severity\n                            kind: enum",
+                        "attribute-id: prohibited-username\n                            kind: integer"
+                )
+                .replace("allowed-values: [low, high]", "minimum: 0\n                            maximum: 100")
+                .replace("severity: [high]", "prohibited-username: [10]")
+                .replace(
+                        "description: \"Example only\"",
+                        "description: \"Example only\"\n"
+                                + "                                enforcement:\n"
+                                + "                                  scope: network-access\n"
+                                + "                                  condition-type: username\n"
+                                + "                                  value-attribute-id: prohibited-username"
+                );
+        assertThrows(PolicyV2ConfigurationException.class, () -> load(nonString));
+    }
+
+    @Test
     void invalidWholeSnapshotIsRejectedBeforePublication() {
         String invalid = validConfiguration("shadow", POLICY_ONE, EXAMPLE_DISPLAY_NAME)
                 .replace("chat.example: 1.0", "missing.offense: 1.0");
