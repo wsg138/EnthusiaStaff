@@ -51,6 +51,7 @@ class PolicyV2PresentationTest {
                 "Cheating",
                 "Exploits/Bug Abuse/Duplication",
                 "Server Disruption",
+                "Complicity & Assistance",
                 "Accounts/VPN/Access",
                 "Evasion/Alt Abuse",
                 "Profiles/Identity",
