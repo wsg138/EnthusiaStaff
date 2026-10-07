@@ -3,7 +3,9 @@ package net.enthusia.staff.persistence;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import java.time.Duration;
+import net.enthusia.staff.domain.policyv2.DecayPolicy;
 import net.enthusia.staff.domain.sanction.SanctionLength;
 import org.junit.jupiter.api.Test;
 
@@ -15,6 +17,25 @@ final class PolicyV2JsonCodecTest {
         assertRoundTrip(SanctionLength.instant());
         assertRoundTrip(SanctionLength.permanent());
         assertRoundTrip(SanctionLength.temporary(Duration.ofMinutes(15)));
+    }
+
+    @Test
+    void legacyExponentialDecayJsonDefaultsMissingPatternHalfLife() {
+        DecayPolicy current = DecayPolicy.exponential(
+                Duration.ofDays(30),
+                Duration.ofDays(120),
+                0.25,
+                2.0
+        );
+        ObjectNode legacy = (ObjectNode) codec.readTree(codec.write(current));
+        legacy.remove("patternHalfLife");
+
+        DecayPolicy decoded = codec.read(legacy.toString(), DecayPolicy.class);
+
+        assertEquals(Duration.ofDays(30), decoded.halfLife());
+        assertEquals(Duration.ofDays(30), decoded.patternHalfLife());
+        assertEquals(0.25, decoded.repeatHalfLifeIncreasePerPrior(), 0.0);
+        assertEquals(2.0, decoded.maximumHalfLifeMultiplier(), 0.0);
     }
 
     private void assertRoundTrip(SanctionLength length) {
