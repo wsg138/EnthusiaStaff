@@ -58,12 +58,12 @@ class PolicyV2ConfigurationLoaderTest {
     @Test
     void remedyOnlyActionParsesWithoutPunitiveFields() {
         String yaml = validConfiguration("shadow", POLICY_ONE, EXAMPLE_DISPLAY_NAME)
-                .replace(
-                        "type: exact\n"
-                                + "                              sanctions:\n"
-                                + "                                - type: warning\n"
-                                + "                                  duration: instant",
-                        "type: remedy-only"
+                .replaceFirst(
+                        "(?m)^([ \\t]*)type: exact\\R"
+                                + "\\1sanctions:\\R"
+                                + "\\1  - type: warning\\R"
+                                + "\\1    duration: instant",
+                        "$1type: remedy-only"
                 );
 
         PolicyAction action = load(yaml).activeSnapshot().offenses().getFirst().rules().getFirst().action();
