@@ -179,6 +179,7 @@ public final class PolicyV2FullOverturnOrchestrator {
                 throw new PolicyV2Store.Conflict("Full-overturn sanction fence is stale");
             }
             sanctions.terminate(providerId(operation, "sanctions", null), operation.caseId(), planned);
+            failures.hit(Checkpoint.AFTER_SANCTION_TERMINATION);
             canonical.reviseSanctions(new PolicyV2Store.SanctionRevisionRequest(
                     operation.caseId(),
                     operation.plan().sanctionRevision(),
@@ -190,7 +191,6 @@ public final class PolicyV2FullOverturnOrchestrator {
                     operation.createdAt()
             ));
         }
-        failures.hit(Checkpoint.AFTER_SANCTION_TERMINATION);
         return advance(operation, Stage.SANCTIONS_TERMINATED);
     }
 
@@ -199,7 +199,6 @@ public final class PolicyV2FullOverturnOrchestrator {
         for (RemedyTarget target : operation.plan().remedies()) {
             cleanRemedy(operation, target);
         }
-        failures.hit(Checkpoint.AFTER_REMEDY_CLEANUP);
         return advance(operation, Stage.REMEDIES_CLEANED);
     }
 
@@ -210,6 +209,7 @@ public final class PolicyV2FullOverturnOrchestrator {
         requireCanonicalFence(target, currentCanonical);
         requireEnforcementFence(target, currentEnforcement);
         applyExternalCleanup(operation, target, currentEnforcement);
+        failures.hit(Checkpoint.AFTER_REMEDY_CLEANUP);
         waiveCanonical(operation, target);
         waiveEnforcement(operation, target);
     }
