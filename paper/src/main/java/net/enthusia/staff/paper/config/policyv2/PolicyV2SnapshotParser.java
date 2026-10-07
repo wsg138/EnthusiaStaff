@@ -50,7 +50,8 @@ final class PolicyV2SnapshotParser {
     );
     private static final Set<String> HISTORY_FIELDS = Set.of("relationships", "decay");
     private static final Set<String> DECAY_FIELDS = Set.of(
-            "mode", "half-life", "repeat-half-life-increase-per-prior", "maximum-half-life-multiplier"
+            "mode", "half-life", "pattern-half-life",
+            "repeat-half-life-increase-per-prior", "maximum-half-life-multiplier"
     );
     private static final Set<String> RULE_FIELDS = Set.of(RULE_ID_FIELD, "when", "action", "remedies");
     private static final Set<String> CONDITION_FIELDS = Set.of(ATTRIBUTES_FIELD, HISTORY_FIELD);
@@ -159,16 +160,17 @@ final class PolicyV2SnapshotParser {
                 path + ".mode"
         );
         if (mode == DecayPolicy.Mode.NON_DECAYING) {
-            rejectPresent(node, path, "half-life", "repeat-half-life-increase-per-prior",
-                    "maximum-half-life-multiplier");
+            rejectPresent(node, path, "half-life", "pattern-half-life",
+                    "repeat-half-life-increase-per-prior", "maximum-half-life-multiplier");
             return DecayPolicy.nonDecaying();
         }
-        ParsedDuration halfLife = durations.parse(PolicyV2Yaml.text(node, "half-life", path));
-        if (halfLife.isPermanent()) {
-            throw PolicyV2Yaml.invalid(path + ".half-life must be a finite duration");
-        }
+        ParsedDuration halfLife = finiteDuration(node, "half-life", path);
+        ParsedDuration patternHalfLife = node.has("pattern-half-life")
+                ? finiteDuration(node, "pattern-half-life", path)
+                : halfLife;
         return DecayPolicy.exponential(
                 halfLife.temporary().orElseThrow(),
+                patternHalfLife.temporary().orElseThrow(),
                 PolicyV2Yaml.doubleValue(node, "repeat-half-life-increase-per-prior", path),
                 PolicyV2Yaml.doubleValue(node, "maximum-half-life-multiplier", path)
         );
@@ -418,6 +420,14 @@ final class PolicyV2SnapshotParser {
             }
         }
         return Set.copyOf(values);
+    }
+
+    private ParsedDuration finiteDuration(JsonNode node, String field, String path) {
+        ParsedDuration parsed = durations.parse(PolicyV2Yaml.text(node, field, path));
+        if (parsed.isPermanent()) {
+            throw PolicyV2Yaml.invalid(path + "." + field + " must be a finite duration");
+        }
+        return parsed;
     }
 
     private static Long optionalLong(JsonNode node, String path) {
