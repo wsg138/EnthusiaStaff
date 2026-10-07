@@ -114,8 +114,10 @@ public final class PolicyV2FullOverturnOrchestrator {
     private Plan plan(PolicyV2Store.CaseRecord policyCase, Actor actor) {
         List<RemedyTarget> targets = new ArrayList<>();
         for (PolicyV2Store.RemedyRecord remedy : policyCase.remedies()) {
-            if (remedy.status() == RemedyStatus.REQUIRED) {
-                targets.add(remedyTarget(policyCase.caseId(), remedy, actor));
+            Optional<PolicyV2RemedyEnforcement> current =
+                    enforcement.find(policyCase.caseId(), remedy.remedy().id());
+            if (remedy.status() == RemedyStatus.REQUIRED || active(current)) {
+                targets.add(remedyTarget(remedy, current, actor));
             }
         }
         return new Plan(
@@ -127,8 +129,11 @@ public final class PolicyV2FullOverturnOrchestrator {
         );
     }
 
-    private RemedyTarget remedyTarget(String caseId, PolicyV2Store.RemedyRecord remedy, Actor actor) {
-        Optional<PolicyV2RemedyEnforcement> current = enforcement.find(caseId, remedy.remedy().id());
+    private RemedyTarget remedyTarget(
+            PolicyV2Store.RemedyRecord remedy,
+            Optional<PolicyV2RemedyEnforcement> current,
+            Actor actor
+    ) {
         boolean cleanup = current.map(value -> value.lifecycle() == Lifecycle.ENFORCED).orElse(false);
         if (cleanup) {
             requireCleanupAuthority(actor, current.orElseThrow().scope());
@@ -139,6 +144,10 @@ public final class PolicyV2FullOverturnOrchestrator {
                 current.map(PolicyV2RemedyEnforcement::revision),
                 cleanup
         );
+    }
+
+    private static boolean active(Optional<PolicyV2RemedyEnforcement> enforcement) {
+        return enforcement.map(value -> !value.lifecycle().terminal()).orElse(false);
     }
 
     private Operation overturnFinding(Operation operation) {
@@ -196,9 +205,10 @@ public final class PolicyV2FullOverturnOrchestrator {
 
     private void cleanRemedy(Operation operation, RemedyTarget target) {
         PolicyV2Store.RemedyRecord currentCanonical = currentRemedy(operation.caseId(), target.remedyId());
-        requireCanonicalFence(target, currentCanonical);
         Optional<PolicyV2RemedyEnforcement> currentEnforcement =
                 enforcement.find(operation.caseId(), target.remedyId());
+        requireCanonicalFence(target, currentCanonical);
+        requireEnforcementFence(target, currentEnforcement);
         applyExternalCleanup(operation, target, currentEnforcement);
         waiveCanonical(operation, target);
         waiveEnforcement(operation, target);
@@ -213,7 +223,6 @@ public final class PolicyV2FullOverturnOrchestrator {
             return;
         }
         PolicyV2RemedyEnforcement enforcementRecord = current.orElseThrow();
-        requireEnforcementFence(target, enforcementRecord);
         remedies.cleanup(providerId(operation, "remedy", target.remedyId()), enforcementRecord);
     }
 
@@ -243,7 +252,6 @@ public final class PolicyV2FullOverturnOrchestrator {
             return;
         }
         PolicyV2RemedyEnforcement value = current.orElseThrow();
-        requireEnforcementFence(target, value);
         enforcement.transition(new PolicyV2EnforcementStore.TransitionRequest(
                 operation.caseId(),
                 target.remedyId(),
@@ -303,9 +311,22 @@ public final class PolicyV2FullOverturnOrchestrator {
         }
     }
 
-    private static void requireEnforcementFence(RemedyTarget target, PolicyV2RemedyEnforcement current) {
+    private static void requireEnforcementFence(
+            RemedyTarget target,
+            Optional<PolicyV2RemedyEnforcement> current
+    ) {
+        if (current.isEmpty()) {
+            if (target.enforcementRevision().isPresent()) {
+                throw new PolicyV2Store.Conflict("Full-overturn enforcement record disappeared");
+            }
+            return;
+        }
+        PolicyV2RemedyEnforcement value = current.orElseThrow();
+        if (value.lifecycle().terminal()) {
+            return;
+        }
         if (target.enforcementRevision().isEmpty()
-                || current.revision() != target.enforcementRevision().orElseThrow()) {
+                || value.revision() != target.enforcementRevision().orElseThrow()) {
             throw new PolicyV2Store.Conflict("Full-overturn enforcement fence is stale");
         }
     }
