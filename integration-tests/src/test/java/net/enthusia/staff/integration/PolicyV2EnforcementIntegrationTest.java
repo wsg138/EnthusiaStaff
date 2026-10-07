@@ -183,7 +183,7 @@ class PolicyV2EnforcementIntegrationTest {
             ));
             assertEquals(0, unauthorizedCalls.get());
 
-            createLifecycleAuditFailureTrigger("REMEDY_ENFORCEMENT_ENFORCED");
+            createLifecycleAuditFailureTrigger();
             try {
                 assertThrows(ModerationPersistenceException.class, () -> runtime.remedies().enforce(
                         admin,
@@ -251,7 +251,7 @@ class PolicyV2EnforcementIntegrationTest {
                     NOW.plusSeconds(1)
             );
 
-            createLifecycleAuditFailureTrigger("REMEDY_ENFORCEMENT_SATISFIED");
+            createLifecycleAuditFailureTrigger();
             try {
                 assertThrows(ModerationPersistenceException.class, () -> runtime.remedies().satisfy(
                         admin,
@@ -496,7 +496,7 @@ class PolicyV2EnforcementIntegrationTest {
                 .orElseThrow();
     }
 
-    private static void createLifecycleAuditFailureTrigger(String eventType) throws Exception {
+    private static void createLifecycleAuditFailureTrigger() throws Exception {
         try (Connection connection = MariaDbIntegrationSupport.connection(DATABASE);
              Statement statement = connection.createStatement()) {
             statement.execute("""
@@ -504,12 +504,12 @@ class PolicyV2EnforcementIntegrationTest {
                     BEFORE INSERT ON policy_v2_audit_events
                     FOR EACH ROW
                     BEGIN
-                        IF NEW.event_type = '%s' THEN
+                        IF NEW.event_type LIKE 'REMEDY_ENFORCEMENT_%' THEN
                             SIGNAL SQLSTATE '45000'
                                 SET MESSAGE_TEXT = 'forced Policy v2 enforcement audit failure';
                         END IF;
                     END
-                    """.formatted(eventType));
+                    """);
         }
     }
 
