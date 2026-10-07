@@ -18,6 +18,8 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionStage;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 import java.util.logging.Level;
@@ -280,6 +282,26 @@ public final class RoseChatIntegration implements AutoCloseable {
         return registration.isActive();
     }
 
+    static ModerationDecision discordMuteDecision(
+            StaffChannelConfiguration channels, TransmissionContext context,
+            MuteEnforcementListener.CachedMuteStatus status
+    ) {
+        return switch (status) {
+            case CLEAR -> ModerationDecision.allow();
+            case MUTED -> ModerationDecision.block("You are muted.");
+            case PUBLIC_MUTED -> isPublicTransmission(channels, context)
+                    ? ModerationDecision.block("You are muted from public chat.") : ModerationDecision.allow();
+            case UNVERIFIED -> ModerationDecision.block(
+                    "Your moderation status is still being verified. Please try again shortly.");
+        };
+    }
+
+    private static boolean isPublicTransmission(StaffChannelConfiguration channels, TransmissionContext context) {
+        return context.surface() != MessageSurface.PRIVATE_MESSAGE
+                && !context.destinationId().equalsIgnoreCase(channels.staffChannelId())
+                && !channels.privateChannelIds().contains(context.destinationId().toLowerCase(Locale.ROOT));
+    }
+
     static boolean shouldRenderLifecyclePresence(
             Predicate<UUID> presenceStateReady,
             StaffVisibilityService visibility,
@@ -381,27 +403,27 @@ public final class RoseChatIntegration implements AutoCloseable {
             if (enforcement == null) {
                 return unverifiedDecision(context);
             }
-            return switch (enforcement.cachedStatus(context.senderId())) {
-                case CLEAR -> ModerationDecision.allow();
-                case PUBLIC_MUTED -> isPublicTransmission(context)
-                        ? ModerationDecision.block("You are muted from public chat.")
-                        : ModerationDecision.allow();
-                case MUTED -> ModerationDecision.block("You are muted.");
-                case UNVERIFIED -> ModerationDecision.block(
-                        "Your moderation status is still being verified. Please try again shortly."
-                );
-            };
+            return muteDecision(context, enforcement.cachedStatus(context.senderId()));
         }
 
-        private boolean isPublicTransmission(TransmissionContext context) {
-            if (context.surface() == MessageSurface.PRIVATE_MESSAGE) {
-                return false;
+        @Override
+        public CompletionStage<ModerationDecision> enforceDiscordMute(TransmissionContext context) {
+            if (mode.get() != OperationalMode.ACTIVE) {
+                return CompletableFuture.completedFuture(ModerationDecision.allow());
             }
-            String destination = context.destinationId();
-            if (destination.equalsIgnoreCase(channels.staffChannelId())) {
-                return false;
+            MuteEnforcementListener enforcement = mutes.get();
+            if (enforcement == null) {
+                return CompletableFuture.completedFuture(muteDecision(
+                        context, MuteEnforcementListener.CachedMuteStatus.UNVERIFIED));
             }
-            return !channels.privateChannelIds().contains(destination.toLowerCase(Locale.ROOT));
+            return enforcement.verifyDiscordStatus(context.senderId())
+                    .thenApply(status -> muteDecision(context, status));
+        }
+
+        private ModerationDecision muteDecision(
+                TransmissionContext context, MuteEnforcementListener.CachedMuteStatus status
+        ) {
+            return discordMuteDecision(channels, context, status);
         }
 
         @Override

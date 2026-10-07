@@ -1,5 +1,7 @@
 # Latest agent handoff
 
+This worker's owner-directed assignment is [offline Discord mute verification](../package-handoffs/2026-10-06-owner-offline-discord-mute.md), PARTIAL / ACTIONABLE_CONTINUATION. Existing investigation/Market/Discord workers and their historical handoffs are preserved; no merge or deployment authorization is inferred.
+
 2026-10-05 current extension: same investigation-tools package now includes fresh-entry automatic vanish and player-name completion, based on normally incorporated `ba6dcabc` / merged #321. Use IT-09..10 and the canonical handoff; old GUI-only heads remain historical.
 
 2026-10-05: owner extended the same investigation-tools package with GUI streamlining. Follow the canonical investigation handoff and IT-06..08. New work stays in PR #322; no merge/deployment authorization.
