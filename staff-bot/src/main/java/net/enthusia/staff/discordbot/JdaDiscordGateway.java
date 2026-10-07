@@ -46,6 +46,8 @@ final class JdaDiscordGateway implements DiscordGateway, DiscordChatEgress, Disc
     private static final System.Logger LOGGER = System.getLogger(JdaDiscordGateway.class.getName());
 
     private final StaffBotConfiguration configuration;
+    private final String discordToken;
+    private final boolean staffInteractionsEnabled;
     private final StaffBotWorkerPool workers;
     private final InteractionReplayGuard interactions;
     private static final Duration INBOUND_CHAT_LIFETIME = Duration.ofSeconds(30);
@@ -83,7 +85,47 @@ final class JdaDiscordGateway implements DiscordGateway, DiscordChatEgress, Disc
             Optional<StaffModerationRuntime> moderation,
             Optional<StaffBotChatBridgeConfiguration> chatConfiguration
     ) {
-        this.configuration = configuration;
+        this(
+                configuration,
+                discordToken,
+                true,
+                workers,
+                interactions,
+                moderation,
+                chatConfiguration
+        );
+    }
+
+    static JdaDiscordGateway publicChat(
+            StaffBotConfiguration configuration,
+            PublicChatDiscordConfiguration publicChat,
+            Optional<StaffModerationRuntime> identitySource,
+            StaffBotChatBridgeConfiguration chatConfiguration
+    ) {
+        Objects.requireNonNull(publicChat, "publicChat");
+        return new JdaDiscordGateway(
+                configuration,
+                publicChat.token(),
+                false,
+                null,
+                null,
+                identitySource,
+                Optional.of(chatConfiguration)
+        );
+    }
+
+    private JdaDiscordGateway(
+            StaffBotConfiguration configuration,
+            String discordToken,
+            boolean staffInteractionsEnabled,
+            StaffBotWorkerPool workers,
+            InteractionReplayGuard interactions,
+            Optional<StaffModerationRuntime> moderation,
+            Optional<StaffBotChatBridgeConfiguration> chatConfiguration
+    ) {
+        this.configuration = Objects.requireNonNull(configuration, "configuration");
+        this.discordToken = Objects.requireNonNull(discordToken, "discordToken");
+        this.staffInteractionsEnabled = staffInteractionsEnabled;
         this.workers = workers;
         this.interactions = interactions;
         this.moderation = moderation == null ? Optional.empty() : moderation;
@@ -112,6 +154,9 @@ final class JdaDiscordGateway implements DiscordGateway, DiscordChatEgress, Disc
     }
 
     private void validateInteractionResources() {
+        if (!staffInteractionsEnabled) {
+            return;
+        }
         if (moderation.isPresent() && (workers == null || interactions == null)) {
             throw new IllegalArgumentException("moderation runtime requires bounded runtime resources");
         }
@@ -124,6 +169,9 @@ final class JdaDiscordGateway implements DiscordGateway, DiscordChatEgress, Disc
     }
 
     private void validateRoleSyncBoundary() {
+        if (!staffInteractionsEnabled) {
+            return;
+        }
         moderation.flatMap(StaffModerationRuntime::roleSync).ifPresent(service -> {
             if (!roleSyncModeAllowed(configuration.environment(), service.configuration().mode())) {
                 throw new IllegalArgumentException("ES-D13 does not authorize production role-sync enforcement");
@@ -154,8 +202,8 @@ final class JdaDiscordGateway implements DiscordGateway, DiscordChatEgress, Disc
     }
 
     private JDABuilder baseBuilder(SessionListener listener) {
-        return JDABuilder.createLight(configuration.discordToken(), gatewayIntents())
-                .enableCache(requiredCacheFlags())
+        return JDABuilder.createLight(discordToken, gatewayIntents())
+                .enableCache(staffInteractionsEnabled ? requiredCacheFlags() : Set.of())
                 .setMemberCachePolicy(MemberCachePolicy.NONE)
                 .setChunkingFilter(ChunkingFilter.NONE)
                 .setAutoReconnect(true)
@@ -167,7 +215,8 @@ final class JdaDiscordGateway implements DiscordGateway, DiscordChatEgress, Disc
 
     private Set<GatewayIntent> gatewayIntents() {
         return gatewayIntents(
-                moderation.flatMap(StaffModerationRuntime::managedRoleShadow).isPresent(),
+                staffInteractionsEnabled
+                        && moderation.flatMap(StaffModerationRuntime::managedRoleShadow).isPresent(),
                 chatConfiguration.map(configuration -> !configuration.ingressRoutes().isEmpty()).orElse(false)
         );
     }
@@ -206,13 +255,16 @@ final class JdaDiscordGateway implements DiscordGateway, DiscordChatEgress, Disc
     }
 
     private void addInteractionListener(JDABuilder builder) {
+        if (!staffInteractionsEnabled) {
+            return;
+        }
         if (configuration.uiPreviewEnabled()) {
             previewListener = new JdaModerationUiPreviewListener(
                     configuration.environment().guildId(),
                     interactions,
                     configuration.interactionCapacity(),
                     configuration.previewWebConfig(),
-                    configuration.discordToken(),
+                    discordToken,
                     moderation
             );
             previewListener.startWeb();
@@ -238,7 +290,7 @@ final class JdaDiscordGateway implements DiscordGateway, DiscordChatEgress, Disc
                 try {
                     ModerationReadApiService service = new ModerationReadApiService(
                             configuration.environment().guildId(), moderation.orElseThrow(), jda);
-                    productionReadApi = new ModerationReadApiServer(configuration.discordToken(), service,
+                    productionReadApi = new ModerationReadApiServer(discordToken, service,
                             configuration.moderationWebUri().orElseThrow().toString());
                     productionReadApi.start();
                 } catch (java.io.IOException exception) {
