@@ -24,6 +24,12 @@ jobs:
         with:
           distribution: temurin
           java-version: "21"
+      - name: Compile W5C integration tests
+        shell: bash
+        run: |
+          chmod +x gradlew
+          ./gradlew :integration-tests:compileTestJava \
+            --no-daemon --no-build-cache --no-configuration-cache --console=plain
       - name: PMD 6.55 changed Java
         shell: bash
         run: |
