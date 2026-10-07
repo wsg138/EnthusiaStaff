@@ -1,0 +1,21 @@
+name: W5C PR411 Codacy Diagnostic
+
+on:
+  push:
+    branches:
+      - diagnostic/w5c-411-codacy
+
+permissions:
+  contents: read
+
+jobs:
+  codacy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fetch PR issues
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          curl --fail --silent --show-error \
+            'https://api.codacy.com/api/v3/analysis/organizations/gh/wsg138/repositories/EnthusiaStaff/pull-requests/411/issues?status=new&limit=100' \
+            | python -m json.tool
