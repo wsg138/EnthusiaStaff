@@ -44,10 +44,21 @@ public final class PolicyV2EnforcementPolicy {
         if (remedy == null || scope == null || condition == null) {
             throw new IllegalArgumentException("remedy enforcement binding must be present");
         }
-        Binding binding = new Binding(remedy.type(), scope, condition.type());
+        requireBinding(remedy.type(), scope, condition.type());
+    }
+
+    public static void requireBinding(
+            RemedySpec.Type remedyType,
+            Scope scope,
+            ConditionType conditionType
+    ) {
+        if (remedyType == null || scope == null || conditionType == null) {
+            throw new IllegalArgumentException("remedy enforcement binding must be present");
+        }
+        Binding binding = new Binding(remedyType, scope, conditionType);
         if (!ALLOWED_BINDINGS.contains(binding)) {
             throw new IllegalArgumentException(
-                    "remedy " + remedy.id() + " cannot use " + scope + " / " + condition.type()
+                    "remedy type " + remedyType + " cannot use " + scope + " / " + conditionType
             );
         }
     }
