@@ -38,12 +38,12 @@ Sanction-only leniency and factual reclassification remain their existing indepe
 | Before finding overturn | STARTED; finding unchanged | executes finding overturn, then continues | none |
 | After finding overturn | STARTED; finding already OVERTURNED | W2 finding operation replays / current state is recognized, stage advances | none |
 | Before sanction termination | FINDING_OVERTURNED; sanctions unchanged | validates sanction revision, terminates, persists empty sanction set | none |
-| After sanction termination | FINDING_OVERTURNED; sanction set already empty | detects completed sanction state and advances | none |
+| After sanction termination | FINDING_OVERTURNED; provider effect may exist while the W2 sanction set is still unchanged | retries the provider with the same UUID, then persists the empty sanction set | none; provider deduplicates the stable UUID |
 | Before remedy cleanup | SANCTIONS_TERMINATED; remedies unchanged | validates remedy/enforcement fences, cleans and waives them | none |
-| After remedy cleanup | SANCTIONS_TERMINATED; canonical/enforcement remedies already terminal | terminal state is recognized; cleanup is not repeated, stage advances | none |
+| After remedy cleanup | SANCTIONS_TERMINATED; provider cleanup may exist while canonical/enforcement remedies are still active | retries cleanup with the same UUID, then persists canonical/enforcement terminal state | none; provider deduplicates the stable UUID |
 | Before final appeal/audit completion | REMEDIES_CLEANED; no final appeal events yet | appends APPROVED and REVISION_APPLIED once, then COMPLETED | none |
 
-The integration test closes the MariaDB-backed runtime after every injected failure, reconstructs all stores/orchestration objects, and resumes by operation UUID. Every row in the matrix must converge to: OVERTURNED finding, no history contribution, empty current Policy v2 sanction set, no REQUIRED remedy, WAIVED enforcement projection, one pair of final appeal events, one audit event per saga stage, and one logical provider effect per provider.
+The integration test closes the MariaDB-backed runtime after every injected failure, reconstructs all stores/orchestration objects, and resumes by operation UUID. Every row in the matrix must converge to: OVERTURNED finding, no history contribution, empty current Policy v2 sanction set, no REQUIRED remedy, WAIVED enforcement projection, one pair of final appeal events, one audit event per saga stage, and one logical provider effect per provider. The two provider-split rows additionally assert two provider invocations with the same stable UUID but only one recorded external effect.
 
 ## Non-authoritative boundary
 
