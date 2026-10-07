@@ -23,6 +23,9 @@ Every W3B lifecycle mutation:
 
 - uses optimistic revision fencing;
 - uses W2's global Policy v2 operation journal for exact replay/collision handling;
+- validates successful retries against the original operation key instead of accepting a new key;
+- preserves existing scope authority: Market/Reputation mutations stay Admin-level and asset
+  restoration keeps the existing Founder-only restore boundary;
 - writes an event to W2's append-only Policy v2 audit stream;
 - is transactional with its W3B projection mutation.
 
@@ -44,8 +47,9 @@ W3B supports these typed conditions:
 | VPN approval | Unapproved/unknown VPN state remains blocked. VPN disabled or positively approved becomes an automatic satisfaction candidate. |
 | Manual | Used for conditions whose completion must be established by a trusted provider/staff workflow. |
 
-The access coordinator persists an observed correction before returning an allow decision. If the
-persistence step fails, the caller does not receive a successful allow result.
+The access coordinator persists an observed correction before returning an allow decision. Automatic
+satisfaction is limited to observed network-compliance remedies. If persistence fails, the caller
+does not receive a successful allow result.
 
 Recurrence does not automatically become an evasion offense. A new violation creates a new
 compliance case/remedy. Deliberate refusal or bypass must be classified separately by policy as a

@@ -213,6 +213,29 @@ class PolicyV2EnforcementIntegrationTest {
             assertEquals(2, providerOperations.size());
             assertEquals(providerOperations.get(0), providerOperations.get(1));
 
+            PolicyV2RemedyEnforcement replayed = runtime.remedies().enforce(
+                    admin,
+                    fixture.caseId(),
+                    remedy.id(),
+                    0L,
+                    (ignored, operationId) -> providerOperations.add(operationId),
+                    "enforce:302",
+                    NOW.plusSeconds(2)
+            );
+            assertEquals(enforced, replayed);
+            assertEquals(2, providerOperations.size());
+
+            assertThrows(PolicyV2Store.Conflict.class, () -> runtime.remedies().enforce(
+                    admin,
+                    fixture.caseId(),
+                    remedy.id(),
+                    0L,
+                    (ignored, operationId) -> providerOperations.add(operationId),
+                    "enforce:different:302",
+                    NOW.plusSeconds(2)
+            ));
+            assertEquals(2, providerOperations.size());
+
             assertThrows(PolicyV2Store.Conflict.class, () -> runtime.enforcement().transition(
                     new PolicyV2EnforcementStore.TransitionRequest(
                             fixture.caseId(),
@@ -351,6 +374,34 @@ class PolicyV2EnforcementIntegrationTest {
             assertEquals(List.of(PROFILE_OFFENSE, PROFILE_OFFENSE), offenses);
             assertFalse(offenses.contains("access.vpn-evasion"));
             assertFalse(offenses.contains("evasion.mute"));
+        }
+    }
+
+    @Test
+    void marketRestrictionKeepsExistingAdminAuthorityBoundary() throws Exception {
+        Fixture fixture = seed(DATABASE, 308);
+        RemedySpec remedy = new RemedySpec(
+                "market-access",
+                RemedySpec.Type.ACCESS_RESTRICTION,
+                "Restrict Market access"
+        );
+        Actor moderator = actor(fixture.actorId(), StaffRank.MOD);
+        Actor admin = actor(fixture.actorId(), StaffRank.ADMIN);
+
+        try (HikariDataSource dataSource = open(DATABASE)) {
+            Runtime runtime = runtime(dataSource);
+            createPolicyCase(runtime.canonical(), fixture, "market.stall-compliance", remedy, "case:308");
+
+            assertThrows(SecurityException.class, () -> runtime.remedies().register(
+                    moderator,
+                    register(fixture, remedy, Scope.MARKET_ACCESS, Condition.manual(), "register:mod:308")
+            ));
+
+            PolicyV2RemedyEnforcement registered = runtime.remedies().register(
+                    admin,
+                    register(fixture, remedy, Scope.MARKET_ACCESS, Condition.manual(), "register:admin:308")
+            );
+            assertEquals(Lifecycle.REQUIRED, registered.lifecycle());
         }
     }
 
