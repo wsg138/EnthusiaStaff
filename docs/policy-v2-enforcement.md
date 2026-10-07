@@ -114,3 +114,20 @@ W4 should:
 
 The Market/Reputation providers remain the authorities for their own durable blacklist state.
 W3B does not write provider tables directly.
+
+## Pinned-condition registration boundary
+
+The supported registration path for configured remedies is
+`PolicyV2RemedyService.registerConfigured`. It reads the persisted case's effective finding
+and remedy (including the retained versioned binding), resolves the typed W3B scope/condition,
+then invokes the existing authorized, operation-key-fenced registration lifecycle.
+
+The older explicit `register` entry point remains compatible with historical unbound remedies;
+when binding metadata is present, it must match the exact scope and condition derived from the
+persisted case. A caller cannot replace a VPN approval condition with another allowlisted
+condition such as `MANUAL`, or substitute different profile information.
+An overturned finding cannot enter registration.
+
+This guards the domain registration boundary only. Provider execution, shadow/live wiring,
+external acknowledgement, and the remaining unsupported `OTHER` remedies are still separate
+cutover requirements.
