@@ -23,6 +23,16 @@ public interface PolicyV2Store {
 
     Optional<CaseRecord> findCase(String caseId);
 
+    /**
+     * Complete authoritative Policy v2 behavioral history for resolver input.
+     * This method must never silently truncate semantically relevant entries.
+     */
+    List<BehavioralHistoryEntry> completeHistory(UUID subjectId, Instant asOf);
+
+    /**
+     * Bounded history for human-facing or paginated views only. Never use this
+     * method as authoritative input to PolicyResolver.
+     */
     List<BehavioralHistoryEntry> history(UUID subjectId, Instant asOf, int limit);
 
     CaseRecord reviseFinding(FindingRevisionRequest request);

@@ -123,6 +123,31 @@ final class PolicyV2CaseReaderJdbc {
         }
     }
 
+    List<BehavioralHistoryEntry> loadCompleteHistory(
+            Connection connection,
+            UUID subjectId,
+            Instant asOf
+    ) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement("""
+                SELECT v.case_id, v.original_finding_json, v.effective_finding_json,
+                       v.finding_state, v.incident_at
+                FROM policy_v2_cases v
+                JOIN cases c ON c.case_id = v.case_id
+                WHERE c.target_id = ? AND v.incident_at <= ?
+                ORDER BY v.incident_at ASC, v.case_id ASC
+                """)) {
+            statement.setBytes(1, UuidBytes.toBytes(subjectId));
+            statement.setTimestamp(2, Timestamp.from(asOf));
+            try (ResultSet result = statement.executeQuery()) {
+                List<BehavioralHistoryEntry> history = new ArrayList<>();
+                while (result.next()) {
+                    history.add(readHistoryEntry(result));
+                }
+                return List.copyOf(history);
+            }
+        }
+    }
+
     List<BehavioralHistoryEntry> loadHistory(
             Connection connection,
             UUID subjectId,

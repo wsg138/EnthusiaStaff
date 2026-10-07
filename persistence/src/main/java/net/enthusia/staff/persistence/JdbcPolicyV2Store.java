@@ -32,6 +32,11 @@ public final class JdbcPolicyV2Store implements PolicyV2Store {
     }
 
     @Override
+    public List<BehavioralHistoryEntry> completeHistory(UUID subjectId, Instant asOf) {
+        return cases.completeHistory(subjectId, asOf);
+    }
+
+    @Override
     public List<BehavioralHistoryEntry> history(UUID subjectId, Instant asOf, int limit) {
         return cases.history(subjectId, asOf, limit);
     }

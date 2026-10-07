@@ -85,6 +85,14 @@ final class PolicyV2CaseCoreJdbc {
                 connection -> reader.loadCase(connection, caseId.trim()));
     }
 
+    List<BehavioralHistoryEntry> completeHistory(UUID subjectId, Instant asOf) {
+        if (subjectId == null || asOf == null) {
+            throw new IllegalArgumentException("Policy v2 complete history request is invalid");
+        }
+        return support.transaction("Unable to read complete Policy v2 history",
+                connection -> reader.loadCompleteHistory(connection, subjectId, asOf));
+    }
+
     List<BehavioralHistoryEntry> history(UUID subjectId, Instant asOf, int limit) {
         if (subjectId == null || asOf == null || limit < 1 || limit > MAX_HISTORY) {
             throw new IllegalArgumentException("Policy v2 history request is invalid");

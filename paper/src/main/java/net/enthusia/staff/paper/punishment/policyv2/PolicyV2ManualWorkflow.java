@@ -21,13 +21,12 @@ import net.enthusia.staff.domain.policyv2.PolicySnapshot;
 import net.enthusia.staff.domain.policyv2.persistence.PolicyV2Store;
 
 public final class PolicyV2ManualWorkflow {
-    static final int HISTORY_LIMIT = 200;
     private static final int MAX_OPERATION_KEY = 128;
     private static final String POLICY_GAP_OFFENSE = "policy-gap.unclassified";
 
     @FunctionalInterface
     public interface HistorySource {
-        List<BehavioralHistoryEntry> history(UUID subjectId, Instant asOf);
+        List<BehavioralHistoryEntry> completeHistory(UUID subjectId, Instant asOf);
     }
 
     @FunctionalInterface
@@ -136,7 +135,7 @@ public final class PolicyV2ManualWorkflow {
         PolicySnapshot snapshot = currentSnapshot();
         validateConfiguredSelection(snapshot, draft);
         IncidentFinding finding = finding(draft);
-        List<BehavioralHistoryEntry> history = histories.history(draft.targetId(), draft.incidentAt());
+        List<BehavioralHistoryEntry> history = histories.completeHistory(draft.targetId(), draft.incidentAt());
         PolicyResolution resolution = resolver.resolve(snapshot, finding, draft.incidentAt(), history);
         return new PolicyV2ManualReview(
                 draft,

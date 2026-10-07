@@ -34,7 +34,7 @@ A resolution becomes `REQUIRES_REVIEW` when the offense is unknown, required/typ
 
 ## W2 persistence expectations
 
-Persist the policy version used for every evaluated/committed v2 case, the original finding, effective finding state, incident attributes, and the history snapshot inputs needed for audit/replay. Persist sanction revisions separately from factual finding revisions/overturns. Do not mutate old snapshots or rewrite v1 cases.
+Persist the policy version used for every evaluated/committed v2 case, the original finding, effective finding state, incident attributes, and the history snapshot inputs needed for audit/replay. Persist sanction revisions separately from factual finding revisions/overturns. Resolver-facing history reads must be completeness-safe: no row limit may silently omit an older finding that can still affect contribution or recurrence. Bounded history reads are display-only. Do not mutate old snapshots or rewrite v1 cases.
 
 ## W3 workflow expectations
 

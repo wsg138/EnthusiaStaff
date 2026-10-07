@@ -30,6 +30,10 @@ final class PolicyV2CaseJdbc {
         return cases.find(caseId);
     }
 
+    List<BehavioralHistoryEntry> completeHistory(UUID subjectId, Instant asOf) {
+        return cases.completeHistory(subjectId, asOf);
+    }
+
     List<BehavioralHistoryEntry> history(UUID subjectId, Instant asOf, int limit) {
         return cases.history(subjectId, asOf, limit);
     }

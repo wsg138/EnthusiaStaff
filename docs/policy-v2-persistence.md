@@ -60,6 +60,14 @@ Policy v2 mutations use a global `policy_v2_operations` journal plus operation-s
 - Transactions roll back state, revision rows, operation records, and audit records together.
 - Immutable policy snapshots are deduplicated by policy version and validated by typed equality; committed cases and shadow evaluations share the same snapshot ID without depending on JSON set ordering.
 
+## Behavioral-history read contracts
+
+`PolicyV2Store.completeHistory(subjectId, asOf)` is the only authoritative history source for Policy v2 resolution. It returns every Policy v2 finding for the subject at or before the incident time in deterministic chronological order (`incident_at`, then `case_id`). It includes overturned rows so W1 can apply their zero-contribution semantics and uses the persisted effective finding for reclassified rows. There is no row-count limit and therefore no silent truncation of older non-decaying findings or recurrence inputs.
+
+`PolicyV2Store.history(subjectId, asOf, limit)` remains a bounded read for human-facing/paginated surfaces only. Resolver orchestration must not use it.
+
+The complete read is intentionally O(n) in the subject's Policy v2 case count because current W1 recurrence semantics can make arbitrarily old rows semantically relevant. MariaDB narrows through the existing `cases(target_id, issued_at, case_id)` history index and joins Policy v2 rows by primary key; the final result is sorted by Policy v2 incident time for deterministic replay. A compact persisted summary would only be safe after policy semantics define a provably equivalent aggregation, so W5A does not invent one.
+
 ## W3 integration boundary
 
 W3 should use `PolicyV2Store` rather than writing these tables directly.

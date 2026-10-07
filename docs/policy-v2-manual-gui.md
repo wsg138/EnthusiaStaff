@@ -77,13 +77,13 @@ Before a shadow confirmation is recorded, PolicyV2ManualWorkflow:
 
 1. rechecks current actor authority;
 2. reloads the current PolicySnapshot;
-3. reloads W2 behavioral history at the incident time;
+3. reloads the complete W2 behavioral history at the incident time through the completeness-safe contract;
 4. resolves the finding again;
 5. compares the refreshed evaluation with the review the staff member saw.
 
 Any change returns a stale result containing the refreshed review. Nothing is persisted until the staff member reviews that recalculation.
 
-Successful shadow submissions use PolicyV2Store.recordShadowEvaluation through PolicyV2StoreAdapter. W2 operation-key idempotency/conflict semantics remain authoritative. A typed W2 conflict is returned to the GUI orchestration as an explicit conflict result.
+Successful shadow submissions use PolicyV2Store.recordShadowEvaluation through PolicyV2StoreAdapter. Resolver reads use PolicyV2Store.completeHistory and never the bounded human-facing history API. W2 operation-key idempotency/conflict semantics remain authoritative. A typed W2 conflict is returned to the GUI orchestration as an explicit conflict result.
 
 ## Integration handoff
 

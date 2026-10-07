@@ -19,8 +19,8 @@ final class PolicyV2StoreAdapter implements
     }
 
     @Override
-    public List<BehavioralHistoryEntry> history(UUID subjectId, Instant asOf) {
-        return requireStore().history(subjectId, asOf, PolicyV2ManualWorkflow.HISTORY_LIMIT);
+    public List<BehavioralHistoryEntry> completeHistory(UUID subjectId, Instant asOf) {
+        return requireStore().completeHistory(subjectId, asOf);
     }
 
     @Override
