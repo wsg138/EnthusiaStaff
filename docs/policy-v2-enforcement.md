@@ -82,6 +82,14 @@ The binding policy is an explicit allowlist:
 - `CONFISCATE` -> asset remediation;
 - `OTHER` is rejected until an explicit supported binding is added.
 
+Configured remedies may now carry optional **versioned enforcement metadata**. The metadata stores
+the W3B scope/condition type and, for username/profile conditions, the stable finding attribute IDs
+that supply the prohibited value/component. `PolicyV2RemedyBindingResolver` resolves that metadata
+only from the pinned remedy plus the stored `IncidentFinding`; it never parses remedy descriptions
+or reads mutable current player state to reconstruct a historical binding. Old persisted remedies
+without metadata remain readable but cannot silently enter typed enforcement until an explicit
+binding is supplied by versioned policy.
+
 `PolicyV2CapabilityGate` supplies side-effect-free report/Market/reputation checks.
 `PolicyV2RemedyActions` supplies idempotent operation IDs to content-removal and external
 restriction gateways so provider retries cannot create a second logical operation.
