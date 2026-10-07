@@ -166,6 +166,9 @@ public final class PolicyV2FullOverturnOrchestrator {
         List<SanctionSpec> planned = operation.plan().sanctions();
         PolicyV2Store.CaseRecord current = requireCase(operation.caseId());
         if (!planned.isEmpty() && !current.currentSanctions().sanctions().isEmpty()) {
+            if (current.sanctionRevision() != operation.plan().sanctionRevision()) {
+                throw new PolicyV2Store.Conflict("Full-overturn sanction fence is stale");
+            }
             sanctions.terminate(providerId(operation, "sanctions", null), operation.caseId(), planned);
             canonical.reviseSanctions(new PolicyV2Store.SanctionRevisionRequest(
                     operation.caseId(),
@@ -192,6 +195,8 @@ public final class PolicyV2FullOverturnOrchestrator {
     }
 
     private void cleanRemedy(Operation operation, RemedyTarget target) {
+        PolicyV2Store.RemedyRecord currentCanonical = currentRemedy(operation.caseId(), target.remedyId());
+        requireCanonicalFence(target, currentCanonical);
         Optional<PolicyV2RemedyEnforcement> currentEnforcement =
                 enforcement.find(operation.caseId(), target.remedyId());
         applyExternalCleanup(operation, target, currentEnforcement);
@@ -290,6 +295,12 @@ public final class PolicyV2FullOverturnOrchestrator {
                 .filter(record -> record.remedy().id().equals(remedyId))
                 .findFirst()
                 .orElseThrow(() -> new PolicyV2Store.MissingRecord("Policy v2 remedy does not exist"));
+    }
+
+    private static void requireCanonicalFence(RemedyTarget target, PolicyV2Store.RemedyRecord current) {
+        if (current.status() == RemedyStatus.REQUIRED && current.revision() != target.canonicalRevision()) {
+            throw new PolicyV2Store.Conflict("Full-overturn remedy fence is stale");
+        }
     }
 
     private static void requireEnforcementFence(RemedyTarget target, PolicyV2RemedyEnforcement current) {
