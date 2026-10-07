@@ -2,6 +2,7 @@ package net.enthusia.staff.domain.policyv2.enforcement;
 
 import java.util.List;
 import java.util.Set;
+import net.enthusia.staff.domain.policyv2.PolicyV2RemedyBindingSpec;
 import net.enthusia.staff.domain.policyv2.RemedySpec;
 import net.enthusia.staff.domain.policyv2.enforcement.PolicyV2RemedyEnforcement.Condition;
 import net.enthusia.staff.domain.policyv2.enforcement.PolicyV2RemedyEnforcement.ConditionType;
@@ -40,14 +41,30 @@ public final class PolicyV2EnforcementPolicy {
         }
     }
 
+    public static void requireBindingSpec(RemedySpec.Type remedyType, PolicyV2RemedyBindingSpec binding) {
+        if (remedyType == null || binding == null) {
+            throw new IllegalArgumentException("remedy enforcement binding metadata must be present");
+        }
+        requireAllowed(
+                new Binding(remedyType, binding.scope(), binding.conditionType()),
+                "configured remedy"
+        );
+    }
+
     public static void requireBinding(RemedySpec remedy, Scope scope, Condition condition) {
         if (remedy == null || scope == null || condition == null) {
             throw new IllegalArgumentException("remedy enforcement binding must be present");
         }
-        Binding binding = new Binding(remedy.type(), scope, condition.type());
+        requireAllowed(
+                new Binding(remedy.type(), scope, condition.type()),
+                "remedy " + remedy.id()
+        );
+    }
+
+    private static void requireAllowed(Binding binding, String label) {
         if (!ALLOWED_BINDINGS.contains(binding)) {
             throw new IllegalArgumentException(
-                    "remedy " + remedy.id() + " cannot use " + scope + " / " + condition.type()
+                    label + " cannot use " + binding.scope() + " / " + binding.conditionType()
             );
         }
     }
