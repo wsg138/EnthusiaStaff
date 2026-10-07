@@ -5,7 +5,7 @@ import java.util.List;
 import net.enthusia.staff.domain.auth.StaffRank;
 import net.enthusia.staff.domain.sanction.SanctionSpec;
 
-public sealed interface PolicyAction permits PolicyAction.Exact, PolicyAction.ExactWithApproval, PolicyAction.Bounded, PolicyAction.RequiresReview {
+public sealed interface PolicyAction permits PolicyAction.Exact, PolicyAction.ExactWithApproval, PolicyAction.Bounded, PolicyAction.RemedyOnly, PolicyAction.RequiresReview {
     int MIN_BOUNDED_OPTIONS = 2;
 
     record Exact(List<SanctionSpec> sanctions) implements PolicyAction {
@@ -68,6 +68,9 @@ public sealed interface PolicyAction permits PolicyAction.Exact, PolicyAction.Ex
         if (remedyOnly) {
             throw new IllegalArgumentException("remedy actions must use RemedySpec, not punitive sanctions");
         }
+    }
+
+    record RemedyOnly() implements PolicyAction {
     }
 
     record RequiresReview(String reasonCode) implements PolicyAction {
