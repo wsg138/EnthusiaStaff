@@ -96,6 +96,7 @@ final class PolicyV2JsonCodec {
     @JsonTypeInfo(use = JsonTypeInfo.Id.NAME, property = "actionType")
     @JsonSubTypes({
         @JsonSubTypes.Type(value = PolicyAction.Exact.class, name = "EXACT"),
+        @JsonSubTypes.Type(value = PolicyAction.ExactWithApproval.class, name = "EXACT_WITH_APPROVAL"),
         @JsonSubTypes.Type(value = PolicyAction.Bounded.class, name = "BOUNDED"),
         @JsonSubTypes.Type(value = PolicyAction.RequiresReview.class, name = "REQUIRES_REVIEW")
     })
