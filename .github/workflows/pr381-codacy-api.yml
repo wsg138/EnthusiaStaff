@@ -1,0 +1,19 @@
+name: PR381 Codacy API Diagnostic
+
+on:
+  push:
+    branches:
+      - diagnostic/381-codacy-api
+
+permissions:
+  contents: read
+
+jobs:
+  codacy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fetch PR issues
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          curl --fail --silent --show-error             'https://api.codacy.com/api/v3/analysis/organizations/gh/wsg138/repositories/EnthusiaStaff/pull-requests/381/issues?status=new&limit=100'             | python -m json.tool
