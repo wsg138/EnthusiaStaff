@@ -20,12 +20,14 @@ Every stage transition appends a `FULL_OVERTURN_*` event to the existing immutab
 
 1. **Finding** — append a normal W2 `FindingOverturn`. The effective finding becomes absent and `BehavioralHistoryEntry.contributingOffenseId()` becomes empty. An already-overturned case is accepted so W5C can heal a pre-existing partial state.
 2. **Sanctions** — call the sanction-termination provider with a deterministic operation UUID, then append a normal W2 sanction revision whose replacement set is empty.
-3. **Remedies** — for each remedy that was REQUIRED when the operation began, run cleanup only when its enforcement lifecycle was ENFORCED, mark the canonical remedy WAIVED, and move any active enforcement projection to WAIVED.
+3. **Remedies** — capture every canonical REQUIRED remedy plus any still-active enforcement projection. This includes W3B's recoverable canonical-terminal/enforcement-active split state. Run external cleanup for captured ENFORCED projections, waive canonical REQUIRED remedies, and move active enforcement projections to WAIVED.
 4. **Appeal completion** — append APPROVED and REVISION_APPLIED appeal events with deterministic W2 operation keys, then mark the saga COMPLETED.
 
 Provider calls are deliberately outside SQL transactions. Their operation UUIDs are stable across retries, so providers must implement idempotency on that UUID. W2 finding, sanction, remedy, enforcement, and appeal writes keep their existing operation-key replay/collision behavior.
 
 Authorization is checked before the durable operation is created. FULL_OVERTURN is required. If an already-enforced remedy requires privileged cleanup, the existing scope boundary is also checked before any mutation: Market and Reputation cleanup remain Admin-level and asset restoration remains Founder-only. Once an authorized saga exists, restart recovery uses the persisted actor and plan so a crash cannot strand the case merely because no staff session is present.
+
+Before any external provider call, W5C revalidates the captured canonical and enforcement revisions. A non-terminal concurrent enforcement change is rejected before cleanup or canonical waiver, while an already-terminal projection is accepted as converged.
 
 Sanction-only leniency and factual reclassification remain their existing independent W2 operations. If either changes a captured revision before its W5C stage executes, the saga rejects the stale fence instead of converting that change into an overturn.
 
