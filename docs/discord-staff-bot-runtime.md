@@ -39,7 +39,17 @@ Configuration is environment-only. `.env` files are ignored by Git and bot token
 Required variables:
 
 - `ENTHUSIA_STAFF_BOT_ENVIRONMENT`: exactly `staging` or `production`;
-- `ENTHUSIA_STAFF_BOT_TOKEN`: token for the selected application.
+- `ENTHUSIA_STAFF_BOT_TOKEN`: token for the selected **staff/moderation** application.
+
+When the Discord chat bridge is enabled, public chat additionally requires a separate Discord
+application identity:
+
+- `ENTHUSIA_STAFF_BOT_PUBLIC_CHAT_TOKEN`;
+- `ENTHUSIA_STAFF_BOT_PUBLIC_CHAT_APPLICATION_ID`.
+
+Both JDA sessions run inside the same StaffBot process. The staff identity owns moderation/admin
+interactions; the public identity owns public chat ingress/egress. Public-chat disconnects pause the
+chat lifecycle and authority lease without treating the moderation JDA as a substitute.
 
 Optional variables:
 
@@ -85,7 +95,7 @@ The HTTP listener is loopback-only.
 - `HEAD` is supported; other methods receive `405`.
 - responses are `Cache-Control: no-store` and contain only environment, lifecycle phase, readiness, a fixed reason category, and rejected-work count. JSON control characters are escaped before output.
 
-A transient Gateway disconnect removes readiness. JDA reconnects with incremental backoff capped at 60 seconds; a resumed/recreated session is revalidated before readiness returns. Asynchronous application-info callbacks are generation-fenced so a response from a disconnected or superseded session cannot restore readiness or fatally poison a newer session. Terminal failure cannot be changed back to `READY` by a late session callback.
+A transient **staff/moderation** Gateway disconnect removes process readiness. JDA reconnects with incremental backoff capped at 60 seconds; a resumed/recreated session is revalidated before readiness returns. The separate public-chat Gateway has its own identity fence and chat lifecycle: its disconnect pauses public chat and drops the authoritative chat-readiness lease, but does not by itself mark the moderation runtime failed. Asynchronous application-info callbacks are generation-fenced so a response from a disconnected or superseded session cannot restore readiness or fatally poison a newer session. Terminal failure cannot be changed back to `READY` by a late session callback.
 
 ## Shutdown and non-destructive smoke validation
 
