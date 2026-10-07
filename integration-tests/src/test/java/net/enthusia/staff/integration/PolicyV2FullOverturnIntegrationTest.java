@@ -71,14 +71,21 @@ class PolicyV2FullOverturnIntegrationTest {
     void everyRequiredFailureCheckpointRecoversAfterRestartWithoutDuplicateEffects() throws Exception {
         int sequence = 410;
         for (Checkpoint checkpoint : Checkpoint.values()) {
-            Fixture fixture = prepare(++sequence);
-            UUID operationId = UUID.randomUUID();
-            RecordingProviders providers = new RecordingProviders();
-
-            failOnceAfterDurableBegin(fixture, operationId, providers, checkpoint);
-            recoverAfterRestart(fixture, operationId, providers);
-            assertConverged(fixture, operationId, providers);
+            assertFailureCheckpointRecovery(checkpoint, ++sequence);
         }
+    }
+
+    private static void assertFailureCheckpointRecovery(
+            Checkpoint checkpoint,
+            int sequence
+    ) throws Exception {
+        Fixture fixture = prepare(sequence);
+        UUID operationId = UUID.randomUUID();
+        RecordingProviders providers = new RecordingProviders();
+
+        failOnceAfterDurableBegin(fixture, operationId, providers, checkpoint);
+        recoverAfterRestart(fixture, operationId, providers);
+        assertConverged(fixture, operationId, providers);
     }
 
     @Test
