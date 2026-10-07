@@ -25,6 +25,15 @@ final class PolicyV2JsonCodecTest {
     }
 
     @Test
+    void remedyOnlyActionRoundTripsThroughPersistedPolicyJson() {
+        PolicyAction.RemedyOnly action = new PolicyAction.RemedyOnly();
+
+        String json = codec.write(action);
+
+        assertEquals(action, codec.read(json, PolicyAction.class));
+    }
+
+    @Test
     void exactWithApprovalActionRoundTripsThroughPersistedPolicyJson() {
         PolicyAction.ExactWithApproval action = new PolicyAction.ExactWithApproval(
                 List.of(new SanctionSpec(
