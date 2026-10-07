@@ -21,7 +21,13 @@ public record HistoryAssessment(double totalContribution, List<Contribution> con
             double decayFactor,
             double halfLifeMultiplier,
             int priorRelatedCount,
-            double contribution
+            double contribution,
+            double patternPersistence
     ) {
+        public Contribution {
+            if (!Double.isFinite(patternPersistence) || patternPersistence < 0.0) {
+                throw new IllegalArgumentException("pattern persistence must be finite and non-negative");
+            }
+        }
     }
 }
