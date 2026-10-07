@@ -251,7 +251,6 @@ public final class PolicyV2FullOverturnOrchestrator {
         if (current.isEmpty() || current.orElseThrow().lifecycle().terminal()) {
             return;
         }
-        PolicyV2RemedyEnforcement value = current.orElseThrow();
         enforcement.transition(new PolicyV2EnforcementStore.TransitionRequest(
                 operation.caseId(),
                 target.remedyId(),
