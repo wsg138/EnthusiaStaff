@@ -37,7 +37,7 @@ class PolicyV2ConfigurationLoaderTest {
     @Test
     void legacyExponentialConfigDefaultsPatternHalfLifeToDirectHalfLife() {
         String legacy = validConfiguration("shadow", POLICY_ONE, EXAMPLE_DISPLAY_NAME)
-                .replace("                            pattern-half-life: 120d\n", "");
+                .replaceFirst("(?m)^[ \\t]*pattern-half-life: 120d\\R", "");
 
         var decay = load(legacy).activeSnapshot().offenses().getFirst().historyPolicy().decayPolicy();
 
@@ -47,15 +47,10 @@ class PolicyV2ConfigurationLoaderTest {
     @Test
     void nonDecayingConfigRejectsPatternHalfLife() {
         String invalid = validConfiguration("shadow", POLICY_ONE, EXAMPLE_DISPLAY_NAME)
-                .replace(
-                        "                            mode: exponential\n"
-                                + "                            half-life: 30d\n"
-                                + "                            pattern-half-life: 120d\n"
-                                + "                            repeat-half-life-increase-per-prior: 0.25\n"
-                                + "                            maximum-half-life-multiplier: 2.0",
-                        "                            mode: non-decaying\n"
-                                + "                            pattern-half-life: 120d"
-                );
+                .replace("mode: exponential", "mode: non-decaying")
+                .replaceFirst("(?m)^[ \\t]*half-life: 30d\\R", "")
+                .replaceFirst("(?m)^[ \\t]*repeat-half-life-increase-per-prior: 0.25\\R", "")
+                .replaceFirst("(?m)^[ \\t]*maximum-half-life-multiplier: 2.0\\R", "");
 
         assertThrows(PolicyV2ConfigurationException.class, () -> load(invalid));
     }
