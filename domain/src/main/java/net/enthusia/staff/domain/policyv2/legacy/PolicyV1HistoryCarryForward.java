@@ -16,7 +16,7 @@ import net.enthusia.staff.domain.policyv2.BehavioralHistoryEntry;
  * instead of being guessed into adverse behavioral history.</p>
  */
 public final class PolicyV1HistoryCarryForward {
-    private static final Map<String, Decision> DECISIONS = decisions();
+    private static final Map<String, Decision> DECISIONS = buildDecisions();
 
     public Optional<BehavioralHistoryEntry> convert(
             PolicyV1BehavioralHistorySource.LegacyFinding legacy
@@ -83,7 +83,7 @@ public final class PolicyV1HistoryCarryForward {
         }
     }
 
-    private static Map<String, Decision> decisions() {
+    private static Map<String, Decision> buildDecisions() {
         Map<String, Decision> values = new LinkedHashMap<>();
 
         map(values, "hate.general-toxicity", "abuse.general-toxicity");
