@@ -35,10 +35,22 @@ class PolarSpectatorPhaseWiringTest {
         );
         String hook = source("src/main/java/net/enthusia/staff/paper/integration/PolarSpectatorPhaseHook.java");
 
-        assertTrue(compatibility.contains("PlayerGameModeChangeEvent"));
-        assertTrue(compatibility.contains("PaperStaffRankResolver.resolve(player::hasPermission)"));
-        assertTrue(hook.contains("PolarSpectatorPhaseCompatibility.eligible(event.user().uuid())"));
+        assertTrue(compatibility.contains("PaperStaffRankResolver.resolveIdentity(player::hasPermission)"));
+        assertTrue(compatibility.contains("PaperStaffRankResolver.resolveLegacyRank(player::hasPermission)"));
+        assertTrue(compatibility.contains("enthusiastaff.identity.unrestricted"));
+        assertTrue(hook.contains("PolarSpectatorPhaseCompatibility.snapshot(playerId)"));
         assertFalse(hook.contains("bukkitPlayer()"));
+        assertFalse(hook.contains("getPlayer("));
+    }
+
+    @Test
+    void diagnosticsRemainRateLimitedAndDoNotBroadenMitigationCancellation() throws IOException {
+        String hook = source("src/main/java/net/enthusia/staff/paper/integration/PolarSpectatorPhaseHook.java");
+
+        assertTrue(hook.contains("DIAGNOSTIC_INTERVAL_NANOS"));
+        assertTrue(hook.contains("Polar Spectator mitigation:"));
+        assertTrue(hook.contains("PolarSpectatorPhasePolicy.shouldCancelMitigation(checkType, eligible)"));
+        assertFalse(hook.contains("polar.bypass"));
     }
 
     private static String source(String relative) throws IOException {
