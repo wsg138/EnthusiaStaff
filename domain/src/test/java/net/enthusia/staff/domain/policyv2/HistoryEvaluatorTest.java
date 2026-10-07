@@ -70,11 +70,16 @@ class HistoryEvaluatorTest {
     }
 
     @Test
-    void recurrenceLengthensLaterHistoryHalfLifeWithinConfiguredBound() {
+    void recentRecurrenceBuildsFadingPatternMemoryAndLengthensLaterHalfLife() {
         OffensePolicy adaptive = PolicyV2TestFixtures.offense(
                 SPAM,
                 Map.of(SPAM, 1.0),
-                DecayPolicy.exponential(Duration.ofDays(10), 0.5, 2.0)
+                DecayPolicy.exponential(
+                        Duration.ofDays(10),
+                        Duration.ofDays(40),
+                        0.5,
+                        2.0
+                )
         );
         PolicySnapshot snapshot = new PolicySnapshot(POLICY_VERSION, List.of(adaptive));
         BehavioralHistoryEntry first = confirmed("first", SPAM, 20);
@@ -85,8 +90,66 @@ class HistoryEvaluatorTest {
         HistoryAssessment.Contribution second = result.contributions().get(1);
 
         assertEquals(1, second.priorRelatedCount());
-        assertEquals(1.5, second.halfLifeMultiplier(), 0.0000001);
+        assertTrue(second.patternPersistence() > 0.8);
+        assertTrue(second.patternPersistence() < 0.9);
+        assertTrue(second.halfLifeMultiplier() > 1.4);
+        assertTrue(second.halfLifeMultiplier() < 1.5);
         assertTrue(second.decayFactor() > 0.5);
+    }
+
+    @Test
+    void repeatedRecentFindingsReinforcePatternMemoryButRespectConfiguredCap() {
+        OffensePolicy adaptive = PolicyV2TestFixtures.offense(
+                SPAM,
+                Map.of(SPAM, 1.0),
+                DecayPolicy.exponential(
+                        Duration.ofDays(10),
+                        Duration.ofDays(90),
+                        1.0,
+                        2.0
+                )
+        );
+        PolicySnapshot snapshot = new PolicySnapshot(POLICY_VERSION, List.of(adaptive));
+        List<BehavioralHistoryEntry> history = List.of(
+                confirmed("first", SPAM, 3),
+                confirmed("second", SPAM, 2),
+                confirmed("third", SPAM, 1)
+        );
+
+        HistoryAssessment.Contribution third = new HistoryEvaluator()
+                .assess(adaptive, NOW, history, snapshot)
+                .contributions()
+                .get(2);
+
+        assertEquals(2, third.priorRelatedCount());
+        assertTrue(third.patternPersistence() > 1.9);
+        assertEquals(2.0, third.halfLifeMultiplier(), 0.0000001);
+    }
+
+    @Test
+    void ancientRelatedHistoryNoLongerSlowsLaterDecayAfterLongCleanPeriod() {
+        OffensePolicy adaptive = PolicyV2TestFixtures.offense(
+                SPAM,
+                Map.of(SPAM, 1.0),
+                DecayPolicy.exponential(
+                        Duration.ofDays(30),
+                        Duration.ofDays(30),
+                        0.5,
+                        3.0
+                )
+        );
+        PolicySnapshot snapshot = new PolicySnapshot(POLICY_VERSION, List.of(adaptive));
+        BehavioralHistoryEntry ancient = confirmed("ancient", SPAM, 400);
+        BehavioralHistoryEntry recent = confirmed("recent", SPAM, 10);
+
+        HistoryAssessment.Contribution recentContribution = new HistoryEvaluator()
+                .assess(adaptive, NOW, List.of(ancient, recent), snapshot)
+                .contributions()
+                .get(1);
+
+        assertEquals(1, recentContribution.priorRelatedCount());
+        assertTrue(recentContribution.patternPersistence() < 0.001);
+        assertTrue(recentContribution.halfLifeMultiplier() < 1.001);
     }
 
     @Test
@@ -116,6 +179,7 @@ class HistoryEvaluatorTest {
 
         assertTrue(result.contributions().get(0).contribution() < 0.000000001);
         assertEquals(1.0, result.contributions().get(1).contribution(), 0.0);
+        assertEquals(1.0, result.contributions().get(1).halfLifeMultiplier(), 0.0);
     }
 
     @Test
@@ -152,6 +216,29 @@ class HistoryEvaluatorTest {
 
         assertEquals(0.5, result.totalContribution(), 0.0);
         assertEquals(FLOOD, result.contributions().getFirst().offenseId());
+    }
+
+    @Test
+    void assessmentIsDeterministicRegardlessOfInputOrdering() {
+        OffensePolicy adaptive = PolicyV2TestFixtures.offense(
+                SPAM,
+                Map.of(SPAM, 1.0),
+                DecayPolicy.exponential(
+                        Duration.ofDays(30),
+                        Duration.ofDays(120),
+                        0.25,
+                        2.0
+                )
+        );
+        PolicySnapshot snapshot = new PolicySnapshot(POLICY_VERSION, List.of(adaptive));
+        BehavioralHistoryEntry first = confirmed("a", SPAM, 12);
+        BehavioralHistoryEntry second = confirmed("b", SPAM, 4);
+
+        HistoryEvaluator evaluator = new HistoryEvaluator();
+        HistoryAssessment chronological = evaluator.assess(adaptive, NOW, List.of(first, second), snapshot);
+        HistoryAssessment reversed = evaluator.assess(adaptive, NOW, List.of(second, first), snapshot);
+
+        assertEquals(chronological, reversed);
     }
 
     private static BehavioralHistoryEntry confirmed(String caseId, String offenseId, long ageDays) {
