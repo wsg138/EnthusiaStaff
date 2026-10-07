@@ -51,14 +51,18 @@ final class AiModerationReadApiService {
                 .findFirst()
                 .flatMap(StaffModerationReadService.LinkedMinecraft::username);
 
+        var moderationSubjectId = target.subject()
+                .map(value -> value.subject().subjectId().toString());
+
         return new AiModerationReadApiModel.Response(
                 "enthusia-staff",
                 "ai-moderation-state",
-                "v1",
+                "v2",
                 new AiModerationReadApiModel.TargetDto(
                         request.target(),
                         playerId.toString(),
-                        username
+                        username,
+                        moderationSubjectId
                 ),
                 snapshot.activeMinecraftSanctions().stream()
                         .map(AiModerationReadApiService::sanction)
