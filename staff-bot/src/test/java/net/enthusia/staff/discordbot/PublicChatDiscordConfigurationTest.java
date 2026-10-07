@@ -15,7 +15,15 @@ class PublicChatDiscordConfigurationTest {
     }
 
     @Test
-    void disabledBridgeRejectsStrayPublicIdentitySecrets() {
+    void disabledBridgeAllowsCompleteDormantIdentityButRejectsPartialConfig() {
+        assertTrue(PublicChatDiscordConfiguration.fromEnvironment(
+                Map.of(
+                        PublicChatDiscordConfiguration.TOKEN_ENV, "not-used-yet",
+                        PublicChatDiscordConfiguration.APPLICATION_ID_ENV, "123456789012345678"
+                ),
+                false
+        ).isEmpty());
+
         assertThrows(IllegalArgumentException.class, () ->
                 PublicChatDiscordConfiguration.fromEnvironment(
                         Map.of(PublicChatDiscordConfiguration.TOKEN_ENV, "not-used"),
