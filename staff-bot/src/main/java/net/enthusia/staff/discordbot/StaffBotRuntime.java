@@ -183,19 +183,35 @@ public final class StaffBotRuntime implements AutoCloseable {
                     configuration.environment().guildId(),
                     configuration.interactionCapacity(),
                     configuration.interactionTtl());
+            Map<String, String> environmentValues = System.getenv();
             Optional<StaffBotChatBridgeConfiguration> chatConfiguration =
                     StaffBotChatBridgeConfiguration.fromEnvironment(
-                            configuration.environment(), System.getenv());
+                            configuration.environment(), environmentValues);
+            Optional<PublicChatDiscordConfiguration> publicChatConfiguration =
+                    PublicChatDiscordConfiguration.fromEnvironment(
+                            environmentValues, chatConfiguration.isPresent());
             StaffBotHealthServer healthServer = new StaffBotHealthServer(configuration.healthAddress(), health);
             JdaDiscordGateway gateway = new JdaDiscordGateway(
-                    configuration, workers, replayGuard, moderation, chatConfiguration);
-            chatTransport = chatConfiguration.map(
-                    current -> StaffBotChatTransport.create(current, gateway, gateway));
+                    configuration, workers, replayGuard, moderation, Optional.empty());
+            Optional<JdaDiscordGateway> publicChatGateway = publicChatConfiguration.map(current ->
+                    JdaDiscordGateway.publicChat(
+                            configuration,
+                            current,
+                            moderation,
+                            chatConfiguration.orElseThrow()
+                    ));
+            chatTransport = publicChatGateway.map(current ->
+                    StaffBotChatTransport.create(chatConfiguration.orElseThrow(), current, current));
             if (chatConfiguration.map(current -> !current.ingressRoutes().isEmpty()).orElse(false)) {
-                gateway.installChatIngress(chatTransport.orElseThrow());
+                publicChatGateway.orElseThrow().installChatIngress(chatTransport.orElseThrow());
             }
             Optional<StaffBotChatLifecycle> chat =
                     chatTransport.map(current -> (StaffBotChatLifecycle) current);
+            Optional<PublicChatRuntime> publicChat = publicChatGateway.map(current ->
+                    new PublicChatRuntime(
+                            current,
+                            publicChatConfiguration.orElseThrow().applicationId()
+                    ));
             return new StaffBotRuntime(
                     configuration,
                     health,
@@ -204,7 +220,7 @@ public final class StaffBotRuntime implements AutoCloseable {
                     healthServer,
                     gateway,
                     moderation,
-                    new RuntimeServices(tunnel, chat));
+                    new RuntimeServices(tunnel, chat, publicChat));
         } catch (IOException | RuntimeException exception) {
             chatTransport.ifPresent(StaffBotChatTransport::close);
             moderation.ifPresent(StaffModerationRuntime::close);
