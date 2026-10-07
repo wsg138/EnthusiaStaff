@@ -2,6 +2,7 @@ package net.enthusia.staff.paper.command;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.lang.reflect.Proxy;
@@ -21,6 +22,8 @@ import org.bukkit.command.ConsoleCommandSender;
 import org.junit.jupiter.api.Test;
 
 class EstaffCommandReloadTest {
+    private static final String POLICY_V2_OPERATION = "policyv2";
+    private static final String TARGET_QUERY = "Target";
     private static final Command COMMAND = new Command("estaff") {
         @Override
         public boolean execute(CommandSender sender, String commandLabel, String[] args) {
@@ -287,6 +290,86 @@ class EstaffCommandReloadTest {
         );
 
         assertEquals(List.of("Usage: /estaff <status|verify [full]|reload|sanction>"), verifyMessages);
+    }
+
+    @Test
+    void policyV2WorkflowIsHiddenWhileDisabledAndExposedOnlyInShadowMode() {
+        List<String> messages = new ArrayList<>();
+        AtomicReference<String> openedTarget = new AtomicReference<>();
+        EstaffCommand command = new EstaffCommand(health());
+        CommandSender staff = sender(Map.of(
+                "enthusiastaff.status", true,
+                "enthusiastaff.punish", true
+        ), messages);
+
+        assertFalse(command.onTabComplete(
+                staff,
+                COMMAND,
+                "estaff",
+                new String[]{""}
+        ).contains(POLICY_V2_OPERATION));
+        command.onCommand(staff, COMMAND, "estaff", new String[]{POLICY_V2_OPERATION, TARGET_QUERY});
+        assertNull(openedTarget.get());
+
+        command.configurePolicyV2Shadow(new PolicyV2ShadowAccess() {
+            @Override
+            public boolean enabled() {
+                return true;
+            }
+
+            @Override
+            public void open(CommandSender sender, String targetQuery) {
+                openedTarget.set(targetQuery);
+            }
+
+            @Override
+            public void reload() {
+            }
+        });
+
+        assertTrue(command.onTabComplete(
+                staff,
+                COMMAND,
+                "estaff",
+                new String[]{""}
+        ).contains(POLICY_V2_OPERATION));
+        command.onCommand(staff, COMMAND, "estaff", new String[]{POLICY_V2_OPERATION, TARGET_QUERY});
+        assertEquals(TARGET_QUERY, openedTarget.get());
+    }
+
+    @Test
+    void policyV2ShadowCommandRechecksPunishmentPermissionBeforeOpening() {
+        AtomicBoolean opened = new AtomicBoolean();
+        List<String> messages = new ArrayList<>();
+        EstaffCommand command = new EstaffCommand(health());
+        command.configurePolicyV2Shadow(new PolicyV2ShadowAccess() {
+            @Override
+            public boolean enabled() {
+                return true;
+            }
+
+            @Override
+            public void open(CommandSender sender, String targetQuery) {
+                opened.set(true);
+            }
+
+            @Override
+            public void reload() {
+            }
+        });
+
+        command.onCommand(
+                sender(Map.of(), messages),
+                COMMAND,
+                "estaff",
+                new String[]{POLICY_V2_OPERATION, TARGET_QUERY}
+        );
+
+        assertFalse(opened.get());
+        assertEquals(
+                List.of("You do not have permission to use Policy v2 shadow review."),
+                messages
+        );
     }
 
     @Test

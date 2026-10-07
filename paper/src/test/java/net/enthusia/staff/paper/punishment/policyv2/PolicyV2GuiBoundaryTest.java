@@ -21,6 +21,12 @@ class PolicyV2GuiBoundaryTest {
     private static final Path REGISTRAR = Path.of(
             "src/main/java/net/enthusia/staff/paper/PaperCommandRegistrar.java"
     );
+    private static final Path SHADOW_RUNTIME = Path.of(
+            "src/main/java/net/enthusia/staff/paper/punishment/policyv2/PolicyV2ShadowRuntime.java"
+    );
+    private static final Path ESTAFF = Path.of(
+            "src/main/java/net/enthusia/staff/paper/command/EstaffCommand.java"
+    );
 
     @Test
     void resultScreenKeepsShadowAndV1AuthorityBoundaryVisible() throws IOException {
@@ -42,6 +48,21 @@ class PolicyV2GuiBoundaryTest {
         assertTrue(source.contains("submitShadow"));
         assertFalse(source.contains("createCase("));
         assertFalse(source.contains("PunishmentService"));
+    }
+
+    @Test
+    void operationalShadowRegistrationIsFeatureGatedAndHasNoAuthoritativeMutationDependency() throws IOException {
+        String controller = Files.readString(CONTROLLER);
+        String runtime = Files.readString(SHADOW_RUNTIME);
+        String estaff = Files.readString(ESTAFF);
+
+        assertTrue(controller.contains("enabled.getAsBoolean()"));
+        assertTrue(runtime.contains("PolicyV2StoreAdapter"));
+        assertTrue(runtime.contains("publications::shadowEnabled"));
+        assertFalse(runtime.contains("PunishmentService"));
+        assertFalse(runtime.contains("createCase("));
+        assertTrue(estaff.contains("policyV2Shadow.enabled()"));
+        assertTrue(estaff.contains("policyv2 <player>"));
     }
 
     @Test

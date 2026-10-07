@@ -9,6 +9,7 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.RejectedExecutionException;
+import java.util.function.BooleanSupplier;
 import java.util.logging.Level;
 import net.enthusia.staff.domain.auth.Actor;
 import net.enthusia.staff.domain.player.PlayerIdentity;
@@ -40,6 +41,7 @@ public final class PolicyV2GuiController implements Listener {
     private final Clock clock;
     private final PolicyV2ManualWorkflow workflow;
     private final ExecutorService workers;
+    private final BooleanSupplier enabled;
     private final PolicyV2GuiNavigator navigator;
     private final PolicyV2GuiRenderer renderer = new PolicyV2GuiRenderer();
     private final Map<UUID, InputCapture> inputCaptures = new ConcurrentHashMap<>();
@@ -51,10 +53,21 @@ public final class PolicyV2GuiController implements Listener {
             PolicyV2ManualWorkflow workflow,
             ExecutorService workers
     ) {
+        this(plugin, clock, workflow, workers, () -> true);
+    }
+
+    public PolicyV2GuiController(
+            JavaPlugin plugin,
+            Clock clock,
+            PolicyV2ManualWorkflow workflow,
+            ExecutorService workers,
+            BooleanSupplier enabled
+    ) {
         this.plugin = java.util.Objects.requireNonNull(plugin, "plugin");
         this.clock = java.util.Objects.requireNonNull(clock, "clock");
         this.workflow = java.util.Objects.requireNonNull(workflow, "workflow");
         this.workers = java.util.Objects.requireNonNull(workers, "workers");
+        this.enabled = java.util.Objects.requireNonNull(enabled, "enabled");
         this.navigator = new PolicyV2GuiNavigator(workflow);
     }
 
@@ -67,7 +80,7 @@ public final class PolicyV2GuiController implements Listener {
     }
 
     public void open(Player viewer, PlayerIdentity target) {
-        if (target == null || authorizedActor(viewer) == null) {
+        if (!enabled.getAsBoolean() || target == null || authorizedActor(viewer) == null) {
             return;
         }
         String targetName = target.currentUsername().orElse(target.playerId().toString());
@@ -83,6 +96,10 @@ public final class PolicyV2GuiController implements Listener {
             return;
         }
         event.setCancelled(true);
+        if (!enabled.getAsBoolean()) {
+            viewer.closeInventory();
+            return;
+        }
         int slot = event.getRawSlot();
         if (slot < 0 || slot >= event.getView().getTopInventory().getSize()) {
             return;
@@ -103,6 +120,9 @@ public final class PolicyV2GuiController implements Listener {
     public void onDrag(InventoryDragEvent event) {
         if (event.getView().getTopInventory().getHolder(false) instanceof PolicyV2GuiHolder) {
             event.setCancelled(true);
+            if (!enabled.getAsBoolean()) {
+                event.getWhoClicked().closeInventory();
+            }
         }
     }
 
@@ -114,6 +134,10 @@ public final class PolicyV2GuiController implements Listener {
             return;
         }
         event.setCancelled(true);
+        if (!enabled.getAsBoolean()) {
+            message(viewer, "Policy v2 shadow mode is disabled; no evaluation was recorded.");
+            return;
+        }
         String input = PlainTextComponentSerializer.plainText().serialize(event.message()).trim();
         onEntity(viewer, () -> handleInput(viewer, capture, input));
     }
@@ -365,14 +389,14 @@ public final class PolicyV2GuiController implements Listener {
 
     private void openState(Player viewer, PolicyV2GuiState state) {
         onEntity(viewer, () -> {
-            if (authorizedActor(viewer) != null) {
+            if (enabled.getAsBoolean() && authorizedActor(viewer) != null) {
                 viewer.openInventory(renderer.render(state));
             }
         });
     }
 
     private Actor authorizedActor(Player viewer) {
-        if (viewer == null) {
+        if (viewer == null || !enabled.getAsBoolean()) {
             return null;
         }
         Actor actor = PaperActorResolver.resolve(viewer).orElse(null);

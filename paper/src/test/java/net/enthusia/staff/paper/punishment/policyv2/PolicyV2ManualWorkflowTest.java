@@ -35,6 +35,9 @@ import net.enthusia.staff.domain.policyv2.persistence.PolicyV2Store;
 import net.enthusia.staff.domain.sanction.SanctionLength;
 import net.enthusia.staff.domain.sanction.SanctionSpec;
 import net.enthusia.staff.domain.sanction.SanctionType;
+import net.enthusia.staff.paper.config.policyv2.PolicyV2Configuration;
+import net.enthusia.staff.paper.config.policyv2.PolicyV2FeatureMode;
+import net.enthusia.staff.paper.config.policyv2.PolicyV2SnapshotPublisher;
 import org.junit.jupiter.api.Test;
 
 class PolicyV2ManualWorkflowTest {
@@ -142,6 +145,39 @@ class PolicyV2ManualWorkflowTest {
 
         PolicyV2ManualWorkflow.SubmissionResult.Stale stale =
                 assertInstanceOf(PolicyV2ManualWorkflow.SubmissionResult.Stale.class, result);
+        assertEquals("policy-2", stale.refreshed().snapshot().version());
+        assertEquals(0, shadow.writes);
+    }
+
+    @Test
+    void staleGuiReviewAfterAtomicReloadCannotRecordPreviousSnapshot() {
+        PolicyV2SnapshotPublisher publisher = new PolicyV2SnapshotPublisher();
+        publisher.publish(new PolicyV2Configuration(
+                PolicyV2Configuration.CURRENT_SCHEMA_VERSION,
+                PolicyV2FeatureMode.SHADOW,
+                POLICY_ONE,
+                Map.of(POLICY_ONE, standardSnapshot(POLICY_ONE))
+        ));
+        RecordingShadow shadow = new RecordingShadow();
+        PolicyV2ManualWorkflow workflow = workflow(
+                publisher::activeSnapshot,
+                List.of(),
+                shadow,
+                new DefaultAuthorizationPolicy()
+        );
+        PolicyV2ManualReview reviewed = workflow.review(actor(StaffRank.MOD), answeredHarassment());
+
+        publisher.publish(new PolicyV2Configuration(
+                PolicyV2Configuration.CURRENT_SCHEMA_VERSION,
+                PolicyV2FeatureMode.SHADOW,
+                "policy-2",
+                Map.of("policy-2", standardSnapshot("policy-2"))
+        ));
+
+        PolicyV2ManualWorkflow.SubmissionResult.Stale stale = assertInstanceOf(
+                PolicyV2ManualWorkflow.SubmissionResult.Stale.class,
+                workflow.submitShadow(actor(StaffRank.MOD), reviewed, "reload-stale")
+        );
         assertEquals("policy-2", stale.refreshed().snapshot().version());
         assertEquals(0, shadow.writes);
     }

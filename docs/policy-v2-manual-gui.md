@@ -85,8 +85,10 @@ Any change returns a stale result containing the refreshed review. Nothing is pe
 
 Successful shadow submissions use PolicyV2Store.recordShadowEvaluation through PolicyV2StoreAdapter. Resolver reads use PolicyV2Store.completeHistory and never the bounded human-facing history API. W2 operation-key idempotency/conflict semantics remain authoritative. A typed W2 conflict is returned to the GUI orchestration as an explicit conflict result.
 
-## Integration handoff
+## W5B operational shadow integration
 
-A later authorized integration/cutover step must provide the active validated PolicySnapshot source, construct PolicyV2GuiController, call its explicit register method, and hand a resolved player into open(...). W3A deliberately does not register this controller from PaperCommandRegistrar and does not alter the live /punish command. That later step must not bypass PolicyV2ManualWorkflow's stale-review and authorization checks.
+W5B supplies the active snapshot through the validated atomic publication runtime. The controller is registered once, but every open/click/chat boundary is feature-gated by the current Policy v2 mode. In `disabled`, the manual workflow is not exposed. In `shadow`, active-duty staff with the normal punishment authority can open it with `/estaff policyv2 <player>`.
 
-Until such a cutover is explicitly approved, the existing /punish command and Policy v1 draft/request/enforcement path remain unchanged.
+Reloading to `disabled` fences already-open Policy v2 screens before another evaluation can be recorded. Reloading or publishing a new snapshot also triggers the existing stale-review protection because the confirmation recomputes against the publisher's current active snapshot.
+
+W5B still does not alter `/punish`, create Policy v2 cases, issue sanctions, enforce remedies, or add an authoritative Policy v2 mode. The existing Policy v1 draft/request/enforcement path remains authoritative. Any later cutover must be a separate owner-authorized change and must not bypass `PolicyV2ManualWorkflow`'s stale-review and authorization checks.

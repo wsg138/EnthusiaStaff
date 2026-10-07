@@ -1,0 +1,28 @@
+# Policy v2 publication manifest.
+# SAFE DEFAULT: disabled. Nothing in this file is owner-approved punishment policy.
+# The example snapshot exists only to validate the loader/publication path.
+schema-version: 1
+mode: disabled
+active-version: example.unapproved.1
+
+versions:
+  - version: example.unapproved.1
+    offenses:
+      - offense-id: example.chat-review
+        display-name: "EXAMPLE ONLY — owner policy unresolved"
+        navigation-group-id: chat-spam
+        attributes: []
+        history:
+          relationships: {}
+          decay:
+            mode: non-decaying
+        resolution-rules:
+          - rule-id: example.review-only
+            when:
+              attributes: {}
+              history:
+                minimum-inclusive: 0
+            action:
+              type: requires-review
+              reason-code: owner-policy.unresolved
+            remedies: []
