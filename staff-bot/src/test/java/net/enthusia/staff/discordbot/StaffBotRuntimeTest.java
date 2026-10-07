@@ -72,6 +72,32 @@ class StaffBotRuntimeTest {
     }
 
     @Test
+    void wrongPublicChatApplicationFailsOnlyTheChatSurfaceClosed() throws Exception {
+        Fixture fixture = new Fixture(true, true);
+        FakeChatLifecycle chat = new FakeChatLifecycle();
+        FakeGateway publicGateway = new FakeGateway(true, true);
+        try (StaffBotRuntime runtime = fixture.runtime(null, chat, publicGateway)) {
+            runtime.start();
+            fixture.gateway.emitIdentity(validStagingIdentity());
+            assertTrue(runtime.awaitReady(Duration.ofMillis(100)));
+            assertEquals(StaffBotHealth.Phase.READY, runtime.health().snapshot().phase());
+
+            publicGateway.emitIdentity(new DiscordRuntimeIdentity(
+                    PUBLIC_CHAT_APPLICATION_ID + 1L,
+                    false,
+                    Set.of(StaffBotEnvironment.STAGING.guildId()),
+                    true,
+                    true
+            ));
+
+            assertEquals(1, chat.pauseCount);
+            assertTrue(publicGateway.shutdownNowRequested);
+            assertEquals(StaffBotHealth.Phase.READY, runtime.health().snapshot().phase());
+            assertFalse(runtime.health().failedEver());
+        }
+    }
+
+    @Test
     void previewRuntimeCreatesWithoutModerationDependencies() throws Exception {
         StaffBotConfiguration configuration = StaffBotConfiguration.fromEnvironment(Map.of(
                 StaffBotConfiguration.ENVIRONMENT_KEY, "staging",
