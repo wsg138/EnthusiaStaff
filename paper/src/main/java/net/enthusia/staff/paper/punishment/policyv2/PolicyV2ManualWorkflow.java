@@ -207,6 +207,11 @@ public final class PolicyV2ManualWorkflow {
         if (draft.isPolicyGap() || resolution.requiresReview()) {
             return PolicyV2ManualReview.ApprovalRoute.ADMIN_FOUNDER_REVIEW;
         }
+        if (resolution.action() instanceof PolicyAction.ExactWithApproval exact
+                && !actor.rank().atLeast(exact.minimumRank())) {
+            requireRequestAuthority(actor);
+            return PolicyV2ManualReview.ApprovalRoute.APPROVAL_REQUIRED;
+        }
         if (resolution.action() instanceof PolicyAction.Bounded bounded
                 && !actor.rank().atLeast(bounded.minimumRank())) {
             requireRequestAuthority(actor);
