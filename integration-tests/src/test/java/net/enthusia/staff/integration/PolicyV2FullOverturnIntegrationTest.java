@@ -15,33 +15,21 @@ import com.zaxxer.hikari.HikariDataSource;
 import java.sql.Connection;
 import java.sql.Statement;
 import java.time.Instant;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
 import net.enthusia.staff.domain.auth.Actor;
-import net.enthusia.staff.domain.auth.DefaultAuthorizationPolicy;
 import net.enthusia.staff.domain.auth.StaffRank;
 import net.enthusia.staff.domain.policyv2.BehavioralHistoryEntry;
 import net.enthusia.staff.domain.policyv2.CaseRevision;
-import net.enthusia.staff.domain.policyv2.RemedySpec;
 import net.enthusia.staff.domain.policyv2.appeal.PolicyV2FullOverturnOrchestrator;
 import net.enthusia.staff.domain.policyv2.appeal.PolicyV2FullOverturnOrchestrator.Checkpoint;
 import net.enthusia.staff.domain.policyv2.appeal.PolicyV2FullOverturnStore;
-import net.enthusia.staff.domain.policyv2.enforcement.PolicyV2EnforcementStore;
-import net.enthusia.staff.domain.policyv2.enforcement.PolicyV2RemedyEnforcement;
-import net.enthusia.staff.domain.policyv2.enforcement.PolicyV2RemedyEnforcement.Condition;
 import net.enthusia.staff.domain.policyv2.enforcement.PolicyV2RemedyEnforcement.Lifecycle;
-import net.enthusia.staff.domain.policyv2.enforcement.PolicyV2RemedyEnforcement.Scope;
-import net.enthusia.staff.domain.policyv2.enforcement.PolicyV2RemedyService;
 import net.enthusia.staff.domain.policyv2.persistence.PolicyV2Store;
-import net.enthusia.staff.domain.sanction.SanctionSpec;
+import net.enthusia.staff.integration.PolicyV2FullOverturnRuntimeTestSupport.RecordingProviders;
+import net.enthusia.staff.integration.PolicyV2FullOverturnRuntimeTestSupport.Runtime;
 import net.enthusia.staff.integration.PolicyV2PersistenceTestSupport.Fixture;
-import net.enthusia.staff.persistence.JdbcPolicyV2EnforcementStore;
-import net.enthusia.staff.persistence.JdbcPolicyV2FullOverturnStore;
-import net.enthusia.staff.persistence.JdbcPolicyV2Store;
 import net.enthusia.staff.persistence.MariaDb;
 import net.enthusia.staff.persistence.ModerationPersistenceException;
 import org.junit.jupiter.api.BeforeAll;
@@ -260,50 +248,8 @@ class PolicyV2FullOverturnIntegrationTest {
         UUID operationId = UUID.randomUUID();
 
         try (HikariDataSource dataSource = open(DATABASE)) {
-            PolicyV2Store canonical = new JdbcPolicyV2Store(dataSource);
-            PolicyV2EnforcementStore enforcement = new JdbcPolicyV2EnforcementStore(dataSource);
-            PolicyV2RemedyService service = new PolicyV2RemedyService(
-                    canonical,
-                    enforcement,
-                    new DefaultAuthorizationPolicy(),
-                    SYSTEM_ACTOR
-            );
-            RemedySpec remedy = new RemedySpec(
-                    "confiscated-assets",
-                    RemedySpec.Type.CONFISCATE,
-                    "Restore confiscated assets after overturn"
-            );
-            PolicyV2EnforcementTestSupport.createPolicyCase(
-                    canonical,
-                    fixture,
-                    "economy.confiscation",
-                    remedy,
-                    "asset-case:434",
-                    OVERTURNED_AT.minusSeconds(3)
-            );
-            Actor admin = actor(fixture.actorId(), StaffRank.ADMIN);
-            PolicyV2RemedyEnforcement required = service.register(
-                    admin,
-                    new PolicyV2RemedyService.RegisterCommand(
-                            fixture.caseId(),
-                            remedy.id(),
-                            fixture.targetId(),
-                            Scope.ASSET,
-                            Condition.manual(),
-                            "asset-register:434",
-                            OVERTURNED_AT.minusSeconds(2)
-                    )
-            );
-            service.enforce(
-                    admin,
-                    fixture.caseId(),
-                    remedy.id(),
-                    required.revision(),
-                    (ignored, providerOperationId) -> { },
-                    "asset-enforce:434",
-                    OVERTURNED_AT.minusSeconds(1)
-            );
-
+            Actor admin = PolicyV2FullOverturnRuntimeTestSupport.createEnforcedAssetRemedy(
+                    dataSource, fixture, SYSTEM_ACTOR, OVERTURNED_AT);
             Runtime runtime = runtime(dataSource, providers, checkpoint -> { });
             assertThrows(SecurityException.class, () -> runtime.orchestrator().execute(
                     command(operationId, fixture, admin, "appeal-asset")
@@ -530,47 +476,8 @@ class PolicyV2FullOverturnIntegrationTest {
             RecordingProviders providers,
             PolicyV2FullOverturnOrchestrator.FailureProbe failureProbe
     ) {
-        PolicyV2Store canonical = new JdbcPolicyV2Store(dataSource);
-        PolicyV2EnforcementStore enforcement = new JdbcPolicyV2EnforcementStore(dataSource);
-        PolicyV2FullOverturnStore operations = new JdbcPolicyV2FullOverturnStore(dataSource);
-        PolicyV2FullOverturnOrchestrator orchestrator = new PolicyV2FullOverturnOrchestrator(
-                canonical,
-                enforcement,
-                operations,
-                new DefaultAuthorizationPolicy(),
-                providers::terminateSanctions,
-                providers::cleanupRemedy,
-                failureProbe
-        );
-        return new Runtime(canonical, enforcement, operations, orchestrator);
-    }
-
-    private record Runtime(
-            PolicyV2Store canonical,
-            PolicyV2EnforcementStore enforcement,
-            PolicyV2FullOverturnStore operations,
-            PolicyV2FullOverturnOrchestrator orchestrator
-    ) {
-    }
-
-    private static final class RecordingProviders {
-        private final Set<UUID> sanctionEffects = new HashSet<>();
-        private final Set<UUID> remedyEffects = new HashSet<>();
-        private final AtomicInteger sanctionAttempts = new AtomicInteger();
-        private final AtomicInteger remedyAttempts = new AtomicInteger();
-
-        void terminateSanctions(UUID operationId, String caseId, List<SanctionSpec> sanctions) {
-            assertFalse(caseId.isBlank());
-            assertFalse(sanctions.isEmpty());
-            sanctionAttempts.incrementAndGet();
-            sanctionEffects.add(operationId);
-        }
-
-        void cleanupRemedy(UUID operationId, PolicyV2RemedyEnforcement enforcement) {
-            assertEquals(Lifecycle.ENFORCED, enforcement.lifecycle());
-            remedyAttempts.incrementAndGet();
-            remedyEffects.add(operationId);
-        }
+        return PolicyV2FullOverturnRuntimeTestSupport.runtime(
+                dataSource, providers, failureProbe, SYSTEM_ACTOR);
     }
 
     private static final class InjectedFailure extends RuntimeException {
