@@ -5,7 +5,10 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import java.time.Duration;
 import java.util.List;
+import java.util.Optional;
+import net.enthusia.staff.domain.policyv2.PolicyV2RemedyBindingSpec;
 import net.enthusia.staff.domain.policyv2.RemedySpec;
+import net.enthusia.staff.domain.policyv2.enforcement.PolicyV2RemedyEnforcement.ConditionType;
 import net.enthusia.staff.domain.policyv2.enforcement.PolicyV2RemedyEnforcement.Condition;
 import net.enthusia.staff.domain.policyv2.enforcement.PolicyV2RemedyEnforcement.Scope;
 import net.enthusia.staff.domain.sanction.SanctionLength;
@@ -38,6 +41,35 @@ class PolicyV2EnforcementPolicyTest {
                 profile, Scope.MARKET_ACCESS, Condition.username("BadName")));
         assertThrows(IllegalArgumentException.class, () -> PolicyV2EnforcementPolicy.requireBinding(
                 access, Scope.CONTENT, Condition.manual()));
+    }
+
+    @Test
+    void configuredBindingMetadataUsesTheSameAllowlistAsRuntimeRegistration() {
+        assertDoesNotThrow(() -> new RemedySpec(
+                "vpn-access",
+                RemedySpec.Type.ACCESS_RESTRICTION,
+                "Disable or approve VPN",
+                Optional.of(new PolicyV2RemedyBindingSpec(
+                        Scope.NETWORK_ACCESS,
+                        ConditionType.VPN_APPROVAL,
+                        Optional.empty(),
+                        Optional.empty(),
+                        Optional.empty()
+                ))
+        ));
+
+        assertThrows(IllegalArgumentException.class, () -> new RemedySpec(
+                "remove-content",
+                RemedySpec.Type.REMOVE_CONTENT,
+                "Remove content",
+                Optional.of(new PolicyV2RemedyBindingSpec(
+                        Scope.MARKET_ACCESS,
+                        ConditionType.MANUAL,
+                        Optional.empty(),
+                        Optional.empty(),
+                        Optional.empty()
+                ))
+        ));
     }
 
     @Test
