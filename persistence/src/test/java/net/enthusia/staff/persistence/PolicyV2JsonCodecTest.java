@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import java.time.Duration;
 import net.enthusia.staff.domain.policyv2.DecayPolicy;
+import net.enthusia.staff.domain.policyv2.PolicyAction;
 import net.enthusia.staff.domain.sanction.SanctionLength;
 import org.junit.jupiter.api.Test;
 
@@ -17,6 +18,15 @@ final class PolicyV2JsonCodecTest {
         assertRoundTrip(SanctionLength.instant());
         assertRoundTrip(SanctionLength.permanent());
         assertRoundTrip(SanctionLength.temporary(Duration.ofMinutes(15)));
+    }
+
+    @Test
+    void remedyOnlyActionRoundTripsThroughPersistedPolicyJson() {
+        PolicyAction.RemedyOnly action = new PolicyAction.RemedyOnly();
+
+        String json = codec.write(action);
+
+        assertEquals(action, codec.read(json, PolicyAction.class));
     }
 
     @Test
