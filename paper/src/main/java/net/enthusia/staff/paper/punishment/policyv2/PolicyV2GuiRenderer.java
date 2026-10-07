@@ -2,7 +2,6 @@ package net.enthusia.staff.paper.punishment.policyv2;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Optional;
 import net.enthusia.staff.domain.policyv2.IncidentAttributeDefinition;
 import net.enthusia.staff.domain.policyv2.IncidentAttributeValue;
 import net.enthusia.staff.domain.policyv2.OffensePolicy;
@@ -22,6 +21,7 @@ final class PolicyV2GuiRenderer {
     static final int CLOSE_SLOT = 51;
     static final int NEXT_SLOT = 53;
     static final int PREVIOUS_SLOT = 45;
+    static final int POLICY_GAP_QUESTION_SLOT = 22;
 
     Inventory render(PolicyV2GuiState state) {
         PolicyV2GuiHolder holder = new PolicyV2GuiHolder(state);
@@ -141,6 +141,7 @@ final class PolicyV2GuiRenderer {
                 answer == null ? "Not answered" : "Confirmed: " + displayValue(answer),
                 answer == null ? NamedTextColor.YELLOW : NamedTextColor.GREEN
         ));
+        lore.add(Component.text("Click to answer or edit", NamedTextColor.YELLOW));
         return item(
                 answer == null ? Material.WRITABLE_BOOK : Material.KNOWLEDGE_BOOK,
                 PolicyV2ReviewPresentation.humanize(definition.id()),
@@ -164,14 +165,15 @@ final class PolicyV2GuiRenderer {
         String status = draft.policyGapSummary().isPresent()
                 ? "Confirmed: " + draft.policyGapSummary().orElseThrow()
                 : "A factual description is required before review.";
-        inventory.setItem(22, item(
+        inventory.setItem(POLICY_GAP_QUESTION_SLOT, item(
                 Material.MAP,
                 "What happened?",
                 NamedTextColor.YELLOW,
                 List.of(
                         Component.text(status, NamedTextColor.GRAY),
                         Component.text("Ordinary staff cannot invent a punishment here.", NamedTextColor.RED),
-                        Component.text("This path always requires Admin/Founder review.", NamedTextColor.GOLD)
+                        Component.text("This path always requires Admin/Founder review.", NamedTextColor.GOLD),
+                        Component.text("Click to enter or edit the description.", NamedTextColor.YELLOW)
                 )
         ));
     }
@@ -179,7 +181,7 @@ final class PolicyV2GuiRenderer {
     private static void review(Inventory inventory, PolicyV2GuiState.Review state) {
         String conduct = state.draft().isPolicyGap()
                 ? state.draft().policyGapSummary().orElse("Description required")
-                : "Selected exact conduct is ready for policy evaluation.";
+                : state.conductLabel();
         inventory.setItem(20, item(
                 Material.BOOK,
                 "What Happened",

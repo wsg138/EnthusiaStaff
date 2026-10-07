@@ -16,10 +16,12 @@ sealed interface PolicyV2GuiState {
             UUID viewerId,
             UUID targetId,
             String targetName,
+            PolicyV2ManualDraft draft,
             List<PolicyV2Category> categories
     ) implements PolicyV2GuiState {
         public Categories {
             validate(viewerId, targetId, targetName);
+            validateDraft(targetId, draft);
             categories = List.copyOf(categories);
         }
     }
@@ -34,7 +36,8 @@ sealed interface PolicyV2GuiState {
     ) implements PolicyV2GuiState {
         public Offenses {
             validate(viewerId, targetId, targetName);
-            if (draft == null || offenses == null || page < 0) {
+            validateDraft(targetId, draft);
+            if (offenses == null || page < 0) {
                 throw new IllegalArgumentException("Policy v2 offense screen is invalid");
             }
             offenses = List.copyOf(offenses);
@@ -46,13 +49,16 @@ sealed interface PolicyV2GuiState {
             UUID targetId,
             String targetName,
             PolicyV2ManualDraft draft,
+            String conductLabel,
             List<IncidentAttributeDefinition> questions
     ) implements PolicyV2GuiState {
         public Questions {
             validate(viewerId, targetId, targetName);
-            if (draft == null || questions == null) {
+            validateDraft(targetId, draft);
+            if (conductLabel == null || conductLabel.isBlank() || questions == null) {
                 throw new IllegalArgumentException("Policy v2 question screen is invalid");
             }
+            conductLabel = conductLabel.trim();
             questions = List.copyOf(questions);
         }
     }
@@ -61,13 +67,16 @@ sealed interface PolicyV2GuiState {
             UUID viewerId,
             UUID targetId,
             String targetName,
-            PolicyV2ManualDraft draft
+            PolicyV2ManualDraft draft,
+            String conductLabel
     ) implements PolicyV2GuiState {
         public Review {
             validate(viewerId, targetId, targetName);
-            if (draft == null) {
+            validateDraft(targetId, draft);
+            if (conductLabel == null || conductLabel.isBlank()) {
                 throw new IllegalArgumentException("Policy v2 review screen is invalid");
             }
+            conductLabel = conductLabel.trim();
         }
     }
 
@@ -76,11 +85,13 @@ sealed interface PolicyV2GuiState {
             UUID targetId,
             String targetName,
             PolicyV2ManualReview review,
-            PolicyV2ReviewPresentation presentation
+            PolicyV2ReviewPresentation presentation,
+            UUID operationId
     ) implements PolicyV2GuiState {
         public Result {
             validate(viewerId, targetId, targetName);
-            if (review == null || presentation == null) {
+            if (review == null || presentation == null || operationId == null
+                    || !targetId.equals(review.draft().targetId())) {
                 throw new IllegalArgumentException("Policy v2 result screen is invalid");
             }
         }
@@ -89,6 +100,12 @@ sealed interface PolicyV2GuiState {
     private static void validate(UUID viewerId, UUID targetId, String targetName) {
         if (viewerId == null || targetId == null || targetName == null || targetName.isBlank()) {
             throw new IllegalArgumentException("Policy v2 GUI identity must be present");
+        }
+    }
+
+    private static void validateDraft(UUID targetId, PolicyV2ManualDraft draft) {
+        if (draft == null || !targetId.equals(draft.targetId())) {
+            throw new IllegalArgumentException("Policy v2 draft does not match the selected target");
         }
     }
 }

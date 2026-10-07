@@ -62,6 +62,17 @@ public record PolicyV2ManualDraft(
         );
     }
 
+    public PolicyV2ManualDraft clearAnswer(String attributeId) {
+        if (attributeId == null || attributeId.isBlank()) {
+            throw new IllegalArgumentException("Policy v2 attribute must be present");
+        }
+        java.util.HashMap<String, IncidentAttributeValue> changed = new java.util.HashMap<>(attributes);
+        changed.remove(attributeId.trim());
+        return new PolicyV2ManualDraft(
+                targetId, incidentAt, categoryId, offenseId, changed, policyGapSummary
+        );
+    }
+
     public PolicyV2ManualDraft describePolicyGap(String summary) {
         return new PolicyV2ManualDraft(
                 targetId, incidentAt, Optional.of(PolicyV2Category.POLICY_GAP.id()),

@@ -15,6 +15,12 @@ class PolicyV2GuiBoundaryTest {
     private static final Path WORKFLOW = Path.of(
             "src/main/java/net/enthusia/staff/paper/punishment/policyv2/PolicyV2ManualWorkflow.java"
     );
+    private static final Path CONTROLLER = Path.of(
+            "src/main/java/net/enthusia/staff/paper/punishment/policyv2/PolicyV2GuiController.java"
+    );
+    private static final Path REGISTRAR = Path.of(
+            "src/main/java/net/enthusia/staff/paper/PaperCommandRegistrar.java"
+    );
 
     @Test
     void resultScreenKeepsShadowAndV1AuthorityBoundaryVisible() throws IOException {
@@ -36,5 +42,19 @@ class PolicyV2GuiBoundaryTest {
         assertTrue(source.contains("submitShadow"));
         assertFalse(source.contains("createCase("));
         assertFalse(source.contains("PunishmentService"));
+    }
+
+    @Test
+    void interactionControllerDrivesTheShadowWorkflowButIsNotLiveRegistered() throws IOException {
+        String controller = Files.readString(CONTROLLER);
+        String registrar = Files.readString(REGISTRAR);
+
+        assertTrue(controller.contains("InventoryClickEvent"));
+        assertTrue(controller.contains("AsyncChatEvent"));
+        assertTrue(controller.contains("workflow.submitShadow("));
+        assertTrue(controller.contains("Policy or history changed."));
+        assertFalse(controller.contains("PunishmentService"));
+        assertFalse(controller.contains("createCase("));
+        assertFalse(registrar.contains("PolicyV2GuiController"));
     }
 }

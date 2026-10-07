@@ -21,7 +21,7 @@ The presentation/state model supports:
 7. a human-readable policy result;
 8. a final shadow submission that shows whether the eventual authoritative route would be direct confirmation, an approval request, or Admin/Founder review.
 
-The screens are represented by PolicyV2GuiState and rendered by PolicyV2GuiRenderer. The orchestration is owned by PolicyV2ManualWorkflow. Persistence is behind PolicyV2StoreAdapter and the W2 PolicyV2Store port.
+The screens are represented by PolicyV2GuiState and rendered by PolicyV2GuiRenderer. PolicyV2GuiController handles inventory clicks, back/edit navigation, typed question capture, async policy/history evaluation, stale-result refresh, and final shadow submission. PolicyV2GuiNavigator keeps navigation/edit semantics separate from Bukkit events, while PolicyV2ManualWorkflow owns policy orchestration. Persistence is behind PolicyV2StoreAdapter and the W2 PolicyV2Store port.
 
 ## Navigation
 
@@ -50,7 +50,7 @@ Configured offenses are browsed by OffensePolicy.navigationGroupId. The GUI neve
 
 ## Questions and editing
 
-Only attributes declared by the selected OffensePolicy are exposed. Answers are validated against the W1 attribute type/range/allowed values before being accepted. Going back to edit the exact offense clears offense-specific answers; going back to edit the category clears all dependent offense state. This prevents facts from one offense being silently reused for another.
+Only attributes declared by the selected OffensePolicy are exposed. Clicking a question captures a bounded chat answer; boolean, integer, enum, and text inputs are parsed and then validated against the W1 type/range/allowed-value definition. Optional answers may be skipped. Going back from review preserves confirmed answers for editing, going back to exact conduct clears offense-specific answers, and going back to category clears all dependent offense state. This prevents facts from one offense being silently reused for another.
 
 Policy Gap is separate from configured offenses. It requires a short factual description and always routes to Admin/Founder review. It never exposes a free-form punishment or duration control.
 
@@ -87,6 +87,6 @@ Successful shadow submissions use PolicyV2Store.recordShadowEvaluation through P
 
 ## Integration handoff
 
-A later authorized integration/cutover step must provide the active validated PolicySnapshot source and register the event/command adapter. That step must not bypass PolicyV2ManualWorkflow's stale-review and authorization checks.
+A later authorized integration/cutover step must provide the active validated PolicySnapshot source, construct PolicyV2GuiController, call its explicit register method, and hand a resolved player into open(...). W3A deliberately does not register this controller from PaperCommandRegistrar and does not alter the live /punish command. That later step must not bypass PolicyV2ManualWorkflow's stale-review and authorization checks.
 
 Until such a cutover is explicitly approved, the existing /punish command and Policy v1 draft/request/enforcement path remain unchanged.
