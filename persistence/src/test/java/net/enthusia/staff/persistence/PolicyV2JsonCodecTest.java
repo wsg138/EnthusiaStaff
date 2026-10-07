@@ -5,8 +5,12 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import java.time.Duration;
+import java.util.List;
+import net.enthusia.staff.domain.auth.StaffRank;
 import net.enthusia.staff.domain.policyv2.DecayPolicy;
 import net.enthusia.staff.domain.policyv2.PolicyAction;
+import net.enthusia.staff.domain.sanction.SanctionSpec;
+import net.enthusia.staff.domain.sanction.SanctionType;
 import net.enthusia.staff.domain.sanction.SanctionLength;
 import org.junit.jupiter.api.Test;
 
@@ -23,6 +27,21 @@ final class PolicyV2JsonCodecTest {
     @Test
     void remedyOnlyActionRoundTripsThroughPersistedPolicyJson() {
         PolicyAction.RemedyOnly action = new PolicyAction.RemedyOnly();
+
+        String json = codec.write(action);
+
+        assertEquals(action, codec.read(json, PolicyAction.class));
+    }
+
+    @Test
+    void exactWithApprovalActionRoundTripsThroughPersistedPolicyJson() {
+        PolicyAction.ExactWithApproval action = new PolicyAction.ExactWithApproval(
+                List.of(new SanctionSpec(
+                        SanctionType.NETWORK_BAN,
+                        SanctionLength.permanent()
+                )),
+                StaffRank.ADMIN
+        );
 
         String json = codec.write(action);
 
