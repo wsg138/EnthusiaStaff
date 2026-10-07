@@ -50,12 +50,12 @@ public final class HistoryEvaluator {
         }
         OffensePolicy priorPolicy = snapshot.offense(effectiveId)
                 .orElseThrow(() -> new IllegalArgumentException("history references unknown related offense"));
-        int priorRelatedCount = countPriorRelated(ordered, index, entry.occurredAt(), priorPolicy);
+        PatternMemory pattern = patternBefore(ordered, index, entry.occurredAt(), priorPolicy);
         DecayResult decay = decay(
                 priorPolicy.historyPolicy().decayPolicy(),
                 entry.occurredAt(),
                 asOf,
-                priorRelatedCount
+                pattern.persistence()
         );
         double contribution = relationshipWeight * decay.factor();
         return java.util.Optional.of(new HistoryAssessment.Contribution(
@@ -64,49 +64,69 @@ public final class HistoryEvaluator {
                 relationshipWeight,
                 decay.factor(),
                 decay.multiplier(),
-                priorRelatedCount,
-                contribution
+                pattern.relatedCount(),
+                contribution,
+                pattern.persistence()
         ));
     }
 
-    private static int countPriorRelated(
+    private static PatternMemory patternBefore(
             List<BehavioralHistoryEntry> ordered,
             int beforeIndex,
             Instant beforeTime,
             OffensePolicy priorPolicy
     ) {
         int count = 0;
+        double persistence = 0.0;
+        DecayPolicy decayPolicy = priorPolicy.historyPolicy().decayPolicy();
         for (int index = 0; index < beforeIndex; index++) {
             BehavioralHistoryEntry candidate = ordered.get(index);
             if (!candidate.occurredAt().isBefore(beforeTime)) {
                 continue;
             }
             String candidateId = candidate.contributingOffenseId().orElse(null);
-            if (candidateId != null && priorPolicy.historyPolicy().weightFor(candidateId) > UNRELATED_WEIGHT) {
-                count++;
+            double relationshipWeight = candidateId == null
+                    ? UNRELATED_WEIGHT
+                    : priorPolicy.historyPolicy().weightFor(candidateId);
+            if (relationshipWeight <= UNRELATED_WEIGHT) {
+                continue;
+            }
+            count++;
+            if (decayPolicy.mode() == DecayPolicy.Mode.EXPONENTIAL) {
+                Duration age = Duration.between(candidate.occurredAt(), beforeTime);
+                persistence += relationshipWeight * exponentialFactor(age, decayPolicy.patternHalfLife());
             }
         }
-        return count;
+        return new PatternMemory(count, persistence);
     }
 
     private static DecayResult decay(
             DecayPolicy policy,
             Instant occurredAt,
             Instant asOf,
-            int priorRelatedCount
+            double patternPersistence
     ) {
         if (policy.mode() == DecayPolicy.Mode.NON_DECAYING) {
             return new DecayResult(1.0, 1.0);
         }
-        double multiplier = policy.halfLifeMultiplier(priorRelatedCount);
+        double multiplier = policy.halfLifeMultiplier(patternPersistence);
         Duration age = Duration.between(occurredAt, asOf);
-        double ageMillis = millis(age);
-        double halfLifeMillis = millis(policy.halfLife()) * multiplier;
-        return new DecayResult(Math.exp(-LOG_TWO * ageMillis / halfLifeMillis), multiplier);
+        double effectiveHalfLifeMillis = millis(policy.halfLife()) * multiplier;
+        return new DecayResult(
+                Math.exp(-LOG_TWO * millis(age) / effectiveHalfLifeMillis),
+                multiplier
+        );
+    }
+
+    private static double exponentialFactor(Duration age, Duration halfLife) {
+        return Math.exp(-LOG_TWO * millis(age) / millis(halfLife));
     }
 
     private static double millis(Duration duration) {
         return duration.getSeconds() * 1000.0 + duration.getNano() / 1_000_000.0;
+    }
+
+    private record PatternMemory(int relatedCount, double persistence) {
     }
 
     private record DecayResult(double factor, double multiplier) {
