@@ -313,6 +313,7 @@ final class PolicyV2SnapshotParser {
             case "exact" -> exactAction(node, path);
             case "exact-with-approval" -> exactWithApprovalAction(node, path);
             case "bounded" -> boundedAction(node, path);
+            case "remedy-only" -> remedyOnlyAction(node, path);
             case "requires-review" -> reviewAction(node, path);
             default -> throw PolicyV2Yaml.invalid(path + ".type has unsupported value " + type);
         };
@@ -360,6 +361,11 @@ final class PolicyV2SnapshotParser {
                         path + ".minimum-rank"
                 )
         );
+    }
+
+    private static PolicyAction remedyOnlyAction(JsonNode node, String path) {
+        requireAbsent(node, path, SANCTIONS_FIELD, ALLOWED_OPTIONS_FIELD, MINIMUM_RANK_FIELD, REASON_CODE_FIELD);
+        return new PolicyAction.RemedyOnly();
     }
 
     private static PolicyAction reviewAction(JsonNode node, String path) {
