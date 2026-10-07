@@ -1,0 +1,104 @@
+# Policy v2 W3B — compliance, remedies, and enforcement
+
+Tracking: #359  
+Parent: #355
+
+This package implements the non-timed-outcome side of Policy v2 without activating it.
+Policy v1 remains authoritative until W4 performs the final coexistence/shadow integration and an
+owner-approved cutover occurs.
+
+## Durable lifecycle
+
+W2 remains the canonical case/remedy store. Its remedy status is intentionally limited to
+`REQUIRED`, `SATISFIED`, and `WAIVED`.
+
+W3B adds `policy_v2_remedy_enforcement` as a durable enforcement projection with:
+
+`REQUIRED -> ENFORCED -> SATISFIED | WAIVED`
+
+A remedy may also move directly from `REQUIRED` to `SATISFIED` when the condition is already
+corrected before an enforcement action, or to `WAIVED` with authorization.
+
+Every W3B lifecycle mutation:
+
+- uses optimistic revision fencing;
+- uses W2's global Policy v2 operation journal for exact replay/collision handling;
+- writes an event to W2's append-only Policy v2 audit stream;
+- is transactional with its W3B projection mutation.
+
+Terminal completion updates the canonical W2 remedy first, then the W3B projection. If the second
+transaction fails, retry observes the already-terminal canonical remedy and completes the W3B
+projection. Tests cover this split-transaction recovery path.
+
+Read-only access/capability checks do not write audit events. Routine reconnects, join denials,
+server restarts, and repeated checks therefore do not manufacture moderation history.
+
+## Compliance conditions
+
+W3B supports these typed conditions:
+
+| Condition | Behavior |
+| --- | --- |
+| Username | Network access remains blocked while the current username equals the prohibited value. A changed username becomes an automatic satisfaction candidate. |
+| Reliable profile component | Access remains blocked until the named component can be observed reliably and differs from the prohibited value. Missing/unreliable observations fail closed rather than guessing. |
+| VPN approval | Unapproved/unknown VPN state remains blocked. VPN disabled or positively approved becomes an automatic satisfaction candidate. |
+| Manual | Used for conditions whose completion must be established by a trusted provider/staff workflow. |
+
+The access coordinator persists an observed correction before returning an allow decision. If the
+persistence step fails, the caller does not receive a successful allow result.
+
+Recurrence does not automatically become an evasion offense. A new violation creates a new
+compliance case/remedy. Deliberate refusal or bypass must be classified separately by policy as a
+behavioral finding.
+
+## Hard policy separation
+
+The W3B safety guard rejects a direct ban outcome for:
+
+- `chat.language.non-english-public` (and the legacy v1 ID);
+- `access.vpn-compliance`.
+
+Warnings/mutes remain possible for the non-English-chat rule because this guard only forbids ban
+sanctions. Mute bypass is a separate `evasion.mute` finding and is not restricted by the guard.
+
+Likewise, `access.vpn-evasion` is deliberately separate from `access.vpn-compliance`. W3B does
+not invent a duration or final owner value; if an owner-approved policy later permits a serious
+sanction (including a 90-day option), the enforcement safety guard does not block that separate
+evasion finding.
+
+No griefing offense or remedy is introduced.
+
+## Remedy adapters and gates
+
+The binding policy is an explicit allowlist:
+
+- `CORRECT_PROFILE` -> network access with username/reliable-profile observation;
+- `ACCESS_RESTRICTION` -> network, report, Market, or reputation access;
+- `REMOVE_CONTENT` -> content remediation;
+- `CONFISCATE` -> asset remediation;
+- `OTHER` is rejected until an explicit supported binding is added.
+
+`PolicyV2CapabilityGate` supplies side-effect-free report/Market/reputation checks.
+`PolicyV2RemedyActions` supplies idempotent operation IDs to content-removal and external
+restriction gateways so provider retries cannot create a second logical operation.
+
+Paper's `PolicyV2AssetRemedyAdapter` routes confiscation into the existing
+`ConfiscationCoordinator`; it does not touch player inventory directly and deliberately does not
+claim lifecycle success merely because the selection UI opened. Durable asset completion remains
+the evidence required before a caller advances the remedy.
+
+## W4 integration boundary
+
+Nothing in W3B is registered into the live Paper/Velocity runtime and no v1 authority is replaced.
+W4 should:
+
+1. construct `JdbcPolicyV2EnforcementStore` beside W2's store;
+2. attach the access coordinator to the supported login/access observation path in shadow/non-live
+   mode first;
+3. wrap report/Market/reputation entry points with the capability gate and provider adapters;
+4. connect durable content/provider completion to `PolicyV2RemedyService.enforce/satisfy`;
+5. connect committed confiscation evidence, not UI-open events, to lifecycle completion;
+6. run the W4 adversarial/coexistence matrix before any owner-approved cutover.
+
+The Market/Reputation providers remain the authorities for their own durable blacklist state.
+W3B does not write provider tables directly.

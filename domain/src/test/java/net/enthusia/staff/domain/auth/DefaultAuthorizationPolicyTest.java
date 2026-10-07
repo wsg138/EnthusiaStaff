@@ -21,7 +21,11 @@ class DefaultAuthorizationPolicyTest {
                 ModerationAction.ISSUE_POLICY_SANCTION,
                 ModerationAction.REQUEST_POLICY_SANCTION
         ));
-        assertPermissions(StaffRank.SYSTEM, EnumSet.of(ModerationAction.ISSUE_POLICY_SANCTION));
+        assertPermissions(StaffRank.SYSTEM, EnumSet.of(
+                ModerationAction.ISSUE_POLICY_SANCTION,
+                ModerationAction.ENFORCE_POLICY_REMEDY,
+                ModerationAction.SATISFY_POLICY_REMEDY
+        ));
         assertPermissions(StaffRank.MOD, EnumSet.of(
                 ModerationAction.ISSUE_POLICY_SANCTION,
                 ModerationAction.REQUEST_POLICY_SANCTION,
@@ -31,6 +35,8 @@ class DefaultAuthorizationPolicyTest {
                 ModerationAction.REVOKE_SANCTION,
                 ModerationAction.REQUEST_FULL_OVERTURN,
                 ModerationAction.ACCEPT_APPEAL,
+                ModerationAction.ENFORCE_POLICY_REMEDY,
+                ModerationAction.SATISFY_POLICY_REMEDY,
                 ModerationAction.APPLY_CASE_CONFISCATION
         ));
         assertPermissions(StaffRank.ADMIN, EnumSet.of(
@@ -46,6 +52,9 @@ class DefaultAuthorizationPolicyTest {
                 ModerationAction.REQUEST_FULL_OVERTURN,
                 ModerationAction.APPROVE_OVERTURN,
                 ModerationAction.ACCEPT_APPEAL,
+                ModerationAction.ENFORCE_POLICY_REMEDY,
+                ModerationAction.SATISFY_POLICY_REMEDY,
+                ModerationAction.WAIVE_POLICY_REMEDY,
                 ModerationAction.APPLY_CASE_CONFISCATION,
                 ModerationAction.MODIFY_MARKET_RESTRICTION,
                 ModerationAction.MODIFY_REPUTATION_RESTRICTION,

@@ -7,14 +7,17 @@ public final class DefaultAuthorizationPolicy implements AuthorizationPolicy {
             return false;
         }
         return switch (actor.rank()) {
-            case SYSTEM -> action == ModerationAction.ISSUE_POLICY_SANCTION;
+            case SYSTEM -> action == ModerationAction.ISSUE_POLICY_SANCTION
+                    || action == ModerationAction.ENFORCE_POLICY_REMEDY
+                    || action == ModerationAction.SATISFY_POLICY_REMEDY;
             case DEVELOPER -> action == ModerationAction.REQUEST_POLICY_SANCTION;
             case HELPER -> action == ModerationAction.ISSUE_POLICY_SANCTION
                     || action == ModerationAction.REQUEST_POLICY_SANCTION;
             case MOD -> switch (action) {
                 case ISSUE_POLICY_SANCTION, REQUEST_POLICY_SANCTION, APPROVE_POLICY_SANCTION,
                         LOWER_RECOMMENDATION, END_SANCTION, REVOKE_SANCTION,
-                        REQUEST_FULL_OVERTURN, ACCEPT_APPEAL, APPLY_CASE_CONFISCATION -> true;
+                        REQUEST_FULL_OVERTURN, ACCEPT_APPEAL, ENFORCE_POLICY_REMEDY,
+                        SATISFY_POLICY_REMEDY, APPLY_CASE_CONFISCATION -> true;
                 default -> false;
             };
             case ADMIN -> switch (action) {
@@ -22,6 +25,7 @@ public final class DefaultAuthorizationPolicy implements AuthorizationPolicy {
                         LOWER_RECOMMENDATION, RAISE_RECOMMENDATION,
                         REQUEST_CUSTOM_DURATION, END_SANCTION, REVOKE_SANCTION, FULL_OVERTURN,
                         REQUEST_FULL_OVERTURN, APPROVE_OVERTURN, ACCEPT_APPEAL,
+                        ENFORCE_POLICY_REMEDY, SATISFY_POLICY_REMEDY, WAIVE_POLICY_REMEDY,
                         APPLY_CASE_CONFISCATION, MODIFY_MARKET_RESTRICTION,
                         MODIFY_REPUTATION_RESTRICTION, MANAGE_ACCOUNT_LINKS -> true;
                 default -> false;
