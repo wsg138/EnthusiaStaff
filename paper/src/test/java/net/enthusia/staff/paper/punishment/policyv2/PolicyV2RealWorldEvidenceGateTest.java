@@ -78,7 +78,7 @@ class PolicyV2RealWorldEvidenceGateTest {
         }, new AtomicInteger());
         for (var draft : List.of(draft("game-only", false), draft("game-only", true),
                 draft("uncertain", true), draft("real-world", false))) {
-            assertTrue(workflow.review(ADMIN, draft).resolution().requiresReview());
+            assertThrows(IllegalArgumentException.class, () -> workflow.review(ADMIN, draft));
         }
         assertEquals(0, calls.get());
     }
@@ -110,6 +110,32 @@ class PolicyV2RealWorldEvidenceGateTest {
         var rejected = assertInstanceOf(PolicyV2ManualWorkflow.SubmissionResult.Rejected.class,
                 workflow.submitShadow(ADMIN, reviewed, "provider-down"));
         assertTrue(rejected.message().contains("evidence"));
+        assertEquals(0, writes.get());
+    }
+
+    @Test
+    void ungatedTerminalRuleWithQuestionsCannotBanGameOnlyBlackmail() {
+        var approvedQuestions = candidatePolicy().offenses().getFirst().attributes();
+        var unsafe = new PolicySnapshot("unsafe.owner", List.of(new OffensePolicy(
+                OFFENSE, "Blackmail", "safety-threats-privacy", approvedQuestions,
+                new HistoryPolicy(Map.of(OFFENSE, 1.0), DecayPolicy.nonDecaying()),
+                List.of(new ResolutionRule("ungated", new RuleCondition(
+                        Map.of(), HistoryWindow.atLeast(0)),
+                        permanentBan(), List.of()))
+        )));
+        AtomicInteger writes = new AtomicInteger();
+        AtomicInteger verifications = new AtomicInteger();
+        var workflow = workflow(unsafe, ignored -> {
+            verifications.incrementAndGet();
+            return true;
+        }, writes);
+        assertThrows(IllegalArgumentException.class, () ->
+                workflow.review(ADMIN, draft("game-only", false)));
+        assertThrows(IllegalArgumentException.class, () ->
+                workflow.review(ADMIN, draft("uncertain", true)));
+        assertThrows(IllegalArgumentException.class, () ->
+                workflow.review(ADMIN, draft("real-world", false)));
+        assertEquals(0, verifications.get());
         assertEquals(0, writes.get());
     }
 
