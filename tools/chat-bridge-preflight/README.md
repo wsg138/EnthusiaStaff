@@ -16,9 +16,11 @@ StaffBot-origin reachability. Do not use the Minecraft, Discord, or Pterodactyl
   container (or an approved equivalent with the identical network namespace).
   No restart or mutation of the live StaffBot JVM is required.
 - Java 21 or later on that host.
-- A private `chat-bridge.properties` file containing the host, port,
-  existing trusted **public-only** PKCS#12 store path, and private store
-  password in its normal keys. Do **not** put secrets in CLI arguments.
+- A **separate**, private probe settings file containing only the fixed host,
+  port, trusted **public-only** PKCS#12 store path, and its password. Copy
+  `probe-settings.properties.example` to a protected untracked location and
+  fill only those four values. No Discord token, HMAC key, or app identity
+  is required for the TCP/TLS check. Do **not** put secrets in CLI arguments.
 - Trusted public store file copied into the probe's actual runtime filesystem.
   Do not use Velocity's private server keystore.
 - No live peer/HMAC settings are needed for this **TCP/TLS-only** test.
@@ -31,7 +33,7 @@ separate from any StaffBot application JAR:
 javac --release 21 -d ./probe-classes tools/chat-bridge-preflight/StaffBotTlsProbe.java
 
 # Only from an authorized shell inside the actual StaffBot runtime network:
-java -cp ./probe-classes StaffBotTlsProbe ./private-chat-bridge.properties
+java -cp ./probe-classes StaffBotTlsProbe ./private-tls-probe.properties
 ```
 
 The config filename is passed as a path only. Do **not** pass credentials on
