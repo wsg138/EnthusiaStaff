@@ -121,6 +121,11 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
         if (Files.notExists(policyV2File)) {
             saveResource("policy-v2.yml", false);
         }
+        // Seed a documented, validation-only C2 preview. No runtime permission code reads it.
+        Path rankPreviewFile = dataDirectory().resolve("ranks.yml");
+        if (Files.notExists(rankPreviewFile)) {
+            saveResource("ranks.yml", false);
+        }
         boolean policiesReady = loadReasonPolicies();
         RestartRequiredConfiguration bootstrap = configurationSnapshot.restartRequired();
         workers = BoundedExecutorFactory.create(bootstrap.workerThreads(), bootstrap.workerQueueCapacity());

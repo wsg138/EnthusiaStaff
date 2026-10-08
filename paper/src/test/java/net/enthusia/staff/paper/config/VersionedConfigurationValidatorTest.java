@@ -30,6 +30,7 @@ class VersionedConfigurationValidatorTest {
                         "config.yml",
                         "reason-policies.yml",
                         "messages.yml",
+                        "ranks.yml",
                         "reports.yml",
                         "gui/reports.yml",
                         "policy-v2.yml"
@@ -56,6 +57,21 @@ class VersionedConfigurationValidatorTest {
         assertTrue(report.entries().stream().anyMatch(entry -> entry.source().equals("gui/reports.yml")));
     }
 
+    @Test
+    void invalidPreviewRanksDoNotBlockValidationOfActiveConfiguration() throws IOException {
+        copyShippedConfiguration();
+        Files.writeString(tempDirectory.resolve("ranks.yml"),
+                "schema-version: 1\nranks: {}\n");
+
+        ConfigurationValidationReport report = validator().validate();
+
+        assertFalse(report.valid());
+        assertTrue(report.errors().stream().anyMatch(error -> error.startsWith("ranks.yml:")));
+        assertTrue(report.entries().stream().anyMatch(entry -> entry.source().equals("messages.yml")));
+        assertTrue(report.entries().stream().anyMatch(entry -> entry.source().equals("policy-v2.yml")));
+        assertTrue(report.entries().stream().noneMatch(entry -> entry.source().equals("ranks.yml")));
+    }
+
     private VersionedConfigurationValidator validator() {
         return new VersionedConfigurationValidator(
                 tempDirectory,
@@ -67,6 +83,7 @@ class VersionedConfigurationValidatorTest {
         copyResource("config.yml");
         copyResource("reason-policies.yml");
         copyResource("messages.yml");
+        copyResource("ranks.yml");
         copyResource("reports.yml");
         Files.createDirectories(tempDirectory.resolve("gui"));
         copyResource("gui/reports.yml");
