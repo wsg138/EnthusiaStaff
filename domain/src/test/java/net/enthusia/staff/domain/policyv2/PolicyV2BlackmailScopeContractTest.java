@@ -41,11 +41,10 @@ class PolicyV2BlackmailScopeContractTest {
 
     @Test
     void minecraftOnlyItemAndBaseLeverageCannotReachTerminalPunishment() {
-        for (boolean verified : List.of(false, true)) {
-            // Even accidentally checking a verification box is insufficient:
-            // context must independently identify real-world coercion.
-            assertReview(resolve("game-only", verified), NO_MATCH);
-        }
+        // Even accidentally checking a verification box is insufficient:
+        // context must independently identify real-world coercion.
+        assertReview(resolve("game-only", false), NO_MATCH);
+        assertReview(resolve("game-only", true), NO_MATCH);
     }
 
     @Test
@@ -57,19 +56,15 @@ class PolicyV2BlackmailScopeContractTest {
 
     @Test
     void absentOrMalformedEvidenceFailsClosedBeforePunishment() {
-        PolicySnapshot snapshot = gatedSnapshot();
-        PolicyResolver resolver = new PolicyResolver();
-        for (Map<String, IncidentAttributeValue> attributes : List.of(
-                Map.<String, IncidentAttributeValue>of(),
-                Map.<String, IncidentAttributeValue>of(CONTEXT,
-                        new IncidentAttributeValue.EnumValue(REAL_WORLD)),
-                Map.<String, IncidentAttributeValue>of(VERIFIED,
-                        new IncidentAttributeValue.BooleanValue(true))
-        )) {
-            var outcome = resolver.resolve(
-                    snapshot, new IncidentFinding(OFFENSE, attributes), INCIDENT_AT, List.of());
-            assertReview(outcome, "policy-gap.invalid-attributes");
-        }
+        assertInvalidEvidence(Map.of());
+        assertInvalidEvidence(Map.of(CONTEXT, new IncidentAttributeValue.EnumValue(REAL_WORLD)));
+        assertInvalidEvidence(Map.of(VERIFIED, new IncidentAttributeValue.BooleanValue(true)));
+    }
+
+    private static void assertInvalidEvidence(Map<String, IncidentAttributeValue> attributes) {
+        var result = new PolicyResolver().resolve(
+                gatedSnapshot(), new IncidentFinding(OFFENSE, attributes), INCIDENT_AT, List.of());
+        assertReview(result, "policy-gap.invalid-attributes");
     }
 
     private static PolicyResolution resolve(String context, boolean verified) {
