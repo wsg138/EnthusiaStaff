@@ -92,6 +92,40 @@ class PolicyV2StaticSafetyAuditTest {
     }
 
     @Test
+    void languageViolationStaysWithinSevenDayChatOnlyLimit() {
+        for (SanctionSpec safe : List.of(
+                new SanctionSpec(SanctionType.WARNING, SanctionLength.instant()),
+                new SanctionSpec(SanctionType.MUTE, SanctionLength.temporary(
+                        java.time.Duration.ofDays(7))),
+                new SanctionSpec(SanctionType.PUBLIC_MUTE, SanctionLength.temporary(
+                        java.time.Duration.ofDays(7)))
+        )) {
+            assertTrue(audit(languageOffense(safe)).passesStaticChecks());
+        }
+
+        for (SanctionSpec unsafe : List.of(
+                new SanctionSpec(SanctionType.MUTE, SanctionLength.permanent()),
+                new SanctionSpec(SanctionType.MUTE, SanctionLength.temporary(
+                        java.time.Duration.ofDays(8))),
+                new SanctionSpec(SanctionType.PUBLIC_MUTE, SanctionLength.temporary(
+                        java.time.Duration.ofDays(8))),
+                new SanctionSpec(SanctionType.KICK, SanctionLength.instant())
+        )) {
+            assertEquals("language.invalid-chat-only-sanction",
+                    audit(languageOffense(unsafe)).findings().getFirst().code());
+        }
+    }
+
+    private static OffensePolicy languageOffense(SanctionSpec sanction) {
+        return offense(LANGUAGE, List.of(), List.of(new ResolutionRule(
+                "single",
+                new RuleCondition(Map.of(), HistoryWindow.atLeast(0)),
+                new PolicyAction.Exact(List.of(sanction)),
+                List.of()
+        )));
+    }
+
+    @Test
     void remedyOnlyAndUnknownOffensesDoNotInventPunitiveFailures() {
         OffensePolicy unknown = offense("content.custom", List.of(), List.of(
                 new ResolutionRule("review", new RuleCondition(Map.of(), HistoryWindow.atLeast(0)),
