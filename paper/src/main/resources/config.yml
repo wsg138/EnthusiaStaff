@@ -155,6 +155,10 @@ discord-chat-bridge:
   #
   # Backward-compatible staging fallback: when mode is omitted, shadow-enabled=true selects SHADOW.
   shadow-enabled: false
+  # Opt-in fallback when InteractiveChat is present but DiscordSRV's image addon is absent.
+  # Generates bounded PNG slot/name/quantity cards without DiscordSRV, addon or texture assets.
+  # Not pixel-identical to legacy addon: accept staging visual differences before cutover.
+  independent-rich-renderer-enabled: false
   #
   # Required only for mode: AUTHORITATIVE. This acknowledgement is intentionally local to Paper;
   # StaffBot production has a separate explicit environment acknowledgement.

@@ -271,3 +271,50 @@ Real rich-render acceptance therefore requires either:
 
 - reviewed trusted dependency onboarding for the exact upstream dependency closure; or
 - a controlled SMP-like staging environment with the real plugins installed.
+
+
+## Independent rich renderer migration candidate (not upstream visual parity)
+
+The optional Paper configuration key
+\`discord-chat-bridge.independent-rich-renderer-enabled: true\` permits a
+provider-neutral image fallback when InteractiveChat is enabled but its
+DiscordSRV-based rendering addon is absent/unavailable. The existing staging
+addon renderer still takes precedence if available.
+
+The new \`IndependentRichChatArtifactProvider\` reads InteractiveChat's actual
+configured item/inventory/Ender chest placeholder patterns and permission
+gates through its own API. It snapshots material types, quantities and slot
+positions using the player's entity scheduler, then renders bounded PNG
+slot-cards on the existing worker pool. No DiscordSRV or
+\`InteractiveChatDiscordSrvAddon\` classes, JDA, tokens, or game texture assets
+are referenced. Rendering errors yield plain text; ordinary Minecraft chat
+continues unchanged. Default is **false**, so existing production behavior is
+unchanged. Changing this configuration requires a separately authorized
+deployment/restart and SHADOW testing.
+
+**Important limitation:** the independent fallback shows material names,
+stack counts and slot positions, not the original addon’s pixel-perfect
+Minecraft item sprites, enchantment glint, lore or custom resource-pack
+textures. It is an actual PNG renderer but does **not** satisfy final visual
+parity by itself. Final physical removal of DiscordSRV still requires owner
+acceptance of a documented rendering difference, or further implementation
+of texture/metadata features, plus the complete acceptance gates in
+[\`discordsrv-full-retirement.md\`](discordsrv-full-retirement.md).
+
+Staging tests before selecting this fallback as the retained implementation:
+
+1. Activate the new Paper renderer only with the new reviewed JAR, private
+   chat SHADOW, InteractiveChat and RoseChat; test with DiscordSRV **present**
+   while its addon is disabled in the staging plugin set.
+2. Send actual unescaped/escaped/permission-restricted item, inventory and
+   Ender chest placeholders. Compare artifact routing/position to legacy
+   output; explicitly sign off on differences.
+3. Verify no server tick stalls, bounded attachments, duplicates, loops,
+   staff/private channel leakage, or failed-message replay.
+4. Remove both DiscordSRV and its addon from a disposable staging server.
+   Verify safe startup, visual output, plain-chat fallback during faults, and
+   reconnect/shutdown behavior. This **must not** be substituted with isolated
+   unit tests or a Windows-side network probe.
+5. Keep the old DiscordSRV plugin/configuration protected for rollback until
+   every other account-link, role-sync, guild, numeral and console consumer
+   also passes its independent migration gate.
