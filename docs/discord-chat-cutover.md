@@ -64,6 +64,35 @@ to the staging application identity is not an acceptable migration technique. Th
 requires the separate public-chat identity, authenticated Velocity STAFFBOT peer, and TLS/HMAC
 secrets to be configured and validated before startup.
 
+### Velocity STAFFBOT peer secret-source preflight
+
+Before editing live Velocity `config.properties`, confirm which channel-secret source it
+currently uses. Adding the peer declaration
+`channel.backend.STAFFBOT.secret-environment=ES_CHANNEL_STAFFBOT_SECRET`
+changes the complete set of required channel secrets.
+
+`PrivateChannelSecrets` deliberately requires an **all-or-nothing** source:
+
+- When any configured channel-secret environment variable is set, **all** configured
+  channel-secret environment variables must be present, including the new
+  `ES_CHANNEL_STAFFBOT_SECRET`. A partial environment fails closed.
+- When no channel-secret environment variable is set, the protected runtime
+  `channel.properties` must contain **exactly** the required properties: existing proxy
+  and TLS-password secrets, every configured backend secret, and the new
+  `channel.backend.STAFFBOT.secret`. A missing or extra property fails closed.
+- The HMAC value used for `STAFFBOT` must match StaffBot's
+  `ENTHUSIA_STAFF_BOT_CHAT_BRIDGE_CLIENT_SECRET`; the existing Velocity proxy
+  HMAC must match StaffBot's `ENTHUSIA_STAFF_BOT_CHAT_BRIDGE_PROXY_SECRET`.
+  Keep all key values private. **Never** put raw secrets in GitHub, this document,
+  or the public `config.properties`.
+- Ensure StaffBot can validate the Velocity TLS endpoint with a truststore containing
+  its trusted public certificate. Never distribute Velocity's private TLS keystore
+  to StaffBot. Preserve old JARs and settings for rollback.
+
+A JAR upload or a new peer-config line alone does not establish a working bridge.
+Verify the secret source, public-chat JDA identity, reachable TLS host, and live
+process environment before an approved SHADOW restart.
+
 **Production cutover** (only after the staging acceptance matrix passes):
 
 ```text
