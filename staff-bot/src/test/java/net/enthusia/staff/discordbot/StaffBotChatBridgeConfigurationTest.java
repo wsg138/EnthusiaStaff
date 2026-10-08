@@ -148,14 +148,48 @@ class StaffBotChatBridgeConfigurationTest {
     }
 
     @Test
-    void productionRejectsShadowModeAndConflictingLegacyBoolean() {
-        Map<String, String> shadow = productionValues();
-        shadow.put(StaffBotChatBridgeConfiguration.MODE_ENV, "SHADOW");
+    void productionShadowModeRequiresExplicitMigrationAcknowledgement() {
+        Map<String, String> values = enabledValues();
+        values.put(StaffBotChatBridgeConfiguration.MODE_ENV, "SHADOW");
+
         assertThrows(
                 IllegalArgumentException.class,
                 () -> StaffBotChatBridgeConfiguration.fromEnvironment(
-                        StaffBotEnvironment.PRODUCTION, shadow));
+                        StaffBotEnvironment.PRODUCTION, values));
 
+        values.put(
+                StaffBotChatBridgeConfiguration.MIGRATION_ACK_ENV,
+                "I_ACKNOWLEDGE_PRODUCTION_SHADOW_MIGRATION");
+        StaffBotChatBridgeConfiguration configuration =
+                StaffBotChatBridgeConfiguration.fromEnvironment(
+                        StaffBotEnvironment.PRODUCTION, values).orElseThrow();
+
+        assertEquals(StaffBotChatBridgeConfiguration.Mode.SHADOW, configuration.mode());
+        assertEquals(
+                STAGING_CHANNEL_ID,
+                configuration.routes().get(new StaffBotChatBridgeConfiguration.Route("SMP", "global")));
+        assertTrue(configuration.ingressRoutes().isEmpty());
+    }
+
+    @Test
+    void productionShadowModeRejectsRoutesOutsidePinnedTestChannel() {
+        Map<String, String> values = enabledValues();
+        values.put(StaffBotChatBridgeConfiguration.MODE_ENV, "SHADOW");
+        values.put(
+                StaffBotChatBridgeConfiguration.MIGRATION_ACK_ENV,
+                "I_ACKNOWLEDGE_PRODUCTION_SHADOW_MIGRATION");
+        values.put(
+                StaffBotChatBridgeConfiguration.ROUTES_ENV,
+                "SMP/global=1650000000000000001");
+
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> StaffBotChatBridgeConfiguration.fromEnvironment(
+                        StaffBotEnvironment.PRODUCTION, values));
+    }
+
+    @Test
+    void productionRejectsConflictingLegacyBoolean() {
         Map<String, String> conflict = productionValues();
         conflict.put(StaffBotChatBridgeConfiguration.ENABLED_ENV, "false");
         assertThrows(
