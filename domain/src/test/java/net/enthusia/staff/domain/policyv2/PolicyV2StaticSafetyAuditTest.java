@@ -18,6 +18,9 @@ class PolicyV2StaticSafetyAuditTest {
     private static final String LANGUAGE = "chat.language.non-english-public";
     private static final String CONTEXT = "coercion-context";
     private static final String VERIFIED = "real-world-leverage-verified";
+    private static final String REAL_WORLD = "real-world";
+    private static final String GAME_ONLY = "game-only";
+    private static final String UNGATED = "blackmail.ungated-punitive-rule";
 
     @Test
     void ungatedBlackmailAndUnsupportedRemediesAreReportedWithoutChangingResolution() {
@@ -33,7 +36,7 @@ class PolicyV2StaticSafetyAuditTest {
                 "blackmail.missing-real-world-evidence-fields",
                 "remedy.unsupported-other",
                 "remedy.missing-enforcement-binding",
-                "blackmail.ungated-punitive-rule"
+                UNGATED
         ), report.findings().stream().map(PolicyV2StaticSafetyAudit.Finding::code).toList());
         assertEquals("market-cleanup", report.findings().get(1).remedyId());
         assertEquals("owner.test", report.snapshotVersion());
@@ -49,18 +52,18 @@ class PolicyV2StaticSafetyAuditTest {
 
         OffensePolicy unverified = offense(BLACKMAIL, required,
                 List.of(new ResolutionRule("missing-proof", new RuleCondition(Map.of(
-                        CONTEXT, Set.of(new IncidentAttributeValue.EnumValue("real-world"))
+                        CONTEXT, Set.of(new IncidentAttributeValue.EnumValue(REAL_WORLD))
                 ), HistoryWindow.atLeast(0)), approvedBan(), List.of())));
-        assertEquals("blackmail.ungated-punitive-rule",
+        assertEquals(UNGATED,
                 audit(unverified).findings().getFirst().code());
 
         OffensePolicy broad = offense(BLACKMAIL, required,
                 List.of(new ResolutionRule("ambiguous", new RuleCondition(Map.of(
-                        CONTEXT, Set.of(new IncidentAttributeValue.EnumValue("real-world"),
-                                new IncidentAttributeValue.EnumValue("game-only")),
+                        CONTEXT, Set.of(new IncidentAttributeValue.EnumValue(REAL_WORLD),
+                                new IncidentAttributeValue.EnumValue(GAME_ONLY)),
                         VERIFIED, Set.of(new IncidentAttributeValue.BooleanValue(true))
                 ), HistoryWindow.atLeast(0)), approvedBan(), List.of())));
-        assertEquals("blackmail.ungated-punitive-rule",
+        assertEquals(UNGATED,
                 audit(broad).findings().getFirst().code());
     }
 
@@ -68,11 +71,11 @@ class PolicyV2StaticSafetyAuditTest {
     void optionalEvidenceFieldsAreNotSufficientToAuthorizeSevereSanction() {
         OffensePolicy offense = offense(BLACKMAIL, List.of(
                 IncidentAttributeDefinition.enumValue(CONTEXT, false,
-                        Set.of("game-only", "real-world", "uncertain")),
+                        Set.of(GAME_ONLY, REAL_WORLD, "uncertain")),
                 IncidentAttributeDefinition.booleanValue(VERIFIED, false)
         ), List.of(new ResolutionRule("terminal", scope(true), approvedBan(), List.of())));
         assertEquals(List.of(
-                "blackmail.missing-real-world-evidence-fields", "blackmail.ungated-punitive-rule"
+                "blackmail.missing-real-world-evidence-fields", UNGATED
         ), audit(offense).findings().stream().map(PolicyV2StaticSafetyAudit.Finding::code).toList());
     }
 
@@ -135,7 +138,7 @@ class PolicyV2StaticSafetyAuditTest {
 
     private static RuleCondition scope(boolean verified) {
         return new RuleCondition(Map.of(
-                CONTEXT, Set.of(new IncidentAttributeValue.EnumValue("real-world")),
+                CONTEXT, Set.of(new IncidentAttributeValue.EnumValue(REAL_WORLD)),
                 VERIFIED, Set.of(new IncidentAttributeValue.BooleanValue(verified))
         ), HistoryWindow.atLeast(0));
     }
@@ -143,7 +146,7 @@ class PolicyV2StaticSafetyAuditTest {
     private static List<IncidentAttributeDefinition> requiredBlackmailFields() {
         return List.of(
                 IncidentAttributeDefinition.enumValue(CONTEXT, true,
-                        Set.of("game-only", "real-world", "uncertain")),
+                        Set.of(GAME_ONLY, REAL_WORLD, "uncertain")),
                 IncidentAttributeDefinition.booleanValue(VERIFIED, true)
         );
     }
