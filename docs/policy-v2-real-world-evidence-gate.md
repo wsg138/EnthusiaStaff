@@ -9,7 +9,7 @@ The Paper manual review workflow now has a required **independent** `PolicyV2Rea
 For `safety.blackmail-extortion`:
 
 - A legacy owner snapshot without the two required fields is rejected for manual review, even if its resolver would otherwise issue a terminal ban.
-- A complete candidate snapshot whose context is `game-only` / `uncertain`, or whose evidence flag is `false`, may reach the resolver's nonpunitive no-match/review path. The verifier is **never consulted** for these scopes. Game-only Minecraft leverage remains allowed; no punishment should be fabricated for it.
+- Game-only, uncertain, and unverified blackmail findings are rejected **before resolving**, even if an accidentally ungated policy snapshot could otherwise produce a terminal ban. The verifier is **never consulted** for these scopes. Game-only Minecraft leverage remains allowed and should not be entered as a severe real-world blackmail offense. Staff should record independently prohibited conduct under its own offense if applicable.
 - Only `coercion-context=real-world` and `real-world-leverage-verified=true` calls the independent verifier with the *exact* reviewer UUID, subject UUID, incident time, full immutable `IncidentFinding` and candidate policy version. Its result must be true before review can continue. There is no default verifier that returns true.
 - `submitShadow` re-evaluates the same gate before writing the shadow evaluation. If evidence has become invalid or unavailable, confirmation is rejected without recording.
 
