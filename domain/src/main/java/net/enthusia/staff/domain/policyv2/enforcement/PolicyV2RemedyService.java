@@ -32,6 +32,30 @@ public final class PolicyV2RemedyService {
         this.systemActorId = Objects.requireNonNull(systemActorId, "systemActorId");
     }
 
+    /**
+     * Registers a remedy using only the versioned binding and the effective finding
+     * persisted in the canonical case. The caller cannot supply or override a condition.
+     */
+    public PolicyV2RemedyEnforcement registerConfigured(Actor actor, ConfiguredRegisterCommand command) {
+        Objects.requireNonNull(command, "command");
+        PolicyV2Store.CaseRecord policyCase = requireCase(command.caseId());
+        PolicyV2Store.RemedyRecord remedy = requireRemedy(policyCase, command.remedyId());
+        var binding = new PolicyV2RemedyBindingResolver().resolve(
+                remedy.remedy(),
+                policyCase.effectiveFinding().orElseThrow(() ->
+                        new PolicyV2Store.Conflict("Overturned findings cannot register remedies"))
+        );
+        return register(actor, new RegisterCommand(
+                command.caseId(),
+                command.remedyId(),
+                policyCase.subjectId(),
+                binding.scope(),
+                binding.condition(),
+                command.operationKey(),
+                command.occurredAt()
+        ));
+    }
+
     public PolicyV2RemedyEnforcement register(Actor actor, RegisterCommand command) {
         Objects.requireNonNull(command, "command");
         requireLifecycleAuthority(
@@ -376,11 +400,25 @@ public final class PolicyV2RemedyService {
             PolicyV2Store.RemedyRecord remedy,
             RegisterCommand command
     ) {
+        if (!policyCase.subjectId().equals(command.subjectId())) {
+            throw new SecurityException("Remedy subject does not match the canonical case target");
+        }
         PolicyV2EnforcementPolicy.requireSafeOutcome(
                 policyCase.resolution().offenseId(),
                 policyCase.currentSanctions().sanctions()
         );
         PolicyV2EnforcementPolicy.requireBinding(remedy.remedy(), command.scope(), command.condition());
+        if (remedy.remedy().enforcementBinding().isPresent()) {
+            var expected = new PolicyV2RemedyBindingResolver().resolve(
+                    remedy.remedy(),
+                    policyCase.effectiveFinding().orElseThrow(() ->
+                            new PolicyV2Store.Conflict("Overturned findings cannot register remedies"))
+            );
+            if (expected.scope() != command.scope() || !expected.condition().equals(command.condition())) {
+                throw new IllegalArgumentException(
+                        "registered remedy condition does not match the pinned policy/finding binding");
+            }
+        }
         if (remedy.status() != PolicyV2Store.RemedyStatus.REQUIRED) {
             throw new PolicyV2Store.Conflict("Only a required remedy can enter enforcement");
         }
@@ -509,6 +547,22 @@ public final class PolicyV2RemedyService {
          * Applies idempotent cleanup/restoration before a terminal lifecycle change.
          */
         void apply(PolicyV2RemedyEnforcement enforcement, UUID operationId);
+    }
+
+    public record ConfiguredRegisterCommand(
+            String caseId,
+            String remedyId,
+            String operationKey,
+            Instant occurredAt
+    ) {
+        public ConfiguredRegisterCommand {
+            caseId = PolicyV2RemedyEnforcement.requireText(caseId, "case id", 64);
+            remedyId = PolicyV2RemedyEnforcement.requireText(remedyId, "remedy id", 96);
+            operationKey = PolicyV2RemedyEnforcement.requireText(operationKey, "operation key", 512);
+            if (occurredAt == null) {
+                throw new IllegalArgumentException("configured remedy registration fields must be present");
+            }
+        }
     }
 
     public record RegisterCommand(

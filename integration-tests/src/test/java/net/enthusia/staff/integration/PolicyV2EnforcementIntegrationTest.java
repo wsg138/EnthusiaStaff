@@ -26,17 +26,21 @@ import com.zaxxer.hikari.HikariDataSource;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 import net.enthusia.staff.domain.auth.Actor;
 import net.enthusia.staff.domain.auth.StaffRank;
+import net.enthusia.staff.domain.policyv2.PolicyV2RemedyBindingSpec;
 import net.enthusia.staff.domain.policyv2.RemedySpec;
 import net.enthusia.staff.domain.policyv2.enforcement.PolicyV2AccessCoordinator;
 import net.enthusia.staff.domain.policyv2.enforcement.PolicyV2AccessEvaluator;
 import net.enthusia.staff.domain.policyv2.enforcement.PolicyV2EnforcementStore;
 import net.enthusia.staff.domain.policyv2.enforcement.PolicyV2RemedyEnforcement;
 import net.enthusia.staff.domain.policyv2.enforcement.PolicyV2RemedyEnforcement.Condition;
+import net.enthusia.staff.domain.policyv2.enforcement.PolicyV2RemedyEnforcement.ConditionType;
+import net.enthusia.staff.domain.policyv2.enforcement.PolicyV2RemedyService;
 import net.enthusia.staff.domain.policyv2.enforcement.PolicyV2RemedyEnforcement.Lifecycle;
 import net.enthusia.staff.domain.policyv2.enforcement.PolicyV2RemedyEnforcement.Scope;
 import net.enthusia.staff.domain.policyv2.persistence.PolicyV2Store;
@@ -154,6 +158,100 @@ class PolicyV2EnforcementIntegrationTest {
                     register(fixture, remedy, Scope.MARKET_ACCESS, Condition.manual(), "register:admin:308", NOW)
             );
             assertEquals(Lifecycle.REQUIRED, registered.lifecycle());
+        }
+    }
+
+    @Test
+    void configuredRegistrationUsesPersistedBindingAndRejectsCallerConditionOverride() throws Exception {
+        Fixture fixture = seed(DATABASE, 309);
+        RemedySpec vpn = new RemedySpec(
+                "vpn-access",
+                RemedySpec.Type.ACCESS_RESTRICTION,
+                "Disable the unapproved VPN",
+                Optional.of(new PolicyV2RemedyBindingSpec(
+                        Scope.NETWORK_ACCESS,
+                        ConditionType.VPN_APPROVAL,
+                        Optional.empty(),
+                        Optional.empty(),
+                        Optional.empty()
+                ))
+        );
+        Actor admin = actor(fixture.actorId(), StaffRank.ADMIN);
+
+        try (HikariDataSource dataSource = open(DATABASE)) {
+            Runtime runtime = runtime(dataSource, SYSTEM_ACTOR);
+            createPolicyCase(runtime.canonical(), fixture,
+                    "access.vpn-compliance", vpn, "case:309", NOW);
+
+            assertThrows(IllegalArgumentException.class, () -> runtime.remedies().register(
+                    admin,
+                    register(fixture, vpn, Scope.NETWORK_ACCESS, Condition.manual(),
+                            "register:wrong:309", NOW)
+            ));
+            assertTrue(runtime.enforcement().find(fixture.caseId(), vpn.id()).isEmpty());
+
+            PolicyV2RemedyEnforcement configured = runtime.remedies().registerConfigured(
+                    admin,
+                    new PolicyV2RemedyService.ConfiguredRegisterCommand(
+                            fixture.caseId(), vpn.id(),
+                            "register:bound:309", NOW
+                    )
+            );
+            assertEquals(Scope.NETWORK_ACCESS, configured.scope());
+            assertEquals(Condition.vpnApproval(), configured.condition());
+
+            PolicyV2RemedyEnforcement replay = runtime.remedies().registerConfigured(
+                    admin,
+                    new PolicyV2RemedyService.ConfiguredRegisterCommand(
+                            fixture.caseId(), vpn.id(),
+                            "register:bound:309", NOW
+                    )
+            );
+            assertEquals(configured, replay);
+        }
+    }
+
+    @Test
+    void registrationCannotAttachARemedyToAnotherPlayersUuid() throws Exception {
+        Fixture fixture = seed(DATABASE, 310);
+        RemedySpec content = contentRemedy();
+        Actor admin = actor(fixture.actorId(), StaffRank.ADMIN);
+        UUID anotherPlayer = new UUID(
+                ~fixture.targetId().getMostSignificantBits(),
+                fixture.targetId().getLeastSignificantBits()
+        );
+
+        try (HikariDataSource dataSource = open(DATABASE)) {
+            Runtime runtime = runtime(dataSource, SYSTEM_ACTOR);
+            createPolicyCase(runtime.canonical(), fixture,
+                    CONTENT_OFFENSE, content, "case:cross-subject:310", NOW);
+            assertEquals(fixture.targetId(),
+                    runtime.canonical().findCase(fixture.caseId()).orElseThrow().subjectId());
+
+            assertThrows(SecurityException.class, () -> runtime.remedies().register(
+                    admin,
+                    new PolicyV2RemedyService.RegisterCommand(
+                            fixture.caseId(), content.id(), anotherPlayer,
+                            Scope.CONTENT, Condition.manual(), "register:wrong-subject:310", NOW
+                    )
+            ));
+            assertTrue(runtime.enforcement().find(fixture.caseId(), content.id()).isEmpty());
+
+            PolicyV2RemedyEnforcement registered = runtime.remedies().register(
+                    admin,
+                    register(fixture, content, Scope.CONTENT,
+                            Condition.manual(), "register:right-subject:310", NOW)
+            );
+            assertEquals(Lifecycle.REQUIRED, registered.lifecycle());
+
+            assertThrows(SecurityException.class, () -> runtime.remedies().register(
+                    admin,
+                    new PolicyV2RemedyService.RegisterCommand(
+                            fixture.caseId(), content.id(), anotherPlayer,
+                            Scope.CONTENT, Condition.manual(), "register:wrong-subject:replay:310", NOW
+                    )
+            ));
+            assertEquals(registered, runtime.enforcement().find(fixture.caseId(), content.id()).orElseThrow());
         }
     }
 

@@ -36,10 +36,11 @@ final class PolicyV2CaseReaderJdbc {
             return Optional.empty();
         }
         try (PreparedStatement statement = connection.prepareStatement("""
-                SELECT v.policy_snapshot_id, v.original_finding_json, v.effective_finding_json,
+                SELECT c.target_id AS canonical_subject_id, v.policy_snapshot_id, v.original_finding_json, v.effective_finding_json,
                        v.finding_state, v.incident_at, v.finding_revision, v.sanction_revision,
                        r.resolution_id, r.resolution_json, r.history_inputs_json
                 FROM policy_v2_cases v
+                JOIN cases c ON c.case_id = v.case_id
                 JOIN policy_v2_resolutions r ON r.case_id = v.case_id
                 WHERE v.case_id = ?
                 """)) {
@@ -51,6 +52,7 @@ final class PolicyV2CaseReaderJdbc {
                 long sanctionRevision = result.getLong("sanction_revision");
                 return Optional.of(new PolicyV2Store.CaseRecord(
                         caseId,
+                        UuidBytes.fromBytes(result.getBytes("canonical_subject_id")),
                         UuidBytes.fromBytes(result.getBytes("policy_snapshot_id")),
                         UuidBytes.fromBytes(result.getBytes("resolution_id")),
                         support.read(result.getString("original_finding_json"), IncidentFinding.class),
