@@ -84,11 +84,13 @@ final class StaffBotChatSettingsFile {
             }
             Properties properties = new Properties() {
                 @Override
-                public synchronized Object put(Object key, Object value) {
-                    if (containsKey(key)) {
-                        throw new IllegalArgumentException("private chat settings contain a duplicate key");
+                public Object put(Object key, Object value) {
+                    synchronized (this) {
+                        if (containsKey(key)) {
+                            throw new IllegalArgumentException("private chat settings contain a duplicate key");
+                        }
+                        return super.put(key, value);
                     }
-                    return super.put(key, value);
                 }
             };
             properties.load(new ByteArrayInputStream(bytes));

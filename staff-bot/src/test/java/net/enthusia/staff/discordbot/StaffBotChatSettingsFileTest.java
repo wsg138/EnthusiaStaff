@@ -14,6 +14,7 @@ import org.junit.jupiter.api.io.TempDir;
 
 class StaffBotChatSettingsFileTest {
     private static final String BRIDGE_MODE = StaffBotChatBridgeConfiguration.MODE_ENV;
+    private static final String SHADOW_SETTING = "=SHADOW\n";
     private static final String CHAT_TOKEN = PublicChatDiscordConfiguration.TOKEN_ENV;
     private static final String CHAT_APP_ID = PublicChatDiscordConfiguration.APPLICATION_ID_ENV;
 
@@ -23,7 +24,7 @@ class StaffBotChatSettingsFileTest {
     @Test
     void overlaysOnlyChatRelatedPropertiesWithoutChangingStaffIdentity() throws IOException {
         Path file = write("chat-bridge.properties",
-                BRIDGE_MODE + "=SHADOW\n"
+                BRIDGE_MODE + SHADOW_SETTING
                 + CHAT_TOKEN + "=dummy-chat-token\n"
                 + CHAT_APP_ID + "=1405605074331373718\n");
         Map<String, String> values = StaffBotChatSettingsFile.overlay(file, Map.of(
@@ -43,7 +44,7 @@ class StaffBotChatSettingsFileTest {
     void productionShadowParsesThroughExistingIdentityAndRouteGates() throws IOException {
         String testKey = java.util.Base64.getEncoder().encodeToString(new byte[32]);
         Path file = write("private-chat-bridge.properties",
-                BRIDGE_MODE + "=SHADOW\n"
+                BRIDGE_MODE + SHADOW_SETTING
                 + StaffBotChatBridgeConfiguration.MIGRATION_ACK_ENV
                         + "=I_ACKNOWLEDGE_PRODUCTION_SHADOW_MIGRATION\n"
                 + StaffBotChatBridgeConfiguration.HOST_ENV + "=velocity.example.test\n"
@@ -71,7 +72,7 @@ class StaffBotChatSettingsFileTest {
     @Test
     void rejectsUnsupportedKeysIncludingModerationToken() throws IOException {
         Path file = write("chat-bridge.properties",
-                BRIDGE_MODE + "=SHADOW\n"
+                BRIDGE_MODE + SHADOW_SETTING
                 + StaffBotConfiguration.TOKEN_KEY + "=malicious-moderator-token\n");
         IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
                 () -> StaffBotChatSettingsFile.overlay(file, Map.of()));
@@ -80,7 +81,7 @@ class StaffBotChatSettingsFileTest {
 
     @Test
     void rejectsDuplicateKeysInsteadOfUsingLastValue() throws IOException {
-        Path file = write("duplicate.properties", BRIDGE_MODE + "=SHADOW\n"
+        Path file = write("duplicate.properties", BRIDGE_MODE + SHADOW_SETTING
                 + BRIDGE_MODE + "=AUTHORITATIVE\n");
         assertThrows(IllegalArgumentException.class,
                 () -> StaffBotChatSettingsFile.overlay(file, Map.of()));
@@ -88,7 +89,7 @@ class StaffBotChatSettingsFileTest {
 
     @Test
     void rejectsAmbiguousEnvironmentOrFileValues() throws IOException {
-        Path file = write("chat-bridge.properties", BRIDGE_MODE + "=SHADOW\n");
+        Path file = write("chat-bridge.properties", BRIDGE_MODE + SHADOW_SETTING);
         assertThrows(IllegalArgumentException.class,
                 () -> StaffBotChatSettingsFile.overlay(file, Map.of(BRIDGE_MODE, "DISABLED")));
     }
@@ -108,7 +109,7 @@ class StaffBotChatSettingsFileTest {
 
     @Test
     void missingAndOversizedFilesFailClosedWithoutIncludingPrivateValues() throws IOException {
-        Path file = write("oversized.properties", BRIDGE_MODE + "=SHADOW\n" + "a".repeat(17_000));
+        Path file = write("oversized.properties", BRIDGE_MODE + SHADOW_SETTING + "a".repeat(17_000));
         IllegalArgumentException tooLarge = assertThrows(IllegalArgumentException.class,
                 () -> StaffBotChatSettingsFile.overlay(file, Map.of()));
         assertTrue(tooLarge.getMessage().contains("too large"));
