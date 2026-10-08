@@ -213,7 +213,8 @@ public final class PolicyV2ManualWorkflow {
                     "Blackmail classification requires the owner-approved real-world evidence questions");
         }
         if (!"real-world".equals(context.value()) || !proven.value()) {
-            return; // Game-only/uncertain/unverified can never match the terminal rule.
+            throw new IllegalArgumentException(
+                    "Game-only, uncertain or unverified leverage is not a real-world blackmail offense");
         }
         var verification = new PolicyV2RealWorldEvidenceGate.VerificationRequest(
                 actor.id(), draft.targetId(), draft.incidentAt(), snapshot.version(), finding);
