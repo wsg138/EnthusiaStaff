@@ -40,6 +40,21 @@ class PolicyV2OwnerV3BlackmailScopeTest {
     }
 
     @Test
+    void candidatePreservesAllOtherApprovedOffenseDefinitions() {
+        var config = load();
+        var previous = config.snapshots().get(SECOND);
+        var candidate = config.snapshots().get(THIRD);
+        assertEquals(previous.offenses().size(), candidate.offenses().size());
+        previous.offenses().stream()
+                .filter(offense -> !OFFENSE.equals(offense.id()))
+                .forEach(offense -> assertEquals(
+                        offense,
+                        candidate.offense(offense.id()).orElseThrow(),
+                        "Candidate changed unrelated offense " + offense.id()
+                ));
+    }
+
+    @Test
     void ordinaryGameOnlyBlackmailNeverMatchesTerminalRule() {
         assertReview(finding("game-only", false), "policy-gap.no-match");
         assertReview(finding("game-only", true), "policy-gap.no-match");
