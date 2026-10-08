@@ -96,6 +96,24 @@ class PolicyV2RealWorldEvidenceGateTest {
     }
 
     @Test
+    void verifierFailureOnResubmissionRejectsWithoutRecording() {
+        AtomicBoolean down = new AtomicBoolean(false);
+        AtomicInteger writes = new AtomicInteger();
+        var workflow = workflow(candidatePolicy(), ignored -> {
+            if (down.get()) {
+                throw new IllegalStateException("Evidence store is unavailable");
+            }
+            return true;
+        }, writes);
+        var reviewed = workflow.review(ADMIN, draft("real-world", true));
+        down.set(true);
+        var rejected = assertInstanceOf(PolicyV2ManualWorkflow.SubmissionResult.Rejected.class,
+                workflow.submitShadow(ADMIN, reviewed, "provider-down"));
+        assertTrue(rejected.message().contains("evidence"));
+        assertEquals(0, writes.get());
+    }
+
+    @Test
     void historicalUngatedBlackmailSnapshotCannotBeReviewed() {
         var legacy = new PolicySnapshot("old.owner", List.of(new OffensePolicy(
                 OFFENSE, "Blackmail", "safety-threats-privacy", List.of(),
