@@ -217,7 +217,14 @@ public final class PolicyV2ManualWorkflow {
         }
         var verification = new PolicyV2RealWorldEvidenceGate.VerificationRequest(
                 actor.id(), draft.targetId(), draft.incidentAt(), snapshot.version(), finding);
-        if (!evidenceGate.verified(verification)) {
+        boolean verified;
+        try {
+            verified = evidenceGate.verified(verification);
+        } catch (RuntimeException unavailable) {
+            throw new IllegalArgumentException("Independent real-world evidence verification is unavailable",
+                    unavailable);
+        }
+        if (!verified) {
             throw new IllegalArgumentException(
                     "A trusted independent real-world evidence verification is required");
         }
