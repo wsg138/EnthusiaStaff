@@ -21,7 +21,7 @@ import net.enthusia.staff.domain.auth.StaffRank;
 
 /** Strict, side-effect-free parser for the C2 preview-only ranks.yml. */
 public final class RankConfigurationLoader {
-    private static final String RESOURCE_NAME = "ranks.yml";
+    private static final String ROOT_PATH = "root";
     private static final String RANKS_PATH = "root.ranks";
     private static final Set<String> ROOT_KEYS = Set.of("schema-version", "ranks");
     private static final Set<String> RANK_KEYS = Set.of("inherits", "grants");
@@ -58,15 +58,10 @@ public final class RankConfigurationLoader {
     RankConfigurationSnapshot load(Reader reader) {
         try {
             JsonNode root = yaml.readTree(reader);
-            requireObject(root, "root");
-            exactFields(root, ROOT_KEYS, "root");
-            JsonNode version = required(root, "schema-version", "root");
-            if (!version.isIntegralNumber() || !version.canConvertToInt()
-                    || version.intValue() != RankConfigurationSnapshot.CURRENT_SCHEMA_VERSION) {
-                throw invalid("root.schema-version must be "
-                        + RankConfigurationSnapshot.CURRENT_SCHEMA_VERSION);
-            }
-            JsonNode ranks = required(root, "ranks", "root");
+            requireObject(root, ROOT_PATH);
+            exactFields(root, ROOT_KEYS, ROOT_PATH);
+            int schemaVersion = requiredSchemaVersion(root);
+            JsonNode ranks = required(root, "ranks", ROOT_PATH);
             requireObject(ranks, RANKS_PATH);
 
             Set<String> names = new HashSet<>();
@@ -79,20 +74,30 @@ public final class RankConfigurationLoader {
             EnumMap<StaffRank, Set<StaffCapability>> grants = new EnumMap<>(StaffRank.class);
             for (StaffRank rank : StaffRank.values()) {
                 JsonNode fields = required(ranks, rank.name(), RANKS_PATH);
-                String path = "root.ranks." + rank;
+                String path = RANKS_PATH + "." + rank;
                 requireObject(fields, path);
                 exactFields(fields, RANK_KEYS, path);
                 inherits.put(rank, parseRanks(required(fields, "inherits", path), path + ".inherits"));
                 grants.put(rank, parseCapabilities(required(fields, "grants", path), path + ".grants"));
             }
-            return new RankConfigurationSnapshot(version.intValue(), inherits, grants);
+            return new RankConfigurationSnapshot(schemaVersion, inherits, grants);
         } catch (IOException exception) {
             throw new ConfigurationValidationException("Unable to parse ranks.yml", exception);
+        } catch (ConfigurationValidationException exception) {
+            throw exception;
         } catch (IllegalArgumentException exception) {
-            throw exception instanceof ConfigurationValidationException
-                    ? exception
-                    : new ConfigurationValidationException("Invalid ranks.yml: " + exception.getMessage(), exception);
+            throw new ConfigurationValidationException("Invalid ranks.yml: " + exception.getMessage(), exception);
         }
+    }
+
+    private static int requiredSchemaVersion(JsonNode root) {
+        JsonNode version = required(root, "schema-version", ROOT_PATH);
+        if (!version.isIntegralNumber() || !version.canConvertToInt()
+                || version.intValue() != RankConfigurationSnapshot.CURRENT_SCHEMA_VERSION) {
+            throw invalid("root.schema-version must be "
+                    + RankConfigurationSnapshot.CURRENT_SCHEMA_VERSION);
+        }
+        return version.intValue();
     }
 
     private static Set<StaffRank> parseRanks(JsonNode value, String path) {

@@ -1,5 +1,6 @@
 package net.enthusia.staff.paper.config;
 
+import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -12,6 +13,8 @@ import net.enthusia.staff.domain.auth.StaffRank;
 import org.junit.jupiter.api.Test;
 
 class RankConfigurationLoaderTest {
+    private static final String UNKNOWN = "unknown";
+    private static final String CANNOT_INHERIT = "cannot inherit";
     private final RankConfigurationLoader loader = new RankConfigurationLoader();
 
     @Test
@@ -72,44 +75,52 @@ class RankConfigurationLoaderTest {
 
     @Test
     void unknownOrMissingFieldFailsClosed() {
-        invalid(valid().replace("schema-version: 1", "schema-version: 999"), "schema-version");
-        invalid(valid().replace("schema-version: 1", "schema-version: true"), "schema-version");
-        invalid(valid().replace("ranks:", "rankz:"), "missing");
-        invalid(valid().replace("  SYSTEM:", "  SERVICE:"), "SYSTEM");
-        invalid(valid().replace("    inherits: []", "    parents: []"), "unknown");
-        invalid(valid().replace("STAFF_MODE_COMBAT_TEST", "SUPER_ADMIN_BYPASS"), "unknown");
-        invalid(valid().replace("  SYSTEM:\n", "  SYSTEM:\n    unknown: true\n"), "unknown");
+        assertAll(() -> {
+            invalid(valid().replace("schema-version: 1", "schema-version: 999"), "schema-version");
+            invalid(valid().replace("schema-version: 1", "schema-version: true"), "schema-version");
+            invalid(valid().replace("ranks:", "rankz:"), "missing");
+            invalid(valid().replace("  SYSTEM:", "  SERVICE:"), "SYSTEM");
+            invalid(valid().replace("    inherits: []", "    parents: []"), UNKNOWN);
+            invalid(valid().replace("STAFF_MODE_COMBAT_TEST", "SUPER_ADMIN_BYPASS"), UNKNOWN);
+            invalid(valid().replace("  SYSTEM:\n", "  SYSTEM:\n    unknown: true\n"), UNKNOWN);
+        });
     }
 
     @Test
     void rejectsDuplicateYamlAndArrayMembers() {
-        invalid(valid().replace("schema-version: 1", "schema-version: 1\nschema-version: 1"),
-                "parse");
-        invalid(valid().replace("    inherits: [HELPER]", "    inherits: [HELPER, HELPER]"),
-                "duplicate");
-        invalid(valid().replace("      - VANISH\n  DEVELOPER:",
-                "      - VANISH\n      - VANISH\n  DEVELOPER:"), "duplicate");
+        assertAll(() -> {
+            invalid(valid().replace("schema-version: 1", "schema-version: 1\nschema-version: 1"),
+                    "parse");
+            invalid(valid().replace("    inherits: [HELPER]", "    inherits: [HELPER, HELPER]"),
+                    "duplicate");
+            invalid(valid().replace("      - VANISH\n  DEVELOPER:",
+                    "      - VANISH\n      - VANISH\n  DEVELOPER:"), "duplicate");
+        });
     }
 
     @Test
     void rejectsUnsafeCrossBranchInheritanceAndSystemGrants() {
-        invalid(valid().replace("  MOD:\n    inherits: [HELPER]",
-                "  MOD:\n    inherits: [DEVELOPER]"), "cannot inherit");
-        invalid(valid().replace("  HELPER:\n    inherits: []",
-                "  HELPER:\n    inherits: [ADMIN]"), "cannot inherit");
-        invalid(valid().replace("  DEVELOPER:\n    inherits: []",
-                "  DEVELOPER:\n    inherits: [MOD]"), "cannot inherit");
-        invalid(valid().replace("  SYSTEM:\n    inherits: []",
-                "  SYSTEM:\n    inherits: [HELPER]"), "cannot inherit");
-        invalid(valid().replace("  SYSTEM:\n    inherits: []\n    grants: []",
-                "  SYSTEM:\n    inherits: []\n    grants: [VANISH]"), "SYSTEM");
+        assertAll(() -> {
+            invalid(valid().replace("  MOD:\n    inherits: [HELPER]",
+                    "  MOD:\n    inherits: [DEVELOPER]"), CANNOT_INHERIT);
+            invalid(valid().replace("  HELPER:\n    inherits: []",
+                    "  HELPER:\n    inherits: [ADMIN]"), CANNOT_INHERIT);
+            invalid(valid().replace("  DEVELOPER:\n    inherits: []",
+                    "  DEVELOPER:\n    inherits: [MOD]"), CANNOT_INHERIT);
+            invalid(valid().replace("  SYSTEM:\n    inherits: []",
+                    "  SYSTEM:\n    inherits: [HELPER]"), CANNOT_INHERIT);
+            invalid(valid().replace("  SYSTEM:\n    inherits: []\n    grants: []",
+                    "  SYSTEM:\n    inherits: []\n    grants: [VANISH]"), "SYSTEM");
+        });
     }
 
     @Test
     void rejectsMalformedNonArraysAndCaseMismatches() {
-        invalid(valid().replace("    inherits: [HELPER]", "    inherits: HELPER"), "array");
-        invalid(valid().replace("      - VANISH", "      - vanish"), "unknown");
-        invalid(valid().replace("    grants: []", "    grants: false"), "array");
+        assertAll(() -> {
+            invalid(valid().replace("    inherits: [HELPER]", "    inherits: HELPER"), "array");
+            invalid(valid().replace("      - VANISH", "      - vanish"), UNKNOWN);
+            invalid(valid().replace("    grants: []", "    grants: false"), "array");
+        });
     }
 
     private String valid() {
@@ -118,7 +129,8 @@ class RankConfigurationLoaderTest {
             if (input == null) {
                 throw new AssertionError("Missing ranks.yml");
             }
-            return new String(input.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
+            return new String(input.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8)
+                    .replace("\r\n", "\n");
         } catch (java.io.IOException exception) {
             throw new AssertionError(exception);
         }

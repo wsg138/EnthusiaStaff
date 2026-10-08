@@ -15,6 +15,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 class VersionedConfigurationValidatorTest {
+    private static final String RANKS_FILE = "ranks.yml";
     @TempDir
     Path tempDirectory;
 
@@ -30,7 +31,7 @@ class VersionedConfigurationValidatorTest {
                         "config.yml",
                         "reason-policies.yml",
                         "messages.yml",
-                        "ranks.yml",
+                        RANKS_FILE,
                         "reports.yml",
                         "gui/reports.yml",
                         "policy-v2.yml"
@@ -60,7 +61,7 @@ class VersionedConfigurationValidatorTest {
     @Test
     void invalidPreviewRanksDoNotBlockValidationOfActiveConfiguration() throws IOException {
         copyShippedConfiguration();
-        Files.writeString(tempDirectory.resolve("ranks.yml"),
+        Files.writeString(tempDirectory.resolve(RANKS_FILE),
                 "schema-version: 1\nranks: {}\n");
 
         ConfigurationValidationReport report = validator().validate();
@@ -69,7 +70,7 @@ class VersionedConfigurationValidatorTest {
         assertTrue(report.errors().stream().anyMatch(error -> error.startsWith("ranks.yml:")));
         assertTrue(report.entries().stream().anyMatch(entry -> entry.source().equals("messages.yml")));
         assertTrue(report.entries().stream().anyMatch(entry -> entry.source().equals("policy-v2.yml")));
-        assertTrue(report.entries().stream().noneMatch(entry -> entry.source().equals("ranks.yml")));
+        assertTrue(report.entries().stream().noneMatch(entry -> entry.source().equals(RANKS_FILE)));
     }
 
     private VersionedConfigurationValidator validator() {
@@ -83,7 +84,7 @@ class VersionedConfigurationValidatorTest {
         copyResource("config.yml");
         copyResource("reason-policies.yml");
         copyResource("messages.yml");
-        copyResource("ranks.yml");
+        copyResource(RANKS_FILE);
         copyResource("reports.yml");
         Files.createDirectories(tempDirectory.resolve("gui"));
         copyResource("gui/reports.yml");
