@@ -51,12 +51,37 @@ source without displaying the password, found:
 with an explicit password and a trusted-certificate entry.
 `PersistentChannelClient` enforces TLS 1.3 with HTTPS hostname verification.
 
-**Limits:** The local certificate inspection does not establish the certificate
-currently served by the live Velocity listener, its process liveness,
-or its accessibility from StaffBot. A future truststore update/rotation
-requires reevaluation. Never copy or upload Velocity's **private server**
-`channel-server.p12` into StaffBot; only the trusted-certificate store
-belongs on the client.
+## New live endpoint evidence from the owner's Windows PC (2026-10-08)
+
+The owner authorized a one-shot, narrow connection test using the existing
+backed-up public-only SMP truststore and its locally protected password file.
+Java performed **no HMAC application authentication or chat publication**.
+
+1. TCP to the internal UUID from **Windows** could not resolve the hostname
+   (`DNS_FAILED`). This is consistent with Bloom's internal-only UUID routing;
+   it does **not** establish internal DNS failure from StaffBot.
+2. TCP to public IP `170.205.24.14:28765` from Windows **CONNECTED**.
+3. TLS 1.3 completed successfully with JSSE hostname verification for the
+   **public IP**, using the SMP public truststore.
+4. A separate TLS 1.3 test routed the underlying TCP socket to the public IP,
+   but set the **TLS peer hostname** to the proposed internal UUID. JSSE
+   HTTPS endpoint identification **PASSED** for that hostname.
+5. The **live presented certificate** fingerprint matched the trusted public
+   certificate exactly:
+   `63dd196e42bb0aa08221581014166431c712b629a769b4ecdc25e0448c7ad73a`.
+
+**Conclusion:** The current **public-facing** Velocity channel listener
+is reachable from the owner's Windows PC, presents the expected trusted
+certificate, and validates against the proposed UUID hostname. This is
+strong evidence that the TLS identity is configured correctly. **StaffBot
+container DNS/TCP routing and authenticated STAFFBOT/HMAC handshake
+remain UNVERIFIED.** It would be incorrect to call this an internal
+StaffBot-origin success.
+
+Do not reuse the local Java diagnostics to scan any other ports/hosts.
+A future truststore update/rotation requires reevaluation. Never copy or
+upload Velocity's **private server** `channel-server.p12` into StaffBot;
+only the trusted-certificate store belongs on the client.
 
 ## Bounded live proof needed before activating SHADOW
 
