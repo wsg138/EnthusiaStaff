@@ -22,6 +22,7 @@ class PolicyV2OwnerV3BlackmailScopeTest {
     private static final String SECOND = "owner.2026-10-07.2";
     private static final String THIRD = "owner.2026-10-07.3";
     private static final String OFFENSE = "safety.blackmail-extortion";
+    private static final String NO_MATCH = "policy-gap.no-match";
     private static final Instant INCIDENT = Instant.parse("2026-10-08T12:00:00Z");
 
     @Test
@@ -56,15 +57,15 @@ class PolicyV2OwnerV3BlackmailScopeTest {
 
     @Test
     void ordinaryGameOnlyBlackmailNeverMatchesTerminalRule() {
-        assertReview(finding("game-only", false), "policy-gap.no-match");
-        assertReview(finding("game-only", true), "policy-gap.no-match");
+        assertReview(finding("game-only", false), NO_MATCH);
+        assertReview(finding("game-only", true), NO_MATCH);
     }
 
     @Test
     void realWorldClaimsWithoutVerificationAndUncertainContextFailClosed() {
-        assertReview(finding("real-world", false), "policy-gap.no-match");
-        assertReview(finding("uncertain", true), "policy-gap.no-match");
-        assertReview(finding("uncertain", false), "policy-gap.no-match");
+        assertReview(finding("real-world", false), NO_MATCH);
+        assertReview(finding("uncertain", true), NO_MATCH);
+        assertReview(finding("uncertain", false), NO_MATCH);
         assertReview(new IncidentFinding(OFFENSE, Map.of()), "policy-gap.invalid-attributes");
     }
 
