@@ -73,6 +73,7 @@ A verified **manual completion** must have a separate explicit staff assertion c
 ## 2026-10-08 provider-side implementation checkpoint
 
 - [EnthusiaCommend draft PR #26](https://github.com/wsg138/EnthusiaCommend/pull/26) introduces **non-mutating** exact-entry correction preflight with canonical subject checks, CAS snapshot checksum, exact giver/target/category/score/timestamp matching, duplicate/ambiguity refusal, immutable output, and score overflow rejection. Three exact-head GitHub Actions checks passed for its latest commit when reviewed. This is preparatory only: **no targeted mutation API or durable provider receipt yet exists**; it must not be treated as remedy completion.
+- [EnthusiaMarket draft PR #15](https://github.com/wsg138/EnthusiaMarket/pull/15) adds **non-mutating** preflight requiring an exact stall ID, canonical SOLO owner UUID, expected world and revision, no conflicting moderation lock or duplicate IDs. It never guesses which stall to remove. As with Commend's preflight, a selection is *not* a durable mutation receipt, and no cleanup/removal provider exists yet. Market implementation must own transaction/recovery and asset guarantees.
 - Cross-repository GitHub Issues are disabled in at least the checked Market repository, so [EnthusiaStaff #462](https://github.com/wsg138/EnthusiaStaff/issues/462) remains the canonical integration tracker for provider follow-ups. Do not assume provider issue records were opened.
 
 ## Required implementation sequencing
