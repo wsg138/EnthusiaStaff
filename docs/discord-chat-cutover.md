@@ -91,6 +91,10 @@ to the staging application identity is not an acceptable migration technique. Th
 requires the separate public-chat identity, authenticated Velocity STAFFBOT peer, and TLS/HMAC
 secrets to be configured and validated before startup.
 
+The current network preflight evidence and strict verification gates are tracked in
+[`discord-chat-bloom-network-preflight.md`](discord-chat-bloom-network-preflight.md).
+That document does **not** claim a successful StaffBot-origin connection.
+
 ### Velocity STAFFBOT peer secret-source preflight
 
 Before editing live Velocity `config.properties`, confirm which channel-secret source it
