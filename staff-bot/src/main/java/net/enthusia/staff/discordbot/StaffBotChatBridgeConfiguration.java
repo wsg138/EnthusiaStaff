@@ -16,6 +16,7 @@ final class StaffBotChatBridgeConfiguration {
     static final String ENABLED_ENV = "ENTHUSIA_STAFF_BOT_CHAT_BRIDGE_ENABLED";
     static final String MODE_ENV = "ENTHUSIA_STAFF_BOT_CHAT_BRIDGE_MODE";
     static final String CUTOVER_ACK_ENV = "ENTHUSIA_STAFF_BOT_CHAT_BRIDGE_CUTOVER_ACK";
+    static final String MIGRATION_ACK_ENV = "ENTHUSIA_STAFF_BOT_CHAT_BRIDGE_MIGRATION_ACK";
     static final String HOST_ENV = "ENTHUSIA_STAFF_BOT_CHAT_BRIDGE_HOST";
     static final String PORT_ENV = "ENTHUSIA_STAFF_BOT_CHAT_BRIDGE_PORT";
     static final String CLIENT_HMAC_ENV = "ENTHUSIA_STAFF_BOT_CHAT_BRIDGE_CLIENT_SECRET";
@@ -33,6 +34,7 @@ final class StaffBotChatBridgeConfiguration {
     private static final String ENABLED_VALUE = "true";
     private static final String DISABLED_VALUE = "false";
     private static final String AUTHORITATIVE_ACK = "I_ACKNOWLEDGE_DISCORDSRV_CHAT_CUTOVER";
+    private static final String MIGRATION_ACK = "I_ACKNOWLEDGE_PRODUCTION_SHADOW_MIGRATION";
     private static final int DEFAULT_PORT = 28_765;
     private static final int DEFAULT_QUEUE_CAPACITY = 256;
     private static final int DEFAULT_DEDUPE_CAPACITY = 4_096;
@@ -95,15 +97,18 @@ final class StaffBotChatBridgeConfiguration {
         }
         Mode mode = selectedMode.orElseThrow();
 
-        OptionalLong pinnedChannel = pinnedChannel(environment);
+        OptionalLong pinnedChannel = pinnedChannel(environment, mode);
         if (environment == StaffBotEnvironment.PRODUCTION) {
-            if (mode != Mode.AUTHORITATIVE) {
-                throw new IllegalArgumentException(
-                        "production Discord chat bridge requires AUTHORITATIVE mode");
-            }
-            if (!AUTHORITATIVE_ACK.equals(values.get(CUTOVER_ACK_ENV))) {
-                throw new IllegalArgumentException(
-                        CUTOVER_ACK_ENV + " must explicitly acknowledge production chat cutover");
+            if (mode == Mode.AUTHORITATIVE) {
+                if (!AUTHORITATIVE_ACK.equals(values.get(CUTOVER_ACK_ENV))) {
+                    throw new IllegalArgumentException(
+                            CUTOVER_ACK_ENV + " must explicitly acknowledge production chat cutover");
+                }
+            } else if (mode == Mode.SHADOW) {
+                if (!MIGRATION_ACK.equals(values.get(MIGRATION_ACK_ENV))) {
+                    throw new IllegalArgumentException(
+                            MIGRATION_ACK_ENV + " must explicitly acknowledge production shadow migration");
+                }
             }
         }
 
@@ -150,7 +155,6 @@ final class StaffBotChatBridgeConfiguration {
 
         Mode selected = Mode.parse(rawMode);
         validateLegacyMode(values, selected, legacyEnabled);
-        validateModeEnvironment(environment, selected);
         return selected == Mode.DISABLED ? Optional.empty() : Optional.of(selected);
     }
 
@@ -189,22 +193,17 @@ final class StaffBotChatBridgeConfiguration {
         }
     }
 
-    private static void validateModeEnvironment(
+    private static OptionalLong pinnedChannel(
             StaffBotEnvironment environment,
-            Mode selected
+            Mode mode
     ) {
-        if (selected == Mode.SHADOW && environment != StaffBotEnvironment.STAGING) {
-            throw new IllegalArgumentException("SHADOW chat bridge mode is staging-only");
-        }
-    }
-
-    private static OptionalLong pinnedChannel(StaffBotEnvironment environment) {
-        if (environment != StaffBotEnvironment.STAGING) {
+        if (environment != StaffBotEnvironment.STAGING
+                && !(environment == StaffBotEnvironment.PRODUCTION && mode == Mode.SHADOW)) {
             return OptionalLong.empty();
         }
-        OptionalLong stagingChannel = environment.testChannelId();
+        OptionalLong stagingChannel = StaffBotEnvironment.STAGING.testChannelId();
         if (stagingChannel.isEmpty()) {
-            throw new IllegalArgumentException("staging Discord chat bridge requires a pinned test channel");
+            throw new IllegalArgumentException("shadow Discord chat bridge requires a pinned test channel");
         }
         return stagingChannel;
     }

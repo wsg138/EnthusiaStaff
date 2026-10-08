@@ -13,6 +13,8 @@ import org.junit.jupiter.api.Test;
 class StaffBotChatBridgeConfigurationTest {
     private static final long STAGING_CHANNEL_ID = 1541286004298752091L;
     private static final String KEY = Base64.getEncoder().encodeToString(new byte[32]);
+    private static final String SHADOW_MODE = "SHADOW";
+    private static final String PRODUCTION_SHADOW_ACK = "I_ACKNOWLEDGE_PRODUCTION_SHADOW_MIGRATION";
 
     @Test
     void bridgeIsDefaultOff() {
@@ -148,14 +150,91 @@ class StaffBotChatBridgeConfigurationTest {
     }
 
     @Test
-    void productionRejectsShadowModeAndConflictingLegacyBoolean() {
-        Map<String, String> shadow = productionValues();
-        shadow.put(StaffBotChatBridgeConfiguration.MODE_ENV, "SHADOW");
+    void productionShadowModeRequiresExplicitMigrationAcknowledgement() {
+        Map<String, String> values = enabledValues();
+        values.put(StaffBotChatBridgeConfiguration.MODE_ENV, SHADOW_MODE);
+
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> StaffBotChatBridgeConfiguration.fromEnvironment(
+                        StaffBotEnvironment.PRODUCTION, values));
+
+        values.put(
+                StaffBotChatBridgeConfiguration.MIGRATION_ACK_ENV,
+                PRODUCTION_SHADOW_ACK);
+        StaffBotChatBridgeConfiguration configuration =
+                StaffBotChatBridgeConfiguration.fromEnvironment(
+                        StaffBotEnvironment.PRODUCTION, values).orElseThrow();
+
+        assertEquals(StaffBotChatBridgeConfiguration.Mode.SHADOW, configuration.mode());
+        assertEquals(
+                STAGING_CHANNEL_ID,
+                configuration.routes().get(new StaffBotChatBridgeConfiguration.Route("SMP", "global")));
+        assertTrue(configuration.ingressRoutes().isEmpty());
+    }
+
+    @Test
+    void productionShadowModeRejectsRoutesOutsidePinnedTestChannel() {
+        Map<String, String> values = enabledValues();
+        values.put(StaffBotChatBridgeConfiguration.MODE_ENV, SHADOW_MODE);
+        values.put(
+                StaffBotChatBridgeConfiguration.MIGRATION_ACK_ENV,
+                PRODUCTION_SHADOW_ACK);
+        values.put(
+                StaffBotChatBridgeConfiguration.ROUTES_ENV,
+                "SMP/global=1650000000000000001");
+
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> StaffBotChatBridgeConfiguration.fromEnvironment(
+                        StaffBotEnvironment.PRODUCTION, values));
+    }
+
+    @Test
+    void productionShadowModeRejectsIngressOutsidePinnedTestChannel() {
+        Map<String, String> values = enabledValues();
+        values.put(StaffBotChatBridgeConfiguration.MODE_ENV, SHADOW_MODE);
+        values.put(
+                StaffBotChatBridgeConfiguration.MIGRATION_ACK_ENV,
+                PRODUCTION_SHADOW_ACK);
+        values.put(
+                StaffBotChatBridgeConfiguration.INGRESS_ROUTES_ENV,
+                "1650000000000000001=SMP/global");
+
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> StaffBotChatBridgeConfiguration.fromEnvironment(
+                        StaffBotEnvironment.PRODUCTION, values));
+    }
+
+    @Test
+    void productionShadowMigrationAndCutoverAcknowledgementsAreNotInterchangeable() {
+        Map<String, String> shadow = enabledValues();
+        shadow.put(StaffBotChatBridgeConfiguration.MODE_ENV, SHADOW_MODE);
+        shadow.put(
+                StaffBotChatBridgeConfiguration.CUTOVER_ACK_ENV,
+                "I_ACKNOWLEDGE_DISCORDSRV_CHAT_CUTOVER");
         assertThrows(
                 IllegalArgumentException.class,
                 () -> StaffBotChatBridgeConfiguration.fromEnvironment(
                         StaffBotEnvironment.PRODUCTION, shadow));
 
+        Map<String, String> authoritative = productionValues();
+        authoritative.remove(StaffBotChatBridgeConfiguration.CUTOVER_ACK_ENV);
+        authoritative.put(
+                StaffBotChatBridgeConfiguration.MIGRATION_ACK_ENV,
+                PRODUCTION_SHADOW_ACK);
+        authoritative.put(
+                StaffBotChatBridgeConfiguration.INGRESS_ROUTES_ENV,
+                "1650000000000000001=SMP/global;1650000000000000002=HUB/global");
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> StaffBotChatBridgeConfiguration.fromEnvironment(
+                        StaffBotEnvironment.PRODUCTION, authoritative));
+    }
+
+    @Test
+    void productionRejectsConflictingLegacyBoolean() {
         Map<String, String> conflict = productionValues();
         conflict.put(StaffBotChatBridgeConfiguration.ENABLED_ENV, "false");
         assertThrows(

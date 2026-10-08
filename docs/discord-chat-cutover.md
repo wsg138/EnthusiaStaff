@@ -43,7 +43,57 @@ ENTHUSIA_STAFF_BOT_CHAT_BRIDGE_MODE=DISABLED|SHADOW|AUTHORITATIVE
 The old `ENTHUSIA_STAFF_BOT_CHAT_BRIDGE_ENABLED=true` remains a staging compatibility alias for
 `SHADOW` only when `MODE` is omitted.
 
-Production requires:
+Production supports two separately acknowledged modes:
+
+**Private-channel migration test, without cutover** (only when the production-SHADOW safety change
+is present in the deployed StaffBot build):
+
+```text
+ENTHUSIA_STAFF_BOT_ENVIRONMENT=production
+ENTHUSIA_STAFF_BOT_CHAT_BRIDGE_MODE=SHADOW
+ENTHUSIA_STAFF_BOT_CHAT_BRIDGE_MIGRATION_ACK=I_ACKNOWLEDGE_PRODUCTION_SHADOW_MIGRATION
+ENTHUSIA_STAFF_BOT_CHAT_BRIDGE_ROUTES=SMP/global=1541286004298752091
+```
+
+The production-SHADOW path pins every Discord route, including any explicitly enabled
+Discord-to-Minecraft ingress route, to the fixed private staging channel
+`1541286004298752091`. A different channel fails configuration validation. SHADOW does **not**
+publish AUTHORITATIVE readiness or suppress RoseChat's legacy DiscordSRV chat. Existing staff
+moderation identity and runtime environment must remain production; switching the moderation bot
+to the staging application identity is not an acceptable migration technique. This mode also
+requires the separate public-chat identity, authenticated Velocity STAFFBOT peer, and TLS/HMAC
+secrets to be configured and validated before startup.
+
+### Velocity STAFFBOT peer secret-source preflight
+
+Before editing live Velocity `config.properties`, confirm which channel-secret source it
+currently uses. Adding the peer declaration
+`channel.backend.STAFFBOT.secret-environment=ES_CHANNEL_STAFFBOT_SECRET`
+changes the complete set of required channel secrets.
+
+`PrivateChannelSecrets` deliberately requires an **all-or-nothing** source:
+
+- When any configured channel-secret environment variable is set, **all** configured
+  channel-secret environment variables must be present, including the new
+  `ES_CHANNEL_STAFFBOT_SECRET`. A partial environment fails closed.
+- When no channel-secret environment variable is set, the protected runtime
+  `channel.properties` must contain **exactly** the required properties: existing proxy
+  and TLS-password secrets, every configured backend secret, and the new
+  `channel.backend.STAFFBOT.secret`. A missing or extra property fails closed.
+- The HMAC value used for `STAFFBOT` must match StaffBot's
+  `ENTHUSIA_STAFF_BOT_CHAT_BRIDGE_CLIENT_SECRET`; the existing Velocity proxy
+  HMAC must match StaffBot's `ENTHUSIA_STAFF_BOT_CHAT_BRIDGE_PROXY_SECRET`.
+  Keep all key values private. **Never** put raw secrets in GitHub, this document,
+  or the public `config.properties`.
+- Ensure StaffBot can validate the Velocity TLS endpoint with a truststore containing
+  its trusted public certificate. Never distribute Velocity's private TLS keystore
+  to StaffBot. Preserve old JARs and settings for rollback.
+
+A JAR upload or a new peer-config line alone does not establish a working bridge.
+Verify the secret source, public-chat JDA identity, reachable TLS host, and live
+process environment before an approved SHADOW restart.
+
+**Production cutover** (only after the staging acceptance matrix passes):
 
 ```text
 ENTHUSIA_STAFF_BOT_ENVIRONMENT=production
@@ -55,7 +105,8 @@ AUTHORITATIVE requires complete symmetric inbound coverage for every distinct Di
 used by outbound routes. This prevents the globally suppressed legacy Discord inbound path from
 leaving any routed Discord channel without a replacement Discord -> Minecraft entry.
 
-Production never accepts the legacy boolean by itself and never accepts `SHADOW`.
+Production never accepts the legacy boolean by itself. The migration acknowledgement is **not**
+a substitute for the separate AUTHORITATIVE cutover acknowledgement.
 
 ## What AUTHORITATIVE changes
 
@@ -124,7 +175,8 @@ controlled server with the actual dependency set.
 ## Shadow validation sequence
 
 1. Keep Paper in `SHADOW`.
-2. Keep StaffBot in staging `SHADOW`.
+2. Keep StaffBot in staging `SHADOW`, or in explicitly acknowledged production `SHADOW` with all
+   routes pinned to the fixed private staging channel. Never use AUTHORITATIVE as a test mode.
 3. Route only the pinned staging test channel.
 4. Leave DiscordSRV fully live.
 5. Compare the replacement output against Minecraft/RoseChat semantics, not DiscordSRV's formatting
