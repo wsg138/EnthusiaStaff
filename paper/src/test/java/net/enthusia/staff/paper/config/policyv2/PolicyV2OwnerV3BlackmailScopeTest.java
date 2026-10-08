@@ -29,7 +29,7 @@ class PolicyV2OwnerV3BlackmailScopeTest {
         var config = load();
         assertEquals(PolicyV2FeatureMode.DISABLED, config.mode());
         assertEquals(SECOND, config.activeVersion());
-        assertEquals(3, config.snapshots().size());
+        assertEquals(4, config.snapshots().size());
         assertEquals(FIRST, config.snapshots().get(FIRST).version());
         assertEquals(SECOND, config.snapshots().get(SECOND).version());
         PolicySnapshot candidate = config.snapshots().get(THIRD);
