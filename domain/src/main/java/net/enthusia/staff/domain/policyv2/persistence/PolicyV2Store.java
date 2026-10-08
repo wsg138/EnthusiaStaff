@@ -126,6 +126,7 @@ public interface PolicyV2Store {
 
     record CaseRecord(
             String caseId,
+            UUID subjectId,
             UUID policySnapshotId,
             UUID resolutionId,
             IncidentFinding originalFinding,
@@ -141,7 +142,7 @@ public interface PolicyV2Store {
     ) {
         public CaseRecord {
             caseId = requireCaseId(caseId);
-            if (policySnapshotId == null || resolutionId == null || originalFinding == null
+            if (subjectId == null || policySnapshotId == null || resolutionId == null || originalFinding == null
                     || effectiveFinding == null || findingState == null || incidentAt == null
                     || findingRevision < 0 || sanctionRevision < 0 || resolution == null
                     || historyInputs == null || remedies == null || currentSanctions == null) {

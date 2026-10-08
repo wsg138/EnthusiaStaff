@@ -193,7 +193,7 @@ class PolicyV2EnforcementIntegrationTest {
             PolicyV2RemedyEnforcement configured = runtime.remedies().registerConfigured(
                     admin,
                     new PolicyV2RemedyService.ConfiguredRegisterCommand(
-                            fixture.caseId(), vpn.id(), fixture.targetId(),
+                            fixture.caseId(), vpn.id(),
                             "register:bound:309", NOW
                     )
             );
@@ -203,11 +203,55 @@ class PolicyV2EnforcementIntegrationTest {
             PolicyV2RemedyEnforcement replay = runtime.remedies().registerConfigured(
                     admin,
                     new PolicyV2RemedyService.ConfiguredRegisterCommand(
-                            fixture.caseId(), vpn.id(), fixture.targetId(),
+                            fixture.caseId(), vpn.id(),
                             "register:bound:309", NOW
                     )
             );
             assertEquals(configured, replay);
+        }
+    }
+
+    @Test
+    void registrationCannotAttachARemedyToAnotherPlayersUuid() throws Exception {
+        Fixture fixture = seed(DATABASE, 310);
+        RemedySpec content = contentRemedy();
+        Actor admin = actor(fixture.actorId(), StaffRank.ADMIN);
+        UUID anotherPlayer = new UUID(
+                ~fixture.targetId().getMostSignificantBits(),
+                fixture.targetId().getLeastSignificantBits()
+        );
+
+        try (HikariDataSource dataSource = open(DATABASE)) {
+            Runtime runtime = runtime(dataSource, SYSTEM_ACTOR);
+            createPolicyCase(runtime.canonical(), fixture,
+                    CONTENT_OFFENSE, content, "case:cross-subject:310", NOW);
+            assertEquals(fixture.targetId(),
+                    runtime.canonical().findCase(fixture.caseId()).orElseThrow().subjectId());
+
+            assertThrows(SecurityException.class, () -> runtime.remedies().register(
+                    admin,
+                    new PolicyV2RemedyService.RegisterCommand(
+                            fixture.caseId(), content.id(), anotherPlayer,
+                            Scope.CONTENT, Condition.manual(), "register:wrong-subject:310", NOW
+                    )
+            ));
+            assertTrue(runtime.enforcement().find(fixture.caseId(), content.id()).isEmpty());
+
+            PolicyV2RemedyEnforcement registered = runtime.remedies().register(
+                    admin,
+                    register(fixture, content, Scope.CONTENT,
+                            Condition.manual(), "register:right-subject:310", NOW)
+            );
+            assertEquals(Lifecycle.REQUIRED, registered.lifecycle());
+
+            assertThrows(SecurityException.class, () -> runtime.remedies().register(
+                    admin,
+                    new PolicyV2RemedyService.RegisterCommand(
+                            fixture.caseId(), content.id(), anotherPlayer,
+                            Scope.CONTENT, Condition.manual(), "register:wrong-subject:replay:310", NOW
+                    )
+            ));
+            assertEquals(registered, runtime.enforcement().find(fixture.caseId(), content.id()).orElseThrow());
         }
     }
 

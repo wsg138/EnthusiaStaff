@@ -48,7 +48,7 @@ public final class PolicyV2RemedyService {
         return register(actor, new RegisterCommand(
                 command.caseId(),
                 command.remedyId(),
-                command.subjectId(),
+                policyCase.subjectId(),
                 binding.scope(),
                 binding.condition(),
                 command.operationKey(),
@@ -400,6 +400,9 @@ public final class PolicyV2RemedyService {
             PolicyV2Store.RemedyRecord remedy,
             RegisterCommand command
     ) {
+        if (!policyCase.subjectId().equals(command.subjectId())) {
+            throw new SecurityException("Remedy subject does not match the canonical case target");
+        }
         PolicyV2EnforcementPolicy.requireSafeOutcome(
                 policyCase.resolution().offenseId(),
                 policyCase.currentSanctions().sanctions()
@@ -549,7 +552,6 @@ public final class PolicyV2RemedyService {
     public record ConfiguredRegisterCommand(
             String caseId,
             String remedyId,
-            UUID subjectId,
             String operationKey,
             Instant occurredAt
     ) {
@@ -557,7 +559,7 @@ public final class PolicyV2RemedyService {
             caseId = PolicyV2RemedyEnforcement.requireText(caseId, "case id", 64);
             remedyId = PolicyV2RemedyEnforcement.requireText(remedyId, "remedy id", 96);
             operationKey = PolicyV2RemedyEnforcement.requireText(operationKey, "operation key", 512);
-            if (subjectId == null || occurredAt == null) {
+            if (occurredAt == null) {
                 throw new IllegalArgumentException("configured remedy registration fields must be present");
             }
         }

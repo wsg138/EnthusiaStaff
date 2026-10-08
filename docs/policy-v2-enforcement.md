@@ -131,3 +131,16 @@ An overturned finding cannot enter registration.
 This guards the domain registration boundary only. Provider execution, shadow/live wiring,
 external acknowledgement, and the remaining unsupported `OTHER` remedies are still separate
 cutover requirements.
+
+## Canonical case subject identity
+
+The persisted Policy v2 case read model carries the immutable canonical subject UUID from
+`cases.target_id`, selected by joining the legacy canonical `cases` record to
+`policy_v2_cases`. The read fails closed when the referenced case is not present. A configured
+remedy registration derives the subject UUID directly from that stored case rather than taking
+it from an arbitrary caller request. The legacy explicit registration API also checks the
+caller-supplied subject UUID against the persisted case subject **before** registering anything.
+A case/subject mismatch throws without writing a W3B enforcement row. No policy mode is changed.
+
+Coverage must include wrong-player attempts (including explicit legacy registration), idempotent
+retry, and preservation of the original case identity across revisions/restarts.
