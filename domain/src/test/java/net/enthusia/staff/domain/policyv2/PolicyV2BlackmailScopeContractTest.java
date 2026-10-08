@@ -23,10 +23,13 @@ class PolicyV2BlackmailScopeContractTest {
     private static final Instant INCIDENT_AT = Instant.parse("2026-10-08T12:00:00Z");
     private static final String CONTEXT = "coercion-context";
     private static final String VERIFIED = "real-world-leverage-verified";
+    private static final String REAL_WORLD = "real-world";
+    private static final String UNCERTAIN = "uncertain";
+    private static final String NO_MATCH = "policy-gap.no-match";
 
     @Test
     void realWorldCoercionRequiresExplicitVerifiedFindingAndAdminApproval() {
-        PolicyResolution outcome = resolve("real-world", true);
+        PolicyResolution outcome = resolve(REAL_WORLD, true);
         PolicyAction.ExactWithApproval punishment =
                 assertInstanceOf(PolicyAction.ExactWithApproval.class, outcome.action());
         assertEquals(StaffRank.ADMIN, punishment.minimumRank());
@@ -41,15 +44,15 @@ class PolicyV2BlackmailScopeContractTest {
         for (boolean verified : List.of(false, true)) {
             // Even accidentally checking a verification box is insufficient:
             // context must independently identify real-world coercion.
-            assertReview(resolve("game-only", verified), "policy-gap.no-match");
+            assertReview(resolve("game-only", verified), NO_MATCH);
         }
     }
 
     @Test
     void uncertainAndUnverifiedRealWorldClaimsCannotReachTerminalPunishment() {
-        assertReview(resolve("uncertain", false), "policy-gap.no-match");
-        assertReview(resolve("uncertain", true), "policy-gap.no-match");
-        assertReview(resolve("real-world", false), "policy-gap.no-match");
+        assertReview(resolve(UNCERTAIN, false), NO_MATCH);
+        assertReview(resolve(UNCERTAIN, true), NO_MATCH);
+        assertReview(resolve(REAL_WORLD, false), NO_MATCH);
     }
 
     @Test
@@ -59,7 +62,7 @@ class PolicyV2BlackmailScopeContractTest {
         for (Map<String, IncidentAttributeValue> attributes : List.of(
                 Map.<String, IncidentAttributeValue>of(),
                 Map.<String, IncidentAttributeValue>of(CONTEXT,
-                        new IncidentAttributeValue.EnumValue("real-world")),
+                        new IncidentAttributeValue.EnumValue(REAL_WORLD)),
                 Map.<String, IncidentAttributeValue>of(VERIFIED,
                         new IncidentAttributeValue.BooleanValue(true))
         )) {
@@ -88,14 +91,14 @@ class PolicyV2BlackmailScopeContractTest {
                 "safety-threats-privacy",
                 List.of(
                         IncidentAttributeDefinition.enumValue(CONTEXT, true,
-                                Set.of("game-only", "real-world", "uncertain")),
+                                Set.of("game-only", REAL_WORLD, UNCERTAIN)),
                         IncidentAttributeDefinition.booleanValue(VERIFIED, true)
                 ),
                 new HistoryPolicy(Map.of(OFFENSE, 1.0), DecayPolicy.nonDecaying()),
                 List.of(new ResolutionRule(
                         "verified-real-world",
                         new RuleCondition(Map.of(
-                                CONTEXT, Set.of(new IncidentAttributeValue.EnumValue("real-world")),
+                                CONTEXT, Set.of(new IncidentAttributeValue.EnumValue(REAL_WORLD)),
                                 VERIFIED, Set.of(new IncidentAttributeValue.BooleanValue(true))
                         ), HistoryWindow.atLeast(0.0)),
                         new PolicyAction.ExactWithApproval(
