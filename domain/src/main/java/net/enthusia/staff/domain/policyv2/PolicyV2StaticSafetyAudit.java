@@ -1,5 +1,6 @@
 package net.enthusia.staff.domain.policyv2;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -41,8 +42,8 @@ public final class PolicyV2StaticSafetyAudit {
                         && (!contextDefined || !strictRealWorldPredicate(rule.condition()))) {
                     findings.add(new Finding("blackmail.ungated-punitive-rule", offense.id(), rule.id(), ""));
                 }
-                if (LANGUAGE.equals(offense.id()) && includesNetworkBan(rule.action())) {
-                    findings.add(new Finding("language.network-ban-prohibited", offense.id(), rule.id(), ""));
+                if (LANGUAGE.equals(offense.id())) {
+                    inspectLanguageSanctions(findings, offense, rule);
                 }
             }
         }
@@ -85,21 +86,38 @@ public final class PolicyV2StaticSafetyAudit {
                 || action instanceof PolicyAction.Bounded;
     }
 
-    private static boolean includesNetworkBan(PolicyAction action) {
-        if (action instanceof PolicyAction.Exact exact) {
-            return hasNetworkBan(exact.sanctions());
+    private static void inspectLanguageSanctions(
+            List<Finding> findings, OffensePolicy offense, ResolutionRule rule
+    ) {
+        List<SanctionSpec> sanctions = allSanctions(rule.action());
+        if (sanctions.stream().anyMatch(sanction -> sanction.type().isBan())) {
+            findings.add(new Finding("language.network-ban-prohibited", offense.id(), rule.id(), ""));
+        } else if (sanctions.stream().anyMatch(PolicyV2StaticSafetyAudit::invalidLanguageSanction)) {
+            findings.add(new Finding("language.invalid-chat-only-sanction", offense.id(), rule.id(), ""));
         }
-        if (action instanceof PolicyAction.ExactWithApproval exact) {
-            return hasNetworkBan(exact.sanctions());
-        }
-        if (action instanceof PolicyAction.Bounded bounded) {
-            return bounded.allowedOptions().stream().anyMatch(PolicyV2StaticSafetyAudit::hasNetworkBan);
-        }
-        return false;
     }
 
-    private static boolean hasNetworkBan(List<SanctionSpec> sanctions) {
-        return sanctions.stream().anyMatch(sanction -> sanction.type().isBan());
+    private static boolean invalidLanguageSanction(SanctionSpec sanction) {
+        return switch (sanction.type()) {
+            case WARNING -> false;
+            case MUTE, PUBLIC_MUTE -> sanction.length().temporary()
+                    .map(duration -> duration.compareTo(Duration.ofDays(7)) > 0)
+                    .orElse(true);
+            default -> true;
+        };
+    }
+
+    private static List<SanctionSpec> allSanctions(PolicyAction action) {
+        if (action instanceof PolicyAction.Exact exact) {
+            return exact.sanctions();
+        }
+        if (action instanceof PolicyAction.ExactWithApproval exact) {
+            return exact.sanctions();
+        }
+        if (action instanceof PolicyAction.Bounded bounded) {
+            return bounded.allowedOptions().stream().flatMap(List::stream).toList();
+        }
+        return List.of();
     }
 
     /** No private evidence or identifying incident metadata is exposed here. */
