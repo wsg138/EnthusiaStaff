@@ -128,6 +128,31 @@ class StaffBotCommandLineTest {
     }
 
     @Test
+    void acceptsSeparatePrivateChatConfigurationWithoutChangingProductionFlags() {
+        StaffBotCommandLine parsed = StaffBotCommandLine.parse(new String[] {
+                "--environment=production",
+                TOKEN_FILE_ARGUMENT,
+                MODERATION_FILE_ARGUMENT,
+                TUNNEL_BINARY_ARGUMENT,
+                "--tunnel-token-file=prod-tunnel",
+                MODERATION_WEB_URL_ARGUMENT,
+                "--chat-bridge-config-file=private/chat-bridge.properties"
+        });
+        assertEquals(StaffBotEnvironment.PRODUCTION, parsed.environment().orElseThrow());
+        assertEquals(Path.of("private/chat-bridge.properties"), parsed.chatSettingsFile().orElseThrow());
+        assertFalse(parsed.toString().contains("private/chat-bridge.properties"));
+        assertTrue(parsed.toString().contains("chatSettingsFile=<configured>"));
+
+        assertThrows(IllegalArgumentException.class,
+                () -> StaffBotCommandLine.parse(new String[] {"--chat-bridge-config-file="}));
+        assertThrows(IllegalArgumentException.class,
+                () -> StaffBotCommandLine.parse(new String[] {
+                        "--chat-bridge-config-file=a",
+                        "--chat-bridge-config-file=b"
+                }));
+    }
+
+    @Test
     void renderedCommandLineDoesNotReconstructConfiguredValues() {
         StaffBotCommandLine commandLine = StaffBotCommandLine.parse(new String[] {
                 PREVIEW_ARGUMENT,
