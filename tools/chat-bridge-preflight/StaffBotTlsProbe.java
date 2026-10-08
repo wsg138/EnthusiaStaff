@@ -45,26 +45,49 @@ public final class StaffBotTlsProbe {
 
     private StaffBotTlsProbe() {}
 
+    private static final int REQUIRED_ARGUMENT_COUNT = 1;
+    private static final int INVALID_USAGE_EXIT_CODE = 2;
+    private static final int FAILED_PROBE_EXIT_CODE = 1;
+    private static final String HELP_ARGUMENT = "--help";
+    private static final String VERIFIED_STATE = "TLS_VERIFIED";
+
     public static void main(String[] args) {
-        if (args.length != 1 || "--help".equals(args[0])) {
-            System.out.println("Usage: java StaffBotTlsProbe <private-chat-bridge.properties>");
-            System.out.println("Run only in an authorized StaffBot-container shell; never in an application console.");
-            System.exit(args.length == 1 ? 0 : 2);
+        System.exit(run(args));
+    }
+
+    static int run(String[] args) {
+        if (args.length != REQUIRED_ARGUMENT_COUNT) {
+            return usage(INVALID_USAGE_EXIT_CODE);
         }
-        final SSLContext context;
+        if (HELP_ARGUMENT.equals(args[0])) {
+            return usage(0);
+        }
+        SSLContext context;
         try {
-            Properties config = loadProperties(Path.of(args[0]));
-            if (!HOST.equals(config.getProperty(PREFIX + "HOST"))
-                    || !Integer.toString(PORT).equals(config.getProperty(PREFIX + "PORT"))) {
-                throw new IllegalArgumentException("Unapproved network target");
-            }
-            context = tlsContext(config);
+            context = configuredContext(args[0]);
         } catch (Exception exception) {
             System.out.println("PREFLIGHT=INVALID_LOCAL_CONFIG");
-            System.exit(2);
-            return;
+            return INVALID_USAGE_EXIT_CODE;
         }
+        return checkConnection(context);
+    }
 
+    private static int usage(int exitCode) {
+        System.out.println("Usage: java StaffBotTlsProbe <private-tls-probe.properties>");
+        System.out.println("Run only in an authorized StaffBot-container shell; never in an application console.");
+        return exitCode;
+    }
+
+    private static SSLContext configuredContext(String path) throws Exception {
+        Properties config = loadProperties(Path.of(path));
+        if (!HOST.equals(config.getProperty(PREFIX + "HOST"))
+                || !Integer.toString(PORT).equals(config.getProperty(PREFIX + "PORT"))) {
+            throw new IllegalArgumentException("Unapproved network target");
+        }
+        return tlsContext(config);
+    }
+
+    private static int checkConnection(SSLContext context) {
         ThreadFactory daemon = task -> {
             Thread thread = new Thread(task, "staffbot-tls-probe");
             thread.setDaemon(true);
@@ -78,14 +101,14 @@ public final class StaffBotTlsProbe {
             if (result.fingerprint != null) {
                 System.out.println("TLS_PEER_CERT_SHA256=" + result.fingerprint);
             }
-            System.exit("TLS_VERIFIED".equals(result.state) ? 0 : 1);
+            return VERIFIED_STATE.equals(result.state) ? 0 : FAILED_PROBE_EXIT_CODE;
         } catch (TimeoutException exception) {
             future.cancel(true);
             System.out.println("PREFLIGHT=TIMEOUT");
-            System.exit(1);
+            return FAILED_PROBE_EXIT_CODE;
         } catch (Exception exception) {
             System.out.println("PREFLIGHT=ERROR");
-            System.exit(1);
+            return FAILED_PROBE_EXIT_CODE;
         } finally {
             pool.shutdownNow();
         }
