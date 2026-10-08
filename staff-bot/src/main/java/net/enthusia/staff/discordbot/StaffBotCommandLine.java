@@ -11,6 +11,7 @@ final class StaffBotCommandLine {
     private static final String TOKEN_FILE_PREFIX = "--token-file=";
     private static final String ENVIRONMENT_PREFIX = "--environment=";
     private static final String MODERATION_CONFIG_FILE_PREFIX = "--moderation-config-file=";
+    private static final String CHAT_SETTINGS_FILE_PREFIX = "--chat-bridge-config-file=";
     private static final String TUNNEL_BINARY_FILE_PREFIX = "--tunnel-binary-file=";
     private static final String TUNNEL_TOKEN_FILE_PREFIX = "--tunnel-token-file=";
     private static final String PREVIEW_WEB_BIND_PREFIX = "--preview-web-bind=";
@@ -22,6 +23,7 @@ final class StaffBotCommandLine {
     private final Path tokenFile;
     private final StaffBotEnvironment environment;
     private final Path moderationConfigFile;
+    private final Path chatSettingsFile;
     private final Path tunnelBinaryFile;
     private final Path tunnelTokenFile;
     private final String previewWebBind;
@@ -34,6 +36,7 @@ final class StaffBotCommandLine {
         this.tokenFile = parser.tokenFile;
         this.environment = parser.environment;
         this.moderationConfigFile = parser.moderationConfigFile;
+        this.chatSettingsFile = parser.chatSettingsFile;
         this.tunnelBinaryFile = parser.tunnelBinaryFile;
         this.tunnelTokenFile = parser.tunnelTokenFile;
         this.previewWebBind = parser.previewWebBind;
@@ -75,6 +78,10 @@ final class StaffBotCommandLine {
         return Optional.ofNullable(moderationConfigFile);
     }
 
+    Optional<Path> chatSettingsFile() {
+        return Optional.ofNullable(chatSettingsFile);
+    }
+
     boolean fileBackedStartup() {
         return !stagingUiPreview && tokenFile != null && moderationConfigFile != null;
     }
@@ -105,6 +112,7 @@ final class StaffBotCommandLine {
                 + ", environment=" + (environment == null ? "<default>" : environment.label())
                 + ", tokenFile=" + configured(tokenFile)
                 + ", moderationConfigFile=" + configured(moderationConfigFile)
+                + ", chatSettingsFile=" + configured(chatSettingsFile)
                 + ", tunnelBinaryFile=" + configured(tunnelBinaryFile)
                 + ", tunnelTokenFile=" + configured(tunnelTokenFile)
                 + ", previewWebBind=" + configured(previewWebBind)
@@ -153,6 +161,7 @@ final class StaffBotCommandLine {
         private Path tokenFile;
         private StaffBotEnvironment environment;
         private Path moderationConfigFile;
+        private Path chatSettingsFile;
         private Path tunnelBinaryFile;
         private Path tunnelTokenFile;
         private String previewWebBind;
@@ -181,6 +190,10 @@ final class StaffBotCommandLine {
         private boolean acceptPath(String argument) {
             if (argument.startsWith(TOKEN_FILE_PREFIX)) {
                 tokenFile = setPathOnce(tokenFile, argument, TOKEN_FILE_PREFIX);
+                return true;
+            }
+            if (argument.startsWith(CHAT_SETTINGS_FILE_PREFIX)) {
+                chatSettingsFile = setPathOnce(chatSettingsFile, argument, CHAT_SETTINGS_FILE_PREFIX);
                 return true;
             }
             if (argument.startsWith(MODERATION_CONFIG_FILE_PREFIX)) {

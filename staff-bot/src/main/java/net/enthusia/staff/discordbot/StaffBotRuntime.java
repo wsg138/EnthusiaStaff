@@ -163,13 +163,26 @@ public final class StaffBotRuntime implements AutoCloseable {
             Optional<Path> moderationConfigFile,
             Optional<StaffBotCommandLine.TunnelFiles> tunnelFiles
     ) throws IOException {
+        return create(configuration, moderationConfigFile, tunnelFiles, Optional.empty());
+    }
+
+    static StaffBotRuntime create(
+            StaffBotConfiguration configuration,
+            Optional<Path> moderationConfigFile,
+            Optional<StaffBotCommandLine.TunnelFiles> tunnelFiles,
+            Optional<Path> chatSettingsFile
+    ) throws IOException {
         Objects.requireNonNull(configuration, "configuration");
+        Objects.requireNonNull(chatSettingsFile, "chatSettingsFile");
         Objects.requireNonNull(moderationConfigFile, "moderationConfigFile");
         Objects.requireNonNull(tunnelFiles, "tunnelFiles");
         if (configuration.moderationWebUri().isPresent()
                 && (tunnelFiles.isEmpty() || moderationConfigFile.isEmpty())) {
             throw new IllegalArgumentException("production moderation website requires its private read tunnel");
         }
+        Map<String, String> environmentValues = chatSettingsFile
+                .map(path -> StaffBotChatSettingsFile.overlay(path, System.getenv()))
+                .orElseGet(System::getenv);
         Optional<StagingTunnel> tunnel = tunnelFiles.map(files -> createTunnel(configuration, files));
         StaffBotHealth health = new StaffBotHealth(configuration.environment());
         StaffBotWorkerPool workers = new StaffBotWorkerPool(
@@ -184,7 +197,6 @@ public final class StaffBotRuntime implements AutoCloseable {
                     configuration.environment().guildId(),
                     configuration.interactionCapacity(),
                     configuration.interactionTtl());
-            Map<String, String> environmentValues = System.getenv();
             Optional<StaffBotChatBridgeConfiguration> chatConfiguration =
                     StaffBotChatBridgeConfiguration.fromEnvironment(
                             configuration.environment(), environmentValues);

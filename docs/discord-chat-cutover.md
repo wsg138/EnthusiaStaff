@@ -43,6 +43,33 @@ ENTHUSIA_STAFF_BOT_CHAT_BRIDGE_MODE=DISABLED|SHADOW|AUTHORITATIVE
 The old `ENTHUSIA_STAFF_BOT_CHAT_BRIDGE_ENABLED=true` remains a staging compatibility alias for
 `SHADOW` only when `MODE` is omitted.
 
+### Bloom file-backed chat settings (optional, not automatically active)
+
+Some Bloom Startup panels expose only predefined `JAR FILE` / `APP FLAGS` fields
+and do not permit arbitrary `ENTHUSIA_STAFF_BOT_*` process environment variables.
+On a StaffBot build containing the separate file-backed chat settings change, the
+existing production startup can add **one path-only argument** to APP FLAGS:
+
+```text
+--chat-bridge-config-file=private-chat-bridge.properties
+```
+
+The option reads only allowlisted chat-bridge/public-chat identity keys from a private
+Java `properties` file. It cannot change the moderation application token, fixed
+StaffBot environment, database or tunnel configuration. Missing, oversized,
+duplicate-key, invalid, or conflicting-with-process-environment files fail closed.
+The file is capped at 16 KiB and is opened without following a symlink. The
+existing default (no argument) still reads chat settings only from environment
+variables. Do not put secrets on the command line or into tracked repository files.
+See `staff-bot/chat-bridge.properties.example` for placeholders only.
+
+This option is **not available in previously staged StaffBot PR #465 artifacts**
+until the new file-backed change is reviewed and a new exact-head artifact is built.
+Do not add the argument to the currently running JAR: its parser rejects unknown
+flags and startup would fail. Even after merge, configuring the file is not
+permission to run AUTHORITATIVE; first complete the pinned private SHADOW acceptance
+process and preserve the existing production JAR and /m rollback files.
+
 Production supports two separately acknowledged modes:
 
 **Private-channel migration test, without cutover** (only when the production-SHADOW safety change
