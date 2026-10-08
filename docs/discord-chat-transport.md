@@ -143,8 +143,11 @@ StaffBot chat is default-off. The legacy
 no explicit mode is present. The preferred control is
 `ENTHUSIA_STAFF_BOT_CHAT_BRIDGE_MODE=DISABLED|SHADOW|AUTHORITATIVE`.
 
-SHADOW remains staging-only. Production requires explicit AUTHORITATIVE mode plus the cutover
-acknowledgement documented in `docs/discord-chat-cutover.md`.
+SHADOW is normally staging-only. When the explicit production-SHADOW safety gate is built into
+StaffBot, production may run SHADOW only with the separate exact migration acknowledgement and
+every chat route pinned to the fixed private staging channel. SHADOW leaves DiscordSRV live and
+does not authorize suppression. Production AUTHORITATIVE requires its independent cutover
+acknowledgement and completed acceptance checks; see `docs/discord-chat-cutover.md`.
 
 ## Discord -> Minecraft staging checkpoint
 
