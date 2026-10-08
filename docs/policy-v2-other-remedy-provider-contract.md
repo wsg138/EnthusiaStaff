@@ -70,6 +70,11 @@ A verified **manual completion** must have a separate explicit staff assertion c
 7. Missing, downgraded or unavailable providers fail closed: keep REQUIRED or review-needed state, audit a bounded diagnostic, never silently substitute another provider or claim completion. Operators need a bounded retry/reconcile action with permissions; reconciliation must not mint new acts.
 8. The public API/Discord/website view is a **sanitized projection**, never a raw provider receipt, target coordinate, investigator note, hidden entry IDs or checksum.
 
+## 2026-10-08 provider-side implementation checkpoint
+
+- [EnthusiaCommend draft PR #26](https://github.com/wsg138/EnthusiaCommend/pull/26) introduces **non-mutating** exact-entry correction preflight with canonical subject checks, CAS snapshot checksum, exact giver/target/category/score/timestamp matching, duplicate/ambiguity refusal, immutable output, and score overflow rejection. Three exact-head GitHub Actions checks passed for its latest commit when reviewed. This is preparatory only: **no targeted mutation API or durable provider receipt yet exists**; it must not be treated as remedy completion.
+- Cross-repository GitHub Issues are disabled in at least the checked Market repository, so [EnthusiaStaff #462](https://github.com/wsg138/EnthusiaStaff/issues/462) remains the canonical integration tracker for provider follow-ups. Do not assume provider issue records were opened.
+
 ## Required implementation sequencing
 
 1. **This document / owner design review only (#462).** Confirm the six operation types, scopes, capabilities and any cases requiring manual signoff. No YAML/Java changes here.
