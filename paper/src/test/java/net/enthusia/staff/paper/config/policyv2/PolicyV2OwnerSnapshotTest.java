@@ -31,6 +31,7 @@ import org.junit.jupiter.api.Test;
 class PolicyV2OwnerSnapshotTest {
     private static final Instant NOW = Instant.parse("2026-10-07T22:00:00Z");
     private static final String OWNER_VERSION = "owner.2026-10-07.2";
+    private static final List<String> HISTORY_TIERS = List.of("related", "pattern", "chronic", "heavy");
 
     @Test
     void bundledOwnerSnapshotIsCompleteButRuntimeRemainsDisabled() {
@@ -152,32 +153,42 @@ class PolicyV2OwnerSnapshotTest {
     @Test
     void everySupportedRemedyHasVersionedEnforcementMetadataAndResolvesFromPinnedFinding() {
         PolicySnapshot snapshot = load().activeSnapshot();
-        PolicyV2RemedyBindingResolver bindings = new PolicyV2RemedyBindingResolver();
-        int supported = 0;
-        int manualOnly = 0;
+        PolicyV2RemedyBindingResolver resolver = new PolicyV2RemedyBindingResolver();
+
+        List<RemedySpec> remedies = snapshot.offenses().stream()
+                .flatMap(offense -> offense.rules().stream())
+                .flatMap(rule -> rule.remedies().stream())
+                .toList();
+        assertTrue(remedies.stream().anyMatch(remedy -> remedy.type() == RemedySpec.Type.OTHER));
+        assertTrue(remedies.stream().anyMatch(remedy -> remedy.type() != RemedySpec.Type.OTHER));
 
         for (OffensePolicy offense : snapshot.offenses()) {
             IncidentFinding finding = new IncidentFinding(
-                    offense.id(),
-                    complianceAttributes(offense.id())
+                    offense.id(), complianceAttributes(offense.id())
             );
             for (var rule : offense.rules()) {
                 for (RemedySpec remedy : rule.remedies()) {
-                    if (remedy.type() == RemedySpec.Type.OTHER) {
-                        manualOnly++;
-                        assertTrue(remedy.enforcementBinding().isEmpty(), offense.id());
-                        continue;
-                    }
-                    supported++;
-                    assertTrue(remedy.enforcementBinding().isPresent(),
-                            offense.id() + " / " + rule.id() + " / " + remedy.id());
-                    var binding = bindings.resolve(remedy, finding);
-                    assertEquals(remedy.enforcementBinding().orElseThrow().scope(), binding.scope());
+                    assertBindingMatchesPinnedFinding(remedy, finding, resolver, offense.id(), rule.id());
                 }
             }
         }
-        assertTrue(supported > 0);
-        assertTrue(manualOnly > 0);
+    }
+
+    private static void assertBindingMatchesPinnedFinding(
+            RemedySpec remedy,
+            IncidentFinding finding,
+            PolicyV2RemedyBindingResolver resolver,
+            String offenseId,
+            String ruleId
+    ) {
+        if (remedy.type() == RemedySpec.Type.OTHER) {
+            assertTrue(remedy.enforcementBinding().isEmpty(), offenseId);
+            return;
+        }
+        assertTrue(remedy.enforcementBinding().isPresent(),
+                offenseId + " / " + ruleId + " / " + remedy.id());
+        var resolved = resolver.resolve(remedy, finding);
+        assertEquals(remedy.enforcementBinding().orElseThrow().scope(), resolved.scope());
     }
 
     @Test
@@ -215,34 +226,48 @@ class PolicyV2OwnerSnapshotTest {
 
     @Test
     void nonBaselineHistoryTiersRetainMandatoryRemediesWithinEachContext() {
-        PolicySnapshot snapshot = load().activeSnapshot();
+        for (OffensePolicy offense : load().activeSnapshot().offenses()) {
+            assertOffenseHistoryRemedies(offense);
+        }
+    }
 
-        for (OffensePolicy offense : snapshot.offenses()) {
-            Map<String, List<String>> baseline = new java.util.HashMap<>();
-            for (var rule : offense.rules()) {
-                if (rule.id().equals("baseline") || rule.id().endsWith("-baseline")) {
-                    String group = rule.id().substring(0, rule.id().length() - "baseline".length());
-                    baseline.put(group, rule.remedies().stream().map(RemedySpec::id).sorted().toList());
-                }
+    private static void assertOffenseHistoryRemedies(OffensePolicy offense) {
+        Map<String, List<String>> baseline = baselineRemediesByContext(offense);
+        for (var rule : offense.rules()) {
+            String suffix = historyTierSuffix(rule.id());
+            if (suffix == null) {
+                continue;
             }
-            for (var rule : offense.rules()) {
-                String suffix = List.of("related", "pattern", "chronic", "heavy").stream()
-                        .filter(name -> rule.id().equals(name) || rule.id().endsWith("-" + name))
-                        .findFirst().orElse(null);
-                if (suffix == null) {
-                    continue;
-                }
-                String group = rule.id().substring(0, rule.id().length() - suffix.length());
-                if (!baseline.containsKey(group)) {
-                    continue;
-                }
-                assertEquals(
-                        baseline.get(group),
-                        rule.remedies().stream().map(RemedySpec::id).sorted().toList(),
-                        offense.id() + " / " + rule.id()
-                );
+            String group = rule.id().substring(0, rule.id().length() - suffix.length());
+            List<String> expected = baseline.get(group);
+            if (expected != null) {
+                assertEquals(expected, remedyIds(rule.remedies()), offense.id() + " / " + rule.id());
             }
         }
+    }
+
+    private static Map<String, List<String>> baselineRemediesByContext(OffensePolicy offense) {
+        Map<String, List<String>> baseline = new java.util.HashMap<>();
+        for (var rule : offense.rules()) {
+            if (rule.id().equals("baseline") || rule.id().endsWith("-baseline")) {
+                String group = rule.id().substring(0, rule.id().length() - "baseline".length());
+                baseline.put(group, remedyIds(rule.remedies()));
+            }
+        }
+        return baseline;
+    }
+
+    private static String historyTierSuffix(String ruleId) {
+        for (String tier : HISTORY_TIERS) {
+            if (ruleId.equals(tier) || ruleId.endsWith("-" + tier)) {
+                return tier;
+            }
+        }
+        return null;
+    }
+
+    private static List<String> remedyIds(List<RemedySpec> remedies) {
+        return remedies.stream().map(RemedySpec::id).sorted().toList();
     }
 
     @Test
