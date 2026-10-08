@@ -31,23 +31,34 @@ public final class PolicyV2StaticSafetyAudit {
         Objects.requireNonNull(snapshot, "snapshot");
         List<Finding> findings = new ArrayList<>();
         for (OffensePolicy offense : snapshot.offenses()) {
-            boolean contextDefined = BLACKMAIL.equals(offense.id()) && validBlackmailAttributes(offense);
-            if (BLACKMAIL.equals(offense.id()) && !contextDefined) {
-                findings.add(new Finding("blackmail.missing-real-world-evidence-fields", offense.id(), "", ""));
-            }
-            for (ResolutionRule rule : offense.rules()) {
-                inspectRemedies(findings, offense, rule);
-                if (BLACKMAIL.equals(offense.id())
-                        && isPunitive(rule.action())
-                        && (!contextDefined || !strictRealWorldPredicate(rule.condition()))) {
-                    findings.add(new Finding("blackmail.ungated-punitive-rule", offense.id(), rule.id(), ""));
-                }
-                if (LANGUAGE.equals(offense.id())) {
-                    inspectLanguageSanctions(findings, offense, rule);
-                }
-            }
+            inspectOffense(findings, offense);
         }
         return new Report(snapshot.version(), findings);
+    }
+
+    private static void inspectOffense(List<Finding> findings, OffensePolicy offense) {
+        boolean isBlackmail = BLACKMAIL.equals(offense.id());
+        boolean contextDefined = isBlackmail && validBlackmailAttributes(offense);
+        if (isBlackmail && !contextDefined) {
+            findings.add(new Finding("blackmail.missing-real-world-evidence-fields", offense.id(), "", ""));
+        }
+        for (ResolutionRule rule : offense.rules()) {
+            inspectRemedies(findings, offense, rule);
+            inspectBlackmailRule(findings, offense, rule, isBlackmail, contextDefined);
+            if (LANGUAGE.equals(offense.id())) {
+                inspectLanguageSanctions(findings, offense, rule);
+            }
+        }
+    }
+
+    private static void inspectBlackmailRule(
+            List<Finding> findings, OffensePolicy offense, ResolutionRule rule,
+            boolean isBlackmail, boolean contextDefined
+    ) {
+        if (isBlackmail && isPunitive(rule.action())
+                && (!contextDefined || !strictRealWorldPredicate(rule.condition()))) {
+            findings.add(new Finding("blackmail.ungated-punitive-rule", offense.id(), rule.id(), ""));
+        }
     }
 
     private static void inspectRemedies(List<Finding> findings, OffensePolicy offense, ResolutionRule rule) {
