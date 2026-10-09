@@ -77,8 +77,16 @@ sealed interface AiReviewGuiState {
             EventDetails details,
             int returnPage,
             List<String> labels,
-            int page
+            int page,
+            History historyOrigin
     ) implements AiReviewGuiState {
+        public LabelPicker(
+                UUID viewerId, long generation, EventDetails details,
+                int returnPage, List<String> labels, int page
+        ) {
+            this(viewerId, generation, details, returnPage, labels, page, null);
+        }
+
         public LabelPicker {
             requireViewer(viewerId, generation);
             if (details == null || returnPage < 0 || page < 0) {
@@ -97,8 +105,18 @@ sealed interface AiReviewGuiState {
             CorrectionDecision decision,
             String proposalId,
             String description,
-            boolean adminRequested
+            boolean adminRequested,
+            History historyOrigin
     ) implements AiReviewGuiState {
+        public Confirm(
+                UUID viewerId, long generation, EventDetails details,
+                int returnPage, WriteKind kind, CorrectionDecision decision,
+                String proposalId, String description, boolean adminRequested
+        ) {
+            this(viewerId, generation, details, returnPage, kind, decision,
+                    proposalId, description, adminRequested, null);
+        }
+
         public Confirm {
             requireViewer(viewerId, generation);
             if (details == null || returnPage < 0 || kind == null || description == null || description.isBlank()) {
