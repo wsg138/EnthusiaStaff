@@ -44,7 +44,7 @@ sealed interface AiReviewGuiState {
             previousCursors = List.copyOf(
                     previousCursors == null ? List.of() : previousCursors
             );
-            if (previousCursors.size() > 50
+            if (previousCursors.size() > AiReviewHistoryNavigation.MAX_PREVIOUS_PAGES
                     || (cursor != null && (cursor.isBlank() || cursor.length() > 64))
                     || (nextCursor != null && (nextCursor.isBlank() || nextCursor.length() > 64))) {
                 throw new IllegalArgumentException("invalid history paging state");
