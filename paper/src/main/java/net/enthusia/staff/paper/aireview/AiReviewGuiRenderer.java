@@ -114,7 +114,7 @@ final class AiReviewGuiRenderer {
         if (!state.previousCursors().isEmpty()) {
             inventory.setItem(PREVIOUS, item(Material.ARROW, "Previous page", List.of()));
         }
-        if (state.nextCursor() != null && state.previousCursors().size() < 50) {
+        if (state.nextCursor() != null && state.previousCursors().size() < AiReviewHistoryNavigation.MAX_PREVIOUS_PAGES) {
             inventory.setItem(NEXT, item(Material.ARROW, "Next page", List.of()));
         }
         inventory.setItem(CLOSE, item(Material.BARRIER, "Close", List.of()));
