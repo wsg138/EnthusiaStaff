@@ -23,6 +23,9 @@ import net.enthusia.staff.domain.policyv2.persistence.PolicyV2Store;
 public final class PolicyV2ManualWorkflow {
     private static final int MAX_OPERATION_KEY = 128;
     private static final String POLICY_GAP_OFFENSE = "policy-gap.unclassified";
+    private static final String BLACKMAIL_OFFENSE = "safety.blackmail-extortion";
+    private static final String REAL_WORLD_SCOPE = "coercion-context";
+    private static final String REAL_WORLD_PROOF = "real-world-leverage-verified";
 
     @FunctionalInterface
     public interface HistorySource {
@@ -57,6 +60,7 @@ public final class PolicyV2ManualWorkflow {
     private final AuthorizationPolicy authorization;
     private final PolicyResolver resolver;
     private final Clock clock;
+    private final PolicyV2RealWorldEvidenceGate evidenceGate;
 
     public PolicyV2ManualWorkflow(
             Supplier<PolicySnapshot> snapshots,
@@ -65,7 +69,20 @@ public final class PolicyV2ManualWorkflow {
             AuthorizationPolicy authorization,
             Clock clock
     ) {
-        this(snapshots, histories, recorder, authorization, new PolicyResolver(), clock);
+        this(snapshots, histories, recorder, authorization, new PolicyResolver(), clock,
+                PolicyV2RealWorldEvidenceGate.unavailable());
+    }
+
+    /** The supplied verifier must check persisted evidence independently of staff answers. */
+    public PolicyV2ManualWorkflow(
+            Supplier<PolicySnapshot> snapshots,
+            HistorySource histories,
+            ShadowRecorder recorder,
+            AuthorizationPolicy authorization,
+            Clock clock,
+            PolicyV2RealWorldEvidenceGate evidenceGate
+    ) {
+        this(snapshots, histories, recorder, authorization, new PolicyResolver(), clock, evidenceGate);
     }
 
     PolicyV2ManualWorkflow(
@@ -74,7 +91,8 @@ public final class PolicyV2ManualWorkflow {
             ShadowRecorder recorder,
             AuthorizationPolicy authorization,
             PolicyResolver resolver,
-            Clock clock
+            Clock clock,
+            PolicyV2RealWorldEvidenceGate evidenceGate
     ) {
         this.snapshots = java.util.Objects.requireNonNull(snapshots, "snapshots");
         this.histories = java.util.Objects.requireNonNull(histories, "histories");
@@ -82,6 +100,7 @@ public final class PolicyV2ManualWorkflow {
         this.authorization = java.util.Objects.requireNonNull(authorization, "authorization");
         this.resolver = java.util.Objects.requireNonNull(resolver, "resolver");
         this.clock = java.util.Objects.requireNonNull(clock, "clock");
+        this.evidenceGate = java.util.Objects.requireNonNull(evidenceGate, "evidenceGate");
     }
 
     public boolean mayStart(Actor actor) {
@@ -135,6 +154,7 @@ public final class PolicyV2ManualWorkflow {
         PolicySnapshot snapshot = currentSnapshot();
         validateConfiguredSelection(snapshot, draft);
         IncidentFinding finding = finding(draft);
+        requireVerifiedRealWorldEvidence(actor, draft, snapshot, finding);
         List<BehavioralHistoryEntry> history = histories.completeHistory(draft.targetId(), draft.incidentAt());
         PolicyResolution resolution = resolver.resolve(snapshot, finding, draft.incidentAt(), history);
         return new PolicyV2ManualReview(
@@ -163,7 +183,7 @@ public final class PolicyV2ManualWorkflow {
         try {
             refreshed = review(actor, reviewed.draft());
         } catch (IllegalArgumentException exception) {
-            return new SubmissionResult.Rejected("Policy changed; reopen the incident before confirming");
+            return new SubmissionResult.Rejected("Policy or evidence changed; reopen the incident before confirming");
         }
         if (!sameEvaluation(reviewed, refreshed)) {
             return new SubmissionResult.Stale(refreshed);
@@ -177,6 +197,37 @@ public final class PolicyV2ManualWorkflow {
             return new SubmissionResult.Recorded(evaluationId, review.route());
         } catch (PolicyV2Store.Conflict conflict) {
             return new SubmissionResult.Conflict("The shadow evaluation conflicts with an existing operation");
+        }
+    }
+
+    private void requireVerifiedRealWorldEvidence(
+            Actor actor, PolicyV2ManualDraft draft, PolicySnapshot snapshot, IncidentFinding finding
+    ) {
+        if (!BLACKMAIL_OFFENSE.equals(finding.offenseId())) {
+            return;
+        }
+        var attributes = finding.attributes();
+        if (!(attributes.get(REAL_WORLD_SCOPE) instanceof IncidentAttributeValue.EnumValue context)
+                || !(attributes.get(REAL_WORLD_PROOF) instanceof IncidentAttributeValue.BooleanValue proven)) {
+            throw new IllegalArgumentException(
+                    "Blackmail classification requires the owner-approved real-world evidence questions");
+        }
+        if (!"real-world".equals(context.value()) || !proven.value()) {
+            throw new IllegalArgumentException(
+                    "Game-only, uncertain or unverified leverage is not a real-world blackmail offense");
+        }
+        var verification = new PolicyV2RealWorldEvidenceGate.VerificationRequest(
+                actor.id(), draft.targetId(), draft.incidentAt(), snapshot.version(), finding);
+        boolean verified;
+        try {
+            verified = evidenceGate.verified(verification);
+        } catch (RuntimeException unavailable) {
+            throw new IllegalArgumentException("Independent real-world evidence verification is unavailable",
+                    unavailable);
+        }
+        if (!verified) {
+            throw new IllegalArgumentException(
+                    "A trusted independent real-world evidence verification is required");
         }
     }
 
