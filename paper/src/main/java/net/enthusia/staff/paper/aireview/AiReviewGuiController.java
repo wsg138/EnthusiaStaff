@@ -567,8 +567,10 @@ final class AiReviewGuiController implements Listener {
                 authority,
                 state.decision(),
                 note,
-                correction -> writeComplete(viewer, correction, state.returnPage()),
-                issue -> writeFailed(viewer, fresh, state.returnPage(), issue)
+                correction -> writeComplete(viewer, correction, state.returnPage(),
+                        state.historyOrigin()),
+                issue -> writeFailed(viewer, fresh, state.returnPage(), issue,
+                        state.historyOrigin())
         );
     }
 
