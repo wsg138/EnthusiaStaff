@@ -1,6 +1,6 @@
 # Bloom StaffBot-to-Velocity chat-channel network preflight
 
-**Status as of 2026-10-08: CONNECTIVITY UNVERIFIED.**
+**Current status October 9, 2026: StaffBot-origin DNS/TCP/TLS 1.3 and pinned peer identity VERIFIED; application HMAC and private SHADOW chat still UNVERIFIED.**
 This is a non-deployment checkpoint supporting draft PRs #422, #465, and #466
 and the separate migration safety procedure in
 [`discord-chat-cutover.md`](discord-chat-cutover.md). Never infer a successful
@@ -214,3 +214,47 @@ maintenance restart and adding ONLY `--tls-diagnostic`. Leave Velocity,
 Paper, DiscordSRV, and private chat routes unchanged. If moderation or
 tunnel health regresses, remove that flag and restore the matching original
 JAR and startup arguments. A successful TLS result is not HMAC/SHADOW proof.
+
+## October 9: StaffBot-origin TLS proven; HMAC deployment still gated
+
+On October 9 at **20:27:10 UTC**, the owner restarted **only the existing
+production StaffBot** with its original production moderation/tunnel flags
+plus the opt-in `--tls-diagnostic` flag. The new diagnostic JAR had been
+promoted from a SHA-256 verified inactive staging copy, and the previous
+active StaffBot JAR retained both in a local backup and on the StaffBot
+SFTP account.
+
+The real running StaffBot process logged `staffbot_tls_diagnostic
+state=TLS_VERIFIED origin=staffbot_jvm`; it also logged successful JDA
+login/WebSocket readiness and `staff_bot_ready environment=production`.
+The Cloudflare connector established four HTTP/2 connections. Its
+optional QUIC prechecks failed, but the configured HTTP/2 transport
+remained connected, so those warnings did not block startup.
+
+The read-only independent SFTP report download then confirmed:
+`STAFFBOT_TLS_DIAGNOSTIC_STATE=TLS_VERIFIED`,
+`CHECKED_UTC=2026-10-09T20:27:10.126904813Z`,
+`SOURCE=STAFFBOT_JVM`, the exact previously pinned Velocity certificate
+SHA-256, `HMAC_CHECKED=false` and `CHAT_MODE_CHANGED=false`.
+The implementation performs DNS resolution from the **actual StaffBot
+JVM**, TCP to the one pinned internal Velocity peer at port 28765,
+TLS 1.3, standard hostname verification and certificate fingerprint
+comparison. No chat frame or HMAC handshake was sent.
+
+A separate read-only download of the **active Velocity**
+`/plugins/enthusiastaff/config.properties` established that the
+currently configured backends are HUB, SMP, TEST and TEMP; there is
+**no STAFFBOT backend entry** in the live proxy configuration. No
+production config, JAR or secret changes were made during this
+inspection.
+
+**Next required step:** independently review/backup the live Velocity
+config and complete private secret-source mapping, then apply the new
+STAFFBOT peer and matching HMAC configuration atomically in a
+separately approved maintenance operation. That change can require
+Velocity restart, so protect live traffic and preserve rollback.
+Only after an actual authenticated StaffBot channel is observed may
+the outbound-only SHADOW route to the fixed private Discord channel
+be activated and tested. DiscordSRV and RoseChat's legacy transport
+must remain active. Neither this TLS result nor a CI green build
+authorizes AUTHORITATIVE mode or physical DiscordSRV removal.
