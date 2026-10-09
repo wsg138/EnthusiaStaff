@@ -360,7 +360,14 @@ public final class AiReviewSubsystem implements AutoCloseable, Listener {
                         }
                     });
                 } catch (AiReviewClientException exception) {
-                    if (exception.category() == AiReviewClientException.Category.CONFLICT) {
+                    if (exception.category() == AiReviewClientException.Category.INVALID_CURSOR) {
+                        // Bad user input must not poison global queue/correction backoff.
+                        schedule(() -> {
+                            if (!closed.get()) {
+                                failure.accept("invalid history cursor; restart with /aireview history");
+                            }
+                        });
+                    } else if (exception.category() == AiReviewClientException.Category.CONFLICT) {
                         backoff.success();
                         schedule(() -> {
                             if (!closed.get()) {
