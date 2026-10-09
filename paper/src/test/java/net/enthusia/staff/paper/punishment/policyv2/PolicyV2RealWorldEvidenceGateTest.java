@@ -40,6 +40,8 @@ class PolicyV2RealWorldEvidenceGateTest {
     private static final String OFFENSE = "safety.blackmail-extortion";
     private static final String CONTEXT = "coercion-context";
     private static final String VERIFIED = "real-world-leverage-verified";
+    private static final String REAL_WORLD = "real-world";
+    private static final String GAME_ONLY = "game-only";
     private static final Actor ADMIN = new Actor(REVIEWER, "admin", StaffRank.ADMIN);
 
     @Test
@@ -47,9 +49,9 @@ class PolicyV2RealWorldEvidenceGateTest {
         var workflow = workflow(candidatePolicy(), PolicyV2RealWorldEvidenceGate.unavailable(),
                 new AtomicInteger());
         assertThrows(IllegalArgumentException.class, () ->
-                workflow.review(ADMIN, draft("real-world", true)));
+                workflow.review(ADMIN, draft(REAL_WORLD, true)));
         assertThrows(IllegalArgumentException.class, () ->
-                workflow.review(ADMIN, draft("real-world", false).clearAnswer(VERIFIED)));
+                workflow.review(ADMIN, draft(REAL_WORLD, false).clearAnswer(VERIFIED)));
     }
 
     @Test
@@ -59,7 +61,7 @@ class PolicyV2RealWorldEvidenceGateTest {
             seen.set(request);
             return true;
         }, new AtomicInteger());
-        var review = workflow.review(ADMIN, draft("real-world", true));
+        var review = workflow.review(ADMIN, draft(REAL_WORLD, true));
         assertInstanceOf(PolicyAction.ExactWithApproval.class, review.resolution().action());
         assertEquals(PolicyV2ManualReview.ApprovalRoute.DIRECT_CONFIRM, review.route());
         assertEquals(REVIEWER, seen.get().reviewerId());
@@ -76,8 +78,8 @@ class PolicyV2RealWorldEvidenceGateTest {
             calls.incrementAndGet();
             return true;
         }, new AtomicInteger());
-        for (var draft : List.of(draft("game-only", false), draft("game-only", true),
-                draft("uncertain", true), draft("real-world", false))) {
+        for (var draft : List.of(draft(GAME_ONLY, false), draft(GAME_ONLY, true),
+                draft("uncertain", true), draft(REAL_WORLD, false))) {
             assertThrows(IllegalArgumentException.class, () -> workflow.review(ADMIN, draft));
         }
         assertEquals(0, calls.get());
@@ -88,7 +90,7 @@ class PolicyV2RealWorldEvidenceGateTest {
         AtomicBoolean evidencePresent = new AtomicBoolean(true);
         AtomicInteger writes = new AtomicInteger();
         var workflow = workflow(candidatePolicy(), ignored -> evidencePresent.get(), writes);
-        var reviewed = workflow.review(ADMIN, draft("real-world", true));
+        var reviewed = workflow.review(ADMIN, draft(REAL_WORLD, true));
         evidencePresent.set(false);
         var result = workflow.submitShadow(ADMIN, reviewed, "same-operation");
         assertInstanceOf(PolicyV2ManualWorkflow.SubmissionResult.Rejected.class, result);
@@ -105,7 +107,7 @@ class PolicyV2RealWorldEvidenceGateTest {
             }
             return true;
         }, writes);
-        var reviewed = workflow.review(ADMIN, draft("real-world", true));
+        var reviewed = workflow.review(ADMIN, draft(REAL_WORLD, true));
         down.set(true);
         var rejected = assertInstanceOf(PolicyV2ManualWorkflow.SubmissionResult.Rejected.class,
                 workflow.submitShadow(ADMIN, reviewed, "provider-down"));
@@ -130,11 +132,11 @@ class PolicyV2RealWorldEvidenceGateTest {
             return true;
         }, writes);
         assertThrows(IllegalArgumentException.class, () ->
-                workflow.review(ADMIN, draft("game-only", false)));
+                workflow.review(ADMIN, draft(GAME_ONLY, false)));
         assertThrows(IllegalArgumentException.class, () ->
                 workflow.review(ADMIN, draft("uncertain", true)));
         assertThrows(IllegalArgumentException.class, () ->
-                workflow.review(ADMIN, draft("real-world", false)));
+                workflow.review(ADMIN, draft(REAL_WORLD, false)));
         assertEquals(0, verifications.get());
         assertEquals(0, writes.get());
     }
@@ -178,13 +180,13 @@ class PolicyV2RealWorldEvidenceGateTest {
                 OFFENSE, "Real-world blackmail", "safety-threats-privacy",
                 List.of(
                         IncidentAttributeDefinition.enumValue(CONTEXT, true,
-                                Set.of("game-only", "real-world", "uncertain")),
+                                Set.of(GAME_ONLY, REAL_WORLD, "uncertain")),
                         IncidentAttributeDefinition.booleanValue(VERIFIED, true)
                 ),
                 new HistoryPolicy(Map.of(OFFENSE, 1.0), DecayPolicy.nonDecaying()),
                 List.of(new ResolutionRule("terminal", new RuleCondition(
                         Map.of(
-                                CONTEXT, Set.of(new IncidentAttributeValue.EnumValue("real-world")),
+                                CONTEXT, Set.of(new IncidentAttributeValue.EnumValue(REAL_WORLD)),
                                 VERIFIED, Set.of(new IncidentAttributeValue.BooleanValue(true))
                         ),
                         HistoryWindow.atLeast(0)), permanentBan(), List.of()))
