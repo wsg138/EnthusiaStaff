@@ -68,6 +68,48 @@ class PolicyV2StaticSafetyAuditTest {
     }
 
     @Test
+    void realWorldPermanentNetworkBanAlwaysRequiresAdministratorApproval() {
+        var permanentNetworkBan = new SanctionSpec(
+                SanctionType.NETWORK_BAN, SanctionLength.permanent());
+        var shortMute = new SanctionSpec(SanctionType.MUTE,
+                SanctionLength.temporary(java.time.Duration.ofDays(1)));
+        var scope = scope(true);
+        var unsafeExact = offense(BLACKMAIL, requiredBlackmailFields(),
+                List.of(new ResolutionRule("exact", scope,
+                        new PolicyAction.Exact(List.of(permanentNetworkBan)), List.of())));
+        var modApproved = offense(BLACKMAIL, requiredBlackmailFields(),
+                List.of(new ResolutionRule("mod", scope,
+                        new PolicyAction.ExactWithApproval(
+                                List.of(permanentNetworkBan), StaffRank.MOD), List.of())));
+        var modBounded = offense(BLACKMAIL, requiredBlackmailFields(),
+                List.of(new ResolutionRule("bounded", scope,
+                        new PolicyAction.Bounded(
+                                List.of(List.of(shortMute), List.of(permanentNetworkBan)),
+                                StaffRank.MOD), List.of())));
+
+        for (OffensePolicy unsafe : List.of(unsafeExact, modApproved, modBounded)) {
+            assertEquals(List.of("blackmail.terminal-requires-admin-approval"),
+                    audit(unsafe).findings().stream()
+                            .map(PolicyV2StaticSafetyAudit.Finding::code).toList());
+        }
+
+        var adminBounded = offense(BLACKMAIL, requiredBlackmailFields(),
+                List.of(new ResolutionRule("bounded", scope,
+                        new PolicyAction.Bounded(
+                                List.of(List.of(shortMute), List.of(permanentNetworkBan)),
+                                StaffRank.ADMIN), List.of())));
+        var founderApproved = offense(BLACKMAIL, requiredBlackmailFields(),
+                List.of(new ResolutionRule("founder", scope,
+                        new PolicyAction.ExactWithApproval(
+                                List.of(permanentNetworkBan), StaffRank.FOUNDER), List.of())));
+        assertTrue(audit(adminBounded).passesStaticChecks());
+        assertTrue(audit(founderApproved).passesStaticChecks());
+        assertTrue(audit(offense(BLACKMAIL, requiredBlackmailFields(),
+                List.of(new ResolutionRule("mute-only", scope,
+                        new PolicyAction.Exact(List.of(shortMute)), List.of())))).passesStaticChecks());
+    }
+
+    @Test
     void optionalEvidenceFieldsAreNotSufficientToAuthorizeSevereSanction() {
         OffensePolicy offense = offense(BLACKMAIL, List.of(
                 IncidentAttributeDefinition.enumValue(CONTEXT, false,
