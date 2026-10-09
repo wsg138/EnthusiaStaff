@@ -258,3 +258,50 @@ the outbound-only SHADOW route to the fixed private Discord channel
 be activated and tested. DiscordSRV and RoseChat's legacy transport
 must remain active. Neither this TLS result nor a CI green build
 authorizes AUTHORITATIVE mode or physical DiscordSRV removal.
+
+## October 9, before the scheduled 5:30 PM EDT Velocity restart
+
+The owner reported a scheduled Velocity proxy restart at 5:30 PM local time.
+A narrowly scoped change was prepared to make that existing maintenance
+window useful; **no extra restart** was initiated.
+
+- Read-only SFTP downloads captured the exact active Velocity
+  `plugins/enthusiastaff/config.properties` and private
+  `plugins/enthusiastaff/secrets.properties`, under a restricted local
+  directory. The live private channel values match the earlier protected
+  backup, including the extra existing BUILD channel secret.
+- The full currently installed Velocity plugin JAR was downloaded and
+  SHA-256 verified to equal the established production baseline
+  `fe27ae2800137c75796ad22fd92aae72782c8882739e7cb9c97c4a98ee158b4e`.
+  Bytecode inspection of this exact binary verified that it already
+  excludes STAFFBOT from required Paper backends and resolves channel
+  HMAC keys through `PrivateRuntimeSecrets`, which accepts the existing
+  per-instance `secrets.properties` fallback.
+- Prepared two **additive** files: the active config with only the new
+  `channel.backend.STAFFBOT.secret-environment=ES_CHANNEL_STAFFBOT_SECRET`
+  entry, and private secrets with only the corresponding
+  `ES_CHANNEL_STAFFBOT_SECRET` entry. All previous keys and values remain
+  identical. The new 32-byte HMAC exactly matches the privately prepared
+  StaffBot client key. No token/key values were displayed or committed.
+- Both candidates were staged in a separate Velocity SFTP folder and
+  their hashes independently read back. Before promotion, the helper
+  checked both active original file hashes and required both protected
+  backup paths to be clear.
+- **SFTP promotion PASSED**: the additive secrets file was installed
+  before the new config, with originals retained on-server as
+  `config.properties.pre-staffbot-20261009` and
+  `secrets.properties.pre-staffbot-20261009`. Independent readback
+  verified the two new active files and both exact original backups.
+  The private local backups are also retained. The Velocity JAR,
+  Paper, StaffBot, DiscordSRV, LumaGuilds and startup flags were not
+  modified by this peer-config operation.
+- A guarded local SFTP `RollbackVelocityPeer` procedure verifies both
+  saved originals before restoring them. The scheduled restart will
+  load the additive config; actual proxy startup/channel health must
+  be verified afterward. A read-only check is scheduled for 5:40 PM
+  local time.
+
+The added STAFFBOT entry only enables acceptance of an authenticated
+peer; **a real HMAC connection has NOT yet been verified** because the
+StaffBot chat client has not been enabled. Do not claim end-to-end
+private SHADOW publication or remove DiscordSRV until separately proven.
