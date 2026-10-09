@@ -139,9 +139,9 @@ final class AiReviewCommand implements CommandExecutor, TabCompleter {
                 || sender instanceof Player player && !subsystem.activeDuty(player)) {
             return;
         }
-        send(sender, "AI decisions · " + page.items().size()
+        sendHistoryLine(sender, "AI decisions · " + page.items().size()
                 + " finalized records (not just flags)", NamedTextColor.GOLD);
-        page.items().forEach(item -> send(
+        page.items().forEach(item -> sendHistoryLine(
                 sender,
                 AiReviewPresentation.bounded(item.eventId(), 64) + " "
                         + item.messageAction() + " "
@@ -152,10 +152,25 @@ final class AiReviewCommand implements CommandExecutor, TabCompleter {
                         ? NamedTextColor.YELLOW : NamedTextColor.GRAY
         ));
         if (page.nextCursor() != null) {
-            send(sender, "Next: /aireview history " + page.nextCursor(), NamedTextColor.GRAY);
+            sendHistoryLine(sender, "Next: /aireview history " + page.nextCursor(), NamedTextColor.GRAY);
         }
-        send(sender, "Inspect: /aireview view <event-id> (authorized in-game only).",
+        sendHistoryLine(sender, "Inspect: /aireview view <event-id> (authorized in-game only).",
                 NamedTextColor.GRAY);
+    }
+
+    private void sendHistoryLine(CommandSender sender, String line, NamedTextColor color) {
+        if (sender instanceof Player player) {
+            // Check access on the same player scheduler task as delivery.
+            onPlayer(player, () -> {
+                if (player.isOnline() && AiReviewPermissions.queue(player)
+                        && subsystem.activeDuty(player)) {
+                    player.sendMessage(StaffMessageStyle.style(Component.text(line, color)));
+                }
+            });
+            return;
+        }
+        // Console still receives only minimized summaries on the global scheduler.
+        send(sender, line, color);
     }
 
     private void refresh(CommandSender sender) {
