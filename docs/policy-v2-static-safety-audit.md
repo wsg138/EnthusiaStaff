@@ -4,12 +4,13 @@ Parent: [Policy v2 #355](https://github.com/wsg138/EnthusiaStaff/issues/355). Re
 
 `PolicyV2StaticSafetyAudit.inspect(PolicySnapshot)` is **read-only** and cannot alter, authorize, or deploy punishments. It returns only snapshot version and finding codes/IDs; it never surfaces private player evidence, player identities, or case contents.
 
-The audit currently detects four classes of static cutover risk:
+The audit currently detects five classes of static cutover risk:
 
 1. `remedy.unsupported-other`: an `OTHER` remedy cannot claim trusted completion through W3B's typed built-in enforcement. This includes the pending owner provider work for Market, Reputation, WorldGuard, and safety cleanup.
 2. `remedy.missing-enforcement-binding`: a non-`OTHER` remedy lacks its versioned typed enforcement binding.
 3. `blackmail.missing-real-world-evidence-fields` and `blackmail.ungated-punitive-rule`: for any punitive `safety.blackmail-extortion` rule, the offense must require enum `coercion-context` including game-only, uncertain and real-world, plus required boolean `real-world-leverage-verified`. Every punitive rule must explicitly restrict **both** to exactly `real-world` and `true`. Non-punitive review outcomes may remain broad. This contract must only be introduced in a **new owner-approved snapshot**, not by rewriting immutable snapshots in PR #455.
-4. `language.network-ban-prohibited` and `language.invalid-chat-only-sanction`: the non-English public-chat offense cannot impose a ban (including via bounded options), a kick, or any other non-chat punitive consequence. Chat mutes must be temporary and **at most seven days**. Ordinary instant warnings remain permitted.
+4. `blackmail.terminal-requires-admin-approval`: a permanently banning blackmail rule requires an explicit `ExactWithApproval` or `Bounded` action with minimum `ADMIN` or `FOUNDER` rank; direct `Exact` actions and `MOD`-approved terminal options are rejected, even when real-world evidence predicates are correct.
+5. `language.network-ban-prohibited` and `language.invalid-chat-only-sanction`: the non-English public-chat offense cannot impose a ban (including via bounded options), a kick, or any other non-chat punitive consequence. Chat mutes must be temporary and **at most seven days**. Ordinary instant warnings remain permitted.
 
 ## Usage and acceptance
 
