@@ -28,6 +28,8 @@ import net.enthusia.staff.paper.aireview.AiReviewModels.CorrectionAuthority;
 import net.enthusia.staff.paper.aireview.AiReviewModels.CorrectionDecision;
 import net.enthusia.staff.paper.aireview.AiReviewModels.CorrectionStatus;
 import net.enthusia.staff.paper.aireview.AiReviewModels.Decision;
+import net.enthusia.staff.paper.aireview.AiReviewModels.DecisionHistoryItem;
+import net.enthusia.staff.paper.aireview.AiReviewModels.DecisionHistoryPage;
 import net.enthusia.staff.paper.aireview.AiReviewModels.EventDetails;
 import net.enthusia.staff.paper.aireview.AiReviewModels.MessageAction;
 import net.enthusia.staff.paper.aireview.AiReviewModels.MessageReference;
@@ -68,6 +70,30 @@ final class AiReviewHttpClient implements AiReviewClient {
             throw new AiReviewClientException(Category.MALFORMED);
         }
         return List.copyOf(parsed);
+    }
+
+    @Override
+    public DecisionHistoryPage listDecisions(int limit, String cursor) {
+        int bounded = Math.max(1, Math.min(limit, configuration.reviewLimit()));
+        if (cursor != null && (cursor.isBlank() || cursor.length() > 64)) {
+            throw new AiReviewClientException(Category.MALFORMED);
+        }
+        String path = "/v1/decisions?limit=" + bounded
+                + (cursor == null ? "" : "&cursor=" + encode(cursor));
+        JsonNode root = request("GET", path, null, 200);
+        JsonNode items = requiredArray(root, "items");
+        if (items.size() > bounded) {
+            throw new AiReviewClientException(Category.MALFORMED);
+        }
+        List<DecisionHistoryItem> parsed = new ArrayList<>();
+        for (JsonNode item : items) {
+            parsed.add(parseDecisionHistoryItem(item));
+        }
+        String next = optionalText(root, "next_cursor");
+        if (next != null && (next.isBlank() || next.length() > 64)) {
+            throw new AiReviewClientException(Category.MALFORMED);
+        }
+        return new DecisionHistoryPage(parsed, next);
     }
 
     @Override
@@ -180,6 +206,30 @@ final class AiReviewHttpClient implements AiReviewClient {
 
     private URI resolve(String path) {
         return configuration.baseUri().resolve(path);
+    }
+
+    private DecisionHistoryItem parseDecisionHistoryItem(JsonNode node) {
+        Boolean degraded = optionalBoolean(node, "degraded");
+        Boolean corrected = optionalBoolean(node, "corrected");
+        if (degraded == null || corrected == null) {
+            throw new AiReviewClientException(Category.MALFORMED);
+        }
+        return new DecisionHistoryItem(
+                requiredText(node, "event_id"),
+                instant(node, "occurred_at"),
+                instant(node, "finalized_at"),
+                requiredText(node, "platform"),
+                requiredText(node, "channel_profile"),
+                requiredText(node, "ingestion_status"),
+                enumValue(MessageAction.class, node, "message_action"),
+                requiredText(node, "semantic_label"),
+                enumValue(ReviewPriority.class, node, "review_priority"),
+                textArray(node, "reason_codes", 32),
+                requiredText(node, "local_model_version"),
+                requiredText(node, "policy_version"),
+                degraded,
+                corrected
+        );
     }
 
     private ReviewItem parseReviewItem(JsonNode node) {
