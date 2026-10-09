@@ -32,8 +32,24 @@ neither classified nor stored. Connection failure, saturation and database
 failure cannot be guaranteed durably logged. Canonical mirrored messages
 are represented by one event rather than duplicating training observations.
 
-This first phase is a **staff command and typed HTTP read client**, not yet a
-new in-game inventory GUI, and is not a reviewed dataset export. Full GUI
-browse/filter, correction labelling, retention/backups and rights-checked,
-anonymized training promotion are separate follow-up tasks. Never fine-tune
-on unreviewed AI guesses or upload raw private-player conversations publicly.
+The base draft PR #477 provides a **staff command and typed HTTP read
+client**. The separate stacked GUI draft adds an inventory browser for players:
+`/aireview history` opens **All Decisions**, and the existing flagged queue
+has an **All Decisions** switch. ALLOW/BLOCK entries use distinguishable items;
+previous/next controls load cursor pages, and clicking an event opens the
+existing authorized detail view. Back from that view returns to the same
+cached history page. The history inventory is read-only and only records
+decision summaries, not raw chat.
+
+GUI loads use the existing bounded async client and generation fencing:
+active staff duty, queue permission and the current view generation are
+checked before rendering or responding to clicks. Event detail access still
+requires the separate detail permission. All stored pages are immutable,
+with cursor stacks bounded to 50 previous pages. No additional staff or
+console permissions are granted. Explicit-cursor player commands and console
+requests retain the compact text pagination path.
+
+This is not a reviewed dataset export. Advanced GUI filtering, retention /
+backups and rights-checked anonymized training promotion remain follow-ups.
+Never fine-tune on unreviewed AI guesses or upload raw private-player
+conversations publicly.
