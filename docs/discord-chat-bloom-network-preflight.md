@@ -143,3 +143,48 @@ controlled staging environment. No shell assumption is authorized.
 
 No screenshots, SFTP listings or public-network tests replace a live
 StaffBot-origin probe or the separately approved production maintenance plan.
+
+## October 9 follow-up: offline-ready, container proof still pending
+
+- At PR #475 head `d4dca00c`, Coverage, Sentinel Restart Artifact and
+  Staff state reset runtime proof all completed successfully; Codacy
+  reported **zero new issues**. The runtime proof's prior isolated client
+  disconnect was transient on one attempt; it passed on rerun. This CI
+  status alone is not StaffBot network proof.
+- The previously staged Paper, Velocity and StaffBot candidate JAR copies
+  remain in **inactive** Bloom folders. On October 9, the owner-local
+  WinSCP SFTP helper reauthenticated all three endpoints with verified
+  host keys and listed each candidate in its matching inactive folder.
+  All three independent local readback SHA-256 checks still passed.
+- The owner-local offline SHADOW configuration test passed: exactly one
+  pinned `SMP/global` outbound private route, no ingress route, no
+  AUTHORITATIVE acknowledgement, structurally matched public Discord
+  application token, correctly paired proposed Velocity/StaffBot HMAC
+  keys and a valid truststore. These are **private local files not in
+  GitHub and not installed as live StaffBot settings**.
+- The tracked one-shot TLS test `tools/chat-bridge-preflight/StaffBotTlsProbe.java`
+  now has `StaffBotTlsProbeTest.java` with **24 passing negative-input
+  assertions**, performed without DNS or TCP access. A Java 21 executable
+  preflight JAR was built privately in the owner's local staging folder;
+  it contains only compiled probe classes, no credentials, keys, or
+  private material. It has **not** been deployed or executed on Bloom.
+- Bloom's documented DuckPanel **game/application console is not an
+  operating-system shell**. SFTP can list/download/upload files, but
+  does not execute the Java probe inside StaffBot's network namespace.
+  Creating another split is not a substitute for the existing StaffBot
+  namespace and Bloom documents that splitting can restart the parent.
+
+**Owner action needed:** Contact Bloom support through their official
+support channel and request an **authorized, non-disruptive shell/exec
+method inside the existing StaffBot container**, or a Bloom-operated
+one-shot DNS/TCP/TLS check from that container, limited to the fixed
+internal Velocity peer on port 28765. Do not provide tokens or HMAC
+secrets in the support request, run shell commands in the application
+console, or restart the live bot as a supposed read-only test.
+
+**After support's response:** Run the pinned TLS probe with the
+public-only truststore under a restricted local config file in the
+StaffBot container. This verifies TLS **only**. Authorized deployment
+of matching StaffBot and Velocity private peer settings, actual HMAC
+channel readiness and private outbound Discord SHADOW message proof
+are separate subsequent gates. DiscordSRV remains installed and live.
