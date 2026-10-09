@@ -720,7 +720,7 @@ final class PaperIntegrationManager implements Listener {
         return RendererFallback.UNAVAILABLE;
     }
 
-    @SuppressWarnings(PMD_NULL_ASSIGNMENT)
+    @SuppressWarnings("PMD.NullAssignment")
     private void closeInteractiveChatRenderer() {
         resources.close("InteractiveChat staging rich renderer", interactiveChatRenderer);
         interactiveChatRenderer = null;

@@ -9,21 +9,23 @@ import java.util.jar.JarEntry;
 import java.util.jar.JarOutputStream;
 import java.util.stream.Stream;
 
+@SuppressWarnings("PMD.TestClassWithoutTestCases") // Standalone no-framework CLI fixture harness.
 public final class DiscordSrvDependencyInventoryTest {
+    private static final String BUKKIT_MANIFEST = "plugin.yml";
     private static int assertions;
 
     public static void main(String[] args) throws Exception {
         withDirectory(dir -> {
-            addJar(dir, "legacy.jar", "plugin.yml", "name: DiscordSRV\\nversion: 1\\n");
-            addJar(dir, "unrelated.jar", "plugin.yml", "name: Unrelated\\nversion: 1\\n");
+            addJar(dir, "legacy.jar", BUKKIT_MANIFEST, "name: DiscordSRV\\nversion: 1\\n");
+            addJar(dir, "unrelated.jar", BUKKIT_MANIFEST, "name: Unrelated\\nversion: 1\\n");
             verify(dir, 0, "RESULT=NO_MANIFEST_REFERENCES");
         });
         withDirectory(dir -> {
-            addJar(dir, "hard.jar", "plugin.yml", "name: Hard\\ndepend: [DiscordSRV]\\n");
+            addJar(dir, "hard.jar", BUKKIT_MANIFEST, "name: Hard\\ndepend: [DiscordSRV]\\n");
             verify(dir, 2, "HARD_DEPENDENCY hard.jar");
         });
         withDirectory(dir -> {
-            addJar(dir, "soft.jar", "plugin.yml", "name: Soft\\nsoftdepend:\\n  - DiscordSRV\\n");
+            addJar(dir, "soft.jar", BUKKIT_MANIFEST, "name: Soft\\nsoftdepend:\\n  - DiscordSRV\\n");
             verify(dir, 2, "SOFT_DEPENDENCY soft.jar");
         });
         withDirectory(dir -> {
@@ -32,7 +34,7 @@ public final class DiscordSrvDependencyInventoryTest {
             verify(dir, 2, "HARD_DEPENDENCY paper.jar");
         });
         withDirectory(dir -> {
-            addJar(dir, "inline-soft.jar", "plugin.yml",
+            addJar(dir, "inline-soft.jar", BUKKIT_MANIFEST,
                     "name: LumaGuilds\\nsoftdepend: [Vault, DiscordSRV]\\ndepend: [RoseChat]\\n");
             verify(dir, 2, "SOFT_DEPENDENCY inline-soft.jar");
         });
@@ -42,12 +44,12 @@ public final class DiscordSrvDependencyInventoryTest {
             verify(dir, 2, "SOFT_DEPENDENCY paper-optional.jar");
         });
         withDirectory(dir -> {
-            addJar(dir, "unknown-ref.jar", "plugin.yml",
+            addJar(dir, "unknown-ref.jar", BUKKIT_MANIFEST,
                     "name: Custom\\ncustom-integration: DiscordSRV\\n");
             verify(dir, 2, "REFERENCE unknown-ref.jar");
         });
         withDirectory(dir -> {
-            addJar(dir, "comment.jar", "plugin.yml", "name: Clean\\n# softdepend: [DiscordSRV]\\n");
+            addJar(dir, "comment.jar", BUKKIT_MANIFEST, "name: Clean\\n# softdepend: [DiscordSRV]\\n");
             verify(dir, 0, "RESULT=NO_MANIFEST_REFERENCES");
         });
         withDirectory(dir -> {
