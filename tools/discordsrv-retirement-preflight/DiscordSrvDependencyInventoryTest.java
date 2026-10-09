@@ -20,16 +20,31 @@ public final class DiscordSrvDependencyInventoryTest {
         });
         withDirectory(dir -> {
             addJar(dir, "hard.jar", "plugin.yml", "name: Hard\\ndepend: [DiscordSRV]\\n");
-            verify(dir, 2, "BLOCKER hard.jar");
+            verify(dir, 2, "HARD_DEPENDENCY hard.jar");
         });
         withDirectory(dir -> {
             addJar(dir, "soft.jar", "plugin.yml", "name: Soft\\nsoftdepend:\\n  - DiscordSRV\\n");
-            verify(dir, 2, "BLOCKER soft.jar");
+            verify(dir, 2, "SOFT_DEPENDENCY soft.jar");
         });
         withDirectory(dir -> {
             addJar(dir, "paper.jar", "paper-plugin.yml",
                     "name: Paper\\ndependencies:\\n  server:\\n    DiscordSRV:\\n      required: true\\n");
-            verify(dir, 2, "BLOCKER paper.jar");
+            verify(dir, 2, "HARD_DEPENDENCY paper.jar");
+        });
+        withDirectory(dir -> {
+            addJar(dir, "inline-soft.jar", "plugin.yml",
+                    "name: LumaGuilds\\nsoftdepend: [Vault, DiscordSRV]\\ndepend: [RoseChat]\\n");
+            verify(dir, 2, "SOFT_DEPENDENCY inline-soft.jar");
+        });
+        withDirectory(dir -> {
+            addJar(dir, "paper-optional.jar", "paper-plugin.yml",
+                    "name: Optional\\ndependencies:\\n  server:\\n    DiscordSRV:\\n      required: false\\n");
+            verify(dir, 2, "SOFT_DEPENDENCY paper-optional.jar");
+        });
+        withDirectory(dir -> {
+            addJar(dir, "unknown-ref.jar", "plugin.yml",
+                    "name: Custom\\ncustom-integration: DiscordSRV\\n");
+            verify(dir, 2, "REFERENCE unknown-ref.jar");
         });
         withDirectory(dir -> {
             addJar(dir, "comment.jar", "plugin.yml", "name: Clean\\n# softdepend: [DiscordSRV]\\n");
@@ -44,7 +59,7 @@ public final class DiscordSrvDependencyInventoryTest {
             verify(dir, 2, "UNVERIFIED broken.jar");
         });
         withDirectory(dir -> verify(dir, 3, "ERROR: empty plugins folder"));
-        System.out.println("PASS: " + assertions + " assertions across 8 isolated JAR inventories");
+        System.out.println("PASS: " + assertions + " assertions across 11 isolated JAR inventories");
     }
 
     private static void verify(Path dir, int expectedCode, String expectedText) throws Exception {

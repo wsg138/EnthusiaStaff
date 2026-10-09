@@ -51,7 +51,7 @@ public final class DiscordSrvDependencyInventory {
     }
 
     private enum JarStatus {
-        CLEAR, LEGACY, REFERENCE, UNVERIFIED
+        CLEAR, LEGACY, HARD_DEPENDENCY, SOFT_DEPENDENCY, REFERENCE, UNVERIFIED
     }
 
     private static int scan(Path directory, PrintStream output) throws IOException {
@@ -68,12 +68,21 @@ public final class DiscordSrvDependencyInventory {
         }
 
         int references = 0;
+        int hard = 0;
+        int soft = 0;
         int unknown = 0;
         int legacyJar = 0;
         for (Path jar : jars) {
             JarStatus status = inspectJar(jar, output);
-            if (status == JarStatus.REFERENCE) {
+            if (status == JarStatus.REFERENCE
+                    || status == JarStatus.HARD_DEPENDENCY
+                    || status == JarStatus.SOFT_DEPENDENCY) {
                 references++;
+                if (status == JarStatus.HARD_DEPENDENCY) {
+                    hard++;
+                } else if (status == JarStatus.SOFT_DEPENDENCY) {
+                    soft++;
+                }
             } else if (status == JarStatus.UNVERIFIED) {
                 unknown++;
             } else if (status == JarStatus.LEGACY) {
@@ -82,6 +91,9 @@ public final class DiscordSrvDependencyInventory {
         }
         output.println("TOTAL_JARS=" + jars.size());
         output.println("LEGACY_JARS=" + legacyJar);
+        output.println("HARD_DEPENDENCIES=" + hard);
+        output.println("SOFT_DEPENDENCIES=" + soft);
+        output.println("OTHER_MANIFEST_REFERENCES=" + (references - hard - soft));
         output.println("DEPENDENCY_REFERENCES=" + references);
         output.println("UNVERIFIED_JARS=" + unknown);
         output.println("SCOPED_TO_MANIFESTS_ONLY=true");
@@ -106,9 +118,11 @@ public final class DiscordSrvDependencyInventory {
                 output.println("LEGACY_PLUGIN " + label + " (DiscordSRV installed)");
                 return JarStatus.LEGACY;
             }
-            if (mentionsDiscordSrv(contents)) {
-                output.println("BLOCKER " + label + " (DiscordSRV referenced in plugin manifest)");
-                return JarStatus.REFERENCE;
+            JarStatus relationship = classifyManifests(contents);
+            if (relationship != JarStatus.CLEAR) {
+                output.println(relationship + " " + label
+                        + " (DiscordSRV in plugin manifest; runtime behavior not verified)");
+                return relationship;
             }
             return JarStatus.CLEAR;
         } catch (IOException | IllegalArgumentException invalidJar) {
@@ -122,12 +136,86 @@ public final class DiscordSrvDependencyInventory {
                 line.trim().matches("(?i)^name:\\s*['\\\"]?DiscordSRV['\\\"]?\\s*(?:#.*)?$")));
     }
 
-    private static boolean mentionsDiscordSrv(List<String> manifests) {
-        // Conservatively include optional dependencies and custom compatibility hooks.
-        return manifests.stream().flatMap(String::lines)
-                .map(String::strip)
-                .filter(line -> !line.startsWith("#"))
-                .anyMatch(line -> line.toLowerCase(Locale.ROOT).contains("discordsrv"));
+    private static JarStatus classifyManifests(List<String> manifests) {
+        JarStatus strongest = JarStatus.CLEAR;
+        for (String manifest : manifests) {
+            JarStatus status = classifyManifest(manifest);
+            if (status == JarStatus.HARD_DEPENDENCY) {
+                return status;
+            }
+            if (status == JarStatus.REFERENCE || (status == JarStatus.SOFT_DEPENDENCY
+                    && strongest == JarStatus.CLEAR)) {
+                strongest = status;
+            }
+        }
+        return strongest;
+    }
+
+    private static JarStatus classifyManifest(String manifest) {
+        String section = "";
+        JarStatus strongest = JarStatus.CLEAR;
+        List<String> lines = manifest.lines().toList();
+        for (int i = 0; i < lines.size(); i++) {
+            String line = withoutComment(lines.get(i));
+            if (line.isBlank()) {
+                continue;
+            }
+            String trimmed = line.strip();
+            int indent = line.length() - line.stripLeading().length();
+            // Bukkit's depend/softdepend/loadbefore fields are top-level list keys.
+            if (indent == 0 && trimmed.contains(":")) {
+                section = trimmed.substring(0, trimmed.indexOf(':')).toLowerCase(Locale.ROOT);
+            }
+            if (!trimmed.toLowerCase(Locale.ROOT).contains("discordsrv")) {
+                continue;
+            }
+            if ("depend".equals(section)) {
+                return JarStatus.HARD_DEPENDENCY;
+            }
+            if ("softdepend".equals(section) || "loadbefore".equals(section)) {
+                strongest = JarStatus.SOFT_DEPENDENCY;
+                continue;
+            }
+            if ("dependencies".equals(section) && trimmed.matches("(?i)^['\\\"]?DiscordSRV['\\\"]?:\\s*$")) {
+                // Paper dependency descriptor: required flag is nested under plugin name.
+                // Absent/unrecognized required flags remain ambiguous, never a safe verdict.
+                JarStatus paper = paperRequiredStatus(lines, i, indent);
+                if (paper == JarStatus.HARD_DEPENDENCY) {
+                    return paper;
+                }
+                strongest = paper == JarStatus.REFERENCE || strongest == JarStatus.REFERENCE
+                        ? JarStatus.REFERENCE : JarStatus.SOFT_DEPENDENCY;
+                continue;
+            }
+            strongest = JarStatus.REFERENCE;
+        }
+        return strongest;
+    }
+
+    private static JarStatus paperRequiredStatus(List<String> lines, int index, int parentIndent) {
+        for (int i = index + 1; i < lines.size(); i++) {
+            String line = withoutComment(lines.get(i));
+            if (line.isBlank()) {
+                continue;
+            }
+            int indent = line.length() - line.stripLeading().length();
+            if (indent <= parentIndent) {
+                break;
+            }
+            String setting = line.strip().toLowerCase(Locale.ROOT);
+            if (setting.matches("required:\\s*true")) {
+                return JarStatus.HARD_DEPENDENCY;
+            }
+            if (setting.matches("required:\\s*false")) {
+                return JarStatus.SOFT_DEPENDENCY;
+            }
+        }
+        return JarStatus.REFERENCE;
+    }
+
+    private static String withoutComment(String line) {
+        int comment = line.indexOf('#');
+        return comment < 0 ? line : line.substring(0, comment);
     }
 
     private static List<String> readManifests(JarFile jar) throws IOException {

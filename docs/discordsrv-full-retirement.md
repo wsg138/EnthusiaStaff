@@ -19,7 +19,7 @@ authorizes production deployment, restarts, role mutations, or deletion.
 | LumaGuilds Discord guild roles | PR #6 merged into an *integration branch* for shadow publication; this is not production retirement. | Reconcile current deployed Luma artifact, migrate remaining DiscordSRV link + JDA role writers, shadow-compare, enable owned role mutations, verify guild lifecycle and safe rollback. |
 | PlayTime numeral roles | PR #30 merged provider-neutral seam; #27 remains open; default branch still has `DiscordSrvNumeralRoleProvider` and explicit legacy preference when installed. | Agree authoritative branch/artifact; remove live DiscordSRV writer and direct imports for final consumer; prove all tier/alt/link/unlink/restart and highest-role parity. |
 | Discord console | Replacement work tracked in closed #267; legacy DiscordSRV console/command forwarding is enabled in the inspected live config. | Prove audited, authorized, allowlisted bridge in staging and approve new production console command ownership; verify no legacy command behavior disappears. |
-| InteractiveChat rich artifacts | Current `InteractiveChatStagingArtifactProvider` reflects into `InteractiveChatDiscordSrvAddon`, which itself hard-depends on DiscordSRV. Dedicated work: #474. | Build/review a truly independent renderer or approved replacement; test item/inventory/Ender chest rendering and plain fallback **with both DiscordSRV and the old addon absent**. This is a hard uninstall blocker. |
+| InteractiveChat rich artifacts | Existing `InteractiveChatStagingArtifactProvider` reflects into the hard-dependent Discord addon. Draft #475 adds an opt-in independent Java2D slot-card fallback (item names/counts, not sprites). It is built and unit-tested but NOT production-tested or pixel-fidelity accepted. Dedicated work: #474. | Verify independent renderer and explicit visual acceptance in a real isolated environment with **both DiscordSRV and addon absent**. Do not confuse compiled fallback with feature parity. |
 | RoseChat / remaining plugins | Provider-neutral outbound/inbound bridge exists; other plugin hooks and runtime configuration may still depend on DiscordSRV. | Scan all live server/plugin manifests and code/config; verify mute/AI moderation, private/staff isolation, reconnect, mentions, and no duplicated messages. |
 
 **Closed GitHub issues represent implementation checkpoints, not proof of live
@@ -31,8 +31,19 @@ JAR contains the feature. Record exact deployed artifact hashes and versions.
 A Java 21, read-only scanner lives at
 [`tools/discordsrv-retirement-preflight/`](../tools/discordsrv-retirement-preflight/README.md).
 Run it against a complete **authorized staging copy** of every Paper server's
-`plugins` folder. Record JAR names and `BLOCKER` / `UNVERIFIED` results.
+`plugins` folder. Record `HARD_DEPENDENCY`, `SOFT_DEPENDENCY`, `REFERENCE`, and
+`UNVERIFIED` findings. All findings remain fail-closed; even `SOFT_DEPENDENCY`
+is **not** proof that removing the plugin preserves its feature behavior.
 There is deliberately no deletion mode.
+
+**Observed on the SMP on October 8:** a read-only SFTP directory listing found the
+installed `DiscordSRV-Build-1.30.5.jar` and 103 total `.jar` filenames.
+Four exact JARs were retrieved locally with SHA-256 and ZIP validation. Their
+manifest-only classifications are: InteractiveChat Discord addon 2026.1.1.0 =
+**HARD_DEPENDENCY**; EnthusiaStaff Paper, LumaGuilds 3.0.23, and EnthusiaPlaytime
+3.7.2 = **SOFT_DEPENDENCY**. This covers only four JARs on one Paper server,
+not the complete plugin suite; `RESULT=BLOCKED` remains the expected outcome.
+No remote files were modified in this inventory.
 
 A manifest scan cannot detect all bytecode/reflection/runtime consumers.
 Search each Enthusia repository, deployment inventory, and running configuration

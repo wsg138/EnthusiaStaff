@@ -30,10 +30,19 @@ to the repository.
 ## Interpretation
 
 - `LEGACY_PLUGIN`: the DiscordSRV JAR itself. Its presence is informational.
-- `BLOCKER`: another plugin manifest references DiscordSRV. This includes
-  hard dependencies, soft dependencies, and compatibility hooks. Inspect and
-  migrate or positively establish that the optional path is disabled before
-  considering removal.
+- `HARD_DEPENDENCY`: a manifest declares DiscordSRV in Bukkit `depend`
+  or Paper `dependencies.server.DiscordSRV.required: true`. The dependent
+  plugin must be removed or migrated before DiscordSRV is uninstalled.
+- `SOFT_DEPENDENCY`: Bukkit `softdepend` / `loadbefore`, or a Paper dependency
+  explicitly marked `required: false`. This is **not** a safe-to-remove
+  finding: existing features may still depend on the installed DiscordSRV.
+- `REFERENCE`: another manifest mentions DiscordSRV outside a recognized
+  dependency declaration, or the Paper `required` flag cannot be determined.
+  Review as unresolved rather than inferring optionality.
+- The counts `HARD_DEPENDENCIES`, `SOFT_DEPENDENCIES`, and
+  `OTHER_MANIFEST_REFERENCES` are disjoint subsets of
+  `DEPENDENCY_REFERENCES`. All three classes retain exit code 2 until
+  reviewed. This is a conservative classification, not a full YAML parser.
 - `UNVERIFIED`: unreadable JAR, missing plugin manifest, excessive manifest
   size, or a non-regular/symlinked JAR. Resolve rather than assuming safety.
 - `RESULT=BLOCKED`: at least one manifest reference or unverifiable JAR.
