@@ -31,23 +31,26 @@ JAR contains the feature. Record exact deployed artifact hashes and versions.
 A Java 21, read-only scanner lives at
 [`tools/discordsrv-retirement-preflight/`](../tools/discordsrv-retirement-preflight/README.md).
 Run it against a complete **authorized staging copy** of every Paper server's
-`plugins` folder. Record `HARD_DEPENDENCY`, `SOFT_DEPENDENCY`, `REFERENCE`, and
-`UNVERIFIED` findings. All findings remain fail-closed; even `SOFT_DEPENDENCY`
+`plugins` folder. Record `HARD_DEPENDENCY`, `SOFT_DEPENDENCY`, `REFERENCE`,
+`BYTECODE_REFERENCE`, and `UNVERIFIED` findings. All findings remain fail-closed; even `SOFT_DEPENDENCY`
 is **not** proof that removing the plugin preserves its feature behavior.
 There is deliberately no deletion mode.
 
 **Observed on the SMP on October 8:** a read-only SFTP directory listing found the
 installed `DiscordSRV-Build-1.30.5.jar` and 103 total `.jar` filenames.
 Four exact JARs were retrieved locally with SHA-256 and ZIP validation. Their
-manifest-only classifications are: InteractiveChat Discord addon 2026.1.1.0 =
+manifest-only classifications (before the bytecode scan was added) are:
+InteractiveChat Discord addon 2026.1.1.0 =
 **HARD_DEPENDENCY**; EnthusiaStaff Paper, LumaGuilds 3.0.23, and EnthusiaPlaytime
 3.7.2 = **SOFT_DEPENDENCY**. This covers only four JARs on one Paper server,
 not the complete plugin suite; `RESULT=BLOCKED` remains the expected outcome.
 No remote files were modified in this inventory.
 
-A manifest scan cannot detect all bytecode/reflection/runtime consumers.
-Search each Enthusia repository, deployment inventory, and running configuration
-for DiscordSRV hooks and the old addon, then inspect actual behavior.
+The scanner also checks bounded compiled class bytes for `DiscordSRV`
+(case-insensitive). Matches can be harmless constants; misses can occur through
+obfuscation, dynamic loading or configuration-only integration. Search each
+Enthusia repository, deployment inventory and running configuration for
+DiscordSRV hooks and the old addon, then inspect actual behavior.
 
 ## Gates (every item required, with proof)
 

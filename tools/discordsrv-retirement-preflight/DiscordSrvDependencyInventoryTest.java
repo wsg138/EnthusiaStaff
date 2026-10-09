@@ -18,7 +18,7 @@ public final class DiscordSrvDependencyInventoryTest {
         withDirectory(dir -> {
             addJar(dir, "legacy.jar", BUKKIT_MANIFEST, "name: DiscordSRV\\nversion: 1\\n");
             addJar(dir, "unrelated.jar", BUKKIT_MANIFEST, "name: Unrelated\\nversion: 1\\n");
-            verify(dir, 0, "RESULT=NO_MANIFEST_REFERENCES");
+            verify(dir, 0, "RESULT=NO_DETECTED_REFERENCES");
         });
         withDirectory(dir -> {
             addJar(dir, "hard.jar", BUKKIT_MANIFEST, "name: Hard\\ndepend: [DiscordSRV]\\n");
@@ -50,7 +50,7 @@ public final class DiscordSrvDependencyInventoryTest {
         });
         withDirectory(dir -> {
             addJar(dir, "comment.jar", BUKKIT_MANIFEST, "name: Clean\\n# softdepend: [DiscordSRV]\\n");
-            verify(dir, 0, "RESULT=NO_MANIFEST_REFERENCES");
+            verify(dir, 0, "RESULT=NO_DETECTED_REFERENCES");
         });
         withDirectory(dir -> {
             addJar(dir, "unknown.jar", "MANIFEST.MF", "Manifest-Version: 1.0\\n");
@@ -60,8 +60,32 @@ public final class DiscordSrvDependencyInventoryTest {
             Files.writeString(dir.resolve("broken.jar"), "not a jar");
             verify(dir, 2, "UNVERIFIED broken.jar");
         });
+        withDirectory(dir -> {
+            addJarWithClass(dir, "bytecode.jar",
+                    "name: BytecodeOnly\\nversion: 1\\n",
+                    "call github/scarsz/discordsrv/DiscordSRV via reflective code");
+            verify(dir, 2, "BYTECODE_REFERENCE bytecode.jar");
+        });
+        withDirectory(dir -> {
+            addJarWithClass(dir, "mixed-case.jar",
+                    "name: MixedCase\\nversion: 1\\n",
+                    "com/example/DiscordSrvBridge");
+            verify(dir, 2, "BYTECODE_REFERENCE mixed-case.jar");
+        });
+        withDirectory(dir -> {
+            addJarWithResource(dir, "resource.jar",
+                    "name: ResourceOnly\\nversion: 1\\n",
+                    "# Docs mention DiscordSRV but compiled classes have no hooks");
+            verify(dir, 0, "BYTECODE_REFERENCES=0");
+        });
+        withDirectory(dir -> {
+            addJarWithClass(dir, "size-limit.jar",
+                    "name: LargeClass\\nversion: 1\\n",
+                    "x".repeat(1_048_577));
+            verify(dir, 2, "UNVERIFIED size-limit.jar");
+        });
         withDirectory(dir -> verify(dir, 3, "ERROR: empty plugins folder"));
-        System.out.println("PASS: " + assertions + " assertions across 11 isolated JAR inventories");
+        System.out.println("PASS: " + assertions + " assertions across 15 isolated JAR inventories");
     }
 
     private static void verify(Path dir, int expectedCode, String expectedText) throws Exception {
@@ -81,6 +105,33 @@ public final class DiscordSrvDependencyInventoryTest {
             output.write(contents.replace("\\n", "\n").getBytes(StandardCharsets.UTF_8));
             output.closeEntry();
         }
+    }
+
+    private static void addJarWithClass(
+            Path directory, String filename, String manifest, String bytecode
+    ) throws IOException {
+        try (JarOutputStream output = new JarOutputStream(
+                Files.newOutputStream(directory.resolve(filename)))) {
+            addEntry(output, BUKKIT_MANIFEST, manifest.replace("\\n", "\n"));
+            addEntry(output, "sample/Example.class", bytecode);
+        }
+    }
+
+    private static void addJarWithResource(
+            Path directory, String filename, String manifest, String resource
+    ) throws IOException {
+        try (JarOutputStream output = new JarOutputStream(
+                Files.newOutputStream(directory.resolve(filename)))) {
+            addEntry(output, BUKKIT_MANIFEST, manifest.replace("\\n", "\n"));
+            addEntry(output, "readme.txt", resource);
+        }
+    }
+
+    private static void addEntry(JarOutputStream output, String name, String contents)
+            throws IOException {
+        output.putNextEntry(new JarEntry(name));
+        output.write(contents.getBytes(StandardCharsets.UTF_8));
+        output.closeEntry();
     }
 
     private static void withDirectory(CheckedConsumer<Path> test) throws Exception {
