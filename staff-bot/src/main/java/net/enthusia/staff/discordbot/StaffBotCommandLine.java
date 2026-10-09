@@ -285,14 +285,22 @@ final class StaffBotCommandLine {
 
         private void validateNormalMode(boolean tunnelRequested) {
             validateNoPreviewOptions(tunnelRequested);
-            if (tlsDiagnostic && (smokeTest || environment != StaffBotEnvironment.PRODUCTION
-                    || tokenFile == null || moderationConfigFile == null)) {
-                throw invalidArguments();
-            }
+            validateDiagnosticMode();
             validateFilePair();
             if (environment != null && tokenFile == null) {
                 throw invalidArguments();
             }
+            validateProductionWebMode(tunnelRequested);
+        }
+
+        private void validateDiagnosticMode() {
+            if (tlsDiagnostic && (smokeTest || environment != StaffBotEnvironment.PRODUCTION
+                    || tokenFile == null || moderationConfigFile == null)) {
+                throw invalidArguments();
+            }
+        }
+
+        private void validateProductionWebMode(boolean tunnelRequested) {
             if (moderationWebUrl != null && (environment != StaffBotEnvironment.PRODUCTION
                     || !tunnelRequested || tokenFile == null)) {
                 throw invalidArguments();

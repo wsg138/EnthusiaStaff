@@ -87,6 +87,10 @@ final class StaffBotTlsStartupDiagnostic {
         } catch (Exception exception) {
             return new Result("DNS_FAILED", null);
         }
+        return connect(context);
+    }
+
+    private static Result connect(SSLContext context) {
         try (SSLSocket socket = (SSLSocket) context.getSocketFactory().createSocket()) {
             try {
                 socket.connect(new InetSocketAddress(HOST, PORT), CONNECT_MS);
@@ -95,25 +99,29 @@ final class StaffBotTlsStartupDiagnostic {
             } catch (Exception exception) {
                 return new Result("TCP_UNREACHABLE", null);
             }
-            socket.setSoTimeout(HANDSHAKE_MS);
-            socket.setEnabledProtocols(new String[] {"TLSv1.3"});
-            SSLParameters parameters = socket.getSSLParameters();
-            parameters.setEndpointIdentificationAlgorithm("HTTPS");
-            socket.setSSLParameters(parameters);
-            try {
-                socket.startHandshake();
-                var certificates = socket.getSession().getPeerCertificates();
-                if (certificates.length == 0 || !(certificates[0] instanceof X509Certificate peer)) {
-                    return new Result("TLS_CERT_INVALID", null);
-                }
-                String fingerprint = fingerprint(peer);
-                return new Result(EXPECTED_CERT_SHA256.equals(fingerprint)
-                        ? "TLS_VERIFIED" : "TLS_CERT_UNEXPECTED", fingerprint);
-            } catch (Exception exception) {
-                return new Result("TLS_FAILED", null);
-            }
+            return verifyTls(socket);
         } catch (Exception exception) {
             return new Result("TCP_UNREACHABLE", null);
+        }
+    }
+
+    private static Result verifyTls(SSLSocket socket) throws Exception {
+        socket.setSoTimeout(HANDSHAKE_MS);
+        socket.setEnabledProtocols(new String[] {"TLSv1.3"});
+        SSLParameters parameters = socket.getSSLParameters();
+        parameters.setEndpointIdentificationAlgorithm("HTTPS");
+        socket.setSSLParameters(parameters);
+        try {
+            socket.startHandshake();
+            var certificates = socket.getSession().getPeerCertificates();
+            if (certificates.length == 0 || !(certificates[0] instanceof X509Certificate peer)) {
+                return new Result("TLS_CERT_INVALID", null);
+            }
+            String digest = fingerprint(peer);
+            return new Result(EXPECTED_CERT_SHA256.equals(digest)
+                    ? "TLS_VERIFIED" : "TLS_CERT_UNEXPECTED", digest);
+        } catch (Exception exception) {
+            return new Result("TLS_FAILED", null);
         }
     }
 
