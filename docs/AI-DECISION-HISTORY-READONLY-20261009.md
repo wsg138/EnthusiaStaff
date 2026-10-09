@@ -38,12 +38,16 @@ client**. The separate stacked GUI draft adds an inventory browser for players:
 has an **All Decisions** switch. ALLOW/BLOCK entries use distinguishable items;
 previous/next controls load cursor pages, and clicking an event opens the
 existing authorized detail view. Back from that view returns to the same
-cached history page. The history inventory is read-only and only records
-decision summaries, not raw chat.
+cached history page, **including after visiting the label picker or correction
+confirmation**. Successful corrections refresh the originating history cursor
+page. History-related failure/conflict handling preserves the originating
+page instead of unexpectedly redirecting to the flagged queue. The history
+inventory is read-only and only records decision summaries, not raw chat.
 
 GUI loads use the existing bounded async client and generation fencing:
 active staff duty, queue permission and the current view generation are
-checked before rendering or responding to clicks. Event detail access still
+checked again in the final player-scheduler task before rendering and before
+responding to clicks. Event detail access still
 requires the separate detail permission. All stored pages are immutable,
 with cursor stacks bounded to 50 previous pages. No additional staff or
 console permissions are granted. Explicit-cursor player commands and console
