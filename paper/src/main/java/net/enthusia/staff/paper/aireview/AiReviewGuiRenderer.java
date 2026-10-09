@@ -6,8 +6,6 @@ import java.util.List;
 import net.enthusia.staff.paper.aireview.AiReviewModels.Correction;
 import net.enthusia.staff.paper.aireview.AiReviewModels.CorrectionStatus;
 import net.enthusia.staff.paper.aireview.AiReviewModels.EventDetails;
-import net.enthusia.staff.paper.aireview.AiReviewModels.DecisionHistoryItem;
-import net.enthusia.staff.paper.aireview.AiReviewModels.MessageAction;
 import net.enthusia.staff.paper.aireview.AiReviewModels.ReviewItem;
 import net.enthusia.staff.paper.aireview.AiReviewModels.ReviewPriority;
 import net.kyori.adventure.text.Component;
@@ -101,26 +99,10 @@ final class AiReviewGuiRenderer {
     private void renderHistory(Inventory inventory, AiReviewGuiState.History state) {
         int count = Math.min(state.items().size(), CONTENT_SLOTS.size());
         for (int index = 0; index < count; index++) {
-            DecisionHistoryItem decision = state.items().get(index);
-            boolean blocked = decision.messageAction() == MessageAction.BLOCK;
-            String label = AiReviewPresentation.bounded(
-                    decision.semanticLabel().replace('_', ' '), 36
-            );
-            List<String> lore = new ArrayList<>();
-            lore.add("Platform: " + decision.platform());
-            lore.add("When: " + decision.occurredAt());
-            lore.add("Review: " + decision.reviewPriority());
-            if (decision.corrected()) {
-                lore.add("Staff correction recorded");
-            }
-            if (decision.degraded()) {
-                lore.add("Degraded / fail-open result");
-            }
-            lore.add("Click to examine this event");
+            AiReviewHistoryPresentation.Row row =
+                    AiReviewHistoryPresentation.summarize(state.items().get(index));
             inventory.setItem(CONTENT_SLOTS.get(index), item(
-                    blocked ? Material.RED_DYE : Material.LIME_DYE,
-                    (blocked ? "Blocked · " : "Allowed · ") + label,
-                    lore
+                    row.material(), row.title(), row.lore()
             ));
         }
         inventory.setItem(REFRESH, item(Material.CLOCK, "Refresh decisions", List.of(
