@@ -127,7 +127,9 @@ class AiReviewSafetyContractTest {
         assertTrue(subsystem.contains("exception.category() == AiReviewClientException.Category.CONFLICT"));
         assertTrue(subsystem.contains("failure.accept(\"central review conflict\")"));
         assertTrue(gui.contains("\"central review conflict\".equals(issue)"));
-        assertTrue(gui.contains("openEvent(viewer, fresh.eventId(), returnPage)"));
+        assertTrue(gui.contains(
+                "openEvent(viewer, fresh.eventId(), returnPage, historyOrigin)"),
+                "conflict refresh must preserve the review source and load fresh central state");
     }
 
     @Test
