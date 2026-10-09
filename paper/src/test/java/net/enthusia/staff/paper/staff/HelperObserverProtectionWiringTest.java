@@ -9,9 +9,11 @@ import java.nio.file.Path;
 import org.junit.jupiter.api.Test;
 
 class HelperObserverProtectionWiringTest {
+    private static final String HELPER_LISTENER_SOURCE =
+            "src/main/java/net/enthusia/staff/paper/staff/HelperObserverProtectionListener.java";
     @Test
     void paperRuntimeRegistersHelperObserverProtectionListener() throws IOException {
-        String runtime = Files.readString(paperModule().resolve(
+        String runtime = readSource(paperModule().resolve(
                 "src/main/java/net/enthusia/staff/paper/PaperRuntimeComponents.java"
         ));
 
@@ -23,7 +25,7 @@ class HelperObserverProtectionWiringTest {
 
     @Test
     void staffModeManagerUsesRankAwareAllowedGameModes() throws IOException {
-        String manager = Files.readString(paperModule().resolve(
+        String manager = readSource(paperModule().resolve(
                 "src/main/java/net/enthusia/staff/paper/staff/StaffModeManager.java"
         ));
 
@@ -39,8 +41,8 @@ class HelperObserverProtectionWiringTest {
 
     @Test
     void helperAirItemGuardDoesNotSkipPreCancelledAirInteractions() throws IOException {
-        String listener = Files.readString(paperModule().resolve(
-                "src/main/java/net/enthusia/staff/paper/staff/HelperObserverProtectionListener.java"
+        String listener = readSource(paperModule().resolve(
+                HELPER_LISTENER_SOURCE
         ));
 
         assertTrue(
@@ -56,8 +58,8 @@ class HelperObserverProtectionWiringTest {
 
     @Test
     void helperProjectilePassThroughUsesModernProjectileHitEventOnly() throws IOException {
-        String listener = Files.readString(paperModule().resolve(
-                "src/main/java/net/enthusia/staff/paper/staff/HelperObserverProtectionListener.java"
+        String listener = readSource(paperModule().resolve(
+                HELPER_LISTENER_SOURCE
         ));
 
         assertTrue(
@@ -74,8 +76,8 @@ class HelperObserverProtectionWiringTest {
 
     @Test
     void retainedMobTargetsAreReconciledThroughEntitySchedulers() throws IOException {
-        String listener = Files.readString(paperModule().resolve(
-                "src/main/java/net/enthusia/staff/paper/staff/HelperObserverProtectionListener.java"
+        String listener = readSource(paperModule().resolve(
+                HELPER_LISTENER_SOURCE
         ));
 
         assertTrue(
@@ -94,11 +96,11 @@ class HelperObserverProtectionWiringTest {
 
     @Test
     void helperObserverAuthorityUsesAppliedSessionRankInsteadOfLivePermissionResolution() throws IOException {
-        String manager = Files.readString(paperModule().resolve(
+        String manager = readSource(paperModule().resolve(
                 "src/main/java/net/enthusia/staff/paper/staff/StaffModeManager.java"
         ));
-        String listener = Files.readString(paperModule().resolve(
-                "src/main/java/net/enthusia/staff/paper/staff/HelperObserverProtectionListener.java"
+        String listener = readSource(paperModule().resolve(
+                HELPER_LISTENER_SOURCE
         ));
 
         assertTrue(
@@ -119,8 +121,8 @@ class HelperObserverProtectionWiringTest {
 
     @Test
     void queuedMobTargetClearRevalidatesObserverProfileAtMutationTime() throws IOException {
-        String listener = Files.readString(paperModule().resolve(
-                "src/main/java/net/enthusia/staff/paper/staff/HelperObserverProtectionListener.java"
+        String listener = readSource(paperModule().resolve(
+                HELPER_LISTENER_SOURCE
         ));
 
         assertTrue(
@@ -128,6 +130,11 @@ class HelperObserverProtectionWiringTest {
                         + "            if (!staffMode.helperObserverActive(targetId) || staffMode.unrestricted(targetId))"),
                 "A queued mob target clear must be abandoned after Helper observer mode ends, changes rank, or becomes unrestricted"
         );
+    }
+
+    private static String readSource(Path path) throws IOException {
+        // Source-text wiring assertions use LF; Git may check files out as CRLF on Windows.
+        return Files.readString(path).replace("\r\n", "\n");
     }
 
     private static Path paperModule() {
