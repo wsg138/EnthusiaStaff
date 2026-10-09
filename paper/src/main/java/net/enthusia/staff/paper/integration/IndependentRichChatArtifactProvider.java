@@ -149,6 +149,9 @@ public final class IndependentRichChatArtifactProvider
         }
     }
 
+    // A Bukkit plugin's class loader must resolve that plugin's private API, not the
+    // request worker's thread-context class loader.
+    @SuppressWarnings("PMD.UseProperClassLoader")
     private static List<MatchRule> discoverRules(Plugin interactiveChat)
             throws ReflectiveOperationException {
         ClassLoader loader = interactiveChat.getClass().getClassLoader();
@@ -225,19 +228,7 @@ public final class IndependentRichChatArtifactProvider
         List<Job> jobs = new ArrayList<>();
         try {
             for (MatchRule rule : rules) {
-                if (!rule.enabled() || !player.hasPermission(rule.kind().permission)) {
-                    continue;
-                }
-                int position = firstUnescapedMatch(rule.expression(), request.canonicalPlainText());
-                if (position < 0) {
-                    continue;
-                }
-                List<Slot> slots = switch (rule.kind()) {
-                    case ITEM -> List.of(slot(player.getInventory().getItemInMainHand()));
-                    case INVENTORY -> copySlots(player.getInventory(), MAX_SLOTS);
-                    case ENDER_CHEST -> copySlots(player.getEnderChest(), MAX_SLOTS);
-                };
-                jobs.add(new Job(rule.kind(), position, slots));
+                captureJob(rule, player, request).ifPresent(jobs::add);
             }
         } catch (RuntimeException failure) {
             result.complete(List.of());
@@ -252,6 +243,24 @@ public final class IndependentRichChatArtifactProvider
         } catch (RejectedExecutionException failure) {
             result.complete(List.of());
         }
+    }
+
+    private static Optional<Job> captureJob(
+            MatchRule rule, Player player, RichChatArtifactRequest request
+    ) {
+        if (!rule.enabled() || !player.hasPermission(rule.kind().permission)) {
+            return Optional.empty();
+        }
+        int position = firstUnescapedMatch(rule.expression(), request.canonicalPlainText());
+        if (position < 0) {
+            return Optional.empty();
+        }
+        List<Slot> slots = switch (rule.kind()) {
+            case ITEM -> List.of(slot(player.getInventory().getItemInMainHand()));
+            case INVENTORY -> copySlots(player.getInventory(), MAX_SLOTS);
+            case ENDER_CHEST -> copySlots(player.getEnderChest(), MAX_SLOTS);
+        };
+        return Optional.of(new Job(rule.kind(), position, slots));
     }
 
     private void renderSnapshots(
@@ -278,7 +287,8 @@ public final class IndependentRichChatArtifactProvider
                             "IC-Native-" + job.kind().title + "-" + suffix + ".png",
                             "image/png", job.kind().alt, png));
                 } catch (RuntimeException failure) {
-                    // The textual chat message is intentionally unaffected.
+                    // Drop only this failed image. The textual chat message is unaffected.
+                    continue;
                 }
             }
         } finally {

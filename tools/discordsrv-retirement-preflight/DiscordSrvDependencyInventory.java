@@ -67,33 +67,20 @@ public final class DiscordSrvDependencyInventory {
             return 3;
         }
 
-        int references = 0;
-        int hard = 0;
-        int soft = 0;
-        int unknown = 0;
-        int legacyJar = 0;
+        int[] counts = new int[JarStatus.values().length];
         for (Path jar : jars) {
-            JarStatus status = inspectJar(jar, output);
-            if (status == JarStatus.REFERENCE
-                    || status == JarStatus.HARD_DEPENDENCY
-                    || status == JarStatus.SOFT_DEPENDENCY) {
-                references++;
-                if (status == JarStatus.HARD_DEPENDENCY) {
-                    hard++;
-                } else if (status == JarStatus.SOFT_DEPENDENCY) {
-                    soft++;
-                }
-            } else if (status == JarStatus.UNVERIFIED) {
-                unknown++;
-            } else if (status == JarStatus.LEGACY) {
-                legacyJar++;
-            }
+            counts[inspectJar(jar, output).ordinal()]++;
         }
+        int hard = counts[JarStatus.HARD_DEPENDENCY.ordinal()];
+        int soft = counts[JarStatus.SOFT_DEPENDENCY.ordinal()];
+        int generic = counts[JarStatus.REFERENCE.ordinal()];
+        int references = hard + soft + generic;
+        int unknown = counts[JarStatus.UNVERIFIED.ordinal()];
         output.println("TOTAL_JARS=" + jars.size());
-        output.println("LEGACY_JARS=" + legacyJar);
+        output.println("LEGACY_JARS=" + counts[JarStatus.LEGACY.ordinal()]);
         output.println("HARD_DEPENDENCIES=" + hard);
         output.println("SOFT_DEPENDENCIES=" + soft);
-        output.println("OTHER_MANIFEST_REFERENCES=" + (references - hard - soft));
+        output.println("OTHER_MANIFEST_REFERENCES=" + generic);
         output.println("DEPENDENCY_REFERENCES=" + references);
         output.println("UNVERIFIED_JARS=" + unknown);
         output.println("SCOPED_TO_MANIFESTS_ONLY=true");
@@ -162,34 +149,38 @@ public final class DiscordSrvDependencyInventory {
             }
             String trimmed = line.strip();
             int indent = line.length() - line.stripLeading().length();
-            // Bukkit's depend/softdepend/loadbefore fields are top-level list keys.
             if (indent == 0 && trimmed.contains(":")) {
                 section = trimmed.substring(0, trimmed.indexOf(':')).toLowerCase(Locale.ROOT);
             }
             if (!trimmed.toLowerCase(Locale.ROOT).contains("discordsrv")) {
                 continue;
             }
-            if ("depend".equals(section)) {
-                return JarStatus.HARD_DEPENDENCY;
+            JarStatus candidate = classifyReference(section, trimmed, lines, i, indent);
+            if (candidate == JarStatus.HARD_DEPENDENCY) {
+                return candidate;
             }
-            if ("softdepend".equals(section) || "loadbefore".equals(section)) {
-                strongest = JarStatus.SOFT_DEPENDENCY;
-                continue;
-            }
-            if ("dependencies".equals(section) && trimmed.matches("(?i)^['\\\"]?DiscordSRV['\\\"]?:\\s*$")) {
-                // Paper dependency descriptor: required flag is nested under plugin name.
-                // Absent/unrecognized required flags remain ambiguous, never a safe verdict.
-                JarStatus paper = paperRequiredStatus(lines, i, indent);
-                if (paper == JarStatus.HARD_DEPENDENCY) {
-                    return paper;
-                }
-                strongest = paper == JarStatus.REFERENCE || strongest == JarStatus.REFERENCE
-                        ? JarStatus.REFERENCE : JarStatus.SOFT_DEPENDENCY;
-                continue;
-            }
-            strongest = JarStatus.REFERENCE;
+            strongest = preferConservative(strongest, candidate);
         }
         return strongest;
+    }
+
+    private static JarStatus classifyReference(
+            String section, String entry, List<String> lines, int index, int indent
+    ) {
+        return switch (section) {
+            case "depend" -> JarStatus.HARD_DEPENDENCY;
+            case "softdepend", "loadbefore" -> JarStatus.SOFT_DEPENDENCY;
+            case "dependencies" -> entry.matches("(?i)^['\\\"]?DiscordSRV['\\\"]?:\\s*$")
+                    ? paperRequiredStatus(lines, index, indent) : JarStatus.REFERENCE;
+            default -> JarStatus.REFERENCE;
+        };
+    }
+
+    private static JarStatus preferConservative(JarStatus current, JarStatus candidate) {
+        if (current == JarStatus.REFERENCE || candidate == JarStatus.REFERENCE) {
+            return JarStatus.REFERENCE;
+        }
+        return candidate == JarStatus.SOFT_DEPENDENCY ? candidate : current;
     }
 
     private static JarStatus paperRequiredStatus(List<String> lines, int index, int parentIndent) {
