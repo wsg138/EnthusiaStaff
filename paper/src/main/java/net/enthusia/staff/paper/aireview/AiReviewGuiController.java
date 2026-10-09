@@ -96,7 +96,46 @@ final class AiReviewGuiController implements Listener {
         }
     }
 
+    void openHistory(Player viewer) {
+        openHistory(viewer, null, List.of());
+    }
+
+    private void openHistory(Player viewer, String cursor, List<String> previousCursors) {
+        if (!subsystem.activeDuty(viewer) || !AiReviewPermissions.queue(viewer)) {
+            deny(viewer, AiReviewPermissions.QUEUE);
+            viewer.closeInventory();
+            return;
+        }
+        if (!subsystem.enabled()) {
+            message(viewer, subsystem.disabledReason(), NamedTextColor.GRAY);
+            return;
+        }
+        UUID token = beginLoad(viewer);
+        message(viewer, "Loading saved AI decisions…", NamedTextColor.GRAY);
+        int limit = Math.min(subsystem.configuration().pageSize(), AiReviewGuiRenderer.CONTENT_SLOTS.size());
+        subsystem.loadDecisions(
+                limit, cursor,
+                page -> onEntity(viewer, () -> {
+                    if (loadCurrent(viewer, token)
+                            && subsystem.activeDuty(viewer)
+                            && AiReviewPermissions.queue(viewer)) {
+                        open(viewer, new AiReviewGuiState.History(
+                                viewer.getUniqueId(), nextGeneration(viewer),
+                                page.items(), cursor, page.nextCursor(), previousCursors
+                        ));
+                    }
+                }),
+                issue -> loadFailed(viewer, token, issue)
+        );
+    }
+
     void openEvent(Player viewer, String eventId, int returnPage) {
+        openEvent(viewer, eventId, returnPage, null);
+    }
+
+    private void openEvent(
+            Player viewer, String eventId, int returnPage, AiReviewGuiState.History historyOrigin
+    ) {
         if (!subsystem.activeDuty(viewer)) {
             message(viewer, "AI review requires active staff mode.", NamedTextColor.RED);
             viewer.closeInventory();
@@ -118,7 +157,8 @@ final class AiReviewGuiController implements Listener {
                                 viewer.getUniqueId(),
                                 nextGeneration(viewer),
                                 details,
-                                returnPage
+                                returnPage,
+                                historyOrigin
                         ));
                     }
                 }),
@@ -153,6 +193,7 @@ final class AiReviewGuiController implements Listener {
             return;
         }
         if (!(state instanceof AiReviewGuiState.Queue)
+                && !(state instanceof AiReviewGuiState.History)
                 && !AiReviewPermissions.detail(viewer)) {
             viewer.closeInventory();
             return;
@@ -165,6 +206,8 @@ final class AiReviewGuiController implements Listener {
         }
         if (state instanceof AiReviewGuiState.Queue queue) {
             queueClick(viewer, queue, slot);
+        } else if (state instanceof AiReviewGuiState.History history) {
+            historyClick(viewer, history, slot);
         } else if (state instanceof AiReviewGuiState.Detail detail) {
             detailClick(viewer, detail, slot);
         } else if (state instanceof AiReviewGuiState.LabelPicker picker) {
@@ -203,6 +246,10 @@ final class AiReviewGuiController implements Listener {
     }
 
     private void queueClick(Player viewer, AiReviewGuiState.Queue state, int slot) {
+        if (slot == AiReviewGuiRenderer.HISTORY_TOGGLE) {
+            openHistory(viewer);
+            return;
+        }
         if (slot == AiReviewGuiRenderer.CLOSE) {
             viewer.closeInventory();
             return;
@@ -228,17 +275,62 @@ final class AiReviewGuiController implements Listener {
         }
     }
 
+    private void historyClick(Player viewer, AiReviewGuiState.History state, int slot) {
+        if (slot == AiReviewGuiRenderer.CLOSE) {
+            viewer.closeInventory();
+            return;
+        }
+        if (slot == AiReviewGuiRenderer.HISTORY_TOGGLE) {
+            openQueue(viewer);
+            return;
+        }
+        if (slot == AiReviewGuiRenderer.REFRESH) {
+            openHistory(viewer, state.cursor(), state.previousCursors());
+            return;
+        }
+        if (slot == AiReviewGuiRenderer.PREVIOUS && !state.previousCursors().isEmpty()) {
+            int last = state.previousCursors().size() - 1;
+            String previous = state.previousCursors().get(last);
+            openHistory(viewer, previous.isEmpty() ? null : previous,
+                    state.previousCursors().subList(0, last));
+            return;
+        }
+        if (slot == AiReviewGuiRenderer.NEXT && state.nextCursor() != null
+                && state.previousCursors().size() < 50) {
+            List<String> cursors = new java.util.ArrayList<>(state.previousCursors());
+            cursors.add(state.cursor() == null ? "" : state.cursor());
+            openHistory(viewer, state.nextCursor(), cursors);
+            return;
+        }
+        int slotIndex = AiReviewGuiRenderer.CONTENT_SLOTS.indexOf(slot);
+        if (slotIndex >= 0 && slotIndex < state.items().size()) {
+            if (!AiReviewPermissions.detail(viewer)) {
+                deny(viewer, AiReviewPermissions.DETAIL);
+                return;
+            }
+            openEvent(viewer, state.items().get(slotIndex).eventId(), 0, state);
+        }
+    }
+
     private void detailClick(Player viewer, AiReviewGuiState.Detail state, int slot) {
         if (slot == AiReviewGuiRenderer.CLOSE) {
             viewer.closeInventory();
             return;
         }
         if (slot == AiReviewGuiRenderer.BACK) {
-            openQueue(viewer, state.returnPage(), false);
+            if (state.historyOrigin() != null) {
+                AiReviewGuiState.History h = state.historyOrigin();
+                open(viewer, new AiReviewGuiState.History(
+                        viewer.getUniqueId(), nextGeneration(viewer), h.items(),
+                        h.cursor(), h.nextCursor(), h.previousCursors()
+                ));
+            } else {
+                openQueue(viewer, state.returnPage(), false);
+            }
             return;
         }
         if (slot == AiReviewGuiRenderer.REFRESH) {
-            openEvent(viewer, state.details().eventId(), state.returnPage());
+            openEvent(viewer, state.details().eventId(), state.returnPage(), state.historyOrigin());
             return;
         }
         if (!AiReviewPermissions.correct(viewer)) {
@@ -569,6 +661,7 @@ final class AiReviewGuiController implements Listener {
                 return;
             }
             if (!(state instanceof AiReviewGuiState.Queue)
+                    && !(state instanceof AiReviewGuiState.History)
                     && !AiReviewPermissions.detail(viewer)) {
                 return;
             }
