@@ -289,17 +289,14 @@ final class AiReviewGuiController implements Listener {
             return;
         }
         if (slot == AiReviewGuiRenderer.PREVIOUS && !state.previousCursors().isEmpty()) {
-            int last = state.previousCursors().size() - 1;
-            String previous = state.previousCursors().get(last);
-            openHistory(viewer, previous.isEmpty() ? null : previous,
-                    state.previousCursors().subList(0, last));
+            var previous = AiReviewHistoryNavigation.previous(state);
+            openHistory(viewer, previous.cursor(), previous.previousCursors());
             return;
         }
         if (slot == AiReviewGuiRenderer.NEXT && state.nextCursor() != null
-                && state.previousCursors().size() < 50) {
-            List<String> cursors = new java.util.ArrayList<>(state.previousCursors());
-            cursors.add(state.cursor() == null ? "" : state.cursor());
-            openHistory(viewer, state.nextCursor(), cursors);
+                && state.previousCursors().size() < AiReviewHistoryNavigation.MAX_PREVIOUS_PAGES) {
+            var next = AiReviewHistoryNavigation.next(state);
+            openHistory(viewer, next.cursor(), next.previousCursors());
             return;
         }
         int slotIndex = AiReviewGuiRenderer.CONTENT_SLOTS.indexOf(slot);
