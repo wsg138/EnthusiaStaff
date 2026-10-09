@@ -47,8 +47,8 @@ class StaffModeEntryVanishWiringTest {
 
         assertTrue(validation.contains("audiences.onOwner("));
         assertTrue(validation.indexOf("resolveAndPublishRank(current)")
-                < validation.indexOf("VanishRankReconciliationPolicy.mayVanish(liveRank)"));
-        assertTrue(validation.indexOf("VanishRankReconciliationPolicy.mayVanish(liveRank)")
+                < validation.indexOf("VanishEnableAuthorityFence.eligible(expectedRank, liveRank)"));
+        assertTrue(validation.indexOf("VanishEnableAuthorityFence.eligible(expectedRank, liveRank)")
                 < validation.indexOf("queuePersistSet("));
         assertTrue(validation.contains("failPendingSet("));
     }
@@ -61,16 +61,10 @@ class StaffModeEntryVanishWiringTest {
                 source.indexOf("private void rememberCommittedState(")
         );
 
-        int firstEligibility = persistence.indexOf("pendingEnableStillEligible(playerId, vanished)");
-        int persist = persistence.indexOf("persistState(loaded, playerId, rank, vanished");
-        int secondEligibility = persistence.indexOf(
-                "pendingEnableStillEligible(playerId, vanished)",
-                firstEligibility + 1
-        );
-        int publish = persistence.indexOf("rememberCommittedState(");
-
-        assertTrue(firstEligibility >= 0 && firstEligibility < persist);
-        assertTrue(secondEligibility > persist && secondEligibility < publish);
+        assertTrue(persistence.contains("VanishEnableAuthorityFence.commitIfEligible("));
+        assertTrue(persistence.contains("() -> onlineStaffRanks.get(playerId)"));
+        assertTrue(persistence.contains("persistState(loaded, playerId, rank, true, selectedGameMode, preferenceUpdate)"));
+        assertTrue(persistence.contains("persistState(loaded, playerId, rank, false, selectedGameMode,"));
         assertTrue(persistence.contains("VanishStore.PreferenceUpdate.KEEP"));
         assertTrue(persistence.contains("return false;"));
     }

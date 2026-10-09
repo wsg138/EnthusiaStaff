@@ -34,6 +34,7 @@ import net.enthusia.staff.domain.escalation.ReasonPolicy;
 import net.enthusia.staff.domain.history.HistoryQueryOptions;
 import net.enthusia.staff.domain.history.ModerationHistoryPage;
 import net.enthusia.staff.domain.player.PlayerIdentity;
+import net.enthusia.staff.domain.player.PlayerNames;
 import net.enthusia.staff.domain.ports.CaseReviewStore;
 import net.enthusia.staff.domain.ports.ModerationHistoryStore;
 import net.enthusia.staff.domain.ports.PlayerDirectory;
@@ -1105,7 +1106,7 @@ public final class PunishmentGuiController implements Listener {
     }
 
     private static String targetName(PlayerIdentity target) {
-        return target.currentUsername().orElse(target.playerId().toString());
+        return PlayerNames.label(target);
     }
 
     public record Dependencies(

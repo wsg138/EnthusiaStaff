@@ -1,6 +1,5 @@
 package net.enthusia.staff.paper.command;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import java.lang.reflect.Array;
 import java.lang.reflect.Proxy;
@@ -24,6 +23,7 @@ import net.kyori.adventure.text.Component;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
 import org.junit.jupiter.api.Test;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 final class FreezeCommandReadTest {
     private static final String COMMAND_NAME = "freeze";
@@ -55,7 +55,7 @@ final class FreezeCommandReadTest {
         );
 
         assertEquals(List.of(Component.text(
-                "FrozenPlayer (" + PLAYER_ID + ") is not currently frozen."
+                "FrozenPlayer is not currently frozen."
         )), messages);
     }
 

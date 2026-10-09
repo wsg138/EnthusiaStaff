@@ -72,6 +72,9 @@ jobs:
           cp validation/staff-state-reset-proof/target/staff-state-reset-proof-1.0.0.jar "$RUNNER_TEMP/StaffStateResetProof.jar"
           printf 'source=%s\n' "$(git rev-parse HEAD)" | tee "$RUNNER_TEMP/evidence/source.txt"
 
+      - name: Verify packet trace fixtures
+        run: node --test validation/staff-state-reset-proof/player-info-trace.test.js
+
       - name: Install protocol clients
         shell: bash
         run: |

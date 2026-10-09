@@ -1,6 +1,7 @@
 package net.enthusia.staff.paper.staff;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -23,14 +24,28 @@ class DetachedStaffRecoveryWiringTest {
     }
 
     @Test
+    void terminalDetachedRecoveryUsesExactFenceAndNeverRestoresSourceSnapshot() throws IOException {
+        String source = Files.readString(MANAGER).replace("\r\n", "\n");
+        int start = source.indexOf("private void retireRestoredDetachedSession");
+        int end = source.indexOf("private void resumeDetachedSession", start);
+        String method = source.substring(start, end);
+        assertTrue(method.contains("loaded.beginDetachedExit(session, clock.instant())"));
+        assertTrue(method.contains("loaded.completeExit(exiting.sessionId(), exiting.checksum()"));
+        assertFalse(method.contains("loaded.beginExit("));
+        assertFalse(method.contains("restoreSavedState("));
+        assertFalse(method.contains("restoreAndVerify("));
+    }
+
+    @Test
     void automaticRecoveryRetryIsSingleFlightPerPlayer() throws IOException {
         String source = Files.readString(MANAGER).replace("\r\n", "\n");
         int start = source.indexOf("private void scheduleRecoveryRetry");
         int end = source.indexOf("private boolean staleFromPriorRuntime", start);
         String method = source.substring(start, end);
 
-        assertTrue(method.contains("if (!scheduledRecoveryRetries.add(playerId))"));
-        assertTrue(method.contains("scheduledRecoveryRetries.remove(playerId)"));
+        assertTrue(method.contains("recoveryRetries.begin(playerId)"));
+        assertTrue(method.contains("recoveryRetries.consume(playerId, ticket)"));
         assertTrue(method.contains("20L"));
+        assertTrue(method.contains("onEntity(playerId, this::recover)"));
     }
 }

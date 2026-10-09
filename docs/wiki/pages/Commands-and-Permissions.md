@@ -32,7 +32,7 @@ Subcommands have independent permissions. `/estaff verify full` additionally req
 
 | Command | Usage | Primary permission |
 | --- | --- | --- |
-| `/punish` | `/punish <player> [reason-id]` or `/punish resume <player>` | `enthusiastaff.punish` |
+| `/punish` | `/punish <player> [reason-id]`, `/punish resume <player>`, or `/punish confirm <player>` | `enthusiastaff.punish` |
 | `/ban` | `/ban <player> [reason-id]` | `enthusiastaff.punish` |
 | `/mute` | `/mute <player> [reason-id]` | `enthusiastaff.punish` |
 | `/warn` | `/warn <player> [reason-id]` | `enthusiastaff.punish` |
@@ -328,3 +328,12 @@ StaffBot uses its own health/readiness surface. Website/moderation-web use their
 - [[Website and Web API]]
 - [[Rank Authority]]
 - [[Developer Code Guide]]
+## Player identity display
+
+Known players are shown by name in alt reviews, report text and menus, case and
+history views, freeze status, and punishment menus. Commands accepting a player
+already accept known names; `/punish confirm <player>` also accepts names.
+Unknown identities and ambiguous historical-name matches retain UUIDs for exact
+selection. Case, report, sanction, request, evidence, and operation IDs identify
+separate records and remain available where required to select the correct record.
+Stored identities and authorization continue to use UUIDs.

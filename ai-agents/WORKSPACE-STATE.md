@@ -221,3 +221,8 @@ and canonical Pi stopped before private dispatch because its bridge credential
 was rejected. Follow the active X03 handoff; do not replace either
 implementation branch, absorb standalone Market PR #6, bypass the bridge, or
 treat missing private runtime as a pass.
+
+
+## Owner fork upstream delivery, 2026-10-08
+
+Owner explicitly assigned continuation of `owner-punish-confirm-player` to merge validated fork PRs and submit remaining source fixes to canonical main. Fork PR1 and PR14 are merged; upstream reconciliation is REVIEW / ACTIONABLE_CONTINUATION in canonical PR #476 on `package/owner-upstream-remaining-20261008`. Current canonical bb8156ce is preserved, including rank policy, preferences, configured messages, recovery and authority controls. See `ai-agents/reports/package-handoffs/2026-10-08-owner-upstream-reconciliation.md` for bounded SPEAR requirements and evidence. Other packages are not reassigned. Upstream #339 remains the separate offline Discord mute submission. No production actions or canonical product merge authorized.

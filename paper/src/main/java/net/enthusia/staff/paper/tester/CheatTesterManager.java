@@ -391,7 +391,8 @@ public final class CheatTesterManager implements Listener, AutoCloseable {
             CheatTesterSessionState terminalState,
             String reason
     ) {
-        String captured = evidence.capture(target, session, reason);
+        String captured = captureForRestoration(() -> evidence.capture(target, session, reason), exception ->
+                plugin.getLogger().log(Level.WARNING, "Tester evidence capture failed; restoring saved state", exception));
         if (session.type == CheatTesterType.FAKE_ENTITY) {
             probes.hideFake(target, session);
             persistCompletion(session, terminalState, reason, captured, true);
@@ -414,20 +415,38 @@ public final class CheatTesterManager implements Listener, AutoCloseable {
     }
 
     private void checkpointThenScheduleRestore(
-            CheatTesterSession session,
-            CheatTesterSessionState terminalState,
-            String reason,
-            String captured
-    ) {
-        CheatTesterJournalStore loaded = store.get();
-        if (loaded != null) {
-            checkpointEvidence(loaded, session, captured);
+            CheatTesterSession session, CheatTesterSessionState terminalState, String reason, String captured) {
+        checkpointThenRestore(() -> {
+            CheatTesterJournalStore loaded = store.get();
+            if (loaded != null) {
+                checkpointEvidence(loaded, session, captured);
+            }
+        }, () -> runtime.scheduleTarget(
+                session.targetId, target -> restoreTarget(target, session, terminalState, reason, captured),
+                () -> retireForRecovery(session, "Target retired before exact restoration")),
+                exception -> plugin.getLogger().log(Level.WARNING,
+                        "Tester checkpoint unavailable; restoration still takes priority", exception));
+    }
+
+    static String captureForRestoration(java.util.function.Supplier<String> capture,
+            java.util.function.Consumer<RuntimeException> failure) {
+        try {
+            return capture.get();
+        } catch (RuntimeException exception) {
+            failure.accept(exception);
+            return "{\"evidenceCaptureFailed\":true}";
         }
-        runtime.scheduleTarget(
-                session.targetId,
-                target -> restoreTarget(target, session, terminalState, reason, captured),
-                () -> retireForRecovery(session, "Target retired before exact restoration")
-        );
+    }
+
+    static void checkpointThenRestore(Runnable checkpoint, Runnable restore,
+            java.util.function.Consumer<RuntimeException> failure) {
+        try {
+            checkpoint.run();
+        } catch (RuntimeException exception) {
+            failure.accept(exception);
+        } finally {
+            restore.run();
+        }
     }
 
     private void checkpointEvidence(

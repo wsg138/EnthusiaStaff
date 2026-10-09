@@ -5,7 +5,7 @@ import net.enthusia.staff.domain.auth.StaffRank;
 import org.bukkit.GameMode;
 import org.bukkit.event.inventory.ClickType;
 
-final class StaffModeAccessPolicy {
+public final class StaffModeAccessPolicy {
     private StaffModeAccessPolicy() {
     }
 
@@ -44,7 +44,7 @@ final class StaffModeAccessPolicy {
         };
     }
 
-    static GameMode initialGameMode(StaffRank rank) {
+    public static GameMode initialGameMode(StaffRank rank) {
         if (rank == StaffRank.DEVELOPER || rank == StaffRank.ADMIN || rank == StaffRank.FOUNDER) {
             return GameMode.CREATIVE;
         }
@@ -54,7 +54,7 @@ final class StaffModeAccessPolicy {
         return GameMode.SPECTATOR;
     }
 
-    static boolean allowsGameMode(StaffRank rank, GameMode gameMode) {
+    public static boolean allowsGameMode(StaffRank rank, GameMode gameMode) {
         Objects.requireNonNull(gameMode, "gameMode");
         if (rank == StaffRank.DEVELOPER || rank == StaffRank.ADMIN || rank == StaffRank.FOUNDER) {
             // Technical Developer and administrative ranks have unrestricted real game-mode choice.

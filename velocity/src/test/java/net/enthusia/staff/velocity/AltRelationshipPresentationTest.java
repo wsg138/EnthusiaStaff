@@ -1,6 +1,5 @@
 package net.enthusia.staff.velocity;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import java.time.Instant;
 import java.util.List;
@@ -13,6 +12,7 @@ import net.enthusia.staff.domain.player.PlayerIdentity;
 import net.enthusia.staff.domain.player.PlayerPlatform;
 import net.kyori.adventure.text.Component;
 import org.junit.jupiter.api.Test;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 class AltRelationshipPresentationTest {
     private static final Instant CREATED = Instant.parse("2026-09-10T12:00:00Z");
@@ -27,7 +27,8 @@ class AltRelationshipPresentationTest {
                 player(targetId, "Target"),
                 List.of(new CurrentLinkedMinecraftAccount(linkedId, Optional.of("VerifiedLink"), CREATED)),
                 true,
-                List.of(new AltRelationshipSummary(networkId, AltRelationshipState.CONFIDENT, 0.75, false, CREATED))
+                List.of(new AltRelationshipSummary(networkId, AltRelationshipState.CONFIDENT, 0.75, false, CREATED)),
+                id -> ".OfflineBedrockPlayer"
         );
 
         assertEquals(List.of(
@@ -35,7 +36,7 @@ class AltRelationshipPresentationTest {
                 Component.text("Verified linked Minecraft accounts: 1"),
                 Component.text("- VerifiedLink (linked 2026-09-10T12:00:00Z)"),
                 Component.text("Network relationships: 1"),
-                Component.text("- " + networkId + " CONFIDENT confidence=75%")
+                Component.text("- .OfflineBedrockPlayer CONFIDENT confidence=75%")
         ), rendered);
     }
 
@@ -59,5 +60,22 @@ class AltRelationshipPresentationTest {
 
     private static PlayerIdentity player(UUID playerId, String username) {
         return new PlayerIdentity(playerId, Optional.of(username), PlayerPlatform.JAVA, CREATED, CREATED);
+    }
+
+    @Test
+    void resolvesUnnamedVerifiedLinkAndKeepsUnknownNetworkPlayerDistinct() {
+        UUID linked = UUID.randomUUID();
+        UUID unknown = UUID.randomUUID();
+        List<Component> lines = AltRelationshipPresentation.render(
+                player(UUID.randomUUID(), "Target"),
+                List.of(new CurrentLinkedMinecraftAccount(linked, Optional.empty(), CREATED)),
+                true,
+                List.of(new AltRelationshipSummary(unknown, AltRelationshipState.CONFIDENT, 0.75, true, CREATED)),
+                id -> id.equals(linked) ? "OfflineJavaPlayer"
+                        : net.enthusia.staff.domain.player.PlayerNames.unknown(id)
+        );
+        assertEquals(Component.text("- OfflineJavaPlayer (linked 2026-09-10T12:00:00Z)"), lines.get(2));
+        assertEquals(Component.text("- Unknown player (" + unknown + ") CONFIDENT confidence=75% locked"),
+                lines.get(4));
     }
 }

@@ -1,6 +1,5 @@
 package net.enthusia.staff.paper.command;
 
-import net.enthusia.staff.paper.presentation.StaffMessageStyle;
 import java.time.Duration;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -10,6 +9,7 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.RejectedExecutionException;
+import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.logging.Level;
 import net.enthusia.staff.common.CaseId;
@@ -21,13 +21,16 @@ import net.enthusia.staff.domain.casefile.SanctionReview;
 import net.enthusia.staff.domain.history.CaseHistoryDetail;
 import net.enthusia.staff.domain.history.HistoryQueryOptions;
 import net.enthusia.staff.domain.history.ModerationHistoryEntry;
+import net.enthusia.staff.domain.player.PlayerNames;
 import net.enthusia.staff.domain.ports.CaseLookup;
 import net.enthusia.staff.domain.ports.ModerationHistoryStore;
+import net.enthusia.staff.domain.ports.PlayerDirectory;
 import net.enthusia.staff.domain.sanction.SanctionLength;
 import net.enthusia.staff.domain.sanction.SanctionSpec;
 import net.enthusia.staff.paper.auth.PaperActorResolver;
 import net.enthusia.staff.paper.config.ModerationFeatureSettings;
 import net.enthusia.staff.paper.inventory.ConfiscationCoordinator;
+import net.enthusia.staff.paper.presentation.StaffMessageStyle;
 import net.kyori.adventure.text.Component;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
@@ -40,6 +43,7 @@ public final class CaseCommand implements CommandExecutor {
     private static final String RESTORE_PERMISSION = "enthusiastaff.case.restoreitems";
     private static final String ENTRY_SEPARATOR = " | ";
 
+    private final Supplier<PlayerDirectory> players;
     private final JavaPlugin plugin;
     private final Supplier<CaseLookup> cases;
     private final Supplier<ConfiscationCoordinator> confiscation;
@@ -68,6 +72,16 @@ public final class CaseCommand implements CommandExecutor {
             AuthorizationPolicy authorization,
             ExecutorService workers
     ) {
+        this(plugin, cases, confiscation, histories, settings, authorization, workers, () -> null);
+    }
+
+    public CaseCommand(
+            JavaPlugin plugin, Supplier<CaseLookup> cases, Supplier<ConfiscationCoordinator> confiscation,
+            Supplier<ModerationHistoryStore> histories, Supplier<ModerationFeatureSettings> settings,
+            AuthorizationPolicy authorization, ExecutorService workers,
+            Supplier<PlayerDirectory> players
+    ) {
+        this.players = java.util.Objects.requireNonNull(players, "players");
         this.plugin = java.util.Objects.requireNonNull(plugin, "plugin");
         this.cases = java.util.Objects.requireNonNull(cases, "cases");
         this.confiscation = java.util.Objects.requireNonNull(confiscation, "confiscation");
@@ -151,7 +165,7 @@ public final class CaseCommand implements CommandExecutor {
                 responses.send(sender, Component.text("That case does not exist."));
                 return;
             }
-            responses.send(sender, render(loaded.orElseThrow(), active, sensitive));
+            responses.send(sender, render(loaded.orElseThrow(), active, sensitive, new PlayerNames(players.get())));
         } catch (RuntimeException exception) {
             plugin.getLogger().log(Level.WARNING, "Sanitized case history query failed for " + caseId, exception);
             responses.send(sender, Component.text("Case history could not be loaded; see the server log."));
@@ -161,13 +175,14 @@ public final class CaseCommand implements CommandExecutor {
     private static List<Component> render(
             CaseHistoryDetail detail,
             ModerationFeatureSettings settings,
-            boolean sensitive
+            boolean sensitive,
+            Function<UUID, String> names
     ) {
         CaseReview review = detail.caseReview();
         DateTimeFormatter formatter = ModerationTimestampFormatter.inZone(settings.historyTimezone());
         List<Component> lines = new ArrayList<>();
         lines.add(Component.text(
-                "Case " + review.caseId().value() + " | subject " + review.targetId()
+                "Case " + review.caseId().value() + " | subject " + names.apply(review.targetId())
                         + ENTRY_SEPARATOR + human(review.sanctionFamily())
                         + ENTRY_SEPARATOR + human(review.state().name())
         ));
@@ -187,7 +202,7 @@ public final class CaseCommand implements CommandExecutor {
         )));
         if (sensitive) {
             lines.add(Component.text(
-                    "Actor: " + review.actorName() + " (" + review.actorRank() + ", " + review.actorId() + ")"
+                    "Actor: " + review.actorName() + " (" + review.actorRank() + ")"
             ));
             if (!review.internalExplanation().isBlank()) {
                 lines.add(Component.text("Internal explanation: " + review.internalExplanation()));
@@ -215,7 +230,7 @@ public final class CaseCommand implements CommandExecutor {
         }
         lines.add(Component.text("Timeline:"));
         for (ModerationHistoryEntry entry : detail.timeline()) {
-            lines.add(Component.text(formatTimelineEntry(entry, formatter, sensitive)));
+            lines.add(Component.text(formatTimelineEntry(entry, formatter, sensitive, names)));
         }
         return List.copyOf(lines);
     }
@@ -223,7 +238,8 @@ public final class CaseCommand implements CommandExecutor {
     private static String formatTimelineEntry(
             ModerationHistoryEntry entry,
             DateTimeFormatter formatter,
-            boolean sensitive
+            boolean sensitive,
+            Function<UUID, String> names
     ) {
         StringBuilder line = new StringBuilder(128)
                 .append("- ")
@@ -245,9 +261,9 @@ public final class CaseCommand implements CommandExecutor {
             line.append(" | reason: ").append(entry.publicReason());
         }
         if (sensitive) {
-            entry.actorName().ifPresentOrElse(
+            entry.actorName().filter(value -> !value.isBlank()).ifPresentOrElse(
                     value -> line.append(" | actor: ").append(value),
-                    () -> entry.actorId().ifPresent(value -> line.append(" | actor: ").append(value))
+                    () -> entry.actorId().ifPresent(value -> line.append(" | actor: ").append(names.apply(value)))
             );
             entry.sensitiveReason().ifPresent(value -> line.append(" | internal: ").append(value));
         }

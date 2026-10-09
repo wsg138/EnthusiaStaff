@@ -21,10 +21,11 @@ import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.event.server.TabCompleteEvent;
 import org.bukkit.plugin.java.JavaPlugin;
 
-/** Keeps private-message targets local until remote visibility can be verified. */
+/** Keeps message and guild-invite presence probes behind the same viewer visibility policy. */
 public final class PrivateMessagePresenceListener implements Listener {
     private static final int COMMAND_WITH_TARGET_PARTS = 2;
     private static final Set<String> COMMANDS = Set.of("msg", "message", "m", "pm", "whisper", "w", "tell", "t");
+    private static final Set<String> GUILD_COMMANDS = Set.of("g", "guild");
     private final Map<UUID, String> localNames = new ConcurrentHashMap<>();
     private final BiPredicate<UUID, UUID> canSee;
 
@@ -67,6 +68,11 @@ public final class PrivateMessagePresenceListener implements Listener {
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     public void onCommand(PlayerCommandPreprocessEvent event) {
+        if (unavailableGuildInvite(event.getPlayer().getUniqueId(), event.getMessage())) {
+            event.setCancelled(true);
+            event.getPlayer().sendMessage(Component.text("That player is not available for guild invitations.", NamedTextColor.RED));
+            return;
+        }
         String[] parts = messageParts(event.getMessage());
         if (parts.length >= COMMAND_WITH_TARGET_PARTS && !parts[1].isEmpty() && !targetAllowed(event.getPlayer().getUniqueId(), parts[1])) {
             event.setCancelled(true);
@@ -77,6 +83,12 @@ public final class PrivateMessagePresenceListener implements Listener {
 
     Optional<List<String>> suggestions(UUID viewer, String buffer) {
         String[] parts = messageParts(buffer);
+        if (parts.length == 0) {
+            String[] guild = guildInviteParts(buffer);
+            if (guild.length == 3) {
+                parts = new String[]{guild[0], guild[2]};
+            }
+        }
         if (parts.length != COMMAND_WITH_TARGET_PARTS) {
             return Optional.empty();
         }
@@ -90,6 +102,22 @@ public final class PrivateMessagePresenceListener implements Listener {
     boolean targetAllowed(UUID viewer, String target) {
         return localNames.entrySet().stream().anyMatch(entry -> entry.getValue().equalsIgnoreCase(target)
                 && canSee.test(viewer, entry.getKey()));
+    }
+
+    boolean unavailableGuildInvite(UUID viewer, String buffer) {
+        String[] parts = guildInviteParts(buffer);
+        return parts.length >= 3 && !parts[2].isEmpty() && !targetAllowed(viewer, parts[2]);
+    }
+
+    private static String[] guildInviteParts(String buffer) {
+        if (!buffer.startsWith("/")) {
+            return new String[0];
+        }
+        String[] parts = buffer.substring(1).split("\\s+", -1);
+        String command = parts[0].toLowerCase(Locale.ROOT);
+        command = command.substring(command.lastIndexOf(':') + 1);
+        return parts.length >= 3 && GUILD_COMMANDS.contains(command) && parts[1].equalsIgnoreCase("invite")
+                ? parts : new String[0];
     }
 
     private static String[] messageParts(String buffer) {

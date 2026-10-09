@@ -7,13 +7,13 @@ function normalizeUuid (value) {
 }
 
 function ownUuid (bot) {
-  const entity = bot.player || bot.entity
-  return normalizeUuid((entity && entity.uuid) || bot._client.uuid)
+  return normalizeUuid(bot.player?.uuid || bot.entity?.uuid || bot._client?.uuid)
 }
 
 function traceOwnPlayerInfo (bot, packet, log) {
   const entries = firstPresent(packet, ['data', 'entries']) || []
   const self = ownUuid(bot)
+  if (!self || !Array.isArray(entries)) return
   const entry = entries.find(candidate => normalizeUuid(profileId(candidate)) === self)
   if (!entry) return
 

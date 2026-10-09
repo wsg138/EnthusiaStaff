@@ -81,7 +81,7 @@ public final class StaffModeManager implements Listener {
     private final java.util.Set<UUID> profileApplications = ConcurrentHashMap.newKeySet();
     private final java.util.Set<UUID> snapshotRestorations = ConcurrentHashMap.newKeySet();
     private final java.util.Set<UUID> pendingRankChecks = ConcurrentHashMap.newKeySet();
-    private final java.util.Set<UUID> scheduledRecoveryRetries = ConcurrentHashMap.newKeySet();
+    private final StaffRecoveryRetryRegistry recoveryRetries = new StaffRecoveryRetryRegistry();
     private final StaffModeHandoffIntentRegistry handoffResumes;
     private final StaffModeSourceHandoffRegistry sourceHandoffs = new StaffModeSourceHandoffRegistry();
     private final StaffModeActivationCoordinator activation;
@@ -89,6 +89,7 @@ public final class StaffModeManager implements Listener {
     private final AtomicBoolean rankReconciliationStarted = new AtomicBoolean();
     private volatile Consumer<UUID> exitListener = ignored -> {
     };
+    private volatile Consumer<UUID> presenceListener = ignored -> { };
     private volatile Consumer<StaffSessionSnapshot> activeSessionListener = ignored -> {
     };
     private volatile Consumer<UUID> gameModeTransitionGuardBegin = ignored -> {
@@ -132,6 +133,10 @@ public final class StaffModeManager implements Listener {
 
     public boolean active(UUID playerId) {
         return active.containsKey(playerId) || handoffGaps.contains(playerId);
+    }
+
+    public StaffRank activeRank(UUID playerId) {
+        return ranks.get(playerId);
     }
 
     public UUID activeSessionId(UUID playerId) {
@@ -194,6 +199,10 @@ public final class StaffModeManager implements Listener {
 
     public void setExitListener(Consumer<UUID> exitListener) {
         this.exitListener = java.util.Objects.requireNonNull(exitListener);
+    }
+
+    public void setPresenceListener(Consumer<UUID> listener) {
+        presenceListener = java.util.Objects.requireNonNull(listener);
     }
 
     public void setActiveSessionListener(Consumer<StaffSessionSnapshot> listener) {
@@ -600,12 +609,15 @@ public final class StaffModeManager implements Listener {
             StaffSessionStore loaded
     ) {
         try {
-            StaffSessionSnapshot exiting = session.state() == StaffSessionState.RECOVERY_REQUIRED
-                    ? loaded.beginExit(playerId, clock.instant()).orElseThrow(() ->
-                            new IllegalStateException(
-                                    "detached recovery-required Staff Mode session disappeared during closure"
-                            ))
-                    : session;
+            StaffSessionSnapshot exiting = loaded.beginDetachedExit(session, clock.instant())
+                    .orElseThrow(() -> new IllegalStateException("detached recovery lost its exact session fence"));
+            if (!exiting.sessionId().equals(session.sessionId())
+                    || !exiting.staffId().equals(playerId)
+                    || !StaffSessionOwnership.detached(exiting.serverId())
+                    || exiting.state() != StaffSessionState.EXITING
+                    || !exiting.checksum().equals(session.checksum())) {
+                throw new IllegalStateException("detached exit returned a different recovery lease");
+            }
             if (!loaded.completeExit(exiting.sessionId(), exiting.checksum(), clock.instant())) {
                 recoveryGate.retry(playerId);
                 safeMessage(
@@ -725,16 +737,20 @@ public final class StaffModeManager implements Listener {
     }
 
     private void scheduleRecoveryRetry(UUID playerId) {
-        if (!scheduledRecoveryRetries.add(playerId)) {
+        UUID ticket = recoveryRetries.begin(playerId).orElse(null);
+        if (ticket == null) {
             return;
         }
-        plugin.getServer().getGlobalRegionScheduler().runDelayed(plugin, ignored -> {
-            scheduledRecoveryRetries.remove(playerId);
-            Player player = plugin.getServer().getPlayer(playerId);
-            if (player != null) {
-                recover(player);
-            }
-        }, 20L);
+        try {
+            plugin.getServer().getGlobalRegionScheduler().runDelayed(plugin, ignored -> {
+                if (recoveryRetries.consume(playerId, ticket)) {
+                    onEntity(playerId, this::recover);
+                }
+            }, 20L);
+        } catch (RuntimeException exception) {
+            recoveryRetries.consume(playerId, ticket);
+            plugin.getLogger().log(Level.WARNING, "Staff recovery retry scheduling failed", exception);
+        }
     }
 
     private boolean staleFromPriorRuntime(StaffSessionSnapshot session) {
@@ -863,6 +879,7 @@ public final class StaffModeManager implements Listener {
         pendingLocalSessions.remove(playerId, session);
         handoffGaps.remove(playerId);
         try {
+            presenceListener.accept(playerId);
             activeSessionListener.accept(session);
         } catch (RuntimeException exception) {
             plugin.getLogger().log(Level.WARNING, "Staff active-session callback failed", exception);
@@ -1078,7 +1095,7 @@ public final class StaffModeManager implements Listener {
         profileApplications.remove(playerId);
         snapshotRestorations.remove(playerId);
         pendingRankChecks.remove(playerId);
-        scheduledRecoveryRetries.remove(playerId);
+        recoveryRetries.clear(playerId);
         handoffGaps.remove(playerId);
         unrestrictedIdentities.remove(playerId);
         toolInventoryPreferences.remove(playerId);
@@ -1573,7 +1590,7 @@ public final class StaffModeManager implements Listener {
     private void completeRuntimeExit(UUID playerId) {
         removeRuntimeState(playerId);
         recoveryGate.clear(playerId);
-        scheduledRecoveryRetries.remove(playerId);
+        recoveryRetries.clear(playerId);
         handoffGaps.remove(playerId);
         try {
             exitListener.accept(playerId);
@@ -1600,6 +1617,7 @@ public final class StaffModeManager implements Listener {
     }
 
     private void removeRuntimeState(UUID playerId) {
+        recoveryRetries.clear(playerId);
         active.remove(playerId);
         pendingLocalSessions.remove(playerId);
         ranks.remove(playerId);

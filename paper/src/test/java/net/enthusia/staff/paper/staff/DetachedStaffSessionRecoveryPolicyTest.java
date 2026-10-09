@@ -1,6 +1,7 @@
 package net.enthusia.staff.paper.staff;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import net.enthusia.staff.domain.staff.StaffSessionState;
 import org.junit.jupiter.api.Test;
@@ -33,4 +34,11 @@ class DetachedStaffSessionRecoveryPolicyTest {
                 DetachedStaffSessionRecoveryPolicy.decide(StaffSessionState.ENTERING)
         );
     }
+    @Test
+    void closedLeaseClearsAndUnknownStateFailsClosed() {
+        assertEquals(DetachedStaffSessionRecoveryPolicy.Action.CLEAR_CLOSED,
+                DetachedStaffSessionRecoveryPolicy.decide(StaffSessionState.CLOSED));
+        assertThrows(NullPointerException.class, () -> DetachedStaffSessionRecoveryPolicy.decide(null));
+    }
+
 }

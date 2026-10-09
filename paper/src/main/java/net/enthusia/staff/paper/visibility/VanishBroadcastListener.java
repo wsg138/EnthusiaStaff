@@ -19,21 +19,21 @@ public final class VanishBroadcastListener implements Listener {
 
     @EventHandler(priority = EventPriority.HIGHEST)
     public void onDeath(PlayerDeathEvent event) {
-        if (vanish.isVanished(event.getPlayer().getUniqueId())) {
+        if (vanish.hiddenFromPublic(event.getPlayer().getUniqueId())) {
             event.deathMessage(null);
         }
     }
 
     @EventHandler(priority = EventPriority.HIGHEST)
     public void onAdvancement(PlayerAdvancementDoneEvent event) {
-        if (vanish.isVanished(event.getPlayer().getUniqueId())) {
+        if (vanish.hiddenFromPublic(event.getPlayer().getUniqueId())) {
             event.message(null);
         }
     }
 
     @EventHandler(priority = EventPriority.HIGHEST)
     public void onPing(PaperServerListPingEvent event) {
-        event.getListedPlayers().removeIf(entry -> vanish.isVanished(entry.id()));
+        event.getListedPlayers().removeIf(entry -> vanish.hiddenFromPublic(entry.id()));
         if (!event.shouldHidePlayers()) {
             event.setNumPlayers(visibleCount(event.getNumPlayers(), vanish.vanishedOnlineCount()));
         }

@@ -14,8 +14,8 @@ import com.velocitypowered.api.event.player.ServerPostConnectEvent;
 import com.velocitypowered.api.event.player.ServerPreConnectEvent;
 import com.velocitypowered.api.event.proxy.ProxyInitializeEvent;
 import com.velocitypowered.api.event.proxy.ProxyShutdownEvent;
-import com.velocitypowered.api.plugin.Plugin;
 import com.velocitypowered.api.plugin.Dependency;
+import com.velocitypowered.api.plugin.Plugin;
 import com.velocitypowered.api.plugin.annotation.DataDirectory;
 import com.velocitypowered.api.proxy.Player;
 import com.velocitypowered.api.proxy.ProxyServer;
@@ -50,20 +50,21 @@ import javax.net.ssl.SSLContext;
 import net.enthusia.staff.common.CaseId;
 import net.enthusia.staff.common.security.HmacTokenService;
 import net.enthusia.staff.common.security.NetworkIdentityProtector;
-import net.enthusia.staff.common.security.SecretKeyMaterial;
 import net.enthusia.staff.common.security.PrivateRuntimeSecrets;
+import net.enthusia.staff.common.security.SecretKeyMaterial;
 import net.enthusia.staff.domain.OperationalMode;
 import net.enthusia.staff.domain.alt.AltRelationshipState;
 import net.enthusia.staff.domain.alt.AltRelationshipSummary;
 import net.enthusia.staff.domain.application.SanctionChangeService;
 import net.enthusia.staff.domain.auth.AuthorizationPolicy;
 import net.enthusia.staff.domain.auth.DefaultAuthorizationPolicy;
-import net.enthusia.staff.domain.moderation.CurrentLinkedMinecraftAccount;
 import net.enthusia.staff.domain.migration.CutoverAssessment;
 import net.enthusia.staff.domain.migration.CutoverEvidence;
 import net.enthusia.staff.domain.migration.DecisionComparison;
 import net.enthusia.staff.domain.migration.FounderOverride;
 import net.enthusia.staff.domain.migration.MigrationMode;
+import net.enthusia.staff.domain.moderation.CurrentLinkedMinecraftAccount;
+import net.enthusia.staff.domain.player.PlayerNames;
 import net.enthusia.staff.domain.player.PlayerPlatform;
 import net.enthusia.staff.domain.ports.AccountLinkingStore;
 import net.enthusia.staff.domain.ports.DiscordOutboxStore;
@@ -1281,14 +1282,7 @@ public final class EnthusiaStaffVelocityPlugin {
             return;
         }
         if (event.getPreviousServer() == null) {
-            // Asset recovery owns the first hop. Do not let a separate Staff Mode
-            // reconnect redirect override a backend selected for durable asset recovery.
-            if (!selectedServerName(event).equalsIgnoreCase(
-                    event.getOriginalServer().getServerInfo().getName()
-            )) {
-                return;
-            }
-            enforceStaffReconnectOwnership(event);
+            // Initial asset routing already applies Staff reconnect only when no asset owns admission.
             return;
         }
         enforceModerationSwitchSafety(event);
@@ -1368,16 +1362,15 @@ public final class EnthusiaStaffVelocityPlugin {
             UUID playerId = event.getPlayer().getUniqueId();
             Instant now = Clock.systemUTC().instant();
             Optional<String> inventoryOwner = inventories.lockedOwningServer(playerId, now);
-            Optional<String> economyOwner = economies.lockedOwningServer(playerId);
             if (event.getPreviousServer() == null) {
                 return initialAssetFencesAllowSwitch(
-                        event, inventories, inventoryOwner, economyOwner, requested, now
+                        event, inventories, inventoryOwner, economies.lockedOwningServer(playerId), requested, now
                 );
             }
             if (denyOwnerMismatch(event, inventoryOwner, requested, "inventory")) {
                 return false;
             }
-            return !denyOwnerMismatch(event, economyOwner, requested, "economy");
+            return !denyOwnerMismatch(event, economies.lockedOwningServer(playerId), requested, "economy");
         } catch (RuntimeException exception) {
             logger.error("Asset fence lookup failed during server connection", exception);
             denyServerSwitchWhenActive(event, "Asset safety status could not be verified.");
@@ -1407,7 +1400,13 @@ public final class EnthusiaStaffVelocityPlugin {
         }
 
         Optional<String> owner = inventoryOwner.isPresent() ? inventoryOwner : economyOwner;
-        if (owner.isEmpty() || owner.orElseThrow().equalsIgnoreCase(requested)) {
+        if (owner.isEmpty()) {
+            enforceStaffReconnectOwnership(event);
+            return true;
+        }
+        // Even when the requested backend already owns the asset, Staff reconnect
+        // must not override that backend with a different snapshot owner.
+        if (owner.orElseThrow().equalsIgnoreCase(requested)) {
             return true;
         }
 
@@ -1821,13 +1820,6 @@ public final class EnthusiaStaffVelocityPlugin {
         }
     }
 
-    private static String selectedServerName(ServerPreConnectEvent event) {
-        return event.getResult().getServer()
-                .orElse(event.getOriginalServer())
-                .getServerInfo()
-                .getName();
-    }
-
     private void denyServerSwitch(ServerPreConnectEvent event, String message) {
         event.setResult(ServerPreConnectEvent.ServerResult.denied());
         Component styled = VelocityMessageStyle.style(Component.text(message));
@@ -2061,7 +2053,8 @@ public final class EnthusiaStaffVelocityPlugin {
                         target,
                         linkedAccounts.orElseGet(List::of),
                         linkedAccounts.isPresent(),
-                        relationships
+                        relationships,
+                        new PlayerNames(directory)
                 ).forEach(source::sendMessage);
             });
         }

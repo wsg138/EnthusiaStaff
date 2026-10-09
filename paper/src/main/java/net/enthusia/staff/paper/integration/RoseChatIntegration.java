@@ -39,6 +39,7 @@ public final class RoseChatIntegration implements AutoCloseable {
 
     private final RoseChatStaffService service;
     private final BridgeRegistration registration;
+    private final RoseChatPresenceRenderer presenceRenderer;
     private final RoseChatAutomatedModerationProvider automatedModeration;
 
     private RoseChatIntegration(
@@ -55,6 +56,7 @@ public final class RoseChatIntegration implements AutoCloseable {
     ) {
         this.service = Objects.requireNonNull(service, "service");
         this.registration = Objects.requireNonNull(registration, "registration");
+        this.presenceRenderer = new RoseChatPresenceRenderer(registration);
         this.automatedModeration = automatedModeration;
     }
 
@@ -298,10 +300,7 @@ public final class RoseChatIntegration implements AutoCloseable {
     public boolean renderPresenceTransition(UUID subjectId, UUID viewerId, boolean vanished) {
         Objects.requireNonNull(subjectId, "subjectId");
         Objects.requireNonNull(viewerId, "viewerId");
-        if (!registration.isActive()) {
-            return false;
-        }
-        return registration.renderPresence(new PresenceContext(
+        return presenceRenderer.render(new PresenceContext(
                 subjectId,
                 viewerId,
                 vanished ? PresenceType.QUIT : PresenceType.JOIN

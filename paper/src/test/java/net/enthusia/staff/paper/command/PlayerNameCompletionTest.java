@@ -99,6 +99,27 @@ class PlayerNameCompletionTest {
         assertEquals(List.of(ALICE_NAME), PlayerNameCompletion.matches(List.of(ALICE_NAME, ALICE_NAME, "Bob"), "a"));
     }
 
+    @Test void ownerNameConfirmationRemainsDiscoverable() {
+        Player viewer = player(UUID.randomUUID(), "Viewer", Set.of("enthusiastaff.punish"));
+        var completion = new PlayerNameCompletion((v, target) -> true, null);
+        assertEquals(List.of("confirm"), completion.complete(viewer, command(PUNISH_NAME), PUNISH_NAME,
+                new String[]{"conf"}, (s, c, a, args) -> List.of("confirm")));
+    }
+
+    @Test void ownerConfirmationNamesUseVisibilityAndPermissionFilters() {
+        UUID hidden = UUID.randomUUID();
+        Set<String> permissions = new HashSet<>(Set.of("enthusiastaff.punish"));
+        Player viewer = player(UUID.randomUUID(), "Viewer", permissions);
+        var completion = new PlayerNameCompletion((v, target) -> !hidden.equals(target), null);
+        completion.remember(player(hidden, HIDDEN_NAME, Set.of()));
+        completion.remember(player(UUID.randomUUID(), ALICE_NAME, Set.of()));
+        assertEquals(List.of(ALICE_NAME), completion.complete(viewer, command(PUNISH_NAME), PUNISH_NAME,
+                new String[]{"confirm", ""}, (s, c, a, args) -> List.of(HIDDEN_NAME, ALICE_NAME)));
+        permissions.clear();
+        assertEquals(List.of(), completion.complete(viewer, command(PUNISH_NAME), PUNISH_NAME,
+                new String[]{"confirm", ""}, (s, c, a, args) -> List.of(ALICE_NAME)));
+    }
+
     private static Command command(String name) {
         return new Command(name) {
             @Override public boolean execute(CommandSender sender, String label, String[] args) { return false; }

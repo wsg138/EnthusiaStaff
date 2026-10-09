@@ -122,6 +122,10 @@ public final class InventoryCoordinator implements Listener, InventoryLockServic
         if (viewer == null || target == null) {
             throw new IllegalArgumentException("viewer and target must be present");
         }
+        if (!inspectionAllowed(viewer)) {
+            viewer.sendMessage(StaffMessageStyle.error("Staff identity and inventory view permission are required."));
+            return;
+        }
         if (mode.get() != OperationalMode.ACTIVE) {
             viewer.sendMessage(StaffMessageStyle.style(Component.text(
                     "Inventory editing is available only while moderation is ACTIVE."
@@ -402,6 +406,16 @@ public final class InventoryCoordinator implements Listener, InventoryLockServic
         }
         if (!holder.viewerId().equals(viewer.getUniqueId())) {
             event.setCancelled(true);
+            return;
+        }
+        if (!inspectionAllowed(viewer)) {
+            event.setCancelled(true);
+            Inventory revokedView = event.getView().getTopInventory();
+            viewer.getScheduler().runDelayed(plugin, ignored -> {
+                if (viewer.getOpenInventory().getTopInventory() == revokedView) {
+                    viewer.closeInventory();
+                }
+            }, () -> { }, 1L);
             return;
         }
         int topSize = event.getView().getTopInventory().getSize();
@@ -740,7 +754,7 @@ public final class InventoryCoordinator implements Listener, InventoryLockServic
             LiveSession session
     ) {
         onEntity(viewer, () -> {
-            if (!viewer.isOnline()) {
+            if (!viewer.isOnline() || !inspectionAllowed(viewer)) {
                 return;
             }
             ModerationInventoryHolder holder = new ModerationInventoryHolder(
@@ -2047,6 +2061,13 @@ public final class InventoryCoordinator implements Listener, InventoryLockServic
     }
 
     private void render(ModerationInventoryHolder holder, InventoryImage image) {
+        Player viewer = plugin.getServer().getPlayer(holder.viewerId());
+        if (viewer == null || !inspectionAllowed(viewer)) {
+            if (viewer != null && viewer.getOpenInventory().getTopInventory().getHolder() == holder) {
+                viewer.closeInventory();
+            }
+            return;
+        }
         Inventory inventory = holder.getInventory();
         for (int guiSlot = 0; guiSlot < inventory.getSize(); guiSlot++) {
             int logical = holder.logicalSlot(guiSlot);
@@ -2057,6 +2078,11 @@ public final class InventoryCoordinator implements Listener, InventoryLockServic
             }
         }
         holder.image(image, false);
+    }
+
+    private static boolean inspectionAllowed(Player viewer) {
+        return net.enthusia.staff.paper.auth.StaffInspectionAuthority.allows(
+                viewer::hasPermission, "enthusiastaff.inventory.view");
     }
 
     private static Optional<LiveInventoryTransferDecision.Click> supportedClick(ClickType click) {

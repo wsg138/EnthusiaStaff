@@ -8,6 +8,8 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
+import java.util.function.Predicate;
+import java.util.function.Function;
 import net.enthusia.staff.domain.auth.StaffRank;
 import net.enthusia.staff.paper.api.StaffVisibilityService;
 
@@ -16,6 +18,13 @@ public final class DefaultStaffVisibilityService implements StaffVisibilityServi
     private final Map<UUID, StaffRank> vanished = new ConcurrentHashMap<>();
     private final Map<UUID, StaffRank> viewers = new ConcurrentHashMap<>();
     private volatile Consumer<UUID> vanishEnabledListener = ignored -> { };
+
+    private record DutyVisibility(Predicate<UUID> active, Function<UUID, StaffRank> rank) { }
+    private volatile DutyVisibility duty = new DutyVisibility(id -> false, id -> null);
+
+    public void setStaffModeVisibility(Predicate<UUID> active, Function<UUID, StaffRank> rank) {
+        duty = new DutyVisibility(Objects.requireNonNull(active), Objects.requireNonNull(rank));
+    }
 
     public DefaultStaffVisibilityService(Map<StaffRank, Set<StaffRank>> visibilityMatrix) {
         if (visibilityMatrix == null) {
@@ -52,12 +61,19 @@ public final class DefaultStaffVisibilityService implements StaffVisibilityServi
 
     @Override
     public boolean canSee(UUID viewerId, UUID targetId) {
-        StaffRank targetRank = vanished.get(targetId);
-        if (targetRank == null || viewerId.equals(targetId)) {
+        if (viewerId.equals(targetId)) {
             return true;
         }
         StaffRank viewerRank = viewers.get(viewerId);
-        return viewerRank != null && visibilityMatrix.getOrDefault(viewerRank, Set.of()).contains(targetRank);
+        StaffRank vanishedRank = vanished.get(targetId);
+        DutyVisibility current = duty;
+        return (vanishedRank == null || visibleRank(viewerRank, vanishedRank))
+                && (!current.active().test(targetId) || visibleRank(viewerRank, current.rank().apply(targetId)));
+    }
+
+    private boolean visibleRank(StaffRank viewerRank, StaffRank targetRank) {
+        return viewerRank != null && targetRank != null
+                && visibilityMatrix.getOrDefault(viewerRank, Set.of()).contains(targetRank);
     }
 
     StaffRank vanishedRank(UUID playerId) {

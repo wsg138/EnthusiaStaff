@@ -61,4 +61,23 @@ class DefaultStaffVisibilityServiceTest {
 
         assertTrue(visibility.canSee(modViewer, vanishedHelper));
     }
+    @Test
+    void staffModeIsPrivateWithoutVanishAndUnknownDutyRankFailsClosed() {
+        DefaultStaffVisibilityService visibility = new DefaultStaffVisibilityService(
+                DefaultStaffVisibilityService.defaultMatrix());
+        UUID target = UUID.randomUUID();
+        UUID viewer = UUID.randomUUID();
+        java.util.concurrent.atomic.AtomicReference<StaffRank> rank =
+                new java.util.concurrent.atomic.AtomicReference<>(StaffRank.MOD);
+        visibility.setStaffModeVisibility(id -> id.equals(target), id -> rank.get());
+        assertFalse(visibility.isVanished(target));
+        assertFalse(visibility.canSee(viewer, target));
+        visibility.setViewerRank(viewer, StaffRank.FOUNDER);
+        assertTrue(visibility.canSee(viewer, target));
+        rank.set(null);
+        assertFalse(visibility.canSee(viewer, target));
+        assertTrue(visibility.canSee(target, target));
+        visibility.setStaffModeVisibility(id -> false, id -> null);
+        assertTrue(visibility.canSee(viewer, target));
+    }
 }

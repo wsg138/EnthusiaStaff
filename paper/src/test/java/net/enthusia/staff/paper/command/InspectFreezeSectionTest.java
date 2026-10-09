@@ -2,6 +2,7 @@ package net.enthusia.staff.paper.command;
 
 import net.enthusia.staff.paper.testsupport.ClickEventTestValues;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -50,11 +51,12 @@ class InspectFreezeSectionTest {
         );
         InspectFreezeSection section = section(() -> store(Optional.of(record)));
 
-        List<Component> lines = section.render(PLAYER_ID, true);
+        List<Component> lines = section.render(PLAYER_ID, true, id -> "StaffMember");
 
         assertEquals(2, lines.size());
         assertTrue(plain(lines.getFirst()).contains("Freeze: active"));
-        assertTrue(plain(lines.getFirst()).contains(ACTOR_ID.toString()));
+        assertTrue(plain(lines.getFirst()).contains("by StaffMember"));
+        assertFalse(plain(lines.getFirst()).contains(ACTOR_ID.toString()));
         assertTrue(plain(lines.getFirst()).contains("held until staff release"));
         assertTrue(plain(lines.getLast()).contains("Movement investigation"));
         assertEquals("/unfreeze " + PLAYER_ID + ' ', clickCommand(lines.getFirst()));

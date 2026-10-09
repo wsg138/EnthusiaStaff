@@ -34,6 +34,6 @@ class VanishBroadcastListenerTest {
         assertFalse(source.contains("event.iterator()"));
         assertFalse(source.contains("getServer().getOnlinePlayers()"));
         assertTrue(manager.contains("audiences.playerIds().stream()"));
-        assertTrue(manager.contains(".filter(this::isVanished)"));
+        assertTrue(manager.contains(".filter(this::hiddenFromPublic)"));
     }
 }

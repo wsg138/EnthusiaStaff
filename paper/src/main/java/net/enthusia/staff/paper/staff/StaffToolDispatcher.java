@@ -378,12 +378,16 @@ public final class StaffToolDispatcher implements Listener, CommandExecutor, Tab
     }
 
     private void runCommand(Player player, String commandLine) {
-        if (!player.performCommand(commandLine)) {
+        if (!player.performCommand(ownedCommand(commandLine))) {
             player.sendMessage(StaffMessageStyle.style(Component.text(
                     "That staff action is unavailable on this backend. Use /estaff verify and the command fallback.",
                     NamedTextColor.RED
             )));
         }
+    }
+
+    static String ownedCommand(String commandLine) {
+        return "enthusiastaff:" + commandLine;
     }
 
     private void beginNamedFollowOrSpectate(UUID actorId, String targetName) {

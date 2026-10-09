@@ -129,13 +129,13 @@ final class VelocitabStaffBridge implements AutoCloseable {
 
     int publicOnlineCount() {
         StaffTabPresence current = presence;
-        Set<UUID> vanished = current == null ? Set.of() : current.vanished().keySet();
+        Set<UUID> vanished = current == null ? Set.of() : current.hiddenFromPublic();
         return PublicOnlineCountPolicy.count(fresh(), lastPlayers, vanished);
     }
 
     int localPublicOnlineCount(Player viewer) {
         StaffTabPresence current = presence;
-        Set<UUID> vanished = current == null ? Set.of() : current.vanished().keySet();
+        Set<UUID> vanished = current == null ? Set.of() : current.hiddenFromPublic();
         String backend = viewer == null ? null : viewer.getCurrentServer()
                 .map(connection -> connection.getServerInfo().getName())
                 .orElse(null);
@@ -168,7 +168,7 @@ final class VelocitabStaffBridge implements AutoCloseable {
 
     private boolean isVanished(String name) throws ReflectiveOperationException {
         Optional<Player> player = proxy.getPlayer(name);
-        return !fresh() || player.isEmpty() || presence.vanished().containsKey(player.get().getUniqueId())
+        return !fresh() || player.isEmpty() || presence.hiddenFromPublic(player.get().getUniqueId())
                 || (boolean) integrationType.getMethod("isVanished", String.class).invoke(previous, name);
     }
 

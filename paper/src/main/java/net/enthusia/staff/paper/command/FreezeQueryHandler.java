@@ -10,6 +10,7 @@ import java.util.function.BiConsumer;
 import java.util.function.Supplier;
 import net.enthusia.staff.domain.freeze.FreezeRecord;
 import net.enthusia.staff.domain.player.PlayerIdentity;
+import net.enthusia.staff.domain.player.PlayerNames;
 import net.enthusia.staff.domain.player.PlayerResolution;
 import net.enthusia.staff.domain.ports.FreezeStore;
 import net.enthusia.staff.domain.ports.PlayerDirectory;
@@ -105,7 +106,7 @@ final class FreezeQueryHandler {
         List<Component> lines = new ArrayList<>();
         lines.add(Component.text("The name '" + input + "' matches more than one player. Use an exact UUID:"));
         for (PlayerIdentity match : ambiguous.matches()) {
-            lines.add(Component.text("- " + identityLabel(match)));
+            lines.add(Component.text("- " + identityLabel(match) + " (" + match.playerId() + ")"));
         }
         if (ambiguous.truncated()) {
             lines.add(Component.text("Additional matches exist; use an exact UUID."));
@@ -144,15 +145,11 @@ final class FreezeQueryHandler {
     }
 
     private static String knownIdentityLabel(PlayerDirectory directory, UUID playerId) {
-        return directory.find(playerId.toString())
-                .map(FreezeQueryHandler::identityLabel)
-                .orElse(playerId.toString());
+        return new PlayerNames(directory).apply(playerId);
     }
 
     private static String identityLabel(PlayerIdentity identity) {
-        return identity.currentUsername()
-                .map(name -> name + " (" + identity.playerId() + ')')
-                .orElse(identity.playerId().toString());
+        return PlayerNames.label(identity);
     }
 
     private void respond(CommandSender sender, String message) {

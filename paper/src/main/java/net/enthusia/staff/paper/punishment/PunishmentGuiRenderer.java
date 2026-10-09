@@ -17,6 +17,8 @@ import net.enthusia.staff.domain.auth.Actor;
 import net.enthusia.staff.domain.casefile.CaseReview;
 import net.enthusia.staff.domain.escalation.PunishmentStep;
 import net.enthusia.staff.domain.escalation.ReasonPolicy;
+import net.enthusia.staff.domain.player.PlayerIdentity;
+import net.enthusia.staff.domain.player.PlayerNames;
 import net.enthusia.staff.domain.history.ModerationHistoryEntry;
 import net.enthusia.staff.domain.sanction.ActiveSanction;
 import net.enthusia.staff.domain.sanction.SanctionLength;
@@ -935,8 +937,8 @@ final class PunishmentGuiRenderer {
         return duration.toString();
     }
 
-    private static String targetName(net.enthusia.staff.domain.player.PlayerIdentity target) {
-        return target.currentUsername().orElse(target.playerId().toString());
+    private static String targetName(PlayerIdentity target) {
+        return PlayerNames.label(target);
     }
 
     private static String formatInstant(Instant instant, PunishmentGuiOverview overview) {

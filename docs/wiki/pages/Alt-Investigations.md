@@ -151,3 +151,10 @@ Canonical Java/Floodgate platform identity is owned by ES-P03 and consumed here;
 - [[Privacy and Data Handling]]
 - [[Commands and Permissions]]
 - [[Staff Tools, Investigations, and Player-State Safety]]
+## Player names
+
+Alt reviews show current known player names for network relationships and verified
+linked accounts, including known offline players and Bedrock name prefixes. An
+unresolved identity is explicitly labeled `Unknown player (UUID)` so unrelated
+unknown accounts remain distinguishable. Names describe players; relationship
+states, confidence, and verified-link evidence retain their existing meaning.

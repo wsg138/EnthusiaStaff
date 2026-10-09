@@ -120,6 +120,23 @@ final class FreezeVerificationFailureTest {
         assertTrue(harness.staffAlerts().getFirst().contains("The player remains restricted"));
     }
 
+    @Test
+    void reconnectRevisionContentionCannotReleaseThePlayer() {
+        Instant now = Instant.parse("2026-10-03T04:00:00Z");
+        FreezeRecord record = new FreezeRecord(PLAYER_ID, UUID.randomUUID(), "investigation",
+                now.minusSeconds(10), Optional.of(now.plusSeconds(300)), false, 7L);
+        AtomicInteger connections = new AtomicInteger();
+        FreezeStore store = proxy(FreezeStore.class, (method, arguments) -> switch (method.getName()) {
+            case ACTIVE_METHOD -> Optional.of(record);
+            case "connected" -> { connections.incrementAndGet(); yield Optional.empty(); }
+            default -> defaultValue(method.getReturnType());
+        });
+        Harness harness = harness(() -> store, directExecutor(), Clock.fixed(now, ZoneOffset.UTC));
+        harness.manager().verify(PLAYER_ID, PLAYER_NAME);
+        assertEquals(2, connections.get());
+        assertUnavailable(harness, "Freeze lookup failed while " + PLAYER_NAME + " is joining.");
+    }
+
     private static Harness harness(
             java.util.function.Supplier<FreezeStore> store,
             ExecutorService workers

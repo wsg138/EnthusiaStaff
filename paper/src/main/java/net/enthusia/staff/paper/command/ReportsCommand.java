@@ -1,6 +1,5 @@
 package net.enthusia.staff.paper.command;
 
-import net.enthusia.staff.paper.presentation.StaffMessageStyle;
 import java.time.Clock;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -12,6 +11,8 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.function.Supplier;
 import net.enthusia.staff.common.IdempotencyKey;
+import net.enthusia.staff.domain.player.PlayerNames;
+import net.enthusia.staff.domain.ports.PlayerDirectory;
 import net.enthusia.staff.domain.ports.ReportStore;
 import net.enthusia.staff.domain.report.ReportAction;
 import net.enthusia.staff.domain.report.ReportDetails;
@@ -19,9 +20,10 @@ import net.enthusia.staff.domain.report.ReportQueue;
 import net.enthusia.staff.domain.report.ReportStateChangeRequest;
 import net.enthusia.staff.domain.report.ReportStateChangeResult;
 import net.enthusia.staff.domain.report.ReportSummary;
-import net.enthusia.staff.paper.report.ReportEvidenceFormatter;
+import net.enthusia.staff.paper.presentation.StaffMessageStyle;
 import net.enthusia.staff.paper.report.ReportEvidenceFormatter.EvidenceKind;
 import net.enthusia.staff.paper.report.ReportEvidenceFormatter.EvidencePage;
+import net.enthusia.staff.paper.report.ReportEvidenceFormatter;
 import net.enthusia.staff.paper.report.ReportGuiController;
 import net.kyori.adventure.text.Component;
 import org.bukkit.command.Command;
@@ -44,6 +46,7 @@ public final class ReportsCommand implements CommandExecutor, TabCompleter {
     private static final int EVIDENCE_KIND_TAB_ARGUMENTS = 3;
     private static final int MIN_POSITIVE_INTEGER = 1;
 
+    private final Supplier<PlayerDirectory> players;
     private final JavaPlugin plugin;
     private final Clock clock;
     private final Supplier<ReportStore> reports;
@@ -69,6 +72,15 @@ public final class ReportsCommand implements CommandExecutor, TabCompleter {
             ReportGuiController gui,
             ReportEvidenceFormatter evidenceFormatter
     ) {
+        this(plugin, clock, reports, workers, gui, evidenceFormatter, () -> null);
+    }
+
+    public ReportsCommand(
+            JavaPlugin plugin, Clock clock, Supplier<ReportStore> reports, ExecutorService workers,
+            ReportGuiController gui, ReportEvidenceFormatter evidenceFormatter,
+            Supplier<PlayerDirectory> players
+    ) {
+        this.players = java.util.Objects.requireNonNull(players, "players");
         if (plugin == null || clock == null || reports == null || workers == null || gui == null
                 || evidenceFormatter == null) {
             throw new IllegalArgumentException("report command dependencies must be present");
@@ -284,10 +296,11 @@ public final class ReportsCommand implements CommandExecutor, TabCompleter {
             return;
         }
         List<ReportSummary> summaries = store.list(queue, actorId, 50);
+        var names = new PlayerNames(players.get());
         send(sender, queue + " reports: " + summaries.size());
         for (ReportSummary summary : summaries) {
             send(sender, summary.reportId() + " rev=" + summary.revision() + " " + summary.state()
-                    + " target=" + summary.targetId() + " reason=" + summary.reasonId()
+                    + " target=" + names.apply(summary.targetId()) + " reason=" + summary.reasonId()
                     + " server=" + summary.serverId());
         }
     }
@@ -305,8 +318,9 @@ public final class ReportsCommand implements CommandExecutor, TabCompleter {
         }
         ReportSummary summary = details.summary();
         send(sender, "Report " + summary.reportId() + " rev=" + summary.revision() + " state=" + summary.state());
-        send(sender, "Reporter=" + summary.reporterId() + " target=" + summary.targetId()
-                + " assigned=" + summary.assignedTo().map(UUID::toString).orElse("none"));
+        var names = new PlayerNames(players.get());
+        send(sender, "Reporter=" + names.apply(summary.reporterId()) + " target=" + names.apply(summary.targetId())
+                + " assigned=" + summary.assignedTo().map(names).orElse("none"));
         send(sender, "Reason=" + summary.reasonId() + " description=" + details.description());
         sendEvidenceAware(
                 sender,

@@ -82,6 +82,12 @@ from actual Spectator mode; vanish itself does not add no-clip to Survival,
 Creative, or Adventure. When Staff Mode exits, the exact pre-Staff game mode from
 the durable snapshot is restored with the rest of the saved state.
 
+Java F3+N/F3+F4 shortcuts receive a client capability hint for Admin/Founder who
+already have `minecraft.command.gamemode`. No operator status or server command
+permission is granted. Real operators keep their existing status; loss of the
+rank or command permission clears the hint. The server still authorizes the
+requested mode, and vanilla keyboard shortcuts do not apply to Bedrock clients.
+
 ## Staff hotbar
 
 The operational hotbar routes into existing commands/services; possessing the item does not grant authority.
@@ -215,3 +221,9 @@ A permission node is an entry gate, not a replacement for central rank/action po
 - [[Commands and Permissions]] — command and node reference.
 - [[Recovery and Troubleshooting]] — failure handling.
 - [[Code Review Guide]] — developer/reviewer invariants.
+
+## Owner fork staff privacy and restoration
+
+Active staff mode uses the staff visibility matrix even with its separate vanish toggle off. Ordinary players cannot see on-duty staff through the Staff visibility service or Velocity tab bridge. Public player counts, samples, deaths, and advancements exclude these sessions. Staff tools use the EnthusiaStaff command namespace to prevent command collisions.
+
+Explicit staff exit disables its vanish state for every rank and preserves the restored game mode. Delayed durable vanish reads cannot reapply Creative during restoration. Guild invite commands reject hidden and unavailable targets identically; GUI and provider integration require client acceptance.

@@ -160,4 +160,16 @@ final class FreezeRuntimeStateTest {
         assertTrue(state.isRestricted(PLAYER_ID));
         assertFalse(state.isFrozen(PLAYER_ID));
     }
+
+    @Test
+    void rapidQuitAndReconnectRejectsAnOldUnfrozenLookup() {
+        FreezeRuntimeState state = new FreezeRuntimeState();
+        long oldLookup = state.beginVerification(PLAYER_ID);
+        assertTrue(state.retire(PLAYER_ID));
+        long reconnect = state.beginVerification(PLAYER_ID);
+        assertFalse(state.resolveVerification(PLAYER_ID, oldLookup, false));
+        assertTrue(state.isRestricted(PLAYER_ID));
+        assertTrue(state.resolveVerification(PLAYER_ID, reconnect, true));
+        assertTrue(state.isCurrentFrozen(PLAYER_ID, reconnect));
+    }
 }

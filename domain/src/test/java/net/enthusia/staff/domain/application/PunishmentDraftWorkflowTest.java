@@ -44,6 +44,33 @@ class PunishmentDraftWorkflowTest {
     private static final UUID TARGET_ID = UUID.fromString("20000000-0000-0000-0000-000000000003");
 
     @Test
+    void targetLookupIsActorBoundAndConsumedDraftCannotBeConfirmedAgain() {
+        Fixture fixture = fixture();
+        fixture.workflow.prepare(request(StaffRank.MOD), OperationalMode.ACTIVE);
+
+        assertTrue(fixture.workflow.resume(TARGET_ID, TARGET_ID).isEmpty());
+        assertTrue(fixture.workflow.resume(ACTOR_ID, ACTOR_ID).isEmpty());
+        UUID selected = fixture.workflow.resume(ACTOR_ID, TARGET_ID).orElseThrow().draftId();
+        assertInstanceOf(PunishmentDraftConfirmation.Applied.class,
+                fixture.workflow.confirmRouted(selected, actor(StaffRank.MOD), OperationalMode.ACTIVE));
+        assertTrue(fixture.workflow.resume(ACTOR_ID, TARGET_ID).isEmpty());
+        assertEquals(1, fixture.moderation.plans.size());
+    }
+
+    @Test
+    void targetLookupRejectsExpiredDraft() {
+        Fixture fixture = fixture();
+        PunishmentDraft draft = assertInstanceOf(PunishmentDraftEvaluation.Prepared.class,
+                fixture.workflow.prepare(request(StaffRank.MOD), OperationalMode.ACTIVE)).draft();
+        fixture.drafts.entries.put(DRAFT_ID, new PunishmentDraft(draft.draftId(), draft.actorId(), draft.targetId(),
+                draft.reasonId(), draft.internalExplanation(), draft.visibility(), draft.commandName(),
+                draft.expectation(), NOW.minusSeconds(60), NOW));
+
+        assertTrue(fixture.workflow.resume(ACTOR_ID, TARGET_ID).isEmpty());
+        assertTrue(fixture.moderation.plans.isEmpty());
+    }
+
+    @Test
     void preparedDraftPersistsCompleteExpectationForTwentyFourHours() {
         Fixture fixture = fixture();
 

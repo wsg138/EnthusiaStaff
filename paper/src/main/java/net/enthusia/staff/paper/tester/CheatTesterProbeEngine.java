@@ -96,12 +96,18 @@ final class CheatTesterProbeEngine {
         return Map.copyOf(configured);
     }
 
-    private static CheatTesterSession.PreparedProbe prepareTotem(PlayerInventory inventory) {
-        int totemSlot = firstMaterial(inventory.getStorageContents(), Material.TOTEM_OF_UNDYING);
+    static CheatTesterSession.PreparedProbe prepareTotem(PlayerInventory inventory) {
+        ItemStack[] storage = inventory.getStorageContents();
+        int totemSlot = firstMaterial(storage, Material.TOTEM_OF_UNDYING);
         if (totemSlot < 0) {
             throw new IllegalStateException("Target needs a totem in normal inventory for a no-injection refill probe");
         }
-        return new CheatTesterSession.PreparedProbe(totemSlot, -1, -1);
+        ItemStack offhand = inventory.getItemInOffHand();
+        int storageSlot = offhand == null || offhand.isEmpty() ? -1 : firstEmpty(storage);
+        if (offhand != null && !offhand.isEmpty() && storageSlot < 0) {
+            throw new IllegalStateException("Target needs one empty inventory slot to preserve the offhand during a totem probe");
+        }
+        return new CheatTesterSession.PreparedProbe(totemSlot, -1, storageSlot);
     }
 
     private static CheatTesterSession.PreparedProbe prepareArmor(PlayerInventory inventory) {
@@ -116,14 +122,26 @@ final class CheatTesterProbeEngine {
     }
 
     private void beginTotem(Player target, CheatTesterSession session) {
-        PlayerInventory inventory = target.getInventory();
-        int source = session.probe.sourceSlot();
+        beginTotem(target.getInventory(), session.probe);
+        target.updateInventory();
+    }
+
+    static void beginTotem(PlayerInventory inventory, CheatTesterSession.PreparedProbe probe) {
+        int source = probe.sourceSlot();
         ItemStack[] storage = inventory.getStorageContents();
         if (!validTotemSource(storage, source)) {
             throw new IllegalStateException("The prepared totem source changed before probe start");
         }
-        inventory.setItemInOffHand(new ItemStack(Material.AIR));
-        target.updateInventory();
+        ItemStack offhand = inventory.getItemInOffHand();
+        if (offhand != null && !offhand.isEmpty()) {
+            int destination = probe.storageSlot();
+            if (destination < 0 || destination >= storage.length
+                    || (storage[destination] != null && !storage[destination].isEmpty())) {
+                throw new IllegalStateException("The reserved offhand storage slot changed before probe start");
+            }
+            inventory.setItem(destination, offhand.clone());
+        }
+        inventory.setItemInOffHand(null);
     }
 
     private static boolean validTotemSource(ItemStack[] storage, int source) {

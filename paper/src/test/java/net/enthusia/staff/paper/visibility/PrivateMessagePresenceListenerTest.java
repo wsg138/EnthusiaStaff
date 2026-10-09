@@ -52,4 +52,18 @@ class PrivateMessagePresenceListenerTest {
         assertTrue(listener.suggestions(viewer, "/msg VisiblePlayer some text").isEmpty());
         assertTrue(listener.suggestions(viewer, "msg ").isEmpty());
     }
+
+    @Test
+    void guildInvitesHideNamesAndCannotProbePresenceThroughAliases() {
+        visibility.setVanished(first, StaffRank.ADMIN, true);
+        for (String command : List.of("/g invite ", "/guild invite ", "/lumaguilds:g INVITE ")) {
+            assertEquals(List.of("HiddenHelper", "VisiblePlayer"), listener.suggestions(viewer, command).orElseThrow());
+            assertTrue(listener.unavailableGuildInvite(viewer, command + "hiddenadmin"));
+            assertFalse(listener.unavailableGuildInvite(viewer, command + "VisiblePlayer"));
+            assertTrue(listener.unavailableGuildInvite(viewer, command + "OfflinePlayer"));
+        }
+        visibility.setViewerRank(viewer, StaffRank.FOUNDER);
+        assertFalse(listener.unavailableGuildInvite(viewer, "/g invite HiddenAdmin"));
+        assertFalse(listener.unavailableGuildInvite(viewer, "/g kick HiddenAdmin"));
+    }
 }

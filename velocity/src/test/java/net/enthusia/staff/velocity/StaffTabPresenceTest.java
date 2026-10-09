@@ -54,4 +54,15 @@ class StaffTabPresenceTest {
         assertTrue(presence.canSee(viewer, null, target, null));
         assertEquals("", presence.marker(target));
     }
+    @Test
+    void staffModeWithoutVanishUsesPrivateRankVisibility() {
+        StaffTabPresence presence = new StaffTabPresence(Map.of(), Set.of(target));
+        assertEquals(Set.of(target), presence.hiddenFromPublic());
+        assertTrue(presence.hiddenFromPublic(target));
+        assertFalse(presence.canSee(viewer, null, target, StaffRank.MOD));
+        assertFalse(presence.canSee(viewer, StaffRank.MOD, target, StaffRank.FOUNDER));
+        assertTrue(presence.canSee(viewer, StaffRank.FOUNDER, target, StaffRank.MOD));
+        assertFalse(presence.canSee(viewer, StaffRank.FOUNDER, target, null));
+        assertTrue(presence.canSee(target, null, target, null));
+    }
 }

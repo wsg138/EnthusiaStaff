@@ -18,8 +18,19 @@ record StaffTabPresence(Map<UUID, StaffRank> vanished, Set<UUID> staffMode) {
             return true;
         }
         StaffRank savedRank = vanished.get(target);
-        return savedRank == null || (StaffVanishVisibility.canSee(viewerRank, savedRank)
-                && StaffVanishVisibility.canSee(viewerRank, currentTargetRank));
+        return (savedRank == null || (StaffVanishVisibility.canSee(viewerRank, savedRank)
+                && StaffVanishVisibility.canSee(viewerRank, currentTargetRank)))
+                && (!staffMode.contains(target) || StaffVanishVisibility.canSee(viewerRank, currentTargetRank));
+    }
+
+    Set<UUID> hiddenFromPublic() {
+        java.util.HashSet<UUID> hidden = new java.util.HashSet<>(vanished.keySet());
+        hidden.addAll(staffMode);
+        return Set.copyOf(hidden);
+    }
+
+    boolean hiddenFromPublic(UUID target) {
+        return vanished.containsKey(target) || staffMode.contains(target);
     }
 
     String marker(UUID target) {

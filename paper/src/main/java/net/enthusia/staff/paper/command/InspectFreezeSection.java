@@ -29,13 +29,18 @@ final class InspectFreezeSection {
     }
 
     List<Component> render(UUID playerId, boolean canManage) {
+        return render(playerId, canManage, net.enthusia.staff.domain.player.PlayerNames::unknown);
+    }
+
+    List<Component> render(UUID playerId, boolean canManage,
+            java.util.function.Function<UUID, String> names) {
         try {
             FreezeStore store = freezes.get();
             if (store == null) {
                 return unavailable();
             }
             FreezeRecord record = store.readActive(playerId, clock.instant()).orElse(null);
-            return record == null ? inactive(playerId, canManage) : active(record, canManage);
+            return record == null ? inactive(playerId, canManage) : active(record, canManage, names);
         } catch (RuntimeException exception) {
             if (logger.isLoggable(Level.WARNING)) {
                 logger.log(Level.WARNING, "Inspector freeze lookup failed for " + playerId, exception);
@@ -49,11 +54,12 @@ final class InspectFreezeSection {
         return List.of(withAction(status, playerId, false, canManage));
     }
 
-    private static List<Component> active(FreezeRecord record, boolean canManage) {
+    private static List<Component> active(FreezeRecord record, boolean canManage,
+            java.util.function.Function<UUID, String> names) {
         Component status = Component.text("Freeze: active", NamedTextColor.RED)
                 .append(Component.text(
                         " | applied " + TIMESTAMP.format(record.frozenAt())
-                                + " by " + record.frozenBy()
+                                + " by " + names.apply(record.frozenBy())
                                 + " | " + handling(record),
                         NamedTextColor.GRAY
                 ));

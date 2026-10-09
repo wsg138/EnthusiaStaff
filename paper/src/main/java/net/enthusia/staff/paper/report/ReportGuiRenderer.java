@@ -3,6 +3,8 @@ package net.enthusia.staff.paper.report;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import java.util.function.Function;
+import net.enthusia.staff.domain.player.PlayerNames;
 import net.enthusia.staff.domain.report.ReportAction;
 import net.enthusia.staff.domain.report.ReportDetails;
 import net.enthusia.staff.domain.report.ReportQueue;
@@ -23,6 +25,11 @@ final class ReportGuiRenderer {
     private static final String QUEUE_KEY_PREFIX = "queue-";
 
     Inventory render(ReportGuiState state, ReportGuiConfiguration configuration) {
+        return render(state, configuration, PlayerNames::unknown);
+    }
+
+    Inventory render(ReportGuiState state, ReportGuiConfiguration configuration,
+            Function<UUID, String> names) {
         ReportGuiHolder holder = new ReportGuiHolder(state, configuration);
         Inventory inventory = Bukkit.createInventory(
                 holder,
@@ -32,11 +39,11 @@ final class ReportGuiRenderer {
         holder.attach(inventory);
         fillControls(inventory, configuration);
         if (state instanceof ReportGuiState.Queue queue) {
-            renderQueue(inventory, queue, configuration);
+            renderQueue(inventory, queue, configuration, names);
         } else if (state instanceof ReportGuiState.Detail detail) {
-            renderDetail(inventory, detail, configuration);
+            renderDetail(inventory, detail, configuration, names);
         } else if (state instanceof ReportGuiState.Review review) {
-            renderReview(inventory, review, configuration);
+            renderReview(inventory, review, configuration, names);
         }
         return inventory;
     }
@@ -44,11 +51,12 @@ final class ReportGuiRenderer {
     private static void renderQueue(
             Inventory inventory,
             ReportGuiState.Queue state,
-            ReportGuiConfiguration configuration
+            ReportGuiConfiguration configuration,
+            Function<UUID, String> names
     ) {
         int pageSize = configuration.pageSize();
         int offset = state.queuePage() * pageSize;
-        renderQueueEntries(inventory, state, configuration, pageSize, offset);
+        renderQueueEntries(inventory, state, configuration, pageSize, offset, names);
         renderQueueControls(inventory, state.queue(), configuration);
         renderQueueNavigation(inventory, state, configuration, pageSize);
     }
@@ -58,7 +66,8 @@ final class ReportGuiRenderer {
             ReportGuiState.Queue state,
             ReportGuiConfiguration configuration,
             int pageSize,
-            int offset
+            int offset,
+            Function<UUID, String> names
     ) {
         for (int index = 0; index < pageSize && offset + index < state.reports().size(); index++) {
             ReportSummary summary = state.reports().get(offset + index);
@@ -66,9 +75,9 @@ final class ReportGuiRenderer {
                     stateMaterial(summary.state(), configuration),
                     summary.reasonId(),
                     List.of(
-                            Component.text("Target: " + summary.targetId(), NamedTextColor.WHITE),
+                            Component.text("Target: " + names.apply(summary.targetId()), NamedTextColor.WHITE),
                             Component.text("State: " + summary.state(), NamedTextColor.GRAY),
-                            Component.text("Assigned: " + summary.assignedTo().map(UUID::toString).orElse("none"),
+                            Component.text("Assigned: " + summary.assignedTo().map(names).orElse("none"),
                                     NamedTextColor.GRAY),
                             Component.text("Server: " + summary.serverId(), NamedTextColor.DARK_GRAY),
                             Component.text("Updated: " + summary.updatedAt(), NamedTextColor.DARK_GRAY),
@@ -121,12 +130,13 @@ final class ReportGuiRenderer {
     private static void renderDetail(
             Inventory inventory,
             ReportGuiState.Detail state,
-            ReportGuiConfiguration configuration
+            ReportGuiConfiguration configuration,
+            Function<UUID, String> names
     ) {
         ReportDetails details = state.details();
         ReportSummary summary = details.summary();
         renderDetailHeader(inventory, summary, configuration);
-        renderDetailIdentity(inventory, details, configuration);
+        renderDetailIdentity(inventory, details, configuration, names);
         renderDetailEvidence(inventory, details, configuration);
         renderQueueControls(inventory, state.queue(), configuration);
         renderDetailNavigation(inventory, configuration);
@@ -154,18 +164,19 @@ final class ReportGuiRenderer {
     private static void renderDetailIdentity(
             Inventory inventory,
             ReportDetails details,
-            ReportGuiConfiguration configuration
+            ReportGuiConfiguration configuration,
+            Function<UUID, String> names
     ) {
         ReportSummary summary = details.summary();
         inventory.setItem(configuration.slot("detail-reporter"), item(
                 configuration.material("reporter"),
                 configuration.message("reporter"),
-                List.of(Component.text(summary.reporterId().toString(), NamedTextColor.GRAY))
+                List.of(Component.text(names.apply(summary.reporterId()), NamedTextColor.GRAY))
         ));
         inventory.setItem(configuration.slot("detail-target"), item(
                 configuration.material("target"),
                 configuration.message("target"),
-                List.of(Component.text(summary.targetId().toString(), NamedTextColor.GRAY))
+                List.of(Component.text(names.apply(summary.targetId()), NamedTextColor.GRAY))
         ));
         inventory.setItem(configuration.slot("detail-location"), item(
                 configuration.material("location"),
@@ -265,7 +276,8 @@ final class ReportGuiRenderer {
     private static void renderReview(
             Inventory inventory,
             ReportGuiState.Review state,
-            ReportGuiConfiguration configuration
+            ReportGuiConfiguration configuration,
+            Function<UUID, String> names
     ) {
         ReportSummary summary = state.details().summary();
         inventory.setItem(configuration.slot("review-report"), item(
@@ -273,6 +285,7 @@ final class ReportGuiRenderer {
                 "Report " + summary.reportId(),
                 List.of(
                         Component.text(summary.reasonId(), NamedTextColor.WHITE),
+                        Component.text("Target: " + names.apply(summary.targetId()), NamedTextColor.WHITE),
                         Component.text("Expected revision: " + summary.revision(), NamedTextColor.YELLOW),
                         Component.text("Current state: " + summary.state(), NamedTextColor.GRAY)
                 )

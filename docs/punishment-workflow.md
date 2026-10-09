@@ -32,6 +32,8 @@ A reason selection creates a MariaDB `punishment_drafts` row. The row is bound t
 
 Closing the review does not create a case. Use the clickable Resume message or `/punish resume <player>` on any Paper backend connected to the same database. Drafts survive logout, server switch, process crash, and restart.
 
+For command confirmation, use `/punish confirm <player>` with the reviewed player's current name (including a Bedrock name prefix). The command resolves the stored player identity and selects only your unexpired draft for that player. Offline players work when their name is known to the player directory. If no matching draft exists, no action is taken. Existing `/punish confirm <draft-id>` commands still work, including for targets without a known username. Confirmation rechecks the selected draft, current authority, target hierarchy, and reviewed recommendation before applying anything.
+
 The draft UUID is also the punishment idempotency identity. Concurrent or retried confirmations can create at most one case. A successful case commit deletes the draft; if only cleanup fails, the committed case ID is reported and retrying the same confirmation is safe. Expired drafts are ignored and pruned.
 
 Ladder edits do not mutate a reviewed snapshot. If the active configuration no longer exactly matches its version, step label, ordinal, and sanctions, confirmation returns `RECOMMENDATION_CHANGED` and opens a fresh review without creating a case.

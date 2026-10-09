@@ -142,3 +142,7 @@ Automated unit and MariaDB/Testcontainers evidence can prove codec bounds, journ
 - [[Incident Playbooks]]
 - [[Recovery and Troubleshooting]]
 - [[Staff Tools, Investigations, and Player-State Safety]]
+
+## Owner fork inspection access
+
+Inventory and inspector views require explicit staff identity plus their respective view permission. A donor granted a view permission alone cannot open them. Opening, rendering, and inventory clicks recheck access; existing edit authority checks remain in place. Wildcard and group inheritance configuration needs a separate server permission review.

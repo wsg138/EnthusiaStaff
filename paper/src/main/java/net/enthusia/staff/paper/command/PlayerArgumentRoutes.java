@@ -6,7 +6,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.function.Predicate;
 
-/** Player argument positions only: reason, case, draft, and confirmation inputs stay delegated. */
+/** Player argument positions only: reason, case, and draft-only inputs stay delegated. */
 public final class PlayerArgumentRoutes {
     private static final String BASE_ACTION = "base";
     private static final String CHEAT_TESTER_COMMAND = "cheattester";
@@ -66,7 +66,8 @@ public final class PlayerArgumentRoutes {
                     "items", route("enthusiastaff.confiscate.items"))),
             Map.entry("freeze", Map.of("keep", route(FREEZE_PERMISSION),
                     "status", route(FREEZE_PERMISSION))),
-            Map.entry(PUNISH_COMMAND, Map.of("resume", route(PUNISH_PERMISSION))),
+            Map.entry(PUNISH_COMMAND, Map.of("resume", route(PUNISH_PERMISSION),
+                    "confirm", route(PUNISH_PERMISSION))),
             Map.entry("stafftools", Map.of("follow", route("enthusiastaff.stafftools.spectate"),
                     "spectate", route("enthusiastaff.stafftools.spectate"))),
             Map.entry("staffflags", Map.of("list", route("enthusiastaff.investigation.view"),
@@ -91,7 +92,7 @@ public final class PlayerArgumentRoutes {
         return switch (name) {
             case "inspect" -> List.of("inventory", "ender", "economy", "items");
             case "freeze" -> List.of("keep", "list", "status");
-            case PUNISH_COMMAND -> List.of("resume", "requests", "review", "approve", "deny");
+            case PUNISH_COMMAND -> List.of("confirm", "resume", "requests", "review", "approve", "deny");
             default -> List.of();
         };
     }

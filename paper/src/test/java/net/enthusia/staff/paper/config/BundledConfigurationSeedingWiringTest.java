@@ -12,7 +12,7 @@ class BundledConfigurationSeedingWiringTest {
     void reasonPolicyResourceIsOnlySeededWhenMissing() throws IOException {
         String source = Files.readString(paperModule().resolve(
                 "src/main/java/net/enthusia/staff/paper/EnthusiaStaffPaperPlugin.java"
-        ));
+        )).replace("\r\n", "\n");
 
         assertTrue(
                 source.contains("if (Files.notExists(reasonPolicyFile())) {\n"
@@ -25,7 +25,7 @@ class BundledConfigurationSeedingWiringTest {
     void reportResourcesAreOnlySeededWhenMissing() throws IOException {
         String source = Files.readString(paperModule().resolve(
                 "src/main/java/net/enthusia/staff/paper/config/ReportConfigurationRuntime.java"
-        ));
+        )).replace("\r\n", "\n");
 
         assertTrue(
                 source.contains("if (Files.notExists(policyFile(plugin))) {\n"

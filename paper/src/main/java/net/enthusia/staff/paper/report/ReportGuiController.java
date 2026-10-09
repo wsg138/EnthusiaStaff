@@ -1,6 +1,5 @@
 package net.enthusia.staff.paper.report;
 
-import net.enthusia.staff.paper.presentation.StaffMessageStyle;
 import java.time.Clock;
 import java.util.List;
 import java.util.Map;
@@ -13,6 +12,8 @@ import java.util.concurrent.RejectedExecutionException;
 import java.util.function.Supplier;
 import java.util.logging.Level;
 import net.enthusia.staff.common.IdempotencyKey;
+import net.enthusia.staff.domain.player.PlayerNames;
+import net.enthusia.staff.domain.ports.PlayerDirectory;
 import net.enthusia.staff.domain.ports.ReportStore;
 import net.enthusia.staff.domain.report.ReportAction;
 import net.enthusia.staff.domain.report.ReportDetails;
@@ -21,6 +22,7 @@ import net.enthusia.staff.domain.report.ReportStateChangeRequest;
 import net.enthusia.staff.domain.report.ReportStateChangeResult;
 import net.enthusia.staff.domain.report.ReportSummary;
 import net.enthusia.staff.paper.config.ReportConfigurationSnapshot;
+import net.enthusia.staff.paper.presentation.StaffMessageStyle;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.event.ClickEvent;
 import net.kyori.adventure.text.event.HoverEvent;
@@ -37,6 +39,7 @@ import org.bukkit.plugin.java.JavaPlugin;
 public final class ReportGuiController implements Listener {
     private static final String MANAGE_PERMISSION = "enthusiastaff.reports.manage";
 
+    private final Supplier<PlayerDirectory> players;
     private final JavaPlugin plugin;
     private final Clock clock;
     private final Supplier<ReportStore> reports;
@@ -54,6 +57,15 @@ public final class ReportGuiController implements Listener {
             Supplier<ReportConfigurationSnapshot> configuration,
             ExecutorService workers
     ) {
+        this(plugin, clock, reports, configuration, workers, () -> null);
+    }
+
+    public ReportGuiController(
+            JavaPlugin plugin, Clock clock, Supplier<ReportStore> reports,
+            Supplier<ReportConfigurationSnapshot> configuration, ExecutorService workers,
+            Supplier<PlayerDirectory> players
+    ) {
+        this.players = Objects.requireNonNull(players, "players");
         if (plugin == null || clock == null || reports == null || configuration == null || workers == null) {
             throw new IllegalArgumentException("report GUI dependencies must be present");
         }
@@ -415,7 +427,8 @@ public final class ReportGuiController implements Listener {
             ReportGuiState state,
             ReportGuiConfiguration gui
     ) {
-        onCurrentLoad(viewer, state.viewerId(), loadId, () -> renderState(viewer, state, gui));
+        Map<UUID, String> names = resolveNames(state);
+        onCurrentLoad(viewer, state.viewerId(), loadId, () -> renderState(viewer, state, gui, names));
     }
 
     private void onCurrentLoad(
@@ -432,18 +445,36 @@ public final class ReportGuiController implements Listener {
     }
 
     private void openState(Player viewer, ReportGuiState state, ReportGuiConfiguration gui) {
-        pendingLoads.remove(state.viewerId());
-        onEntity(viewer, () -> renderState(viewer, state, gui));
+        UUID loadId = beginLoad(state.viewerId());
+        submitLoad(viewer, state.viewerId(), loadId, () -> openLoadedState(viewer, loadId, state, gui));
     }
 
     private void renderState(
             Player viewer,
             ReportGuiState state,
-            ReportGuiConfiguration gui
+            ReportGuiConfiguration gui,
+            Map<UUID, String> names
     ) {
         if (authorized(viewer)) {
-            viewer.openInventory(renderer.render(state, gui));
+            viewer.openInventory(renderer.render(state, gui, id -> names.getOrDefault(id,
+                    PlayerNames.unknown(id))));
         }
+    }
+
+    private Map<UUID, String> resolveNames(ReportGuiState state) {
+        var lookup = new PlayerNames(players.get());
+        List<ReportSummary> summaries = switch (state) {
+            case ReportGuiState.Queue queue -> queue.reports();
+            case ReportGuiState.Detail detail -> List.of(detail.details().summary());
+            case ReportGuiState.Review review -> List.of(review.details().summary());
+        };
+        Map<UUID, String> names = new java.util.HashMap<>();
+        for (ReportSummary summary : summaries) {
+            names.put(summary.targetId(), lookup.apply(summary.targetId()));
+            names.put(summary.reporterId(), lookup.apply(summary.reporterId()));
+            summary.assignedTo().ifPresent(id -> names.put(id, lookup.apply(id)));
+        }
+        return Map.copyOf(names);
     }
 
     private boolean authorized(Player viewer) {

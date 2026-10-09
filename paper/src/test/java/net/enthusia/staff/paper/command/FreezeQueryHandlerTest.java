@@ -1,7 +1,5 @@
 package net.enthusia.staff.paper.command;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 
 import java.lang.reflect.Array;
 import java.lang.reflect.Proxy;
@@ -22,6 +20,8 @@ import net.enthusia.staff.domain.ports.PlayerDirectory;
 import net.kyori.adventure.text.Component;
 import org.bukkit.command.CommandSender;
 import org.junit.jupiter.api.Test;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 
 final class FreezeQueryHandlerTest {
     private static final Instant NOW = Instant.parse("2026-09-08T12:30:00Z");
@@ -51,8 +51,8 @@ final class FreezeQueryHandlerTest {
         handler(directory, store, messages).status(sender(), "FrozenPlayer");
 
         assertEquals(List.of(
-                Component.text("Freeze status for FrozenPlayer (" + PLAYER_ID + ')'),
-                Component.text("Applied by StaffMember (" + ACTOR_ID + ") at 2026-09-08 12:29:00 UTC"),
+                Component.text("Freeze status for FrozenPlayer"),
+                Component.text("Applied by StaffMember at 2026-09-08 12:29:00 UTC"),
                 Component.text("Reason: Investigating suspicious inventory movement"),
                 Component.text("Current handling: offline timeout at 2026-09-08 12:40:00 UTC")
         ), messages);

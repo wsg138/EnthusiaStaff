@@ -1,6 +1,5 @@
 package net.enthusia.staff.paper.sanction;
 
-import net.enthusia.staff.paper.presentation.StaffMessageStyle;
 import io.papermc.paper.event.player.AsyncChatEvent;
 import java.time.Clock;
 import java.time.Instant;
@@ -24,6 +23,7 @@ import net.enthusia.staff.domain.auth.Actor;
 import net.enthusia.staff.domain.auth.AuthorizationPolicy;
 import net.enthusia.staff.domain.casefile.CaseReview;
 import net.enthusia.staff.domain.player.PlayerIdentity;
+import net.enthusia.staff.domain.player.PlayerNames;
 import net.enthusia.staff.domain.ports.CaseLookup;
 import net.enthusia.staff.domain.ports.CaseReviewStore;
 import net.enthusia.staff.domain.ports.PlayerDirectory;
@@ -31,6 +31,7 @@ import net.enthusia.staff.domain.sanction.SanctionChangeAction;
 import net.enthusia.staff.domain.sanction.SanctionChangeRequest;
 import net.enthusia.staff.domain.sanction.SanctionChangeResult;
 import net.enthusia.staff.paper.auth.PaperActorResolver;
+import net.enthusia.staff.paper.presentation.StaffMessageStyle;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 import org.bukkit.entity.Player;
@@ -166,7 +167,7 @@ public final class SanctionChangeGuiController implements Listener {
             CaseReview review = reviewStore.find(direct).orElse(null);
             if (review != null && matchesCommandCase(commandName, direct, caseLookup)) {
                 openState(viewer, new SanctionChangeGuiState.Actions(
-                        viewer.getUniqueId(), commandName, review.targetId().toString(), review, Optional.empty()
+                        viewer.getUniqueId(), commandName, new PlayerNames(directory).apply(review.targetId()), review, Optional.empty()
                 ));
                 return;
             }
@@ -176,7 +177,7 @@ public final class SanctionChangeGuiController implements Listener {
             message(viewer, "No matching player or case was found.");
             return;
         }
-        String targetLabel = target.currentUsername().orElse(target.playerId().toString());
+        String targetLabel = PlayerNames.label(target);
         if (!"removepunishment".equals(commandName)) {
             CaseId latest = caseLookup.latestCase(
                     target.playerId(), SanctionChangeAccess.aliasTypes(commandName), true

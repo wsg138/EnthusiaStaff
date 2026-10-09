@@ -19,6 +19,7 @@ This page explains the **staff procedure** for creating and correcting punishmen
 ```text
 /punish <player>
 /punish resume <player>
+/punish confirm <player>
 /ban <player> [reason-id]
 /mute <player> [reason-id]
 /warn <player> [reason-id]
@@ -86,6 +87,8 @@ An unfinished punishment may be saved and resumed:
 ```
 
 Review the draft again before confirming. History, evidence, configuration, authority or another staff decision may have changed since the draft was created. A stale recommendation should be recalculated rather than trusted blindly.
+
+Use `/punish confirm <player>` to confirm your saved draft for the named player. Known offline names and Bedrock names with their prefix are supported. Only your own unexpired draft is selected; a missing or expired draft creates no punishment. Draft IDs remain supported for compatibility and unnamed targets.
 
 ## Evidence and notes
 

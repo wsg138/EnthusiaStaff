@@ -239,3 +239,8 @@ Canonical ES-P12 terminal handoff: `ai-agents/reports/package-handoffs/2026-09-2
 ## Next sequential action
 
 X03 remains `PARTIAL` / `ACTIONABLE_CONTINUATION`: complete only bounded paired remediation while preserving Market #7, Staff #139, and exact component parity. D09 remains `BLOCKED` / `PARKED_BLOCKED`: keep PR #203 frozen/open at `a48390c50c6968e75437abd2dd05c0faeece355d` until legitimate X03 V21 reaches `main`, then reconcile D09 normally and rerun every invalidated exact-head gate. D08 remains `PLANNED`; D10 and D12 remain gated by incomplete D09; D13 remains independently parked. Do not activate a replacement D09 implementation while #203 is preserved.
+
+
+## Owner fork upstream delivery, 2026-10-08
+
+Owner explicitly assigned continuation of `owner-punish-confirm-player` to merge validated fork PRs and submit remaining source fixes to canonical main. Fork PR1 and PR14 are merged; upstream reconciliation is REVIEW / ACTIONABLE_CONTINUATION in canonical PR #476 on `package/owner-upstream-remaining-20261008`. Current canonical bb8156ce is preserved, including rank policy, preferences, configured messages, recovery and authority controls. See `ai-agents/reports/package-handoffs/2026-10-08-owner-upstream-reconciliation.md` for bounded SPEAR requirements and evidence. Other packages are not reassigned. Upstream #339 remains the separate offline Discord mute submission. No production actions or canonical product merge authorized.

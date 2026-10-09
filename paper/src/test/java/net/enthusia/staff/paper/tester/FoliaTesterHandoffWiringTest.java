@@ -22,6 +22,11 @@ final class FoliaTesterHandoffWiringTest {
         assertFalse(manager.contains("Player current = plugin.getServer().getPlayer(record.targetId())"));
         assertFalse(manager.contains("Target probe could not be scheduled after journal commit"));
 
+        String checkpoint = manager.substring(manager.indexOf("private void checkpointThenScheduleRestore("),
+                manager.indexOf("private void checkpointEvidence("));
+        assertTrue(checkpoint.contains("checkpointThenRestore(() ->"));
+        assertTrue(checkpoint.contains("() -> runtime.scheduleTarget("));
+
         assertTrue(runtime.contains("handoff.execute(targetId, operation, retired);"));
         assertFalse(runtime.contains("target == null || !target.isOnline()"));
     }

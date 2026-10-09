@@ -139,3 +139,7 @@ Representative distributed Java/Bedrock/runtime acceptance remains a separate ev
 - [[Recovery and Troubleshooting]] — what to do if cleanup/restoration is uncertain.
 - [[Code Review Guide]] — scheduler, persistence, privacy and validation review.
 - [[Build and Testing]] — evidence classes and staging boundaries.
+
+## Owner fork totem safety
+
+The totem probe moves an occupied offhand into an empty storage slot before testing. A full inventory refuses the probe before changing items. The recovery snapshot still restores the original layout. Evidence capture or checkpoint errors do not prevent restoration from being scheduled, and the durable recovery journal remains authoritative.

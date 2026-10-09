@@ -34,6 +34,11 @@ public interface StaffSessionStore {
 
     Optional<StaffSessionSnapshot> beginExit(UUID staffId, Instant now);
 
+    /** Begins terminal recovery only for the exact already-restored detached lease. */
+    default Optional<StaffSessionSnapshot> beginDetachedExit(StaffSessionSnapshot expected, Instant now) {
+        throw new UnsupportedOperationException("fenced detached Staff Mode exit is not supported");
+    }
+
     boolean completeExit(UUID sessionId, String restoredChecksum, Instant now);
 
     void recoveryRequired(UUID sessionId, String reason, Instant now);

@@ -26,6 +26,16 @@ final class InventoryEditAuthorityWiringTest {
         assertOrdered(method, "editAuthority.current(viewer)", "loaded.prepare(request");
     }
 
+    @Test
+    void revokedInspectionCancelsThenClosesOnlyTheSameViewOnTheEntityScheduler() throws IOException {
+        String method = methodSource("public void onClick(", "private void editClickedSlot(");
+        int revocation = method.indexOf("if (!inspectionAllowed(viewer))");
+        String revoked = method.substring(revocation, method.indexOf("int topSize", revocation));
+        assertOrdered(revoked, "event.setCancelled(true)", "viewer.getScheduler().runDelayed(");
+        assertOrdered(revoked, "viewer.getOpenInventory().getTopInventory() == revokedView", "viewer.closeInventory()");
+        assertTrue(revoked.contains("}, () -> { }, 1L)"), "close must be deferred to the next entity tick");
+    }
+
     private static String methodSource(String startMarker, String endMarker) throws IOException {
         String source = Files.readString(SOURCE).replace("\r\n", "\n");
         int start = source.indexOf(startMarker);

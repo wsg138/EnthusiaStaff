@@ -7,12 +7,14 @@ import java.util.List;
 import java.util.Locale;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.RejectedExecutionException;
+import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.logging.Level;
 import net.enthusia.staff.domain.history.HistoryQueryOptions;
 import net.enthusia.staff.domain.history.ModerationHistoryEntry;
 import net.enthusia.staff.domain.history.ModerationHistoryPage;
 import net.enthusia.staff.domain.player.PlayerIdentity;
+import net.enthusia.staff.domain.player.PlayerNames;
 import net.enthusia.staff.domain.player.PlayerResolution;
 import net.enthusia.staff.domain.ports.ModerationHistoryStore;
 import net.enthusia.staff.domain.ports.PlayerDirectory;
@@ -151,7 +153,8 @@ public final class HistoryCommand implements CommandExecutor, TabCompleter {
                     resolved.matchKind(),
                     result,
                     active.historyTimezone(),
-                    sensitive
+                    sensitive,
+                    new PlayerNames(players.get())
             ));
         } catch (IllegalArgumentException exception) {
             responses.send(sender, StaffMessageStyle.warning("Invalid history page: " + sanitized(exception.getMessage())));
@@ -179,15 +182,16 @@ public final class HistoryCommand implements CommandExecutor, TabCompleter {
         return List.copyOf(lines);
     }
 
-    private static List<Component> render(
+    static List<Component> render(
             PlayerIdentity identity,
             PlayerResolution.MatchKind matchKind,
             ModerationHistoryPage page,
             ZoneId timezone,
-            boolean sensitive
+            boolean sensitive,
+            Function<java.util.UUID, String> names
     ) {
         List<Component> lines = new ArrayList<>();
-        String currentName = identity.currentUsername().orElse("unknown");
+        String currentName = PlayerNames.label(identity);
         lines.add(StaffMessageStyle.header("EnthusiaStaff • History"));
         lines.add(subjectLine(identity, currentName, matchKind));
         if (page.entries().isEmpty()) {
@@ -197,7 +201,7 @@ public final class HistoryCommand implements CommandExecutor, TabCompleter {
         lines.add(pageLine(page));
         lines.add(StaffMessageStyle.section("Timeline"));
         DateTimeFormatter formatter = ModerationTimestampFormatter.inZone(timezone);
-        page.entries().forEach(entry -> lines.add(formatEntry(entry, formatter, sensitive)));
+        page.entries().forEach(entry -> lines.add(formatEntry(entry, formatter, sensitive, names)));
         if (page.page() < page.totalPages()) {
             lines.add(Component.text("Next page  ", NamedTextColor.DARK_GRAY)
                     .append(StaffMessageStyle.command(
@@ -214,8 +218,6 @@ public final class HistoryCommand implements CommandExecutor, TabCompleter {
     ) {
         return Component.text("  Player  ", NamedTextColor.GRAY)
                 .append(StaffMessageStyle.player(currentName))
-                .append(Component.text(DETAIL_SEPARATOR, NamedTextColor.DARK_GRAY))
-                .append(StaffMessageStyle.id(identity.playerId()))
                 .append(Component.text(DETAIL_SEPARATOR + identity.platform(), NamedTextColor.GRAY))
                 .append(Component.text(DETAIL_SEPARATOR + "matched by " + human(matchKind.name()), NamedTextColor.DARK_GRAY));
     }
@@ -230,7 +232,8 @@ public final class HistoryCommand implements CommandExecutor, TabCompleter {
     private static Component formatEntry(
             ModerationHistoryEntry entry,
             DateTimeFormatter formatter,
-            boolean sensitive
+            boolean sensitive,
+            Function<java.util.UUID, String> names
     ) {
         Component line = Component.text("  • ", NamedTextColor.DARK_GRAY)
                 .append(Component.text(formatter.format(entry.occurredAt()), NamedTextColor.DARK_GRAY))
@@ -241,7 +244,7 @@ public final class HistoryCommand implements CommandExecutor, TabCompleter {
         if (!entry.publicReason().isBlank()) {
             line = line.append(Component.text(DETAIL_SEPARATOR + "reason: " + entry.publicReason(), NamedTextColor.GRAY));
         }
-        return sensitive ? appendSensitive(line, entry) : line;
+        return sensitive ? appendSensitive(line, entry, names) : line;
     }
 
     private static Component appendIds(Component line, ModerationHistoryEntry entry) {
@@ -292,13 +295,14 @@ public final class HistoryCommand implements CommandExecutor, TabCompleter {
         return line;
     }
 
-    private static Component appendSensitive(Component line, ModerationHistoryEntry entry) {
+    private static Component appendSensitive(Component line, ModerationHistoryEntry entry,
+            Function<java.util.UUID, String> names) {
         Component result = line;
-        if (entry.actorName().isPresent()) {
+        if (entry.actorName().filter(value -> !value.isBlank()).isPresent()) {
             result = result.append(Component.text(DETAIL_SEPARATOR + "actor ", NamedTextColor.DARK_GRAY))
                     .append(StaffMessageStyle.player(entry.actorName().orElseThrow()));
         } else if (entry.actorId().isPresent()) {
-            result = appendId(result, "actor", entry.actorId().orElseThrow());
+            result = appendId(result, "actor", names.apply(entry.actorId().orElseThrow()));
         }
         if (entry.sensitiveReason().isPresent()) {
             result = result.append(Component.text(

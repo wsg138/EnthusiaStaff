@@ -220,6 +220,7 @@ class StaffSessionShutdownRecoveryIntegrationTest extends PunishmentRequestMaria
             StaffSessionSnapshot exiting = store.beginExit(staffId, NOW.plusSeconds(2)).orElseThrow();
             assertEquals(StaffSessionOwnership.DETACHED_SERVER_ID, exiting.serverId());
             assertEquals(StaffSessionState.EXITING, exiting.state());
+            exiting = store.beginDetachedExit(exiting, NOW.plusSeconds(3)).orElseThrow();
             assertTrue(store.completeExit(
                     exiting.sessionId(),
                     detached.checksum(),
@@ -254,13 +255,46 @@ class StaffSessionShutdownRecoveryIntegrationTest extends PunishmentRequestMaria
             assertEquals(StaffSessionOwnership.DETACHED_SERVER_ID, recovery.serverId());
             assertEquals(StaffSessionState.RECOVERY_REQUIRED, recovery.state());
 
-            StaffSessionSnapshot exiting = store.beginExit(staffId, NOW.plusSeconds(3)).orElseThrow();
+            StaffSessionSnapshot exiting = store.beginDetachedExit(recovery, NOW.plusSeconds(3)).orElseThrow();
             assertTrue(store.completeExit(
                     exiting.sessionId(),
                     detached.checksum(),
                     NOW.plusSeconds(4)
             ));
             assertFalse(store.active(staffId).isPresent());
+        }
+    }
+
+    @Test
+    void detachedExitFenceRejectsWrongRevisionChecksumAndReplacementSession() {
+        UUID staffId = identifier("staff-detached-stale-fence");
+        try (MariaDbRuntime runtime = MariaDb.initialize(databaseConfig())) {
+            StaffSessionStore store = runtime.staffSessionStore();
+            StaffSessionSnapshot source = begin(runtime, staffId, OTHER_SERVER, 10);
+            StaffSessionSnapshot detached = store.detach(staffId, source.sessionId(), source.revision(),
+                    OTHER_SERVER, source.checksum(), NOW.plusSeconds(1)).orElseThrow();
+            store.recoveryRequired(detached.sessionId(), "Interrupted verified detach", NOW.plusSeconds(2));
+            StaffSessionSnapshot recovery = store.active(staffId).orElseThrow();
+            assertThrows(IllegalArgumentException.class,
+                    () -> store.beginDetachedExit(detached, NOW.plusSeconds(3)));
+            StaffSessionSnapshot staleRevision = new StaffSessionSnapshot(recovery.sessionId(), staffId,
+                    recovery.serverId(), recovery.state(), recovery.vanishActive(), recovery.schemaVersion(),
+                    recovery.checksum(), recovery.snapshot(), recovery.startedAt(), recovery.revision() - 1);
+            assertTrue(store.beginDetachedExit(staleRevision, NOW.plusSeconds(3)).isEmpty());
+            StaffSessionSnapshot wrongChecksum = new StaffSessionSnapshot(recovery.sessionId(), staffId,
+                    recovery.serverId(), recovery.state(), recovery.vanishActive(), recovery.schemaVersion(),
+                    "e".repeat(64), recovery.snapshot(), recovery.startedAt(), recovery.revision());
+            assertTrue(store.beginDetachedExit(wrongChecksum, NOW.plusSeconds(3)).isEmpty());
+            assertEquals(StaffSessionState.RECOVERY_REQUIRED, store.active(staffId).orElseThrow().state());
+            StaffSessionSnapshot exiting = store.beginDetachedExit(recovery, NOW.plusSeconds(4)).orElseThrow();
+            assertTrue(store.completeExit(exiting.sessionId(), exiting.checksum(), NOW.plusSeconds(5)));
+            StaffSessionSnapshot replacement = begin(runtime, staffId, SCOPED_SERVER, 11);
+            assertTrue(store.beginDetachedExit(recovery, NOW.plusSeconds(6)).isEmpty());
+            StaffSessionSnapshot current = store.active(staffId).orElseThrow();
+            assertEquals(replacement.sessionId(), current.sessionId());
+            assertEquals(replacement.revision(), current.revision());
+            assertEquals(StaffSessionState.ACTIVE, current.state());
+            assertEquals(SCOPED_SERVER, current.serverId());
         }
     }
 

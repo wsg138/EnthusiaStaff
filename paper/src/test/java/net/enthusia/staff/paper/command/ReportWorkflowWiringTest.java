@@ -1,8 +1,5 @@
 package net.enthusia.staff.paper.command;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -12,6 +9,9 @@ import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import org.junit.jupiter.api.Test;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 final class ReportWorkflowWiringTest {
     private static final Path REGISTRAR_SOURCE = Path.of(
@@ -40,7 +40,7 @@ final class ReportWorkflowWiringTest {
         assertTrue(source.contains("bindCompleting(\"report\", report, report);"));
         assertTrue(source.contains("new ReportGuiController("));
         assertTrue(source.contains("activeReportStore,"));
-        assertTrue(source.contains("new ReportsCommand(plugin(), clock(), activeReportStore, workers(), reportGui)"));
+        assertTrue(source.contains("new ReportsCommand(plugin(), clock(), activeReportStore, workers(), reportGui,"));
         assertTrue(source.contains("bindCompleting(\"reports\", reports, reports);"));
     }
 

@@ -25,3 +25,8 @@ Remaining hands-on acceptance includes #350 Spectator noclip, #392 HUB ProtocolL
 The repository is live production software. Historical pre-release/LiteBans records remain historical evidence; current-facing docs should not present them as current authority.
 
 Live GitHub is authoritative. Read the canonical handoff and the live PR/issue state before acting.
+
+
+## Owner fork upstream delivery, 2026-10-08
+
+Owner explicitly assigned continuation of `owner-punish-confirm-player` to merge validated fork PRs and submit remaining source fixes to canonical main. Fork PR1 and PR14 are merged; upstream reconciliation is REVIEW / ACTIONABLE_CONTINUATION in canonical PR #476 on `package/owner-upstream-remaining-20261008`. Current canonical bb8156ce is preserved, including rank policy, preferences, configured messages, recovery and authority controls. See `ai-agents/reports/package-handoffs/2026-10-08-owner-upstream-reconciliation.md` for bounded SPEAR requirements and evidence. Other packages are not reassigned. Upstream #339 remains the separate offline Discord mute submission. No production actions or canonical product merge authorized.

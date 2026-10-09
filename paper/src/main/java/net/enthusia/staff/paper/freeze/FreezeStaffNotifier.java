@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.List;
 import net.enthusia.staff.domain.auth.Actor;
 import net.enthusia.staff.domain.player.PlayerIdentity;
+import net.enthusia.staff.domain.player.PlayerNames;
 import net.enthusia.staff.paper.auth.PaperStaffRankResolver;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.event.ClickEvent;
@@ -39,7 +40,7 @@ public final class FreezeStaffNotifier implements FreezeAlertSink {
     }
 
     static Component render(PlayerIdentity target, Actor actor, String reason, boolean frozen) {
-        String targetName = target.currentUsername().orElse(target.playerId().toString());
+        String targetName = PlayerNames.label(target);
         Component message = Component.text("[Freeze] ", NamedTextColor.GOLD)
                 .append(Component.text(targetName, NamedTextColor.YELLOW))
                 .append(Component.text(frozen ? " frozen by " : " unfrozen by ", NamedTextColor.GRAY))

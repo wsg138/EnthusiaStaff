@@ -21,7 +21,7 @@ class PunishmentGuiSecurityRegressionTest {
 
     @Test
     void historyPageRechecksCurrentSensitiveHistoryPermission() throws IOException {
-        String source = Files.readString(CONTROLLER);
+        String source = Files.readString(CONTROLLER).replace("\r\n", "\n");
         String method = method(source, "private void openHistory(", "private void openUnavailableHistory(");
 
         assertTrue(method.contains(
@@ -35,7 +35,7 @@ class PunishmentGuiSecurityRegressionTest {
     @Test
     void overviewNeverCachesSensitiveHistoryPermissionOrEntries() throws IOException {
         String source = Files.readString(OVERVIEW);
-        String controller = Files.readString(CONTROLLER);
+        String controller = Files.readString(CONTROLLER).replace("\r\n", "\n");
 
         assertFalse(source.contains("sensitiveHistory"));
         assertFalse(source.contains("ModerationHistoryEntry"));
@@ -47,7 +47,7 @@ class PunishmentGuiSecurityRegressionTest {
 
     @Test
     void historyResultRechecksSensitivePermissionBeforeRendering() throws IOException {
-        String source = Files.readString(CONTROLLER);
+        String source = Files.readString(CONTROLLER).replace("\r\n", "\n");
         String method = method(source, "private void openState(", "private Actor authorizedActor(");
 
         assertTrue(method.contains("history.sensitiveHistory()"));
@@ -86,6 +86,19 @@ class PunishmentGuiSecurityRegressionTest {
                 "button(Material.ARROW, \"Back\", NamedTextColor.AQUA)"
         ));
         assertFalse(method.contains("Back · Categories"));
+    }
+
+    @Test
+    void targetLabelsKeepFriendlyNamesWithoutRedundantUuidLore() throws IOException {
+        String source = Files.readString(RENDERER);
+        String targetItem = method(source, "private static ItemStack targetItem(",
+                "private static ItemStack activeSanctionsItem(");
+        String targetLabel = method(source, "private static String targetName(",
+                "private static String formatInstant(");
+
+        assertTrue(targetItem.contains("targetName(state.target())"));
+        assertFalse(targetItem.contains("playerId().toString()"));
+        assertTrue(targetLabel.contains("PlayerNames.label(target)"));
     }
 
     private static String method(String source, String startMarker, String endMarker) {

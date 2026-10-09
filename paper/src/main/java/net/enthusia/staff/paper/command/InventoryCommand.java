@@ -64,6 +64,10 @@ public final class InventoryCommand implements CommandExecutor, TabCompleter {
             sender.sendMessage(StaffMessageStyle.style("This inventory viewer requires an in-game staff viewer."));
             return true;
         }
+        if (!net.enthusia.staff.paper.auth.StaffInspectionAuthority.allows(viewer::hasPermission, PERMISSION)) {
+            viewer.sendMessage(StaffMessageStyle.error("An explicit staff identity is required to inspect inventories."));
+            return true;
+        }
         if (arguments.length != TARGET_ARGUMENT_COUNT) {
             viewer.sendMessage(StaffMessageStyle.style(Component.text("Usage: /" + label + " <player|uuid>")));
             return true;
@@ -101,7 +105,7 @@ public final class InventoryCommand implements CommandExecutor, TabCompleter {
             String alias,
             String[] arguments
     ) {
-        if (!CommandPermissionGate.allows(sender::hasPermission, PERMISSION)
+        if (!net.enthusia.staff.paper.auth.StaffInspectionAuthority.allows(sender::hasPermission, PERMISSION)
                 || arguments.length != TARGET_ARGUMENT_COUNT) {
             return List.of();
         }
