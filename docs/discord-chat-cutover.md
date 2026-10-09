@@ -276,17 +276,17 @@ Real rich-render acceptance therefore requires either:
 ## Independent rich renderer migration candidate (not upstream visual parity)
 
 The optional Paper configuration key
-\`discord-chat-bridge.independent-rich-renderer-enabled: true\` permits a
+`discord-chat-bridge.independent-rich-renderer-enabled: true` permits a
 provider-neutral image fallback when InteractiveChat is enabled but its
 DiscordSRV-based rendering addon is absent/unavailable. The existing staging
 addon renderer still takes precedence if available.
 
-The new \`IndependentRichChatArtifactProvider\` reads InteractiveChat's actual
+The new `IndependentRichChatArtifactProvider` reads InteractiveChat's actual
 configured item/inventory/Ender chest placeholder patterns and permission
 gates through its own API. It snapshots material types, quantities and slot
 positions using the player's entity scheduler, then renders bounded PNG
 slot-cards on the existing worker pool. No DiscordSRV or
-\`InteractiveChatDiscordSrvAddon\` classes, JDA, tokens, or game texture assets
+`InteractiveChatDiscordSrvAddon` classes, JDA, tokens, or game texture assets
 are referenced. Rendering errors yield plain text; ordinary Minecraft chat
 continues unchanged. Default is **false**, so existing production behavior is
 unchanged. Changing this configuration requires a separately authorized
@@ -299,7 +299,7 @@ textures. It is an actual PNG renderer but does **not** satisfy final visual
 parity by itself. Final physical removal of DiscordSRV still requires owner
 acceptance of a documented rendering difference, or further implementation
 of texture/metadata features, plus the complete acceptance gates in
-[\`discordsrv-full-retirement.md\`](discordsrv-full-retirement.md).
+[`discordsrv-full-retirement.md`](discordsrv-full-retirement.md).
 
 Staging tests before selecting this fallback as the retained implementation:
 

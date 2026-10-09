@@ -263,25 +263,27 @@ public final class IndependentRichChatArtifactProvider
             return;
         }
         List<RichChatArtifact> artifacts = new ArrayList<>();
-        for (Job job : jobs) {
-            if (expired(request) || result.isDone()) {
-                result.complete(List.of());
-                return;
-            }
-            try {
-                byte[] png = png(renderCard(job.kind(), job.slots()));
-                if (png.length == 0 || png.length > RichChatArtifact.MAX_ARTIFACT_BYTES) {
-                    continue;
+        try {
+            for (Job job : jobs) {
+                if (expired(request) || result.isDone()) {
+                    return;
                 }
-                String suffix = request.eventId().toString().substring(0, 8);
-                artifacts.add(new RichChatArtifact(job.kind().artifactKind, job.position(),
-                        "IC-Native-" + job.kind().title + "-" + suffix + ".png",
-                        "image/png", job.kind().alt, png));
-            } catch (RuntimeException failure) {
-                // The textual chat message is intentionally unaffected.
+                try {
+                    byte[] png = png(renderCard(job.kind(), job.slots()));
+                    if (png.length == 0 || png.length > RichChatArtifact.MAX_ARTIFACT_BYTES) {
+                        continue;
+                    }
+                    String suffix = request.eventId().toString().substring(0, 8);
+                    artifacts.add(new RichChatArtifact(job.kind().artifactKind, job.position(),
+                            "IC-Native-" + job.kind().title + "-" + suffix + ".png",
+                            "image/png", job.kind().alt, png));
+                } catch (RuntimeException failure) {
+                    // The textual chat message is intentionally unaffected.
+                }
             }
+        } finally {
+            result.complete(List.copyOf(artifacts));
         }
-        result.complete(List.copyOf(artifacts));
     }
 
     private static List<Slot> copySlots(Inventory inventory, int max) {
