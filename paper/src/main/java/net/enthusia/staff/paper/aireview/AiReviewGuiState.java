@@ -3,6 +3,7 @@ package net.enthusia.staff.paper.aireview;
 import java.util.List;
 import java.util.UUID;
 import net.enthusia.staff.paper.aireview.AiReviewModels.CorrectionDecision;
+import net.enthusia.staff.paper.aireview.AiReviewModels.DecisionHistoryItem;
 import net.enthusia.staff.paper.aireview.AiReviewModels.EventDetails;
 import net.enthusia.staff.paper.aireview.AiReviewModels.ReviewItem;
 
@@ -28,12 +29,40 @@ sealed interface AiReviewGuiState {
         }
     }
 
+    /** Read-only cursor page. Blank stack entries represent the first page. */
+    record History(
+            UUID viewerId,
+            long generation,
+            List<DecisionHistoryItem> items,
+            String cursor,
+            String nextCursor,
+            List<String> previousCursors
+    ) implements AiReviewGuiState {
+        public History {
+            requireViewer(viewerId, generation);
+            items = List.copyOf(items == null ? List.of() : items);
+            previousCursors = List.copyOf(
+                    previousCursors == null ? List.of() : previousCursors
+            );
+            if (previousCursors.size() > 50
+                    || (cursor != null && (cursor.isBlank() || cursor.length() > 64))
+                    || (nextCursor != null && (nextCursor.isBlank() || nextCursor.length() > 64))) {
+                throw new IllegalArgumentException("invalid history paging state");
+            }
+        }
+    }
+
     record Detail(
             UUID viewerId,
             long generation,
             EventDetails details,
-            int returnPage
+            int returnPage,
+            History historyOrigin
     ) implements AiReviewGuiState {
+        public Detail(UUID viewerId, long generation, EventDetails details, int returnPage) {
+            this(viewerId, generation, details, returnPage, null);
+        }
+
         public Detail {
             requireViewer(viewerId, generation);
             if (details == null || returnPage < 0) {
