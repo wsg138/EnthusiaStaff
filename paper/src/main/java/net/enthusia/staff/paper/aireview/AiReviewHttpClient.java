@@ -80,7 +80,15 @@ final class AiReviewHttpClient implements AiReviewClient {
         }
         String path = "/v1/decisions?limit=" + bounded
                 + (cursor == null ? "" : "&cursor=" + encode(cursor));
-        JsonNode root = request("GET", path, null, 200);
+        JsonNode root;
+        try {
+            root = request("GET", path, null, 200);
+        } catch (AiReviewClientException exception) {
+            if (exception.category() == Category.NOT_FOUND && cursor != null) {
+                throw new AiReviewClientException(Category.INVALID_CURSOR, exception);
+            }
+            throw exception;
+        }
         JsonNode items = requiredArray(root, "items");
         if (items.size() > bounded) {
             throw new AiReviewClientException(Category.MALFORMED);
@@ -194,6 +202,9 @@ final class AiReviewHttpClient implements AiReviewClient {
     private AiReviewClientException statusException(int status) {
         if (status == 409) {
             return new AiReviewClientException(Category.CONFLICT);
+        }
+        if (status == 404) {
+            return new AiReviewClientException(Category.NOT_FOUND);
         }
         if (status == 401 || status == 403) {
             return new AiReviewClientException(Category.AUTH);
