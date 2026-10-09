@@ -60,6 +60,9 @@ public final class DiscordSrvDependencyInventory {
         CLEAR, LEGACY, HARD_DEPENDENCY, SOFT_DEPENDENCY, REFERENCE, BYTECODE_REFERENCE, UNVERIFIED
     }
 
+    private record JarInspection(JarStatus status, boolean bytecodeReference) {
+    }
+
     private static int scan(Path directory, PrintStream output) throws IOException {
         List<Path> jars;
         try (Stream<Path> entries = Files.list(directory)) {
@@ -74,21 +77,27 @@ public final class DiscordSrvDependencyInventory {
         }
 
         int[] counts = new int[JarStatus.values().length];
+        int bytecodeHits = 0;
         for (Path jar : jars) {
-            counts[inspectJar(jar, output).ordinal()]++;
+            JarInspection result = inspectJar(jar, output);
+            counts[result.status().ordinal()]++;
+            if (result.bytecodeReference()) {
+                bytecodeHits++;
+            }
         }
         int hard = counts[JarStatus.HARD_DEPENDENCY.ordinal()];
         int soft = counts[JarStatus.SOFT_DEPENDENCY.ordinal()];
         int generic = counts[JarStatus.REFERENCE.ordinal()];
-        int bytecode = counts[JarStatus.BYTECODE_REFERENCE.ordinal()];
-        int references = hard + soft + generic + bytecode;
+        int bytecodeOnly = counts[JarStatus.BYTECODE_REFERENCE.ordinal()];
+        int references = hard + soft + generic + bytecodeOnly;
         int unknown = counts[JarStatus.UNVERIFIED.ordinal()];
         output.println("TOTAL_JARS=" + jars.size());
         output.println("LEGACY_JARS=" + counts[JarStatus.LEGACY.ordinal()]);
         output.println("HARD_DEPENDENCIES=" + hard);
         output.println("SOFT_DEPENDENCIES=" + soft);
         output.println("OTHER_MANIFEST_REFERENCES=" + generic);
-        output.println("BYTECODE_REFERENCES=" + bytecode);
+        output.println("BYTECODE_REFERENCES=" + bytecodeHits);
+        output.println("BYTECODE_ONLY_REFERENCES=" + bytecodeOnly);
         output.println("DEPENDENCY_REFERENCES=" + references);
         output.println("UNVERIFIED_JARS=" + unknown);
         output.println("SCOPED_TO_MANIFESTS_ONLY=false");
@@ -98,37 +107,38 @@ public final class DiscordSrvDependencyInventory {
         return references > 0 || unknown > 0 ? 2 : 0;
     }
 
-    private static JarStatus inspectJar(Path jar, PrintStream output) {
+    private static JarInspection inspectJar(Path jar, PrintStream output) {
         String label = safeLabel(jar.getFileName().toString());
         if (Files.isSymbolicLink(jar) || !Files.isRegularFile(jar, LinkOption.NOFOLLOW_LINKS)) {
             output.println("UNVERIFIED " + label + " (not a regular JAR)");
-            return JarStatus.UNVERIFIED;
+            return new JarInspection(JarStatus.UNVERIFIED, false);
         }
         try (JarFile archive = new JarFile(jar.toFile(), false)) {
             List<String> contents = readManifests(archive);
             if (contents.isEmpty()) {
                 output.println("UNVERIFIED " + label + " (no Paper/Bukkit manifest)");
-                return JarStatus.UNVERIFIED;
+                return new JarInspection(JarStatus.UNVERIFIED, false);
             }
             if (isDiscordSrvPlugin(contents)) {
                 output.println("LEGACY_PLUGIN " + label + " (DiscordSRV installed)");
-                return JarStatus.LEGACY;
+                return new JarInspection(JarStatus.LEGACY, false);
             }
-            JarStatus relationship = classifyManifests(contents);
-            if (relationship != JarStatus.CLEAR) {
-                output.println(relationship + " " + label
+            JarStatus manifest = classifyManifests(contents);
+            boolean bytecode = hasBytecodeReference(archive);
+            if (manifest != JarStatus.CLEAR) {
+                output.println(manifest + " " + label
                         + " (DiscordSRV in plugin manifest; runtime behavior not verified)");
-                return relationship;
             }
-            if (hasBytecodeReference(archive)) {
+            if (bytecode) {
                 output.println("BYTECODE_REFERENCE " + label
                         + " (class-file symbol or literal; confirm runtime dependency)");
-                return JarStatus.BYTECODE_REFERENCE;
             }
-            return JarStatus.CLEAR;
+            JarStatus result = manifest == JarStatus.CLEAR && bytecode
+                    ? JarStatus.BYTECODE_REFERENCE : manifest;
+            return new JarInspection(result, bytecode);
         } catch (IOException | IllegalArgumentException invalidJar) {
             output.println("UNVERIFIED " + label + " (unreadable or oversized manifest/class files)");
-            return JarStatus.UNVERIFIED;
+            return new JarInspection(JarStatus.UNVERIFIED, false);
         }
     }
 

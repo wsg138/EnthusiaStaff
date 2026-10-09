@@ -36,15 +36,35 @@ Run it against a complete **authorized staging copy** of every Paper server's
 is **not** proof that removing the plugin preserves its feature behavior.
 There is deliberately no deletion mode.
 
-**Observed on the SMP on October 8:** a read-only SFTP directory listing found the
-installed `DiscordSRV-Build-1.30.5.jar` and 103 total `.jar` filenames.
-Four exact JARs were retrieved locally with SHA-256 and ZIP validation. Their
-manifest-only classifications (before the bytecode scan was added) are:
-InteractiveChat Discord addon 2026.1.1.0 =
-**HARD_DEPENDENCY**; EnthusiaStaff Paper, LumaGuilds 3.0.23, and EnthusiaPlaytime
-3.7.2 = **SOFT_DEPENDENCY**. This covers only four JARs on one Paper server,
-not the complete plugin suite; `RESULT=BLOCKED` remains the expected outcome.
-No remote files were modified in this inventory.
+**Full SMP static JAR inventory, October 9, 2026:** the owner ran the
+bounded read-only SFTP snapshot of all **103** live SMP plugin JARs into a
+private local directory. The upgraded analyzer completed on the downloaded
+copies, with **0 unverifiable JARs** and **0 bytecode-only additional plugins**.
+It reported one installed DiscordSRV JAR, **one hard dependency**, and **nine
+soft dependencies**. Every one of the ten dependent plugin JARs also contained
+the `DiscordSRV` literal in compiled class bytes; bytecode matches **overlap**
+the manifest classifications and are not ten more plugins. No server files,
+private configurations, processes, or Discord roles were changed.
+
+| Manifest classification | Actual SMP plugin JAR | Retirement work to verify |
+| --- | --- | --- |
+| HARD | InteractiveChatDiscordSrvAddon 2026.1.1.0 | Must be removed/replaced on a separately tested DiscordSRV-free staging Paper build; compare native renderer to current graphical behavior. |
+| SOFT | EnthusiaAdvancements pilot.6 | Audit advancement-to-Discord side effects and whether they must be migrated to provider-neutral transport. |
+| SOFT | EnthusiaPlaytime 3.7.2 | Eliminate legacy numeral-role writes and DiscordSRV account lookup; exercise link, alt and only-highest-role parity. |
+| SOFT | EnthusiaStaff AuthorityBridge | Verify account-link compatibility/transition importer can be retired without losing canonical links. |
+| SOFT | EnthusiaStaff Paper | Remove remaining optional legacy hooks only after replacement services and readiness handling are accepted. |
+| SOFT | InteractiveChat 2026.1.1.0 | Verify native Minecraft placeholder/chat behavior when DiscordSRV and addon are absent. |
+| SOFT | LumaGuilds 3.0.23 | Audit link and guild-role mutation dependency; keep live LumaGuilds unchanged until separately authorized adapter and parity are ready. |
+| SOFT | OreAnnouncer 2.8.5 | Inspect what Discord notifications, if any, depend on DiscordSRV; preserve intended behavior or explicitly approve its retirement. |
+| SOFT | Plan 5.8 | Inspect its DiscordSRV extension/hook; confirm the analytics behavior without legacy plugin. |
+| SOFT | RoseChat RC-4 | Preserve mute/moderation and chat source behavior; verify legacy suppression/fallback and incoming routing. |
+
+**Static inventory result: BLOCKED.** All 103 SMP JAR copies were inspected,
+but this is **not** a complete network inventory, nor a functional test. Check
+every other Minecraft Paper server separately, and verify each item above under
+a live, isolated staging runtime. Do not infer compatibility solely from a
+soft dependency or a compiled symbol. The 2026-10-09 scan supersedes the
+earlier four-JAR sample, which was not exhaustive.
 
 The scanner also checks bounded compiled class bytes for `DiscordSRV`
 (case-insensitive). Matches can be harmless constants; misses can occur through

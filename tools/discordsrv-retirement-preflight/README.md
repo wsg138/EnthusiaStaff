@@ -39,14 +39,18 @@ to the repository.
 - `REFERENCE`: another manifest mentions DiscordSRV outside a recognized
   dependency declaration, or the Paper `required` flag cannot be determined.
   Review as unresolved rather than inferring optionality.
-- `BYTECODE_REFERENCE`: a plugin with no recognized manifest reference contains
-  `DiscordSRV` (case-insensitive) in a compiled class, potentially as a direct
-  JVM package symbol, reflection string, or incidental constant. Review the
-  relevant component; this is not proof of an active dependency.
-- The counts `HARD_DEPENDENCIES`, `SOFT_DEPENDENCIES`, and
-  `OTHER_MANIFEST_REFERENCES`, and `BYTECODE_REFERENCES` are disjoint subsets
-  of `DEPENDENCY_REFERENCES`. All four classes retain exit code 2 until
-  reviewed. This is a conservative classification, not a full YAML parser.
+- `BYTECODE_REFERENCE`: a plugin has `DiscordSRV` (case-insensitive) in
+  a compiled class, potentially as a direct JVM package symbol, reflection
+  string, or incidental constant. This is reported **even if the same plugin
+  already declares a manifest dependency**. Review the referenced component:
+  the finding alone does not prove an active runtime dependency.
+- `HARD_DEPENDENCIES`, `SOFT_DEPENDENCIES`, `OTHER_MANIFEST_REFERENCES`
+  and `BYTECODE_ONLY_REFERENCES` are **disjoint** counts by plugin.
+  `BYTECODE_REFERENCES` is an **overlapping** count of all non-legacy plugins
+  with matching compiled class bytes; it may include the manifest categories.
+  `DEPENDENCY_REFERENCES` counts distinct non-legacy plugins matching either
+  source exactly once. All categories remain fail-closed. The analyzer is
+  deliberately conservative and not a full YAML parser.
 - `UNVERIFIED`: unreadable JAR, missing plugin manifest, excessive manifest
   or expanded class size/count, or a non-regular/symlinked JAR. Resolve rather
   than assuming safety. Class scans are capped at 1 MiB per entry and 256 MiB

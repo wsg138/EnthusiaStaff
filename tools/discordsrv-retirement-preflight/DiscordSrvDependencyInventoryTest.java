@@ -67,6 +67,16 @@ public final class DiscordSrvDependencyInventoryTest {
             verify(dir, 2, "BYTECODE_REFERENCE bytecode.jar");
         });
         withDirectory(dir -> {
+            addJarWithClass(dir, "manifest-plus-class.jar",
+                    "name: Optional\nsoftdepend: [DiscordSRV]\n",
+                    "invoke com/example/DiscordSrvHook");
+            verify(dir, 2, "SOFT_DEPENDENCY manifest-plus-class.jar");
+            verify(dir, 2, "BYTECODE_REFERENCE manifest-plus-class.jar");
+            verify(dir, 2, "BYTECODE_REFERENCES=1");
+            verify(dir, 2, "BYTECODE_ONLY_REFERENCES=0");
+            verify(dir, 2, "DEPENDENCY_REFERENCES=1");
+        });
+        withDirectory(dir -> {
             addJarWithClass(dir, "mixed-case.jar",
                     "name: MixedCase\\nversion: 1\\n",
                     "com/example/DiscordSrvBridge");
@@ -85,7 +95,7 @@ public final class DiscordSrvDependencyInventoryTest {
             verify(dir, 2, "UNVERIFIED size-limit.jar");
         });
         withDirectory(dir -> verify(dir, 3, "ERROR: empty plugins folder"));
-        System.out.println("PASS: " + assertions + " assertions across 15 isolated JAR inventories");
+        System.out.println("PASS: " + assertions + " assertions across 16 isolated JAR inventories");
     }
 
     private static void verify(Path dir, int expectedCode, String expectedText) throws Exception {
