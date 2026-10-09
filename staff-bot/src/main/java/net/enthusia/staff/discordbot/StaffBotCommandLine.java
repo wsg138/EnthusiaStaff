@@ -12,6 +12,7 @@ final class StaffBotCommandLine {
     private static final String ENVIRONMENT_PREFIX = "--environment=";
     private static final String MODERATION_CONFIG_FILE_PREFIX = "--moderation-config-file=";
     private static final String CHAT_SETTINGS_FILE_PREFIX = "--chat-bridge-config-file=";
+    private static final String SHORT_CHAT_SETTINGS_FILE_PREFIX = "--chat=";
     private static final String TLS_DIAGNOSTIC_FLAG = "--tls-diagnostic";
     private static final String TUNNEL_BINARY_FILE_PREFIX = "--tunnel-binary-file=";
     private static final String TUNNEL_TOKEN_FILE_PREFIX = "--tunnel-token-file=";
@@ -207,6 +208,10 @@ final class StaffBotCommandLine {
             }
             if (argument.startsWith(CHAT_SETTINGS_FILE_PREFIX)) {
                 chatSettingsFile = setPathOnce(chatSettingsFile, argument, CHAT_SETTINGS_FILE_PREFIX);
+                return true;
+            }
+            if (argument.startsWith(SHORT_CHAT_SETTINGS_FILE_PREFIX)) {
+                chatSettingsFile = setPathOnce(chatSettingsFile, argument, SHORT_CHAT_SETTINGS_FILE_PREFIX);
                 return true;
             }
             if (argument.startsWith(MODERATION_CONFIG_FILE_PREFIX)) {

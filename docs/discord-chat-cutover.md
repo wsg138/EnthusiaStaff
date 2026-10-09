@@ -63,6 +63,37 @@ existing default (no argument) still reads chat settings only from environment
 variables. Do not put secrets on the command line or into tracked repository files.
 See `staff-bot/chat-bridge.properties.example` for placeholders only.
 
+#### Bloom APP FLAGS length limit (private SHADOW only)
+
+The Bloom StaffBot APP FLAGS field has a 200-character maximum. When the
+matching StaffBot JAR includes the reviewed short-option parser, use
+`--chat=c` as an alias for `--chat-bridge-config-file=c`.
+Both forms select the **same** file-backed chat configuration and reject
+empty/duplicate/conflicting options. The short private file `/c` must
+contain the approved outbound-only SHADOW properties with the private TLS
+truststore path. The short option never authorizes AUTHORITATIVE mode.
+
+With `/c` provisioned and readback verified, the proposed production
+flags are **190 characters**:
+
+```text
+--environment=production --token-file=tp --moderation-config-file=m --tunnel-binary-file=cloudflared --tunnel-token-file=prod-tunnel --moderation-web-url=https://staff.enthusia.info --chat=c
+```
+
+**Do not shorten `cloudflared` or `prod-tunnel` filenames.** Both names
+are enforced by `StaffBotRuntime.createTunnel` and
+`CloudflaredStagingTunnel`; merely copying the file bytes to another name
+causes production configuration validation to fail before startup. This
+occurred during the October 9, 2026 private SHADOW activation attempt when
+`--tunnel-token-file=k` was used. The owner restored the previous working
+flags and confirmed StaffBot returned to
+`staff_bot_ready environment=production`. No CHAT/HMAC acceptance was
+proven by that failed attempt. Removing already-proven optional
+`--tls-diagnostic` is appropriate only after its proof is retained.
+Do not use `--chat=c` until a JAR actually containing the short parser has
+been built, reviewed, safely staged, and deployed in a separately
+controlled StaffBot maintenance window.
+
 This option is **not available in previously staged StaffBot PR #465 artifacts**
 until the new file-backed change is reviewed and a new exact-head artifact is built.
 Do not add the argument to the currently running JAR: its parser rejects unknown
