@@ -48,7 +48,8 @@ public final class StaffBotApplication {
                 commandLine.smokeTest(),
                 commandLine.moderationConfigFile(),
                 commandLine.tunnelFiles(),
-                commandLine.chatSettingsFile());
+                commandLine.chatSettingsFile(),
+                commandLine.tlsDiagnostic());
     }
 
     private static int runRuntime(
@@ -56,13 +57,17 @@ public final class StaffBotApplication {
             boolean smokeTest,
             Optional<Path> moderationConfigFile,
             Optional<StaffBotCommandLine.TunnelFiles> tunnelFiles,
-            Optional<Path> chatSettingsFile
+            Optional<Path> chatSettingsFile,
+            boolean tlsDiagnostic
     ) {
         try (StaffBotRuntime runtime = StaffBotRuntime.create(
                 configuration, moderationConfigFile, tunnelFiles, chatSettingsFile)) {
             Runtime.getRuntime().addShutdownHook(
                     Thread.ofPlatform().name("staff-bot-shutdown").unstarted(runtime::close));
             runtime.start();
+            if (tlsDiagnostic) {
+                StaffBotTlsStartupDiagnostic.start();
+            }
 
             if (smokeTest) {
                 return runSmokeTest(runtime, configuration);

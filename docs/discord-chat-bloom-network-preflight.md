@@ -188,3 +188,29 @@ StaffBot container. This verifies TLS **only**. Authorized deployment
 of matching StaffBot and Velocity private peer settings, actual HMAC
 channel readiness and private outbound Discord SHADOW message proof
 are separate subsequent gates. DiscordSRV remains installed and live.
+
+## October 9: opt-in StaffBot startup TLS diagnostic
+
+The new StaffBot option `--tls-diagnostic` is disabled by default and only
+accepted with the existing production file-backed bot/moderation flags.
+It runs once after the normal StaffBot services start, on a daemon thread.
+The diagnostic connects only to the previously pinned internal Velocity
+hostname and port 28765; it requires TLS 1.3, standard hostname checks,
+and the exact verified public certificate fingerprint.
+
+The public X.509 certificate is embedded in the StaffBot JAR. No password,
+HMAC secret, private key, bot token, or public-chat route is bundled or
+required by this diagnostic. No app frames or chat messages are sent.
+
+The status is logged as `staffbot_tls_diagnostic state=...` and written
+to `staffbot-tls-diagnostic-result.txt` in the StaffBot working directory
+for SFTP readback. The report explicitly says HMAC is not checked.
+The diagnostic does not alter StaffBot moderation readiness or enable the
+new chat bridge.
+
+Controlled activation requires retaining the exact live StaffBot JAR and
+all existing startup arguments, installing the reviewed replacement at a
+maintenance restart and adding ONLY `--tls-diagnostic`. Leave Velocity,
+Paper, DiscordSRV, and private chat routes unchanged. If moderation or
+tunnel health regresses, remove that flag and restore the matching original
+JAR and startup arguments. A successful TLS result is not HMAC/SHADOW proof.
