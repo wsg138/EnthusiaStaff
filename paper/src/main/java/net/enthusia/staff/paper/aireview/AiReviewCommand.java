@@ -119,6 +119,10 @@ final class AiReviewCommand implements CommandExecutor, TabCompleter {
             return;
         }
         String cursor = arguments.length == 2 ? arguments[1] : null;
+        if (cursor == null && sender instanceof Player player) {
+            gui.openHistory(player);
+            return;
+        }
         if (cursor != null && (cursor.isBlank() || cursor.length() > 64)) {
             send(sender, "Invalid history cursor.", NamedTextColor.RED);
             return;
