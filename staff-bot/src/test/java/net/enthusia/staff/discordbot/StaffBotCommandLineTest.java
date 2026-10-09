@@ -11,6 +11,7 @@ import org.junit.jupiter.api.Test;
 class StaffBotCommandLineTest {
     private static final String PRODUCTION_ENVIRONMENT_ARGUMENT = "--environment=production";
     private static final String TLS_DIAGNOSTIC_ARGUMENT = "--tls-diagnostic";
+    private static final String SHORT_CHAT_FILE_ARGUMENT = "--chat=c";
     private static final String PREVIEW_ARGUMENT = "--staging-ui-preview";
     private static final String SMOKE_TEST_ARGUMENT = "--smoke-test";
     private static final String TOKEN_FILE_NAME = "staging-bot-token.txt";
@@ -159,7 +160,7 @@ class StaffBotCommandLineTest {
         String startupFlags = "--environment=production --token-file=tp"
                 + " --moderation-config-file=m --tunnel-binary-file=cloudflared"
                 + " --tunnel-token-file=prod-tunnel"
-                + " --moderation-web-url=https://staff.enthusia.info --chat=c";
+                + " --moderation-web-url=https://staff.enthusia.info " + SHORT_CHAT_FILE_ARGUMENT;
         assertTrue(startupFlags.length() <= 200);
 
         StaffBotCommandLine parsed = StaffBotCommandLine.parse(startupFlags.split(" "));
@@ -171,20 +172,20 @@ class StaffBotCommandLineTest {
         assertEquals(Path.of("tp"), parsed.tokenFile().orElseThrow());
         assertEquals("https://staff.enthusia.info", parsed.moderationWebUrl().orElseThrow());
         assertFalse(parsed.tlsDiagnostic());
-        assertFalse(parsed.toString().contains("--chat=c"));
+        assertFalse(parsed.toString().contains(SHORT_CHAT_FILE_ARGUMENT));
         assertTrue(parsed.toString().contains("chatSettingsFile=<configured>"));
 
         assertThrows(IllegalArgumentException.class,
                 () -> StaffBotCommandLine.parse(new String[] {"--chat="}));
         assertThrows(IllegalArgumentException.class,
-                () -> StaffBotCommandLine.parse(new String[] {"--chat=c", "--chat=d"}));
+                () -> StaffBotCommandLine.parse(new String[] {SHORT_CHAT_FILE_ARGUMENT, "--chat=d"}));
         assertThrows(IllegalArgumentException.class,
                 () -> StaffBotCommandLine.parse(new String[] {
-                        "--chat=c", "--chat-bridge-config-file=d"
+                        SHORT_CHAT_FILE_ARGUMENT, "--chat-bridge-config-file=d"
                 }));
         assertThrows(IllegalArgumentException.class,
                 () -> StaffBotCommandLine.parse(new String[] {
-                        "--chat-bridge-config-file=d", "--chat=c"
+                        "--chat-bridge-config-file=d", SHORT_CHAT_FILE_ARGUMENT
                 }));
     }
 
