@@ -366,7 +366,8 @@ final class AiReviewGuiController implements Listener {
                     state.details(),
                     state.returnPage(),
                     SEMANTIC_LABELS,
-                    0
+                    0,
+                    state.historyOrigin()
             ));
         } else if (slot == AiReviewGuiRenderer.APPROVE) {
             Correction pending = state.details().latestPendingCorrection();
@@ -399,7 +400,8 @@ final class AiReviewGuiController implements Listener {
                     viewer.getUniqueId(),
                     nextGeneration(viewer),
                     state.details(),
-                    state.returnPage()
+                    state.returnPage(),
+                    state.historyOrigin()
             ));
             return;
         }
@@ -434,7 +436,8 @@ final class AiReviewGuiController implements Listener {
                 decision,
                 null,
                 "Change semantic label to " + label,
-                false
+                false,
+                state.historyOrigin()
         ));
     }
 
@@ -448,7 +451,8 @@ final class AiReviewGuiController implements Listener {
                     viewer.getUniqueId(),
                     nextGeneration(viewer),
                     state.details(),
-                    state.returnPage()
+                    state.returnPage(),
+                    state.historyOrigin()
             ));
             return;
         }
@@ -509,7 +513,8 @@ final class AiReviewGuiController implements Listener {
                     if (!validAgainstFresh(state, fresh)) {
                         message(viewer, "The central review state changed; no write was made.", NamedTextColor.YELLOW);
                         open(viewer, new AiReviewGuiState.Detail(
-                                viewer.getUniqueId(), nextGeneration(viewer), fresh, state.returnPage()
+                                viewer.getUniqueId(), nextGeneration(viewer), fresh,
+                                state.returnPage(), state.historyOrigin()
                         ));
                         return;
                     }
@@ -549,8 +554,10 @@ final class AiReviewGuiController implements Listener {
                     reviewerId,
                     authority,
                     note,
-                    correction -> writeComplete(viewer, correction, state.returnPage()),
-                    issue -> writeFailed(viewer, fresh, state.returnPage(), issue)
+                    correction -> writeComplete(viewer, correction, state.returnPage(),
+                            state.historyOrigin()),
+                    issue -> writeFailed(viewer, fresh, state.returnPage(), issue,
+                            state.historyOrigin())
             );
             return;
         }
@@ -565,7 +572,10 @@ final class AiReviewGuiController implements Listener {
         );
     }
 
-    private void writeComplete(Player viewer, Correction correction, int returnPage) {
+    private void writeComplete(
+            Player viewer, Correction correction, int returnPage,
+            AiReviewGuiState.History historyOrigin
+    ) {
         onEntity(viewer, () -> {
             if (!subsystem.activeDuty(viewer)) {
                 viewer.closeInventory();
@@ -579,25 +589,33 @@ final class AiReviewGuiController implements Listener {
                     correction.status() == AiReviewModels.CorrectionStatus.ACCEPTED
                             ? NamedTextColor.GREEN : NamedTextColor.GOLD
             );
-            subsystem.refreshQueue(
-                    false,
-                    () -> onEntity(viewer, () -> openQueue(viewer, returnPage, false))
-            );
+            if (historyOrigin != null) {
+                openHistory(viewer, historyOrigin.cursor(), historyOrigin.previousCursors());
+            } else {
+                subsystem.refreshQueue(
+                        false,
+                        () -> onEntity(viewer, () -> openQueue(viewer, returnPage, false))
+                );
+            }
         });
     }
 
-    private void writeFailed(Player viewer, EventDetails fresh, int returnPage, String issue) {
+    private void writeFailed(
+            Player viewer, EventDetails fresh, int returnPage, String issue,
+            AiReviewGuiState.History historyOrigin
+    ) {
         onEntity(viewer, () -> {
             message(viewer, "No correction was committed: " + issue + '.', NamedTextColor.YELLOW);
             if ("central review conflict".equals(issue)) {
-                openEvent(viewer, fresh.eventId(), returnPage);
+                openEvent(viewer, fresh.eventId(), returnPage, historyOrigin);
                 return;
             }
             open(viewer, new AiReviewGuiState.Detail(
                     viewer.getUniqueId(),
                     nextGeneration(viewer),
                     fresh,
-                    returnPage
+                    returnPage,
+                    historyOrigin
             ));
         });
     }
@@ -620,7 +638,8 @@ final class AiReviewGuiController implements Listener {
                 decision,
                 proposalId,
                 description,
-                adminRequested
+                adminRequested,
+                state.historyOrigin()
         ));
     }
 
@@ -635,7 +654,8 @@ final class AiReviewGuiController implements Listener {
                 state.details(),
                 state.returnPage(),
                 state.labels(),
-                page
+                page,
+                state.historyOrigin()
         ));
     }
 
@@ -656,6 +676,7 @@ final class AiReviewGuiController implements Listener {
     private void open(Player viewer, AiReviewGuiState state) {
         onEntity(viewer, () -> {
             if (!viewer.isOnline()
+                    || !subsystem.activeDuty(viewer)
                     || !AiReviewPermissions.queue(viewer)
                     || activeGeneration.getOrDefault(viewer.getUniqueId(), -1L) != state.generation()) {
                 return;
