@@ -6,6 +6,8 @@ import java.util.List;
 import net.enthusia.staff.paper.aireview.AiReviewModels.Correction;
 import net.enthusia.staff.paper.aireview.AiReviewModels.CorrectionStatus;
 import net.enthusia.staff.paper.aireview.AiReviewModels.EventDetails;
+import net.enthusia.staff.paper.aireview.AiReviewModels.DecisionHistoryItem;
+import net.enthusia.staff.paper.aireview.AiReviewModels.MessageAction;
 import net.enthusia.staff.paper.aireview.AiReviewModels.ReviewItem;
 import net.enthusia.staff.paper.aireview.AiReviewModels.ReviewPriority;
 import net.kyori.adventure.text.Component;
@@ -26,6 +28,7 @@ final class AiReviewGuiRenderer {
     static final int PREVIOUS = 45;
     static final int BACK = 45;
     static final int REFRESH = 49;
+    static final int HISTORY_TOGGLE = 48;
     static final int NEXT = 53;
     static final int CLOSE = 50;
     static final int ALLOW = 20;
@@ -50,6 +53,8 @@ final class AiReviewGuiRenderer {
         fill(inventory);
         if (state instanceof AiReviewGuiState.Queue queue) {
             renderQueue(inventory, queue, now);
+        } else if (state instanceof AiReviewGuiState.History history) {
+            renderHistory(inventory, history);
         } else if (state instanceof AiReviewGuiState.Detail detail) {
             renderDetail(inventory, detail, adminAvailable);
         } else if (state instanceof AiReviewGuiState.LabelPicker picker) {
@@ -84,6 +89,50 @@ final class AiReviewGuiRenderer {
             inventory.setItem(PREVIOUS, item(Material.ARROW, "Previous page", List.of()));
         }
         if ((state.page() + 1) * pageSize < state.items().size()) {
+            inventory.setItem(NEXT, item(Material.ARROW, "Next page", List.of()));
+        }
+        inventory.setItem(HISTORY_TOGGLE, item(Material.BOOK, "All Decisions", List.of(
+                "Browse allowed and blocked messages",
+                "Read-only decision history"
+        )));
+        inventory.setItem(CLOSE, item(Material.BARRIER, "Close", List.of()));
+    }
+
+    private void renderHistory(Inventory inventory, AiReviewGuiState.History state) {
+        int count = Math.min(state.items().size(), CONTENT_SLOTS.size());
+        for (int index = 0; index < count; index++) {
+            DecisionHistoryItem decision = state.items().get(index);
+            boolean blocked = decision.messageAction() == MessageAction.BLOCK;
+            String label = AiReviewPresentation.bounded(
+                    decision.semanticLabel().replace('_', ' '), 36
+            );
+            List<String> lore = new ArrayList<>();
+            lore.add("Platform: " + decision.platform());
+            lore.add("When: " + decision.occurredAt());
+            lore.add("Review: " + decision.reviewPriority());
+            if (decision.corrected()) {
+                lore.add("Staff correction recorded");
+            }
+            if (decision.degraded()) {
+                lore.add("Degraded / fail-open result");
+            }
+            lore.add("Click to examine this event");
+            inventory.setItem(CONTENT_SLOTS.get(index), item(
+                    blocked ? Material.RED_DYE : Material.LIME_DYE,
+                    (blocked ? "Blocked · " : "Allowed · ") + label,
+                    lore
+            ));
+        }
+        inventory.setItem(REFRESH, item(Material.CLOCK, "Refresh decisions", List.of(
+                "Reload this cursor page from the central API"
+        )));
+        inventory.setItem(HISTORY_TOGGLE, item(Material.BOOKSHELF, "Flagged review queue", List.of(
+                "Return to cases that need staff attention"
+        )));
+        if (!state.previousCursors().isEmpty()) {
+            inventory.setItem(PREVIOUS, item(Material.ARROW, "Previous page", List.of()));
+        }
+        if (state.nextCursor() != null && state.previousCursors().size() < 50) {
             inventory.setItem(NEXT, item(Material.ARROW, "Next page", List.of()));
         }
         inventory.setItem(CLOSE, item(Material.BARRIER, "Close", List.of()));
@@ -164,7 +213,9 @@ final class AiReviewGuiRenderer {
                 )));
             }
         }
-        inventory.setItem(BACK, item(Material.ARROW, "Back to queue", List.of()));
+        inventory.setItem(BACK, item(Material.ARROW,
+                state.historyOrigin() == null ? "Back to queue" : "Back to all decisions",
+                List.of()));
         inventory.setItem(REFRESH, item(Material.CLOCK, "Refresh event", List.of()));
         inventory.setItem(CLOSE, item(Material.BARRIER, "Close", List.of()));
     }
@@ -293,6 +344,9 @@ final class AiReviewGuiRenderer {
     private static Component title(AiReviewGuiState state) {
         if (state instanceof AiReviewGuiState.Queue queue) {
             return Component.text("AI Review Queue · Page " + (queue.page() + 1));
+        }
+        if (state instanceof AiReviewGuiState.History history) {
+            return Component.text("AI Decisions · Page " + (history.previousCursors().size() + 1));
         }
         if (state instanceof AiReviewGuiState.LabelPicker) {
             return Component.text("AI Review · Semantic Label");
