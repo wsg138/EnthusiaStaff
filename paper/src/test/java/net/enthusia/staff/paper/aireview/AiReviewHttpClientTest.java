@@ -96,6 +96,28 @@ class AiReviewHttpClientTest {
     }
 
     @Test
+    void historyMissingCursorIsInputFailureNotSharedServiceOutage() throws Exception {
+        try (MiniServer server = new MiniServer(request -> Response.json(404, "{}"))) {
+            AiReviewHttpClient client = client(server, 64 * 1024, 2_000);
+            var failure = assertThrows(AiReviewClientException.class,
+                    () -> client.listDecisions(10, "missing-cursor"));
+            assertEquals(Category.INVALID_CURSOR, failure.category());
+            assertEquals("/v1/decisions?limit=10&cursor=missing-cursor",
+                    server.awaitRequest().target());
+        }
+    }
+
+    @Test
+    void unrelatedEventNotFoundRemainsOrdinaryServiceError() throws Exception {
+        try (MiniServer server = new MiniServer(request -> Response.json(404, "{}"))) {
+            AiReviewHttpClient client = client(server, 64 * 1024, 2_000);
+            assertEquals(Category.NOT_FOUND,
+                    assertThrows(AiReviewClientException.class,
+                            () -> client.event("no-such-event")).category());
+        }
+    }
+
+    @Test
     void eventParsingUsesOnlyTypedAllowlistedFields() throws Exception {
         try (MiniServer server = new MiniServer(request -> Response.json(200, eventJson()))) {
             var details = client(server, 64 * 1024, 2_000).event("event-1");
