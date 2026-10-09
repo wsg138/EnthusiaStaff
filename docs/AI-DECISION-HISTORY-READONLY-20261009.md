@@ -53,6 +53,41 @@ with cursor stacks bounded to 50 previous pages. No additional staff or
 console permissions are granted. Explicit-cursor player commands and console
 requests retain the compact text pagination path.
 
+## Staging acceptance — not executed
+
+Before anybody enables or merges these draft changes, use an **isolated,
+authorized staging server** with a central API sandbox holding synthetic
+audit events only. Do not point the test at live player private messages.
+
+1. Verify an active-duty staff member with queue-read permission can switch
+   between **Flagged Queue** and **All Decisions**.
+2. Verify an unflagged ALLOW shows green, an enforced BLOCK shows red, an
+   ALLOW requiring staff review shows yellow, and a stored FAIL_OPEN shows
+   gray with the explicit note that it was **not verified safe**.
+3. Generate enough synthetic events for three pages. Test Next → Next →
+   Previous → Previous and Refresh. Check that no item is skipped, repeated
+   unexpectedly, or paired with the wrong event.
+4. Open an event from page two, then return. Verify the same cursor page
+   remains visible; repeat through label selection, confirmation, and
+   correction failure/conflict. Confirm an accepted correction refreshes the
+   origin page without mutating the original AI decision.
+5. Revoke active staff duty or read permission while a history request is
+   outstanding. Ensure the result is not opened or disclosed. Revoke detail
+   permission before clicking an event and confirm sensitive content stays
+   inaccessible.
+6. Simulate an unknown/expired cursor, unavailable API, and fail-open
+   condition. History browsing must not back off unrelated review actions or
+   claim messages were blocked when they were delivered.
+7. Confirm the history list has **no raw chat text, sender IDs or neighbor
+   messages**, and ticket/staff-exempt content remains absent entirely.
+8. Exercise a queued correction only with synthetic records and authorized
+   staff. Verify the existing correction quorum still controls writes and
+   no action creates punishment or changes live moderation policy.
+
+Capture exact draft SHAs, test output, and a **redacted** staging receipt.
+Any failed acceptance step keeps the PR draft. Staging acceptance is separate
+from GitHub CI and does not authorize production deployment.
+
 This is not a reviewed dataset export. Advanced GUI filtering, retention /
 backups and rights-checked anonymized training promotion remain follow-ups.
 Never fine-tune on unreviewed AI guesses or upload raw private-player
