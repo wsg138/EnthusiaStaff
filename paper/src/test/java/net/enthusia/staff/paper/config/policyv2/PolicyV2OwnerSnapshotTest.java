@@ -31,6 +31,7 @@ import org.junit.jupiter.api.Test;
 class PolicyV2OwnerSnapshotTest {
     private static final Instant NOW = Instant.parse("2026-10-07T22:00:00Z");
     private static final String OWNER_VERSION = "owner.2026-10-07.2";
+    private static final String RULE_SEPARATOR = " / ";
     private static final List<String> HISTORY_TIERS = List.of("related", "pattern", "chronic", "heavy");
 
     @Test
@@ -138,16 +139,19 @@ class PolicyV2OwnerSnapshotTest {
                 "disruption.chunk-loading",
                 "disruption.laggy-build"
         )) {
-            var resolution = resolver.resolve(
-                    snapshot,
-                    new IncidentFinding(offenseId, complianceAttributes(offenseId)),
-                    NOW,
-                    List.of()
-            );
-            assertInstanceOf(PolicyAction.RemedyOnly.class, resolution.action(), offenseId);
-            assertFalse(resolution.remedies().isEmpty(), offenseId);
-            assertEquals(0.0, resolution.history().totalContribution(), 0.0, offenseId);
+            assertComplianceFinding(snapshot, resolver, offenseId);
         }
+    }
+
+    private static void assertComplianceFinding(
+            PolicySnapshot snapshot, PolicyResolver resolver, String offenseId
+    ) {
+        var resolution = resolver.resolve(
+                snapshot, new IncidentFinding(offenseId, complianceAttributes(offenseId)),
+                NOW, List.of());
+        assertInstanceOf(PolicyAction.RemedyOnly.class, resolution.action(), offenseId);
+        assertFalse(resolution.remedies().isEmpty(), offenseId);
+        assertEquals(0.0, resolution.history().totalContribution(), 0.0, offenseId);
     }
 
     @Test
@@ -163,13 +167,18 @@ class PolicyV2OwnerSnapshotTest {
         assertTrue(remedies.stream().anyMatch(remedy -> remedy.type() != RemedySpec.Type.OTHER));
 
         for (OffensePolicy offense : snapshot.offenses()) {
-            IncidentFinding finding = new IncidentFinding(
-                    offense.id(), complianceAttributes(offense.id())
-            );
-            for (var rule : offense.rules()) {
-                for (RemedySpec remedy : rule.remedies()) {
-                    assertBindingMatchesPinnedFinding(remedy, finding, resolver, offense.id(), rule.id());
-                }
+            assertOffenseRemedyBindings(offense, resolver);
+        }
+    }
+
+    private static void assertOffenseRemedyBindings(
+            OffensePolicy offense, PolicyV2RemedyBindingResolver resolver
+    ) {
+        IncidentFinding finding = new IncidentFinding(
+                offense.id(), complianceAttributes(offense.id()));
+        for (var rule : offense.rules()) {
+            for (RemedySpec remedy : rule.remedies()) {
+                assertBindingMatchesPinnedFinding(remedy, finding, resolver, offense.id(), rule.id());
             }
         }
     }
@@ -186,7 +195,7 @@ class PolicyV2OwnerSnapshotTest {
             return;
         }
         assertTrue(remedy.enforcementBinding().isPresent(),
-                offenseId + " / " + ruleId + " / " + remedy.id());
+                offenseId + RULE_SEPARATOR + ruleId + RULE_SEPARATOR + remedy.id());
         var resolved = resolver.resolve(remedy, finding);
         assertEquals(remedy.enforcementBinding().orElseThrow().scope(), resolved.scope());
     }
@@ -202,26 +211,28 @@ class PolicyV2OwnerSnapshotTest {
                 "profile.inappropriate-other",
                 "access.vpn-compliance"
         )) {
-            IncidentFinding finding = new IncidentFinding(offenseId, complianceAttributes(offenseId));
-            RemedySpec remedy = snapshot.offense(offenseId).orElseThrow()
-                    .rules().getFirst().remedies().getFirst();
-            var resolved = resolver.resolve(remedy, finding);
-            assertEquals(
-                    PolicyV2RemedyEnforcement.Scope.NETWORK_ACCESS,
-                    resolved.scope(),
-                    offenseId
-            );
-            var expected = switch (offenseId) {
-                case "profile.inappropriate-username" ->
-                        PolicyV2RemedyEnforcement.Condition.username("BadName");
-                case "profile.inappropriate-skin" ->
-                        PolicyV2RemedyEnforcement.Condition.profileComponent("skin", "skin:bad");
-                case "profile.inappropriate-other" ->
-                        PolicyV2RemedyEnforcement.Condition.profileComponent("cape", "component:bad");
-                default -> PolicyV2RemedyEnforcement.Condition.vpnApproval();
-            };
-            assertEquals(expected, resolved.condition(), offenseId);
+            assertProfileVpnCondition(snapshot, resolver, offenseId);
         }
+    }
+
+    private static void assertProfileVpnCondition(
+            PolicySnapshot snapshot, PolicyV2RemedyBindingResolver resolver, String offenseId
+    ) {
+        IncidentFinding finding = new IncidentFinding(offenseId, complianceAttributes(offenseId));
+        RemedySpec remedy = snapshot.offense(offenseId).orElseThrow()
+                .rules().getFirst().remedies().getFirst();
+        var resolved = resolver.resolve(remedy, finding);
+        assertEquals(PolicyV2RemedyEnforcement.Scope.NETWORK_ACCESS, resolved.scope(), offenseId);
+        var expected = switch (offenseId) {
+            case "profile.inappropriate-username" ->
+                    PolicyV2RemedyEnforcement.Condition.username("BadName");
+            case "profile.inappropriate-skin" ->
+                    PolicyV2RemedyEnforcement.Condition.profileComponent("skin", "skin:bad");
+            case "profile.inappropriate-other" ->
+                    PolicyV2RemedyEnforcement.Condition.profileComponent("cape", "component:bad");
+            default -> PolicyV2RemedyEnforcement.Condition.vpnApproval();
+        };
+        assertEquals(expected, resolved.condition(), offenseId);
     }
 
     @Test
@@ -241,7 +252,7 @@ class PolicyV2OwnerSnapshotTest {
             String group = rule.id().substring(0, rule.id().length() - suffix.length());
             List<String> expected = baseline.get(group);
             if (expected != null) {
-                assertEquals(expected, remedyIds(rule.remedies()), offense.id() + " / " + rule.id());
+                assertEquals(expected, remedyIds(rule.remedies()), offense.id() + RULE_SEPARATOR + rule.id());
             }
         }
     }
@@ -326,11 +337,11 @@ class PolicyV2OwnerSnapshotTest {
                 PolicyAction.ExactWithApproval exact = assertInstanceOf(
                         PolicyAction.ExactWithApproval.class,
                         rule.action(),
-                        offense.id() + " / " + rule.id()
+                        offense.id() + RULE_SEPARATOR + rule.id()
                 );
                 assertTrue(
                         exact.minimumRank().atLeast(StaffRank.ADMIN),
-                        offense.id() + " / " + rule.id()
+                        offense.id() + RULE_SEPARATOR + rule.id()
                 );
             }
         }
@@ -356,19 +367,19 @@ class PolicyV2OwnerSnapshotTest {
                 PolicyAction.ExactWithApproval action = assertInstanceOf(
                         PolicyAction.ExactWithApproval.class,
                         rule.action(),
-                        offenseId + " / " + rule.id()
+                        offenseId + RULE_SEPARATOR + rule.id()
                 );
                 assertEquals(
                         StaffRank.ADMIN,
                         action.minimumRank(),
-                        offenseId + " / " + rule.id()
+                        offenseId + RULE_SEPARATOR + rule.id()
                 );
                 assertTrue(
                         action.sanctions().stream().anyMatch(
                                 sanction -> sanction.type() == SanctionType.NETWORK_BAN
                                         && sanction.length().isPermanent()
                         ),
-                        offenseId + " / " + rule.id()
+                        offenseId + RULE_SEPARATOR + rule.id()
                 );
             }
         }
