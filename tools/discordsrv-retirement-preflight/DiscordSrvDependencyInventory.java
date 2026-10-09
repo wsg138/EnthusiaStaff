@@ -85,13 +85,19 @@ public final class DiscordSrvDependencyInventory {
                 bytecodeHits++;
             }
         }
+        return summarizeCounts(jars.size(), counts, bytecodeHits, output);
+    }
+
+    private static int summarizeCounts(
+            int totalJars, int[] counts, int bytecodeHits, PrintStream output
+    ) {
         int hard = counts[JarStatus.HARD_DEPENDENCY.ordinal()];
         int soft = counts[JarStatus.SOFT_DEPENDENCY.ordinal()];
         int generic = counts[JarStatus.REFERENCE.ordinal()];
         int bytecodeOnly = counts[JarStatus.BYTECODE_REFERENCE.ordinal()];
         int references = hard + soft + generic + bytecodeOnly;
         int unknown = counts[JarStatus.UNVERIFIED.ordinal()];
-        output.println("TOTAL_JARS=" + jars.size());
+        output.println("TOTAL_JARS=" + totalJars);
         output.println("LEGACY_JARS=" + counts[JarStatus.LEGACY.ordinal()]);
         output.println("HARD_DEPENDENCIES=" + hard);
         output.println("SOFT_DEPENDENCIES=" + soft);
