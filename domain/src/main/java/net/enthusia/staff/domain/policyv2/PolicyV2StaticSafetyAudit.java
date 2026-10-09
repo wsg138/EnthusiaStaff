@@ -5,7 +5,9 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
+import net.enthusia.staff.domain.auth.StaffRank;
 import net.enthusia.staff.domain.sanction.SanctionSpec;
+import net.enthusia.staff.domain.sanction.SanctionType;
 
 /**
  * Read-only, fail-closed static audit of a candidate Policy v2 snapshot.
@@ -59,6 +61,11 @@ public final class PolicyV2StaticSafetyAudit {
                 && (!contextDefined || !strictRealWorldPredicate(rule.condition()))) {
             findings.add(new Finding("blackmail.ungated-punitive-rule", offense.id(), rule.id(), ""));
         }
+        if (isBlackmail && containsPermanentNetworkBan(rule.action())
+                && !requiresAdministratorApproval(rule.action())) {
+            findings.add(new Finding("blackmail.terminal-requires-admin-approval",
+                    offense.id(), rule.id(), ""));
+        }
     }
 
     private static void inspectRemedies(List<Finding> findings, OffensePolicy offense, ResolutionRule rule) {
@@ -95,6 +102,21 @@ public final class PolicyV2StaticSafetyAudit {
         return action instanceof PolicyAction.Exact
                 || action instanceof PolicyAction.ExactWithApproval
                 || action instanceof PolicyAction.Bounded;
+    }
+
+    private static boolean containsPermanentNetworkBan(PolicyAction action) {
+        return allSanctions(action).stream().anyMatch(sanction ->
+                sanction.type() == SanctionType.NETWORK_BAN && sanction.length().isPermanent());
+    }
+
+    private static boolean requiresAdministratorApproval(PolicyAction action) {
+        if (action instanceof PolicyAction.ExactWithApproval approved) {
+            return approved.minimumRank().atLeast(StaffRank.ADMIN);
+        }
+        if (action instanceof PolicyAction.Bounded bounded) {
+            return bounded.minimumRank().atLeast(StaffRank.ADMIN);
+        }
+        return false;
     }
 
     private static void inspectLanguageSanctions(
