@@ -36,6 +36,22 @@ javac --release 21 -d ./probe-classes tools/chat-bridge-preflight/StaffBotTlsPro
 java -cp ./probe-classes StaffBotTlsProbe ./private-tls-probe.properties
 ```
 
+### Offline safety regression test
+
+Before ever invoking a live connectivity test, compile and run the companion
+standalone validation harness on a developer machine:
+
+```sh
+javac --release 21 -d ./probe-classes tools/chat-bridge-preflight/StaffBotTlsProbe.java tools/chat-bridge-preflight/StaffBotTlsProbeTest.java
+java -cp ./probe-classes StaffBotTlsProbeTest
+```
+
+The harness checks that missing arguments, mismatched destinations/ports,
+missing files, empty truststores, oversized configuration, and symlinked
+settings (where symlinks are supported) all **fail closed**, without making
+any DNS or TCP connection. A green local harness validates input rejection
+only; it **does not prove live StaffBot → Velocity reachability**.
+
 The config filename is passed as a path only. Do **not** pass credentials on
 the command line or log the contents of the config.
 
