@@ -42,7 +42,7 @@ class PolicyV2OwnerSnapshotTest {
         assertEquals(PolicyV2FeatureMode.DISABLED, configuration.mode());
         assertEquals(OWNER_VERSION, configuration.activeVersion());
         assertEquals(OWNER_VERSION, snapshot.version());
-        assertEquals(3, configuration.snapshots().size());
+        assertEquals(4, configuration.snapshots().size());
         assertTrue(configuration.snapshots().containsKey("owner.2026-10-07.1"));
         assertEquals(85, snapshot.offenses().size());
         assertTrue(snapshot.offenses().stream().noneMatch(
