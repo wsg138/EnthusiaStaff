@@ -160,6 +160,14 @@ final class StaffModerationRuntime implements AutoCloseable {
                 new net.enthusia.staff.domain.moderation.DiscordUserId(Long.toUnsignedString(userId)), 50);
     }
 
+    net.enthusia.staff.persistence.DiscordStaffReadRuntime.ReviewPulse reviewPulse() {
+        return data.reviewPulse(java.time.Instant.now());
+    }
+
+    java.util.List<net.enthusia.staff.persistence.DiscordStaffReadRuntime.PendingReview> pendingReviews(int limit) {
+        return data.pendingReviews(java.time.Instant.now(), limit);
+    }
+
     LinkedStaffActorResolver actors() {
         return actorResolver;
     }

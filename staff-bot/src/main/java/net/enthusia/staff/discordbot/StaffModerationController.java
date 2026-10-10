@@ -260,7 +260,8 @@ final class StaffModerationController {
             case LINKED -> linked(invokerId, invokerName, target, decoded.target());
             case NOTES -> notes(invokerId, invokerName, target, decoded.target());
             case CASES -> cases(invokerId, invokerName, target, decoded.target());
-            case SELECT_MINECRAFT, CASE -> throw new IllegalStateException("component action already handled");
+            case SELECT_MINECRAFT, CASE, REVIEW_APPROVE, REVIEW_DENY, REVIEW_DENY_SUBMIT ->
+                    throw new IllegalStateException("component action handled by separate surface");
         };
     }
 
@@ -282,7 +283,8 @@ final class StaffModerationController {
             case PROFILE, LINKED -> DiscordModerationOperation.VIEW_LINKED_ACCOUNTS;
             case NOTES -> DiscordModerationOperation.VIEW_NOTES;
             case HISTORY, HISTORY_DISCORD, HISTORY_MINECRAFT, CASES -> DiscordModerationOperation.VIEW_HISTORY;
-            case SELECT_MINECRAFT, CASE -> throw new IllegalArgumentException("component action must be handled first");
+            case SELECT_MINECRAFT, CASE, REVIEW_APPROVE, REVIEW_DENY, REVIEW_DENY_SUBMIT ->
+                    throw new IllegalArgumentException("component action must be handled first");
         };
     }
 
@@ -290,7 +292,7 @@ final class StaffModerationController {
         return switch (type) {
             case DISCORD -> ModerationPlatform.DISCORD;
             case MINECRAFT -> ModerationPlatform.MINECRAFT;
-            case CASE, NONE -> throw new IllegalArgumentException("component target cannot open a moderation profile");
+            case CASE, REQUEST, NONE -> throw new IllegalArgumentException("component target cannot open a moderation profile");
         };
     }
 
@@ -436,7 +438,7 @@ final class StaffModerationController {
         return switch (targetRef.type()) {
             case DISCORD -> reads.discordTarget(discord(targetRef.discordId()));
             case MINECRAFT -> reads.minecraftTarget(targetRef.minecraftId());
-            case CASE, NONE -> throw new IllegalArgumentException("component target cannot open a moderation profile");
+            case CASE, REQUEST, NONE -> throw new IllegalArgumentException("component target cannot open a moderation profile");
         };
     }
 

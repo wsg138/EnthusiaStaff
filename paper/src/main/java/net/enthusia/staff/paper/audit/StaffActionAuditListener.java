@@ -41,7 +41,7 @@ public final class StaffActionAuditListener implements Listener {
         if (!shouldAudit(player)) {
             return;
         }
-        record(player, "command", event.getMessage());
+        record(player, "command", StaffAuditCommandSummary.summarize(event.getMessage()));
     }
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)

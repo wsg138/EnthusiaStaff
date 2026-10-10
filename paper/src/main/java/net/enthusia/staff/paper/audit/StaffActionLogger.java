@@ -32,7 +32,7 @@ import net.enthusia.staff.domain.auth.StaffRank;
  * {@code plugins/EnthusiaStaff/logs/staff-actions-<date>.log} (rotated daily, 30-day retention)
  * and to {@code plugins/EnthusiaStaff/discord-outbox/staff-actions-<date>.jsonl}, which the
  * Discord bot forwards to the configured {@code discord.log-forward-channel}. A best-effort
- * insert into the {@code discord_outbox} table (destination {@code staff-action-log}) is queued
+ * insert into the {@code discord_outbox} table (destination {@code logs-staffmode}) is queued
  * on the worker executor; it never blocks or fails the calling game thread.
  *
  * <p>This logger never throws: audit must not break gameplay.
@@ -42,7 +42,7 @@ public final class StaffActionLogger implements AutoCloseable {
     private static final String LOG_FILE_PREFIX = "staff-actions-";
     private static final char FIRST_PRINTABLE_ASCII = 0x20;
     private static final int RETENTION_DAYS = 30;
-    private static final String OUTBOX_DESTINATION = "staff-action-log";
+    private static final String OUTBOX_DESTINATION = "logs-staffmode";
     private static final String OUTBOX_EVENT_TYPE = "STAFF_ACTION";
 
     private final Logger log;

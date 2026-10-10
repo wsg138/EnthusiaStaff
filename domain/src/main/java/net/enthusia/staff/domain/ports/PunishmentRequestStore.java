@@ -24,6 +24,11 @@ public interface PunishmentRequestStore {
             Instant leaseExpiresAt
     );
 
+    /** Best-effort fenced lease release for a review that did not commit a decision. */
+    default boolean abandon(PunishmentApprovalLease lease) {
+        return false;
+    }
+
     PunishmentRequestResult approve(
             PunishmentApprovalLease lease,
             Actor approver,

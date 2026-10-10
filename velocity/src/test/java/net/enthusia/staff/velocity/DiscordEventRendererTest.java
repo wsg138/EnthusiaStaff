@@ -53,6 +53,21 @@ final class DiscordEventRendererTest {
     }
 
     @Test
+    void punishmentChannelNeverRevealsPrivateAltRelationshipMetadata() {
+        String payload = "{\"caseId\":\"case-1\",\"targetId\":\"target\","
+                + "\"sourcePlayerId\":\"private-source\",\"sourceSanctionId\":\"private-sanction\","
+                + "\"relationshipState\":\"CONFIRMED_ALT\"}";
+        String punishment = renderer.render(message("punishments", "SANCTION_INHERITED", payload));
+        assertTrue(punishment.contains("caseId=case-1"));
+        assertFalse(punishment.contains("private-source"));
+        assertFalse(punishment.contains("private-sanction"));
+        assertFalse(punishment.contains("relationshipState"));
+        String alert = renderer.render(message("alerts", "ALT_EVASION_REVIEW", payload));
+        assertTrue(alert.contains("sourcePlayerId=private-source"));
+        assertTrue(alert.contains("relationshipState=CONFIRMED_ALT"));
+    }
+
+    @Test
     void freezeEventsRenderUnderPunishmentsWithReason() {
         String rendered = renderer.render(message(
                 "punishments",
@@ -62,6 +77,38 @@ final class DiscordEventRendererTest {
 
         assertTrue(rendered.contains("reason=line1 line2 'code'"));
         assertFalse(rendered.contains("`"));
+    }
+
+    @Test
+    void altReviewAlertShowsEvidenceCategoryWithoutRawNetworkAddress() {
+        String rendered = renderer.render(message(
+                "alerts", "ALT_EVASION_REVIEW",
+                "{\"targetId\":\"joining\",\"relatedPlayerId\":\"sanctioned\","
+                        + "\"sanctionType\":\"BAN\",\"relationshipState\":\"SAME_NETWORK\","
+                        + "\"confidencePolicyGrade\":0.25,\"trigger\":\"JOIN\","
+                        + "\"rawIp\":\"private-address\",\"caseId\":\"case-7\"}"
+        ));
+        assertTrue(rendered.contains("relatedPlayerId=sanctioned"));
+        assertTrue(rendered.contains("trigger=JOIN"));
+        assertTrue(rendered.contains("confidencePolicyGrade=0.25"));
+        assertFalse(rendered.contains("private-address"));
+        assertFalse(rendered.contains("rawIp"));
+    }
+
+    @Test
+    void approvalRequiredAlertExposesOnlySafeReviewMetadata() {
+        String rendered = renderer.render(message(
+                "alerts", "PUNISHMENT_APPROVAL_REQUIRED",
+                "{\"requestId\":\"request-1\",\"targetId\":\"target-1\","
+                        + "\"requesterId\":\"staff-1\",\"reasonId\":\"cheating\","
+                        + "\"requiredRank\":\"MOD\",\"visibility\":\"PRIVATE\","
+                        + "\"internalExplanation\":\"Sensitive evidence: do not post\"}"
+        ));
+        assertTrue(rendered.contains("PUNISHMENT_APPROVAL_REQUIRED"));
+        assertTrue(rendered.contains("requestId=request-1"));
+        assertTrue(rendered.contains("requiredRank=MOD"));
+        assertFalse(rendered.contains("Sensitive evidence"));
+        assertFalse(rendered.contains("internalExplanation"));
     }
 
     @Test

@@ -126,6 +126,40 @@ final class HttpStaffAuthorityClient implements StaffAuthorityClient, MinecraftR
         }
     }
 
+    com.fasterxml.jackson.databind.JsonNode review(String operation, java.util.Map<String, Object> input) {
+        var json = new com.fasterxml.jackson.databind.ObjectMapper().findAndRegisterModules();
+        try {
+            byte[] body = json.writeValueAsBytes(input);
+            String target = StaffAuthorityHttpSigning.punishmentRequestTarget("/v1/staff-reviews/" + operation, body);
+            URI origin = transport == StaffModerationConfiguration.AuthorityTransport.BLOOM_PRIVATE_SPLIT
+                    ? privateResolver.resolve(endpoint) : endpoint;
+            HttpRequest.Builder builder = HttpRequest.newBuilder(origin.resolve(target))
+                    .timeout(Duration.ofSeconds(10)).header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofByteArray(body));
+            String nonce = null;
+            if (transport == StaffModerationConfiguration.AuthorityTransport.LOOPBACK) {
+                builder.header("Authorization", "Bearer " + credential);
+            } else {
+                nonce = nonce();
+                var proof = StaffAuthorityHttpSigning.signRequest(credential, "POST", target, clock.instant(), nonce);
+                builder.header(StaffAuthorityHttpSigning.TIMESTAMP_HEADER, proof.timestamp())
+                        .header(StaffAuthorityHttpSigning.NONCE_HEADER, proof.nonce())
+                        .header(StaffAuthorityHttpSigning.SIGNATURE_HEADER, proof.signature());
+            }
+            var call = new RequestCall(builder.build(), nonce);
+            var response = send(call.request());
+            verifySignedResponse(call, response);
+            if (response.statusCode() == HTTP_FORBIDDEN) throw new SecurityException("current Minecraft staff authority denied action");
+            if (response.statusCode() == HTTP_BAD_REQUEST) throw new IllegalArgumentException("Minecraft staff review rejected");
+            if (response.statusCode() != HTTP_OK || response.body().length() > 128 * 1024) {
+                throw new UnavailableException("Minecraft staff review service unavailable");
+            }
+            return json.readTree(response.body());
+        } catch (com.fasterxml.jackson.core.JsonProcessingException exception) {
+            throw new UnavailableException("Minecraft staff review response invalid", exception);
+        }
+    }
+
     private RequestCall request(UUID playerId, String path) {
         if (playerId == null) {
             throw new IllegalArgumentException("playerId must be present");

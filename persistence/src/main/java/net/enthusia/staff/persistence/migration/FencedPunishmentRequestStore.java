@@ -59,6 +59,11 @@ public final class FencedPunishmentRequestStore implements PunishmentRequestStor
     }
 
     @Override
+    public boolean abandon(PunishmentApprovalLease lease) {
+        return fence.execute(() -> delegate.abandon(lease), () -> false);
+    }
+
+    @Override
     public PunishmentRequestResult approve(
             PunishmentApprovalLease lease,
             Actor approver,

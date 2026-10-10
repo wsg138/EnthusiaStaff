@@ -17,10 +17,14 @@ class PaperPunishmentCommitEffectsTest {
         var claims = new PaperPunishmentCommitEffects.DeliveryClaims();
         var now = java.time.Instant.parse("2026-10-01T03:00:00Z");
         var caseId = new net.enthusia.staff.common.CaseId("TESTCASE00000001");
-        assertTrue(claims.claim(caseId, now));
-        assertFalse(claims.claim(caseId, now.plusSeconds(1)));
-        assertFalse(claims.claim(caseId, now.plusSeconds(120)));
-        assertTrue(claims.claim(caseId, now.plusSeconds(301)));
+        java.util.UUID first = java.util.UUID.randomUUID();
+        java.util.UUID anotherAlt = java.util.UUID.randomUUID();
+        assertTrue(claims.claim(caseId, first, now));
+        assertFalse(claims.claim(caseId, first, now.plusSeconds(1)));
+        assertTrue(claims.claim(caseId, anotherAlt, now.plusSeconds(1)),
+                "two distinct targets in the same case must both receive online enforcement");
+        assertFalse(claims.claim(caseId, anotherAlt, now.plusSeconds(120)));
+        assertTrue(claims.claim(caseId, first, now.plusSeconds(301)));
     }
     @Test
     void delayedAndFutureNetworkEventsCannotReplayOnlineEffects() {

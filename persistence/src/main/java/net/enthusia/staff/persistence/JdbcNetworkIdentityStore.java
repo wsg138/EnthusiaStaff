@@ -14,6 +14,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -34,6 +35,7 @@ public final class JdbcNetworkIdentityStore implements NetworkIdentityStore {
     private static final UUID SYSTEM_ACTOR = new UUID(0L, 0L);
     private static final int MAX_AUTOMATED_MATCHES = 20;
     private static final int MATCH_QUERY_LIMIT = MAX_AUTOMATED_MATCHES + 1;
+        private static final int MAX_VERIFIED_LINKED_ACCOUNTS = 100;
     private static final int MAX_RETENTION_BATCH_SIZE = 5_000;
     private static final Duration EVIDENCE_REFRESH_INTERVAL = Duration.ofHours(24);
     private static final List<SanctionType> INHERITABLE_SANCTION_TYPES = Arrays.stream(SanctionType.values())
@@ -128,15 +130,11 @@ public final class JdbcNetworkIdentityStore implements NetworkIdentityStore {
             LockedObservation locked,
             Instant observedAt
     ) throws SQLException, JsonProcessingException {
-        Optional<Instant> cutoverAt = latestCutover(connection);
-        boolean protectedHistory = hasProtectedRelationshipHistory(connection, joiningPlayerId);
-        boolean singleCandidate = locked.matches().size() == 1;
         int inherited = 0;
         int alerts = 0;
         for (MatchingPlayer match : locked.matches()) {
             MatchOutcome outcome = processMatch(
-                    connection, joiningPlayerId, match, singleCandidate,
-                    locked.firstSeenAt(), cutoverAt, protectedHistory, observedAt
+                    connection, joiningPlayerId, match, observedAt
             );
             inherited += outcome.inherited();
             alerts += outcome.alerts();
@@ -148,10 +146,6 @@ public final class JdbcNetworkIdentityStore implements NetworkIdentityStore {
             Connection connection,
             UUID joiningPlayerId,
             MatchingPlayer match,
-            boolean singleCandidate,
-            Instant firstSeenAt,
-            Optional<Instant> cutoverAt,
-            boolean protectedHistory,
             Instant observedAt
     ) throws SQLException, JsonProcessingException {
         Relationship relationship = lockOrCreateRelationship(
@@ -162,10 +156,7 @@ public final class JdbcNetworkIdentityStore implements NetworkIdentityStore {
         if (active.isEmpty()) {
             return new MatchOutcome(0, 0);
         }
-        boolean unambiguous = relationship.created() && singleCandidate && !match.currentlyOnline();
-        if (inheritancePolicy.shouldInherit(
-                relationship.state(), unambiguous, firstSeenAt, cutoverAt, protectedHistory
-        )) {
+        if (inheritancePolicy.shouldInherit(relationship.state(), false)) {
             int inherited = inheritAll(
                     connection, joiningPlayerId, match.playerId(), relationship.state(), active, observedAt
             );
@@ -216,6 +207,153 @@ public final class JdbcNetworkIdentityStore implements NetworkIdentityStore {
             }
         }
         return inherited;
+    }
+
+    /**
+     * This reconciles current Discord-linked peers AND manually confirmed high-confidence
+     * alt decisions without requiring matching network tokens. An ephemeral current link
+     * does not automatically create a durable relationship state.
+     */
+    @Override
+    public NetworkIdentityObservationResult observeConnectedAlts(
+            UUID joiningPlayerId, Instant observedAt, boolean suppressAutomatedEvidence
+    ) {
+        if (joiningPlayerId == null || observedAt == null) {
+            throw new IllegalArgumentException("connected-alt observation fields must be present");
+        }
+        if (suppressAutomatedEvidence) {
+            return new NetworkIdentityObservationResult(0, 0, 0, true);
+        }
+        return transactionRetry.execute(
+                "Connected-alt inheritance retry interrupted",
+                () -> observeConnectedAltsOnce(joiningPlayerId, observedAt)
+        );
+    }
+
+    private NetworkIdentityObservationResult observeConnectedAltsOnce(UUID joiningPlayerId, Instant observedAt) {
+        try (Connection connection = dataSource.getConnection()) {
+            connection.setAutoCommit(false);
+            try {
+                Map<UUID, Boolean> connected = new LinkedHashMap<>();
+                for (MatchingPlayer account : verifiedLinkPeers(connection, joiningPlayerId)) {
+                    connected.put(account.playerId(), true);
+                }
+                for (MatchingPlayer account : manuallyConfirmedPeers(connection, joiningPlayerId)) {
+                    connected.putIfAbsent(account.playerId(), false);
+                }
+                List<MatchingPlayer> candidates = new ArrayList<>();
+                for (UUID account : connected.keySet()) {
+                    candidates.add(new MatchingPlayer(account, false));
+                }
+                // Fail closed against an anomalous or overly broad linked-account set.
+                if (candidates.size() > MAX_VERIFIED_LINKED_ACCOUNTS) {
+                    connection.rollback();
+                    return new NetworkIdentityObservationResult(candidates.size(), 0, 0, true);
+                }
+                lockObservationPlayers(connection, joiningPlayerId, candidates, Map.of());
+                int inherited = 0;
+                for (MatchingPlayer peer : candidates) {
+                    Relationship explicitRelationship = lockRelationship(
+                            connection, ordered(joiningPlayerId, peer.playerId())
+                    );
+                    AltRelationshipState state = explicitRelationship == null
+                            ? null : explicitRelationship.state();
+                    boolean currentVerifiedDiscordLink = connected.getOrDefault(peer.playerId(), false);
+                    if (!inheritancePolicy.shouldInherit(state, currentVerifiedDiscordLink)) {
+                        continue;
+                    }
+                    List<SourceSanction> active = activeInheritableSanctions(
+                            connection, peer.playerId(), observedAt
+                    );
+                    inherited += inheritAll(
+                            connection, joiningPlayerId, peer.playerId(),
+                            currentVerifiedDiscordLink ? AltRelationshipState.CONFIRMED_ALT : state,
+                            active, observedAt
+                    );
+                }
+                connection.commit();
+                return new NetworkIdentityObservationResult(candidates.size(), inherited, inherited, false);
+            } catch (SQLException | JsonProcessingException exception) {
+                rollback(connection, exception);
+                throw new ModerationPersistenceException("Connected-alt inheritance transaction failed", exception);
+            } finally {
+                restoreAutoCommit(connection);
+            }
+        } catch (SQLException exception) {
+            throw new ModerationPersistenceException("Unable to open connected-alt transaction", exception);
+        }
+    }
+
+    /**
+     * Explicit staff-confirmed alt relationships qualify without current Discord
+     * linkage or a matching network token. A pair-level exception is still checked
+     * before inheritance, and no transitive graph assumption is made.
+     */
+    private static List<MatchingPlayer> manuallyConfirmedPeers(Connection connection, UUID joiningPlayerId)
+            throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement("""
+                SELECT CASE WHEN r.lower_player_id = ? THEN r.upper_player_id ELSE r.lower_player_id END
+                       AS related_player_id,
+                       CASE WHEN p.current_server IS NULL THEN FALSE ELSE TRUE END AS currently_online
+                FROM alt_relationships r
+                JOIN players p ON p.player_id =
+                  CASE WHEN r.lower_player_id = ? THEN r.upper_player_id ELSE r.lower_player_id END
+                WHERE (r.lower_player_id = ? OR r.upper_player_id = ?)
+                  AND r.relationship_state IN ('VERY_CONFIDENT', 'CONFIRMED_ALT')
+                ORDER BY related_player_id
+                LIMIT ?
+                FOR UPDATE
+                """)) {
+            byte[] joining = UuidBytes.toBytes(joiningPlayerId);
+            statement.setBytes(1, joining);
+            statement.setBytes(2, joining);
+            statement.setBytes(3, joining);
+            statement.setBytes(4, joining);
+            statement.setInt(5, MAX_VERIFIED_LINKED_ACCOUNTS + 1);
+            try (ResultSet result = statement.executeQuery()) {
+                List<MatchingPlayer> peers = new ArrayList<>();
+                while (result.next()) {
+                    peers.add(new MatchingPlayer(
+                            UuidBytes.fromBytes(result.getBytes("related_player_id")),
+                            result.getBoolean("currently_online")
+                    ));
+                }
+                return List.copyOf(peers);
+            }
+        }
+    }
+
+    private static List<MatchingPlayer> verifiedLinkPeers(Connection connection, UUID joiningPlayerId)
+            throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement("""
+                SELECT related.minecraft_player_id,
+                       CASE WHEN p.current_server IS NULL THEN FALSE ELSE TRUE END AS currently_online
+                FROM discord_minecraft_links anchor
+                JOIN discord_minecraft_links related
+                  ON related.discord_user_id = anchor.discord_user_id
+                JOIN players p ON p.player_id = related.minecraft_player_id
+                WHERE anchor.minecraft_player_id = ?
+                  AND anchor.unlinked_at IS NULL
+                  AND related.unlinked_at IS NULL
+                  AND related.minecraft_player_id <> ?
+                ORDER BY related.minecraft_player_id
+                LIMIT ?
+                FOR UPDATE
+                """)) {
+            statement.setBytes(1, UuidBytes.toBytes(joiningPlayerId));
+            statement.setBytes(2, UuidBytes.toBytes(joiningPlayerId));
+            statement.setInt(3, MAX_VERIFIED_LINKED_ACCOUNTS + 1);
+            try (ResultSet result = statement.executeQuery()) {
+                List<MatchingPlayer> peers = new ArrayList<>();
+                while (result.next()) {
+                    peers.add(new MatchingPlayer(
+                            UuidBytes.fromBytes(result.getBytes("minecraft_player_id")),
+                            result.getBoolean("currently_online")
+                    ));
+                }
+                return List.copyOf(peers);
+            }
+        }
     }
 
     @Override
@@ -288,6 +426,9 @@ public final class JdbcNetworkIdentityStore implements NetworkIdentityStore {
                             state == AltRelationshipState.NOT_RELATED
                     );
                 }
+                if (!state.inheritsAutomatically()) {
+                    revokeExemptedInheritedSanctions(connection, pair, actorId, changedAt, state);
+                }
                 insertRelationshipAudit(connection, pair, actorId, state.name(), changedAt, reason);
                 connection.commit();
                 return true;
@@ -299,6 +440,98 @@ public final class JdbcNetworkIdentityStore implements NetworkIdentityStore {
             }
         } catch (SQLException exception) {
             throw new ModerationPersistenceException("Unable to open alt relationship transaction", exception);
+        }
+    }
+
+    /** Relationship exemptions reverse existing inherited sanctions between this exact pair only. */
+    private void revokeExemptedInheritedSanctions(
+            Connection connection, PlayerPair pair, UUID actorId, Instant now, AltRelationshipState state
+    ) throws SQLException, JsonProcessingException {
+        record Derived(UUID sanctionId, UUID targetId, String caseId) { }
+        List<Derived> inherited = new ArrayList<>();
+        try (PreparedStatement statement = connection.prepareStatement("""
+                SELECT child.sanction_id, child.target_id, child.case_id
+                  FROM sanctions child
+                  JOIN sanctions source ON child.inherited_from = source.sanction_id
+                 WHERE child.status = 'ACTIVE'
+                   AND ((child.target_id = ? AND source.target_id = ?)
+                     OR (child.target_id = ? AND source.target_id = ?))
+                 FOR UPDATE
+                """)) {
+            statement.setBytes(1, UuidBytes.toBytes(pair.lower()));
+            statement.setBytes(2, UuidBytes.toBytes(pair.upper()));
+            statement.setBytes(3, UuidBytes.toBytes(pair.upper()));
+            statement.setBytes(4, UuidBytes.toBytes(pair.lower()));
+            try (ResultSet result = statement.executeQuery()) {
+                while (result.next()) {
+                    inherited.add(new Derived(
+                            UuidBytes.fromBytes(result.getBytes("sanction_id")),
+                            UuidBytes.fromBytes(result.getBytes("target_id")),
+                            result.getString("case_id")));
+                }
+            }
+        }
+        for (Derived derived : inherited) {
+            try (PreparedStatement update = connection.prepareStatement("""
+                    UPDATE sanctions SET status = 'REVOKED', ended_at = ?, revision = revision + 1
+                    WHERE sanction_id = ? AND status = 'ACTIVE'
+                    """)) {
+                update.setTimestamp(1, Timestamp.from(now));
+                update.setBytes(2, UuidBytes.toBytes(derived.sanctionId()));
+                if (update.executeUpdate() != 1) {
+                    continue;
+                }
+            }
+            String key = "alt-exception:" + UUID.nameUUIDFromBytes(
+                    (derived.sanctionId() + ":" + state.name()).getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            String payload = json.writeValueAsString(Map.of(
+                    "caseId", derived.caseId(),
+                    "targetId", derived.targetId().toString(),
+                    "sanctionId", derived.sanctionId().toString(),
+                    "action", "ALT_RELATIONSHIP_EXEMPTION",
+                    "relationshipState", state.name()
+            ));
+            try (PreparedStatement network = connection.prepareStatement("""
+                    INSERT INTO network_outbox(message_id, idempotency_key, destination, message_type,
+                        protocol_version, payload_json, available_at, created_at)
+                    VALUES (?, ?, 'broadcast', 'SANCTION_CHANGED', ?, ?, ?, ?)
+                    """);
+                 PreparedStatement discord = connection.prepareStatement("""
+                    INSERT INTO discord_outbox(message_id, idempotency_key, destination, event_type,
+                        payload_json, available_at, created_at)
+                    VALUES (?, ?, 'punishments', 'ALT_SANCTION_EXEMPTION', ?, ?, ?)
+                    """);
+                 PreparedStatement event = connection.prepareStatement("""
+                    INSERT INTO sanction_events(event_id, sanction_id, event_type, actor_id,
+                        occurred_at, reason, event_json, idempotency_key, case_id, subject_id)
+                    VALUES (?, ?, 'ALT_RELATIONSHIP_EXEMPTION', ?, ?, ?, ?, ?, ?, ?)
+                    """)) {
+                network.setBytes(1, UuidBytes.toBytes(UUID.randomUUID()));
+                network.setString(2, key + ":network");
+                network.setInt(3, PROTOCOL_VERSION);
+                network.setString(4, payload);
+                network.setTimestamp(5, Timestamp.from(now));
+                network.setTimestamp(6, Timestamp.from(now));
+                network.executeUpdate();
+
+                discord.setBytes(1, UuidBytes.toBytes(UUID.randomUUID()));
+                discord.setString(2, key + ":discord");
+                discord.setString(3, payload);
+                discord.setTimestamp(4, Timestamp.from(now));
+                discord.setTimestamp(5, Timestamp.from(now));
+                discord.executeUpdate();
+
+                event.setBytes(1, UuidBytes.toBytes(UUID.randomUUID()));
+                event.setBytes(2, UuidBytes.toBytes(derived.sanctionId()));
+                event.setBytes(3, UuidBytes.toBytes(actorId));
+                event.setTimestamp(4, Timestamp.from(now));
+                event.setString(5, "Alt relationship exempted: " + state.name());
+                event.setString(6, payload);
+                event.setString(7, key + ":event");
+                event.setString(8, derived.caseId());
+                event.setBytes(9, UuidBytes.toBytes(derived.targetId()));
+                event.executeUpdate();
+            }
         }
     }
 
@@ -376,20 +609,19 @@ public final class JdbcNetworkIdentityStore implements NetworkIdentityStore {
                 UuidBytes.toBytes(first), UuidBytes.toBytes(second)
         ));
 
-        Map<UUID, LockedPlayer> locked = new HashMap<>();
+        Map<UUID, Boolean> locked = new HashMap<>();
         for (UUID playerId : playerIds) {
             locked.put(playerId, lockPlayer(connection, playerId));
         }
-        LockedPlayer joining = locked.get(joiningPlayerId);
         List<MatchingPlayer> matches = candidates.stream()
                 .map(candidate -> new MatchingPlayer(
                         candidate.playerId(),
                         candidate.currentlyOnline()
-                                || locked.get(candidate.playerId()).currentlyOnline()
+                                || locked.get(candidate.playerId())
                                 || observedOnline.getOrDefault(candidate.playerId(), false)
                 ))
                 .toList();
-        return new LockedObservation(joining.firstSeenAt(), matches);
+        return new LockedObservation(matches);
     }
 
     private static void rememberOnlineCandidates(
@@ -403,18 +635,15 @@ public final class JdbcNetworkIdentityStore implements NetworkIdentityStore {
         }
     }
 
-    private static LockedPlayer lockPlayer(Connection connection, UUID playerId) throws SQLException {
+    private static boolean lockPlayer(Connection connection, UUID playerId) throws SQLException {
         try (PreparedStatement statement = connection.prepareStatement(
-                "SELECT first_seen_at, current_server FROM players WHERE player_id = ? FOR UPDATE")) {
+                "SELECT current_server FROM players WHERE player_id = ? FOR UPDATE")) {
             statement.setBytes(1, UuidBytes.toBytes(playerId));
             try (ResultSet result = statement.executeQuery()) {
                 if (!result.next()) {
                     throw new SQLException("Player directory record is missing");
                 }
-                return new LockedPlayer(
-                        result.getTimestamp("first_seen_at").toInstant(),
-                        result.getString("current_server") != null
-                );
+                return result.getString("current_server") != null;
             }
         }
     }
@@ -445,18 +674,6 @@ public final class JdbcNetworkIdentityStore implements NetworkIdentityStore {
         }
     }
 
-    private static Optional<Instant> latestCutover(Connection connection) throws SQLException {
-        try (PreparedStatement statement = connection.prepareStatement(
-                "SELECT MAX(authorized_at) FROM cutover_records");
-             ResultSet result = statement.executeQuery()) {
-            if (!result.next()) {
-                return Optional.empty();
-            }
-            Timestamp value = result.getTimestamp(1);
-            return value == null ? Optional.empty() : Optional.of(value.toInstant());
-        }
-    }
-
     private static List<MatchingPlayer> matchingPlayers(
             Connection connection,
             UUID joiningPlayerId,
@@ -484,23 +701,6 @@ public final class JdbcNetworkIdentityStore implements NetworkIdentityStore {
                     ));
                 }
                 return List.copyOf(players);
-            }
-        }
-    }
-
-    private static boolean hasProtectedRelationshipHistory(Connection connection, UUID playerId) throws SQLException {
-        try (PreparedStatement statement = connection.prepareStatement("""
-                SELECT EXISTS(
-                    SELECT 1 FROM alt_relationships
-                    WHERE (lower_player_id = ? OR upper_player_id = ?)
-                      AND relationship_state IN ('APPROVED_ALT', 'SHARED_HOUSEHOLD', 'NOT_RELATED')
-                )
-                """)) {
-            byte[] id = UuidBytes.toBytes(playerId);
-            statement.setBytes(1, id);
-            statement.setBytes(2, id);
-            try (ResultSet result = statement.executeQuery()) {
-                return result.next() && result.getBoolean(1);
             }
         }
     }
@@ -645,12 +845,13 @@ public final class JdbcNetworkIdentityStore implements NetworkIdentityStore {
     ) throws SQLException {
         String placeholders = String.join(",", Collections.nCopies(INHERITABLE_SANCTION_TYPES.size(), "?"));
         String sql = """
-                SELECT s.sanction_id, s.case_id, s.sanction_type, s.expiration_at
+                SELECT s.sanction_id, s.case_id, s.sanction_type, s.expiration_at, c.public_reason
                 FROM sanctions s JOIN cases c ON c.case_id = s.case_id
                 WHERE s.target_id = ? AND s.status = 'ACTIVE'
                   AND s.sanction_type IN (%s)
                   AND (s.expiration_at IS NULL OR s.expiration_at > ?)
                   AND c.state <> 'FULLY_OVERTURNED'
+                  AND s.inherited_from IS NULL
                 ORDER BY s.issued_at
                 LIMIT 100
                 FOR UPDATE
@@ -670,7 +871,8 @@ public final class JdbcNetworkIdentityStore implements NetworkIdentityStore {
                             UuidBytes.fromBytes(result.getBytes("sanction_id")),
                             result.getString("case_id"),
                             SanctionType.valueOf(result.getString("sanction_type")),
-                            expiration == null ? Optional.empty() : Optional.of(expiration.toInstant())
+                            expiration == null ? Optional.empty() : Optional.of(expiration.toInstant()),
+                            result.getString("public_reason")
                     ));
                 }
                 return List.copyOf(sanctions);
@@ -717,9 +919,16 @@ public final class JdbcNetworkIdentityStore implements NetworkIdentityStore {
                 "sanctionType", source.type().name(),
                 "relationshipState", state.name()
         ));
+        String networkPayload = json.writeValueAsString(Map.of(
+                "caseId", source.caseId(),
+                "targetId", joiningPlayerId.toString(),
+                "sanctionTypes", List.of(source.type().name()),
+                "publicReason", source.publicReason(),
+                "issuedAt", now.toString()
+        ));
         insertInheritedEvent(connection, sanctionId, baseKey, payload, now);
         insertInheritedAudit(connection, joiningPlayerId, source.caseId(), baseKey, payload, now);
-        insertOutboxes(connection, baseKey, payload, now);
+        insertOutboxes(connection, baseKey, payload, networkPayload, now);
         insertStaffAlert(connection, "SAME_NETWORK_SANCTION_INHERITANCE", payload, now);
         return true;
     }
@@ -770,22 +979,28 @@ public final class JdbcNetworkIdentityStore implements NetworkIdentityStore {
         }
     }
 
-    private static void insertOutboxes(Connection connection, String key, String payload, Instant now)
+    private static void insertOutboxes(
+            Connection connection, String key, String payload, String networkPayload, Instant now)
             throws SQLException {
         try (PreparedStatement network = connection.prepareStatement("""
                 INSERT INTO network_outbox(message_id, idempotency_key, destination, message_type,
                     protocol_version, payload_json, available_at, created_at)
-                VALUES (?, ?, 'broadcast', 'SANCTION_CHANGED', ?, ?, ?, ?)
+                VALUES (?, ?, 'broadcast', 'PUNISHMENT_CREATED', ?, ?, ?, ?)
                 """);
              PreparedStatement discord = connection.prepareStatement("""
                 INSERT INTO discord_outbox(message_id, idempotency_key, destination, event_type,
                     payload_json, available_at, created_at)
                 VALUES (?, ?, 'punishments', 'SANCTION_INHERITED', ?, ?, ?)
+                """);
+             PreparedStatement review = connection.prepareStatement("""
+                INSERT INTO discord_outbox(message_id, idempotency_key, destination, event_type,
+                    payload_json, available_at, created_at)
+                VALUES (?, ?, 'alerts', 'ALT_SANCTION_INHERITED', ?, ?, ?)
                 """)) {
             network.setBytes(1, UuidBytes.toBytes(UUID.randomUUID()));
             network.setString(2, key + ":network");
             network.setInt(3, PROTOCOL_VERSION);
-            network.setString(4, payload);
+            network.setString(4, networkPayload);
             network.setTimestamp(5, Timestamp.from(now));
             network.setTimestamp(6, Timestamp.from(now));
             network.executeUpdate();
@@ -796,6 +1011,13 @@ public final class JdbcNetworkIdentityStore implements NetworkIdentityStore {
             discord.setTimestamp(4, Timestamp.from(now));
             discord.setTimestamp(5, Timestamp.from(now));
             discord.executeUpdate();
+
+            review.setBytes(1, UuidBytes.toBytes(UUID.randomUUID()));
+            review.setString(2, key + ":alt-review");
+            review.setString(3, payload);
+            review.setTimestamp(4, Timestamp.from(now));
+            review.setTimestamp(5, Timestamp.from(now));
+            review.executeUpdate();
         }
     }
 
@@ -814,12 +1036,36 @@ public final class JdbcNetworkIdentityStore implements NetworkIdentityStore {
                     "relatedPlayerId", sourcePlayerId.toString(),
                     "caseId", source.caseId(),
                     "sanctionType", source.type().name(),
-                    "relationshipState", state.name()
+                    "relationshipState", state.name(),
+                    "trigger", "JOIN",
+                    "confidencePolicyGrade", state.confidence()
             ));
             insertStaffAlert(connection, "LOW_CONFIDENCE_RELATED_ACCOUNT_ONLINE", payload, now);
+            insertDiscordAltReviewAlert(connection, joiningPlayerId, sourcePlayerId, source, payload, now);
             alerts++;
         }
         return alerts;
+    }
+
+    /** One Discord alert per joining player, source sanction and hour; duplicate logins do not spam staff. */
+    private static void insertDiscordAltReviewAlert(
+            Connection connection, UUID joiningPlayerId, UUID relatedPlayerId,
+            SourceSanction source, String payload, Instant now
+    ) throws SQLException {
+        String key = "alt-review:" + joiningPlayerId + ":" + relatedPlayerId
+                + ":" + source.sanctionId() + ":" + now.getEpochSecond() / 3600;
+        try (PreparedStatement statement = connection.prepareStatement("""
+                INSERT IGNORE INTO discord_outbox(message_id, idempotency_key, destination, event_type,
+                    payload_json, available_at, created_at)
+                VALUES (?, ?, 'alerts', 'ALT_EVASION_REVIEW', ?, ?, ?)
+                """)) {
+            statement.setBytes(1, UuidBytes.toBytes(UUID.randomUUID()));
+            statement.setString(2, key);
+            statement.setString(3, payload);
+            statement.setTimestamp(4, Timestamp.from(now));
+            statement.setTimestamp(5, Timestamp.from(now));
+            statement.executeUpdate();
+        }
     }
 
     private static void insertStaffAlert(Connection connection, String type, String payload, Instant now)
@@ -956,16 +1202,7 @@ public final class JdbcNetworkIdentityStore implements NetworkIdentityStore {
     }
 
     private static double confidence(AltRelationshipState state) {
-        return switch (state) {
-            case SAME_NETWORK -> 0.25;
-            case LOW_CONFIDENCE -> 0.20;
-            case SEMI_CONFIDENT -> 0.50;
-            case CONFIDENT -> 0.75;
-            case VERY_CONFIDENT -> 0.90;
-            case CONFIRMED_ALT, APPROVED_ALT -> 1.00;
-            case SHARED_HOUSEHOLD -> 0.75;
-            case NOT_RELATED -> 0.00;
-        };
+        return state.confidence();
     }
 
     private static void validateManualChange(
@@ -1026,10 +1263,7 @@ public final class JdbcNetworkIdentityStore implements NetworkIdentityStore {
     private record MatchingPlayer(UUID playerId, boolean currentlyOnline) {
     }
 
-    private record LockedPlayer(Instant firstSeenAt, boolean currentlyOnline) {
-    }
-
-    private record LockedObservation(Instant firstSeenAt, List<MatchingPlayer> matches) {
+    private record LockedObservation(List<MatchingPlayer> matches) {
     }
 
     private record MatchOutcome(int inherited, int alerts) {
@@ -1048,7 +1282,8 @@ public final class JdbcNetworkIdentityStore implements NetworkIdentityStore {
             UUID sanctionId,
             String caseId,
             SanctionType type,
-            Optional<Instant> expiration
+            Optional<Instant> expiration,
+            String publicReason
     ) {
     }
 }

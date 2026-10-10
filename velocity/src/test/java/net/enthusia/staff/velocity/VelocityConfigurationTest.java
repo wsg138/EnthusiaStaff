@@ -147,6 +147,24 @@ final class VelocityConfigurationTest {
     }
 
     @Test
+    void altInheritanceNeverActivatesOnExistingOrFreshInstallWithoutExplicitOptIn(
+            @TempDir Path directory
+    ) throws IOException {
+        Properties properties = copiedDefaults(directory);
+        assertFalse(VelocityConfiguration.load(directory).altInheritanceEnabled());
+        properties.remove("alt-inheritance.enabled");
+        store(directory, properties);
+        assertFalse(VelocityConfiguration.load(directory).altInheritanceEnabled(),
+                "existing installations have no new property and must remain fail-closed");
+        properties.setProperty("alt-inheritance.enabled", "true");
+        store(directory, properties);
+        assertTrue(VelocityConfiguration.load(directory).altInheritanceEnabled());
+        properties.setProperty("alt-inheritance.enabled", "sometimes");
+        store(directory, properties);
+        assertThrows(IllegalArgumentException.class, () -> VelocityConfiguration.load(directory));
+    }
+
+    @Test
     void optionalValuesUseSafeDefaults(@TempDir Path directory) throws IOException {
         Properties properties = copiedDefaults(directory);
         properties.remove(TLS_KEY_STORE);

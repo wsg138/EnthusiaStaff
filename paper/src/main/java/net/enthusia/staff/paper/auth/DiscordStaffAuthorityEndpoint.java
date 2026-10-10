@@ -51,6 +51,7 @@ public final class DiscordStaffAuthorityEndpoint implements AutoCloseable {
     private final ThreadPoolExecutor executor;
     private final DiscordStaffAuthorityAuthenticator authenticator;
     private final StaffWebPunishmentService webPunishments;
+    private final StaffWebReviewService webReviews;
     private final com.fasterxml.jackson.databind.ObjectMapper json = new com.fasterxml.jackson.databind.ObjectMapper()
             .findAndRegisterModules().disable(com.fasterxml.jackson.databind.SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
 
@@ -59,7 +60,8 @@ public final class DiscordStaffAuthorityEndpoint implements AutoCloseable {
             JavaPlugin plugin,
             DiscordStaffAuthorityConfiguration.Value configuration,
             LuckPerms luckPerms,
-            StaffWebPunishmentService.Dependencies webDependencies
+            StaffWebPunishmentService.Dependencies webDependencies,
+            StaffWebReviewService.Dependencies reviewDependencies
     ) throws IOException {
         this.plugin = plugin;
         this.luckPerms = luckPerms;
@@ -67,6 +69,8 @@ public final class DiscordStaffAuthorityEndpoint implements AutoCloseable {
                 configuration.secret(), configuration.privateSplit());
         this.webPunishments = webDependencies == null ? null : new StaffWebPunishmentService(
                 webDependencies, this::punishmentActor, this::resolve);
+        this.webReviews = reviewDependencies == null ? null : new StaffWebReviewService(
+                reviewDependencies, this::reviewActor, this::resolve);
         HttpServer createdServer = HttpServer.create(
                 bindAddress(configuration.bindHost(), configuration.port()), BACKLOG);
         ThreadPoolExecutor createdExecutor = new ThreadPoolExecutor(
@@ -85,6 +89,9 @@ public final class DiscordStaffAuthorityEndpoint implements AutoCloseable {
             if (webPunishments != null) {
                 createdServer.createContext("/v1/staff-punishments/", this::handlePunishment);
             }
+            if (webReviews != null) {
+                createdServer.createContext("/v1/staff-reviews/", this::handleReview);
+            }
             createdServer.start();
         } catch (RuntimeException exception) {
             createdServer.stop(0);
@@ -96,11 +103,17 @@ public final class DiscordStaffAuthorityEndpoint implements AutoCloseable {
     }
 
     public static Optional<DiscordStaffAuthorityEndpoint> startIfConfigured(JavaPlugin plugin) {
-        return startIfConfigured(plugin, null);
+        return startIfConfigured(plugin, null, null);
     }
 
     public static Optional<DiscordStaffAuthorityEndpoint> startIfConfigured(
             JavaPlugin plugin, StaffWebPunishmentService.Dependencies webDependencies) {
+        return startIfConfigured(plugin, webDependencies, null);
+    }
+
+    public static Optional<DiscordStaffAuthorityEndpoint> startIfConfigured(
+            JavaPlugin plugin, StaffWebPunishmentService.Dependencies webDependencies,
+            StaffWebReviewService.Dependencies reviewDependencies) {
         if (plugin == null) {
             throw new IllegalArgumentException("plugin must be present");
         }
@@ -109,7 +122,7 @@ public final class DiscordStaffAuthorityEndpoint implements AutoCloseable {
         if (configuration.isEmpty() || luckPerms.isEmpty()) {
             return Optional.empty();
         }
-        return bind(plugin, configuration.orElseThrow(), luckPerms.orElseThrow(), webDependencies);
+        return bind(plugin, configuration.orElseThrow(), luckPerms.orElseThrow(), webDependencies, reviewDependencies);
     }
 
     private static Optional<DiscordStaffAuthorityConfiguration.Value> configuredAuthority(JavaPlugin plugin) {
@@ -138,10 +151,12 @@ public final class DiscordStaffAuthorityEndpoint implements AutoCloseable {
             JavaPlugin plugin,
             DiscordStaffAuthorityConfiguration.Value configuration,
             LuckPerms luckPerms,
-            StaffWebPunishmentService.Dependencies webDependencies
+            StaffWebPunishmentService.Dependencies webDependencies,
+            StaffWebReviewService.Dependencies reviewDependencies
     ) {
         try {
-            return Optional.of(new DiscordStaffAuthorityEndpoint(plugin, configuration, luckPerms, webDependencies));
+            return Optional.of(new DiscordStaffAuthorityEndpoint(plugin, configuration, luckPerms,
+                    webDependencies, reviewDependencies));
         } catch (IOException | RuntimeException exception) {
             log(plugin, "discord_staff_authority_bind_failed", exception);
             return Optional.empty();
@@ -238,6 +253,42 @@ public final class DiscordStaffAuthorityEndpoint implements AutoCloseable {
         }
     }
 
+    private void handleReview(HttpExchange exchange) throws IOException {
+        try {
+            handleReviewSafely(exchange);
+        } finally {
+            exchange.close();
+        }
+    }
+
+    private void handleReviewSafely(HttpExchange exchange) throws IOException {
+        DiscordStaffAuthorityAuthenticator.Result authorization = null;
+        try {
+            PunishmentRequest request = authorizePunishmentRequest(exchange);
+            if (request == null) {
+                return;
+            }
+            authorization = request.authorization();
+            StaffWebReviewService.Request input = json.readValue(
+                    request.body(), StaffWebReviewService.Request.class);
+            if (input == null) {
+                throw new IllegalArgumentException("review input is required");
+            }
+            String operation = request.path().substring("/v1/staff-reviews/".length());
+            StaffWebReviewService.Decision decision = webReviews.execute(operation, input);
+            respond(exchange, 200, json.writeValueAsString(decision), authorization);
+        } catch (SecurityException exception) {
+            respond(exchange, 403, "{}", authorization);
+        } catch (IllegalArgumentException | com.fasterxml.jackson.core.JsonProcessingException exception) {
+            respond(exchange, 400, "{}", authorization);
+        } catch (RuntimeException exception) {
+            log(plugin, "staff_web_review_request_failed", exception);
+            if (exchange.getResponseCode() == -1) {
+                respond(exchange, 503, "{}", authorization);
+            }
+        }
+    }
+
     private PunishmentRequest authorizePunishmentRequest(HttpExchange exchange) throws IOException {
         if (!POST_METHOD.equals(exchange.getRequestMethod())) {
             respond(exchange, 405, "{}", null);
@@ -278,6 +329,19 @@ public final class DiscordStaffAuthorityEndpoint implements AutoCloseable {
             byte[] body,
             DiscordStaffAuthorityAuthenticator.Result authorization
     ) {
+    }
+
+    private net.enthusia.staff.domain.auth.Actor reviewActor(UUID playerId) {
+        User user = loadUser(playerId);
+        var permissions = user.getCachedData().getPermissionData();
+        if (!permissions.checkPermission("enthusiastaff.punishment.requests.review").asBoolean()) {
+            throw new SecurityException("current punishment-review permission is required");
+        }
+        StaffRank rank = PaperStaffRankResolver.resolve(
+                permission -> permissions.checkPermission(permission).asBoolean())
+                .orElseThrow(() -> new SecurityException("current staff rank is required"));
+        return new net.enthusia.staff.domain.auth.Actor(playerId,
+                user.getUsername() == null ? playerId.toString() : user.getUsername(), rank);
     }
 
     private net.enthusia.staff.domain.auth.Actor punishmentActor(UUID playerId) {

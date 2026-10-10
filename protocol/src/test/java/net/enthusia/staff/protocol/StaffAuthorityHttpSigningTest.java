@@ -35,6 +35,23 @@ class StaffAuthorityHttpSigningTest {
         org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class,
                 () -> StaffAuthorityHttpSigning.punishmentRequestTarget("/v1/staff-punishments/prepare/../confirm", original));
     }
+    @Test
+    void signedReviewDecisionBindsActionAndExactRequest() {
+        byte[] body = "{\"actorId\":\"player-one\",\"requestId\":\"request-one\"}"
+                .getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        String approve = StaffAuthorityHttpSigning.punishmentRequestTarget("/v1/staff-reviews/approve", body);
+        String deny = StaffAuthorityHttpSigning.punishmentRequestTarget("/v1/staff-reviews/deny", body);
+        var proof = StaffAuthorityHttpSigning.signRequest(CREDENTIAL, POST, approve, NOW, NONCE);
+        assertEquals(StaffAuthorityHttpSigning.Verification.ACCEPTED,
+                StaffAuthorityHttpSigning.verifyRequest(CREDENTIAL, POST, approve,
+                        proof.timestamp(), proof.nonce(), proof.signature(), CLOCK));
+        assertEquals(StaffAuthorityHttpSigning.Verification.INVALID_SIGNATURE,
+                StaffAuthorityHttpSigning.verifyRequest(CREDENTIAL, POST, deny,
+                        proof.timestamp(), proof.nonce(), proof.signature(), CLOCK));
+        org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class,
+                () -> StaffAuthorityHttpSigning.punishmentRequestTarget("/v1/staff-reviews/delete", body));
+    }
+
     private static final String CREDENTIAL = "authority-test-credential-value-1234567890";
     private static final String METHOD = "GET";
     private static final String TARGET =

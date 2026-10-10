@@ -68,6 +68,11 @@ class SanctionLifecycleIntegrationTest {
     void clearFixtures() throws SQLException {
         try (HikariDataSource dataSource = MariaDb.open(databaseConfig());
              Connection connection = dataSource.getConnection()) {
+            // Break fixture-only child→source FKs before deleting all sanctions.
+            try (PreparedStatement detach = connection.prepareStatement(
+                    "UPDATE sanctions SET inherited_from = NULL WHERE inherited_from IS NOT NULL")) {
+                detach.executeUpdate();
+            }
             for (String table : List.of(
                     "network_outbox_deliveries",
                     NETWORK_OUTBOX_TABLE,
@@ -142,6 +147,89 @@ class SanctionLifecycleIntegrationTest {
         }
         assertEquals(1, count("sanction_events"));
         assertEquals(1, count("audit_events"));
+    }
+
+    @Test
+    void exactRevocationPropagatesToInheritedAltWithSeparateAuditAndOutbox() throws Exception {
+        Fixture parent = seed(86, "HELPER", SanctionStatus.ACTIVE,
+                now().minusSeconds(300), Optional.of(now().plusSeconds(7200)));
+        UUID child = uuid(186);
+        UUID inheritedId = uuid(286);
+        try (HikariDataSource source = MariaDb.open(databaseConfig());
+             Connection connection = source.getConnection()) {
+            insertPlayer(connection, child, "InheritingPlayer", "BEDROCK");
+            try (PreparedStatement insert = connection.prepareStatement("""
+                    INSERT INTO sanctions(sanction_id, case_id, target_id, sanction_type,
+                        status, issued_at, activated_at, expiration_at, inherited_from)
+                    VALUES (?, ?, ?, 'BAN', 'ACTIVE', ?, ?, ?, ?)
+                    """)) {
+                Instant issued = now().minusSeconds(200);
+                insert.setBytes(1, uuidBytes(inheritedId));
+                insert.setString(2, parent.caseId().value());
+                insert.setBytes(3, uuidBytes(child));
+                insert.setTimestamp(4, Timestamp.from(issued));
+                insert.setTimestamp(5, Timestamp.from(issued));
+                insert.setTimestamp(6, Timestamp.from(now().plusSeconds(7200)));
+                insert.setBytes(7, uuidBytes(parent.sanctionId()));
+                assertEquals(1, insert.executeUpdate());
+            }
+        }
+        try (MariaDbRuntime runtime = MariaDb.initialize(databaseConfig())) {
+            ExactSanctionChangeResult.Applied result = assertInstanceOf(
+                    ExactSanctionChangeResult.Applied.class,
+                    runtime.sanctionMutationStore().applyExact(request(
+                            parent, 0, SanctionChangeAction.REVOKE, Optional.empty(),
+                            "Remove verified mistaken case", "exact-derived-revoke",
+                            Optional.empty()), DEFAULT_LIMITS));
+            assertEquals(SanctionStatus.REVOKED, result.resultingStatus());
+        }
+        assertEquals("REVOKED",
+                stringValue("SELECT status FROM sanctions WHERE sanction_id=?", inheritedId));
+        assertEquals(2, count(NETWORK_OUTBOX_TABLE));
+        assertEquals(2, count(DISCORD_OUTBOX_TABLE));
+        assertEquals(2, count("sanction_events"));
+    }
+
+    @Test
+    void exactOverturnOfSourceMarksCaseOverturnedDespiteDerivedAltAndRevokesChild() throws Exception {
+        Fixture parent = seed(87, "HELPER", SanctionStatus.ACTIVE,
+                now().minusSeconds(300), Optional.of(now().plusSeconds(7200)));
+        UUID child = uuid(187);
+        UUID inherited = uuid(287);
+        try (HikariDataSource source = MariaDb.open(databaseConfig());
+             Connection connection = source.getConnection()) {
+            insertPlayer(connection, child, "SeparateAlt", "JAVA");
+            try (PreparedStatement insert = connection.prepareStatement("""
+                    INSERT INTO sanctions(sanction_id, case_id, target_id, sanction_type,
+                        status, issued_at, activated_at, expiration_at, inherited_from)
+                    VALUES (?, ?, ?, 'BAN', 'ACTIVE', ?, ?, ?, ?)
+                    """)) {
+                Instant issued = now().minusSeconds(200);
+                insert.setBytes(1, uuidBytes(inherited));
+                insert.setString(2, parent.caseId().value());
+                insert.setBytes(3, uuidBytes(child));
+                insert.setTimestamp(4, Timestamp.from(issued));
+                insert.setTimestamp(5, Timestamp.from(issued));
+                insert.setTimestamp(6, Timestamp.from(now().plusSeconds(7200)));
+                insert.setBytes(7, uuidBytes(parent.sanctionId()));
+                assertEquals(1, insert.executeUpdate());
+            }
+        }
+        try (MariaDbRuntime runtime = MariaDb.initialize(databaseConfig())) {
+            ExactSanctionChangeResult.Applied result = assertInstanceOf(
+                    ExactSanctionChangeResult.Applied.class,
+                    runtime.sanctionMutationStore().applyExact(request(
+                            parent, 0, SanctionChangeAction.FULL_OVERTURN, Optional.empty(),
+                            "Evidence reversed the entire punishment", "exact-derived-overturn",
+                            Optional.empty()), DEFAULT_LIMITS));
+            assertEquals(SanctionStatus.OVERTURNED, result.resultingStatus());
+        }
+        assertEquals("OVERTURNED",
+                stringValue("SELECT status FROM sanctions WHERE sanction_id=?", inherited));
+        assertEquals("FULLY_OVERTURNED",
+                stringValue("SELECT state FROM cases WHERE case_id=?", parent.caseId().value()));
+        assertEquals(2, count("sanction_events"));
+        assertEquals(2, count(NETWORK_OUTBOX_TABLE));
     }
 
     @Test

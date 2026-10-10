@@ -163,7 +163,7 @@ class VelocityConfigurationReloadCoordinatorTest {
                 "ES_WEBSITE_CODE", 300, 65_536, 2, 64,
                 true, "127.0.0.1", 19_000, "velocity", "ES_CHANNEL_PROXY",
                 Path.of("channel.p12"), "ES_CHANNEL_PASSWORD", Map.of("survival", "ES_CHANNEL_SURVIVAL"),
-                true, 1, "ES_IDENTITY_HMAC", 1, "ES_IDENTITY_ENCRYPTION",
+                true, false, 1, "ES_IDENTITY_HMAC", 1, "ES_IDENTITY_ENCRYPTION",
                 true,
                 Map.of(
                         "punishments", "ES_DISCORD_PUNISHMENTS", "reports", "ES_DISCORD_REPORTS",

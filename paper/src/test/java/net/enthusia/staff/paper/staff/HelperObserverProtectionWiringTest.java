@@ -11,7 +11,7 @@ import org.junit.jupiter.api.Test;
 class HelperObserverProtectionWiringTest {
     @Test
     void paperRuntimeRegistersHelperObserverProtectionListener() throws IOException {
-        String runtime = Files.readString(paperModule().resolve(
+        String runtime = readNormalized(paperModule().resolve(
                 "src/main/java/net/enthusia/staff/paper/PaperRuntimeComponents.java"
         ));
 
@@ -23,7 +23,7 @@ class HelperObserverProtectionWiringTest {
 
     @Test
     void staffModeManagerUsesRankAwareAllowedGameModes() throws IOException {
-        String manager = Files.readString(paperModule().resolve(
+        String manager = readNormalized(paperModule().resolve(
                 "src/main/java/net/enthusia/staff/paper/staff/StaffModeManager.java"
         ));
 
@@ -39,7 +39,7 @@ class HelperObserverProtectionWiringTest {
 
     @Test
     void helperAirItemGuardDoesNotSkipPreCancelledAirInteractions() throws IOException {
-        String listener = Files.readString(paperModule().resolve(
+        String listener = readNormalized(paperModule().resolve(
                 "src/main/java/net/enthusia/staff/paper/staff/HelperObserverProtectionListener.java"
         ));
 
@@ -56,7 +56,7 @@ class HelperObserverProtectionWiringTest {
 
     @Test
     void helperProjectilePassThroughUsesModernProjectileHitEventOnly() throws IOException {
-        String listener = Files.readString(paperModule().resolve(
+        String listener = readNormalized(paperModule().resolve(
                 "src/main/java/net/enthusia/staff/paper/staff/HelperObserverProtectionListener.java"
         ));
 
@@ -74,7 +74,7 @@ class HelperObserverProtectionWiringTest {
 
     @Test
     void retainedMobTargetsAreReconciledThroughEntitySchedulers() throws IOException {
-        String listener = Files.readString(paperModule().resolve(
+        String listener = readNormalized(paperModule().resolve(
                 "src/main/java/net/enthusia/staff/paper/staff/HelperObserverProtectionListener.java"
         ));
 
@@ -94,10 +94,10 @@ class HelperObserverProtectionWiringTest {
 
     @Test
     void helperObserverAuthorityUsesAppliedSessionRankInsteadOfLivePermissionResolution() throws IOException {
-        String manager = Files.readString(paperModule().resolve(
+        String manager = readNormalized(paperModule().resolve(
                 "src/main/java/net/enthusia/staff/paper/staff/StaffModeManager.java"
         ));
-        String listener = Files.readString(paperModule().resolve(
+        String listener = readNormalized(paperModule().resolve(
                 "src/main/java/net/enthusia/staff/paper/staff/HelperObserverProtectionListener.java"
         ));
 
@@ -119,7 +119,7 @@ class HelperObserverProtectionWiringTest {
 
     @Test
     void queuedMobTargetClearRevalidatesObserverProfileAtMutationTime() throws IOException {
-        String listener = Files.readString(paperModule().resolve(
+        String listener = readNormalized(paperModule().resolve(
                 "src/main/java/net/enthusia/staff/paper/staff/HelperObserverProtectionListener.java"
         ));
 
@@ -141,4 +141,9 @@ class HelperObserverProtectionWiringTest {
         }
         throw new IllegalStateException("Could not locate the Paper module from " + current);
     }
+    private static String readNormalized(Path file) throws IOException {
+        // Source assertions match Java syntax rather than the host's Git checkout line endings.
+        return Files.readString(file).replace("\r\n", "\n");
+    }
+
 }

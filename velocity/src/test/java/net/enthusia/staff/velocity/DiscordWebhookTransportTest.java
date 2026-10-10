@@ -41,9 +41,56 @@ final class DiscordWebhookTransportTest {
         assertEquals(route.endpoint(), endpoint.get());
         assertEquals(Duration.ofSeconds(2), timeout.get());
         JsonNode payload = new ObjectMapper().readTree(body.get());
-        assertEquals("REPORT_CREATED\nreportId=r-1", payload.path("content").asText());
+        assertTrue(payload.path("content").isMissingNode());
+        assertEquals("REPORT CREATED", payload.path("embeds").get(0).path("title").asText());
+        assertEquals("Report ID", payload.path("embeds").get(0).path("fields").get(0).path("name").asText());
+        assertEquals("r-1", payload.path("embeds").get(0).path("fields").get(0).path("value").asText());
         assertTrue(payload.path("allowed_mentions").path("parse").isArray());
         assertEquals(0, payload.path("allowed_mentions").path("parse").size());
+    }
+
+    @Test
+    void staffActionUsesEmbedsWithMentionsDisabled() throws Exception {
+        AtomicReference<String> sent = new AtomicReference<>();
+        DiscordWebhookTransport.Jdk transport = new DiscordWebhookTransport.Jdk(
+                Duration.ofSeconds(2), (uri, timeout, body) -> { sent.set(body); return 204; }
+        );
+        DiscordWebhookRoute staffRoute = DiscordWebhookRoute.approvedStaging(
+                "logs-staffmode", URI.create("https://" + STAGING_HOST + "/staff"), Set.of(STAGING_HOST)
+        );
+        assertTrue(transport.send(staffRoute,
+                "STAFF_ACTION\nname=Moderator\naction=command\ndetail=/msg (arguments withheld)").success());
+        JsonNode payload = new ObjectMapper().readTree(sent.get());
+        JsonNode embed = payload.path("embeds").get(0);
+        assertEquals("STAFF ACTION", embed.path("title").asText());
+        assertEquals(0x5382B4, embed.path("color").asInt());
+        assertEquals(3, embed.path("fields").size());
+        assertTrue(payload.path("content").isMissingNode());
+        assertEquals(0, payload.path("allowed_mentions").path("parse").size());
+    }
+
+    @Test
+    void alertsCanPingOnlyAnExplicitlyConfiguredRole() throws Exception {
+        AtomicReference<String> sent = new AtomicReference<>();
+        String role = "123456789012345678";
+        DiscordWebhookTransport.Jdk transport = new DiscordWebhookTransport.Jdk(
+                Duration.ofSeconds(2), (uri, timeout, body) -> { sent.set(body); return 204; }, role
+        );
+        DiscordWebhookRoute alert = DiscordWebhookRoute.approvedStaging(
+                "alerts", URI.create("https://" + STAGING_HOST + "/alerts"), Set.of(STAGING_HOST)
+        );
+        DiscordWebhookRoute punishment = DiscordWebhookRoute.approvedStaging(
+                "punishments", URI.create("https://" + STAGING_HOST + "/punishments"), Set.of(STAGING_HOST)
+        );
+        transport.send(alert, "ALT_EVASION_REVIEW\\ntargetId=player");
+        JsonNode alertPayload = new ObjectMapper().readTree(sent.get());
+        assertEquals("<@&" + role + ">", alertPayload.path("content").asText());
+        assertEquals(role, alertPayload.path("allowed_mentions").path("roles").get(0).asText());
+        assertEquals(0, alertPayload.path("allowed_mentions").path("parse").size());
+        transport.send(punishment, "PUNISHMENT_CREATED\\ntargetId=player");
+        JsonNode punishmentPayload = new ObjectMapper().readTree(sent.get());
+        assertTrue(punishmentPayload.path("content").isMissingNode());
+        assertTrue(punishmentPayload.path("allowed_mentions").path("roles").isMissingNode());
     }
 
     @Test

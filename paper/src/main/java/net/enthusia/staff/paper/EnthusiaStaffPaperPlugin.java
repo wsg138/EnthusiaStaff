@@ -185,7 +185,8 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
                     mode::get,
                     () -> storageValue(PaperStorageBindings::sanctionLookup),
                     () -> storageValue(PaperStorageBindings::playerDirectory),
-                    workers
+                    workers,
+                    () -> storageValue(PaperStorageBindings::altMuteEvasionAlertStore)
             );
             getServer().getPluginManager().registerEvents(muteEnforcement, this);
             muteEnforcement.start();
@@ -1013,6 +1014,8 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
                 new PaperIntegrationManager.Stores(
                         () -> storageValue(PaperStorageBindings::punishmentService),
                         () -> storageValue(PaperStorageBindings::punishmentDraftWorkflow),
+                        () -> storageValue(PaperStorageBindings::punishmentRequestService),
+                        () -> storageValue(PaperStorageBindings::staffSessionStore),
                         () -> storageValue(PaperStorageBindings::playerDirectory),
                         () -> storageValue(PaperStorageBindings::economyJournalStore),
                         () -> storageValue(PaperStorageBindings::inventoryJournalStore)

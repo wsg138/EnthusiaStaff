@@ -31,10 +31,16 @@ final class DiscordEventRenderer {
             ),
             "reports", List.of("reportId", TARGET_ID, "reasonId", "serverId", "status", STATE, "actorId"),
             "logs-staffmode", List.of(
-                    "staffId", TARGET_ID, "actorId", "sessionId", "rank", "active", "reason", "serverId", STATE
+                    "staffId", TARGET_ID, "actorId", "actor", "name", "sessionId",
+                    "rank", "active", "vanished", "staffMode", "server", "serverId",
+                    "action", "detail", "reason", "ts", STATE
             ),
             "alerts", List.of(
-                    "caseId", TARGET_ID, "sanctionId", "requestId", "reportId", "destination",
+                    "caseId", TARGET_ID, "relatedPlayerId", "sourcePlayerId",
+                    "sanctionId", "sourceSanctionId", "sanctionType",
+                    "relationshipState", "confidencePolicyGrade", "trigger",
+                    "requestId", "requestRevision", "requesterId", "requiredRank", "reasonId",
+                    "visibility", "reportId", "destination",
                     "errorCode", "status", STATE, "type", "serverId"
             )
     );
@@ -71,6 +77,13 @@ final class DiscordEventRenderer {
             String safe = safeValue(value);
             if (safe != null) {
                 appendField(rendered, field, safe);
+            }
+        }
+        if ("PUNISHMENT_APPROVAL_REQUIRED".equals(message.eventType())) {
+            String requestId = safeValue(payload.get("requestId"));
+            if (requestId != null && requestId.matches("[0-9a-fA-F-]{36}")) {
+                appendField(rendered, "review", "/review-request request-id:" + requestId
+                        + " decision:approve (or deny with a note)");
             }
         }
         return truncateWithEllipsis(rendered.toString(), MAX_CONTENT_CHARACTERS);
