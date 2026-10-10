@@ -15,6 +15,8 @@ import net.enthusia.staff.protocol.ChatBridgeRenderedMessage;
 import org.junit.jupiter.api.Test;
 
 class JdaDiscordGatewayTest {
+    private static final String LINKED_DISCORD_LABEL = "Discord: DiscordName";
+
     @Test
     void restrictionRuntimeEnablesOnlyMemberOverrideCache() {
         assertEquals(Set.of(CacheFlag.MEMBER_OVERRIDES), JdaDiscordGateway.requiredCacheFlags());
@@ -111,7 +113,7 @@ class JdaDiscordGatewayTest {
         ChatBridgeOutboundMessage plain = chatMessage("hello");
         assertEquals(
                 "[SMP · Discord: DiscordName] Player: hello",
-                JdaDiscordGateway.chatContent(plain, java.util.Optional.of("Discord: DiscordName"))
+                JdaDiscordGateway.chatContent(plain, java.util.Optional.of(LINKED_DISCORD_LABEL))
         );
 
         ChatBridgeRenderedMessage rendered = renderedMessage(
@@ -123,7 +125,7 @@ class JdaDiscordGatewayTest {
                 "[SMP · Discord: DiscordName] **[VIP] Player:** *hello*",
                 JdaDiscordGateway.renderedChatContent(
                         rendered,
-                        java.util.Optional.of("Discord: DiscordName")
+                        java.util.Optional.of(LINKED_DISCORD_LABEL)
                 )
         );
     }
@@ -138,7 +140,7 @@ class JdaDiscordGatewayTest {
 
         String content = JdaDiscordGateway.renderedChatContent(
                 rendered,
-                java.util.Optional.of("Discord: DiscordName")
+                java.util.Optional.of(LINKED_DISCORD_LABEL)
         );
 
         assertEquals(2_000, content.length());
@@ -158,7 +160,7 @@ class JdaDiscordGatewayTest {
     @Test
     void linkedIdentityIsPassiveTextOnlyWithSafeFallbacks() {
         assertEquals(
-                java.util.Optional.of("Discord: DiscordName"),
+                java.util.Optional.of(LINKED_DISCORD_LABEL),
                 JdaDiscordGateway.cachedDiscordDisplay("DiscordName")
         );
         assertEquals(
