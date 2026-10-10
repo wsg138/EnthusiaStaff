@@ -1,0 +1,51 @@
+name: Exact sanction selector regression
+
+on:
+  pull_request:
+    paths:
+      - "paper/**"
+      - "domain/**"
+      - "persistence/**"
+      - "integration-tests/**"
+      - ".github/workflows/exact-sanction-selector-test.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  exact-warning-isolation:
+    name: Revoke one warning without changing sibling warning
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out exact draft revision
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Set up Java 25
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "25"
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@3f131e8634966bd73d06cc69884922b02e6faf92
+      - name: Assert isolated Docker daemon is available
+        run: docker info --format '{{.ServerVersion}}'
+      - name: Run exact-sanction MariaDB integration regression
+        run: |
+          chmod +x gradlew
+          ./gradlew :integration-tests:test \
+            --tests net.enthusia.staff.integration.SanctionLifecycleIntegrationTest.revokingOneOfTwoWarningsInTheSameCasePreservesTheOtherWarning \
+            --no-daemon --no-configuration-cache --console=plain
+      - name: Upload failed test reports
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: exact-sanction-isolation-failure
+          path: |
+            integration-tests/build/test-results/test
+            integration-tests/build/reports/tests/test
+          if-no-files-found: ignore
+          retention-days: 7
