@@ -69,6 +69,16 @@ class PunishmentSanctionRoutesTest {
     }
 
     @Test
+    void caseDetailSuggestsSpecificUnpunishIdButNeverRunsItAutomatically() throws IOException {
+        String source = Files.readString(Path.of(
+                "src/main/java/net/enthusia/staff/paper/command/CaseCommand.java"
+        )).replace("\r\n", "\n");
+        assertTrue(source.contains("ClickEvent.suggestCommand("));
+        assertTrue(source.contains("\"/unpunish \" + sanction.sanctionId()"));
+        assertFalse(source.contains("ClickEvent.runCommand("));
+    }
+
+    @Test
     void NewRoutesAreRegisteredAndAuthorityGated() throws IOException {
         Path base = Path.of("src/main/java/net/enthusia/staff/paper");
         String registrar = Files.readString(base.resolve("PaperCommandRegistrar.java"))
