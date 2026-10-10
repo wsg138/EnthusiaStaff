@@ -228,12 +228,12 @@ final class JdaStaffModerationListener extends ListenerAdapter {
                     }
                     var pulse = moderationRuntime.reviewPulse();
                     var reviews = moderationRuntime.pendingReviews(4);
-                    StringBuilder message = new StringBuilder("**Staff review center**\\n")
+                    StringBuilder message = new StringBuilder("**Staff review center**\n")
                             .append("Pending punishments: ").append(pulse.pendingPunishmentRequests())
                             .append(" | Open reports: ").append(pulse.openReports())
                             .append(" | Claimed reports: ").append(pulse.claimedReports())
                             .append(" | Alt alert events (24h): ").append(pulse.altSignalsInLastDay())
-                            .append("\\n");
+                            .append("\n");
                     if (reviews.isEmpty()) {
                         hook.sendMessage(message.append("No pending Minecraft punishment requests.").toString())
                                 .queue();
@@ -245,7 +245,7 @@ final class JdaStaffModerationListener extends ListenerAdapter {
                         message.append(number).append(". **").append(review.reasonId())
                                 .append("** · Target: `").append(review.targetId())
                                 .append("` · Required: ").append(review.requiredRank())
-                                .append(" · Request: `").append(review.requestId()).append("`\\n");
+                                .append(" · Request: `").append(review.requestId()).append("`\n");
                         var target = SignedComponentCodec.TargetRef.request(review.requestId());
                         rows.add(ActionRow.of(
                                 Button.success(reviewComponents.encode(
