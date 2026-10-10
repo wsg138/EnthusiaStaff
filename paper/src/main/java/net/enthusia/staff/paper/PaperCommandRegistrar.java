@@ -89,6 +89,7 @@ final class PaperCommandRegistrar {
     private final Dependencies dependencies;
     private final ReloadableModerationFeatureSettings moderationSettings;
     private SanctionLifecycleCommand sanctionLifecycle;
+    private ExactSanctionPickerGui exactSanctionPicker;
 
     PaperCommandRegistrar(Dependencies dependencies) {
         this.dependencies = Objects.requireNonNull(dependencies, "dependencies");
@@ -225,6 +226,7 @@ final class PaperCommandRegistrar {
                 activeAuthorization, workers(), sanctionLifecycle
         );
         plugin().getServer().getPluginManager().registerEvents(exactPicker, plugin());
+        exactSanctionPicker = exactPicker;
         command.configureExactSanctionPicker(exactPicker);
         PUNISHMENT_COMMANDS.forEach(name -> bindCompleting(name, command, command));
     }
@@ -254,6 +256,7 @@ final class PaperCommandRegistrar {
         SanctionChangeCommand command = new SanctionChangeCommand(
                 plugin(), writeMode(), changes, players, cases, activeAuthorization, workers(), changeGui
         );
+        command.configureExactSanctionPicker(exactSanctionPicker);
         SANCTION_CHANGE_COMMANDS.forEach(name -> bindCompleting(name, command, command));
     }
 
