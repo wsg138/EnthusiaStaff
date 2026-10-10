@@ -76,6 +76,7 @@ public final class PunishmentCommand implements CommandExecutor, TabCompleter {
     private final PunishmentRequestCommandHandler requestCommands;
     private final ExecutorService workers;
     private final StaffTargetGuard targetGuard;
+    private volatile SanctionLifecycleCommand sanctionLifecycle;
 
     public PunishmentCommand(
             JavaPlugin plugin,
@@ -115,11 +116,26 @@ public final class PunishmentCommand implements CommandExecutor, TabCompleter {
         this.targetGuard = java.util.Objects.requireNonNull(targetGuard, "targetGuard");
     }
 
+    public void configureSanctionLifecycle(SanctionLifecycleCommand lifecycle) {
+        sanctionLifecycle = java.util.Objects.requireNonNull(lifecycle, "lifecycle");
+    }
+
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
         Actor actor = PaperActorResolver.resolve(sender).orElse(null);
         String route = CommandRoute.canonicalName(command);
         if (!banRouteAllowed(sender, actor, route)) {
+            return true;
+        }
+        if (PunishmentSanctionRoutes.handles(route, args)) {
+            String[] routed = PunishmentSanctionRoutes.rewrite(route, args);
+            if (routed == null) {
+                sender.sendMessage(StaffMessageStyle.usage(PunishmentSanctionRoutes.usage()));
+            } else if (sanctionLifecycle == null) {
+                sender.sendMessage(StaffMessageStyle.error("Exact sanction changes are not configured."));
+            } else {
+                sanctionLifecycle.execute(sender, label, routed);
+            }
             return true;
         }
         if (handleRequestCommand(sender, actor, route, args)) {
@@ -608,6 +624,10 @@ public final class PunishmentCommand implements CommandExecutor, TabCompleter {
         )));
         if (CENTRAL_COMMAND.equals(route)) {
             sender.sendMessage(StaffMessageStyle.style(Component.text(
+                    "Exact sanction change: /punish remove|end|reduce|change <sanction-id> ...", 
+                    NamedTextColor.GRAY
+            )));
+            sender.sendMessage(StaffMessageStyle.style(Component.text(
                     "Request review: /punish requests | review | approve | deny",
                     NamedTextColor.GRAY
             )));
@@ -616,8 +636,19 @@ public final class PunishmentCommand implements CommandExecutor, TabCompleter {
 
     @Override
     public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
-        List<String> completions = new ArrayList<>(requestCommands.complete(CommandRoute.canonicalName(command), args));
+        String route = CommandRoute.canonicalName(command);
+        if ("unpunish".equals(route)) {
+            return List.of();
+        }
+        List<String> completions = new ArrayList<>(requestCommands.complete(route, args));
         if (args.length == SINGLE_ARGUMENT_COUNT) {
+            if (CENTRAL_COMMAND.equals(route)) {
+                for (String action : List.of("remove", "end", "reduce", "change", "overturn")) {
+                    if (action.startsWith(args[0].toLowerCase(Locale.ROOT))) {
+                        completions.add(action);
+                    }
+                }
+            }
             String prefix = args[0].toLowerCase(Locale.ROOT);
             if (CONFIRM_SUBCOMMAND.startsWith(prefix)) {
                 completions.add(CONFIRM_SUBCOMMAND);
