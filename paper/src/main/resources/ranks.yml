@@ -1,0 +1,42 @@
+# Preview-only C2 rank capability candidate. This file is NOT an authorization source.
+# /estaff config validate parses it; reload and runtime do not publish its grants.
+# Role identity, on-duty authority, vanish reconciliation, and sanction permissions remain code-owned.
+schema-version: 1
+ranks:
+  HELPER:
+    inherits: []
+    grants:
+      - STAFF_MODE_GAMEMODE_SURVIVAL
+      - STAFF_MODE_GAMEMODE_SPECTATOR
+  MOD:
+    inherits: [HELPER]
+    grants:
+      - STAFF_MODE_ADVANCED_TOOLS
+      - STAFF_MODE_INVENTORY_EDIT
+      - VANISH
+  DEVELOPER:
+    inherits: []
+    grants:
+      - STAFF_MODE_GAMEMODE_SURVIVAL
+      - STAFF_MODE_GAMEMODE_SPECTATOR
+      - STAFF_MODE_GAMEMODE_CREATIVE
+      - STAFF_MODE_GAMEMODE_ADVENTURE
+      - STAFF_MODE_ADVANCED_TOOLS
+      - STAFF_MODE_INVENTORY_EDIT
+      - STAFF_MODE_ENDER_CHEST_OPEN
+      - STAFF_MODE_ENDER_CHEST_EDIT
+      - STAFF_MODE_COMBAT_TEST
+      - VANISH
+  ADMIN:
+    inherits: [MOD]
+    grants:
+      - STAFF_MODE_GAMEMODE_CREATIVE
+      - STAFF_MODE_GAMEMODE_ADVENTURE
+      - STAFF_MODE_ENDER_CHEST_OPEN
+  FOUNDER:
+    inherits: [ADMIN]
+    grants:
+      - STAFF_MODE_ENDER_CHEST_EDIT
+  SYSTEM:
+    inherits: []
+    grants: []
