@@ -108,7 +108,7 @@ class PunishmentSanctionRoutesTest {
         assertTrue(source.contains("new Selection(state, chosen, action(state.action))"));
         assertTrue(source.contains("service.exactRevision(state.selection.entry.sanction.sanctionId())"));
         assertTrue(source.contains("state.selection.entry.sanction.revision()"));
-        assertTrue(source.contains("lifecycle.execute(viewer, \"punish\", args)"));
+        assertTrue(source.contains("lifecycle.executeSelected(viewer, \"punish\", args,"));
         assertTrue(source.contains("if (!submitting.add(viewer.getUniqueId()))"));
         assertTrue(source.contains("new Confirmation(capture.selection, capture.expiration, value)"));
     }
