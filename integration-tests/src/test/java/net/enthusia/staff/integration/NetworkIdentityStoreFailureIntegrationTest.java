@@ -72,13 +72,13 @@ class NetworkIdentityStoreFailureIntegrationTest {
     }
 
     @Test
-    void transientFailureRollsBackWholeObservationAndRetryInheritsExactlyOnce() throws SQLException {
+    void transientEvidenceFailureRollsBackWholeObservationAndRetryNeverAutoPunishesSharedIp() throws SQLException {
         Instant now = Instant.parse("2026-08-07T20:00:00Z");
         AltInheritanceFixture fixture = automaticInheritanceFixture(now, (byte) 31, "ALTCASE000000031");
 
         assertThrows(
                 ModerationPersistenceException.class,
-                () -> failingInheritedEventStore().observeAndInherit(
+                () -> failingNetworkEvidenceStore().observeAndInherit(
                         fixture.joining(), fixture.identity(), now, false
                 )
         );
@@ -94,13 +94,13 @@ class NetworkIdentityStoreFailureIntegrationTest {
                 fixture.joining(), fixture.identity(), now.plusSeconds(2), false
         );
 
-        assertEquals(1, retry.inheritedSanctions());
+        assertEquals(0, retry.inheritedSanctions());
         assertEquals(0, duplicate.inheritedSanctions());
-        assertCommittedInheritanceExactlyOnce(fixture);
+        assertNetworkOverlapRecordedWithoutAutomaticSanction(fixture);
     }
 
     @Test
-    void concurrentEligibleObservationsSerializeWithoutDuplicateSanctions() throws Exception {
+    void concurrentNetworkObservationsSerializeWithoutAutoPunishingSharedIp() throws Exception {
         Instant now = Instant.parse("2026-08-07T20:15:00Z");
         AltInheritanceFixture fixture = automaticInheritanceFixture(now, (byte) 32, "ALTCASE000000032");
         JdbcNetworkIdentityStore firstStore = store();
@@ -118,11 +118,11 @@ class NetworkIdentityStoreFailureIntegrationTest {
             NetworkIdentityObservationResult firstResult = first.get(20, TimeUnit.SECONDS);
             NetworkIdentityObservationResult secondResult = second.get(20, TimeUnit.SECONDS);
 
-            assertEquals(1, firstResult.inheritedSanctions() + secondResult.inheritedSanctions());
+            assertEquals(0, firstResult.inheritedSanctions() + secondResult.inheritedSanctions());
         } finally {
             executor.shutdownNow();
         }
-        assertCommittedInheritanceExactlyOnce(fixture);
+        assertNetworkOverlapRecordedWithoutAutomaticSanction(fixture);
         assertEquals(1, evidenceCount(fixture.source(), fixture.joining(), "SAME_NETWORK"));
     }
 
@@ -136,24 +136,26 @@ class NetworkIdentityStoreFailureIntegrationTest {
         return observationStore.observeAndInherit(fixture.joining(), fixture.identity(), observedAt, false);
     }
 
-    private void assertCommittedInheritanceExactlyOnce(AltInheritanceFixture fixture) throws SQLException {
+    private void assertNetworkOverlapRecordedWithoutAutomaticSanction(AltInheritanceFixture fixture)
+            throws SQLException {
         assertEquals(1, relationshipCount(fixture.joining()));
-        assertEquals(1, inheritedSanctionCount(fixture.joining(), fixture.sourceSanction()));
+        assertEquals(0, inheritedSanctionCount(fixture.joining(), fixture.sourceSanction()));
         assertEquals(1, tokenCount(fixture.joining(), fixture.identity()));
-        assertEquals(1, inheritedEventCount());
-        assertEquals(1, networkOutboxCount());
-        assertEquals(1, discordOutboxCount());
+        assertEquals(1, evidenceCount(fixture.source(), fixture.joining(), "SAME_NETWORK"));
+        assertEquals(0, inheritedEventCount());
+        assertEquals(0, networkOutboxCount());
+        assertEquals(0, discordOutboxCount());
     }
 
     private JdbcNetworkIdentityStore store() {
         return new JdbcNetworkIdentityStore(dataSource, new ObjectMapper());
     }
 
-    private JdbcNetworkIdentityStore failingInheritedEventStore() {
-        return new JdbcNetworkIdentityStore(failingInheritedEventDataSource(), new ObjectMapper());
+    private JdbcNetworkIdentityStore failingNetworkEvidenceStore() {
+        return new JdbcNetworkIdentityStore(failingNetworkEvidenceDataSource(), new ObjectMapper());
     }
 
-    private DataSource failingInheritedEventDataSource() {
+    private DataSource failingNetworkEvidenceDataSource() {
         AtomicBoolean failed = new AtomicBoolean();
         return (DataSource) Proxy.newProxyInstance(
                 Thread.currentThread().getContextClassLoader(),
@@ -161,37 +163,36 @@ class NetworkIdentityStoreFailureIntegrationTest {
                 (proxy, method, args) -> {
                     Object value = invoke(method, dataSource, args);
                     if (GET_CONNECTION_METHOD.equals(method.getName())) {
-                        return failingInheritedEventConnection((Connection) value, failed);
+                        return failingNetworkEvidenceConnection((Connection) value, failed);
                     }
                     return value;
                 }
         );
     }
 
-    private Connection failingInheritedEventConnection(Connection connection, AtomicBoolean failed) {
+    private Connection failingNetworkEvidenceConnection(Connection connection, AtomicBoolean failed) {
         return (Connection) Proxy.newProxyInstance(
                 Thread.currentThread().getContextClassLoader(),
                 new Class<?>[]{Connection.class},
                 (proxy, method, args) -> {
                     Object value = invoke(method, connection, args);
-                    if (isInheritedEventInsert(method, args)) {
-                        return failingInheritedEventStatement((PreparedStatement) value, failed);
+                    if (isNetworkEvidenceInsert(method, args)) {
+                        return failingNetworkEvidenceStatement((PreparedStatement) value, failed);
                     }
                     return value;
                 }
         );
     }
 
-    private static boolean isInheritedEventInsert(Method method, Object[] args) {
+    private static boolean isNetworkEvidenceInsert(Method method, Object[] args) {
         return "prepareStatement".equals(method.getName())
                 && args != null
                 && args.length > 0
                 && args[0] instanceof String sql
-                && sql.contains("INSERT INTO sanction_events")
-                && sql.contains("'INHERITED'");
+                && sql.contains("INSERT INTO alt_evidence");
     }
 
-    private PreparedStatement failingInheritedEventStatement(PreparedStatement statement, AtomicBoolean failed) {
+    private PreparedStatement failingNetworkEvidenceStatement(PreparedStatement statement, AtomicBoolean failed) {
         return (PreparedStatement) Proxy.newProxyInstance(
                 Thread.currentThread().getContextClassLoader(),
                 new Class<?>[]{PreparedStatement.class},
@@ -199,7 +200,7 @@ class NetworkIdentityStoreFailureIntegrationTest {
                     if (EXECUTE_UPDATE_METHOD.equals(method.getName())
                             && (args == null || args.length == NO_ARGUMENTS)
                             && failed.compareAndSet(false, true)) {
-                        throw new SQLException("Synthetic transient inherited-event failure");
+                        throw new SQLException("Synthetic transient network evidence failure");
                     }
                     return invoke(method, statement, args);
                 }

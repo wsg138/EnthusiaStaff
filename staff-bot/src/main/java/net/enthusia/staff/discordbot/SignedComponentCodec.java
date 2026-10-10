@@ -37,7 +37,12 @@ final class SignedComponentCodec {
         CASE("k"),
         REVIEW_APPROVE("u"),
         REVIEW_DENY("v"),
-        REVIEW_DENY_SUBMIT("w");
+        REVIEW_DENY_SUBMIT("w"),
+        REPORT_CLAIM("a"),
+        REPORT_CLOSE("b"),
+        REPORT_NO_VIOLATION("e"),
+        REPORT_CLOSE_SUBMIT("f"),
+        REPORT_NO_VIOLATION_SUBMIT("g");
 
         private final String wireCode;
 
@@ -64,6 +69,7 @@ final class SignedComponentCodec {
         MINECRAFT("m"),
         CASE("c"),
         REQUEST("r"),
+        REPORT("t"),
         NONE("x");
 
         private final String wireCode;
@@ -115,6 +121,49 @@ final class SignedComponentCodec {
                 throw new IllegalStateException("target is not a request");
             }
             return UUID.fromString(uuidText(value));
+        }
+
+        static TargetRef report(UUID reportId, long revision) {
+            if (reportId == null || revision < 0) {
+                throw new IllegalArgumentException("report target and revision must be present");
+            }
+            var buffer = java.nio.ByteBuffer.allocate(16)
+                    .putLong(reportId.getMostSignificantBits())
+                    .putLong(reportId.getLeastSignificantBits());
+            return new TargetRef(TargetType.REPORT,
+                    Base64.getUrlEncoder().withoutPadding().encodeToString(buffer.array())
+                    + "~" + Long.toString(revision, 36));
+        }
+
+        UUID reportId() {
+            if (type != TargetType.REPORT) {
+                throw new IllegalStateException("target is not a report");
+            }
+            String[] parts = value.split("~", -1);
+            if (parts.length != 2 || parts[0].length() != 22) {
+                throw new IllegalArgumentException("invalid report target");
+            }
+            byte[] bytes = Base64.getUrlDecoder().decode(parts[0]);
+            if (bytes.length != 16) {
+                throw new IllegalArgumentException("invalid report UUID");
+            }
+            var buffer = java.nio.ByteBuffer.wrap(bytes);
+            return new UUID(buffer.getLong(), buffer.getLong());
+        }
+
+        long reportRevision() {
+            if (type != TargetType.REPORT) {
+                throw new IllegalStateException("target is not a report");
+            }
+            String[] parts = value.split("~", -1);
+            if (parts.length != 2 || !parts[1].matches("[0-9a-z]{1,13}")) {
+                throw new IllegalArgumentException("invalid report revision");
+            }
+            long revision = Long.parseLong(parts[1], 36);
+            if (revision < 0) {
+                throw new IllegalArgumentException("negative report revision");
+            }
+            return revision;
         }
 
         static TargetRef caseId(CaseId caseId) {
@@ -313,6 +362,10 @@ final class SignedComponentCodec {
             case MINECRAFT -> TargetRef.minecraft(new TargetRef(type, encoded).minecraftId());
             case CASE -> TargetRef.caseId(new CaseId(encoded));
             case REQUEST -> TargetRef.request(new TargetRef(type, encoded).requestId());
+            case REPORT -> {
+                TargetRef candidate = new TargetRef(type, encoded);
+                yield TargetRef.report(candidate.reportId(), candidate.reportRevision());
+            }
             case NONE -> TargetRef.none();
         };
     }

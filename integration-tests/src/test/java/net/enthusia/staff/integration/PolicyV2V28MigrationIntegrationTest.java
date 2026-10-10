@@ -51,7 +51,8 @@ class PolicyV2V28MigrationIntegrationTest {
             assertTrue(tableExists("policy_v2_cases"));
             assertTrue(tableExists("policy_v2_remedy_enforcement"));
             assertTrue(tableExists("policy_v2_full_overturns"));
-            assertEquals("30", latestMigrationVersion());
+            assertEquals("31", latestMigrationVersion());
+            assertTrue(tableExists("discord_investigation_cases"));
             assertEquals(1, legacyCaseCount());
             assertEquals(0, policyV2CaseCount());
         }

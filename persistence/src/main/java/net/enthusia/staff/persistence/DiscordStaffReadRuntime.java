@@ -145,6 +145,39 @@ public final class DiscordStaffReadRuntime implements AutoCloseable {
         return investigationNotes.recent(subjectId, visibility, limit);
     }
 
+    /** Bounded, non-evidentiary report queue for the private Discord review surface. */
+    public record PendingReport(UUID reportId, UUID targetId, String reasonId,
+            String state, long revision) { }
+
+    public List<PendingReport> pendingReports(int limit) {
+        if (limit < 1 || limit > 10) {
+            throw new IllegalArgumentException("report queue limit is invalid");
+        }
+        try (var connection = dataSource.getConnection();
+             var statement = connection.prepareStatement("""
+                    SELECT report_id, target_id, reason_id, state, revision
+                      FROM reports
+                     WHERE state IN ('OPEN', 'CLAIMED', 'AWAITING_REVIEW')
+                     ORDER BY created_at ASC, report_id ASC
+                     LIMIT ?
+                    """)) {
+            statement.setInt(1, limit);
+            try (var rows = statement.executeQuery()) {
+                var result = new java.util.ArrayList<PendingReport>();
+                while (rows.next()) {
+                    result.add(new PendingReport(
+                            UuidBytes.fromBytes(rows.getBytes("report_id")),
+                            UuidBytes.fromBytes(rows.getBytes("target_id")),
+                            rows.getString("reason_id"), rows.getString("state"),
+                            rows.getLong("revision")));
+                }
+                return List.copyOf(result);
+            }
+        } catch (java.sql.SQLException exception) {
+            throw new IllegalStateException("Unable to load report review queue", exception);
+        }
+    }
+
     public Optional<VersionedSubject> subjectForDiscord(DiscordUserId userId) {
         return identities.subjectForDiscord(userId);
     }

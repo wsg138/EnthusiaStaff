@@ -54,6 +54,7 @@ public final class DiscordStaffAuthorityEndpoint implements AutoCloseable {
     private final DiscordStaffAuthorityAuthenticator authenticator;
     private final StaffWebPunishmentService webPunishments;
     private final StaffWebReviewService webReviews;
+    private final StaffWebReportService webReports;
     private final com.fasterxml.jackson.databind.ObjectMapper json = new com.fasterxml.jackson.databind.ObjectMapper()
             .findAndRegisterModules().disable(com.fasterxml.jackson.databind.SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
 
@@ -63,7 +64,8 @@ public final class DiscordStaffAuthorityEndpoint implements AutoCloseable {
             DiscordStaffAuthorityConfiguration.Value configuration,
             LuckPerms luckPerms,
             StaffWebPunishmentService.Dependencies webDependencies,
-            StaffWebReviewService.Dependencies reviewDependencies
+            StaffWebReviewService.Dependencies reviewDependencies,
+            StaffWebReportService.Dependencies reportDependencies
     ) throws IOException {
         this.plugin = plugin;
         this.luckPerms = luckPerms;
@@ -73,6 +75,8 @@ public final class DiscordStaffAuthorityEndpoint implements AutoCloseable {
                 webDependencies, this::punishmentActor, this::resolve);
         this.webReviews = reviewDependencies == null ? null : new StaffWebReviewService(
                 reviewDependencies, this::reviewActor, this::resolve);
+        this.webReports = reportDependencies == null ? null : new StaffWebReportService(
+                reportDependencies, this::reportActor, this::resolve);
         HttpServer createdServer = HttpServer.create(
                 bindAddress(configuration.bindHost(), configuration.port()), BACKLOG);
         this.server = createdServer;
@@ -88,6 +92,9 @@ public final class DiscordStaffAuthorityEndpoint implements AutoCloseable {
             if (webReviews != null) {
                 createdServer.createContext("/v1/staff-reviews/", this::handleReview);
             }
+            if (webReports != null) {
+                createdServer.createContext("/v1/staff-reports/", this::handleReport);
+            }
             createdServer.start();
         } catch (RuntimeException exception) {
             server.stop(0);
@@ -97,17 +104,24 @@ public final class DiscordStaffAuthorityEndpoint implements AutoCloseable {
     }
 
     public static Optional<DiscordStaffAuthorityEndpoint> startIfConfigured(JavaPlugin plugin) {
-        return startIfConfigured(plugin, null, null);
+        return startIfConfigured(plugin, null, null, null);
     }
 
     public static Optional<DiscordStaffAuthorityEndpoint> startIfConfigured(
             JavaPlugin plugin, StaffWebPunishmentService.Dependencies webDependencies) {
-        return startIfConfigured(plugin, webDependencies, null);
+        return startIfConfigured(plugin, webDependencies, null, null);
     }
 
     public static Optional<DiscordStaffAuthorityEndpoint> startIfConfigured(
             JavaPlugin plugin, StaffWebPunishmentService.Dependencies webDependencies,
             StaffWebReviewService.Dependencies reviewDependencies) {
+        return startIfConfigured(plugin, webDependencies, reviewDependencies, null);
+    }
+
+    public static Optional<DiscordStaffAuthorityEndpoint> startIfConfigured(
+            JavaPlugin plugin, StaffWebPunishmentService.Dependencies webDependencies,
+            StaffWebReviewService.Dependencies reviewDependencies,
+            StaffWebReportService.Dependencies reportDependencies) {
         if (plugin == null) {
             throw new IllegalArgumentException("plugin must be present");
         }
@@ -116,7 +130,8 @@ public final class DiscordStaffAuthorityEndpoint implements AutoCloseable {
         if (configuration.isEmpty() || luckPerms.isEmpty()) {
             return Optional.empty();
         }
-        return bind(plugin, configuration.orElseThrow(), luckPerms.orElseThrow(), webDependencies, reviewDependencies);
+        return bind(plugin, configuration.orElseThrow(), luckPerms.orElseThrow(),
+                webDependencies, reviewDependencies, reportDependencies);
     }
 
     private static Optional<DiscordStaffAuthorityConfiguration.Value> configuredAuthority(JavaPlugin plugin) {
@@ -146,11 +161,12 @@ public final class DiscordStaffAuthorityEndpoint implements AutoCloseable {
             DiscordStaffAuthorityConfiguration.Value configuration,
             LuckPerms luckPerms,
             StaffWebPunishmentService.Dependencies webDependencies,
-            StaffWebReviewService.Dependencies reviewDependencies
+            StaffWebReviewService.Dependencies reviewDependencies,
+            StaffWebReportService.Dependencies reportDependencies
     ) {
         try {
             return Optional.of(new DiscordStaffAuthorityEndpoint(plugin, configuration, luckPerms,
-                    webDependencies, reviewDependencies));
+                    webDependencies, reviewDependencies, reportDependencies));
         } catch (IOException | RuntimeException exception) {
             log(plugin, "discord_staff_authority_bind_failed", exception);
             return Optional.empty();
@@ -309,6 +325,35 @@ public final class DiscordStaffAuthorityEndpoint implements AutoCloseable {
         }
     }
 
+    private void handleReport(HttpExchange exchange) throws IOException {
+        DiscordStaffAuthorityAuthenticator.Result authorization = null;
+        try {
+            PunishmentRequest request = authorizePunishmentRequest(exchange);
+            if (request == null) {
+                return;
+            }
+            authorization = request.authorization();
+            StaffWebReportService.Request input = json.readValue(request.body(), StaffWebReportService.Request.class);
+            if (input == null) {
+                throw new IllegalArgumentException("report action is required");
+            }
+            String action = request.path().substring("/v1/staff-reports/".length());
+            var result = webReports.execute(action, input);
+            respond(exchange, 200, json.writeValueAsString(result), authorization);
+        } catch (SecurityException exception) {
+            respond(exchange, 403, "{}", authorization);
+        } catch (IllegalArgumentException | com.fasterxml.jackson.core.JsonProcessingException exception) {
+            respond(exchange, 400, "{}", authorization);
+        } catch (RuntimeException exception) {
+            log(plugin, "staff_web_report_request_failed", exception);
+            if (exchange.getResponseCode() == -1) {
+                respond(exchange, 503, "{}", authorization);
+            }
+        } finally {
+            exchange.close();
+        }
+    }
+
     private PunishmentRequest authorizePunishmentRequest(HttpExchange exchange) throws IOException {
         if (!POST_METHOD.equals(exchange.getRequestMethod())) {
             respond(exchange, 405, "{}", null);
@@ -356,6 +401,19 @@ public final class DiscordStaffAuthorityEndpoint implements AutoCloseable {
         var permissions = user.getCachedData().getPermissionData();
         if (!permissions.checkPermission("enthusiastaff.punishment.requests.review").asBoolean()) {
             throw new SecurityException("current punishment-review permission is required");
+        }
+        StaffRank rank = PaperStaffRankResolver.resolve(
+                permission -> permissions.checkPermission(permission).asBoolean())
+                .orElseThrow(() -> new SecurityException("current staff rank is required"));
+        return new net.enthusia.staff.domain.auth.Actor(playerId,
+                user.getUsername() == null ? playerId.toString() : user.getUsername(), rank);
+    }
+
+    private net.enthusia.staff.domain.auth.Actor reportActor(UUID playerId) {
+        User user = loadUser(playerId);
+        var permissions = user.getCachedData().getPermissionData();
+        if (!permissions.checkPermission("enthusiastaff.reports.manage").asBoolean()) {
+            throw new SecurityException("current Minecraft report-management permission is required");
         }
         StaffRank rank = PaperStaffRankResolver.resolve(
                 permission -> permissions.checkPermission(permission).asBoolean())

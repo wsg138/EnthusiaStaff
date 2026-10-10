@@ -53,6 +53,8 @@ jobs:
             --tests net.enthusia.staff.integration.CaseSanctionHierarchyIntegrationTest \
             --tests net.enthusia.staff.integration.DiscordInvestigationPersistenceIntegrationTest \
             --tests net.enthusia.staff.integration.DiscordReviewQueueReadIntegrationTest \
+            --tests net.enthusia.staff.integration.NetworkIdentityStoreFailureIntegrationTest \
+            --tests net.enthusia.staff.integration.PolicyV2V28MigrationIntegrationTest \
             --no-daemon --no-build-cache --no-configuration-cache --console=plain
       - name: Upload MariaDB integration failure reports
         if: failure()
