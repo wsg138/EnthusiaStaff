@@ -665,9 +665,9 @@ public final class PunishmentCommand implements CommandExecutor, TabCompleter {
                 return List.of();
             }
             boolean permitted = "change".equals(action)
-                    ? sender.hasPermission("enthusiastaff.remove")
+                    ? true
                     : sender.hasPermission(SanctionChangeAccess.permissionFor(
-                            PunishmentSanctionRoutes.action(action)));
+                            ExactSanctionPickerGui.action(action)));
             return permitted ? onlineNames(sender, args[1]) : List.of();
         }
         List<String> completions = new ArrayList<>(requestCommands.complete(route, args));
