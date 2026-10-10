@@ -445,11 +445,8 @@ public final class AiReviewSubsystem implements AutoCloseable, Listener {
                 urgent > 0 ? NamedTextColor.RED : NamedTextColor.GOLD
         );
         for (Player player : plugin.getServer().getOnlinePlayers()) {
-            if (!activeDuty(player)
-                    || !AiReviewPermissions.queue(player)
-                    || !player.hasPermission(configuration.notificationPermission())) {
-                continue;
-            }
+            // Folia: active-duty and permission state belong to the player's
+            // entity scheduler, not the global review-poll completion thread.
             player.getScheduler().execute(plugin, () -> {
                 if (activeDuty(player)
                         && AiReviewPermissions.queue(player)
