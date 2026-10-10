@@ -96,18 +96,19 @@ class AiReviewHttpClientTest {
         }
     }
 
-    @Test
-    void allHistoryFiltersAreEncodedAsFixedServerSideValues() throws Exception {
-        for (AiReviewHistoryFilter filter : AiReviewHistoryFilter.values()) {
-            try (MiniServer server = new MiniServer(request ->
-                    Response.json(200, "{\"items\":[],\"next_cursor\":null}"))) {
-                AiReviewHttpClient client = client(server, 64 * 1024, 2_000);
-                assertTrue(client.listDecisions(2, null, filter).items().isEmpty());
-                String expected = "/v1/decisions?limit=2"
-                        + (filter == AiReviewHistoryFilter.ALL
-                                ? "" : "&filter=" + filter.apiValue());
-                assertEquals(expected, server.awaitRequest().target());
-            }
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.EnumSource(AiReviewHistoryFilter.class)
+    void allHistoryFiltersAreEncodedAsFixedServerSideValues(
+            AiReviewHistoryFilter filter
+    ) throws Exception {
+        try (MiniServer server = new MiniServer(request ->
+                Response.json(200, "{\"items\":[],\"next_cursor\":null}"))) {
+            AiReviewHttpClient client = client(server, 64 * 1024, 2_000);
+            assertTrue(client.listDecisions(2, null, filter).items().isEmpty());
+            String expected = "/v1/decisions?limit=2"
+                    + (filter == AiReviewHistoryFilter.ALL
+                            ? "" : "&filter=" + filter.apiValue());
+            assertEquals(expected, server.awaitRequest().target());
         }
     }
 
