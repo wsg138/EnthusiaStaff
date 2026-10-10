@@ -59,7 +59,7 @@ class AiReviewHistoryGuiStateTest {
         UUID viewerId = UUID.randomUUID();
         var history = new AiReviewGuiState.History(
                 viewerId, 3L, List.of(record("event-1")), "older",
-                "next", List.of("")
+                "next", List.of(""), AiReviewHistoryFilter.CORRECTED
         );
         var decision = new Decision(
                 MessageAction.ALLOW, "SAFE", ReviewPriority.NONE,
@@ -88,6 +88,7 @@ class AiReviewHistoryGuiStateTest {
         assertSame(history, picker.historyOrigin());
         assertSame(history, confirm.historyOrigin());
         assertEquals("older", confirm.historyOrigin().cursor());
+        assertEquals(AiReviewHistoryFilter.CORRECTED, confirm.historyOrigin().filter());
     }
 
     @Test
