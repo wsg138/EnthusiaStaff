@@ -10,7 +10,7 @@ import org.junit.jupiter.api.Test;
 class BundledConfigurationSeedingWiringTest {
     @Test
     void reasonPolicyResourceIsOnlySeededWhenMissing() throws IOException {
-        String source = Files.readString(paperModule().resolve(
+        String source = normalizedSource(paperModule().resolve(
                 "src/main/java/net/enthusia/staff/paper/EnthusiaStaffPaperPlugin.java"
         ));
 
@@ -23,7 +23,7 @@ class BundledConfigurationSeedingWiringTest {
 
     @Test
     void reportResourcesAreOnlySeededWhenMissing() throws IOException {
-        String source = Files.readString(paperModule().resolve(
+        String source = normalizedSource(paperModule().resolve(
                 "src/main/java/net/enthusia/staff/paper/config/ReportConfigurationRuntime.java"
         ));
 
@@ -37,6 +37,11 @@ class BundledConfigurationSeedingWiringTest {
                         + "                plugin.saveResource(\"gui/reports.yml\", false);"),
                 "Existing GUI reports.yml must not trigger an expected saveResource warning"
         );
+    }
+
+    /** Source-shape assertions must be stable for both CRLF Windows and LF CI checkouts. */
+    private static String normalizedSource(Path path) throws IOException {
+        return Files.readString(path).replace("\r\n", "\n");
     }
 
     private static Path paperModule() {
