@@ -134,7 +134,7 @@ class JdaDiscordGatewayTest {
 
     @Test
     void uncachedDiscordAccountUsesNonPingingMentionInsteadOfLinkedLabel() {
-        String discordId = "123456789012345678";
+        String discordId = "1".repeat(18);
         assertEquals(
                 java.util.Optional.of("<@" + discordId + ">"),
                 JdaDiscordGateway.discordProfileMention(discordId)
