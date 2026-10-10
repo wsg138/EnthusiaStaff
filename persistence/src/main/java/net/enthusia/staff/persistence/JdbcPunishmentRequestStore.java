@@ -117,8 +117,10 @@ public final class JdbcPunishmentRequestStore implements PunishmentRequestStore 
                 dataSource, "Unable to release abandoned punishment review lease",
                 connection -> {
                     try (PreparedStatement statement = connection.prepareStatement("""
-                            DELETE FROM operation_leases
+                            UPDATE operation_leases
+                            SET lease_until = '2000-01-01 00:00:00', updated_at = NOW(6)
                             WHERE resource_key = ? AND owner_id = ? AND fencing_token = ?
+                              AND lease_until > '2000-01-01 00:00:00'
                             """)) {
                         statement.setString(1,
                                 JdbcPunishmentRequestFulfillment.resourceKey(lease.request().requestId()));
