@@ -255,7 +255,17 @@ public final class AiReviewSubsystem implements AutoCloseable, Listener {
             Consumer<DecisionHistoryPage> success,
             Consumer<String> failure
     ) {
-        submit(() -> client.listDecisions(limit, cursor), success, failure);
+        loadDecisions(limit, cursor, AiReviewHistoryFilter.ALL, success, failure);
+    }
+
+    void loadDecisions(
+            int limit,
+            String cursor,
+            AiReviewHistoryFilter filter,
+            Consumer<DecisionHistoryPage> success,
+            Consumer<String> failure
+    ) {
+        submit(() -> client.listDecisions(limit, cursor, filter), success, failure);
     }
 
     void loadEvent(
