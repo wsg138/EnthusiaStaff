@@ -887,6 +887,11 @@ public final class JdbcNetworkIdentityStore implements NetworkIdentityStore {
                 INSERT INTO discord_outbox(message_id, idempotency_key, destination, event_type,
                     payload_json, available_at, created_at)
                 VALUES (?, ?, 'punishments', 'SANCTION_INHERITED', ?, ?, ?)
+                """);
+             PreparedStatement review = connection.prepareStatement("""
+                INSERT INTO discord_outbox(message_id, idempotency_key, destination, event_type,
+                    payload_json, available_at, created_at)
+                VALUES (?, ?, 'alerts', 'ALT_SANCTION_INHERITED', ?, ?, ?)
                 """)) {
             network.setBytes(1, UuidBytes.toBytes(UUID.randomUUID()));
             network.setString(2, key + ":network");
@@ -902,6 +907,13 @@ public final class JdbcNetworkIdentityStore implements NetworkIdentityStore {
             discord.setTimestamp(4, Timestamp.from(now));
             discord.setTimestamp(5, Timestamp.from(now));
             discord.executeUpdate();
+
+            review.setBytes(1, UuidBytes.toBytes(UUID.randomUUID()));
+            review.setString(2, key + ":alt-review");
+            review.setString(3, payload);
+            review.setTimestamp(4, Timestamp.from(now));
+            review.setTimestamp(5, Timestamp.from(now));
+            review.executeUpdate();
         }
     }
 
@@ -920,12 +932,36 @@ public final class JdbcNetworkIdentityStore implements NetworkIdentityStore {
                     "relatedPlayerId", sourcePlayerId.toString(),
                     "caseId", source.caseId(),
                     "sanctionType", source.type().name(),
-                    "relationshipState", state.name()
+                    "relationshipState", state.name(),
+                    "trigger", "JOIN",
+                    "confidencePolicyGrade", state.confidence()
             ));
             insertStaffAlert(connection, "LOW_CONFIDENCE_RELATED_ACCOUNT_ONLINE", payload, now);
+            insertDiscordAltReviewAlert(connection, joiningPlayerId, sourcePlayerId, source, payload, now);
             alerts++;
         }
         return alerts;
+    }
+
+    /** One Discord alert per joining player, source sanction and hour; duplicate logins do not spam staff. */
+    private static void insertDiscordAltReviewAlert(
+            Connection connection, UUID joiningPlayerId, UUID relatedPlayerId,
+            SourceSanction source, String payload, Instant now
+    ) throws SQLException {
+        String key = "alt-review:" + joiningPlayerId + ":" + relatedPlayerId
+                + ":" + source.sanctionId() + ":" + now.getEpochSecond() / 3600;
+        try (PreparedStatement statement = connection.prepareStatement("""
+                INSERT IGNORE INTO discord_outbox(message_id, idempotency_key, destination, event_type,
+                    payload_json, available_at, created_at)
+                VALUES (?, ?, 'alerts', 'ALT_EVASION_REVIEW', ?, ?, ?)
+                """)) {
+            statement.setBytes(1, UuidBytes.toBytes(UUID.randomUUID()));
+            statement.setString(2, key);
+            statement.setString(3, payload);
+            statement.setTimestamp(4, Timestamp.from(now));
+            statement.setTimestamp(5, Timestamp.from(now));
+            statement.executeUpdate();
+        }
     }
 
     private static void insertStaffAlert(Connection connection, String type, String payload, Instant now)

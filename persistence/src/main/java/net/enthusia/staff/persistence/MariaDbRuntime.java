@@ -30,6 +30,7 @@ import net.enthusia.staff.domain.ports.InventoryRecoveryStore;
 import net.enthusia.staff.domain.ports.ModerationHistoryStore;
 import net.enthusia.staff.domain.ports.ModerationStore;
 import net.enthusia.staff.domain.ports.NetworkIdentityStore;
+import net.enthusia.staff.domain.ports.AltMuteEvasionAlertStore;
 import net.enthusia.staff.domain.ports.NetworkOutboxStore;
 import net.enthusia.staff.domain.ports.OperationalStateStore;
 import net.enthusia.staff.domain.ports.PlayerDirectory;
@@ -74,6 +75,7 @@ public final class MariaDbRuntime implements AutoCloseable {
     private final StaffPreferenceStore staffPreferenceStore;
     private final VanishStore vanishStore;
     private final NetworkIdentityStore networkIdentityStore;
+    private final AltMuteEvasionAlertStore altMuteEvasionAlertStore;
     private final ScheduledExecutorService networkIdentityRetentionExecutor;
     private final SanctionMutationStore sanctionMutationStore;
     private final CaseLookup caseLookup;
@@ -118,6 +120,7 @@ public final class MariaDbRuntime implements AutoCloseable {
         this.playerDirectory = new JdbcPlayerDirectory(dataSource);
         this.networkOutboxStore = new JdbcNetworkOutboxStore(dataSource);
         this.discordOutboxStore = new JdbcDiscordOutboxStore(dataSource);
+        this.altMuteEvasionAlertStore = new JdbcAltMuteEvasionAlertStore(dataSource, json);
         this.freezeStore = new JdbcFreezeStore(dataSource);
         this.staffSessionStore = new JdbcStaffSessionStore(dataSource);
         this.staffPreferenceStore = new JdbcStaffPreferenceStore(dataSource);
@@ -172,6 +175,7 @@ public final class MariaDbRuntime implements AutoCloseable {
     public StaffPreferenceStore staffPreferenceStore() { return staffPreferenceStore; }
     public VanishStore vanishStore() { return vanishStore; }
     public NetworkIdentityStore networkIdentityStore() { return networkIdentityStore; }
+    public AltMuteEvasionAlertStore altMuteEvasionAlertStore() { return altMuteEvasionAlertStore; }
     public SanctionMutationStore sanctionMutationStore() { return sanctionMutationStore; }
     public CaseLookup caseLookup() { return caseLookup; }
     public CaseReviewStore caseReviewStore() { return caseReviewStore; }

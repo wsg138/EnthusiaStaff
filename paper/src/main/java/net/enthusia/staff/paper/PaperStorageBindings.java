@@ -20,6 +20,7 @@ import net.enthusia.staff.domain.auth.AuthorizationPolicy;
 import net.enthusia.staff.domain.escalation.EscalationEngine;
 import net.enthusia.staff.domain.ports.AtomicReasonPolicyRepository;
 import net.enthusia.staff.domain.ports.CaseLookup;
+import net.enthusia.staff.domain.ports.AltMuteEvasionAlertStore;
 import net.enthusia.staff.domain.ports.CaseReviewStore;
 import net.enthusia.staff.domain.ports.ClientEvidenceStore;
 import net.enthusia.staff.domain.ports.EconomyJournalStore;
@@ -161,6 +162,7 @@ record PaperStorageBindings(
     ModerationStore moderationStore() { return moderation.moderationStore(); }
     PlayerDirectory playerDirectory() { return moderation.playerDirectory(); }
     SanctionLookup sanctionLookup() { return moderation.sanctionLookup(); }
+    AltMuteEvasionAlertStore altMuteEvasionAlertStore() { return runtime.altMuteEvasionAlertStore(); }
     CaseLookup caseLookup() { return moderation.caseLookup(); }
     CaseReviewStore caseReviewStore() { return moderation.caseReviewStore(); }
     ModerationHistoryStore moderationHistoryStore() { return moderation.moderationHistoryStore(); }

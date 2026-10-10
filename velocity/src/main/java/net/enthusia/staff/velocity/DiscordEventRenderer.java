@@ -20,7 +20,8 @@ final class DiscordEventRenderer {
             "punishments", List.of(
                     "caseId", TARGET_ID, "subjectId", "reasonId", "family",
                     "publicReason", "internalExplanation", "issuedAt",
-                    "sanctionId", "sanctionIds", "sanctionType", "sanctionTypes", "sanctionDetails",
+                    "sanctionId", "sanctionIds", "sourceSanctionId", "sourcePlayerId",
+                    "relationshipState", "sanctionType", "sanctionTypes", "sanctionDetails",
                     "requestId", "actorId", "actorName", "actorRank",
                     "action", "status", "previousStatus", "resultingStatus",
                     "previousExpiration", "resultingExpiration",
@@ -31,10 +32,16 @@ final class DiscordEventRenderer {
             ),
             "reports", List.of("reportId", TARGET_ID, "reasonId", "serverId", "status", STATE, "actorId"),
             "logs-staffmode", List.of(
-                    "staffId", TARGET_ID, "actorId", "sessionId", "rank", "active", "reason", "serverId", STATE
+                    "staffId", TARGET_ID, "actorId", "actor", "name", "sessionId",
+                    "rank", "active", "vanished", "staffMode", "server", "serverId",
+                    "action", "detail", "reason", "ts", STATE
             ),
             "alerts", List.of(
-                    "caseId", TARGET_ID, "sanctionId", "requestId", "reportId", "destination",
+                    "caseId", TARGET_ID, "relatedPlayerId", "sourcePlayerId",
+                    "sanctionId", "sourceSanctionId", "sanctionType",
+                    "relationshipState", "confidencePolicyGrade", "trigger",
+                    "requestId", "requestRevision", "requesterId", "requiredRank", "reasonId",
+                    "visibility", "reportId", "destination",
                     "errorCode", "status", STATE, "type", "serverId"
             )
     );

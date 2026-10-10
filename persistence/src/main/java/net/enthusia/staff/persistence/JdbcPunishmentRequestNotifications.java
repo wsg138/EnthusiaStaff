@@ -259,6 +259,35 @@ final class JdbcPunishmentRequestNotifications {
                     "Punishment request Discord intent was not inserted"
             );
         }
+        if ("PUNISHMENT_REQUEST_SUBMITTED".equals(eventType)) {
+            insertDiscordReviewRequired(connection, request, occurrenceKey, serialized, now);
+        }
+    }
+
+    /**
+     * The punishments channel retains its complete immutable lifecycle log.
+     * A separate actionable REVIEW notice appears in the private alerts channel.
+     * This event intentionally does not approve or commit anything.
+     */
+    private static void insertDiscordReviewRequired(
+            Connection connection, PunishmentApprovalRequest request,
+            String occurrenceKey, String serialized, Instant now
+    ) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement("""
+                INSERT INTO discord_outbox(message_id, idempotency_key, destination, event_type,
+                    payload_json, available_at, created_at)
+                VALUES (?, ?, 'alerts', 'PUNISHMENT_APPROVAL_REQUIRED', ?, ?, ?)
+                """)) {
+            statement.setBytes(1, UuidBytes.toBytes(UUID.randomUUID()));
+            statement.setString(2, "punishment-review:" + request.requestId() + ':' + occurrenceKey);
+            statement.setString(3, serialized);
+            statement.setTimestamp(4, Timestamp.from(now));
+            statement.setTimestamp(5, Timestamp.from(now));
+            JdbcTransactionSupport.requireSingleUpdate(
+                    statement.executeUpdate(),
+                    "Punishment request review notification was not inserted"
+            );
+        }
     }
 
     private static PunishmentRequestAlertIntent finalized(PunishmentRequestAlertIntent draft) {

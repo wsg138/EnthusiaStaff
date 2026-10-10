@@ -65,6 +65,38 @@ final class DiscordEventRendererTest {
     }
 
     @Test
+    void altReviewAlertShowsEvidenceCategoryWithoutRawNetworkAddress() {
+        String rendered = renderer.render(message(
+                "alerts", "ALT_EVASION_REVIEW",
+                "{\"targetId\":\"joining\",\"relatedPlayerId\":\"sanctioned\","
+                        + "\"sanctionType\":\"BAN\",\"relationshipState\":\"SAME_NETWORK\","
+                        + "\"confidencePolicyGrade\":0.25,\"trigger\":\"JOIN\","
+                        + "\"rawIp\":\"private-address\",\"caseId\":\"case-7\"}"
+        ));
+        assertTrue(rendered.contains("relatedPlayerId=sanctioned"));
+        assertTrue(rendered.contains("trigger=JOIN"));
+        assertTrue(rendered.contains("confidencePolicyGrade=0.25"));
+        assertFalse(rendered.contains("private-address"));
+        assertFalse(rendered.contains("rawIp"));
+    }
+
+    @Test
+    void approvalRequiredAlertExposesOnlySafeReviewMetadata() {
+        String rendered = renderer.render(message(
+                "alerts", "PUNISHMENT_APPROVAL_REQUIRED",
+                "{\"requestId\":\"request-1\",\"targetId\":\"target-1\","
+                        + "\"requesterId\":\"staff-1\",\"reasonId\":\"cheating\","
+                        + "\"requiredRank\":\"MOD\",\"visibility\":\"PRIVATE\","
+                        + "\"internalExplanation\":\"Sensitive evidence: do not post\"}"
+        ));
+        assertTrue(rendered.contains("PUNISHMENT_APPROVAL_REQUIRED"));
+        assertTrue(rendered.contains("requestId=request-1"));
+        assertTrue(rendered.contains("requiredRank=MOD"));
+        assertFalse(rendered.contains("Sensitive evidence"));
+        assertFalse(rendered.contains("internalExplanation"));
+    }
+
+    @Test
     void fieldTruncationDoesNotSplitSurrogatePair() {
         String reason = "a".repeat(178) + "😀" + "z";
         String rendered = renderer.render(message(

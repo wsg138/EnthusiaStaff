@@ -19,6 +19,7 @@ import java.util.logging.Level;
 import net.enthusia.staff.domain.OperationalMode;
 import net.enthusia.staff.domain.player.PlayerPlatform;
 import net.enthusia.staff.domain.ports.PlayerDirectory;
+import net.enthusia.staff.domain.ports.AltMuteEvasionAlertStore;
 import net.enthusia.staff.domain.ports.SanctionLookup;
 import net.enthusia.staff.domain.sanction.ActiveSanction;
 import net.enthusia.staff.domain.sanction.SanctionType;
@@ -47,6 +48,7 @@ public final class MuteEnforcementListener implements Listener, AutoCloseable {
     private static final Duration CACHE_TTL = Duration.ofSeconds(45);
     private static final Set<SanctionType> MUTE_TYPES = Set.of(SanctionType.MUTE, SanctionType.PUBLIC_MUTE);
     private static final long NEXT_TICK = 1L;
+    private static final Duration ATTEMPT_THROTTLE = Duration.ofMinutes(5);
 
     private final JavaPlugin plugin;
     private final Clock clock;
@@ -55,6 +57,8 @@ public final class MuteEnforcementListener implements Listener, AutoCloseable {
     private final Supplier<SanctionLookup> sanctions;
     private final Supplier<PlayerDirectory> players;
     private final ExecutorService workers;
+    private final Supplier<AltMuteEvasionAlertStore> muteEvasionAlerts;
+    private final ConcurrentHashMap<UUID, Instant> lastMuteEvasionAlert = new ConcurrentHashMap<>();
     private final PaperPlayerPlatformResolver platforms;
     private final PlayerMessageDispatcher messages;
     private final ConcurrentHashMap<UUID, Entry> cache = new ConcurrentHashMap<>();
@@ -69,6 +73,19 @@ public final class MuteEnforcementListener implements Listener, AutoCloseable {
             Supplier<PlayerDirectory> players,
             ExecutorService workers
     ) {
+        this(plugin, clock, serverId, mode, sanctions, players, workers, () -> null);
+    }
+
+    public MuteEnforcementListener(
+            JavaPlugin plugin,
+            Clock clock,
+            String serverId,
+            Supplier<OperationalMode> mode,
+            Supplier<SanctionLookup> sanctions,
+            Supplier<PlayerDirectory> players,
+            ExecutorService workers,
+            Supplier<AltMuteEvasionAlertStore> muteEvasionAlerts
+    ) {
         this.plugin = plugin;
         this.clock = clock;
         this.serverId = serverId;
@@ -76,6 +93,7 @@ public final class MuteEnforcementListener implements Listener, AutoCloseable {
         this.sanctions = sanctions;
         this.players = players;
         this.workers = workers;
+        this.muteEvasionAlerts = Objects.requireNonNull(muteEvasionAlerts, "muteEvasionAlerts");
         this.platforms = PaperPlayerPlatformResolver.discover(plugin);
         this.messages = new PlayerMessageDispatcher(plugin);
     }
@@ -149,6 +167,7 @@ public final class MuteEnforcementListener implements Listener, AutoCloseable {
     @EventHandler(priority = EventPriority.MONITOR)
     public void onQuit(PlayerQuitEvent event) {
         cache.remove(event.getPlayer().getUniqueId());
+        lastMuteEvasionAlert.remove(event.getPlayer().getUniqueId());
     }
 
     @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
@@ -176,12 +195,38 @@ public final class MuteEnforcementListener implements Listener, AutoCloseable {
         if (!entry.active().isEmpty()) {
             cancellation.accept(true);
             ActiveSanction mute = preferredMute(entry.active());
+            recordInheritedMuteAttempt(player.getUniqueId(), mute);
             String expiration = mute.expiresAt().map(Instant::toString).orElse("permanent");
             String prefix = mute.type() == SanctionType.PUBLIC_MUTE
                     ? "You are muted from public chat"
                     : "You are muted";
             notifyPlayer(player, prefix + " (case " + mute.caseId() + ", expires " + expiration + ").");
         }
+    }
+
+    private void recordInheritedMuteAttempt(UUID playerId, ActiveSanction mute) {
+        if (mute.inheritedFrom().isEmpty()) {
+            return;
+        }
+        Instant now = clock.instant();
+        Instant prior = lastMuteEvasionAlert.putIfAbsent(playerId, now);
+        if (prior != null) {
+            if (prior.plus(ATTEMPT_THROTTLE).isAfter(now)
+                    || !lastMuteEvasionAlert.replace(playerId, prior, now)) {
+                return;
+            }
+        }
+        submit(() -> {
+            try {
+                AltMuteEvasionAlertStore alerts = muteEvasionAlerts.get();
+                if (alerts != null) {
+                    alerts.recordBlockedChat(playerId, mute, serverId, now);
+                }
+            } catch (RuntimeException exception) {
+                plugin.getLogger().log(Level.WARNING,
+                        "Unable to record blocked chat by an inherited-muted account", exception);
+            }
+        });
     }
 
     private static ActiveSanction preferredMute(List<ActiveSanction> active) {
@@ -256,6 +301,7 @@ public final class MuteEnforcementListener implements Listener, AutoCloseable {
             refreshTask.cancel();
         }
         cache.clear();
+        lastMuteEvasionAlert.clear();
     }
 
     private record Entry(List<ActiveSanction> active, Instant validUntil) {
