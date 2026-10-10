@@ -1016,6 +1016,7 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
                         () -> storageValue(PaperStorageBindings::punishmentDraftWorkflow),
                         () -> storageValue(PaperStorageBindings::punishmentRequestService),
                         () -> storageValue(PaperStorageBindings::staffSessionStore),
+                        () -> storageValue(PaperStorageBindings::reportStore),
                         () -> storageValue(PaperStorageBindings::playerDirectory),
                         () -> storageValue(PaperStorageBindings::economyJournalStore),
                         () -> storageValue(PaperStorageBindings::inventoryJournalStore)

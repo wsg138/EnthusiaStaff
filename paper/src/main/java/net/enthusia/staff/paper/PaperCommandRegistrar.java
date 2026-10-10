@@ -236,8 +236,10 @@ final class PaperCommandRegistrar {
         Supplier<CaseLookup> cases = storage(PaperStorageBindings::caseLookup);
         AuthorizationPolicy activeAuthorization = activeAuthorization();
         SanctionChangeGuiController changeGui = new SanctionChangeGuiController(
-                plugin(), clock(), writeMode(), changes, players, cases,
-                storage(PaperStorageBindings::caseReviewStore), activeAuthorization, workers()
+                plugin(), clock(), writeMode(), changes,
+                new SanctionChangeGuiController.Stores(
+                        players, cases, storage(PaperStorageBindings::caseReviewStore)
+                ), activeAuthorization, workers()
         );
         plugin().getServer().getPluginManager().registerEvents(changeGui, plugin());
         SanctionChangeCommand command = new SanctionChangeCommand(

@@ -60,6 +60,91 @@ class HttpStaffAuthorityClientTest {
     }
 
     @Test
+    void privateReviewApproveUsesBodyBoundSignatureAndVerifiedCommittedResponse() throws IOException {
+        AtomicReference<StaffAuthorityHttpSigning.Verification> proof = new AtomicReference<>();
+        AtomicReference<Boolean> bodyBound = new AtomicReference<>();
+        HttpServer server = HttpServer.create(new InetSocketAddress(LOOPBACK, 0), 1);
+        server.createContext("/v1/staff-reviews/approve", exchange -> {
+            byte[] input = exchange.getRequestBody().readAllBytes();
+            String target = exchange.getRequestURI().toString();
+            bodyBound.set(target.equals(StaffAuthorityHttpSigning.punishmentRequestTarget(
+                    "/v1/staff-reviews/approve", input)));
+            String nonce = exchange.getRequestHeaders().getFirst(StaffAuthorityHttpSigning.NONCE_HEADER);
+            proof.set(StaffAuthorityHttpSigning.verifyRequest(CREDENTIAL, "POST", target,
+                    exchange.getRequestHeaders().getFirst(StaffAuthorityHttpSigning.TIMESTAMP_HEADER),
+                    nonce, exchange.getRequestHeaders().getFirst(StaffAuthorityHttpSigning.SIGNATURE_HEADER),
+                    Clock.systemUTC()));
+            String body = """
+                    {"state":"APPROVED","caseId":"CASE000000000001"}
+                    """;
+            exchange.getResponseHeaders().set(StaffAuthorityHttpSigning.RESPONSE_SIGNATURE_HEADER,
+                    StaffAuthorityHttpSigning.signResponse(CREDENTIAL, nonce, 200, body));
+            byte[] output = body.getBytes(StandardCharsets.UTF_8);
+            exchange.sendResponseHeaders(200, output.length);
+            exchange.getResponseBody().write(output);
+            exchange.close();
+        });
+        server.start();
+        try {
+            var client = new HttpStaffAuthorityClient(URI.create(
+                    RANK_URL.formatted(server.getAddress().getPort())), CREDENTIAL,
+                    StaffModerationConfiguration.AuthorityTransport.BLOOM_PRIVATE_SPLIT);
+            var result = client.review("approve", java.util.Map.of(
+                    "actorId", UUID.randomUUID().toString(),
+                    "requestId", UUID.randomUUID().toString(), "note", ""));
+            assertEquals("APPROVED", result.path("state").asText());
+            assertEquals("CASE000000000001", result.path("caseId").asText());
+            assertEquals(true, bodyBound.get());
+            assertEquals(StaffAuthorityHttpSigning.Verification.ACCEPTED, proof.get());
+        } finally {
+            server.stop(0);
+        }
+    }
+
+    @Test
+    void privateReportClaimUsesBodyBoundSignatureAndVerifiesCommittedRevision() throws IOException {
+        AtomicReference<StaffAuthorityHttpSigning.Verification> proof = new AtomicReference<>();
+        AtomicReference<Boolean> bodyBound = new AtomicReference<>();
+        HttpServer server = HttpServer.create(new InetSocketAddress(LOOPBACK, 0), 1);
+        server.createContext("/v1/staff-reports/claim", exchange -> {
+            byte[] input = exchange.getRequestBody().readAllBytes();
+            String target = exchange.getRequestURI().toString();
+            bodyBound.set(target.equals(StaffAuthorityHttpSigning.punishmentRequestTarget(
+                    "/v1/staff-reports/claim", input)));
+            String nonce = exchange.getRequestHeaders().getFirst(StaffAuthorityHttpSigning.NONCE_HEADER);
+            proof.set(StaffAuthorityHttpSigning.verifyRequest(CREDENTIAL, "POST", target,
+                    exchange.getRequestHeaders().getFirst(StaffAuthorityHttpSigning.TIMESTAMP_HEADER),
+                    nonce, exchange.getRequestHeaders().getFirst(StaffAuthorityHttpSigning.SIGNATURE_HEADER),
+                    Clock.systemUTC()));
+            String body = """
+                    {"state":"CLAIMED","revision":4,"replayed":false}
+                    """;
+            exchange.getResponseHeaders().set(StaffAuthorityHttpSigning.RESPONSE_SIGNATURE_HEADER,
+                    StaffAuthorityHttpSigning.signResponse(CREDENTIAL, nonce, 200, body));
+            byte[] output = body.getBytes(StandardCharsets.UTF_8);
+            exchange.sendResponseHeaders(200, output.length);
+            exchange.getResponseBody().write(output);
+            exchange.close();
+        });
+        server.start();
+        try {
+            var client = new HttpStaffAuthorityClient(URI.create(
+                    RANK_URL.formatted(server.getAddress().getPort())), CREDENTIAL,
+                    StaffModerationConfiguration.AuthorityTransport.BLOOM_PRIVATE_SPLIT);
+            var result = client.report("claim", java.util.Map.of(
+                    "actorId", UUID.randomUUID().toString(),
+                    "reportId", UUID.randomUUID().toString(), "expectedRevision", 3,
+                    "operationId", "123456789012345678", "note", "Claimed"));
+            assertEquals("CLAIMED", result.path("state").asText());
+            assertEquals(4, result.path("revision").asInt());
+            assertEquals(true, bodyBound.get());
+            assertEquals(StaffAuthorityHttpSigning.Verification.ACCEPTED, proof.get());
+        } finally {
+            server.stop(0);
+        }
+    }
+
+    @Test
     void loopbackTransportPreservesBearerAuthorityResourcePath() throws IOException {
         UUID playerId = UUID.fromString("0f48cf03-f319-41e8-981f-4d0e765b5b49");
         AtomicReference<URI> requestUri = new AtomicReference<>();

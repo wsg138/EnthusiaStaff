@@ -57,10 +57,10 @@ staff-tools:
     no-fall:
       vertical: 0.70
   cooldowns:
-    random-teleport-millis: 2000
-    target-tool-millis: 750
-    toggle-tool-millis: 500
-    menu-millis: 500
+    random-teleport-millis: 250
+    target-tool-millis: 100
+    toggle-tool-millis: 100
+    menu-millis: 100
 
 # Restart-only investigation settings; all new permissions require explicit grants.
 investigation:

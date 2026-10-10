@@ -15,7 +15,9 @@ import net.dv8tion.jda.api.components.selections.StringSelectMenu;
 import net.dv8tion.jda.api.components.textinput.TextInput;
 import net.dv8tion.jda.api.components.textinput.TextInputStyle;
 import net.dv8tion.jda.api.entities.Guild;
+import net.dv8tion.jda.api.entities.Message;
 import net.dv8tion.jda.api.entities.User;
+import net.dv8tion.jda.api.entities.channel.middleman.MessageChannel;
 import net.dv8tion.jda.api.events.interaction.ModalInteractionEvent;
 import net.dv8tion.jda.api.events.interaction.command.MessageContextInteractionEvent;
 import net.dv8tion.jda.api.events.interaction.command.SlashCommandInteractionEvent;
@@ -37,7 +39,7 @@ import net.enthusia.staff.domain.discord.DiscordDeliveryOutcome;
 import net.enthusia.staff.domain.moderation.DiscordUserId;
 import net.enthusia.staff.domain.sanction.SanctionType;
 
-/** JDA adapter for D06 reads and D07 confirmed Discord-only moderation actions. */
+/** JDA adapter for private moderation reads, investigations, and confirmed Discord-only actions. */
 final class JdaStaffModerationListener extends ListenerAdapter {
     private static final System.Logger LOGGER = System.getLogger(JdaStaffModerationListener.class.getName());
     private static final long NO_GUILD = 0L;
@@ -60,6 +62,7 @@ final class JdaStaffModerationListener extends ListenerAdapter {
     private static final String REVIEW_REQUEST = "review-request";
     private static final String REVIEW_QUEUE = "review-queue";
     private static final String REVIEW_MODAL_NOTE = "review-note";
+    private static final String REPORT_MODAL_NOTE = "report-note";
     private static final String REVIEW_ID = "request-id";
     private static final String REVIEW_DECISION = "decision";
     private static final String REVIEW_NOTE = "note";
@@ -104,6 +107,7 @@ final class JdaStaffModerationListener extends ListenerAdapter {
     private final HttpStaffAuthorityClient reviewAuthority;
     private final StaffModerationRuntime moderationRuntime;
     private final SignedComponentCodec reviewComponents;
+    private final Optional<DiscordInvestigationCommandController> investigations;
     private final java.util.concurrent.atomic.AtomicBoolean enabled = new java.util.concurrent.atomic.AtomicBoolean();
 
     JdaStaffModerationListener(
@@ -136,6 +140,7 @@ final class JdaStaffModerationListener extends ListenerAdapter {
         this.reviewAuthority = moderation.authority();
         this.moderationRuntime = moderation;
         this.reviewComponents = moderation.components();
+        this.investigations = moderation.investigationService().map(DiscordInvestigationCommandController::new);
         this.webIssuer = webIssuer;
         this.webModeration = webIssuer.isPresent() ? Optional.of(moderation) : Optional.empty();
         this.controller = new StaffModerationController(
@@ -156,7 +161,8 @@ final class JdaStaffModerationListener extends ListenerAdapter {
             webAuthorizer = new ModerationReadRequestAuthorizer(guildId, webModeration.orElseThrow(), jda);
         }
         List<CommandData> expected = commands(
-                punishments.isPresent(), webIssuer.isPresent(), commandBridge.isPresent());
+                punishments.isPresent(), webIssuer.isPresent(), commandBridge.isPresent(),
+                investigations.isPresent());
         guild.updateCommands().addCommands(expected).queue(
                 registered -> commandsRegistered(registered, expected.size()),
                 this::commandRegistrationFailed
@@ -188,6 +194,11 @@ final class JdaStaffModerationListener extends ListenerAdapter {
         }
         long actorId = event.getUser().getIdLong();
         String actorName = event.getUser().getName();
+        DiscordInvestigationCommandController investigation = investigations.orElse(null);
+        if (investigation != null && investigation.handlesSlash(event.getName())) {
+            dispatchInvestigation(event, () -> investigation.executeSlash(event, actorId, actorName));
+            return;
+        }
         if (REVIEW_QUEUE.equals(event.getName())) {
             dispatchReviewQueue(event, actorId, actorName);
             return;
@@ -227,15 +238,17 @@ final class JdaStaffModerationListener extends ListenerAdapter {
                         return;
                     }
                     var pulse = moderationRuntime.reviewPulse();
-                    var reviews = moderationRuntime.pendingReviews(4);
+                    var altAlerts = moderationRuntime.pendingAltAlerts(2);
+                    var reports = moderationRuntime.pendingReports(altAlerts.isEmpty() ? 2 : 1);
+                    var reviews = moderationRuntime.pendingReviews(5 - reports.size() - altAlerts.size());
                     StringBuilder message = new StringBuilder("**Staff review center**\n")
                             .append("Pending punishments: ").append(pulse.pendingPunishmentRequests())
                             .append(" | Open reports: ").append(pulse.openReports())
                             .append(" | Claimed reports: ").append(pulse.claimedReports())
                             .append(" | Alt alert events (24h): ").append(pulse.altSignalsInLastDay())
                             .append("\n");
-                    if (reviews.isEmpty()) {
-                        hook.sendMessage(message.append("No pending Minecraft punishment requests.").toString())
+                    if (reviews.isEmpty() && reports.isEmpty() && altAlerts.isEmpty()) {
+                        hook.sendMessage(message.append("No actionable punishment requests, reports or alt alerts.").toString())
                                 .queue();
                         return;
                     }
@@ -257,7 +270,47 @@ final class JdaStaffModerationListener extends ListenerAdapter {
                         ));
                         number++;
                     }
-                    message.append("Review buttons expire shortly. All actions recheck live Minecraft authority.");
+                    for (var report : reports) {
+                        var target = SignedComponentCodec.TargetRef.report(report.reportId(), report.revision());
+                        message.append("Report ").append(number).append(". **").append(report.reasonId())
+                                .append("** · ").append(report.state()).append(" · Target: `")
+                                .append(report.targetId()).append("` · Report: `")
+                                .append(report.reportId()).append("` rev=")
+                                .append(report.revision()).append("\n");
+                        if ("OPEN".equals(report.state())) {
+                            rows.add(ActionRow.of(Button.primary(reviewComponents.encode(
+                                    SignedComponentCodec.Action.REPORT_CLAIM, target, actorId),
+                                    "Claim report " + number)));
+                        } else {
+                            rows.add(ActionRow.of(
+                                    Button.success(reviewComponents.encode(
+                                            SignedComponentCodec.Action.REPORT_CLOSE, target, actorId),
+                                            "Close report " + number),
+                                    Button.secondary(reviewComponents.encode(
+                                            SignedComponentCodec.Action.REPORT_NO_VIOLATION, target, actorId),
+                                            "No violation " + number)));
+                        }
+                        number++;
+                    }
+                    for (var alt : altAlerts) {
+                        message.append("Alt ").append(number).append(". **").append(alt.punishmentType())
+                                .append("** · Discord: `")
+                                .append(Long.toUnsignedString(alt.targetDiscordId()))
+                                .append("` · Minecraft: `").append(alt.triggeringMinecraftId())
+                                .append("` · Alert: `").append(alt.alertId()).append("`\n");
+                        rows.add(ActionRow.of(
+                                Button.secondary(DiscordInvestigationAlertControls.linked(alt.targetDiscordId()),
+                                        "Linked " + number),
+                                Button.secondary(DiscordInvestigationAlertControls.history(alt.targetDiscordId()),
+                                        "History " + number),
+                                Button.primary(DiscordInvestigationAlertControls.moderate(alt.targetDiscordId()),
+                                        "Investigate " + number),
+                                Button.danger(DiscordInvestigationAlertControls.resolve(
+                                        alt.targetDiscordId(), alt.alertId()), "Resolve " + number)
+                        ));
+                        number++;
+                    }
+                    message.append("Controls expire shortly. Every action rechecks Minecraft authority and state.");
                     hook.sendMessage(message.toString()).addComponents(rows).queue();
                 } catch (RuntimeException exception) {
                     log("discord_review_queue_failed", exception);
@@ -328,6 +381,108 @@ final class JdaStaffModerationListener extends ListenerAdapter {
                     .queue();
         }
         return true;
+    }
+
+    private static boolean isReportComponent(String id) {
+        return id != null && (id.startsWith("d6:a:t:") || id.startsWith("d6:b:t:")
+                || id.startsWith("d6:e:t:"));
+    }
+
+    private boolean handleReportButton(ButtonInteractionEvent event) {
+        if (!isReportComponent(event.getComponentId())) {
+            return false;
+        }
+        long actorId = event.getUser().getIdLong();
+        try {
+            var decoded = reviewComponents.decodeAndClaim(event.getComponentId(), actorId);
+            var target = decoded.target();
+            if (decoded.action() == SignedComponentCodec.Action.REPORT_CLAIM) {
+                submitReport(event, actorId, event.getUser().getName(), target,
+                        "claim", "Claimed from the private Discord review queue");
+                return true;
+            }
+            var submitted = decoded.action() == SignedComponentCodec.Action.REPORT_CLOSE
+                    ? SignedComponentCodec.Action.REPORT_CLOSE_SUBMIT
+                    : SignedComponentCodec.Action.REPORT_NO_VIOLATION_SUBMIT;
+            if (decoded.action() != SignedComponentCodec.Action.REPORT_CLOSE
+                    && decoded.action() != SignedComponentCodec.Action.REPORT_NO_VIOLATION) {
+                throw new IllegalArgumentException("unsupported report action");
+            }
+            String modalId = reviewComponents.encode(submitted, target, actorId);
+            TextInput note = TextInput.create(REPORT_MODAL_NOTE, TextInputStyle.PARAGRAPH)
+                    .setPlaceholder("Private report resolution note (required, audit retained)")
+                    .setRequiredRange(1, 500).build();
+            event.replyModal(Modal.create(modalId, "Resolve Minecraft report")
+                    .addComponents(Label.of("Resolution note", note)).build()).queue();
+        } catch (RuntimeException exception) {
+            event.reply("That report action has expired or belongs to another reviewer.")
+                    .setEphemeral(true).queue();
+        }
+        return true;
+    }
+
+    private boolean handleReportModal(ModalInteractionEvent event) {
+        if (!accepted(guildId(event.getGuild()))) {
+            return false;
+        }
+        String id = event.getModalId();
+        if (id == null || !(id.startsWith("d6:f:t:") || id.startsWith("d6:g:t:"))) {
+            return false;
+        }
+        try {
+            var decoded = reviewComponents.decodeAndClaim(id, event.getUser().getIdLong());
+            String operation = switch (decoded.action()) {
+                case REPORT_CLOSE_SUBMIT -> "close";
+                case REPORT_NO_VIOLATION_SUBMIT -> "no-violation";
+                default -> throw new IllegalArgumentException("invalid report resolution");
+            };
+            String note = event.getValue(REPORT_MODAL_NOTE) == null
+                    ? "" : event.getValue(REPORT_MODAL_NOTE).getAsString().strip();
+            if (note.isBlank() || note.length() > 500) {
+                event.reply("A private resolution note is required.").setEphemeral(true).queue();
+                return true;
+            }
+            submitReport(event, event.getUser().getIdLong(), event.getUser().getName(),
+                    decoded.target(), operation, note);
+        } catch (RuntimeException exception) {
+            event.reply("This report form has expired or was already submitted. Refresh /review-queue.")
+                    .setEphemeral(true).queue();
+        }
+        return true;
+    }
+
+    private void submitReport(IReplyCallback event, long actorId, String actorName,
+            SignedComponentCodec.TargetRef target, String operation, String note) {
+        long interactionId = event.getIdLong();
+        if (!claim(interactionId, event)) {
+            return;
+        }
+        event.deferReply(true).queue(hook -> {
+            boolean scheduled = workers.tryExecute(() -> {
+                try {
+                    var actor = actors.invoker(new DiscordUserId(Long.toUnsignedString(actorId)), actorName);
+                    var answer = reviewAuthority.report(operation, java.util.Map.of(
+                            "actorId", actor.id().toString(),
+                            "reportId", target.reportId().toString(),
+                            "expectedRevision", target.reportRevision(),
+                            "note", note,
+                            "operationId", Long.toUnsignedString(interactionId)));
+                    String state = answer.path("state").asText();
+                    if (!java.util.Set.of("CLAIMED", "CLOSED", "NO_VIOLATION", "AWAITING_REVIEW").contains(state)) {
+                        hook.sendMessage("The report outcome is unconfirmed; refresh the queue.").queue();
+                        return;
+                    }
+                    hook.sendMessage("Minecraft report saved as " + state + " (revision "
+                            + answer.path("revision").asLong() + ").").queue();
+                } catch (RuntimeException exception) {
+                    log("discord_report_review_failed", exception);
+                    hook.sendMessage("Report action was not confirmed. Refresh the report queue.").queue();
+                }
+            });
+            if (!scheduled) {
+                hook.sendMessage("The report review worker is busy.").queue();
+            }
+        }, failure -> interactions.release(interactionId));
     }
 
     private void submitReview(IReplyCallback event, long actorId, String actorName,
@@ -689,8 +844,25 @@ final class JdaStaffModerationListener extends ListenerAdapter {
                             actor, guildId, channel, message, target));
             return;
         }
-        dispatch(event, () -> withPunish(
-                controller.moderateDiscord(actor, event.getUser().getName(), target), target));
+        dispatch(event, () -> moderateMessage(event, actor, target));
+    }
+
+    private StaffModerationController.Response moderateMessage(
+            MessageContextInteractionEvent event, long actorId, long targetId) {
+        StaffModerationController.Response response = withPunish(
+                controller.moderateDiscord(actorId, event.getUser().getName(), targetId), targetId);
+        DiscordInvestigationCommandController investigation = investigations.orElse(null);
+        if (investigation == null) {
+            return response;
+        }
+        try {
+            var capture = investigation.captureMessage(actorId, event.getUser().getName(),
+                    targetId, event.getTarget(), event.getId());
+            return investigation.decorate(response, capture);
+        } catch (RuntimeException exception) {
+            log("discord_evidence_capture_failed", exception);
+            return response;
+        }
     }
 
     @Override
@@ -699,10 +871,10 @@ final class JdaStaffModerationListener extends ListenerAdapter {
             unavailable(event);
             return;
         }
-        if (handleReviewButton(event)) {
+        if (handleReviewButton(event) || handleReportButton(event)) {
             return;
         }
-        if (handlePunishmentButton(event)) {
+        if (handleInvestigationButton(event) || handlePunishmentButton(event)) {
             return;
         }
         long actor = event.getUser().getIdLong();
@@ -712,6 +884,62 @@ final class JdaStaffModerationListener extends ListenerAdapter {
                 event.getComponentId(),
                 Optional.empty()
         ));
+    }
+
+    private boolean handleInvestigationButton(ButtonInteractionEvent event) {
+        DiscordInvestigationCommandController investigation = investigations.orElse(null);
+        if (investigation == null) {
+            return false;
+        }
+        String customId = event.getComponentId();
+        if (DiscordInvestigationCommandController.isCaptureMore(customId)) {
+            DiscordInvestigationCommandController.ContextTarget target =
+                    DiscordInvestigationCommandController.contextTarget(customId);
+            dispatchInvestigation(event, () -> captureMore(event, investigation, target));
+            return true;
+        }
+        if (!DiscordInvestigationAlertControls.handles(customId)) {
+            return false;
+        }
+        dispatchAlertAction(event, investigation, DiscordInvestigationAlertControls.parse(customId));
+        return true;
+    }
+
+    private void dispatchAlertAction(
+            ButtonInteractionEvent event,
+            DiscordInvestigationCommandController investigation,
+            DiscordInvestigationAlertControls.Action action
+    ) {
+        long actorId = event.getUser().getIdLong();
+        String actorName = event.getUser().getName();
+        long targetId = action.targetDiscordId();
+        switch (action.type()) {
+            case LINKED -> dispatch(event, () -> controller.linkedDiscord(actorId, actorName, targetId));
+            case HISTORY -> dispatch(event, () -> controller.historyDiscord(actorId, actorName, targetId));
+            case MODERATE -> dispatch(event, () -> withPunish(
+                    controller.moderateDiscord(actorId, actorName, targetId), targetId));
+            case RESOLVE -> dispatchInvestigation(event, () -> investigation.resolveAlert(
+                    actorId, actorName, targetId, action.alertId().orElseThrow()));
+            default -> throw new IllegalStateException("unsupported linked-alt alert action");
+        }
+    }
+
+    private static DiscordInvestigationCommandController.Mutation captureMore(
+            ButtonInteractionEvent event,
+            DiscordInvestigationCommandController investigation,
+            DiscordInvestigationCommandController.ContextTarget target
+    ) {
+        Guild guild = event.getGuild();
+        if (guild == null) {
+            throw new IllegalArgumentException("capture-more requires a guild");
+        }
+        var channel = guild.getGuildChannelById(target.channelId());
+        if (!(channel instanceof MessageChannel messageChannel)) {
+            throw new IllegalArgumentException("capture-more channel is unavailable");
+        }
+        Message focus = messageChannel.retrieveMessageById(target.messageId()).complete();
+        return investigation.captureMore(
+                event.getUser().getIdLong(), event.getUser().getName(), target, focus, event.getId());
     }
 
     private boolean handlePunishmentButton(ButtonInteractionEvent event) {
@@ -783,7 +1011,7 @@ final class JdaStaffModerationListener extends ListenerAdapter {
 
     @Override
     public void onModalInteraction(ModalInteractionEvent event) {
-        if (handleReviewModal(event)) {
+        if (handleReviewModal(event) || handleReportModal(event)) {
             return;
         }
         if (!accepted(guildId(event.getGuild()))
@@ -905,6 +1133,20 @@ final class JdaStaffModerationListener extends ListenerAdapter {
         );
     }
 
+    private void dispatchInvestigation(
+            IReplyCallback event,
+            Supplier<DiscordInvestigationCommandController.Mutation> work
+    ) {
+        long interactionId = event.getIdLong();
+        if (!claim(interactionId, event)) {
+            return;
+        }
+        event.deferReply(true).queue(
+                hook -> scheduleInvestigation(hook, work),
+                failure -> interactions.release(interactionId)
+        );
+    }
+
     private boolean claim(long interactionId, IReplyCallback event) {
         InteractionReplayGuard.ClaimResult claim = interactions.claim(interactionId);
         if (claim == InteractionReplayGuard.ClaimResult.CLAIMED) {
@@ -943,6 +1185,16 @@ final class JdaStaffModerationListener extends ListenerAdapter {
         }
     }
 
+    private void scheduleInvestigation(
+            InteractionHook hook,
+            Supplier<DiscordInvestigationCommandController.Mutation> work
+    ) {
+        boolean scheduled = workers.tryExecute(() -> executeInvestigation(hook, work));
+        if (!scheduled) {
+            hook.sendMessage("The investigation action queue is busy. Try again shortly.").queue();
+        }
+    }
+
     private void executePunishment(
             InteractionHook hook,
             Supplier<DiscordPunishmentCommandController.Prepared> work
@@ -965,6 +1217,18 @@ final class JdaStaffModerationListener extends ListenerAdapter {
             hook.sendMessage(work.get().content()).queue();
         } catch (RuntimeException exception) {
             actionFailure(hook, exception);
+        }
+    }
+
+    private void executeInvestigation(
+            InteractionHook hook,
+            Supplier<DiscordInvestigationCommandController.Mutation> work
+    ) {
+        try {
+            hook.sendMessage(work.get().content()).queue();
+        } catch (RuntimeException exception) {
+            log("discord_investigation_interaction_failed", exception);
+            hook.sendMessage("The private investigation action was rejected or could not be completed safely.").queue();
         }
     }
 
@@ -1018,7 +1282,7 @@ final class JdaStaffModerationListener extends ListenerAdapter {
     }
 
     static List<CommandData> commands() {
-        return commands(false);
+        return commands(false, false);
     }
 
     static List<CommandData> commands(boolean includePunishments) {
@@ -1030,6 +1294,12 @@ final class JdaStaffModerationListener extends ListenerAdapter {
     }
 
     static List<CommandData> commands(boolean includePunishments, boolean webEnabled, boolean includeConsole) {
+        return commands(includePunishments, webEnabled, includeConsole, false);
+    }
+
+    static List<CommandData> commands(
+            boolean includePunishments, boolean webEnabled,
+            boolean includeConsole, boolean includeInvestigations) {
         DefaultMemberPermissions discovery = DefaultMemberPermissions.DISABLED;
         List<CommandData> commands = new ArrayList<>(List.of(
                 moderateSlash(MODERATE, webEnabled, discovery),
@@ -1064,6 +1334,9 @@ final class JdaStaffModerationListener extends ListenerAdapter {
                     .addOption(OptionType.STRING, SERVER_OPTION, "Configured server ID", true)
                     .addOption(OptionType.STRING, COMMAND_OPTION, "Allowlisted command and arguments", true)
                     .setDefaultPermissions(discovery));
+        }
+        if (includeInvestigations) {
+            commands.addAll(DiscordInvestigationCommandController.commands(discovery));
         }
         return List.copyOf(commands);
     }

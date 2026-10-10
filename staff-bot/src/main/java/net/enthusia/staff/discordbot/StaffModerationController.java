@@ -260,7 +260,9 @@ final class StaffModerationController {
             case LINKED -> linked(invokerId, invokerName, target, decoded.target());
             case NOTES -> notes(invokerId, invokerName, target, decoded.target());
             case CASES -> cases(invokerId, invokerName, target, decoded.target());
-            case SELECT_MINECRAFT, CASE, REVIEW_APPROVE, REVIEW_DENY, REVIEW_DENY_SUBMIT ->
+            case SELECT_MINECRAFT, CASE, REVIEW_APPROVE, REVIEW_DENY, REVIEW_DENY_SUBMIT,
+                    REPORT_CLAIM, REPORT_CLOSE, REPORT_NO_VIOLATION,
+                    REPORT_CLOSE_SUBMIT, REPORT_NO_VIOLATION_SUBMIT ->
                     throw new IllegalStateException("component action handled by separate surface");
         };
     }
@@ -283,7 +285,9 @@ final class StaffModerationController {
             case PROFILE, LINKED -> DiscordModerationOperation.VIEW_LINKED_ACCOUNTS;
             case NOTES -> DiscordModerationOperation.VIEW_NOTES;
             case HISTORY, HISTORY_DISCORD, HISTORY_MINECRAFT, CASES -> DiscordModerationOperation.VIEW_HISTORY;
-            case SELECT_MINECRAFT, CASE, REVIEW_APPROVE, REVIEW_DENY, REVIEW_DENY_SUBMIT ->
+            case SELECT_MINECRAFT, CASE, REVIEW_APPROVE, REVIEW_DENY, REVIEW_DENY_SUBMIT,
+                    REPORT_CLAIM, REPORT_CLOSE, REPORT_NO_VIOLATION,
+                    REPORT_CLOSE_SUBMIT, REPORT_NO_VIOLATION_SUBMIT ->
                     throw new IllegalArgumentException("component action must be handled first");
         };
     }
@@ -292,7 +296,7 @@ final class StaffModerationController {
         return switch (type) {
             case DISCORD -> ModerationPlatform.DISCORD;
             case MINECRAFT -> ModerationPlatform.MINECRAFT;
-            case CASE, REQUEST, NONE -> throw new IllegalArgumentException("component target cannot open a moderation profile");
+            case CASE, REQUEST, REPORT, NONE -> throw new IllegalArgumentException("component target cannot open a moderation profile");
         };
     }
 
@@ -365,9 +369,12 @@ final class StaffModerationController {
             StaffModerationReadService.Target target,
             SignedComponentCodec.TargetRef targetRef
     ) {
-        authorize(invokerId, invokerName, target, DiscordModerationOperation.VIEW_NOTES);
+        Actor actor = authorize(invokerId, invokerName, target, DiscordModerationOperation.VIEW_NOTES);
         StaffModerationReadService.Snapshot snapshot = reads.snapshot(target);
-        return Response.text(StaffModerationTextRenderer.notes(snapshot), historyNavigation(invokerId, targetRef));
+        return Response.text(
+                StaffModerationTextRenderer.notes(snapshot, reads.investigationNotes(target, actor.rank())),
+                historyNavigation(invokerId, targetRef)
+        );
     }
 
     private Response cases(
@@ -382,17 +389,13 @@ final class StaffModerationController {
     }
 
     private Response caseView(long invokerId, String invokerName, CaseId caseId) {
-        Actor actor = requireInvoker(
-                invokerId,
-                invokerName,
-                DiscordModerationOperation.VIEW_HISTORY,
-                ModerationPlatform.MINECRAFT
-        );
+        Actor actor = actors.invoker(discord(invokerId), invokerName);
         CaseReview review = reads.caseReview(caseId).orElse(null);
         if (review == null) {
+            authorization.require(actor, Optional.empty(), DiscordModerationOperation.VIEW_HISTORY, ModerationPlatform.MINECRAFT);
             return Response.text("No case exists with that ID.", List.of());
         }
-        StaffModerationReadService.Target target = reads.minecraftTarget(review.targetId());
+        StaffModerationReadService.Target target = reads.caseTarget(review);
         require(actor, actors.targetStaff(target), DiscordModerationOperation.VIEW_HISTORY, target);
         return Response.text(StaffModerationTextRenderer.caseView(caseId, review), List.of());
     }
@@ -438,7 +441,7 @@ final class StaffModerationController {
         return switch (targetRef.type()) {
             case DISCORD -> reads.discordTarget(discord(targetRef.discordId()));
             case MINECRAFT -> reads.minecraftTarget(targetRef.minecraftId());
-            case CASE, REQUEST, NONE -> throw new IllegalArgumentException("component target cannot open a moderation profile");
+            case CASE, REQUEST, REPORT, NONE -> throw new IllegalArgumentException("component target cannot open a moderation profile");
         };
     }
 

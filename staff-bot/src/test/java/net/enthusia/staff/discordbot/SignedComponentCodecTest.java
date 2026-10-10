@@ -61,6 +61,26 @@ class SignedComponentCodecTest {
     }
 
     @Test
+    void reportReviewControlsFitDiscordLengthAndEnforceActorBoundRevisionAndReplay() {
+        SignedComponentCodec codec = codec(Clock.fixed(NOW, ZoneOffset.UTC));
+        UUID report = UUID.fromString("11111111-2222-3333-4444-555555555555");
+        var target = SignedComponentCodec.TargetRef.report(report, Long.MAX_VALUE);
+        String encoded = codec.encode(SignedComponentCodec.Action.REPORT_NO_VIOLATION_SUBMIT,
+                target, 123456789123456789L);
+        assertTrue(encoded.length() <= 100);
+        assertEquals(SignedComponentCodec.Denial.WRONG_ACTOR,
+                assertThrows(SignedComponentCodec.InvalidComponentException.class,
+                        () -> codec.decodeAndClaim(encoded, 123456789123456788L)).denial());
+        var decoded = codec.decodeAndClaim(encoded, 123456789123456789L);
+        assertEquals(SignedComponentCodec.Action.REPORT_NO_VIOLATION_SUBMIT, decoded.action());
+        assertEquals(report, decoded.target().reportId());
+        assertEquals(Long.MAX_VALUE, decoded.target().reportRevision());
+        assertEquals(SignedComponentCodec.Denial.REPLAYED,
+                assertThrows(SignedComponentCodec.InvalidComponentException.class,
+                        () -> codec.decodeAndClaim(encoded, 123456789123456789L)).denial());
+    }
+
+    @Test
     void rejectsWrongActorTamperAndStaleComponents() {
         SignedComponentCodec source = codec(Clock.fixed(NOW, ZoneOffset.UTC));
         String encoded = source.encode(

@@ -165,6 +165,40 @@ class NetworkIdentityStoreIntegrationTest {
     }
 
     @Test
+    void downgradingConfirmedAltRevokesPreviouslyInheritedSanction() throws SQLException {
+        Instant now = Instant.parse("2026-10-10T19:30:00Z");
+        UUID reviewer = UUID.randomUUID();
+        UUID source = UUID.randomUUID();
+        UUID alt = UUID.randomUUID();
+        UUID sanction = UUID.randomUUID();
+        MariaDbIntegrationSupport.insertPlayer(DATABASE, reviewer, "DowngradeReviewer", now.minusSeconds(90));
+        MariaDbIntegrationSupport.insertPlayer(DATABASE, source, "DowngradeSource", now.minusSeconds(90));
+        MariaDbIntegrationSupport.insertPlayer(DATABASE, alt, "DowngradeAlt", now.minusSeconds(90));
+        String caseId = "ALTDOWNGRADE0001";
+        MariaDbIntegrationSupport.insertCase(DATABASE, caseId, source, reviewer, now.minusSeconds(40));
+        MariaDbIntegrationSupport.insertSanction(DATABASE, sanction, caseId, source,
+                "BAN", "ACTIVE", now.minusSeconds(30), now.plusSeconds(900));
+        JdbcNetworkIdentityStore store = store();
+        assertTrue(store.setRelationship(source, alt, AltRelationshipState.CONFIRMED_ALT,
+                reviewer, now, "Manually established same-person relationship"));
+        assertEquals(1, store.observeConnectedAlts(alt, now.plusSeconds(1), false).inheritedSanctions());
+        assertEquals(1, inheritedSanctionCount(alt, sanction));
+        assertTrue(store.setRelationship(source, alt, AltRelationshipState.LOW_CONFIDENCE,
+                reviewer, now.plusSeconds(2), "Evidence disproved confirmed alt"));
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement("""
+                    SELECT status FROM sanctions WHERE target_id = ? AND inherited_from = ?
+                    """)) {
+            statement.setBytes(1, MariaDbIntegrationSupport.uuidBytes(alt));
+            statement.setBytes(2, MariaDbIntegrationSupport.uuidBytes(sanction));
+            try (ResultSet result = statement.executeQuery()) {
+                assertTrue(result.next());
+                assertEquals("REVOKED", result.getString("status"));
+            }
+        }
+    }
+
+    @Test
     void verifiedSameDiscordAccountsShareBanAndBothMuteTypesAcrossDifferentNetworks() throws SQLException {
         Instant now = Instant.parse("2026-10-10T19:00:00Z");
         UUID moderator = UUID.randomUUID();
@@ -254,40 +288,6 @@ class NetworkIdentityStoreIntegrationTest {
                 reviewer, now.plusSeconds(2), "Additional independent evidence now confirmed"));
         assertEquals(1, store().observeConnectedAlts(other, now.plusSeconds(3), false).inheritedSanctions());
         assertEquals(1, inheritedSanctionCount(other, sanction));
-    }
-
-    @Test
-    void downgradingConfirmedAltRevokesPreviouslyInheritedSanction() throws SQLException {
-        Instant now = Instant.parse("2026-10-10T19:30:00Z");
-        UUID reviewer = UUID.randomUUID();
-        UUID source = UUID.randomUUID();
-        UUID alt = UUID.randomUUID();
-        UUID sanction = UUID.randomUUID();
-        MariaDbIntegrationSupport.insertPlayer(DATABASE, reviewer, "DowngradeReviewer", now.minusSeconds(90));
-        MariaDbIntegrationSupport.insertPlayer(DATABASE, source, "DowngradeSource", now.minusSeconds(90));
-        MariaDbIntegrationSupport.insertPlayer(DATABASE, alt, "DowngradeAlt", now.minusSeconds(90));
-        String caseId = "ALTDOWNGRADE0001";
-        MariaDbIntegrationSupport.insertCase(DATABASE, caseId, source, reviewer, now.minusSeconds(40));
-        MariaDbIntegrationSupport.insertSanction(DATABASE, sanction, caseId, source,
-                "BAN", "ACTIVE", now.minusSeconds(30), now.plusSeconds(900));
-        JdbcNetworkIdentityStore store = store();
-        assertTrue(store.setRelationship(source, alt, AltRelationshipState.CONFIRMED_ALT,
-                reviewer, now, "Manually established same-person relationship"));
-        assertEquals(1, store.observeConnectedAlts(alt, now.plusSeconds(1), false).inheritedSanctions());
-        assertEquals(1, inheritedSanctionCount(alt, sanction));
-        assertTrue(store.setRelationship(source, alt, AltRelationshipState.LOW_CONFIDENCE,
-                reviewer, now.plusSeconds(2), "Evidence disproved confirmed alt"));
-        try (Connection connection = dataSource.getConnection();
-             PreparedStatement statement = connection.prepareStatement("""
-                    SELECT status FROM sanctions WHERE target_id = ? AND inherited_from = ?
-                    """)) {
-            statement.setBytes(1, MariaDbIntegrationSupport.uuidBytes(alt));
-            statement.setBytes(2, MariaDbIntegrationSupport.uuidBytes(sanction));
-            try (ResultSet result = statement.executeQuery()) {
-                assertTrue(result.next());
-                assertEquals("REVOKED", result.getString("status"));
-            }
-        }
     }
 
     @Test

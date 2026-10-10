@@ -1,4 +1,4 @@
-version: "2026-09-26.1"
+version: "2026-10-10.1"
 defaults:
   decay-eligible: true
   public-default: true
@@ -547,9 +547,6 @@ reasons:
     display-name: Ban evasion
     severity: 80
     ladder:
-      - { label: "30 day ban", sanctions: [{ type: NETWORK_BAN, duration: 30d }] }
-      - { label: "60 day ban", sanctions: [{ type: NETWORK_BAN, duration: 60d }] }
-      - { label: "90 day ban", sanctions: [{ type: NETWORK_BAN, duration: 90d }] }
       - { label: "Permanent ban", sanctions: [{ type: NETWORK_BAN, duration: permanent }] }
 
   - id: evasion.network-identity-ban

@@ -137,6 +137,11 @@ final class StaffToolsMenuController implements Listener {
             dispatcher.showMenuHelp(viewer);
             return;
         }
+        if (slot == StaffToolsMenuRenderer.LAUNCH_SLOT) {
+            viewer.closeInventory();
+            dispatcher.launch(viewer);
+            return;
+        }
         StaffToolDefinition tool = root.toolAt(StaffToolsMenuRenderer.rootToolIndex(slot));
         if (tool == null) {
             return;
