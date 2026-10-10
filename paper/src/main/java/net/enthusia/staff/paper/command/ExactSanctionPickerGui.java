@@ -247,7 +247,8 @@ public final class ExactSanctionPickerGui implements Listener {
                 String[] args = exactArguments(state);
                 // execute rechecks Staff Mode and rank; applyExact checks latest revision
                 // and records the actor, reason, and exact sanction identity.
-                lifecycle.execute(viewer, "punish", args);
+                lifecycle.executeSelected(viewer, "punish", args,
+                        state.selection.entry.sanction.revision());
             });
         } catch (RuntimeException exception) {
             plugin.getLogger().log(Level.WARNING, "Exact sanction preflight failed", exception);
