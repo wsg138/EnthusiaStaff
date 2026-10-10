@@ -186,6 +186,48 @@ class SanctionLifecycleIntegrationTest {
     }
 
     @Test
+    void exactOverturnOfSourceMarksCaseOverturnedDespiteDerivedAltAndRevokesChild() throws Exception {
+        Fixture parent = seed(87, "HELPER", SanctionStatus.ACTIVE,
+                now().minusSeconds(300), Optional.of(now().plusSeconds(7200)));
+        UUID child = uuid(187);
+        UUID inherited = uuid(287);
+        try (HikariDataSource source = MariaDb.open(databaseConfig());
+             Connection connection = source.getConnection()) {
+            insertPlayer(connection, child, "SeparateAlt", "JAVA");
+            try (PreparedStatement insert = connection.prepareStatement("""
+                    INSERT INTO sanctions(sanction_id, case_id, target_id, sanction_type,
+                        status, issued_at, activated_at, expiration_at, inherited_from)
+                    VALUES (?, ?, ?, 'BAN', 'ACTIVE', ?, ?, ?, ?)
+                    """)) {
+                Instant issued = now().minusSeconds(200);
+                insert.setBytes(1, uuidBytes(inherited));
+                insert.setString(2, parent.caseId().value());
+                insert.setBytes(3, uuidBytes(child));
+                insert.setTimestamp(4, Timestamp.from(issued));
+                insert.setTimestamp(5, Timestamp.from(issued));
+                insert.setTimestamp(6, Timestamp.from(now().plusSeconds(7200)));
+                insert.setBytes(7, uuidBytes(parent.sanctionId()));
+                assertEquals(1, insert.executeUpdate());
+            }
+        }
+        try (MariaDbRuntime runtime = MariaDb.initialize(databaseConfig())) {
+            ExactSanctionChangeResult.Applied result = assertInstanceOf(
+                    ExactSanctionChangeResult.Applied.class,
+                    runtime.sanctionMutationStore().applyExact(request(
+                            parent, 0, SanctionChangeAction.FULL_OVERTURN, Optional.empty(),
+                            "Evidence reversed the entire punishment", "exact-derived-overturn",
+                            Optional.empty()), DEFAULT_LIMITS));
+            assertEquals(SanctionStatus.OVERTURNED, result.resultingStatus());
+        }
+        assertEquals("OVERTURNED",
+                stringValue("SELECT status FROM sanctions WHERE sanction_id=?", inherited));
+        assertEquals("FULLY_OVERTURNED",
+                stringValue("SELECT state FROM cases WHERE case_id=?", parent.caseId().value()));
+        assertEquals(2, count("sanction_events"));
+        assertEquals(2, count(NETWORK_OUTBOX_TABLE));
+    }
+
+    @Test
     void reductionRejectsExtensionsAndIdenticalExpirationsWithoutAuditNoise() throws Exception {
         Instant issued = now().minusSeconds(3_600);
         Instant expiration = now().plusSeconds(3_600);

@@ -10,7 +10,7 @@ import org.junit.jupiter.api.Test;
 class BundledConfigurationSeedingWiringTest {
     @Test
     void reasonPolicyResourceIsOnlySeededWhenMissing() throws IOException {
-        String source = Files.readString(paperModule().resolve(
+        String source = readNormalized(paperModule().resolve(
                 "src/main/java/net/enthusia/staff/paper/EnthusiaStaffPaperPlugin.java"
         ));
 
@@ -23,7 +23,7 @@ class BundledConfigurationSeedingWiringTest {
 
     @Test
     void reportResourcesAreOnlySeededWhenMissing() throws IOException {
-        String source = Files.readString(paperModule().resolve(
+        String source = readNormalized(paperModule().resolve(
                 "src/main/java/net/enthusia/staff/paper/config/ReportConfigurationRuntime.java"
         ));
 
@@ -50,4 +50,9 @@ class BundledConfigurationSeedingWiringTest {
         }
         throw new IllegalStateException("Could not locate the Paper module from " + current);
     }
+    private static String readNormalized(Path file) throws IOException {
+        // Source assertions match Java syntax rather than the host's Git checkout line endings.
+        return Files.readString(file).replace("\r\n", "\n");
+    }
+
 }

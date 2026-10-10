@@ -283,7 +283,7 @@ final class JdbcExactSanctionMutationStore implements SanctionMutationStore {
         try (PreparedStatement statement = connection.prepareStatement("""
                 SELECT sanction_id, status
                 FROM sanctions
-                WHERE case_id = ?
+                WHERE case_id = ? AND inherited_from IS NULL
                 ORDER BY sanction_id
                 FOR UPDATE
                 """)) {
