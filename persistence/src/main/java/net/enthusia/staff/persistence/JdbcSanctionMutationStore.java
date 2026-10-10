@@ -366,11 +366,11 @@ public final class JdbcSanctionMutationStore implements SanctionMutationStore {
         try (PreparedStatement statement = includeApplied
                 ? connection.prepareStatement("""
                         UPDATE sanctions SET status = ?, ended_at = ?, revision = revision + 1
-                        WHERE case_id = ? AND status IN ('PENDING', 'ACTIVE', 'APPLIED')
+                        WHERE case_id = ? AND inherited_from IS NULL AND status IN ('PENDING', 'ACTIVE', 'APPLIED')
                         """)
                 : connection.prepareStatement("""
                         UPDATE sanctions SET status = ?, ended_at = ?, revision = revision + 1
-                        WHERE case_id = ? AND status IN ('PENDING', 'ACTIVE')
+                        WHERE case_id = ? AND inherited_from IS NULL AND status IN ('PENDING', 'ACTIVE')
                         """)) {
             statement.setString(1, status);
             statement.setTimestamp(2, Timestamp.from(now));
@@ -393,7 +393,7 @@ public final class JdbcSanctionMutationStore implements SanctionMutationStore {
         List<UUID> sanctions = new ArrayList<>();
         try (PreparedStatement select = connection.prepareStatement("""
                 SELECT sanction_id, expiration_at FROM sanctions
-                WHERE case_id = ? AND status = 'ACTIVE' FOR UPDATE
+                WHERE case_id = ? AND inherited_from IS NULL AND status = 'ACTIVE' FOR UPDATE
                 """)) {
             select.setString(1, request.caseId().value());
             try (ResultSet result = select.executeQuery()) {
@@ -413,7 +413,7 @@ public final class JdbcSanctionMutationStore implements SanctionMutationStore {
         }
         try (PreparedStatement update = connection.prepareStatement("""
                 UPDATE sanctions SET expiration_at = ?, revision = revision + 1
-                WHERE case_id = ? AND status = 'ACTIVE'
+                WHERE case_id = ? AND inherited_from IS NULL AND status = 'ACTIVE'
                 """)) {
             update.setTimestamp(1, Timestamp.from(replacement));
             update.setString(2, request.caseId().value());
@@ -436,7 +436,7 @@ public final class JdbcSanctionMutationStore implements SanctionMutationStore {
                 """);
              PreparedStatement updates = connection.prepareStatement("""
                 UPDATE sanctions SET status = 'OVERTURNED', ended_at = ?, revision = revision + 1
-                WHERE case_id = ? AND status <> 'OVERTURNED'
+                WHERE case_id = ? AND inherited_from IS NULL AND status <> 'OVERTURNED'
                 """)) {
             cases.setString(1, request.caseId().value());
             cases.executeUpdate();
@@ -551,7 +551,7 @@ public final class JdbcSanctionMutationStore implements SanctionMutationStore {
 
     private static List<UUID> lockAllSanctions(Connection connection, String caseId) throws SQLException {
         try (PreparedStatement statement = connection.prepareStatement("""
-                SELECT sanction_id FROM sanctions WHERE case_id = ? FOR UPDATE
+                SELECT sanction_id FROM sanctions WHERE case_id = ? AND inherited_from IS NULL FOR UPDATE
                 """)) {
             return lockedSanctions(statement, caseId);
         }
@@ -565,12 +565,12 @@ public final class JdbcSanctionMutationStore implements SanctionMutationStore {
         try (PreparedStatement statement = includeApplied
                 ? connection.prepareStatement("""
                         SELECT sanction_id FROM sanctions
-                        WHERE case_id = ? AND status IN ('PENDING', 'ACTIVE', 'APPLIED')
+                        WHERE case_id = ? AND inherited_from IS NULL AND status IN ('PENDING', 'ACTIVE', 'APPLIED')
                         FOR UPDATE
                         """)
                 : connection.prepareStatement("""
                         SELECT sanction_id FROM sanctions
-                        WHERE case_id = ? AND status IN ('PENDING', 'ACTIVE')
+                        WHERE case_id = ? AND inherited_from IS NULL AND status IN ('PENDING', 'ACTIVE')
                         FOR UPDATE
                         """)) {
             return lockedSanctions(statement, caseId);
