@@ -99,6 +99,28 @@ class PunishmentSanctionRoutesTest {
     }
 
     @Test
+    void menuActionsRequireBothLegacyAndExactWritePermissions() {
+        var action = net.enthusia.staff.domain.sanction.SanctionChangeAction.REVOKE;
+        var ui = net.enthusia.staff.paper.sanction.SanctionChangeAccess.permissionFor(action);
+        var write = SanctionLifecycleCommand.REVOKE_PERMISSION;
+        assertFalse(ExactSanctionPickerGui.hasActionPermissions(
+                value -> value.equals(ui), action));
+        assertFalse(ExactSanctionPickerGui.hasActionPermissions(
+                value -> value.equals(write), action));
+        assertTrue(ExactSanctionPickerGui.hasActionPermissions(
+                java.util.Set.of(ui, write)::contains, action));
+        for (var permittedAction : java.util.List.of(
+                net.enthusia.staff.domain.sanction.SanctionChangeAction.REVOKE,
+                net.enthusia.staff.domain.sanction.SanctionChangeAction.END_EARLY,
+                net.enthusia.staff.domain.sanction.SanctionChangeAction.REDUCE_DURATION,
+                net.enthusia.staff.domain.sanction.SanctionChangeAction.FULL_OVERTURN
+        )) {
+            assertFalse(ExactSanctionPickerGui.hasActionPermissions(
+                    value -> false, permittedAction));
+        }
+    }
+
+    @Test
     void inventorySlotSelectsOnlyTheClickedWarningIncludingAcrossPages() {
         java.util.List<String> warnings = new java.util.ArrayList<>();
         for (int i = 0; i < 48; i++) {
