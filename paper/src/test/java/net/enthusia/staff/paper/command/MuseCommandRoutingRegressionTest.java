@@ -33,13 +33,16 @@ class MuseCommandRoutingRegressionTest {
     }
 
     @Test
-    void centralRemovePunishmentSingleArgumentDoesNotOpenTheGui() throws IOException {
+    void centralRemovePunishmentSingleArgumentOpensExactSelectionBeforeAnyFallback() throws IOException {
         String source = source("SanctionChangeCommand.java");
         String method = method(source, "private boolean openAliasGui", "private static boolean hasMinimumArguments");
 
-        assertTrue(method.contains("central || arguments.length != SINGLE_ARGUMENT"));
+        assertTrue(method.contains("arguments.length != SINGLE_ARGUMENT"));
+        assertTrue(method.contains("picker.open(player, arguments[0], selection,"));
+        assertTrue(method.contains("if (central) {"));
         assertTrue(method.contains("return false;"));
-        assertTrue(method.contains("gui.open(player, arguments[0], route)"));
+        assertTrue(method.indexOf("picker.open(player, arguments[0], selection,")
+                < method.indexOf("gui.open(player, arguments[0], route)"));
     }
 
     @Test
