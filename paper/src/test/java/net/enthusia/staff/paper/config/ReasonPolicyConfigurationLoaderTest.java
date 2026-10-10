@@ -26,7 +26,7 @@ class ReasonPolicyConfigurationLoaderTest {
         Map<String, ReasonPolicy> policies = loaded.policies().stream()
                 .collect(Collectors.toMap(ReasonPolicy::id, Function.identity()));
 
-        assertEquals("2026-09-26.1", loaded.version());
+        assertEquals("2026-10-10.1", loaded.version());
         assertEquals(85, policies.size());
         assertTrue(loaded.aliases().isEmpty());
         assertTrue(loaded.removedReasons().isEmpty());
@@ -43,6 +43,10 @@ class ReasonPolicyConfigurationLoaderTest {
                 SanctionType.MARKET_BLACKLIST,
                 policies.get("market.compliance-failure").steps().get(3).sanctions().get(1).type()
         );
+        ReasonPolicy banEvasion = policies.get("evasion.ban");
+        assertEquals(1, banEvasion.steps().size());
+        assertEquals(SanctionType.NETWORK_BAN, banEvasion.steps().getFirst().sanctions().getFirst().type());
+        assertTrue(banEvasion.steps().getFirst().sanctions().getFirst().length().isPermanent());
         ReasonPolicy networkIdentityBan = policies.get("evasion.network-identity-ban");
         assertEquals(4, networkIdentityBan.steps().size());
         assertTrue(networkIdentityBan.steps().stream()

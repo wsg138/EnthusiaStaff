@@ -494,7 +494,7 @@ final class PunishmentGuiRenderer {
         boolean publicCase = draft.visibility() == net.enthusia.staff.domain.casefile.CaseVisibility.PUBLIC;
         return item(
                 publicCase ? Material.LIME_DYE : Material.GRAY_DYE,
-                "Visibility",
+                publicCase ? "Public punishment (default)" : "Private punishment",
                 publicCase ? NamedTextColor.GREEN : NamedTextColor.GRAY,
                 List.of(
                         booleanLine("Public", publicCase),
