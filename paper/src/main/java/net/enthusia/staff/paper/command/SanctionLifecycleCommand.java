@@ -74,6 +74,18 @@ public final class SanctionLifecycleCommand {
     }
 
     public boolean execute(CommandSender sender, String label, String[] args) {
+        return execute(sender, label, args, java.util.OptionalLong.empty());
+    }
+
+    /** GUI selection includes the original sanction revision to reject stale clicks. */
+    boolean executeSelected(CommandSender sender, String label, String[] args, long expectedRevision) {
+        if (expectedRevision < 0) {
+            throw new IllegalArgumentException("Sanction revision must be nonnegative");
+        }
+        return execute(sender, label, args, java.util.OptionalLong.of(expectedRevision));
+    }
+
+    private boolean execute(CommandSender sender, String label, String[] args, java.util.OptionalLong expectedRevision) {
         if (args.length < 2 || !args[0].equalsIgnoreCase("sanction")) {
             return false;
         }
@@ -117,7 +129,8 @@ public final class SanctionLifecycleCommand {
                 selected,
                 parsed,
                 sender.hasPermission(BYPASS_HIERARCHY_PERMISSION),
-                systemActor
+                systemActor,
+                expectedRevision
         );
         submit(sender, () -> apply(sender, pending));
         return true;
@@ -151,7 +164,8 @@ public final class SanctionLifecycleCommand {
         ExactSanctionChangeRequest request = null;
         ExactSanctionChangeResult result;
         try {
-            java.util.OptionalLong revision = service.exactRevision(pending.parsed().sanctionId());
+            java.util.OptionalLong revision = pending.expectedRevision().isPresent()
+                    ? pending.expectedRevision() : service.exactRevision(pending.parsed().sanctionId());
             if (revision.isEmpty()) {
                 responses.send(sender, Component.text("Sanction change rejected: The sanction does not exist [SANCTION_NOT_FOUND]"));
                 return;
@@ -436,7 +450,8 @@ public final class SanctionLifecycleCommand {
             Operation operation,
             Parsed parsed,
             boolean bypassHierarchy,
-            boolean systemActor
+            boolean systemActor,
+            java.util.OptionalLong expectedRevision
     ) {
     }
 
