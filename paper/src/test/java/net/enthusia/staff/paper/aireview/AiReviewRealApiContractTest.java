@@ -27,11 +27,13 @@ class AiReviewRealApiContractTest {
     private static final String STAFF_TOKEN = System.getenv("ENTHUSIA_CONTRACT_STAFF_TOKEN");
     private static final String READER_TOKEN = System.getenv("ENTHUSIA_CONTRACT_READER_TOKEN");
     private static final String BLOCK_ID = System.getenv("ENTHUSIA_CONTRACT_BLOCK_ID");
+    private static final String FAIL_OPEN_ID = System.getenv("ENTHUSIA_CONTRACT_FAIL_OPEN_ID");
 
     @Test
     void liveLoopbackApiProvidesFilteredHistoryAndTwoStaffCorrections() {
         assumeTrue(BASE_URL != null && BASE_URL.startsWith("http://127.0.0.1:"));
-        assumeTrue(STAFF_TOKEN != null && READER_TOKEN != null && BLOCK_ID != null);
+        assumeTrue(STAFF_TOKEN != null && READER_TOKEN != null
+                && BLOCK_ID != null && FAIL_OPEN_ID != null);
         AiReviewHttpClient staff = client("contract-staff", STAFF_TOKEN);
 
         var first = staff.listDecisions(1, null);
@@ -50,7 +52,7 @@ class AiReviewRealApiContractTest {
                 .items().stream().filter(x -> x.messageAction() == MessageAction.ALLOW).count());
         assertEquals(2, staff.listDecisions(10, null, AiReviewHistoryFilter.ALLOWED)
                 .items().size());
-        assertTrue(staff.listDecisions(10, null, AiReviewHistoryFilter.FAIL_OPEN).items().isEmpty());
+        assertRealFailOpen(staff);
 
         var original = staff.event(BLOCK_ID);
         assertEquals(MessageAction.BLOCK, original.decision().messageAction());
@@ -79,6 +81,18 @@ class AiReviewRealApiContractTest {
         assertEquals("LOW_LEVEL_HARASSMENT", corrected.items().get(0).semanticLabel());
         assertEquals(MessageAction.ALLOW, staff.event(BLOCK_ID)
                 .acceptedCorrection().corrected().messageAction());
+    }
+
+    private static void assertRealFailOpen(AiReviewHttpClient staff) {
+        var items = staff.listDecisions(10, null, AiReviewHistoryFilter.FAIL_OPEN).items();
+        assertEquals(1, items.size());
+        var fallback = items.getFirst();
+        assertEquals(FAIL_OPEN_ID, fallback.eventId());
+        assertEquals("FAIL_OPEN", fallback.ingestionStatus());
+        assertEquals(MessageAction.ALLOW, fallback.messageAction());
+        assertTrue(fallback.degraded());
+        assertTrue(AiReviewHistoryPresentation.summarize(fallback)
+                .lore().contains("Fail-open is NOT a verified safe decision."));
     }
 
     private static CorrectionDecision safeCorrection() {
