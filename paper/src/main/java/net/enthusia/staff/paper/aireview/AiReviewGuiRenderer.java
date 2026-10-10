@@ -30,6 +30,7 @@ final class AiReviewGuiRenderer {
     static final int HISTORY_FILTER = 47;
     static final int NEXT = 53;
     static final int CLOSE = 50;
+    private static final String CLOSE_LABEL = "Close";
     static final int ALLOW = 20;
     static final int BLOCK = 22;
     static final int REVIEW = 24;
@@ -94,7 +95,7 @@ final class AiReviewGuiRenderer {
                 "Browse allowed and blocked messages",
                 "Read-only decision history"
         )));
-        inventory.setItem(CLOSE, item(Material.BARRIER, "Close", List.of()));
+        inventory.setItem(CLOSE, item(Material.BARRIER, CLOSE_LABEL, List.of()));
     }
 
     private void renderHistory(Inventory inventory, AiReviewGuiState.History state) {
@@ -123,7 +124,7 @@ final class AiReviewGuiRenderer {
         if (state.nextCursor() != null && state.previousCursors().size() < AiReviewHistoryNavigation.MAX_PREVIOUS_PAGES) {
             inventory.setItem(NEXT, item(Material.ARROW, "Next page", List.of()));
         }
-        inventory.setItem(CLOSE, item(Material.BARRIER, "Close", List.of()));
+        inventory.setItem(CLOSE, item(Material.BARRIER, CLOSE_LABEL, List.of()));
     }
 
     private void renderDetail(
@@ -205,7 +206,7 @@ final class AiReviewGuiRenderer {
                 state.historyOrigin() == null ? "Back to queue" : "Back to all decisions",
                 List.of()));
         inventory.setItem(REFRESH, item(Material.CLOCK, "Refresh event", List.of()));
-        inventory.setItem(CLOSE, item(Material.BARRIER, "Close", List.of()));
+        inventory.setItem(CLOSE, item(Material.BARRIER, CLOSE_LABEL, List.of()));
     }
 
     private void renderLabels(Inventory inventory, AiReviewGuiState.LabelPicker state) {
@@ -228,7 +229,7 @@ final class AiReviewGuiRenderer {
             inventory.setItem(NEXT, item(Material.ARROW, "Next labels", List.of()));
         }
         inventory.setItem(BACK, item(Material.ARROW, "Back to event", List.of()));
-        inventory.setItem(CLOSE, item(Material.BARRIER, "Close", List.of()));
+        inventory.setItem(CLOSE, item(Material.BARRIER, CLOSE_LABEL, List.of()));
     }
 
     private void renderConfirm(Inventory inventory, AiReviewGuiState.Confirm state) {
