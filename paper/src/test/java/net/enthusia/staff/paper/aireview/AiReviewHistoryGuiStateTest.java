@@ -91,6 +91,22 @@ class AiReviewHistoryGuiStateTest {
     }
 
     @Test
+    void selectedFilterIsImmutableAndCyclesThroughClosedChoices() {
+        var filtered = new AiReviewGuiState.History(
+                UUID.randomUUID(), 8L, List.of(record("e1")),
+                null, "next", List.of(), AiReviewHistoryFilter.FAIL_OPEN
+        );
+        assertEquals(AiReviewHistoryFilter.FAIL_OPEN, filtered.filter());
+        assertEquals(AiReviewHistoryFilter.CORRECTED, filtered.filter().next());
+        assertEquals(AiReviewHistoryFilter.ALL, filtered.filter().next().next());
+        assertThrows(IllegalArgumentException.class,
+                () -> new AiReviewGuiState.History(
+                        UUID.randomUUID(), 8L, List.of(),
+                        null, null, List.of(), null
+                ));
+    }
+
+    @Test
     void historyRejectsInvalidOrUnboundedPageTokens() {
         UUID viewerId = UUID.randomUUID();
         assertThrows(IllegalArgumentException.class,
