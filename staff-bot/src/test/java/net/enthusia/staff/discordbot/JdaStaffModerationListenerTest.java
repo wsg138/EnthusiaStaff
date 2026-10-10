@@ -18,7 +18,7 @@ class JdaStaffModerationListenerTest {
     void staffReadCommandsAreCompleteAndDefaultDisabledForDiscovery() {
         var commands = JdaStaffModerationListener.commands();
 
-        assertEquals(10, commands.size());
+        assertEquals(11, commands.size());
         assertEquals(Set.of(
                 "moderate",
                 "punish",
@@ -29,7 +29,8 @@ class JdaStaffModerationListenerTest {
                 "history",
                 "notes",
                 "case",
-                "review-request"
+                "review-request",
+                "review-queue"
         ), names(commands));
         assertTrue(commands.stream().allMatch(command ->
                 DefaultMemberPermissions.DISABLED.equals(command.getDefaultPermissions())));
@@ -43,7 +44,7 @@ class JdaStaffModerationListenerTest {
     @Test
     void productionWebKeepsStaffCommandsAndAllowsChannelLaunch() {
         var commands = JdaStaffModerationListener.commands(false, true);
-        assertEquals(10, commands.size());
+        assertEquals(11, commands.size());
         assertTrue(commands.stream().allMatch(command ->
                 DefaultMemberPermissions.DISABLED.equals(command.getDefaultPermissions())));
         for (String name : java.util.List.of("moderate", "punish")) {
@@ -58,13 +59,21 @@ class JdaStaffModerationListenerTest {
     void enforcementRuntimeAddsApprovedQuickCommandsAndSelfPreview() {
         var commands = JdaStaffModerationListener.commands(true);
 
-        assertEquals(19, commands.size());
+        assertEquals(20, commands.size());
         assertTrue(names(commands).containsAll(Set.of(
                 "warn", "mute", "unmute", "kick", "ban", "unban", "restrict", "unrestrict",
                 "notification-test"
         )));
         assertTrue(commands.stream().allMatch(command ->
                 DefaultMemberPermissions.DISABLED.equals(command.getDefaultPermissions())));
+    }
+
+    @Test
+    void reviewQueueUsesDefaultDisabledPermissionAndNoArguments() {
+        SlashCommandData queue = (SlashCommandData) command(
+                JdaStaffModerationListener.commands(), "review-queue");
+        assertEquals(0, queue.getOptions().size());
+        assertEquals(DefaultMemberPermissions.DISABLED, queue.getDefaultPermissions());
     }
 
     @Test
@@ -107,7 +116,7 @@ class JdaStaffModerationListenerTest {
     void commandBridgeAddsOnlyThePrivateConsoleCommand() {
         var commands = JdaStaffModerationListener.commands(false, false, true);
 
-        assertEquals(11, commands.size());
+        assertEquals(12, commands.size());
         SlashCommandData console = (SlashCommandData) command(commands, "console");
         assertEquals(
                 java.util.List.of("server", "command"),

@@ -94,12 +94,176 @@ public final class JdbcSanctionMutationStore implements SanctionMutationStore {
             connection.rollback();
             return change.rejection();
         }
+        List<InheritedChange> inheritedChanges = reconcileInheritedChanges(
+                connection, request.caseId().value(), change.sanctionIds(), now);
         insertSanctionEvents(connection, request, change.sanctionIds(), now);
         insertAudit(connection, request, caseRow.targetId(), change.sanctionIds(), now);
         insertOutboxes(connection, request, caseRow.targetId(), now);
+        for (InheritedChange inherited : inheritedChanges) {
+            insertInheritedOutboxes(connection, request, inherited, now);
+        }
         connection.commit();
         return new SanctionChangeResult.Applied(change.sanctionIds().size(), false);
     }
+
+    /**
+     * A source sanction's expiration/revocation/overturn is authoritative for all derived sanctions.
+     * This executes in the same transaction as the source case change, so a successful owner
+     * correction cannot leave an inherited alt sanction active with stale source state.
+     */
+    private static List<InheritedChange> reconcileInheritedChanges(
+            Connection connection, String sourceCaseId, List<UUID> changedSources, Instant now
+    ) throws SQLException {
+        if (changedSources.isEmpty()) {
+            return List.of();
+        }
+        record Candidate(UUID sanctionId, UUID playerId, String currentStatus, String sourceStatus,
+                Instant currentExpiry, Instant sourceExpiry) { }
+        if (changedSources.size() > 512) {
+            throw new SQLException("A single case cannot reconcile more than 512 source sanctions");
+        }
+        List<Candidate> candidates = new ArrayList<>();
+        String placeholders = String.join(",", java.util.Collections.nCopies(changedSources.size(), "?"));
+        String sql = """
+                SELECT child.sanction_id, child.target_id, child.status AS child_status,
+                       child.expiration_at AS child_expiration, source.status AS source_status,
+                       source.expiration_at AS source_expiration
+                  FROM sanctions child JOIN sanctions source ON child.inherited_from = source.sanction_id
+                 WHERE source.case_id = ? AND source.sanction_id IN (%s)
+                       AND child.status = 'ACTIVE'
+                 FOR UPDATE
+                """.formatted(placeholders);
+        try (PreparedStatement query = connection.prepareStatement(sql)) {
+            query.setString(1, sourceCaseId);
+            for (int i = 0; i < changedSources.size(); i++) {
+                query.setBytes(i + 2, UuidBytes.toBytes(changedSources.get(i)));
+            }
+            try (ResultSet rows = query.executeQuery()) {
+                while (rows.next()) {
+                    Timestamp current = rows.getTimestamp("child_expiration");
+                    Timestamp source = rows.getTimestamp("source_expiration");
+                    candidates.add(new Candidate(
+                            UuidBytes.fromBytes(rows.getBytes("sanction_id")),
+                            UuidBytes.fromBytes(rows.getBytes("target_id")),
+                            rows.getString("child_status"), rows.getString("source_status"),
+                            current == null ? null : current.toInstant(),
+                            source == null ? null : source.toInstant()));
+                }
+            }
+        }
+        List<InheritedChange> changes = new ArrayList<>();
+        try (PreparedStatement update = connection.prepareStatement("""
+                UPDATE sanctions
+                   SET status = ?, expiration_at = ?, ended_at = ?, revision = revision + 1
+                 WHERE sanction_id = ? AND status = 'ACTIVE'
+                """)) {
+            for (Candidate candidate : candidates) {
+                boolean sourceEnded = switch (candidate.sourceStatus()) {
+                    case "REVOKED", "OVERTURNED", "ENDED_EARLY", "EXPIRED" -> true;
+                    default -> false;
+                };
+                String nextStatus = sourceEnded ? candidate.sourceStatus() : "ACTIVE";
+                Instant nextExpiry = sourceEnded ? candidate.currentExpiry() : candidate.sourceExpiry();
+                if (!sourceEnded && java.util.Objects.equals(candidate.currentExpiry(), nextExpiry)) {
+                    continue;
+                }
+                update.setString(1, nextStatus);
+                if (nextExpiry == null) {
+                    update.setNull(2, java.sql.Types.TIMESTAMP);
+                } else {
+                    update.setTimestamp(2, Timestamp.from(nextExpiry));
+                }
+                if (sourceEnded) {
+                    update.setTimestamp(3, Timestamp.from(now));
+                } else {
+                    update.setNull(3, java.sql.Types.TIMESTAMP);
+                }
+                update.setBytes(4, UuidBytes.toBytes(candidate.sanctionId()));
+                if (update.executeUpdate() == 1) {
+                    changes.add(new InheritedChange(candidate.sanctionId(), candidate.playerId(), nextStatus));
+                }
+            }
+        }
+        return List.copyOf(changes);
+    }
+
+    /**
+     * Invoked by exact sanction changes as well as case-wide changes; both write the
+     * same atomic child state / child target network / Discord / audit events.
+     */
+    void reconcileExactInherited(
+            Connection connection,
+            net.enthusia.staff.domain.sanction.ExactSanctionChangeRequest exact,
+            net.enthusia.staff.common.CaseId caseId,
+            Instant now
+    ) throws SQLException, JsonProcessingException {
+        SanctionChangeRequest contextual = new SanctionChangeRequest(
+                exact.idempotencyKey(), caseId, exact.actor(), exact.action(),
+                exact.replacementExpiration(), exact.reason());
+        for (InheritedChange inherited : reconcileInheritedChanges(
+                connection, caseId.value(), List.of(exact.sanctionId()), now)) {
+            insertInheritedOutboxes(connection, contextual, inherited, now);
+        }
+    }
+
+    private void insertInheritedOutboxes(
+            Connection connection, SanctionChangeRequest request, InheritedChange change, Instant now
+    ) throws SQLException, JsonProcessingException {
+        String base = "derived-change:" + UUID.nameUUIDFromBytes(
+                (request.idempotencyKey().value() + ':' + change.sanctionId())
+                        .getBytes(StandardCharsets.UTF_8));
+        String payload = json.writeValueAsString(Map.of(
+                "caseId", request.caseId().value(),
+                "targetId", change.targetId().toString(),
+                "sanctionId", change.sanctionId().toString(),
+                "action", request.action().name(),
+                "inheritedStatus", change.status(),
+                "inherited", true
+        ));
+        try (PreparedStatement network = connection.prepareStatement("""
+                INSERT INTO network_outbox(message_id, idempotency_key, destination, message_type,
+                    protocol_version, payload_json, available_at, created_at)
+                VALUES (?, ?, 'broadcast', 'SANCTION_CHANGED', ?, ?, ?, ?)
+                """);
+             PreparedStatement discord = connection.prepareStatement("""
+                INSERT INTO discord_outbox(message_id, idempotency_key, destination, event_type,
+                    payload_json, available_at, created_at)
+                VALUES (?, ?, 'punishments', 'SANCTION_CHANGED', ?, ?, ?)
+                """)) {
+            network.setBytes(1, UuidBytes.toBytes(UUID.randomUUID()));
+            network.setString(2, base + ":network");
+            network.setInt(3, PROTOCOL_VERSION);
+            network.setString(4, payload);
+            network.setTimestamp(5, Timestamp.from(now));
+            network.setTimestamp(6, Timestamp.from(now));
+            network.executeUpdate();
+
+            discord.setBytes(1, UuidBytes.toBytes(UUID.randomUUID()));
+            discord.setString(2, base + ":discord");
+            discord.setString(3, payload);
+            discord.setTimestamp(4, Timestamp.from(now));
+            discord.setTimestamp(5, Timestamp.from(now));
+            discord.executeUpdate();
+        }
+        try (PreparedStatement event = connection.prepareStatement("""
+                INSERT INTO sanction_events(event_id, sanction_id, event_type, actor_id,
+                    occurred_at, reason, event_json, idempotency_key, case_id, subject_id)
+                VALUES (?, ?, 'INHERITED_SOURCE_CHANGED', ?, ?, ?, ?, ?, ?, ?)
+                """)) {
+            event.setBytes(1, UuidBytes.toBytes(UUID.randomUUID()));
+            event.setBytes(2, UuidBytes.toBytes(change.sanctionId()));
+            event.setBytes(3, UuidBytes.toBytes(request.actor().id()));
+            event.setTimestamp(4, Timestamp.from(now));
+            event.setString(5, "Source sanction corrected: " + request.action().name());
+            event.setString(6, payload);
+            event.setString(7, base + ":event");
+            event.setString(8, request.caseId().value());
+            event.setBytes(9, UuidBytes.toBytes(change.targetId()));
+            event.executeUpdate();
+        }
+    }
+
+    private record InheritedChange(UUID sanctionId, UUID targetId, String status) { }
 
     private static SanctionChangeResult.Rejected validateHierarchy(
             SanctionChangeRequest request,

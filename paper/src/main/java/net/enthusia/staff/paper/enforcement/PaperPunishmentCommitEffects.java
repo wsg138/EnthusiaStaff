@@ -116,7 +116,7 @@ public final class PaperPunishmentCommitEffects implements AutoCloseable {
     }
 
     private void applyOnlineEffect(Player player, net.enthusia.staff.common.CaseId caseId, String reason, CommitEffect effect) {
-        if (!delivered.claim(caseId, java.time.Instant.now())) return;
+        if (!delivered.claim(caseId, player.getUniqueId(), java.time.Instant.now())) return;
         switch (effect) {
             case BAN -> player.kick(Component.text(
                     "You are banned. " + reason + " (case " + caseId + ')'
@@ -132,14 +132,19 @@ public final class PaperPunishmentCommitEffects implements AutoCloseable {
     }
 
     static final class DeliveryClaims {
-        private final java.util.Map<net.enthusia.staff.common.CaseId, java.time.Instant> cases = new java.util.HashMap<>();
+        private final java.util.Map<DeliveryKey, java.time.Instant> cases = new java.util.HashMap<>();
+        private record DeliveryKey(net.enthusia.staff.common.CaseId caseId, UUID playerId) { }
         private final Object lock = new Object();
 
-        boolean claim(net.enthusia.staff.common.CaseId caseId, java.time.Instant now) {
+        boolean claim(net.enthusia.staff.common.CaseId caseId, UUID playerId, java.time.Instant now) {
+            if (caseId == null || playerId == null || now == null) {
+                throw new IllegalArgumentException("online punishment claim fields must be present");
+            }
+            DeliveryKey key = new DeliveryKey(caseId, playerId);
             synchronized (lock) {
                 cases.entrySet().removeIf(entry -> entry.getValue().isBefore(now.minusSeconds(300)));
-                if (cases.containsKey(caseId) || cases.size() >= 10_000) return false;
-                cases.put(caseId, now);
+                if (cases.containsKey(key) || cases.size() >= 10_000) return false;
+                cases.put(key, now);
                 return true;
             }
         }

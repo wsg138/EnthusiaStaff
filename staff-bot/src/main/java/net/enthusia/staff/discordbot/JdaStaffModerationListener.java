@@ -58,6 +58,8 @@ final class JdaStaffModerationListener extends ListenerAdapter {
     private static final String TYPE_OPTION = "type";
     private static final String CONSOLE = "console";
     private static final String REVIEW_REQUEST = "review-request";
+    private static final String REVIEW_QUEUE = "review-queue";
+    private static final String REVIEW_MODAL_NOTE = "review-note";
     private static final String REVIEW_ID = "request-id";
     private static final String REVIEW_DECISION = "decision";
     private static final String REVIEW_NOTE = "note";
@@ -100,6 +102,8 @@ final class JdaStaffModerationListener extends ListenerAdapter {
     private final Optional<DiscordPunishmentCommandController> punishments;
     private final Optional<DiscordCommandBridgeCoordinator> commandBridge;
     private final HttpStaffAuthorityClient reviewAuthority;
+    private final StaffModerationRuntime moderationRuntime;
+    private final SignedComponentCodec reviewComponents;
     private final java.util.concurrent.atomic.AtomicBoolean enabled = new java.util.concurrent.atomic.AtomicBoolean();
 
     JdaStaffModerationListener(
@@ -130,6 +134,8 @@ final class JdaStaffModerationListener extends ListenerAdapter {
         this.actors = moderation.actors();
         this.commandBridge = moderation.commandBridge();
         this.reviewAuthority = moderation.authority();
+        this.moderationRuntime = moderation;
+        this.reviewComponents = moderation.components();
         this.webIssuer = webIssuer;
         this.webModeration = webIssuer.isPresent() ? Optional.of(moderation) : Optional.empty();
         this.controller = new StaffModerationController(
@@ -182,6 +188,10 @@ final class JdaStaffModerationListener extends ListenerAdapter {
         }
         long actorId = event.getUser().getIdLong();
         String actorName = event.getUser().getName();
+        if (REVIEW_QUEUE.equals(event.getName())) {
+            dispatchReviewQueue(event, actorId, actorName);
+            return;
+        }
         if (REVIEW_REQUEST.equals(event.getName())) {
             dispatchMinecraftReview(event, actorId, actorName);
             return;
@@ -199,6 +209,160 @@ final class JdaStaffModerationListener extends ListenerAdapter {
             return;
         }
         dispatchReadCommand(event, actorId, actorName);
+    }
+
+    /** Private interactive queue. Every button is HMAC-bound to the invoker and short-lived. */
+    private void dispatchReviewQueue(SlashCommandInteractionEvent event, long actorId, String actorName) {
+        long interactionId = event.getIdLong();
+        if (!claim(interactionId, event)) {
+            return;
+        }
+        event.deferReply(true).queue(hook -> {
+            boolean scheduled = workers.tryExecute(() -> {
+                try {
+                    var actor = actors.invoker(
+                            new DiscordUserId(Long.toUnsignedString(actorId)), actorName);
+                    if (!actor.rank().canApprovePunishmentRequests()) {
+                        hook.sendMessage("Current Minecraft moderator rank is required.").queue();
+                        return;
+                    }
+                    var pulse = moderationRuntime.reviewPulse();
+                    var reviews = moderationRuntime.pendingReviews(4);
+                    StringBuilder message = new StringBuilder("**Staff review center**\\n")
+                            .append("Pending punishments: ").append(pulse.pendingPunishmentRequests())
+                            .append(" | Open reports: ").append(pulse.openReports())
+                            .append(" | Claimed reports: ").append(pulse.claimedReports())
+                            .append(" | Alt alert events (24h): ").append(pulse.altSignalsInLastDay())
+                            .append("\\n");
+                    if (reviews.isEmpty()) {
+                        hook.sendMessage(message.append("No pending Minecraft punishment requests.").toString())
+                                .queue();
+                        return;
+                    }
+                    java.util.List<ActionRow> rows = new ArrayList<>();
+                    int number = 1;
+                    for (var review : reviews) {
+                        message.append(number).append(". **").append(review.reasonId())
+                                .append("** · Target: `").append(review.targetId())
+                                .append("` · Required: ").append(review.requiredRank())
+                                .append(" · Request: `").append(review.requestId()).append("`\\n");
+                        var target = SignedComponentCodec.TargetRef.request(review.requestId());
+                        rows.add(ActionRow.of(
+                                Button.success(reviewComponents.encode(
+                                        SignedComponentCodec.Action.REVIEW_APPROVE, target, actorId),
+                                        "Approve " + number),
+                                Button.danger(reviewComponents.encode(
+                                        SignedComponentCodec.Action.REVIEW_DENY, target, actorId),
+                                        "Deny " + number)
+                        ));
+                        number++;
+                    }
+                    message.append("Review buttons expire shortly. All actions recheck live Minecraft authority.");
+                    hook.sendMessage(message.toString()).addComponents(rows).queue();
+                } catch (RuntimeException exception) {
+                    log("discord_review_queue_failed", exception);
+                    hook.sendMessage("The private review queue could not be loaded.").queue();
+                }
+            });
+            if (!scheduled) {
+                hook.sendMessage("The staff review worker is busy.").queue();
+            }
+        }, failure -> interactions.release(interactionId));
+    }
+
+    private static boolean isReviewComponent(String id) {
+        return id != null && (id.startsWith("d6:u:r:") || id.startsWith("d6:v:r:"));
+    }
+
+    private boolean handleReviewButton(ButtonInteractionEvent event) {
+        if (!isReviewComponent(event.getComponentId())) {
+            return false;
+        }
+        long actorId = event.getUser().getIdLong();
+        try {
+            var decoded = reviewComponents.decodeAndClaim(event.getComponentId(), actorId);
+            if (decoded.action() == SignedComponentCodec.Action.REVIEW_APPROVE) {
+                submitReview(event, actorId, event.getUser().getName(),
+                        decoded.target().requestId(), "approve", "");
+            } else if (decoded.action() == SignedComponentCodec.Action.REVIEW_DENY) {
+                String modalId = reviewComponents.encode(
+                        SignedComponentCodec.Action.REVIEW_DENY_SUBMIT,
+                        SignedComponentCodec.TargetRef.request(decoded.target().requestId()), actorId);
+                TextInput note = TextInput.create(REVIEW_MODAL_NOTE, TextInputStyle.PARAGRAPH)
+                        .setPlaceholder("Why should this request be denied? (private staff audit)")
+                        .setRequiredRange(1, 500).build();
+                event.replyModal(Modal.create(modalId, "Deny Minecraft punishment request")
+                        .addComponents(Label.of("Denial reason", note)).build()).queue();
+            } else {
+                event.reply("Invalid review action.").setEphemeral(true).queue();
+            }
+        } catch (RuntimeException exception) {
+            event.reply("That review button is expired or belongs to another reviewer.").setEphemeral(true).queue();
+        }
+        return true;
+    }
+
+    private boolean handleReviewModal(ModalInteractionEvent event) {
+        if (!accepted(guildId(event.getGuild()))) {
+            return false;
+        }
+        String id = event.getModalId();
+        if (id == null || !id.startsWith("d6:w:r:")) {
+            return false;
+        }
+        try {
+            var decoded = reviewComponents.decodeAndClaim(id, event.getUser().getIdLong());
+            if (decoded.action() != SignedComponentCodec.Action.REVIEW_DENY_SUBMIT) {
+                throw new IllegalArgumentException("invalid review denial modal");
+            }
+            String note = event.getValue(REVIEW_MODAL_NOTE) == null
+                    ? "" : event.getValue(REVIEW_MODAL_NOTE).getAsString();
+            if (note.isBlank() || note.length() > 500) {
+                event.reply("A private denial reason is required.").setEphemeral(true).queue();
+                return true;
+            }
+            submitReview(event, event.getUser().getIdLong(), event.getUser().getName(),
+                    decoded.target().requestId(), "deny", note);
+        } catch (RuntimeException exception) {
+            event.reply("This review form expired or was already used. Refresh /review-queue.").setEphemeral(true)
+                    .queue();
+        }
+        return true;
+    }
+
+    private void submitReview(IReplyCallback event, long actorId, String actorName,
+            java.util.UUID requestId, String decision, String note) {
+        long interactionId = event.getIdLong();
+        if (!claim(interactionId, event)) {
+            return;
+        }
+        event.deferReply(true).queue(hook -> {
+            boolean scheduled = workers.tryExecute(() -> {
+                try {
+                    String result = committedReview(actorId, actorName, requestId, decision, note);
+                    hook.sendMessage(result).queue();
+                } catch (RuntimeException exception) {
+                    log("discord_review_button_commit_failed", exception);
+                    hook.sendMessage("Review was not confirmed. Refresh the queue before trying again.").queue();
+                }
+            });
+            if (!scheduled) {
+                hook.sendMessage("Review workers are busy.").queue();
+            }
+        }, failure -> interactions.release(interactionId));
+    }
+
+    private String committedReview(long actorId, String actorName, java.util.UUID requestId,
+            String decision, String note) {
+        var actor = actors.invoker(new DiscordUserId(Long.toUnsignedString(actorId)), actorName);
+        var response = reviewAuthority.review(decision, java.util.Map.of(
+                "actorId", actor.id().toString(), "requestId", requestId.toString(), "note", note));
+        return switch (response.path("state").asText()) {
+            case "APPROVED" -> "Approved and saved; network enforcement queued. Case: "
+                    + response.path("caseId").asText();
+            case "DENIED" -> "Denied. No punishment applied.";
+            default -> "The request outcome is unconfirmed. Reopen the review queue.";
+        };
     }
 
     /** Discord decisions are never authoritative until Paper returns a committed case/request state. */
@@ -535,6 +699,9 @@ final class JdaStaffModerationListener extends ListenerAdapter {
             unavailable(event);
             return;
         }
+        if (handleReviewButton(event)) {
+            return;
+        }
         if (handlePunishmentButton(event)) {
             return;
         }
@@ -616,6 +783,9 @@ final class JdaStaffModerationListener extends ListenerAdapter {
 
     @Override
     public void onModalInteraction(ModalInteractionEvent event) {
+        if (handleReviewModal(event)) {
+            return;
+        }
         if (!accepted(guildId(event.getGuild()))
                 || !DiscordPunishmentCommandController.isPanelModal(event.getModalId())
                 || punishments.isEmpty()) {
@@ -877,6 +1047,8 @@ final class JdaStaffModerationListener extends ListenerAdapter {
                 userSlash(HISTORY, "View recent moderation history", discovery),
                 userSlash(NOTES, "View recent private staff notes", discovery),
                 stringSlash(CASE, "View a moderation case by exact ID", CASE_ID_OPTION, "16-character case ID", discovery),
+                Commands.slash(REVIEW_QUEUE, "View Minecraft punishment requests with Approve/Deny buttons")
+                        .setDefaultPermissions(discovery),
                 Commands.slash(REVIEW_REQUEST, "Approve or deny a Minecraft punishment request")
                         .addOption(OptionType.STRING, REVIEW_ID, "Exact request UUID", true)
                         .addOptions(new OptionData(OptionType.STRING, REVIEW_DECISION, "Review decision", true)

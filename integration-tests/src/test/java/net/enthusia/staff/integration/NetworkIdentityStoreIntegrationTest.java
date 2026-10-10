@@ -80,7 +80,7 @@ class NetworkIdentityStoreIntegrationTest {
     }
 
     @Test
-    void confirmedRelationshipInheritsExactRemainingSanctionOnlyOnce() throws SQLException {
+    void confirmedRelationshipInheritsExactRemainingSanctionOnlyOnce() throws Exception {
         Instant now = Instant.parse("2026-08-07T14:00:00Z");
         Instant expiration = now.plus(Duration.ofDays(2));
         UUID actor = UUID.randomUUID();
@@ -131,6 +131,37 @@ class NetworkIdentityStoreIntegrationTest {
         assertEquals(0, duplicate.inheritedSanctions());
         assertEquals(1, inheritedSanctionCount(joining, sourceSanction));
         assertEquals(expiration, inheritedExpiration(joining, sourceSanction));
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement("""
+                    SELECT message_type, payload_json FROM network_outbox
+                    WHERE idempotency_key = ?
+                    """)) {
+            statement.setString(1, "inherit:" + joining + ":" + sourceSanction + ":network");
+            try (ResultSet row = statement.executeQuery()) {
+                assertTrue(row.next(), "inherited sanctions must emit online effects, not only cache refresh");
+                assertEquals("PUNISHMENT_CREATED", row.getString("message_type"));
+                var payload = new ObjectMapper().readTree(row.getString("payload_json"));
+                assertEquals(joining.toString(), payload.path("targetId").asText());
+                assertEquals("BAN", payload.path("sanctionTypes").get(0).asText());
+                assertTrue(payload.has("issuedAt"));
+                assertTrue(payload.has("publicReason"));
+                assertFalse(payload.has("rawIp"));
+            }
+        }
+        assertTrue(store.setRelationship(source, joining, AltRelationshipState.SHARED_HOUSEHOLD,
+                actor, now.plusSeconds(8), "Later verified separate household members"));
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement("""
+                    SELECT status FROM sanctions WHERE target_id = ? AND inherited_from = ?
+                    """)) {
+            statement.setBytes(1, MariaDbIntegrationSupport.uuidBytes(joining));
+            statement.setBytes(2, MariaDbIntegrationSupport.uuidBytes(sourceSanction));
+            try (ResultSet result = statement.executeQuery()) {
+                assertTrue(result.next());
+                assertEquals("REVOKED", result.getString("status"),
+                        "verified household exception must reverse existing inherited ban");
+            }
+        }
     }
 
     @Test

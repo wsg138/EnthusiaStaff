@@ -147,6 +147,51 @@ class CaseSanctionHierarchyIntegrationTest {
     }
 
     @Test
+    void endingSourceSanctionAtomicallyEndsInheritedAltAndNotifiesItsOnlineTarget() throws Exception {
+        Fixture source = seed(28, HELPER_RANK);
+        UUID child = uuid(928);
+        UUID inherited = uuid(929);
+        try (HikariDataSource dataSource = MariaDb.open(databaseConfig());
+             Connection connection = dataSource.getConnection()) {
+            insertPlayer(connection, child, "InheritingAlt");
+            try (PreparedStatement statement = connection.prepareStatement("""
+                    INSERT INTO sanctions(sanction_id, case_id, target_id, sanction_type, status,
+                        issued_at, activated_at, expiration_at, inherited_from, revision)
+                    VALUES (?, ?, ?, 'BAN', 'ACTIVE', ?, ?, ?, ?, 0)
+                    """)) {
+                statement.setBytes(1, MariaDbIntegrationSupport.uuidBytes(inherited));
+                statement.setString(2, source.caseId().value());
+                statement.setBytes(3, MariaDbIntegrationSupport.uuidBytes(child));
+                Instant issued = Instant.now().minusSeconds(100);
+                statement.setTimestamp(4, Timestamp.from(issued));
+                statement.setTimestamp(5, Timestamp.from(issued));
+                statement.setTimestamp(6, Timestamp.from(Instant.now().plusSeconds(7200)));
+                statement.setBytes(7, MariaDbIntegrationSupport.uuidBytes(source.sanctionId()));
+                assertEquals(1, statement.executeUpdate());
+            }
+        }
+        try (MariaDbRuntime runtime = MariaDb.initialize(databaseConfig())) {
+            assertApplied(runtime.sanctionMutationStore().apply(
+                    request(source, MODERATOR, "inherited-source-end")), 1, false);
+        }
+        assertEquals("ENDED_EARLY", sanctionStatus(source));
+        try (HikariDataSource dataSource = MariaDb.open(databaseConfig());
+             Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement(
+                     "SELECT status, ended_at FROM sanctions WHERE sanction_id = ?")) {
+            statement.setBytes(1, MariaDbIntegrationSupport.uuidBytes(inherited));
+            try (ResultSet result = statement.executeQuery()) {
+                assertTrue(result.next());
+                assertEquals("ENDED_EARLY", result.getString("status"));
+                assertNotNull(result.getTimestamp("ended_at"));
+            }
+        }
+        assertEquals(2, count("network_outbox"));
+        assertEquals(2, count("discord_outbox"));
+        assertEquals(2, count("sanction_events"));
+    }
+
+    @Test
     void staleExpectationStillRejectsAuthorizedMutationWithoutSideEffects() throws Exception {
         Fixture fixture = seed(7, HELPER_RANK);
         SanctionChangeExpectation stale = new SanctionChangeExpectation(

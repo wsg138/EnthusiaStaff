@@ -426,6 +426,11 @@ public final class JdbcNetworkIdentityStore implements NetworkIdentityStore {
                             state == AltRelationshipState.NOT_RELATED
                     );
                 }
+                if (state == AltRelationshipState.SHARED_HOUSEHOLD
+                        || state == AltRelationshipState.NOT_RELATED
+                        || state == AltRelationshipState.APPROVED_ALT) {
+                    revokeExemptedInheritedSanctions(connection, pair, actorId, changedAt, state);
+                }
                 insertRelationshipAudit(connection, pair, actorId, state.name(), changedAt, reason);
                 connection.commit();
                 return true;
@@ -437,6 +442,98 @@ public final class JdbcNetworkIdentityStore implements NetworkIdentityStore {
             }
         } catch (SQLException exception) {
             throw new ModerationPersistenceException("Unable to open alt relationship transaction", exception);
+        }
+    }
+
+    /** Relationship exemptions reverse existing inherited sanctions between this exact pair only. */
+    private void revokeExemptedInheritedSanctions(
+            Connection connection, PlayerPair pair, UUID actorId, Instant now, AltRelationshipState state
+    ) throws SQLException, JsonProcessingException {
+        record Derived(UUID sanctionId, UUID targetId, String caseId) { }
+        List<Derived> inherited = new ArrayList<>();
+        try (PreparedStatement statement = connection.prepareStatement("""
+                SELECT child.sanction_id, child.target_id, child.case_id
+                  FROM sanctions child
+                  JOIN sanctions source ON child.inherited_from = source.sanction_id
+                 WHERE child.status = 'ACTIVE'
+                   AND ((child.target_id = ? AND source.target_id = ?)
+                     OR (child.target_id = ? AND source.target_id = ?))
+                 FOR UPDATE
+                """)) {
+            statement.setBytes(1, UuidBytes.toBytes(pair.lower()));
+            statement.setBytes(2, UuidBytes.toBytes(pair.upper()));
+            statement.setBytes(3, UuidBytes.toBytes(pair.upper()));
+            statement.setBytes(4, UuidBytes.toBytes(pair.lower()));
+            try (ResultSet result = statement.executeQuery()) {
+                while (result.next()) {
+                    inherited.add(new Derived(
+                            UuidBytes.fromBytes(result.getBytes("sanction_id")),
+                            UuidBytes.fromBytes(result.getBytes("target_id")),
+                            result.getString("case_id")));
+                }
+            }
+        }
+        for (Derived derived : inherited) {
+            try (PreparedStatement update = connection.prepareStatement("""
+                    UPDATE sanctions SET status = 'REVOKED', ended_at = ?, revision = revision + 1
+                    WHERE sanction_id = ? AND status = 'ACTIVE'
+                    """)) {
+                update.setTimestamp(1, Timestamp.from(now));
+                update.setBytes(2, UuidBytes.toBytes(derived.sanctionId()));
+                if (update.executeUpdate() != 1) {
+                    continue;
+                }
+            }
+            String key = "alt-exception:" + UUID.nameUUIDFromBytes(
+                    (derived.sanctionId() + ":" + state.name()).getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            String payload = json.writeValueAsString(Map.of(
+                    "caseId", derived.caseId(),
+                    "targetId", derived.targetId().toString(),
+                    "sanctionId", derived.sanctionId().toString(),
+                    "action", "ALT_RELATIONSHIP_EXEMPTION",
+                    "relationshipState", state.name()
+            ));
+            try (PreparedStatement network = connection.prepareStatement("""
+                    INSERT INTO network_outbox(message_id, idempotency_key, destination, message_type,
+                        protocol_version, payload_json, available_at, created_at)
+                    VALUES (?, ?, 'broadcast', 'SANCTION_CHANGED', ?, ?, ?, ?)
+                    """);
+                 PreparedStatement discord = connection.prepareStatement("""
+                    INSERT INTO discord_outbox(message_id, idempotency_key, destination, event_type,
+                        payload_json, available_at, created_at)
+                    VALUES (?, ?, 'punishments', 'ALT_SANCTION_EXEMPTION', ?, ?, ?)
+                    """);
+                 PreparedStatement event = connection.prepareStatement("""
+                    INSERT INTO sanction_events(event_id, sanction_id, event_type, actor_id,
+                        occurred_at, reason, event_json, idempotency_key, case_id, subject_id)
+                    VALUES (?, ?, 'ALT_RELATIONSHIP_EXEMPTION', ?, ?, ?, ?, ?, ?, ?)
+                    """)) {
+                network.setBytes(1, UuidBytes.toBytes(UUID.randomUUID()));
+                network.setString(2, key + ":network");
+                network.setInt(3, PROTOCOL_VERSION);
+                network.setString(4, payload);
+                network.setTimestamp(5, Timestamp.from(now));
+                network.setTimestamp(6, Timestamp.from(now));
+                network.executeUpdate();
+
+                discord.setBytes(1, UuidBytes.toBytes(UUID.randomUUID()));
+                discord.setString(2, key + ":discord");
+                discord.setString(3, payload);
+                discord.setTimestamp(4, Timestamp.from(now));
+                discord.setTimestamp(5, Timestamp.from(now));
+                discord.executeUpdate();
+
+                event.setBytes(1, UuidBytes.toBytes(UUID.randomUUID()));
+                event.setBytes(2, UuidBytes.toBytes(derived.sanctionId()));
+                event.setBytes(3, UuidBytes.toBytes(actorId));
+                event.setTimestamp(4, Timestamp.from(now));
+                event.setString(5, "Alt relationship exempted: " + state.name());
+                event.setString(6, payload);
+                event.setString(7, key + ":event");
+                event.setString(8, derived.caseId());
+                event.setBytes(9, UuidBytes.toBytes(derived.targetId()));
+                event.executeUpdate();
+            }
         }
     }
 
@@ -750,7 +847,7 @@ public final class JdbcNetworkIdentityStore implements NetworkIdentityStore {
     ) throws SQLException {
         String placeholders = String.join(",", Collections.nCopies(INHERITABLE_SANCTION_TYPES.size(), "?"));
         String sql = """
-                SELECT s.sanction_id, s.case_id, s.sanction_type, s.expiration_at
+                SELECT s.sanction_id, s.case_id, s.sanction_type, s.expiration_at, c.public_reason
                 FROM sanctions s JOIN cases c ON c.case_id = s.case_id
                 WHERE s.target_id = ? AND s.status = 'ACTIVE'
                   AND s.sanction_type IN (%s)
@@ -776,7 +873,8 @@ public final class JdbcNetworkIdentityStore implements NetworkIdentityStore {
                             UuidBytes.fromBytes(result.getBytes("sanction_id")),
                             result.getString("case_id"),
                             SanctionType.valueOf(result.getString("sanction_type")),
-                            expiration == null ? Optional.empty() : Optional.of(expiration.toInstant())
+                            expiration == null ? Optional.empty() : Optional.of(expiration.toInstant()),
+                            result.getString("public_reason")
                     ));
                 }
                 return List.copyOf(sanctions);
@@ -823,9 +921,16 @@ public final class JdbcNetworkIdentityStore implements NetworkIdentityStore {
                 "sanctionType", source.type().name(),
                 "relationshipState", state.name()
         ));
+        String networkPayload = json.writeValueAsString(Map.of(
+                "caseId", source.caseId(),
+                "targetId", joiningPlayerId.toString(),
+                "sanctionTypes", List.of(source.type().name()),
+                "publicReason", source.publicReason(),
+                "issuedAt", now.toString()
+        ));
         insertInheritedEvent(connection, sanctionId, baseKey, payload, now);
         insertInheritedAudit(connection, joiningPlayerId, source.caseId(), baseKey, payload, now);
-        insertOutboxes(connection, baseKey, payload, now);
+        insertOutboxes(connection, baseKey, payload, networkPayload, now);
         insertStaffAlert(connection, "SAME_NETWORK_SANCTION_INHERITANCE", payload, now);
         return true;
     }
@@ -876,12 +981,13 @@ public final class JdbcNetworkIdentityStore implements NetworkIdentityStore {
         }
     }
 
-    private static void insertOutboxes(Connection connection, String key, String payload, Instant now)
+    private static void insertOutboxes(
+            Connection connection, String key, String payload, String networkPayload, Instant now)
             throws SQLException {
         try (PreparedStatement network = connection.prepareStatement("""
                 INSERT INTO network_outbox(message_id, idempotency_key, destination, message_type,
                     protocol_version, payload_json, available_at, created_at)
-                VALUES (?, ?, 'broadcast', 'SANCTION_CHANGED', ?, ?, ?, ?)
+                VALUES (?, ?, 'broadcast', 'PUNISHMENT_CREATED', ?, ?, ?, ?)
                 """);
              PreparedStatement discord = connection.prepareStatement("""
                 INSERT INTO discord_outbox(message_id, idempotency_key, destination, event_type,
@@ -896,7 +1002,7 @@ public final class JdbcNetworkIdentityStore implements NetworkIdentityStore {
             network.setBytes(1, UuidBytes.toBytes(UUID.randomUUID()));
             network.setString(2, key + ":network");
             network.setInt(3, PROTOCOL_VERSION);
-            network.setString(4, payload);
+            network.setString(4, networkPayload);
             network.setTimestamp(5, Timestamp.from(now));
             network.setTimestamp(6, Timestamp.from(now));
             network.executeUpdate();
@@ -1178,7 +1284,8 @@ public final class JdbcNetworkIdentityStore implements NetworkIdentityStore {
             UUID sanctionId,
             String caseId,
             SanctionType type,
-            Optional<Instant> expiration
+            Optional<Instant> expiration,
+            String publicReason
     ) {
     }
 }

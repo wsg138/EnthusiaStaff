@@ -62,6 +62,73 @@ public final class DiscordStaffReadRuntime implements AutoCloseable {
         return new DiscordStaffReadRuntime(dataSource, clock);
     }
 
+    /** A bounded, read-only list for the bot-owned private review queue (no evidence body). */
+    public record PendingReview(UUID requestId, UUID targetId, String reasonId, String requiredRank,
+            UUID requesterId, Instant createdAt) { }
+
+    /** Read-only dashboard pulse; recent alt alerts are not equivalent to unresolved cases. */
+    public record ReviewPulse(long openReports, long claimedReports,
+            long pendingPunishmentRequests, long altSignalsInLastDay) { }
+
+    public ReviewPulse reviewPulse(Instant now) {
+        if (now == null) {
+            throw new IllegalArgumentException("review pulse instant is required");
+        }
+        try (var connection = dataSource.getConnection();
+             var statement = connection.prepareStatement("""
+                    SELECT
+                        (SELECT COUNT(*) FROM reports
+                          WHERE state IN ('OPEN', 'AWAITING_REVIEW')) AS open_reports,
+                        (SELECT COUNT(*) FROM reports WHERE state = 'CLAIMED') AS claimed_reports,
+                        (SELECT COUNT(*) FROM punishment_requests
+                          WHERE status = 'PENDING' AND expires_at > ?) AS pending_punishments,
+                        (SELECT COUNT(*) FROM discord_outbox
+                          WHERE event_type LIKE 'ALT_%' AND created_at >= ?) AS alt_signals
+                    """)) {
+            statement.setTimestamp(1, java.sql.Timestamp.from(now));
+            statement.setTimestamp(2, java.sql.Timestamp.from(now.minus(java.time.Duration.ofDays(1))));
+            try (var result = statement.executeQuery()) {
+                if (!result.next()) {
+                    throw new IllegalStateException("review pulse query was empty");
+                }
+                return new ReviewPulse(result.getLong("open_reports"), result.getLong("claimed_reports"),
+                        result.getLong("pending_punishments"), result.getLong("alt_signals"));
+            }
+        } catch (java.sql.SQLException exception) {
+            throw new IllegalStateException("Unable to load review pulse", exception);
+        }
+    }
+
+    public List<PendingReview> pendingReviews(Instant now, int limit) {
+        if (now == null || limit < 1 || limit > 10) {
+            throw new IllegalArgumentException("review list bound is invalid");
+        }
+        try (var connection = dataSource.getConnection();
+             var statement = connection.prepareStatement("""
+                    SELECT request_id, target_id, reason_id, required_rank, requester_id, created_at
+                      FROM punishment_requests
+                     WHERE status = 'PENDING' AND expires_at > ?
+                     ORDER BY created_at DESC LIMIT ?
+                    """)) {
+            statement.setTimestamp(1, java.sql.Timestamp.from(now));
+            statement.setInt(2, limit);
+            try (var rows = statement.executeQuery()) {
+                var pending = new java.util.ArrayList<PendingReview>();
+                while (rows.next()) {
+                    pending.add(new PendingReview(
+                            UuidBytes.fromBytes(rows.getBytes("request_id")),
+                            UuidBytes.fromBytes(rows.getBytes("target_id")),
+                            rows.getString("reason_id"), rows.getString("required_rank"),
+                            UuidBytes.fromBytes(rows.getBytes("requester_id")),
+                            rows.getTimestamp("created_at").toInstant()));
+                }
+                return List.copyOf(pending);
+            }
+        } catch (java.sql.SQLException exception) {
+            throw new IllegalStateException("Unable to read pending punishment reviews", exception);
+        }
+    }
+
     public Optional<VersionedSubject> subjectForDiscord(DiscordUserId userId) {
         return identities.subjectForDiscord(userId);
     }

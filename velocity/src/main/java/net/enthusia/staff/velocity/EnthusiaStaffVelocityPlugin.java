@@ -171,6 +171,11 @@ public final class EnthusiaStaffVelocityPlugin {
     private volatile NetworkIdentityProtector networkIdentityProtector;
     private volatile boolean activeAuthorityObserved;
     private volatile ScheduledTask operationalStateTask;
+    private volatile ScheduledTask onlineAltReconciliationTask;
+    private final java.util.concurrent.atomic.AtomicBoolean onlineAltReconcileRunning =
+            new java.util.concurrent.atomic.AtomicBoolean();
+    private final java.util.concurrent.atomic.AtomicInteger onlineAltReconcileCursor =
+            new java.util.concurrent.atomic.AtomicInteger();
     private volatile PersistentChannelServer channelServer;
     private volatile VelocityChatBridgeRelay chatBridgeRelay;
     private volatile VelocityChatArtifactRelay chatArtifactRelay;
@@ -322,6 +327,8 @@ public final class EnthusiaStaffVelocityPlugin {
         }
         cancelScheduledTask("operational state refresh", operationalStateTask);
         operationalStateTask = null;
+        cancelScheduledTask("online alt reconciliation", onlineAltReconciliationTask);
+        onlineAltReconciliationTask = null;
         closeOutboxWorker();
         closeDiscordWorker();
         cancelScheduledTask("website maintenance", websiteMaintenanceTask);
@@ -497,6 +504,10 @@ public final class EnthusiaStaffVelocityPlugin {
         operationalStateTask = proxy.getScheduler().buildTask(this, this::refreshOperationalState)
                 .repeat(5, TimeUnit.SECONDS)
                 .schedule();
+        onlineAltReconciliationTask = proxy.getScheduler()
+                .buildTask(this, this::queueOnlineAltReconciliation)
+                .delay(15, TimeUnit.SECONDS)
+                .repeat(15, TimeUnit.SECONDS).schedule();
         initializeShadowMigrationSchedule(loaded);
         logger.info("MariaDB verified; Velocity moderation authority is {}", state.mode());
     }
@@ -537,6 +548,8 @@ public final class EnthusiaStaffVelocityPlugin {
     private void cleanupFailedInitialization(MariaDbRuntime opened) {
         cancelScheduledTask("failed operational state refresh", operationalStateTask);
         operationalStateTask = null;
+        cancelScheduledTask("failed online alt reconciliation", onlineAltReconciliationTask);
+        onlineAltReconciliationTask = null;
         cancelScheduledTask("failed website maintenance", websiteMaintenanceTask);
         websiteMaintenanceTask = null;
         cancelScheduledTask("failed shadow migration", shadowMigrationTask);
@@ -1122,6 +1135,55 @@ public final class EnthusiaStaffVelocityPlugin {
                     "operational-state", "State refresh failed; active authority fails closed"
             ));
             logger.error("Operational state refresh failed", exception);
+        }
+    }
+
+    /**
+     * Rechecks only verified linked accounts and previously adjudicated high-confidence
+     * relationships while they remain online. Shared-network hints never trigger this path.
+     * A rotating 24-player batch prevents a full-network synchronous database scan.
+     */
+    private void queueOnlineAltReconciliation() {
+        if (authorityMode.get() != OperationalMode.ACTIVE || shuttingDown.get()
+                || networkIdentityStore == null
+                || !onlineAltReconcileRunning.compareAndSet(false, true)) {
+            return;
+        }
+        if (!submitWorker(() -> {
+            try {
+                reconcileOnlineAlts();
+            } finally {
+                onlineAltReconcileRunning.set(false);
+            }
+        })) {
+            onlineAltReconcileRunning.set(false);
+        }
+    }
+
+    private void reconcileOnlineAlts() {
+        NetworkIdentityStore store = networkIdentityStore;
+        if (store == null || authorityMode.get() != OperationalMode.ACTIVE || shuttingDown.get()) {
+            return;
+        }
+        List<UUID> players = proxy.getAllPlayers().stream()
+                .map(com.velocitypowered.api.proxy.Player::getUniqueId)
+                .sorted().toList();
+        if (players.isEmpty()) {
+            return;
+        }
+        int start = Math.floorMod(onlineAltReconcileCursor.getAndAdd(24), players.size());
+        int count = Math.min(24, players.size());
+        Instant now = Clock.systemUTC().instant();
+        for (int index = 0; index < count && authorityMode.get() == OperationalMode.ACTIVE; index++) {
+            UUID id = players.get((start + index) % players.size());
+            try {
+                store.observeConnectedAlts(id, now, false);
+            } catch (RuntimeException exception) {
+                health.update(OperationalMode.DEGRADED,
+                        Map.of("alt-reconciliation", "Online identity reconciliation failed"));
+                logger.warn("Unable to reconcile current authoritative alt sanctions", exception);
+                return;
+            }
         }
     }
 

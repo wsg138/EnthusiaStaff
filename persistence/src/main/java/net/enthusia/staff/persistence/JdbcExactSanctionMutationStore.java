@@ -36,6 +36,7 @@ final class JdbcExactSanctionMutationStore implements SanctionMutationStore {
     private final DataSource dataSource;
     private final Clock clock;
     private final ExactSanctionEventWriter eventWriter;
+    private final JdbcSanctionMutationStore inheritedMutations;
 
     JdbcExactSanctionMutationStore(DataSource dataSource, ObjectMapper json, Clock clock) {
         if (dataSource == null || json == null || clock == null) {
@@ -44,6 +45,7 @@ final class JdbcExactSanctionMutationStore implements SanctionMutationStore {
         this.dataSource = dataSource;
         this.clock = clock;
         this.eventWriter = new ExactSanctionEventWriter(json);
+        this.inheritedMutations = new JdbcSanctionMutationStore(dataSource, json, clock);
     }
 
     @Override
@@ -244,6 +246,7 @@ final class JdbcExactSanctionMutationStore implements SanctionMutationStore {
             updateCaseOverturnState(connection, row.caseId());
         }
         eventWriter.write(connection, request, row, mutation, now);
+        inheritedMutations.reconcileExactInherited(connection, request, row.caseId(), now);
     }
 
     private static ExactSanctionChangeResult rollbackAndReturn(

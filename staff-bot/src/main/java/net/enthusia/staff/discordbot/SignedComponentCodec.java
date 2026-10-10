@@ -34,7 +34,10 @@ final class SignedComponentCodec {
         NOTES("n"),
         CASES("c"),
         SELECT_MINECRAFT("s"),
-        CASE("k");
+        CASE("k"),
+        REVIEW_APPROVE("u"),
+        REVIEW_DENY("v"),
+        REVIEW_DENY_SUBMIT("w");
 
         private final String wireCode;
 
@@ -60,6 +63,7 @@ final class SignedComponentCodec {
         DISCORD("d"),
         MINECRAFT("m"),
         CASE("c"),
+        REQUEST("r"),
         NONE("x");
 
         private final String wireCode;
@@ -97,6 +101,20 @@ final class SignedComponentCodec {
                 throw new IllegalArgumentException("playerId must be present");
             }
             return new TargetRef(TargetType.MINECRAFT, playerId.toString().replace("-", ""));
+        }
+
+        static TargetRef request(UUID requestId) {
+            if (requestId == null) {
+                throw new IllegalArgumentException("review request id must be present");
+            }
+            return new TargetRef(TargetType.REQUEST, requestId.toString().replace("-", ""));
+        }
+
+        UUID requestId() {
+            if (type != TargetType.REQUEST || value.length() != UUID_HEX_LENGTH) {
+                throw new IllegalStateException("target is not a request");
+            }
+            return UUID.fromString(uuidText(value));
         }
 
         static TargetRef caseId(CaseId caseId) {
@@ -294,6 +312,7 @@ final class SignedComponentCodec {
             case DISCORD -> TargetRef.discord(Long.parseLong(encoded, 36));
             case MINECRAFT -> TargetRef.minecraft(new TargetRef(type, encoded).minecraftId());
             case CASE -> TargetRef.caseId(new CaseId(encoded));
+            case REQUEST -> TargetRef.request(new TargetRef(type, encoded).requestId());
             case NONE -> TargetRef.none();
         };
     }
