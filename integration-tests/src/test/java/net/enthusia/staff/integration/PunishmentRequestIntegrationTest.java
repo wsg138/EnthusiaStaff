@@ -186,6 +186,29 @@ class PunishmentRequestIntegrationTest extends PunishmentRequestMariaDbSupport {
     }
 
     @Test
+    void abandonedReviewLeaseReleasesOnlyCurrentOwnerAndFencingToken() throws SQLException {
+        PunishmentApprovalRequest pending = request(
+                "abandoned-review", sevenDayBan(), NOW.plus(Duration.ofDays(7)));
+        try (MariaDbRuntime runtime = MariaDb.initialize(databaseConfig())) {
+            PunishmentRequestStore store = runtime.punishmentRequestStore();
+            store.submit(pending);
+            PunishmentApprovalLease first = acquire(store, pending, MOD, NOW);
+            assertEquals(1, leaseCount(pending.requestId()));
+            assertTrue(store.abandon(first));
+            assertEquals(1, leaseCount(pending.requestId()));
+            assertFalse(store.abandon(first));
+            PunishmentApprovalLease second = acquire(store, pending, MOD, NOW.plusSeconds(1));
+            assertTrue(second.fenceToken() > first.fenceToken());
+            assertFalse(store.abandon(first), "stale lease cannot release current owner's claim");
+            assertEquals(1, leaseCount(pending.requestId()));
+            assertTrue(store.abandon(second));
+            assertEquals(1, leaseCount(pending.requestId()));
+            assertEquals(PunishmentRequestStatus.PENDING,
+                    store.find(pending.requestId()).orElseThrow().status());
+        }
+    }
+
+    @Test
     void denialAndExpirationRemainDurableWithoutCreatingCases() throws SQLException {
         PunishmentApprovalRequest denied = request(
                 "denial",
