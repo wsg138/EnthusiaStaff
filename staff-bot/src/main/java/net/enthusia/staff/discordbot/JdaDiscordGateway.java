@@ -14,6 +14,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
+import java.util.regex.Pattern;
 import net.dv8tion.jda.api.JDA;
 import net.dv8tion.jda.api.JDABuilder;
 import net.dv8tion.jda.api.Permission;
@@ -44,6 +45,12 @@ import net.enthusia.staff.protocol.ChatBridgeRenderedMessage;
 /** JDA 6.5 adapter. JDA owns Discord REST bucket/global rate limits and Gateway reconnect scheduling. */
 final class JdaDiscordGateway implements DiscordGateway, DiscordChatEgress, DiscordRenderedChatEgress {
     private static final System.Logger LOGGER = System.getLogger(JdaDiscordGateway.class.getName());
+    private static final Pattern INTERACTIVE_CHAT_ITEM_MARKER = Pattern.compile(
+            "(?i)<chat=[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}:(\\[(?:item|inv|inventory|enderchest)\\]):>"
+    );
+    private static final Pattern LEGACY_MINECRAFT_FORMATTING = Pattern.compile(
+            "(?i)\\u00a7[0-9a-fk-or]"
+    );
 
     private final StaffBotConfiguration configuration;
     private final String discordToken;
@@ -424,7 +431,7 @@ final class JdaDiscordGateway implements DiscordGateway, DiscordChatEgress, Disc
         String prefix = sourcePrefix(message.sourceServerId(), linkedPresentation)
                 + message.displayName() + ": ";
         int available = Math.max(0, 2_000 - prefix.length());
-        return prefix + truncateDiscordText(message.plainText(), available);
+        return prefix + truncateDiscordText(cleanDiscordChatText(message.plainText()), available);
     }
 
 
@@ -533,15 +540,25 @@ final class JdaDiscordGateway implements DiscordGateway, DiscordChatEgress, Disc
         Objects.requireNonNull(message, "message");
         String prefix = sourcePrefix(message.sourceServerId(), linkedPresentation);
         int available = Math.max(0, 2_000 - prefix.length());
-        String markdown = message.lineMarkdown();
+        String markdown = cleanDiscordChatText(message.lineMarkdown());
         if (markdown.length() <= available) {
             return prefix + markdown;
         }
-        String plain = message.linePlainText();
+        String plain = cleanDiscordChatText(message.linePlainText());
         if (plain.length() <= available) {
             return prefix + plain;
         }
         return prefix + truncateDiscordText(plain, available);
+    }
+
+    static String cleanDiscordChatText(String text) {
+        Objects.requireNonNull(text, "text");
+        // InteractiveChat may encode the user-facing [item] marker in a transport tag.
+        // Discord cannot interpret this internal marker. Rich PNG attachments, when available,
+        // are delivered separately; otherwise show the readable placeholder without the UUID.
+        String readable = INTERACTIVE_CHAT_ITEM_MARKER.matcher(text).replaceAll("$1");
+        // Minecraft legacy colors and formatting are not Discord markup.
+        return LEGACY_MINECRAFT_FORMATTING.matcher(readable).replaceAll("");
     }
 
     private Optional<String> chatSenderIdentity(

@@ -678,6 +678,15 @@ final class PaperIntegrationManager implements Listener {
             clearIssue(INTERACTIVE_CHAT_RENDERER);
             return;
         }
+        // Opt-in independent cards are preferred when requested. The installed
+        // DiscordSRV image addon can expose a valid API but still fail at render time
+        // on newer Minecraft versions. Prefer the isolated, lightweight renderer
+        // instead of waiting for a runtime error that the discovery check cannot see.
+        if (plugin().getConfig().getBoolean(
+                "discord-chat-bridge.independent-rich-renderer-enabled", false)
+                && registerIndependentRichRenderer() == RendererFallback.READY) {
+            return;
+        }
         InteractiveChatStagingArtifactProvider.Discovery discovery =
                 InteractiveChatStagingArtifactProvider.discoverAndRegister(
                         plugin(),

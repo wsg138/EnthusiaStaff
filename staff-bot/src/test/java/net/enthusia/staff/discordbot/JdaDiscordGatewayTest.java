@@ -84,6 +84,29 @@ class JdaDiscordGatewayTest {
     }
 
     @Test
+    void itemTransportMarkersAndLegacyColorsDoNotLeakToDiscord() {
+        String token = "<chat=" + UUID.randomUUID() + ":[item]:>";
+        assertEquals("[item]", JdaDiscordGateway.cleanDiscordChatText(token));
+        assertEquals(
+                "Ping: GodOfSharks -> 125ms",
+                JdaDiscordGateway.cleanDiscordChatText("\u00a7ePing\u00a77:\u00a7f GodOfSharks \u00a77-> \u00a7a125ms")
+        );
+        assertEquals(
+                "[SMP] Player: [item]",
+                JdaDiscordGateway.chatContent(chatMessage(token))
+        );
+        assertEquals(
+                "[SMP] Player: Ping: GodOfSharks -> 125ms",
+                JdaDiscordGateway.chatContent(chatMessage(
+                        "\u00a7ePing\u00a77:\u00a7f GodOfSharks \u00a77-> \u00a7a125ms"))
+        );
+        assertEquals(
+                "<chat=untrusted:[item]:>",
+                JdaDiscordGateway.cleanDiscordChatText("<chat=untrusted:[item]:>")
+        );
+    }
+
+    @Test
     void linkedSenderPresentationIsAdditiveAndSafeAcrossFallbacks() {
         ChatBridgeOutboundMessage plain = chatMessage("hello");
         assertEquals(
