@@ -9,6 +9,11 @@ import java.nio.file.Path;
 import org.junit.jupiter.api.Test;
 
 class PunishmentGuiSecurityRegressionTest {
+    /** Source-shape assertions must be stable for both CRLF Windows and LF CI checkouts. */
+    private static String normalizedSource(Path path) throws IOException {
+        return Files.readString(path).replace("\r\n", "\n");
+    }
+
     private static final Path CONTROLLER = Path.of(
             "src/main/java/net/enthusia/staff/paper/punishment/PunishmentGuiController.java"
     );
@@ -21,7 +26,7 @@ class PunishmentGuiSecurityRegressionTest {
 
     @Test
     void historyPageRechecksCurrentSensitiveHistoryPermission() throws IOException {
-        String source = Files.readString(CONTROLLER);
+        String source = normalizedSource(CONTROLLER);
         String method = method(source, "private void openHistory(", "private void openUnavailableHistory(");
 
         assertTrue(method.contains(
@@ -34,8 +39,8 @@ class PunishmentGuiSecurityRegressionTest {
 
     @Test
     void overviewNeverCachesSensitiveHistoryPermissionOrEntries() throws IOException {
-        String source = Files.readString(OVERVIEW);
-        String controller = Files.readString(CONTROLLER);
+        String source = normalizedSource(OVERVIEW);
+        String controller = normalizedSource(CONTROLLER);
 
         assertFalse(source.contains("sensitiveHistory"));
         assertFalse(source.contains("ModerationHistoryEntry"));
@@ -47,7 +52,7 @@ class PunishmentGuiSecurityRegressionTest {
 
     @Test
     void historyResultRechecksSensitivePermissionBeforeRendering() throws IOException {
-        String source = Files.readString(CONTROLLER);
+        String source = normalizedSource(CONTROLLER);
         String method = method(source, "private void openState(", "private Actor authorizedActor(");
 
         assertTrue(method.contains("history.sensitiveHistory()"));
@@ -57,7 +62,7 @@ class PunishmentGuiSecurityRegressionTest {
 
     @Test
     void resumedReviewStillShowsTheFullConfiguredLadder() throws IOException {
-        String source = Files.readString(RENDERER);
+        String source = normalizedSource(RENDERER);
         String method = method(source, "private void renderReview(", "private void renderHistory(");
 
         assertTrue(method.contains("catalog.find(draft.reasonId())"));
@@ -69,7 +74,7 @@ class PunishmentGuiSecurityRegressionTest {
 
     @Test
     void unavailableHistoryIsNotRenderedAsAnEmptySuccessfulTimeline() throws IOException {
-        String source = Files.readString(RENDERER);
+        String source = normalizedSource(RENDERER);
         String method = method(source, "private void renderHistory(", "private void renderHeader(");
 
         assertTrue(method.contains("if (!state.available())"));
@@ -79,7 +84,7 @@ class PunishmentGuiSecurityRegressionTest {
 
     @Test
     void historyBackButtonDoesNotClaimItAlwaysReturnsToCategories() throws IOException {
-        String source = Files.readString(RENDERER);
+        String source = normalizedSource(RENDERER);
         String method = method(source, "private void renderHistory(", "private void renderHeader(");
 
         assertTrue(method.contains(
