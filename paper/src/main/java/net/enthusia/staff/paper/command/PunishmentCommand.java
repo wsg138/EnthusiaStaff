@@ -77,6 +77,7 @@ public final class PunishmentCommand implements CommandExecutor, TabCompleter {
     private final ExecutorService workers;
     private final StaffTargetGuard targetGuard;
     private volatile SanctionLifecycleCommand sanctionLifecycle;
+    private volatile ExactSanctionPickerGui exactSanctionPicker;
 
     public PunishmentCommand(
             JavaPlugin plugin,
@@ -120,6 +121,10 @@ public final class PunishmentCommand implements CommandExecutor, TabCompleter {
         sanctionLifecycle = java.util.Objects.requireNonNull(lifecycle, "lifecycle");
     }
 
+    public void configureExactSanctionPicker(ExactSanctionPickerGui picker) {
+        exactSanctionPicker = java.util.Objects.requireNonNull(picker, "picker");
+    }
+
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
         Actor actor = PaperActorResolver.resolve(sender).orElse(null);
@@ -128,6 +133,16 @@ public final class PunishmentCommand implements CommandExecutor, TabCompleter {
             return true;
         }
         if (PunishmentSanctionRoutes.handles(route, args)) {
+            if (sender instanceof Player player && PunishmentSanctionRoutes.isPickerRequest(route, args)) {
+                if (exactSanctionPicker == null) {
+                    sender.sendMessage(StaffMessageStyle.error("Punishment selection is not configured."));
+                } else {
+                    exactSanctionPicker.open(player,
+                            PunishmentSanctionRoutes.pickerTarget(route, args),
+                            PunishmentSanctionRoutes.pickerAction(route, args));
+                }
+                return true;
+            }
             String[] routed = PunishmentSanctionRoutes.rewrite(route, args);
             if (routed == null) {
                 sender.sendMessage(StaffMessageStyle.usage(PunishmentSanctionRoutes.usage()));
@@ -624,7 +639,7 @@ public final class PunishmentCommand implements CommandExecutor, TabCompleter {
         )));
         if (CENTRAL_COMMAND.equals(route)) {
             sender.sendMessage(StaffMessageStyle.style(Component.text(
-                    "Exact sanction change: /punish remove|end|reduce|change <sanction-id> ...", 
+                    "Punishment changes: /punish remove|end|reduce|change <player> opens a selector.", 
                     NamedTextColor.GRAY
             )));
             sender.sendMessage(StaffMessageStyle.style(Component.text(
