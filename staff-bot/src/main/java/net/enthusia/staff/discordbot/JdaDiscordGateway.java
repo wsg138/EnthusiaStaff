@@ -556,14 +556,29 @@ final class JdaDiscordGateway implements DiscordGateway, DiscordChatEgress, Disc
         String id = discordId.orElseThrow();
         Member member = guild.getMemberById(id);
         if (member != null) {
-            return Optional.of("@" + escapeDiscordMarkdown(member.getEffectiveName()));
+            return cachedDiscordDisplay(member.getEffectiveName()).or(() -> discordProfileMention(id));
         }
         User user = api.getUserById(id);
         if (user != null) {
-            return Optional.of("@" + escapeDiscordMarkdown(
-                    ModerationDiscordMessageMapper.displayName(user)));
+            return cachedDiscordDisplay(ModerationDiscordMessageMapper.displayName(user))
+                    .or(() -> discordProfileMention(id));
         }
-        return Optional.of("linked");
+        // The Discord client can resolve this ID into a clickable account mention, even when
+        // the bot has no member/user cache. Both chat send paths disable allowed mentions,
+        // so the linked account is never pinged by an ordinary Minecraft chat message.
+        return discordProfileMention(id);
+    }
+
+    static Optional<String> discordProfileMention(String id) {
+        if (id == null || !id.matches("[0-9]{15,20}")) {
+            return Optional.empty();
+        }
+        return Optional.of("<@" + id + ">");
+    }
+
+    private static Optional<String> cachedDiscordDisplay(String name) {
+        String escaped = escapeDiscordMarkdown(name);
+        return escaped.isBlank() ? Optional.empty() : Optional.of("@" + escaped);
     }
 
     private static String sourcePrefix(
@@ -579,7 +594,7 @@ final class JdaDiscordGateway implements DiscordGateway, DiscordChatEgress, Disc
 
     static String escapeDiscordMarkdown(String value) {
         if (value == null || value.isBlank()) {
-            return "linked";
+            return "";
         }
         StringBuilder escaped = new StringBuilder(Math.min(value.length() * 2, 128));
         int limit = Math.min(value.length(), 64);
@@ -592,7 +607,7 @@ final class JdaDiscordGateway implements DiscordGateway, DiscordChatEgress, Disc
                 escaped.append(character);
             }
         }
-        return escaped.isEmpty() ? "linked" : escaped.toString();
+        return escaped.toString();
     }
 
     private static String truncateDiscordText(String text, int maximumLength) {

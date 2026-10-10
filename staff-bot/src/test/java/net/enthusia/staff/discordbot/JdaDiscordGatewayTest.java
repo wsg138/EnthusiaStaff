@@ -129,7 +129,30 @@ class JdaDiscordGatewayTest {
                 "Name\\*With\\_Markdown\\|",
                 JdaDiscordGateway.escapeDiscordMarkdown("Name*With_Markdown|")
         );
-        assertEquals("linked", JdaDiscordGateway.escapeDiscordMarkdown("\n\t"));
+        assertEquals("", JdaDiscordGateway.escapeDiscordMarkdown("\n\t"));
+    }
+
+    @Test
+    void uncachedDiscordAccountUsesNonPingingMentionInsteadOfLinkedLabel() {
+        String discordId = "123456789012345678";
+        assertEquals(
+                java.util.Optional.of("<@" + discordId + ">"),
+                JdaDiscordGateway.discordProfileMention(discordId)
+        );
+        assertEquals(
+                "[SMP · <@" + discordId + ">] Player: hello",
+                JdaDiscordGateway.chatContent(
+                        chatMessage("hello"),
+                        JdaDiscordGateway.discordProfileMention(discordId)
+                )
+        );
+        assertEquals(java.util.Optional.empty(), JdaDiscordGateway.discordProfileMention("bad"));
+        assertEquals(java.util.Optional.empty(), JdaDiscordGateway.discordProfileMention(null));
+        assertEquals(
+                "[SMP] Player: hello",
+                JdaDiscordGateway.chatContent(chatMessage("hello"),
+                        JdaDiscordGateway.discordProfileMention("bad"))
+        );
     }
 
     @Test
