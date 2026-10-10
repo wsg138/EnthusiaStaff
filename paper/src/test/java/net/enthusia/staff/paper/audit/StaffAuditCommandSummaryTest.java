@@ -18,5 +18,8 @@ class StaffAuditCommandSummaryTest {
         assertEquals("/punish (arguments withheld)", StaffAuditCommandSummary.summarize("/punish Player ban"));
         assertEquals("/unknown (arguments withheld)", StaffAuditCommandSummary.summarize("bad"));
         assertEquals("/unknown (arguments withheld)", StaffAuditCommandSummary.summarize(null));
+        assertEquals("/unknown (arguments withheld)", StaffAuditCommandSummary.summarize("/login:secret"));
+        assertEquals("/unknown (arguments withheld)", StaffAuditCommandSummary.summarize("/tokenSuperSecret ABC"));
+        assertEquals("/punish (arguments withheld)", StaffAuditCommandSummary.summarize("/PUNISH target reason"));
     }
 }
