@@ -127,33 +127,45 @@ Use the approved mutation commands rather than deleting rows or editing the data
 
 Select the exact case/sanction when multiple actions exist. A change should preserve the original record and explain whether it is a reduction, early ending, revocation, correction, appeal result or full overturn.
 
-### Exact punishment shortcuts (draft; not confirmed deployed)
+### Select and change an individual punishment (new draft GUI)
 
-If a player has several warnings or other punishments, use `/history <player>` and
-`/case <case-id>` to find the **specific sanction UUID**. Do not guess a case
-or let a player name implicitly select the latest punishment. On Java Edition,
-clicking a sanction line in `/case` **suggests** `/unpunish <that-id>` in chat
-without executing it; enter an audit reason yourself before sending.
-The exact-ID commands change only that sanction and retain its audit record:
+No one needs to type a sanction UUID in-game. Use the player name:
 
 ```text
-/unpunish <sanction-id> <written reason>
-/punish remove <sanction-id> <written reason>
-/punish end <sanction-id> <written reason>
-/punish reduce <sanction-id> <new-duration-or-UTC-expiration> <written reason>
-/punish change <sanction-id> <remove|end|reduce|overturn> ... <written reason>
-/punish change <sanction-id> <new-duration-or-UTC-expiration> <written reason>
+/unpunish <player>
+/punish remove <player>
+/punish end <player>
+/punish reduce <player>
+/punish change <player>
 ```
 
-`/unpunish` and `/punish remove` **revoke** the chosen sanction (including
-one of several warnings). `end` ends an active sanction early without
-revoking the underlying history. `reduce` moves a sanction's expiration
-earlier; `change` with just a new duration is *also reduction-only* and
-cannot extend a punishment. A specific action after `change` selects that
-action's existing policy path. Mods may reduce, end and revoke as authorized;
-a full overturn remains Admin/Founder-only. All shortcuts require active staff
-authority, per-action permissions and an audited reason. Ordinary sanction
-commands are not enabled in shadow/read-only modes.
+The menu lists individual punishments from recent case history, including **each
+warning separately** even when several warnings share the same case. Entries show
+their type, case reason, issue time, status, expiration, and short reference.
+Choose exactly one punishment. `/punish change` then offers an action selection;
+the other commands preselect the appropriate action. For reductions, provide a
+new shorter duration such as `2d` or an ISO-8601 UTC expiration in the
+private chat prompt. Next enter the written audit reason and click the final
+**Confirm selected punishment** button.
+
+The internal sanction ID never needs to be typed: the selected entry is bound
+to its exact persisted UUID and expected revision, and the final write flows
+through the existing exact-sanction lifecycle. A changed/stale record, missing
+authority, or non-active moderation mode rejects the mutation. No command
+silently chooses "the most recent warning." Existing case and event records
+remain auditable; other sanctions are not the target of the change.
+
+Mods may revoke, end, or reduce within their rank/hierarchy and permissions;
+full overturn is limited to Admin/Founder. A reduction cannot extend a
+punishment. The GUI includes a cancellation option, requires an audit reason,
+and asks for a separate final confirmation. Staff Mode remains required.
+
+For console and automation only, the explicit `/estaff sanction` and exact-ID
+`/punish remove|end|reduce <sanction-id> ...` commands remain available.
+`/case` still displays IDs for investigation, but normal staff do not need
+to copy them into commands.
+
+**These commands are in a draft PR, not confirmed deployed on live SMP.**
 
 Case-oriented `/removepunishment` and older `/unwarn` paths remain separate;
 use the exact-ID shortcuts when the distinction between multiple warnings
