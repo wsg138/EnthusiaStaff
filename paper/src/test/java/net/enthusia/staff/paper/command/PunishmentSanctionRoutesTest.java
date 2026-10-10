@@ -112,6 +112,16 @@ class PunishmentSanctionRoutesTest {
     }
 
     @Test
+    void ambiguousStorageFailureDoesNotClaimNoPunishmentWasChanged() throws IOException {
+        String source = Files.readString(Path.of(
+                "src/main/java/net/enthusia/staff/paper/command/SanctionLifecycleCommand.java"
+        )).replace("\r\n", "\n");
+        assertTrue(source.contains("Sanction change status UNKNOWN after a storage error."));
+        assertTrue(source.contains("the write may have committed."));
+        assertFalse(source.contains("The sanction change failed; no raw database error"));
+    }
+
+    @Test
     void menuActionsRequireBothLegacyAndExactWritePermissions() {
         var action = net.enthusia.staff.domain.sanction.SanctionChangeAction.REVOKE;
         var ui = net.enthusia.staff.paper.sanction.SanctionChangeAccess.permissionFor(action);
