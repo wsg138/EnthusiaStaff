@@ -26,14 +26,17 @@ class MuseCommandSurfaceRegressionTest {
     }
 
     @Test
-    void centralRemovePunishmentTargetOnlyRouteDoesNotOpenGui() throws IOException {
+    void centralRemovePunishmentTargetOnlyRouteOpensExactGuiWithoutSelectingLatest() throws IOException {
         String source = Files.readString(REMOVE);
         int helper = source.indexOf("private boolean openAliasGui");
-        int centralGate = source.indexOf("central || arguments.length != SINGLE_ARGUMENT", helper);
-        int guiOpen = source.indexOf("gui.open(player, arguments[0], route)", helper);
+        int playerGate = source.indexOf("arguments.length != SINGLE_ARGUMENT", helper);
+        int picker = source.indexOf("picker.open(player, arguments[0], selection,", helper);
+        int legacy = source.indexOf("gui.open(player, arguments[0], route)", picker);
 
-        assertTrue(helper >= 0 && centralGate > helper);
-        assertTrue(guiOpen > centralGate);
+        assertTrue(helper >= 0 && playerGate > helper);
+        assertTrue(picker > playerGate);
+        assertTrue(legacy > picker);
+        assertTrue(source.contains("if (central) {\n            return false;"));
     }
 
     @Test
