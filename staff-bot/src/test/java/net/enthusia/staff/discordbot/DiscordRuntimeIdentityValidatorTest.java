@@ -61,6 +61,32 @@ class DiscordRuntimeIdentityValidatorTest {
     }
 
     @Test
+    void explicitApplicationIdSupportsSeparatePublicChatBot() {
+        long publicChatApplicationId = 9_999_001L;
+        DiscordRuntimeIdentity identity = new DiscordRuntimeIdentity(
+                publicChatApplicationId,
+                false,
+                Set.of(StaffBotEnvironment.STAGING.guildId()),
+                true,
+                true
+        );
+
+        assertTrue(DiscordRuntimeIdentityValidator.validate(
+                StaffBotEnvironment.STAGING,
+                publicChatApplicationId,
+                identity
+        ).valid());
+        assertEquals(
+                DiscordRuntimeIdentityValidator.APPLICATION_MISMATCH,
+                DiscordRuntimeIdentityValidator.validate(
+                        StaffBotEnvironment.STAGING,
+                        publicChatApplicationId + 1L,
+                        identity
+                ).reason()
+        );
+    }
+
+    @Test
     void stagingRequiresVisibleOperationalTestChannel() {
         assertEquals(
                 DiscordRuntimeIdentityValidator.STAGING_CHANNEL_MISSING,

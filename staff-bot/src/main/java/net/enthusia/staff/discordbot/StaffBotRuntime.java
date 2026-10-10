@@ -3,6 +3,7 @@ package net.enthusia.staff.discordbot;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
@@ -15,6 +16,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 /** Owns every resource in the isolated staff-bot process and provides deterministic shutdown semantics. */
 public final class StaffBotRuntime implements AutoCloseable {
     private static final System.Logger LOGGER = System.getLogger(StaffBotRuntime.class.getName());
+    private static final long MIN_APPLICATION_ID = 1L;
 
     private final StaffBotConfiguration configuration;
     private final StaffBotHealth health;
@@ -25,9 +27,11 @@ public final class StaffBotRuntime implements AutoCloseable {
     private final Optional<StaffModerationRuntime> moderationRuntime;
     private final Optional<StagingTunnel> stagingTunnel;
     private final Optional<StaffBotChatLifecycle> chatLifecycle;
+    private final Optional<PublicChatRuntime> publicChatRuntime;
     private final Object startupGate = new Object();
     private final AtomicBoolean started = new AtomicBoolean();
     private final AtomicBoolean gatewayStarted = new AtomicBoolean();
+    private final AtomicBoolean publicChatGatewayStarted = new AtomicBoolean();
     private final AtomicBoolean closed = new AtomicBoolean();
     private final CompletableFuture<Boolean> readiness = new CompletableFuture<>();
     private final CountDownLatch terminated = new CountDownLatch(1);
@@ -108,19 +112,38 @@ public final class StaffBotRuntime implements AutoCloseable {
         RuntimeServices services = Objects.requireNonNull(runtimeServices, "runtimeServices");
         this.stagingTunnel = services.stagingTunnel();
         this.chatLifecycle = services.chatLifecycle();
+        this.publicChatRuntime = services.publicChatRuntime();
     }
 
     record RuntimeServices(
             Optional<StagingTunnel> stagingTunnel,
-            Optional<StaffBotChatLifecycle> chatLifecycle
+            Optional<StaffBotChatLifecycle> chatLifecycle,
+            Optional<PublicChatRuntime> publicChatRuntime
     ) {
         RuntimeServices {
             Objects.requireNonNull(stagingTunnel, "stagingTunnel");
             Objects.requireNonNull(chatLifecycle, "chatLifecycle");
+            Objects.requireNonNull(publicChatRuntime, "publicChatRuntime");
+        }
+
+        RuntimeServices(
+                Optional<StagingTunnel> stagingTunnel,
+                Optional<StaffBotChatLifecycle> chatLifecycle
+        ) {
+            this(stagingTunnel, chatLifecycle, Optional.empty());
         }
 
         static RuntimeServices empty() {
-            return new RuntimeServices(Optional.empty(), Optional.empty());
+            return new RuntimeServices(Optional.empty(), Optional.empty(), Optional.empty());
+        }
+    }
+
+    record PublicChatRuntime(DiscordGateway gateway, long applicationId) {
+        PublicChatRuntime {
+            Objects.requireNonNull(gateway, "gateway");
+            if (applicationId < MIN_APPLICATION_ID) {
+                throw new IllegalArgumentException("public chat application ID must be positive");
+            }
         }
     }
 
@@ -161,19 +184,36 @@ public final class StaffBotRuntime implements AutoCloseable {
                     configuration.environment().guildId(),
                     configuration.interactionCapacity(),
                     configuration.interactionTtl());
+            Map<String, String> environmentValues = System.getenv();
             Optional<StaffBotChatBridgeConfiguration> chatConfiguration =
                     StaffBotChatBridgeConfiguration.fromEnvironment(
-                            configuration.environment(), System.getenv());
+                            configuration.environment(), environmentValues);
+            Optional<PublicChatDiscordConfiguration> publicChatConfiguration =
+                    PublicChatDiscordConfiguration.fromEnvironment(
+                            environmentValues, chatConfiguration.isPresent());
             StaffBotHealthServer healthServer = new StaffBotHealthServer(configuration.healthAddress(), health);
+            Optional<StaffModerationRuntime> openedModeration = moderation;
             JdaDiscordGateway gateway = new JdaDiscordGateway(
-                    configuration, workers, replayGuard, moderation, chatConfiguration);
-            chatTransport = chatConfiguration.map(
-                    current -> StaffBotChatTransport.create(current, gateway, gateway));
+                    configuration, workers, replayGuard, openedModeration, Optional.empty());
+            Optional<JdaDiscordGateway> publicChatGateway = publicChatConfiguration.map(current ->
+                    JdaDiscordGateway.publicChat(
+                            configuration,
+                            current,
+                            openedModeration,
+                            chatConfiguration.orElseThrow()
+                    ));
+            chatTransport = publicChatGateway.map(current ->
+                    StaffBotChatTransport.create(chatConfiguration.orElseThrow(), current, current));
             if (chatConfiguration.map(current -> !current.ingressRoutes().isEmpty()).orElse(false)) {
-                gateway.installChatIngress(chatTransport.orElseThrow());
+                publicChatGateway.orElseThrow().installChatIngress(chatTransport.orElseThrow());
             }
             Optional<StaffBotChatLifecycle> chat =
                     chatTransport.map(current -> (StaffBotChatLifecycle) current);
+            Optional<PublicChatRuntime> publicChat = publicChatGateway.map(current ->
+                    new PublicChatRuntime(
+                            current,
+                            publicChatConfiguration.orElseThrow().applicationId()
+                    ));
             return new StaffBotRuntime(
                     configuration,
                     health,
@@ -182,7 +222,7 @@ public final class StaffBotRuntime implements AutoCloseable {
                     healthServer,
                     gateway,
                     moderation,
-                    new RuntimeServices(tunnel, chat));
+                    new RuntimeServices(tunnel, chat, publicChat));
         } catch (IOException | RuntimeException exception) {
             chatTransport.ifPresent(StaffBotChatTransport::close);
             moderation.ifPresent(StaffModerationRuntime::close);
@@ -203,6 +243,7 @@ public final class StaffBotRuntime implements AutoCloseable {
         startTunnel();
         startGateway();
         startChat();
+        startPublicChatGateway();
     }
 
     public boolean awaitReady(Duration timeout) throws InterruptedException {
@@ -242,8 +283,11 @@ public final class StaffBotRuntime implements AutoCloseable {
         readiness.complete(false);
 
         String chatShutdownFailure = shutdownChat();
+        String publicChatShutdownFailure = shutdownPublicChatGateway();
         String gatewayShutdownFailure = shutdownGateway();
-        String shutdownFailure = gatewayShutdownFailure == null ? chatShutdownFailure : gatewayShutdownFailure;
+        String shutdownFailure = gatewayShutdownFailure != null
+                ? gatewayShutdownFailure
+                : publicChatShutdownFailure != null ? publicChatShutdownFailure : chatShutdownFailure;
         stagingTunnel.ifPresent(StagingTunnel::close);
         healthEndpoint.close();
         moderationRuntime.ifPresent(StaffModerationRuntime::close);
@@ -300,6 +344,25 @@ public final class StaffBotRuntime implements AutoCloseable {
         }
     }
 
+    private void startPublicChatGateway() {
+        if (publicChatRuntime.isEmpty()) {
+            return;
+        }
+        PublicChatRuntime publicChat = publicChatRuntime.orElseThrow();
+        try {
+            publicChat.gateway().start(new PublicChatGatewayObserver(publicChat.applicationId()));
+            publicChatGatewayStarted.set(true);
+        } catch (RuntimeException exception) {
+            pauseChatQuietly();
+            publicChat.gateway().shutdownNow();
+            logIfEnabled(
+                    System.Logger.Level.WARNING,
+                    "public_chat_gateway_start_failed type={0}",
+                    exception.getClass().getSimpleName()
+            );
+        }
+    }
+
     private void tunnelExitedUnexpectedly() {
         synchronized (startupGate) {
             if (!closed.get() && !health.failedEver()) {
@@ -327,6 +390,27 @@ public final class StaffBotRuntime implements AutoCloseable {
         return failed ? "chat_transport_shutdown_failed" : null;
     }
 
+    private String shutdownPublicChatGateway() {
+        if (publicChatRuntime.isEmpty() || !publicChatGatewayStarted.get()) {
+            return null;
+        }
+        DiscordGateway publicGateway = publicChatRuntime.orElseThrow().gateway();
+        publicGateway.shutdown();
+        try {
+            if (!publicGateway.awaitShutdown(configuration.shutdownTimeout())) {
+                publicGateway.shutdownNow();
+                if (!publicGateway.awaitShutdown(Duration.ofSeconds(2))) {
+                    return "public_chat_gateway_shutdown_timeout";
+                }
+            }
+        } catch (InterruptedException exception) {
+            publicGateway.shutdownNow();
+            Thread.currentThread().interrupt();
+            return "public_chat_gateway_shutdown_interrupted";
+        }
+        return null;
+    }
+
     private String shutdownGateway() {
         if (!gatewayStarted.get()) {
             return null;
@@ -351,6 +435,7 @@ public final class StaffBotRuntime implements AutoCloseable {
         pauseChatQuietly();
         health.transition(StaffBotHealth.Phase.FAILED, reason);
         readiness.complete(false);
+        publicChatRuntime.ifPresent(current -> current.gateway().shutdownNow());
         gateway.shutdownNow();
         terminated.countDown();
         logIfEnabled(System.Logger.Level.ERROR,
@@ -393,6 +478,85 @@ public final class StaffBotRuntime implements AutoCloseable {
         }
     }
 
+    private final class PublicChatGatewayObserver implements DiscordGatewayObserver {
+        private final long expectedApplicationId;
+
+        private PublicChatGatewayObserver(long expectedApplicationId) {
+            this.expectedApplicationId = expectedApplicationId;
+        }
+
+        @Override
+        public void onIdentityResolved(DiscordRuntimeIdentity identity) {
+            if (closed.get() || health.failedEver()) {
+                return;
+            }
+            DiscordRuntimeIdentityValidator.ValidationResult result =
+                    DiscordRuntimeIdentityValidator.validate(
+                            configuration.environment(),
+                            expectedApplicationId,
+                            identity
+                    );
+            if (!result.valid()) {
+                pauseChatQuietly();
+                publicChatRuntime.ifPresent(current -> current.gateway().shutdownNow());
+                logIfEnabled(
+                        System.Logger.Level.ERROR,
+                        "public_chat_identity_rejected environment={0} reason={1}",
+                        configuration.environment().label(),
+                        result.reason()
+                );
+                return;
+            }
+            try {
+                chatLifecycle.ifPresent(StaffBotChatLifecycle::resume);
+                logIfEnabled(
+                        System.Logger.Level.INFO,
+                        "public_chat_ready environment={0}",
+                        configuration.environment().label()
+                );
+            } catch (RuntimeException exception) {
+                pauseChatQuietly();
+                publicChatRuntime.ifPresent(current -> current.gateway().shutdownNow());
+                logIfEnabled(
+                        System.Logger.Level.ERROR,
+                        "public_chat_resume_failed type={0}",
+                        exception.getClass().getSimpleName()
+                );
+            }
+        }
+
+        @Override
+        public void onDisconnected() {
+            if (!closed.get()) {
+                pauseChatQuietly();
+                logIfEnabled(
+                        System.Logger.Level.WARNING,
+                        "public_chat_gateway_disconnected environment={0}",
+                        configuration.environment().label()
+                );
+            }
+        }
+
+        @Override
+        public void onFatal(String reason) {
+            if (!closed.get()) {
+                pauseChatQuietly();
+                publicChatRuntime.ifPresent(current -> current.gateway().shutdownNow());
+                logIfEnabled(
+                        System.Logger.Level.ERROR,
+                        "public_chat_gateway_failed environment={0} reason={1}",
+                        configuration.environment().label(),
+                        reason
+                );
+            }
+        }
+
+        @Override
+        public void onShutdown() {
+            pauseChatQuietly();
+        }
+    }
+
     private final class RuntimeGatewayObserver implements DiscordGatewayObserver {
         @Override
         public void onIdentityResolved(DiscordRuntimeIdentity identity) {
@@ -411,12 +575,6 @@ public final class StaffBotRuntime implements AutoCloseable {
                 failClosed("interaction_enable_failed");
                 return;
             }
-            try {
-                chatLifecycle.ifPresent(StaffBotChatLifecycle::resume);
-            } catch (RuntimeException exception) {
-                failClosed("chat_resume_failed");
-                return;
-            }
             health.transition(StaffBotHealth.Phase.READY, result.reason());
             readiness.complete(true);
             logIfEnabled(System.Logger.Level.INFO,
@@ -428,7 +586,6 @@ public final class StaffBotRuntime implements AutoCloseable {
             if (closed.get() || health.failedEver()) {
                 return;
             }
-            pauseChatQuietly();
             health.transition(StaffBotHealth.Phase.DISCONNECTED, "gateway_disconnected_reconnecting");
             logIfEnabled(System.Logger.Level.WARNING,
                     "staff_bot_gateway_disconnected environment={0}", configuration.environment().label());
@@ -443,12 +600,9 @@ public final class StaffBotRuntime implements AutoCloseable {
 
         @Override
         public void onShutdown() {
-            pauseChatQuietly();
             if (!closed.get() && !health.failedEver()) {
-                health.transition(StaffBotHealth.Phase.FAILED, "gateway_shutdown_unexpected");
+                failClosed("gateway_shutdown_unexpected");
             }
-            readiness.complete(false);
-            terminated.countDown();
         }
     }
 }

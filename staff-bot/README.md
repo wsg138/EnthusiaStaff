@@ -65,7 +65,15 @@ The smoke test connects to Discord, validates the configured application/guild i
 Always required:
 
 - `ENTHUSIA_STAFF_BOT_ENVIRONMENT`: `staging` or `production`.
-- `ENTHUSIA_STAFF_BOT_TOKEN`: token for the selected fixed Discord application.
+- `ENTHUSIA_STAFF_BOT_TOKEN`: token for the selected fixed **staff/moderation** Discord application.
+
+If the Discord chat bridge is enabled, configure the separate public-chat application too:
+
+- `ENTHUSIA_STAFF_BOT_PUBLIC_CHAT_TOKEN`
+- `ENTHUSIA_STAFF_BOT_PUBLIC_CHAT_APPLICATION_ID`
+
+This does not require another Bloom/Pterodactyl server. The same StaffBot JVM owns both JDA
+sessions, but their listeners, intents, identity validation, and lifecycle gates are separated.
 
 To enable the existing account-link/moderation read integration, configure this complete group together:
 

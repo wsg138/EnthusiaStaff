@@ -10,14 +10,26 @@ public final class DiscordRuntimeIdentityValidator {
     public static final String GUILD_SCOPE_MISMATCH = "guild_scope_mismatch";
     public static final String STAGING_CHANNEL_MISSING = "staging_channel_missing";
     public static final String STAGING_CHANNEL_INACCESSIBLE = "staging_channel_inaccessible";
+    private static final long MIN_APPLICATION_ID = 1L;
 
     private DiscordRuntimeIdentityValidator() {
     }
 
     public static ValidationResult validate(StaffBotEnvironment environment, DiscordRuntimeIdentity identity) {
+        return validate(environment, environment.applicationId(), identity);
+    }
+
+    public static ValidationResult validate(
+            StaffBotEnvironment environment,
+            long expectedApplicationId,
+            DiscordRuntimeIdentity identity
+    ) {
         Objects.requireNonNull(environment, "environment");
         Objects.requireNonNull(identity, "identity");
-        if (identity.applicationId() != environment.applicationId()) {
+        if (expectedApplicationId < MIN_APPLICATION_ID) {
+            throw new IllegalArgumentException("expected Discord application ID must be positive");
+        }
+        if (identity.applicationId() != expectedApplicationId) {
             return ValidationResult.failure(APPLICATION_MISMATCH);
         }
         if (identity.botPublic()) {
@@ -26,13 +38,21 @@ public final class DiscordRuntimeIdentityValidator {
         if (identity.guildIds().size() != 1 || !identity.guildIds().contains(environment.guildId())) {
             return ValidationResult.failure(GUILD_SCOPE_MISMATCH);
         }
-        if (environment == StaffBotEnvironment.STAGING) {
-            if (!identity.stagingChannelPresent()) {
-                return ValidationResult.failure(STAGING_CHANNEL_MISSING);
-            }
-            if (!identity.stagingChannelOperational()) {
-                return ValidationResult.failure(STAGING_CHANNEL_INACCESSIBLE);
-            }
+        return validateStagingChannel(environment, identity);
+    }
+
+    private static ValidationResult validateStagingChannel(
+            StaffBotEnvironment environment,
+            DiscordRuntimeIdentity identity
+    ) {
+        if (environment != StaffBotEnvironment.STAGING) {
+            return ValidationResult.success();
+        }
+        if (!identity.stagingChannelPresent()) {
+            return ValidationResult.failure(STAGING_CHANNEL_MISSING);
+        }
+        if (!identity.stagingChannelOperational()) {
+            return ValidationResult.failure(STAGING_CHANNEL_INACCESSIBLE);
         }
         return ValidationResult.success();
     }

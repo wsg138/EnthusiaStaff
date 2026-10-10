@@ -21,8 +21,12 @@ RoseChat
   -> Velocity ephemeral chat relay
   -> authenticated STAFFBOT peer
   -> bounded StaffBot chat queue
-  -> StaffBot JDA
+  -> public-chat JDA identity (Enthusia SMP)
 ```
+
+The public-chat JDA session is separate from the Staff/moderation JDA session but runs in the same
+StaffBot JVM/container. It has a separate token/application-ID fence and owns only public chat
+ingress/egress.
 
 The reverse Discord -> Minecraft path is now implemented as a separate staging-only checkpoint.
 It routes explicitly to one target backend and enters RoseChat's canonical Discord-origin pipeline

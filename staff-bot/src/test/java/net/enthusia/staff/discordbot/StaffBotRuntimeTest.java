@@ -14,6 +14,8 @@ import java.util.Set;
 import org.junit.jupiter.api.Test;
 
 class StaffBotRuntimeTest {
+    private static final long PUBLIC_CHAT_APPLICATION_ID = 9_999_001L;
+
     @Test
     void exactIdentityTransitionsRuntimeToReadyAndReconnects() throws Exception {
         Fixture fixture = new Fixture(true, true);
@@ -35,29 +37,87 @@ class StaffBotRuntimeTest {
     }
 
     @Test
-    void chatTransportFollowsValidatedDiscordIdentityLifecycle() throws Exception {
+    void publicChatIdentityOwnsChatLifecycleIndependentlyFromStaffGateway() throws Exception {
         Fixture fixture = new Fixture(true, true);
         FakeChatLifecycle chat = new FakeChatLifecycle();
-        try (StaffBotRuntime runtime = fixture.runtime(null, chat)) {
+        FakeGateway publicGateway = new FakeGateway(true, true);
+        try (StaffBotRuntime runtime = fixture.runtime(null, chat, publicGateway)) {
             runtime.start();
             assertTrue(chat.started);
+            assertTrue(publicGateway.started);
             assertEquals(0, chat.resumeCount);
             assertEquals(0, chat.pauseCount);
 
             fixture.gateway.emitIdentity(validStagingIdentity());
             assertTrue(runtime.awaitReady(Duration.ofMillis(100)));
+            assertEquals(0, chat.resumeCount);
+
+            publicGateway.emitIdentity(validPublicChatIdentity());
             assertEquals(1, chat.resumeCount);
 
             fixture.gateway.emitDisconnect();
+            assertEquals(0, chat.pauseCount);
+
+            publicGateway.emitDisconnect();
             assertEquals(1, chat.pauseCount);
 
-            fixture.gateway.emitIdentity(validStagingIdentity());
+            publicGateway.emitIdentity(validPublicChatIdentity());
             assertEquals(2, chat.resumeCount);
         }
 
         assertTrue(chat.closed);
         assertTrue(chat.pauseCount >= 2);
         assertTrue(fixture.gateway.shutdownRequested);
+        assertTrue(publicGateway.shutdownRequested);
+    }
+
+    @Test
+    void wrongPublicChatApplicationFailsOnlyTheChatSurfaceClosed() throws Exception {
+        Fixture fixture = new Fixture(true, true);
+        FakeChatLifecycle chat = new FakeChatLifecycle();
+        FakeGateway publicGateway = new FakeGateway(true, true);
+        try (StaffBotRuntime runtime = fixture.runtime(null, chat, publicGateway)) {
+            runtime.start();
+            fixture.gateway.emitIdentity(validStagingIdentity());
+            assertTrue(runtime.awaitReady(Duration.ofMillis(100)));
+            assertEquals(StaffBotHealth.Phase.READY, runtime.health().snapshot().phase());
+
+            publicGateway.emitIdentity(new DiscordRuntimeIdentity(
+                    PUBLIC_CHAT_APPLICATION_ID + 1L,
+                    false,
+                    Set.of(StaffBotEnvironment.STAGING.guildId()),
+                    true,
+                    true
+            ));
+
+            assertEquals(1, chat.pauseCount);
+            assertTrue(publicGateway.shutdownNowRequested);
+            assertEquals(StaffBotHealth.Phase.READY, runtime.health().snapshot().phase());
+            assertFalse(runtime.health().failedEver());
+        }
+    }
+
+    @Test
+    void unexpectedStaffGatewayShutdownFailsProcessAndCannotReenablePublicChat() throws Exception {
+        Fixture fixture = new Fixture(true, true);
+        FakeChatLifecycle chat = new FakeChatLifecycle();
+        FakeGateway publicGateway = new FakeGateway(true, true);
+        try (StaffBotRuntime runtime = fixture.runtime(null, chat, publicGateway)) {
+            runtime.start();
+            fixture.gateway.emitIdentity(validStagingIdentity());
+            publicGateway.emitIdentity(validPublicChatIdentity());
+            assertEquals(1, chat.resumeCount);
+
+            fixture.gateway.emitShutdown();
+
+            assertTrue(runtime.health().failedEver());
+            assertEquals("gateway_shutdown_unexpected", runtime.health().snapshot().reason());
+            assertTrue(publicGateway.shutdownNowRequested);
+            assertEquals(1, chat.pauseCount);
+
+            publicGateway.emitIdentity(validPublicChatIdentity());
+            assertEquals(1, chat.resumeCount);
+        }
     }
 
     @Test
@@ -207,6 +267,15 @@ class StaffBotRuntimeTest {
                 true);
     }
 
+    private static DiscordRuntimeIdentity validPublicChatIdentity() {
+        return new DiscordRuntimeIdentity(
+                PUBLIC_CHAT_APPLICATION_ID,
+                false,
+                Set.of(StaffBotEnvironment.STAGING.guildId()),
+                true,
+                true);
+    }
+
     private static final class Fixture {
         private final StaffBotHealth health = new StaffBotHealth(StaffBotEnvironment.STAGING);
         private final FakeHealthEndpoint endpoint = new FakeHealthEndpoint();
@@ -225,6 +294,14 @@ class StaffBotRuntimeTest {
         }
 
         private StaffBotRuntime runtime(FakeTunnel tunnel, FakeChatLifecycle chat) {
+            return runtime(tunnel, chat, null);
+        }
+
+        private StaffBotRuntime runtime(
+                FakeTunnel tunnel,
+                FakeChatLifecycle chat,
+                FakeGateway publicGateway
+        ) {
             StaffBotConfiguration configuration = new StaffBotConfiguration(
                     StaffBotEnvironment.STAGING,
                     "test-only-token",
@@ -244,7 +321,12 @@ class StaffBotRuntimeTest {
                     Optional.empty(),
                     new StaffBotRuntime.RuntimeServices(
                             Optional.ofNullable(tunnel),
-                            Optional.ofNullable(chat)));
+                            Optional.ofNullable(chat),
+                            Optional.ofNullable(publicGateway).map(current ->
+                                    new StaffBotRuntime.PublicChatRuntime(
+                                            current,
+                                            PUBLIC_CHAT_APPLICATION_ID
+                                    ))));
         }
     }
 
@@ -379,6 +461,10 @@ class StaffBotRuntimeTest {
 
         private void emitDisconnect() {
             observer.onDisconnected();
+        }
+
+        private void emitShutdown() {
+            observer.onShutdown();
         }
     }
 }
