@@ -22,6 +22,8 @@ import net.enthusia.staff.paper.aireview.AiReviewModels.ReviewPriority;
 import org.junit.jupiter.api.Test;
 
 class AiReviewHistoryGuiStateTest {
+    private static final String OLDER_CURSOR = "older";
+    private static final String NEXT_CURSOR = "next";
     private static DecisionHistoryItem record(String id) {
         return new DecisionHistoryItem(
                 id, Instant.parse("2026-10-09T10:00:00Z"),
@@ -36,17 +38,17 @@ class AiReviewHistoryGuiStateTest {
     void historyIsReadOnlyImmutableAndSupportsCursorStack() {
         UUID viewerId = UUID.randomUUID();
         var entries = new ArrayList<>(List.of(record("event-1")));
-        var prior = new ArrayList<>(List.of("", "older"));
+        var prior = new ArrayList<>(List.of("", OLDER_CURSOR));
         var page = new AiReviewGuiState.History(
-                viewerId, 2L, entries, "current", "next", prior
+                viewerId, 2L, entries, "current", NEXT_CURSOR, prior
         );
         entries.clear();
         prior.clear();
 
         assertEquals(1, page.items().size());
-        assertEquals(List.of("", "older"), page.previousCursors());
+        assertEquals(List.of("", OLDER_CURSOR), page.previousCursors());
         assertEquals("current", page.cursor());
-        assertEquals("next", page.nextCursor());
+        assertEquals(NEXT_CURSOR, page.nextCursor());
         assertEquals(2L, page.generation());
         assertThrows(UnsupportedOperationException.class,
                 () -> page.items().add(record("other")));
@@ -58,8 +60,8 @@ class AiReviewHistoryGuiStateTest {
     void historyOriginIsPreservedThroughDetailLabelAndConfirmationStates() {
         UUID viewerId = UUID.randomUUID();
         var history = new AiReviewGuiState.History(
-                viewerId, 3L, List.of(record("event-1")), "older",
-                "next", List.of(""), AiReviewHistoryFilter.CORRECTED
+                viewerId, 3L, List.of(record("event-1")), OLDER_CURSOR,
+                NEXT_CURSOR, List.of(""), AiReviewHistoryFilter.CORRECTED
         );
         var decision = new Decision(
                 MessageAction.ALLOW, "SAFE", ReviewPriority.NONE,
@@ -87,7 +89,7 @@ class AiReviewHistoryGuiStateTest {
         assertSame(history, detail.historyOrigin());
         assertSame(history, picker.historyOrigin());
         assertSame(history, confirm.historyOrigin());
-        assertEquals("older", confirm.historyOrigin().cursor());
+        assertEquals(OLDER_CURSOR, confirm.historyOrigin().cursor());
         assertEquals(AiReviewHistoryFilter.CORRECTED, confirm.historyOrigin().filter());
     }
 
@@ -95,7 +97,7 @@ class AiReviewHistoryGuiStateTest {
     void selectedFilterIsImmutableAndCyclesThroughClosedChoices() {
         var filtered = new AiReviewGuiState.History(
                 UUID.randomUUID(), 8L, List.of(record("e1")),
-                null, "next", List.of(), AiReviewHistoryFilter.FAIL_OPEN
+                null, NEXT_CURSOR, List.of(), AiReviewHistoryFilter.FAIL_OPEN
         );
         assertEquals(AiReviewHistoryFilter.FAIL_OPEN, filtered.filter());
         assertEquals(AiReviewHistoryFilter.CORRECTED, filtered.filter().next());
