@@ -348,6 +348,54 @@ class SanctionLifecycleIntegrationTest {
     }
 
     @Test
+    void revokingOneOfTwoWarningsInTheSameCasePreservesTheOtherWarning() throws Exception {
+        Instant issued = now().minusSeconds(3_600);
+        Instant expiry = now().plusSeconds(7_200);
+        Fixture first = seed(55, "HELPER", SanctionStatus.ACTIVE, issued, Optional.of(expiry));
+        UUID secondWarningId = uuid(256);
+        try (HikariDataSource source = MariaDb.open(databaseConfig());
+             Connection connection = source.getConnection()) {
+            try (PreparedStatement statement = connection.prepareStatement(
+                    "UPDATE sanctions SET sanction_type='WARNING' WHERE sanction_id=?"
+            )) {
+                statement.setBytes(1, uuidBytes(first.sanctionId()));
+                assertEquals(1, statement.executeUpdate());
+            }
+            try (PreparedStatement statement = connection.prepareStatement("""
+                    INSERT INTO sanctions(
+                        sanction_id, case_id, target_id, sanction_type, status,
+                        issued_at, activated_at, expiration_at, ended_at, revision)
+                    VALUES (?, ?, ?, 'WARNING', 'ACTIVE', ?, ?, ?, NULL, 0)
+                    """)) {
+                statement.setBytes(1, uuidBytes(secondWarningId));
+                statement.setString(2, first.caseId().value());
+                statement.setBytes(3, uuidBytes(first.subjectId()));
+                statement.setTimestamp(4, Timestamp.from(issued));
+                statement.setTimestamp(5, Timestamp.from(issued));
+                statement.setTimestamp(6, Timestamp.from(expiry));
+                assertEquals(1, statement.executeUpdate());
+            }
+        }
+        try (MariaDbRuntime runtime = MariaDb.initialize(databaseConfig())) {
+            var result = runtime.sanctionMutationStore().applyExact(request(
+                    first, 0, SanctionChangeAction.REVOKE, Optional.empty(),
+                    "The first warning was mistaken, preserve the second",
+                    "revoke-one-of-two-warnings", Optional.empty()
+            ), DEFAULT_LIMITS);
+            assertEquals(SanctionStatus.REVOKED,
+                    assertInstanceOf(ExactSanctionChangeResult.Applied.class, result).resultingStatus());
+        }
+        assertEquals("REVOKED", stringValue(
+                "SELECT status FROM sanctions WHERE sanction_id=?", first.sanctionId()));
+        assertEquals("ACTIVE", stringValue(
+                "SELECT status FROM sanctions WHERE sanction_id=?", secondWarningId));
+        assertEquals(0, longValue(
+                "SELECT revision FROM sanctions WHERE sanction_id=?", secondWarningId));
+        assertEquals(1, count("sanction_events"));
+        assertEquals(1, count("audit_events"));
+    }
+
+    @Test
     void appealLinkedOverturnValidatesBindingAndPreventsReuse() throws Exception {
         Fixture fixture = seed(
                 7,
