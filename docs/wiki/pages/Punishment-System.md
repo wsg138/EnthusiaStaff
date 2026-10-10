@@ -131,8 +131,10 @@ Select the exact case/sanction when multiple actions exist. A change should pres
 
 If a player has several warnings or other punishments, use `/history <player>` and
 `/case <case-id>` to find the **specific sanction UUID**. Do not guess a case
-or let a player name implicitly select the latest punishment. The exact-ID
-commands change only that sanction and retain its audit record:
+or let a player name implicitly select the latest punishment. On Java Edition,
+clicking a sanction line in `/case` **suggests** `/unpunish <that-id>` in chat
+without executing it; enter an audit reason yourself before sending.
+The exact-ID commands change only that sanction and retain its audit record:
 
 ```text
 /unpunish <sanction-id> <written reason>
