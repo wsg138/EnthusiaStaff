@@ -200,6 +200,11 @@ public final class PunishmentRequestService {
                 ));
     }
 
+    public boolean abandon(PunishmentApprovalLease lease) {
+        Objects.requireNonNull(lease, "lease");
+        return requests.abandon(lease);
+    }
+
     public PunishmentRequestResult approve(PunishmentApprovalLease lease, Actor approver) {
         Objects.requireNonNull(lease);
         Objects.requireNonNull(approver);

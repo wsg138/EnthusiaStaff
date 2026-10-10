@@ -109,6 +109,28 @@ public final class JdbcPunishmentRequestStore implements PunishmentRequestStore 
     }
 
     @Override
+    public boolean abandon(PunishmentApprovalLease lease) {
+        if (lease == null) {
+            throw new IllegalArgumentException("lease must be present");
+        }
+        return JdbcTransactionSupport.execute(
+                dataSource, "Unable to release abandoned punishment review lease",
+                connection -> {
+                    try (PreparedStatement statement = connection.prepareStatement("""
+                            DELETE FROM operation_leases
+                            WHERE resource_key = ? AND owner_id = ? AND fencing_token = ?
+                            """)) {
+                        statement.setString(1,
+                                JdbcPunishmentRequestFulfillment.resourceKey(lease.request().requestId()));
+                        statement.setString(2, lease.ownerId().toString());
+                        statement.setLong(3, lease.fenceToken());
+                        return statement.executeUpdate() == 1;
+                    }
+                }
+        );
+    }
+
+    @Override
     public PunishmentRequestResult approve(
             PunishmentApprovalLease lease,
             Actor approver,
