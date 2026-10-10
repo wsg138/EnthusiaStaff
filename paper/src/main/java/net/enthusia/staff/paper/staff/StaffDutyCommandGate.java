@@ -28,7 +28,7 @@ import org.bukkit.event.player.PlayerCommandPreprocessEvent;
 public final class StaffDutyCommandGate implements Listener {
     /** Staff-authority commands that require an active staff-mode session. */
     private static final Set<String> ON_DUTY_COMMANDS = Set.of(
-            "punish", "ban", "mute", "warn", "kick", "ipban",
+            "punish", "unpunish", "ban", "mute", "warn", "kick", "ipban",
             "removepunishment", "unban", "unmute", "removewarning", "unwarn",
             "reports", "aireview", "inspect", "invsee", "endersee",
             "alts", "alt", "client", "freeze", "unfreeze",
