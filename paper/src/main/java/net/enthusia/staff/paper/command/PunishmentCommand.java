@@ -31,6 +31,7 @@ import net.enthusia.staff.paper.auth.PaperActorResolver;
 import net.enthusia.staff.paper.auth.StaffTargetGuard;
 import net.enthusia.staff.paper.punishment.PunishmentGuiController;
 import net.enthusia.staff.paper.punishment.PunishmentRequestPresentation;
+import net.enthusia.staff.paper.sanction.SanctionChangeAccess;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.command.Command;
@@ -653,7 +654,21 @@ public final class PunishmentCommand implements CommandExecutor, TabCompleter {
     public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
         String route = CommandRoute.canonicalName(command);
         if ("unpunish".equals(route)) {
-            return List.of();
+            return args.length == 1 && sender.hasPermission("enthusiastaff.remove")
+                    ? onlineNames(sender, args[0]) : List.of();
+        }
+        if (CENTRAL_COMMAND.equals(route) && args.length == SUBCOMMAND_ARGUMENT_COUNT
+                && PunishmentSanctionRoutes.handles(route, args)) {
+            String action = PunishmentSanctionRoutes.pickerAction(route, args);
+            Actor actor = PaperActorResolver.resolve(sender).orElse(null);
+            if (actor == null || !SanctionChangeAccess.canChangeAnything(authorization, actor)) {
+                return List.of();
+            }
+            boolean permitted = "change".equals(action)
+                    ? sender.hasPermission("enthusiastaff.remove")
+                    : sender.hasPermission(SanctionChangeAccess.permissionFor(
+                            PunishmentSanctionRoutes.action(action)));
+            return permitted ? onlineNames(sender, args[1]) : List.of();
         }
         List<String> completions = new ArrayList<>(requestCommands.complete(route, args));
         if (args.length == SINGLE_ARGUMENT_COUNT) {
@@ -689,6 +704,17 @@ public final class PunishmentCommand implements CommandExecutor, TabCompleter {
                     .toList();
         }
         return completions;
+    }
+
+    private static List<String> onlineNames(CommandSender sender, String prefix) {
+        if (!(sender instanceof Player player)) {
+            return List.of();
+        }
+        String normalized = prefix.toLowerCase(Locale.ROOT);
+        return player.getServer().getOnlinePlayers().stream()
+                .map(Player::getName)
+                .filter(name -> name.toLowerCase(Locale.ROOT).startsWith(normalized))
+                .toList();
     }
 
     record Dependencies(
