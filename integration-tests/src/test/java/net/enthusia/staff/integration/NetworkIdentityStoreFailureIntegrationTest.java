@@ -347,7 +347,7 @@ class NetworkIdentityStoreFailureIntegrationTest {
     private int networkOutboxCount() throws SQLException {
         try (Connection connection = dataSource.getConnection();
              PreparedStatement statement = connection.prepareStatement(
-                     "SELECT COUNT(*) FROM network_outbox WHERE message_type = 'SANCTION_CHANGED'")) {
+                     "SELECT COUNT(*) FROM network_outbox")) {
             return readCount(statement);
         }
     }

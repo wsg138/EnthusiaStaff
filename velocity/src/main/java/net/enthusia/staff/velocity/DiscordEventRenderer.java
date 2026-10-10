@@ -20,8 +20,7 @@ final class DiscordEventRenderer {
             "punishments", List.of(
                     "caseId", TARGET_ID, "subjectId", "reasonId", "family",
                     "publicReason", "internalExplanation", "issuedAt",
-                    "sanctionId", "sanctionIds", "sourceSanctionId", "sourcePlayerId",
-                    "relationshipState", "sanctionType", "sanctionTypes", "sanctionDetails",
+                    "sanctionId", "sanctionIds", "sanctionType", "sanctionTypes", "sanctionDetails",
                     "requestId", "actorId", "actorName", "actorRank",
                     "action", "status", "previousStatus", "resultingStatus",
                     "previousExpiration", "resultingExpiration",

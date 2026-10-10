@@ -426,9 +426,12 @@ public final class JdbcNetworkIdentityStore implements NetworkIdentityStore {
                             state == AltRelationshipState.NOT_RELATED
                     );
                 }
-                if (state == AltRelationshipState.SHARED_HOUSEHOLD
-                        || state == AltRelationshipState.NOT_RELATED
-                        || state == AltRelationshipState.APPROVED_ALT) {
+                boolean protectedPair = state.preventsAutomaticInheritance();
+                // A currently verified shared Discord identity is an independent inheritance
+                // source; low-confidence network downgrades alone must not undo that link.
+                boolean stillVerified = !protectedPair && verifiedLinkPeers(connection, pair.lower())
+                        .stream().anyMatch(peer -> peer.playerId().equals(pair.upper()));
+                if (protectedPair || (!state.inheritsAutomatically() && !stillVerified)) {
                     revokeExemptedInheritedSanctions(connection, pair, actorId, changedAt, state);
                 }
                 insertRelationshipAudit(connection, pair, actorId, state.name(), changedAt, reason);
