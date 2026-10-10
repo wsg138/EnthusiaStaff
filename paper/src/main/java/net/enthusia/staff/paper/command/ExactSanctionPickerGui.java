@@ -135,9 +135,7 @@ public final class ExactSanctionPickerGui implements Listener {
             List<Entry> entries = new ArrayList<>();
             for (CaseReview review : reviews.recent(player.playerId(), 100)) {
                 for (SanctionReview sanction : review.sanctions()) {
-                    if (allowedTypes.contains(sanction.type())
-                            && sanction.status() != SanctionStatus.REVOKED
-                            && sanction.status() != SanctionStatus.OVERTURNED) {
+                    if (selectable(sanction, allowedTypes)) {
                         entries.add(new Entry(review, sanction));
                     }
                 }
@@ -156,6 +154,14 @@ public final class ExactSanctionPickerGui implements Listener {
             plugin.getLogger().log(Level.WARNING, "Exact punishment picker could not load history", exception);
             notice(viewer, "Punishment selection is unavailable. No changes were made.");
         }
+    }
+
+    /** Every entry is one sanction; aliases only expose matching punishment types. */
+    static boolean selectable(SanctionReview sanction, Set<SanctionType> allowedTypes) {
+        return sanction != null && allowedTypes != null
+                && allowedTypes.contains(sanction.type())
+                && sanction.status() != SanctionStatus.REVOKED
+                && sanction.status() != SanctionStatus.OVERTURNED;
     }
 
     @EventHandler(priority = EventPriority.HIGHEST)
