@@ -27,13 +27,14 @@ class AiReviewRealApiContractTest {
     private static final String STAFF_TOKEN = System.getenv("ENTHUSIA_CONTRACT_STAFF_TOKEN");
     private static final String READER_TOKEN = System.getenv("ENTHUSIA_CONTRACT_READER_TOKEN");
     private static final String BLOCK_ID = System.getenv("ENTHUSIA_CONTRACT_BLOCK_ID");
+    private static final String REVIEW_ID = System.getenv("ENTHUSIA_CONTRACT_REVIEW_ID");
     private static final String FAIL_OPEN_ID = System.getenv("ENTHUSIA_CONTRACT_FAIL_OPEN_ID");
 
     @Test
     void liveLoopbackApiProvidesFilteredHistoryAndTwoStaffCorrections() {
         assumeTrue(BASE_URL != null && BASE_URL.startsWith("http://127.0.0.1:"));
         assumeTrue(STAFF_TOKEN != null && READER_TOKEN != null
-                && BLOCK_ID != null && FAIL_OPEN_ID != null);
+                && BLOCK_ID != null && REVIEW_ID != null && FAIL_OPEN_ID != null);
         AiReviewHttpClient staff = client("contract-staff", STAFF_TOKEN);
 
         var first = staff.listDecisions(1, null);
@@ -62,6 +63,7 @@ class AiReviewRealApiContractTest {
                         .correct(BLOCK_ID, "contract-reader", CorrectionAuthority.STAFF,
                                 safeCorrection(), null)).category());
 
+        assertReadAccessErrors(staff);
         var firstVote = staff.correct(BLOCK_ID, "contract-reviewer-a",
                 CorrectionAuthority.STAFF, safeCorrection(), "synthetic correction");
         assertEquals(CorrectionStatus.PENDING_CONFIRMATION, firstVote.status());
@@ -81,6 +83,36 @@ class AiReviewRealApiContractTest {
         assertEquals("LOW_LEVEL_HARASSMENT", corrected.items().get(0).semanticLabel());
         assertEquals(MessageAction.ALLOW, staff.event(BLOCK_ID)
                 .acceptedCorrection().corrected().messageAction());
+        assertRejectionWorkflow(staff);
+    }
+
+    private static void assertReadAccessErrors(AiReviewHttpClient staff) {
+        assertEquals(Category.AUTH, assertThrows(AiReviewClientException.class,
+                () -> client("contract-staff", "invalid-test-token")
+                        .listDecisions(1, null)).category());
+        assertEquals(Category.INVALID_CURSOR, assertThrows(AiReviewClientException.class,
+                () -> staff.listDecisions(2, "missing-contract-cursor")).category());
+        assertEquals(Category.AUTH, assertThrows(AiReviewClientException.class,
+                () -> staff.correct(REVIEW_ID, "contract-reviewer-a",
+                        CorrectionAuthority.ADMIN, safeCorrection(), "unauthorized")).category());
+    }
+
+    private static void assertRejectionWorkflow(AiReviewHttpClient staff) {
+        var proposal = staff.correct(REVIEW_ID, "contract-reviewer-c",
+                CorrectionAuthority.STAFF, safeCorrection(), "synthetic proposal");
+        assertEquals(CorrectionStatus.PENDING_CONFIRMATION, proposal.status());
+        var first = staff.reject(proposal.proposalId(), "contract-reviewer-d",
+                CorrectionAuthority.STAFF, "synthetic rejection");
+        assertEquals(1, first.rejections());
+        var retry = staff.reject(proposal.proposalId(), "contract-reviewer-d",
+                CorrectionAuthority.STAFF, "synthetic duplicate");
+        assertEquals(1, retry.rejections());
+        var second = staff.reject(proposal.proposalId(), "contract-reviewer-e",
+                CorrectionAuthority.STAFF, "synthetic confirmation");
+        assertEquals(CorrectionStatus.REJECTED, second.status());
+        assertEquals(2, second.rejections());
+        assertEquals(1, staff.listDecisions(10, null, AiReviewHistoryFilter.CORRECTED)
+                .items().size());
     }
 
     private static void assertRealFailOpen(AiReviewHttpClient staff) {
