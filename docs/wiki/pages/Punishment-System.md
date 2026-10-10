@@ -127,6 +127,36 @@ Use the approved mutation commands rather than deleting rows or editing the data
 
 Select the exact case/sanction when multiple actions exist. A change should preserve the original record and explain whether it is a reduction, early ending, revocation, correction, appeal result or full overturn.
 
+### Exact punishment shortcuts (draft; not confirmed deployed)
+
+If a player has several warnings or other punishments, use `/history <player>` and
+`/case <case-id>` to find the **specific sanction UUID**. Do not guess a case
+or let a player name implicitly select the latest punishment. The exact-ID
+commands change only that sanction and retain its audit record:
+
+```text
+/unpunish <sanction-id> <written reason>
+/punish remove <sanction-id> <written reason>
+/punish end <sanction-id> <written reason>
+/punish reduce <sanction-id> <new-duration-or-UTC-expiration> <written reason>
+/punish change <sanction-id> <remove|end|reduce|overturn> ... <written reason>
+/punish change <sanction-id> <new-duration-or-UTC-expiration> <written reason>
+```
+
+`/unpunish` and `/punish remove` **revoke** the chosen sanction (including
+one of several warnings). `end` ends an active sanction early without
+revoking the underlying history. `reduce` moves a sanction's expiration
+earlier; `change` with just a new duration is *also reduction-only* and
+cannot extend a punishment. A specific action after `change` selects that
+action's existing policy path. Mods may reduce, end and revoke as authorized;
+a full overturn remains Admin/Founder-only. All shortcuts require active staff
+authority, per-action permissions and an audited reason. Ordinary sanction
+commands are not enabled in shadow/read-only modes.
+
+Case-oriented `/removepunishment` and older `/unwarn` paths remain separate;
+use the exact-ID shortcuts when the distinction between multiple warnings
+matters. **Do not assume this draft is installed on the live server.**
+
 Use `/history <player|uuid> [page]` for the newest-first moderation timeline and `/case [view] <case-id>` for complete case, sanction, request, appeal and mutation detail. Exact sanction changes use `/estaff sanction reduce|end|revoke|overturn` and always preserve the original decision and append audit history. See [[Moderation, Punishments, and Reports]] for source files and remaining staging work.
 
 ## Stop and ask for help when
