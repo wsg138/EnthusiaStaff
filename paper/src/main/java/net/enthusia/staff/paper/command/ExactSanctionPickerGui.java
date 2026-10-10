@@ -14,6 +14,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.function.Supplier;
+import java.util.function.Predicate;
 import java.util.logging.Level;
 import net.enthusia.staff.domain.application.SanctionChangeService;
 import net.enthusia.staff.domain.auth.Actor;
@@ -422,8 +423,21 @@ public final class ExactSanctionPickerGui implements Listener {
     }
 
     private boolean permitted(Player viewer, Actor actor, SanctionChangeAction action) {
-        return viewer.hasPermission(SanctionChangeAccess.permissionFor(action))
+        return hasActionPermissions(viewer::hasPermission, action)
                 && authorization.permits(actor, action.requiredModerationAction());
+    }
+
+    /** Both UI and exact-write permissions are required before offering an action. */
+    static boolean hasActionPermissions(Predicate<String> hasPermission, SanctionChangeAction action) {
+        String exactPermission = switch (action) {
+            case REVOKE -> SanctionLifecycleCommand.REVOKE_PERMISSION;
+            case END_EARLY -> SanctionLifecycleCommand.END_PERMISSION;
+            case REDUCE_DURATION -> SanctionLifecycleCommand.REDUCE_PERMISSION;
+            case FULL_OVERTURN -> SanctionLifecycleCommand.OVERTURN_PERMISSION;
+            default -> throw new IllegalArgumentException("Unsupported exact punishment action");
+        };
+        return hasPermission.test(SanctionChangeAccess.permissionFor(action))
+                && hasPermission.test(exactPermission);
     }
 
     static SanctionChangeAction action(String action) {
