@@ -26,6 +26,7 @@ import net.enthusia.staff.domain.ports.CaseReviewStore;
 import net.enthusia.staff.domain.ports.PlayerDirectory;
 import net.enthusia.staff.domain.sanction.SanctionChangeAction;
 import net.enthusia.staff.domain.sanction.SanctionStatus;
+import net.enthusia.staff.domain.sanction.SanctionType;
 import net.enthusia.staff.paper.auth.PaperActorResolver;
 import net.enthusia.staff.paper.sanction.SanctionChangeAccess;
 import net.enthusia.staff.paper.presentation.StaffMessageStyle;
@@ -92,6 +93,15 @@ public final class ExactSanctionPickerGui implements Listener {
     }
 
     public void open(Player viewer, String playerName, String requestedAction) {
+        open(viewer, playerName, requestedAction, Set.of(SanctionType.values()));
+    }
+
+    /** Alias-specific filters prevent /unwarn from showing bans and vice versa. */
+    public void open(Player viewer, String playerName, String requestedAction, Set<SanctionType> allowedTypes) {
+        if (allowedTypes == null || allowedTypes.isEmpty()) {
+            throw new IllegalArgumentException("At least one sanction type is required");
+        }
+        Set<SanctionType> selectedTypes = Set.copyOf(allowedTypes);
         if (!authorized(viewer, requestedAction)) {
             notice(viewer, "You do not have authority to change these punishments.");
             return;
@@ -102,13 +112,14 @@ public final class ExactSanctionPickerGui implements Listener {
         captures.remove(viewerId);
         submitting.remove(viewerId);
         try {
-            workers.execute(() -> load(viewer, session, playerName, requestedAction));
+            workers.execute(() -> load(viewer, session, playerName, requestedAction, selectedTypes));
         } catch (RejectedExecutionException exception) {
             notice(viewer, "Moderation work queue is busy. No change was made.");
         }
     }
 
-    private void load(Player viewer, UUID session, String playerName, String action) {
+    private void load(Player viewer, UUID session, String playerName, String action,
+            Set<SanctionType> allowedTypes) {
         try {
             PlayerDirectory directory = players.get();
             CaseReviewStore reviews = cases.get();
@@ -124,7 +135,8 @@ public final class ExactSanctionPickerGui implements Listener {
             List<Entry> entries = new ArrayList<>();
             for (CaseReview review : reviews.recent(player.playerId(), 100)) {
                 for (SanctionReview sanction : review.sanctions()) {
-                    if (sanction.status() != SanctionStatus.REVOKED
+                    if (allowedTypes.contains(sanction.type())
+                            && sanction.status() != SanctionStatus.REVOKED
                             && sanction.status() != SanctionStatus.OVERTURNED) {
                         entries.add(new Entry(review, sanction));
                     }
