@@ -12,6 +12,7 @@ import java.util.concurrent.RejectedExecutionException;
 import java.util.function.Supplier;
 import java.util.logging.Level;
 import net.enthusia.staff.domain.OperationalMode;
+import net.enthusia.staff.domain.sanction.SanctionChangeAction;
 import net.enthusia.staff.domain.application.PreparePunishmentDraftRequest;
 import net.enthusia.staff.domain.application.PunishmentDraft;
 import net.enthusia.staff.domain.application.PunishmentDraftCleanupException;
@@ -665,9 +666,18 @@ public final class PunishmentCommand implements CommandExecutor, TabCompleter {
                 return List.of();
             }
             boolean permitted = "change".equals(action)
-                    ? true
-                    : sender.hasPermission(SanctionChangeAccess.permissionFor(
-                            ExactSanctionPickerGui.action(action)));
+                    ? java.util.stream.Stream.of(
+                            SanctionChangeAction.REVOKE,
+                            SanctionChangeAction.END_EARLY,
+                            SanctionChangeAction.REDUCE_DURATION,
+                            SanctionChangeAction.FULL_OVERTURN
+                    ).anyMatch(selected -> ExactSanctionPickerGui.hasActionPermissions(
+                            sender::hasPermission, selected)
+                            && authorization.permits(actor, selected.requiredModerationAction()))
+                    : ExactSanctionPickerGui.hasActionPermissions(
+                            sender::hasPermission, ExactSanctionPickerGui.action(action))
+                            && authorization.permits(
+                                    actor, ExactSanctionPickerGui.action(action).requiredModerationAction());
             return permitted ? onlineNames(sender, args[1]) : List.of();
         }
         List<String> completions = new ArrayList<>(requestCommands.complete(route, args));
