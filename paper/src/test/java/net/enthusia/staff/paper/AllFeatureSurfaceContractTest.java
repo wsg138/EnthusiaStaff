@@ -44,6 +44,7 @@ final class AllFeatureSurfaceContractTest {
             "kick",
             "ipban",
             "removepunishment",
+            "unpunish",
             "unban",
             "unmute",
             "removewarning",
