@@ -99,6 +99,25 @@ class PunishmentSanctionRoutesTest {
     }
 
     @Test
+    void inventorySlotSelectsOnlyTheClickedWarningIncludingAcrossPages() {
+        java.util.List<String> warnings = new java.util.ArrayList<>();
+        for (int i = 0; i < 48; i++) {
+            warnings.add("warning-" + i);
+        }
+        assertTrue(ExactSanctionPickerGui.pageEntry(warnings, 0, 0)
+                .orElseThrow().equals("warning-0"));
+        assertTrue(ExactSanctionPickerGui.pageEntry(warnings, 0, 1)
+                .orElseThrow().equals("warning-1"));
+        assertTrue(ExactSanctionPickerGui.pageEntry(warnings, 1, 0)
+                .orElseThrow().equals("warning-45"));
+        assertTrue(ExactSanctionPickerGui.pageEntry(warnings, 1, 2)
+                .orElseThrow().equals("warning-47"));
+        assertTrue(ExactSanctionPickerGui.pageEntry(warnings, 1, 3).isEmpty());
+        assertTrue(ExactSanctionPickerGui.pageEntry(warnings, 0, 49).isEmpty());
+        assertTrue(ExactSanctionPickerGui.pageEntry(warnings, -1, 0).isEmpty());
+    }
+
+    @Test
     void pickerUsesOnePersistedSanctionAndAuditConfirmation() throws IOException {
         String source = Files.readString(Path.of(
                 "src/main/java/net/enthusia/staff/paper/command/ExactSanctionPickerGui.java"
