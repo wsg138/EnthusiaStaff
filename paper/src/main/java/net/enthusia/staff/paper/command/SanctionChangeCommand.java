@@ -81,6 +81,13 @@ public final class SanctionChangeCommand implements CommandExecutor, TabComplete
         }
         String route = CommandRoute.canonicalName(command);
         boolean central = route.equals("removepunishment");
+        if (sender instanceof Player && !central && arguments.length > SINGLE_ARGUMENT) {
+            sender.sendMessage(StaffMessageStyle.usage(
+                    "Use /" + route + " <player> to choose the exact punishment in the GUI. "
+                            + "Multi-argument legacy shortcuts are console-only."
+            ));
+            return true;
+        }
         if (openAliasGui(sender, arguments, route, central)) {
             return true;
         }
