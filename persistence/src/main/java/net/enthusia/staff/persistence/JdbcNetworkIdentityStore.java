@@ -426,9 +426,7 @@ public final class JdbcNetworkIdentityStore implements NetworkIdentityStore {
                             state == AltRelationshipState.NOT_RELATED
                     );
                 }
-                if (state == AltRelationshipState.SHARED_HOUSEHOLD
-                        || state == AltRelationshipState.NOT_RELATED
-                        || state == AltRelationshipState.APPROVED_ALT) {
+                if (!state.inheritsAutomatically()) {
                     revokeExemptedInheritedSanctions(connection, pair, actorId, changedAt, state);
                 }
                 insertRelationshipAudit(connection, pair, actorId, state.name(), changedAt, reason);
