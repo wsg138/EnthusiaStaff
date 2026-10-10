@@ -44,6 +44,15 @@ page. History-related failure/conflict handling preserves the originating
 page instead of unexpectedly redirecting to the flagged queue. The history
 inventory is read-only and only records decision summaries, not raw chat.
 
+The GUI's **Filter** hopper cycles `All → Allowed → Blocked → Needs Review →
+Fail-open → Corrected → All`. Filter predicates run in the central API,
+never only against the visible page, and switching filters always resets the
+cursor to page one. Previous/Next/Refresh and the post-correction return path
+retain the selected filter. `Allowed` intentionally excludes fail-open records
+but does not certify correctness. The API extension is part of the draft
+[AI-Moderation-API #87](https://github.com/wsg138/AI-Moderation-API/pull/87)
+and is required for the filters to work after staging deployment.
+
 GUI loads use the existing bounded async client and generation fencing:
 active staff duty, queue permission and the current view generation are
 checked again in the final player-scheduler task before rendering and before
@@ -65,8 +74,10 @@ audit events only. Do not point the test at live player private messages.
    ALLOW requiring staff review shows yellow, and a stored FAIL_OPEN shows
    gray with the explicit note that it was **not verified safe**.
 3. Generate enough synthetic events for three pages. Test Next → Next →
-   Previous → Previous and Refresh. Check that no item is skipped, repeated
-   unexpectedly, or paired with the wrong event.
+   Previous → Previous and Refresh. Cycle each of the six server-side filters;
+   confirm excluded entries never appear, that filtered pages are complete,
+   and switching filters resets to page one. Check that no item is skipped,
+   repeated unexpectedly, or paired with the wrong event.
 4. Open an event from page two, then return. Verify the same cursor page
    remains visible; repeat through label selection, confirmation, and
    correction failure/conflict. Confirm an accepted correction refreshes the
