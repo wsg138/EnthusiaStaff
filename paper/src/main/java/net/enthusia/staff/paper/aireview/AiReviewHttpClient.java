@@ -74,12 +74,24 @@ final class AiReviewHttpClient implements AiReviewClient {
 
     @Override
     public DecisionHistoryPage listDecisions(int limit, String cursor) {
+        return listDecisions(limit, cursor, AiReviewHistoryFilter.ALL);
+    }
+
+    @Override
+    public DecisionHistoryPage listDecisions(
+            int limit, String cursor, AiReviewHistoryFilter filter
+    ) {
+        if (filter == null) {
+            throw new AiReviewClientException(Category.MALFORMED);
+        }
         int bounded = Math.max(1, Math.min(limit, configuration.reviewLimit()));
         if (cursor != null && (cursor.isBlank() || cursor.length() > 64)) {
             throw new AiReviewClientException(Category.MALFORMED);
         }
         String path = "/v1/decisions?limit=" + bounded
-                + (cursor == null ? "" : "&cursor=" + encode(cursor));
+                + (cursor == null ? "" : "&cursor=" + encode(cursor))
+                + (filter == AiReviewHistoryFilter.ALL
+                        ? "" : "&filter=" + encode(filter.apiValue()));
         JsonNode root;
         try {
             root = request("GET", path, null, 200);
