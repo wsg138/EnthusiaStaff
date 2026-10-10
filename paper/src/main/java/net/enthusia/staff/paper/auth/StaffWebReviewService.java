@@ -90,26 +90,37 @@ public final class StaffWebReviewService {
         if (!(lease instanceof PunishmentRequestResult.Leased acquired)) {
             return rejected(lease);
         }
-        // Re-read rank, Staff Mode, and target hierarchy after acquiring the lease.
-        Actor currentActor = Objects.requireNonNull(actorResolver.apply(request.actorId()), "current reviewer");
-        if (currentActor.rank() != actor.rank() || !currentActor.id().equals(actor.id())
-                || staffSessions.active(actor.id()).filter(session -> session.state()
-                        == net.enthusia.staff.domain.staff.StaffSessionState.ACTIVE).isEmpty()
-                || !service.mayReview(currentActor, current)
-                || targetRanks.apply(current.proposal().targetId())
-                        .filter(rank -> !hierarchy.permits(currentActor.rank(), rank)).isPresent()) {
-            throw new SecurityException("reviewer authority changed during request claim");
+        boolean committed = false;
+        try {
+            // Re-read rank, Staff Mode, and target hierarchy after acquiring the lease.
+            Actor currentActor = Objects.requireNonNull(actorResolver.apply(request.actorId()), "current reviewer");
+            if (currentActor.rank() != actor.rank() || !currentActor.id().equals(actor.id())
+                    || staffSessions.active(actor.id()).filter(session -> session.state()
+                            == net.enthusia.staff.domain.staff.StaffSessionState.ACTIVE).isEmpty()
+                    || dependencies.mode().get() != OperationalMode.ACTIVE
+                    || !service.mayReview(currentActor, current)
+                    || targetRanks.apply(current.proposal().targetId())
+                            .filter(rank -> !hierarchy.permits(currentActor.rank(), rank)).isPresent()) {
+                throw new SecurityException("reviewer authority changed during request claim");
+            }
+            PunishmentRequestResult result = "approve".equals(operation)
+                    ? service.approve(acquired.lease(), currentActor)
+                    : service.deny(acquired.lease(), currentActor, note);
+            if (result instanceof PunishmentRequestResult.Approved approved) {
+                committed = true;
+                return new Decision("APPROVED", request.requestId().toString(), approved.caseId().value());
+            }
+            if (result instanceof PunishmentRequestResult.Denied) {
+                committed = true;
+                return new Decision("DENIED", request.requestId().toString(), "");
+            }
+            return rejected(result);
+        } finally {
+            if (!committed) {
+                // The fenced release cannot affect a different reviewer or a newer lease.
+                service.abandon(acquired.lease());
+            }
         }
-        PunishmentRequestResult result = "approve".equals(operation)
-                ? service.approve(acquired.lease(), currentActor)
-                : service.deny(acquired.lease(), currentActor, note);
-        if (result instanceof PunishmentRequestResult.Approved approved) {
-            return new Decision("APPROVED", request.requestId().toString(), approved.caseId().value());
-        }
-        if (result instanceof PunishmentRequestResult.Denied) {
-            return new Decision("DENIED", request.requestId().toString(), "");
-        }
-        return rejected(result);
     }
 
     private static Decision rejected(PunishmentRequestResult result) {
