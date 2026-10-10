@@ -198,7 +198,9 @@ public final class SanctionLifecycleCommand {
                     exception
             );
             responses.send(sender, Component.text(
-                    "The sanction change failed; no raw database error was shown. See the server log."
+                    "Sanction change status UNKNOWN after a storage error. "
+                            + "Check /history and /case before retrying; the write may have committed. "
+                            + "See the server log."
             ));
             return;
         }
