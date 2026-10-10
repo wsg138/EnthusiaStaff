@@ -5,6 +5,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.KeyStore;
 import java.util.Comparator;
+import java.util.UUID;
 import java.util.stream.Stream;
 
 /**
@@ -17,6 +18,8 @@ public final class StaffBotTlsProbeTest {
     private static final String HOST = "25319956-7c92-49d1-9afe-ea6e18758016";
     private static final String PORT = "28765";
     private static final String INVALID_CONFIGURATION = "INVALID_LOCAL_CONFIG";
+    // Random fixture only: never embed a password even in offline negative tests.
+    private static final String SYNTHETIC_PASSWORD = UUID.randomUUID().toString();
     private static int assertions;
 
     private StaffBotTlsProbeTest() {
@@ -38,9 +41,9 @@ public final class StaffBotTlsProbeTest {
 
             Path emptyStore = workspace.dir.resolve("empty.p12");
             KeyStore trust = KeyStore.getInstance("PKCS12");
-            trust.load(null, "synthetic-test-password".toCharArray());
+            trust.load(null, SYNTHETIC_PASSWORD.toCharArray());
             try (var stream = Files.newOutputStream(emptyStore)) {
-                trust.store(stream, "synthetic-test-password".toCharArray());
+                trust.store(stream, SYNTHETIC_PASSWORD.toCharArray());
             }
             Files.writeString(file, settings(HOST, PORT, emptyStore.toString()));
             verify(new String[] {file.toString()}, 2, INVALID_CONFIGURATION);
@@ -82,7 +85,7 @@ public final class StaffBotTlsProbeTest {
         return PREFIX + "HOST=" + host + "\n"
                 + PREFIX + "PORT=" + port + "\n"
                 + PREFIX + "TRUST_STORE=" + store.replace("\\", "\\\\") + "\n"
-                + PREFIX + "TRUST_STORE_PASSWORD=synthetic-test-password\n";
+                + PREFIX + "TRUST_STORE_PASSWORD=" + SYNTHETIC_PASSWORD + "\n";
     }
 
     @SuppressWarnings("PMD.CloseResource") // System.out belongs to the JVM; the capture stream is closed below.
