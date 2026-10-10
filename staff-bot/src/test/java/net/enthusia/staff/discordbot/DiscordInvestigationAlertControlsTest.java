@@ -35,6 +35,24 @@ class DiscordInvestigationAlertControlsTest {
     }
 
     @Test
+    void reviewQueueActionsRoundTripUnsignedSnowflakesWithoutLeakingAuthority() {
+        EvasionAlert alert = alert();
+        long target = Long.parseUnsignedLong(alert.targetDiscordUserId().value());
+        for (String actionId : java.util.List.of(
+                DiscordInvestigationAlertControls.linked(target),
+                DiscordInvestigationAlertControls.history(target),
+                DiscordInvestigationAlertControls.moderate(target),
+                DiscordInvestigationAlertControls.resolve(target, alert.alertId()))) {
+            var parsed = DiscordInvestigationAlertControls.parse(actionId);
+            assertEquals(target, parsed.targetDiscordId());
+            assertTrue(actionId.length() <= 100);
+        }
+        assertEquals(alert.alertId(), DiscordInvestigationAlertControls.parse(
+                DiscordInvestigationAlertControls.resolve(target, alert.alertId()))
+                .alertId().orElseThrow());
+    }
+
+    @Test
     void malformedOrZeroTargetActionsAreRejected() {
         assertThrows(IllegalArgumentException.class, () -> DiscordInvestigationAlertControls.parse("d09alert:linked:0"));
         assertThrows(IllegalArgumentException.class, () -> DiscordInvestigationAlertControls.parse("d09alert:resolve:1:not-a-uuid"));

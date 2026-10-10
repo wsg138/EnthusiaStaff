@@ -238,16 +238,17 @@ final class JdaStaffModerationListener extends ListenerAdapter {
                         return;
                     }
                     var pulse = moderationRuntime.reviewPulse();
-                    var reports = moderationRuntime.pendingReports(2);
-                    var reviews = moderationRuntime.pendingReviews(reports.isEmpty() ? 4 : 3);
-                    StringBuilder message = new StringBuilder("**Staff review center**\\n")
+                    var altAlerts = moderationRuntime.pendingAltAlerts(2);
+                    var reports = moderationRuntime.pendingReports(altAlerts.isEmpty() ? 2 : 1);
+                    var reviews = moderationRuntime.pendingReviews(5 - reports.size() - altAlerts.size());
+                    StringBuilder message = new StringBuilder("**Staff review center**\n")
                             .append("Pending punishments: ").append(pulse.pendingPunishmentRequests())
                             .append(" | Open reports: ").append(pulse.openReports())
                             .append(" | Claimed reports: ").append(pulse.claimedReports())
                             .append(" | Alt alert events (24h): ").append(pulse.altSignalsInLastDay())
-                            .append("\\n");
-                    if (reviews.isEmpty() && reports.isEmpty()) {
-                        hook.sendMessage(message.append("No actionable punishment requests or reports.").toString())
+                            .append("\n");
+                    if (reviews.isEmpty() && reports.isEmpty() && altAlerts.isEmpty()) {
+                        hook.sendMessage(message.append("No actionable punishment requests, reports or alt alerts.").toString())
                                 .queue();
                         return;
                     }
@@ -257,7 +258,7 @@ final class JdaStaffModerationListener extends ListenerAdapter {
                         message.append(number).append(". **").append(review.reasonId())
                                 .append("** · Target: `").append(review.targetId())
                                 .append("` · Required: ").append(review.requiredRank())
-                                .append(" · Request: `").append(review.requestId()).append("`\\n");
+                                .append(" · Request: `").append(review.requestId()).append("`\n");
                         var target = SignedComponentCodec.TargetRef.request(review.requestId());
                         rows.add(ActionRow.of(
                                 Button.success(reviewComponents.encode(
@@ -275,7 +276,7 @@ final class JdaStaffModerationListener extends ListenerAdapter {
                                 .append("** · ").append(report.state()).append(" · Target: `")
                                 .append(report.targetId()).append("` · Report: `")
                                 .append(report.reportId()).append("` rev=")
-                                .append(report.revision()).append("\\n");
+                                .append(report.revision()).append("\n");
                         if ("OPEN".equals(report.state())) {
                             rows.add(ActionRow.of(Button.primary(reviewComponents.encode(
                                     SignedComponentCodec.Action.REPORT_CLAIM, target, actorId),
@@ -289,6 +290,24 @@ final class JdaStaffModerationListener extends ListenerAdapter {
                                             SignedComponentCodec.Action.REPORT_NO_VIOLATION, target, actorId),
                                             "No violation " + number)));
                         }
+                        number++;
+                    }
+                    for (var alt : altAlerts) {
+                        message.append("Alt ").append(number).append(". **").append(alt.punishmentType())
+                                .append("** · Discord: `")
+                                .append(Long.toUnsignedString(alt.targetDiscordId()))
+                                .append("` · Minecraft: `").append(alt.triggeringMinecraftId())
+                                .append("` · Alert: `").append(alt.alertId()).append("`\n");
+                        rows.add(ActionRow.of(
+                                Button.secondary(DiscordInvestigationAlertControls.linked(alt.targetDiscordId()),
+                                        "Linked " + number),
+                                Button.secondary(DiscordInvestigationAlertControls.history(alt.targetDiscordId()),
+                                        "History " + number),
+                                Button.primary(DiscordInvestigationAlertControls.moderate(alt.targetDiscordId()),
+                                        "Investigate " + number),
+                                Button.danger(DiscordInvestigationAlertControls.resolve(
+                                        alt.targetDiscordId(), alt.alertId()), "Resolve " + number)
+                        ));
                         number++;
                     }
                     message.append("Controls expire shortly. Every action rechecks Minecraft authority and state.");

@@ -53,6 +53,36 @@ final class DiscordInvestigationAlertControls {
         return id(Type.RESOLVE, alert, true);
     }
 
+    static String linked(long targetDiscordId) {
+        return compact(Type.LINKED, targetDiscordId, Optional.empty());
+    }
+
+    static String history(long targetDiscordId) {
+        return compact(Type.HISTORY, targetDiscordId, Optional.empty());
+    }
+
+    static String moderate(long targetDiscordId) {
+        return compact(Type.MODERATE, targetDiscordId, Optional.empty());
+    }
+
+    static String resolve(long targetDiscordId, UUID alertId) {
+        return compact(Type.RESOLVE, targetDiscordId, Optional.ofNullable(alertId));
+    }
+
+    private static String compact(Type type, long targetDiscordId, Optional<UUID> alertId) {
+        if (targetDiscordId == INVALID_DISCORD_ID || type == null || alertId == null
+                || (type == Type.RESOLVE) != alertId.isPresent()) {
+            throw new IllegalArgumentException("invalid linked-alt control fields");
+        }
+        String id = PREFIX + type.name().toLowerCase(java.util.Locale.ROOT) + ":"
+                + Long.toUnsignedString(targetDiscordId)
+                + (alertId.isPresent() ? ":" + alertId.orElseThrow() : "");
+        if (id.length() > MAX_COMPONENT_ID) {
+            throw new IllegalArgumentException("linked-alt control exceeds Discord limit");
+        }
+        return id;
+    }
+
     static Action parse(String customId) {
         if (!handles(customId)) {
             throw new IllegalArgumentException("not a linked-alt alert action");

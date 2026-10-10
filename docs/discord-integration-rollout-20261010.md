@@ -96,4 +96,6 @@ The bot-owned, private `/review-queue` now shows **a bounded mixture of pending 
 
 A failed network response is ambiguous: check the report's authoritative state before resubmitting. The final operation is audited and its report outbox event belongs to the `reports` channel. None of this is active on the live network without separately configuring both the isolated moderation bot and private signed Minecraft authority endpoint and validating their connectivity.
 
-The restricted `/review-queue` is not yet a comprehensive AI moderation decision surface; the independent D09 investigation slash commands and alt alert controls remain available when configured. End-to-end real Discord↔Minecraft staging, external punishment adapters and production role permissions remain release gates.
+The optional D09 investigation runtime also contributes up to two **unresolved linked-alt alerts** to the same private `/review-queue` with its existing reauthorized Linked/History/Investigate/Resolve controls. The alert cards show only opaque identities and punishment type, not underlying chat evidence. Five-row Discord limits are respected by dynamically bounding punishment requests, report cases, and alt alerts together. Without D09 configuration, the bot never queries its alert table.
+
+The restricted `/review-queue` is not yet a comprehensive AI moderation decision surface; D09 investigation slash commands remain available when configured. End-to-end real Discord↔Minecraft staging, external punishment adapters and production role permissions remain release gates.

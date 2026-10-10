@@ -38,6 +38,7 @@ class DiscordReviewQueueReadIntegrationTest {
             Instant now = Instant.now();
             assertTrue(read.pendingReviews(now, 4).isEmpty());
             assertTrue(read.pendingReports(4).isEmpty());
+            assertTrue(read.pendingAltAlerts(2).isEmpty());
             var pulse = read.reviewPulse(now);
             assertEquals(0L, pulse.pendingPunishmentRequests());
             assertEquals(0L, pulse.openReports());

@@ -178,6 +178,41 @@ public final class DiscordStaffReadRuntime implements AutoCloseable {
         }
     }
 
+    /** D09-only private alert list. Does not expose raw evidence or the punishment narrative. */
+    public record PendingAltAlert(UUID alertId, long targetDiscordId,
+            UUID triggeringMinecraftId, String punishmentType) { }
+
+    public List<PendingAltAlert> pendingAltAlerts(int limit) {
+        if (limit < 1 || limit > 5) {
+            throw new IllegalArgumentException("alt-alert bound is invalid");
+        }
+        try (var connection = dataSource.getConnection();
+             var statement = connection.prepareStatement("""
+                    SELECT alert_id, target_discord_user_id,
+                           triggering_minecraft_player_id, punishment_type
+                      FROM discord_evasion_alerts
+                     WHERE state = 'OPEN'
+                     ORDER BY triggered_at DESC, alert_id DESC
+                     LIMIT ?
+                    """)) {
+            statement.setInt(1, limit);
+            try (var rows = statement.executeQuery()) {
+                var pending = new java.util.ArrayList<PendingAltAlert>();
+                while (rows.next()) {
+                    pending.add(new PendingAltAlert(
+                            UuidBytes.fromBytes(rows.getBytes("alert_id")),
+                            Long.parseUnsignedLong(rows.getBigDecimal("target_discord_user_id")
+                                    .toBigIntegerExact().toString()),
+                            UuidBytes.fromBytes(rows.getBytes("triggering_minecraft_player_id")),
+                            rows.getString("punishment_type")));
+                }
+                return List.copyOf(pending);
+            }
+        } catch (java.sql.SQLException exception) {
+            throw new IllegalStateException("Unable to load linked-alt review alerts", exception);
+        }
+    }
+
     public Optional<VersionedSubject> subjectForDiscord(DiscordUserId userId) {
         return identities.subjectForDiscord(userId);
     }
