@@ -71,6 +71,7 @@ import net.enthusia.staff.paper.punishment.PunishmentRequestGuiController;
 import net.enthusia.staff.paper.report.ChatContextBuffer;
 import net.enthusia.staff.paper.report.ReportGuiController;
 import net.enthusia.staff.paper.sanction.SanctionChangeGuiController;
+import net.enthusia.staff.paper.command.ExactSanctionPickerGui;
 import net.enthusia.staff.paper.staff.StaffModeManager;
 import net.enthusia.staff.paper.visibility.VanishManager;
 import org.bukkit.command.CommandExecutor;
@@ -218,6 +219,13 @@ final class PaperCommandRegistrar {
                 plugin(), writeMode(), drafts, players, activeAuthorization, punishmentGui, requestHandler, workers()
         );
         command.configureSanctionLifecycle(sanctionLifecycle);
+        ExactSanctionPickerGui exactPicker = new ExactSanctionPickerGui(
+                plugin(), clock(), players, cases,
+                storage(PaperStorageBindings::sanctionChangeService),
+                activeAuthorization, workers(), sanctionLifecycle
+        );
+        plugin().getServer().getPluginManager().registerEvents(exactPicker, plugin());
+        command.configureExactSanctionPicker(exactPicker);
         PUNISHMENT_COMMANDS.forEach(name -> bindCompleting(name, command, command));
     }
 
