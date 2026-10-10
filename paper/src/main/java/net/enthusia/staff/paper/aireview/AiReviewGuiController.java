@@ -617,7 +617,12 @@ final class AiReviewGuiController implements Listener {
             AiReviewGuiState.History historyOrigin
     ) {
         onEntity(viewer, () -> {
-            message(viewer, "No correction was committed: " + issue + '.', NamedTextColor.YELLOW);
+            message(viewer, AiReviewWriteFeedback.message(issue), NamedTextColor.YELLOW);
+            if (AiReviewWriteFeedback.outcomeUncertain(issue)) {
+                // The API might have saved the vote before its reply was lost.
+                // Never reopen a stale pre-write snapshot as if it were authoritative.
+                return;
+            }
             if ("central review conflict".equals(issue)) {
                 openEvent(viewer, fresh.eventId(), returnPage, historyOrigin);
                 return;
