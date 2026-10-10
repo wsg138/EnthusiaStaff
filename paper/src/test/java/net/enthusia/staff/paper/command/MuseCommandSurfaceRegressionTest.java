@@ -27,7 +27,7 @@ class MuseCommandSurfaceRegressionTest {
 
     @Test
     void centralRemovePunishmentTargetOnlyRouteOpensExactGuiWithoutSelectingLatest() throws IOException {
-        String source = Files.readString(REMOVE);
+        String source = Files.readString(REMOVE).replace("\r\n", "\n");
         int helper = source.indexOf("private boolean openAliasGui");
         int playerGate = source.indexOf("arguments.length != SINGLE_ARGUMENT", helper);
         int picker = source.indexOf("picker.open(player, arguments[0], selection,", helper);
