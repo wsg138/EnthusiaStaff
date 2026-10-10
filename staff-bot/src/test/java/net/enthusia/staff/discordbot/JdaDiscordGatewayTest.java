@@ -110,8 +110,8 @@ class JdaDiscordGatewayTest {
     void linkedSenderPresentationIsAdditiveAndSafeAcrossFallbacks() {
         ChatBridgeOutboundMessage plain = chatMessage("hello");
         assertEquals(
-                "[SMP · @DiscordName] Player: hello",
-                JdaDiscordGateway.chatContent(plain, java.util.Optional.of("@DiscordName"))
+                "[SMP · Discord: DiscordName] Player: hello",
+                JdaDiscordGateway.chatContent(plain, java.util.Optional.of("Discord: DiscordName"))
         );
 
         ChatBridgeRenderedMessage rendered = renderedMessage(
@@ -120,10 +120,10 @@ class JdaDiscordGatewayTest {
                 "[VIP] Player: hello"
         );
         assertEquals(
-                "[SMP · @DiscordName] **[VIP] Player:** *hello*",
+                "[SMP · Discord: DiscordName] **[VIP] Player:** *hello*",
                 JdaDiscordGateway.renderedChatContent(
                         rendered,
-                        java.util.Optional.of("@DiscordName")
+                        java.util.Optional.of("Discord: DiscordName")
                 )
         );
     }
@@ -138,11 +138,11 @@ class JdaDiscordGatewayTest {
 
         String content = JdaDiscordGateway.renderedChatContent(
                 rendered,
-                java.util.Optional.of("@DiscordName")
+                java.util.Optional.of("Discord: DiscordName")
         );
 
         assertEquals(2_000, content.length());
-        assertTrue(content.startsWith("[SMP · @DiscordName] [VIP] Player: "));
+        assertTrue(content.startsWith("[SMP · Discord: DiscordName] [VIP] Player: "));
         assertFalse(Character.isHighSurrogate(content.charAt(content.length() - 1)));
     }
 
@@ -156,25 +156,24 @@ class JdaDiscordGatewayTest {
     }
 
     @Test
-    void uncachedDiscordAccountUsesNonPingingMentionInsteadOfLinkedLabel() {
-        String discordId = "1".repeat(18);
+    void linkedIdentityIsPassiveTextOnlyWithSafeFallbacks() {
         assertEquals(
-                java.util.Optional.of("<@" + discordId + ">"),
-                JdaDiscordGateway.discordProfileMention(discordId)
+                java.util.Optional.of("Discord: DiscordName"),
+                JdaDiscordGateway.cachedDiscordDisplay("DiscordName")
         );
         assertEquals(
-                "[SMP · <@" + discordId + ">] Player: hello",
-                JdaDiscordGateway.chatContent(
-                        chatMessage("hello"),
-                        JdaDiscordGateway.discordProfileMention(discordId)
-                )
+                java.util.Optional.of("Discord: Name＠everyone"),
+                JdaDiscordGateway.cachedDiscordDisplay("Name@everyone")
         );
-        assertEquals(java.util.Optional.empty(), JdaDiscordGateway.discordProfileMention("bad"));
-        assertEquals(java.util.Optional.empty(), JdaDiscordGateway.discordProfileMention(null));
+        assertEquals(
+                java.util.Optional.of("Discord: ‹＠unknown-user›"),
+                JdaDiscordGateway.cachedDiscordDisplay("<@unknown-user>")
+        );
+        assertEquals(java.util.Optional.empty(), JdaDiscordGateway.cachedDiscordDisplay(null));
+        assertEquals(java.util.Optional.empty(), JdaDiscordGateway.cachedDiscordDisplay("\n\t"));
         assertEquals(
                 "[SMP] Player: hello",
-                JdaDiscordGateway.chatContent(chatMessage("hello"),
-                        JdaDiscordGateway.discordProfileMention("bad"))
+                JdaDiscordGateway.chatContent(chatMessage("hello"), java.util.Optional.empty())
         );
     }
 

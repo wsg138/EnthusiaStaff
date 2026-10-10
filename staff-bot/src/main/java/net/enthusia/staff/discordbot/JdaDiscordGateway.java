@@ -407,7 +407,7 @@ final class JdaDiscordGateway implements DiscordGateway, DiscordChatEgress, Disc
 
         String content = chatContent(
                 message,
-                chatSenderIdentity(api, channel.getGuild(), message.minecraftPlayerId())
+                chatSenderIdentity(channel.getGuild(), message.minecraftPlayerId())
         );
         try {
             channel.sendMessage(content)
@@ -462,7 +462,7 @@ final class JdaDiscordGateway implements DiscordGateway, DiscordChatEgress, Disc
 
         String content = renderedChatContent(
                 message,
-                chatSenderIdentity(api, channel.getGuild(), message.minecraftPlayerId())
+                chatSenderIdentity(channel.getGuild(), message.minecraftPlayerId())
         );
         if (artifacts.isEmpty()
                 || !channel.getGuild().getSelfMember().hasPermission(
@@ -562,7 +562,6 @@ final class JdaDiscordGateway implements DiscordGateway, DiscordChatEgress, Disc
     }
 
     private Optional<String> chatSenderIdentity(
-            JDA api,
             Guild guild,
             UUID minecraftPlayerId
     ) {
@@ -570,32 +569,20 @@ final class JdaDiscordGateway implements DiscordGateway, DiscordChatEgress, Disc
         if (discordId.isEmpty()) {
             return Optional.empty();
         }
-        String id = discordId.orElseThrow();
-        Member member = guild.getMemberById(id);
-        if (member != null) {
-            return cachedDiscordDisplay(member.getEffectiveName()).or(() -> discordProfileMention(id));
-        }
-        User user = api.getUserById(id);
-        if (user != null) {
-            return cachedDiscordDisplay(ModerationDiscordMessageMapper.displayName(user))
-                    .or(() -> discordProfileMention(id));
-        }
-        // The Discord client can resolve this ID into a clickable account mention, even when
-        // the bot has no member/user cache. Both chat send paths disable allowed mentions,
-        // so the linked account is never pinged by an ordinary Minecraft chat message.
-        return discordProfileMention(id);
+        // Display only confirmed members of this Discord guild. Unknown or cross-guild
+        // identities must not become <@id> mentions or @unknown-user placeholders.
+        Member member = guild.getMemberById(discordId.orElseThrow());
+        return member == null ? Optional.empty() : cachedDiscordDisplay(member.getEffectiveName());
     }
 
-    static Optional<String> discordProfileMention(String id) {
-        if (id == null || !id.matches("[0-9]{15,20}")) {
+    static Optional<String> cachedDiscordDisplay(String name) {
+        // The linked account is shown as passive text, never a Discord ping.
+        if (name == null || name.isBlank()) {
             return Optional.empty();
         }
-        return Optional.of("<@" + id + ">");
-    }
-
-    private static Optional<String> cachedDiscordDisplay(String name) {
-        String escaped = escapeDiscordMarkdown(name);
-        return escaped.isBlank() ? Optional.empty() : Optional.of("@" + escaped);
+        String escaped = escapeDiscordMarkdown(name.replace("@", "＠")
+                .replace("<", "‹").replace(">", "›"));
+        return escaped.isBlank() ? Optional.empty() : Optional.of("Discord: " + escaped);
     }
 
     private static String sourcePrefix(
