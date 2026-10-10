@@ -167,9 +167,21 @@ to copy them into commands.
 
 **These commands are in a draft PR, not confirmed deployed on live SMP.**
 
-Case-oriented `/removepunishment` and older `/unwarn` paths remain separate;
-use the exact-ID shortcuts when the distinction between multiple warnings
-matters. **Do not assume this draft is installed on the live server.**
+The existing `/removepunishment <player>` and `/unwarn <player>`,
+`/removewarning <player>`, `/unban <player>` and `/unmute <player>`
+also open this exact-punishment picker. The warning aliases list **warnings only**,
+while ban/mute aliases only display matching punishment types; none
+silently changes the latest sanction. The legacy multi-argument console
+syntax remains available for compatibility and still has its own confirmation
+and authorization safeguards.
+
+The picker currently loads the most recent **100 cases** from the player
+record; for an older historical case, use `/history <player> [page]`
+and `/case <case-id>`. The latter exposes a clickable suggested
+`/unpunish` command for the selected sanction without needing to type its
+UUID manually.
+
+**Do not assume this draft is installed on the live server.**
 
 Use `/history <player|uuid> [page]` for the newest-first moderation timeline and `/case [view] <case-id>` for complete case, sanction, request, appeal and mutation detail. Exact sanction changes use `/estaff sanction reduce|end|revoke|overturn` and always preserve the original decision and append audit history. See [[Moderation, Punishments, and Reports]] for source files and remaining staging work.
 
