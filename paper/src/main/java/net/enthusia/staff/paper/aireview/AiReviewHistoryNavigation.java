@@ -16,7 +16,7 @@ final class AiReviewHistoryNavigation {
             throw new IllegalStateException("there is no previous audit page");
         }
         String prior = stack.get(stack.size() - 1);
-        return new Page(prior.isEmpty() ? null : prior, stack.subList(0, stack.size() - 1));
+        return new Page(prior, stack.subList(0, stack.size() - 1));
     }
 
     static Page next(AiReviewGuiState.History history) {
@@ -29,9 +29,17 @@ final class AiReviewHistoryNavigation {
         return new Page(history.nextCursor(), stack);
     }
 
-    record Page(String cursor, List<String> previousCursors) {
+    /** Empty cursorToken represents the first page; no nullable token is stored. */
+    record Page(String cursorToken, List<String> previousCursors) {
         Page {
+            if (cursorToken == null) {
+                throw new IllegalArgumentException("cursor token required");
+            }
             previousCursors = List.copyOf(previousCursors);
+        }
+
+        String cursor() {
+            return cursorToken.isEmpty() ? null : cursorToken;
         }
     }
 }
