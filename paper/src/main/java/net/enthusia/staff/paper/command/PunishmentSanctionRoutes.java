@@ -19,6 +19,28 @@ final class PunishmentSanctionRoutes {
                 && DIRECT.contains(args[0].toLowerCase(Locale.ROOT));
     }
 
+    static boolean isPickerRequest(String command, String[] args) {
+        return handles(command, args)
+                && ("unpunish".equals(command) && args.length == 1
+                    || "punish".equals(command) && args.length == 2);
+    }
+
+    static String pickerTarget(String command, String[] args) {
+        return "unpunish".equals(command) ? args[0] : args[1];
+    }
+
+    static String pickerAction(String command, String[] args) {
+        if ("unpunish".equals(command)) {
+            return "remove";
+        }
+        return switch (args[0].toLowerCase(Locale.ROOT)) {
+            case "remove", "revoke" -> "remove";
+            case "end" -> "end";
+            case "reduce" -> "reduce";
+            default -> "change";
+        };
+    }
+
     /**
      * Returns the canonical /estaff sanction argument vector; null means invalid input.
      * Every mutation requires an exact sanction UUID. A player or case name never selects
@@ -79,10 +101,7 @@ final class PunishmentSanctionRoutes {
     }
 
     static String usage() {
-        return "Choose an exact sanction ID with /history <player> and /case <case-id>. "
-                + "Then: /unpunish <sanction-id> <reason>, "
-                + "/punish remove|end <sanction-id> <reason>, "
-                + "/punish reduce <sanction-id> <duration|UTC-expiration> <reason>, "
-                + "or /punish change <sanction-id> <remove|end|reduce|overturn> ...";
+        return "Use /unpunish <player> or /punish remove|end|reduce|change <player> "
+                + "to select a punishment in a GUI. Console may use exact IDs with reasons.";
     }
 }
