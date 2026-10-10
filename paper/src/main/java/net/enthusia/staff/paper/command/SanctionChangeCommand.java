@@ -47,6 +47,7 @@ public final class SanctionChangeCommand implements CommandExecutor, TabComplete
     private final AuthorizationPolicy authorization;
     private final ExecutorService workers;
     private final SanctionChangeGuiController gui;
+    private volatile ExactSanctionPickerGui exactPicker;
 
     public SanctionChangeCommand(
             JavaPlugin plugin,
@@ -66,6 +67,10 @@ public final class SanctionChangeCommand implements CommandExecutor, TabComplete
         this.authorization = authorization;
         this.workers = workers;
         this.gui = gui;
+    }
+
+    public void configureExactSanctionPicker(ExactSanctionPickerGui picker) {
+        exactPicker = java.util.Objects.requireNonNull(picker, "picker");
     }
 
     @Override
@@ -111,7 +116,18 @@ public final class SanctionChangeCommand implements CommandExecutor, TabComplete
     }
 
     private boolean openAliasGui(CommandSender sender, String[] arguments, String route, boolean central) {
-        if (central || arguments.length != SINGLE_ARGUMENT || !(sender instanceof Player player)) {
+        if (arguments.length != SINGLE_ARGUMENT || !(sender instanceof Player player)) {
+            return false;
+        }
+        ExactSanctionPickerGui picker = exactPicker;
+        if (picker != null) {
+            SanctionChangeAction action = central ? null : SanctionChangeAccess.aliasAction(route);
+            String selection = action == SanctionChangeAction.END_EARLY ? "end"
+                    : action == SanctionChangeAction.REVOKE ? "remove" : "change";
+            picker.open(player, arguments[0], selection, SanctionChangeAccess.aliasTypes(route));
+            return true;
+        }
+        if (central) {
             return false;
         }
         gui.open(player, arguments[0], route);
