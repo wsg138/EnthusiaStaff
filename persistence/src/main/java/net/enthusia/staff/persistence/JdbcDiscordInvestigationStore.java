@@ -12,7 +12,7 @@ import net.enthusia.staff.domain.investigation.InvestigationEvidence;
 import net.enthusia.staff.domain.investigation.InvestigationNote;
 import net.enthusia.staff.domain.ports.DiscordInvestigationStore;
 
-/** V22-backed authoritative D09 investigation repository. */
+/** V31-backed authoritative D09 investigation repository. */
 public final class JdbcDiscordInvestigationStore implements DiscordInvestigationStore {
     private final JdbcDiscordInvestigationCaseStore cases;
     private final JdbcDiscordInvestigationNoteStore notes;
