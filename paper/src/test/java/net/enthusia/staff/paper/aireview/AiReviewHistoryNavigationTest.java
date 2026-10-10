@@ -9,6 +9,8 @@ import java.util.UUID;
 import org.junit.jupiter.api.Test;
 
 class AiReviewHistoryNavigationTest {
+    private static final String EVENT_01 = "event-01";
+    private static final String EVENT_02 = "event-02";
     private static AiReviewGuiState.History history(
             String cursor, String nextCursor, List<String> previous
     ) {
@@ -19,12 +21,12 @@ class AiReviewHistoryNavigationTest {
 
     @Test
     void firstPageRoundTripKeepsPreviousCursorStack() {
-        var first = history(null, "event-01", List.of());
+        var first = history(null, EVENT_01, List.of());
         var second = AiReviewHistoryNavigation.next(first);
-        assertEquals("event-01", second.cursor());
+        assertEquals(EVENT_01, second.cursor());
         assertEquals(List.of(""), second.previousCursors());
 
-        var secondState = history(second.cursor(), "event-02", second.previousCursors());
+        var secondState = history(second.cursor(), EVENT_02, second.previousCursors());
         var previous = AiReviewHistoryNavigation.previous(secondState);
         assertNull(previous.cursor());
         assertEquals(List.of(), previous.previousCursors());
@@ -32,15 +34,15 @@ class AiReviewHistoryNavigationTest {
 
     @Test
     void laterPageRoundTripPreservesOpaqueCursor() {
-        var page = history("event-02", "event-03", List.of("", "event-01"));
+        var page = history(EVENT_02, "event-03", List.of("", EVENT_01));
         var next = AiReviewHistoryNavigation.next(page);
         assertEquals("event-03", next.cursor());
-        assertEquals(List.of("", "event-01", "event-02"), next.previousCursors());
+        assertEquals(List.of("", EVENT_01, EVENT_02), next.previousCursors());
         var previous = AiReviewHistoryNavigation.previous(
                 history(next.cursor(), null, next.previousCursors())
         );
-        assertEquals("event-02", previous.cursor());
-        assertEquals(List.of("", "event-01"), previous.previousCursors());
+        assertEquals(EVENT_02, previous.cursor());
+        assertEquals(List.of("", EVENT_01), previous.previousCursors());
     }
 
     @Test
