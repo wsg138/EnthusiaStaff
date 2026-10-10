@@ -15,8 +15,6 @@ import net.enthusia.staff.protocol.ChatBridgeRenderedMessage;
 import org.junit.jupiter.api.Test;
 
 class JdaDiscordGatewayTest {
-    private static final String LINKED_DISCORD_LABEL = "Discord: DiscordName";
-
     @Test
     void restrictionRuntimeEnablesOnlyMemberOverrideCache() {
         assertEquals(Set.of(CacheFlag.MEMBER_OVERRIDES), JdaDiscordGateway.requiredCacheFlags());
@@ -109,11 +107,10 @@ class JdaDiscordGatewayTest {
     }
 
     @Test
-    void linkedSenderPresentationIsAdditiveAndSafeAcrossFallbacks() {
-        ChatBridgeOutboundMessage plain = chatMessage("hello");
+    void ordinaryAndRichChatAlwaysUseOnlyMinecraftNames() {
         assertEquals(
-                "[SMP · Discord: DiscordName] Player: hello",
-                JdaDiscordGateway.chatContent(plain, java.util.Optional.of(LINKED_DISCORD_LABEL))
+                "[SMP] Player: hello",
+                JdaDiscordGateway.chatContent(chatMessage("hello"))
         );
 
         ChatBridgeRenderedMessage rendered = renderedMessage(
@@ -122,60 +119,8 @@ class JdaDiscordGatewayTest {
                 "[VIP] Player: hello"
         );
         assertEquals(
-                "[SMP · Discord: DiscordName] **[VIP] Player:** *hello*",
-                JdaDiscordGateway.renderedChatContent(
-                        rendered,
-                        java.util.Optional.of(LINKED_DISCORD_LABEL)
-                )
-        );
-    }
-
-    @Test
-    void linkedPrefixStillHonorsDiscordContentLimit() {
-        ChatBridgeRenderedMessage rendered = renderedMessage(
-                "hello",
-                "*".repeat(2_100),
-                "[VIP] Player: " + "x".repeat(2_100)
-        );
-
-        String content = JdaDiscordGateway.renderedChatContent(
-                rendered,
-                java.util.Optional.of(LINKED_DISCORD_LABEL)
-        );
-
-        assertEquals(2_000, content.length());
-        assertTrue(content.startsWith("[SMP · Discord: DiscordName] [VIP] Player: "));
-        assertFalse(Character.isHighSurrogate(content.charAt(content.length() - 1)));
-    }
-
-    @Test
-    void discordDisplayNamesAreEscapedBeforeMarkdownPresentation() {
-        assertEquals(
-                "Name\\*With\\_Markdown\\|",
-                JdaDiscordGateway.escapeDiscordMarkdown("Name*With_Markdown|")
-        );
-        assertEquals("", JdaDiscordGateway.escapeDiscordMarkdown("\n\t"));
-    }
-
-    @Test
-    void linkedIdentityIsPassiveTextOnlyWithSafeFallbacks() {
-        assertEquals(
-                java.util.Optional.of(LINKED_DISCORD_LABEL),
-                JdaDiscordGateway.cachedDiscordDisplay("DiscordName")
-        );
-        assertEquals(
-                java.util.Optional.of("Discord: Name＠everyone"),
-                JdaDiscordGateway.cachedDiscordDisplay("Name@everyone")
-        );
-        assertEquals(
-                java.util.Optional.of("Discord: ‹＠unknown-user›"),
-                JdaDiscordGateway.cachedDiscordDisplay("<@unknown-user>")
-        );
-        assertEquals(java.util.Optional.empty(), JdaDiscordGateway.cachedDiscordDisplay(null));
-        assertEquals(java.util.Optional.empty(), JdaDiscordGateway.cachedDiscordDisplay("\n\t"));
-        assertEquals(
-                "[SMP] Player: hello",
-                JdaDiscordGateway.chatContent(chatMessage("hello"), java.util.Optional.empty())
+                "[SMP] **[VIP] Player:** *hello*",
+                JdaDiscordGateway.renderedChatContent(rendered)
         );
     }
 
