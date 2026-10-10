@@ -29,6 +29,7 @@ import net.enthusia.staff.paper.auth.PaperActorResolver;
 import net.enthusia.staff.paper.config.ModerationFeatureSettings;
 import net.enthusia.staff.paper.inventory.ConfiscationCoordinator;
 import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.event.ClickEvent;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
@@ -210,7 +211,9 @@ public final class CaseCommand implements CommandExecutor {
                                 + sanction.endedAt()
                                         .map(value -> " | ended " + formatter.format(value))
                                         .orElse("")
-                ));
+                ).clickEvent(ClickEvent.suggestCommand(
+                        "/unpunish " + sanction.sanctionId() + " "
+                )));
             }
         }
         lines.add(Component.text("Timeline:"));
