@@ -97,10 +97,13 @@ final class AiReviewGuiController implements Listener {
     }
 
     void openHistory(Player viewer) {
-        openHistory(viewer, null, List.of());
+        openHistory(viewer, null, List.of(), AiReviewHistoryFilter.ALL);
     }
 
-    private void openHistory(Player viewer, String cursor, List<String> previousCursors) {
+    private void openHistory(
+            Player viewer, String cursor, List<String> previousCursors,
+            AiReviewHistoryFilter filter
+    ) {
         if (!subsystem.activeDuty(viewer) || !AiReviewPermissions.queue(viewer)) {
             deny(viewer, AiReviewPermissions.QUEUE);
             viewer.closeInventory();
@@ -114,14 +117,14 @@ final class AiReviewGuiController implements Listener {
         message(viewer, "Loading saved AI decisions…", NamedTextColor.GRAY);
         int limit = Math.min(subsystem.configuration().pageSize(), AiReviewGuiRenderer.CONTENT_SLOTS.size());
         subsystem.loadDecisions(
-                limit, cursor,
+                limit, cursor, filter,
                 page -> onEntity(viewer, () -> {
                     if (loadCurrent(viewer, token)
                             && subsystem.activeDuty(viewer)
                             && AiReviewPermissions.queue(viewer)) {
                         open(viewer, new AiReviewGuiState.History(
                                 viewer.getUniqueId(), nextGeneration(viewer),
-                                page.items(), cursor, page.nextCursor(), previousCursors
+                                page.items(), cursor, page.nextCursor(), previousCursors, filter
                         ));
                     }
                 }),
@@ -284,19 +287,23 @@ final class AiReviewGuiController implements Listener {
             openQueue(viewer);
             return;
         }
+        if (slot == AiReviewGuiRenderer.HISTORY_FILTER) {
+            openHistory(viewer, null, List.of(), state.filter().next());
+            return;
+        }
         if (slot == AiReviewGuiRenderer.REFRESH) {
-            openHistory(viewer, state.cursor(), state.previousCursors());
+            openHistory(viewer, state.cursor(), state.previousCursors(), state.filter());
             return;
         }
         if (slot == AiReviewGuiRenderer.PREVIOUS && !state.previousCursors().isEmpty()) {
             var previous = AiReviewHistoryNavigation.previous(state);
-            openHistory(viewer, previous.cursor(), previous.previousCursors());
+            openHistory(viewer, previous.cursor(), previous.previousCursors(), state.filter());
             return;
         }
         if (slot == AiReviewGuiRenderer.NEXT && state.nextCursor() != null
                 && state.previousCursors().size() < AiReviewHistoryNavigation.MAX_PREVIOUS_PAGES) {
             var next = AiReviewHistoryNavigation.next(state);
-            openHistory(viewer, next.cursor(), next.previousCursors());
+            openHistory(viewer, next.cursor(), next.previousCursors(), state.filter());
             return;
         }
         int slotIndex = AiReviewGuiRenderer.CONTENT_SLOTS.indexOf(slot);
@@ -319,7 +326,7 @@ final class AiReviewGuiController implements Listener {
                 AiReviewGuiState.History h = state.historyOrigin();
                 open(viewer, new AiReviewGuiState.History(
                         viewer.getUniqueId(), nextGeneration(viewer), h.items(),
-                        h.cursor(), h.nextCursor(), h.previousCursors()
+                        h.cursor(), h.nextCursor(), h.previousCursors(), h.filter()
                 ));
             } else {
                 openQueue(viewer, state.returnPage(), false);
@@ -589,7 +596,8 @@ final class AiReviewGuiController implements Listener {
                             ? NamedTextColor.GREEN : NamedTextColor.GOLD
             );
             if (historyOrigin != null) {
-                openHistory(viewer, historyOrigin.cursor(), historyOrigin.previousCursors());
+                openHistory(viewer, historyOrigin.cursor(), historyOrigin.previousCursors(),
+                        historyOrigin.filter());
             } else {
                 subsystem.refreshQueue(
                         false,
