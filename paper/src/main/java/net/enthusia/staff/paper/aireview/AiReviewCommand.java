@@ -411,7 +411,7 @@ final class AiReviewCommand implements CommandExecutor, TabCompleter {
     }
 
     private void writeFailure(Player player, String eventId, String issue) {
-        send(player, "No correction was committed: " + issue, NamedTextColor.YELLOW);
+        send(player, AiReviewWriteFeedback.message(issue), NamedTextColor.YELLOW);
         if (!"central review conflict".equals(issue)) {
             return;
         }
