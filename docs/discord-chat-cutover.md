@@ -63,6 +63,37 @@ existing default (no argument) still reads chat settings only from environment
 variables. Do not put secrets on the command line or into tracked repository files.
 See `staff-bot/chat-bridge.properties.example` for placeholders only.
 
+#### Bloom APP FLAGS length limit (private SHADOW only)
+
+The Bloom StaffBot APP FLAGS field has a 200-character maximum. When the
+matching StaffBot JAR includes the reviewed short-option parser, use
+`--chat=c` as an alias for `--chat-bridge-config-file=c`.
+Both forms select the **same** file-backed chat configuration and reject
+empty/duplicate/conflicting options. The short private file `/c` must
+contain the approved outbound-only SHADOW properties with the private TLS
+truststore path. The short option never authorizes AUTHORITATIVE mode.
+
+With `/c` provisioned and readback verified, the proposed production
+flags are **190 characters**:
+
+```text
+--environment=production --token-file=tp --moderation-config-file=m --tunnel-binary-file=cloudflared --tunnel-token-file=prod-tunnel --moderation-web-url=https://staff.enthusia.info --chat=c
+```
+
+**Do not shorten `cloudflared` or `prod-tunnel` filenames.** Both names
+are enforced by `StaffBotRuntime.createTunnel` and
+`CloudflaredStagingTunnel`; merely copying the file bytes to another name
+causes production configuration validation to fail before startup. This
+occurred during the October 9, 2026 private SHADOW activation attempt when
+`--tunnel-token-file=k` was used. The owner restored the previous working
+flags and confirmed StaffBot returned to
+`staff_bot_ready environment=production`. No CHAT/HMAC acceptance was
+proven by that failed attempt. Removing already-proven optional
+`--tls-diagnostic` is appropriate only after its proof is retained.
+Do not use `--chat=c` until a JAR actually containing the short parser has
+been built, reviewed, safely staged, and deployed in a separately
+controlled StaffBot maintenance window.
+
 This option is **not available in previously staged StaffBot PR #465 artifacts**
 until the new file-backed change is reviewed and a new exact-head artifact is built.
 Do not add the argument to the currently running JAR: its parser rejects unknown
@@ -271,3 +302,50 @@ Real rich-render acceptance therefore requires either:
 
 - reviewed trusted dependency onboarding for the exact upstream dependency closure; or
 - a controlled SMP-like staging environment with the real plugins installed.
+
+
+## Independent rich renderer migration candidate (not upstream visual parity)
+
+The optional Paper configuration key
+`discord-chat-bridge.independent-rich-renderer-enabled: true` permits a
+provider-neutral image fallback when InteractiveChat is enabled but its
+DiscordSRV-based rendering addon is absent/unavailable. The existing staging
+addon renderer still takes precedence if available.
+
+The new `IndependentRichChatArtifactProvider` reads InteractiveChat's actual
+configured item/inventory/Ender chest placeholder patterns and permission
+gates through its own API. It snapshots material types, quantities and slot
+positions using the player's entity scheduler, then renders bounded PNG
+slot-cards on the existing worker pool. No DiscordSRV or
+`InteractiveChatDiscordSrvAddon` classes, JDA, tokens, or game texture assets
+are referenced. Rendering errors yield plain text; ordinary Minecraft chat
+continues unchanged. Default is **false**, so existing production behavior is
+unchanged. Changing this configuration requires a separately authorized
+deployment/restart and SHADOW testing.
+
+**Important limitation:** the independent fallback shows material names,
+stack counts and slot positions, not the original addon’s pixel-perfect
+Minecraft item sprites, enchantment glint, lore or custom resource-pack
+textures. It is an actual PNG renderer but does **not** satisfy final visual
+parity by itself. Final physical removal of DiscordSRV still requires owner
+acceptance of a documented rendering difference, or further implementation
+of texture/metadata features, plus the complete acceptance gates in
+[`discordsrv-full-retirement.md`](discordsrv-full-retirement.md).
+
+Staging tests before selecting this fallback as the retained implementation:
+
+1. Activate the new Paper renderer only with the new reviewed JAR, private
+   chat SHADOW, InteractiveChat and RoseChat; test with DiscordSRV **present**
+   while its addon is disabled in the staging plugin set.
+2. Send actual unescaped/escaped/permission-restricted item, inventory and
+   Ender chest placeholders. Compare artifact routing/position to legacy
+   output; explicitly sign off on differences.
+3. Verify no server tick stalls, bounded attachments, duplicates, loops,
+   staff/private channel leakage, or failed-message replay.
+4. Remove both DiscordSRV and its addon from a disposable staging server.
+   Verify safe startup, visual output, plain-chat fallback during faults, and
+   reconnect/shutdown behavior. This **must not** be substituted with isolated
+   unit tests or a Windows-side network probe.
+5. Keep the old DiscordSRV plugin/configuration protected for rollback until
+   every other account-link, role-sync, guild, numeral and console consumer
+   also passes its independent migration gate.

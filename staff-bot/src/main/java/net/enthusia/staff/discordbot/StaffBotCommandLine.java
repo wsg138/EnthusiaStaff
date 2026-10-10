@@ -12,6 +12,8 @@ final class StaffBotCommandLine {
     private static final String ENVIRONMENT_PREFIX = "--environment=";
     private static final String MODERATION_CONFIG_FILE_PREFIX = "--moderation-config-file=";
     private static final String CHAT_SETTINGS_FILE_PREFIX = "--chat-bridge-config-file=";
+    private static final String SHORT_CHAT_SETTINGS_FILE_PREFIX = "--chat=";
+    private static final String TLS_DIAGNOSTIC_FLAG = "--tls-diagnostic";
     private static final String TUNNEL_BINARY_FILE_PREFIX = "--tunnel-binary-file=";
     private static final String TUNNEL_TOKEN_FILE_PREFIX = "--tunnel-token-file=";
     private static final String PREVIEW_WEB_BIND_PREFIX = "--preview-web-bind=";
@@ -24,6 +26,7 @@ final class StaffBotCommandLine {
     private final StaffBotEnvironment environment;
     private final Path moderationConfigFile;
     private final Path chatSettingsFile;
+    private final boolean tlsDiagnostic;
     private final Path tunnelBinaryFile;
     private final Path tunnelTokenFile;
     private final String previewWebBind;
@@ -37,6 +40,7 @@ final class StaffBotCommandLine {
         this.environment = parser.environment;
         this.moderationConfigFile = parser.moderationConfigFile;
         this.chatSettingsFile = parser.chatSettingsFile;
+        this.tlsDiagnostic = parser.tlsDiagnostic;
         this.tunnelBinaryFile = parser.tunnelBinaryFile;
         this.tunnelTokenFile = parser.tunnelTokenFile;
         this.previewWebBind = parser.previewWebBind;
@@ -82,6 +86,10 @@ final class StaffBotCommandLine {
         return Optional.ofNullable(chatSettingsFile);
     }
 
+    boolean tlsDiagnostic() {
+        return tlsDiagnostic;
+    }
+
     boolean fileBackedStartup() {
         return !stagingUiPreview && tokenFile != null && moderationConfigFile != null;
     }
@@ -113,6 +121,7 @@ final class StaffBotCommandLine {
                 + ", tokenFile=" + configured(tokenFile)
                 + ", moderationConfigFile=" + configured(moderationConfigFile)
                 + ", chatSettingsFile=" + configured(chatSettingsFile)
+                + ", tlsDiagnostic=" + tlsDiagnostic
                 + ", tunnelBinaryFile=" + configured(tunnelBinaryFile)
                 + ", tunnelTokenFile=" + configured(tunnelTokenFile)
                 + ", previewWebBind=" + configured(previewWebBind)
@@ -162,6 +171,7 @@ final class StaffBotCommandLine {
         private StaffBotEnvironment environment;
         private Path moderationConfigFile;
         private Path chatSettingsFile;
+        private boolean tlsDiagnostic;
         private Path tunnelBinaryFile;
         private Path tunnelTokenFile;
         private String previewWebBind;
@@ -176,6 +186,10 @@ final class StaffBotCommandLine {
         }
 
         private boolean acceptFlag(String argument) {
+            if (TLS_DIAGNOSTIC_FLAG.equals(argument)) {
+                tlsDiagnostic = setOnce(tlsDiagnostic);
+                return true;
+            }
             if (SMOKE_TEST_ARGUMENT.equals(argument)) {
                 smokeTest = setOnce(smokeTest);
                 return true;
@@ -194,6 +208,10 @@ final class StaffBotCommandLine {
             }
             if (argument.startsWith(CHAT_SETTINGS_FILE_PREFIX)) {
                 chatSettingsFile = setPathOnce(chatSettingsFile, argument, CHAT_SETTINGS_FILE_PREFIX);
+                return true;
+            }
+            if (argument.startsWith(SHORT_CHAT_SETTINGS_FILE_PREFIX)) {
+                chatSettingsFile = setPathOnce(chatSettingsFile, argument, SHORT_CHAT_SETTINGS_FILE_PREFIX);
                 return true;
             }
             if (argument.startsWith(MODERATION_CONFIG_FILE_PREFIX)) {
@@ -264,17 +282,30 @@ final class StaffBotCommandLine {
         }
 
         private void validatePreviewMode() {
-            if (tokenFile == null || environment != null || moderationWebUrl != null) {
+            if (tokenFile == null || environment != null || moderationWebUrl != null
+                    || tlsDiagnostic) {
                 throw invalidArguments();
             }
         }
 
         private void validateNormalMode(boolean tunnelRequested) {
             validateNoPreviewOptions(tunnelRequested);
+            validateDiagnosticMode();
             validateFilePair();
             if (environment != null && tokenFile == null) {
                 throw invalidArguments();
             }
+            validateProductionWebMode(tunnelRequested);
+        }
+
+        private void validateDiagnosticMode() {
+            if (tlsDiagnostic && (smokeTest || environment != StaffBotEnvironment.PRODUCTION
+                    || tokenFile == null || moderationConfigFile == null)) {
+                throw invalidArguments();
+            }
+        }
+
+        private void validateProductionWebMode(boolean tunnelRequested) {
             if (moderationWebUrl != null && (environment != StaffBotEnvironment.PRODUCTION
                     || !tunnelRequested || tokenFile == null)) {
                 throw invalidArguments();

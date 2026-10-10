@@ -19,7 +19,7 @@ authorizes production deployment, restarts, role mutations, or deletion.
 | LumaGuilds Discord guild roles | PR #6 merged into an *integration branch* for shadow publication; this is not production retirement. | Reconcile current deployed Luma artifact, migrate remaining DiscordSRV link + JDA role writers, shadow-compare, enable owned role mutations, verify guild lifecycle and safe rollback. |
 | PlayTime numeral roles | PR #30 merged provider-neutral seam; #27 remains open; default branch still has `DiscordSrvNumeralRoleProvider` and explicit legacy preference when installed. | Agree authoritative branch/artifact; remove live DiscordSRV writer and direct imports for final consumer; prove all tier/alt/link/unlink/restart and highest-role parity. |
 | Discord console | Replacement work tracked in closed #267; legacy DiscordSRV console/command forwarding is enabled in the inspected live config. | Prove audited, authorized, allowlisted bridge in staging and approve new production console command ownership; verify no legacy command behavior disappears. |
-| InteractiveChat rich artifacts | Current `InteractiveChatStagingArtifactProvider` reflects into `InteractiveChatDiscordSrvAddon`, which itself hard-depends on DiscordSRV. Dedicated work: #474. | Build/review a truly independent renderer or approved replacement; test item/inventory/Ender chest rendering and plain fallback **with both DiscordSRV and the old addon absent**. This is a hard uninstall blocker. |
+| InteractiveChat rich artifacts | Existing `InteractiveChatStagingArtifactProvider` reflects into the hard-dependent Discord addon. Draft #475 adds an opt-in independent Java2D slot-card fallback (item names/counts, not sprites). It is built and unit-tested but NOT production-tested or pixel-fidelity accepted. Dedicated work: #474. | Verify independent renderer and explicit visual acceptance in a real isolated environment with **both DiscordSRV and addon absent**. Do not confuse compiled fallback with feature parity. |
 | RoseChat / remaining plugins | Provider-neutral outbound/inbound bridge exists; other plugin hooks and runtime configuration may still depend on DiscordSRV. | Scan all live server/plugin manifests and code/config; verify mute/AI moderation, private/staff isolation, reconnect, mentions, and no duplicated messages. |
 
 **Closed GitHub issues represent implementation checkpoints, not proof of live
@@ -31,12 +31,46 @@ JAR contains the feature. Record exact deployed artifact hashes and versions.
 A Java 21, read-only scanner lives at
 [`tools/discordsrv-retirement-preflight/`](../tools/discordsrv-retirement-preflight/README.md).
 Run it against a complete **authorized staging copy** of every Paper server's
-`plugins` folder. Record JAR names and `BLOCKER` / `UNVERIFIED` results.
+`plugins` folder. Record `HARD_DEPENDENCY`, `SOFT_DEPENDENCY`, `REFERENCE`,
+`BYTECODE_REFERENCE`, and `UNVERIFIED` findings. All findings remain fail-closed; even `SOFT_DEPENDENCY`
+is **not** proof that removing the plugin preserves its feature behavior.
 There is deliberately no deletion mode.
 
-A manifest scan cannot detect all bytecode/reflection/runtime consumers.
-Search each Enthusia repository, deployment inventory, and running configuration
-for DiscordSRV hooks and the old addon, then inspect actual behavior.
+**Full SMP static JAR inventory, October 9, 2026:** the owner ran the
+bounded read-only SFTP snapshot of all **103** live SMP plugin JARs into a
+private local directory. The upgraded analyzer completed on the downloaded
+copies, with **0 unverifiable JARs** and **0 bytecode-only additional plugins**.
+It reported one installed DiscordSRV JAR, **one hard dependency**, and **nine
+soft dependencies**. Every one of the ten dependent plugin JARs also contained
+the `DiscordSRV` literal in compiled class bytes; bytecode matches **overlap**
+the manifest classifications and are not ten more plugins. No server files,
+private configurations, processes, or Discord roles were changed.
+
+| Manifest classification | Actual SMP plugin JAR | Retirement work to verify |
+| --- | --- | --- |
+| HARD | InteractiveChatDiscordSrvAddon 2026.1.1.0 | Must be removed/replaced on a separately tested DiscordSRV-free staging Paper build; compare native renderer to current graphical behavior. |
+| SOFT | EnthusiaAdvancements pilot.6 | Audit advancement-to-Discord side effects and whether they must be migrated to provider-neutral transport. |
+| SOFT | EnthusiaPlaytime 3.7.2 | Eliminate legacy numeral-role writes and DiscordSRV account lookup; exercise link, alt and only-highest-role parity. |
+| SOFT | EnthusiaStaff AuthorityBridge | Verify account-link compatibility/transition importer can be retired without losing canonical links. |
+| SOFT | EnthusiaStaff Paper | Remove remaining optional legacy hooks only after replacement services and readiness handling are accepted. |
+| SOFT | InteractiveChat 2026.1.1.0 | Verify native Minecraft placeholder/chat behavior when DiscordSRV and addon are absent. |
+| SOFT | LumaGuilds 3.0.23 | Audit link and guild-role mutation dependency; keep live LumaGuilds unchanged until separately authorized adapter and parity are ready. |
+| SOFT | OreAnnouncer 2.8.5 | Inspect what Discord notifications, if any, depend on DiscordSRV; preserve intended behavior or explicitly approve its retirement. |
+| SOFT | Plan 5.8 | Inspect its DiscordSRV extension/hook; confirm the analytics behavior without legacy plugin. |
+| SOFT | RoseChat RC-4 | Preserve mute/moderation and chat source behavior; verify legacy suppression/fallback and incoming routing. |
+
+**Static inventory result: BLOCKED.** All 103 SMP JAR copies were inspected,
+but this is **not** a complete network inventory, nor a functional test. Check
+every other Minecraft Paper server separately, and verify each item above under
+a live, isolated staging runtime. Do not infer compatibility solely from a
+soft dependency or a compiled symbol. The 2026-10-09 scan supersedes the
+earlier four-JAR sample, which was not exhaustive.
+
+The scanner also checks bounded compiled class bytes for `DiscordSRV`
+(case-insensitive). Matches can be harmless constants; misses can occur through
+obfuscation, dynamic loading or configuration-only integration. Search each
+Enthusia repository, deployment inventory and running configuration for
+DiscordSRV hooks and the old addon, then inspect actual behavior.
 
 ## Gates (every item required, with proof)
 

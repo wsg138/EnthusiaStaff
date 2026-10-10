@@ -9,6 +9,9 @@ import java.nio.file.Path;
 import org.junit.jupiter.api.Test;
 
 class StaffBotCommandLineTest {
+    private static final String PRODUCTION_ENVIRONMENT_ARGUMENT = "--environment=production";
+    private static final String TLS_DIAGNOSTIC_ARGUMENT = "--tls-diagnostic";
+    private static final String SHORT_CHAT_FILE_ARGUMENT = "--chat=c";
     private static final String PREVIEW_ARGUMENT = "--staging-ui-preview";
     private static final String SMOKE_TEST_ARGUMENT = "--smoke-test";
     private static final String TOKEN_FILE_NAME = "staging-bot-token.txt";
@@ -67,7 +70,7 @@ class StaffBotCommandLineTest {
     @Test
     void productionWebRequiresProductionBotAndDedicatedTunnelFiles() {
         StaffBotCommandLine commandLine = StaffBotCommandLine.parse(new String[] {
-                "--environment=production", TOKEN_FILE_ARGUMENT, MODERATION_FILE_ARGUMENT,
+                PRODUCTION_ENVIRONMENT_ARGUMENT, TOKEN_FILE_ARGUMENT, MODERATION_FILE_ARGUMENT,
                 TUNNEL_BINARY_ARGUMENT, "--tunnel-token-file=prod-tunnel",
                 MODERATION_WEB_URL_ARGUMENT
         });
@@ -130,7 +133,7 @@ class StaffBotCommandLineTest {
     @Test
     void acceptsSeparatePrivateChatConfigurationWithoutChangingProductionFlags() {
         StaffBotCommandLine parsed = StaffBotCommandLine.parse(new String[] {
-                "--environment=production",
+                PRODUCTION_ENVIRONMENT_ARGUMENT,
                 TOKEN_FILE_ARGUMENT,
                 MODERATION_FILE_ARGUMENT,
                 TUNNEL_BINARY_ARGUMENT,
@@ -150,6 +153,70 @@ class StaffBotCommandLineTest {
                         "--chat-bridge-config-file=a",
                         "--chat-bridge-config-file=b"
                 }));
+    }
+
+    @Test
+    void shortChatOptionFitsBloomLimitWithoutChangingPinnedProductionTunnelNames() {
+        String startupFlags = "--environment=production --token-file=tp"
+                + " --moderation-config-file=m --tunnel-binary-file=cloudflared"
+                + " --tunnel-token-file=prod-tunnel"
+                + " --moderation-web-url=https://staff.enthusia.info " + SHORT_CHAT_FILE_ARGUMENT;
+        assertTrue(startupFlags.length() <= 200);
+
+        StaffBotCommandLine parsed = StaffBotCommandLine.parse(startupFlags.split(" "));
+        assertEquals(StaffBotEnvironment.PRODUCTION, parsed.environment().orElseThrow());
+        assertEquals(Path.of("c"), parsed.chatSettingsFile().orElseThrow());
+        assertEquals(Path.of("cloudflared"), parsed.tunnelFiles().orElseThrow().binaryFile());
+        assertEquals(Path.of("prod-tunnel"), parsed.tunnelFiles().orElseThrow().tokenFile());
+        assertEquals(Path.of("m"), parsed.moderationConfigFile().orElseThrow());
+        assertEquals(Path.of("tp"), parsed.tokenFile().orElseThrow());
+        assertEquals("https://staff.enthusia.info", parsed.moderationWebUrl().orElseThrow());
+        assertFalse(parsed.tlsDiagnostic());
+        assertFalse(parsed.toString().contains(SHORT_CHAT_FILE_ARGUMENT));
+        assertTrue(parsed.toString().contains("chatSettingsFile=<configured>"));
+
+        assertThrows(IllegalArgumentException.class,
+                () -> StaffBotCommandLine.parse(new String[] {"--chat="}));
+        assertThrows(IllegalArgumentException.class,
+                () -> StaffBotCommandLine.parse(new String[] {SHORT_CHAT_FILE_ARGUMENT, "--chat=d"}));
+        assertThrows(IllegalArgumentException.class,
+                () -> StaffBotCommandLine.parse(new String[] {
+                        SHORT_CHAT_FILE_ARGUMENT, "--chat-bridge-config-file=d"
+                }));
+        assertThrows(IllegalArgumentException.class,
+                () -> StaffBotCommandLine.parse(new String[] {
+                        "--chat-bridge-config-file=d", SHORT_CHAT_FILE_ARGUMENT
+                }));
+    }
+
+    @Test
+    void diagnosticMayRunOnlyWithProductionBotAndPreservesModerationArguments() {
+        StaffBotCommandLine commandLine = StaffBotCommandLine.parse(new String[] {
+                PRODUCTION_ENVIRONMENT_ARGUMENT, TOKEN_FILE_ARGUMENT, MODERATION_FILE_ARGUMENT,
+                TLS_DIAGNOSTIC_ARGUMENT
+        });
+        assertTrue(commandLine.tlsDiagnostic());
+        assertTrue(commandLine.chatSettingsFile().isEmpty());
+        assertFalse(commandLine.toString().contains("tlsDiagnosticFile"));
+        assertTrue(commandLine.toString().contains("tlsDiagnostic=true"));
+        assertThrows(IllegalArgumentException.class, () -> StaffBotCommandLine.parse(new String[] {
+                TLS_DIAGNOSTIC_ARGUMENT
+        }));
+        assertThrows(IllegalArgumentException.class, () -> StaffBotCommandLine.parse(new String[] {
+                TOKEN_FILE_ARGUMENT, MODERATION_FILE_ARGUMENT,
+                TLS_DIAGNOSTIC_ARGUMENT
+        }));
+        assertThrows(IllegalArgumentException.class, () -> StaffBotCommandLine.parse(new String[] {
+                PREVIEW_ARGUMENT, TOKEN_FILE_ARGUMENT, TLS_DIAGNOSTIC_ARGUMENT
+        }));
+        assertThrows(IllegalArgumentException.class, () -> StaffBotCommandLine.parse(new String[] {
+                PRODUCTION_ENVIRONMENT_ARGUMENT, TOKEN_FILE_ARGUMENT, MODERATION_FILE_ARGUMENT,
+                TLS_DIAGNOSTIC_ARGUMENT, TLS_DIAGNOSTIC_ARGUMENT
+        }));
+        assertThrows(IllegalArgumentException.class, () -> StaffBotCommandLine.parse(new String[] {
+                PRODUCTION_ENVIRONMENT_ARGUMENT, TOKEN_FILE_ARGUMENT, MODERATION_FILE_ARGUMENT,
+                TLS_DIAGNOSTIC_ARGUMENT, SMOKE_TEST_ARGUMENT
+        }));
     }
 
     @Test
