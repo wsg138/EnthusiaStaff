@@ -10,7 +10,7 @@ import org.junit.jupiter.api.Test;
 class StaffModeDeathWiringTest {
     @Test
     void paperRuntimeRegistersDeathContainmentListener() throws IOException {
-        String runtime = Files.readString(paperModule().resolve(
+        String runtime = normalizedSource(paperModule().resolve(
                 "src/main/java/net/enthusia/staff/paper/PaperRuntimeComponents.java"
         ));
 
@@ -22,7 +22,7 @@ class StaffModeDeathWiringTest {
 
     @Test
     void deathListenerContainsBeforeNormalDeathLifecycleAndUsesDurableExit() throws IOException {
-        String listener = Files.readString(paperModule().resolve(
+        String listener = normalizedSource(paperModule().resolve(
                 "src/main/java/net/enthusia/staff/paper/staff/StaffModeDeathListener.java"
         ));
 
@@ -45,7 +45,7 @@ class StaffModeDeathWiringTest {
 
     @Test
     void deathDuringAnotherStaffTransitionIsRetriedAfterTheGateReleases() throws IOException {
-        String listener = Files.readString(paperModule().resolve(
+        String listener = normalizedSource(paperModule().resolve(
                 "src/main/java/net/enthusia/staff/paper/staff/StaffModeDeathListener.java"
         ));
 
@@ -65,13 +65,13 @@ class StaffModeDeathWiringTest {
     @Test
     void internalCompletedDeathConsumersIgnoreCancelledStaffDeaths() throws IOException {
         Path root = repositoryRoot();
-        String tester = Files.readString(paperModule().resolve(
+        String tester = normalizedSource(paperModule().resolve(
                 "src/main/java/net/enthusia/staff/paper/tester/CheatTesterLifecycleListener.java"
         ));
-        String stalk = Files.readString(root.resolve(
+        String stalk = normalizedSource(root.resolve(
                 "components/enthusia-commend/src/main/java/org/enthusia/rep/stalk/StalkManager.java"
         ));
-        String balance = Files.readString(root.resolve(
+        String balance = normalizedSource(root.resolve(
                 "components/enthusia-currency/src/main/java/com/enthusia/enthusiacurrency/item/ItemBalanceTracker.java"
         ));
 
@@ -90,6 +90,11 @@ class StaffModeDeathWiringTest {
                         + "    public void onDeath(PlayerDeathEvent event)"),
                 "Cancelled Staff Mode death events must not schedule item-balance death scans"
         );
+    }
+
+    /** Source-shape assertions must be stable for both CRLF Windows and LF CI checkouts. */
+    private static String normalizedSource(Path path) throws IOException {
+        return Files.readString(path).replace("\r\n", "\n");
     }
 
     private static Path paperModule() {
