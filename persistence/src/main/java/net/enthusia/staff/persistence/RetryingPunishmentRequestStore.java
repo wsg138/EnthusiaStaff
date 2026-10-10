@@ -61,6 +61,11 @@ final class RetryingPunishmentRequestStore implements PunishmentRequestStore {
     }
 
     @Override
+    public boolean abandon(PunishmentApprovalLease lease) {
+        return retry.execute(INTERRUPTED, () -> delegate.abandon(lease));
+    }
+
+    @Override
     public PunishmentRequestResult approve(
             PunishmentApprovalLease lease,
             Actor approver,
