@@ -36,10 +36,22 @@ sealed interface AiReviewGuiState {
             List<DecisionHistoryItem> items,
             String cursor,
             String nextCursor,
-            List<String> previousCursors
+            List<String> previousCursors,
+            AiReviewHistoryFilter filter
     ) implements AiReviewGuiState {
+        public History(
+                UUID viewerId, long generation, List<DecisionHistoryItem> items,
+                String cursor, String nextCursor, List<String> previousCursors
+        ) {
+            this(viewerId, generation, items, cursor, nextCursor,
+                    previousCursors, AiReviewHistoryFilter.ALL);
+        }
+
         public History {
             requireViewer(viewerId, generation);
+            if (filter == null) {
+                throw new IllegalArgumentException("history filter required");
+            }
             items = List.copyOf(items == null ? List.of() : items);
             previousCursors = List.copyOf(
                     previousCursors == null ? List.of() : previousCursors
