@@ -140,6 +140,34 @@ class PunishmentSanctionRoutesTest {
     }
 
     @Test
+    void legacyUnwarnListsWarningsOnlyAndExcludesTerminalSanctions() {
+        var now = java.time.Instant.parse("2026-10-10T12:00:00Z");
+        var warning = new net.enthusia.staff.domain.casefile.SanctionReview(
+                java.util.UUID.randomUUID(),
+                net.enthusia.staff.domain.sanction.SanctionType.WARNING,
+                net.enthusia.staff.domain.sanction.SanctionStatus.APPLIED,
+                now, java.util.Optional.empty(), java.util.Optional.empty(), 0);
+        var ban = new net.enthusia.staff.domain.casefile.SanctionReview(
+                java.util.UUID.randomUUID(),
+                net.enthusia.staff.domain.sanction.SanctionType.BAN,
+                net.enthusia.staff.domain.sanction.SanctionStatus.ACTIVE,
+                now, java.util.Optional.empty(), java.util.Optional.empty(), 0);
+        var revokedWarning = new net.enthusia.staff.domain.casefile.SanctionReview(
+                java.util.UUID.randomUUID(),
+                net.enthusia.staff.domain.sanction.SanctionType.WARNING,
+                net.enthusia.staff.domain.sanction.SanctionStatus.REVOKED,
+                now, java.util.Optional.empty(), java.util.Optional.empty(), 1);
+        var warnings = net.enthusia.staff.paper.sanction.SanctionChangeAccess.aliasTypes("unwarn");
+        assertTrue(ExactSanctionPickerGui.selectable(warning, warnings));
+        assertFalse(ExactSanctionPickerGui.selectable(ban, warnings));
+        assertFalse(ExactSanctionPickerGui.selectable(revokedWarning, warnings));
+        assertTrue(ExactSanctionPickerGui.selectable(ban,
+                net.enthusia.staff.paper.sanction.SanctionChangeAccess.aliasTypes("unban")));
+        assertFalse(ExactSanctionPickerGui.selectable(warning,
+                net.enthusia.staff.paper.sanction.SanctionChangeAccess.aliasTypes("unmute")));
+    }
+
+    @Test
     void pickerUsesOnePersistedSanctionAndAuditConfirmation() throws IOException {
         String source = Files.readString(Path.of(
                 "src/main/java/net/enthusia/staff/paper/command/ExactSanctionPickerGui.java"
