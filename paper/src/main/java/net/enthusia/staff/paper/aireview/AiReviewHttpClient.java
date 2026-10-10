@@ -94,14 +94,14 @@ final class AiReviewHttpClient implements AiReviewClient {
     }
 
     private String historyPath(int bounded, String cursor, AiReviewHistoryFilter filter) {
-        String path = "/v1/decisions?limit=" + bounded;
+        StringBuilder path = new StringBuilder("/v1/decisions?limit=").append(bounded);
         if (cursor != null) {
-            path += "&cursor=" + encode(cursor);
+            path.append("&cursor=").append(encode(cursor));
         }
         if (filter != AiReviewHistoryFilter.ALL) {
-            path += "&filter=" + encode(filter.apiValue());
+            path.append("&filter=").append(encode(filter.apiValue()));
         }
-        return path;
+        return path.toString();
     }
 
     private JsonNode historyResponse(String path, String cursor) {
