@@ -74,21 +74,48 @@ final class AiReviewHttpClient implements AiReviewClient {
 
     @Override
     public DecisionHistoryPage listDecisions(int limit, String cursor) {
-        int bounded = Math.max(1, Math.min(limit, configuration.reviewLimit()));
-        if (cursor != null && (cursor.isBlank() || cursor.length() > 64)) {
+        return listDecisions(limit, cursor, AiReviewHistoryFilter.ALL);
+    }
+
+    @Override
+    public DecisionHistoryPage listDecisions(
+            int limit, String cursor, AiReviewHistoryFilter filter
+    ) {
+        int bounded = historyLimit(limit, cursor, filter);
+        JsonNode root = historyResponse(historyPath(bounded, cursor, filter), cursor);
+        return parseHistoryPage(root, bounded);
+    }
+
+    private int historyLimit(int limit, String cursor, AiReviewHistoryFilter filter) {
+        if (filter == null || (cursor != null && (cursor.isBlank() || cursor.length() > 64))) {
             throw new AiReviewClientException(Category.MALFORMED);
         }
-        String path = "/v1/decisions?limit=" + bounded
-                + (cursor == null ? "" : "&cursor=" + encode(cursor));
-        JsonNode root;
+        return Math.max(1, Math.min(limit, configuration.reviewLimit()));
+    }
+
+    private String historyPath(int bounded, String cursor, AiReviewHistoryFilter filter) {
+        StringBuilder path = new StringBuilder("/v1/decisions?limit=").append(bounded);
+        if (cursor != null) {
+            path.append("&cursor=").append(encode(cursor));
+        }
+        if (filter != AiReviewHistoryFilter.ALL) {
+            path.append("&filter=").append(encode(filter.apiValue()));
+        }
+        return path.toString();
+    }
+
+    private JsonNode historyResponse(String path, String cursor) {
         try {
-            root = request("GET", path, null, 200);
+            return request("GET", path, null, 200);
         } catch (AiReviewClientException exception) {
             if (exception.category() == Category.NOT_FOUND && cursor != null) {
                 throw new AiReviewClientException(Category.INVALID_CURSOR, exception);
             }
             throw exception;
         }
+    }
+
+    private DecisionHistoryPage parseHistoryPage(JsonNode root, int bounded) {
         JsonNode items = requiredArray(root, "items");
         if (items.size() > bounded) {
             throw new AiReviewClientException(Category.MALFORMED);

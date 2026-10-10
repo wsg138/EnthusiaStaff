@@ -32,8 +32,74 @@ neither classified nor stored. Connection failure, saturation and database
 failure cannot be guaranteed durably logged. Canonical mirrored messages
 are represented by one event rather than duplicating training observations.
 
-This first phase is a **staff command and typed HTTP read client**, not yet a
-new in-game inventory GUI, and is not a reviewed dataset export. Full GUI
-browse/filter, correction labelling, retention/backups and rights-checked,
-anonymized training promotion are separate follow-up tasks. Never fine-tune
-on unreviewed AI guesses or upload raw private-player conversations publicly.
+The base draft PR #477 provides a **staff command and typed HTTP read
+client**. The separate stacked GUI draft adds an inventory browser for players:
+`/aireview history` opens **All Decisions**, and the existing flagged queue
+has an **All Decisions** switch. ALLOW/BLOCK entries use distinguishable items;
+previous/next controls load cursor pages, and clicking an event opens the
+existing authorized detail view. Back from that view returns to the same
+cached history page, **including after visiting the label picker or correction
+confirmation**. Successful corrections refresh the originating history cursor
+page. History-related failure/conflict handling preserves the originating
+page instead of unexpectedly redirecting to the flagged queue. The history
+inventory is read-only and only records decision summaries, not raw chat.
+
+The GUI's **Filter** hopper cycles `All → Allowed → Blocked → Needs Review →
+Fail-open → Corrected → All`. Filter predicates run in the central API,
+never only against the visible page, and switching filters always resets the
+cursor to page one. Previous/Next/Refresh and the post-correction return path
+retain the selected filter. `Allowed` intentionally excludes fail-open records
+but does not certify correctness. The API extension is part of the draft
+[AI-Moderation-API #87](https://github.com/wsg138/AI-Moderation-API/pull/87)
+and is required for the filters to work after staging deployment.
+
+GUI loads use the existing bounded async client and generation fencing:
+active staff duty, queue permission and the current view generation are
+checked again in the final player-scheduler task before rendering and before
+responding to clicks. Event detail access still
+requires the separate detail permission. All stored pages are immutable,
+with cursor stacks bounded to 50 previous pages. No additional staff or
+console permissions are granted. Explicit-cursor player commands and console
+requests retain the compact text pagination path.
+
+## Staging acceptance — not executed
+
+Before anybody enables or merges these draft changes, use an **isolated,
+authorized staging server** with a central API sandbox holding synthetic
+audit events only. Do not point the test at live player private messages.
+
+1. Verify an active-duty staff member with queue-read permission can switch
+   between **Flagged Queue** and **All Decisions**.
+2. Verify an unflagged ALLOW shows green, an enforced BLOCK shows red, an
+   ALLOW requiring staff review shows yellow, and a stored FAIL_OPEN shows
+   gray with the explicit note that it was **not verified safe**.
+3. Generate enough synthetic events for three pages. Test Next → Next →
+   Previous → Previous and Refresh. Cycle each of the six server-side filters;
+   confirm excluded entries never appear, that filtered pages are complete,
+   and switching filters resets to page one. Check that no item is skipped,
+   repeated unexpectedly, or paired with the wrong event.
+4. Open an event from page two, then return. Verify the same cursor page
+   remains visible; repeat through label selection, confirmation, and
+   correction failure/conflict. Confirm an accepted correction refreshes the
+   origin page without mutating the original AI decision.
+5. Revoke active staff duty or read permission while a history request is
+   outstanding. Ensure the result is not opened or disclosed. Revoke detail
+   permission before clicking an event and confirm sensitive content stays
+   inaccessible.
+6. Simulate an unknown/expired cursor, unavailable API, and fail-open
+   condition. History browsing must not back off unrelated review actions or
+   claim messages were blocked when they were delivered.
+7. Confirm the history list has **no raw chat text, sender IDs or neighbor
+   messages**, and ticket/staff-exempt content remains absent entirely.
+8. Exercise a queued correction only with synthetic records and authorized
+   staff. Verify the existing correction quorum still controls writes and
+   no action creates punishment or changes live moderation policy.
+
+Capture exact draft SHAs, test output, and a **redacted** staging receipt.
+Any failed acceptance step keeps the PR draft. Staging acceptance is separate
+from GitHub CI and does not authorize production deployment.
+
+This is not a reviewed dataset export. Advanced GUI filtering, retention /
+backups and rights-checked anonymized training promotion remain follow-ups.
+Never fine-tune on unreviewed AI guesses or upload raw private-player
+conversations publicly.

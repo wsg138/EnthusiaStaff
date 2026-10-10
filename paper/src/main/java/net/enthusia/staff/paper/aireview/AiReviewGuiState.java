@@ -3,6 +3,7 @@ package net.enthusia.staff.paper.aireview;
 import java.util.List;
 import java.util.UUID;
 import net.enthusia.staff.paper.aireview.AiReviewModels.CorrectionDecision;
+import net.enthusia.staff.paper.aireview.AiReviewModels.DecisionHistoryItem;
 import net.enthusia.staff.paper.aireview.AiReviewModels.EventDetails;
 import net.enthusia.staff.paper.aireview.AiReviewModels.ReviewItem;
 
@@ -28,12 +29,52 @@ sealed interface AiReviewGuiState {
         }
     }
 
+    /** Read-only cursor page. Blank stack entries represent the first page. */
+    record History(
+            UUID viewerId,
+            long generation,
+            List<DecisionHistoryItem> items,
+            String cursor,
+            String nextCursor,
+            List<String> previousCursors,
+            AiReviewHistoryFilter filter
+    ) implements AiReviewGuiState {
+        public History(
+                UUID viewerId, long generation, List<DecisionHistoryItem> items,
+                String cursor, String nextCursor, List<String> previousCursors
+        ) {
+            this(viewerId, generation, items, cursor, nextCursor,
+                    previousCursors, AiReviewHistoryFilter.ALL);
+        }
+
+        public History {
+            requireViewer(viewerId, generation);
+            if (filter == null) {
+                throw new IllegalArgumentException("history filter required");
+            }
+            items = List.copyOf(items == null ? List.of() : items);
+            previousCursors = List.copyOf(
+                    previousCursors == null ? List.of() : previousCursors
+            );
+            if (previousCursors.size() > AiReviewHistoryNavigation.MAX_PREVIOUS_PAGES
+                    || (cursor != null && (cursor.isBlank() || cursor.length() > 64))
+                    || (nextCursor != null && (nextCursor.isBlank() || nextCursor.length() > 64))) {
+                throw new IllegalArgumentException("invalid history paging state");
+            }
+        }
+    }
+
     record Detail(
             UUID viewerId,
             long generation,
             EventDetails details,
-            int returnPage
+            int returnPage,
+            History historyOrigin
     ) implements AiReviewGuiState {
+        public Detail(UUID viewerId, long generation, EventDetails details, int returnPage) {
+            this(viewerId, generation, details, returnPage, null);
+        }
+
         public Detail {
             requireViewer(viewerId, generation);
             if (details == null || returnPage < 0) {
@@ -48,8 +89,16 @@ sealed interface AiReviewGuiState {
             EventDetails details,
             int returnPage,
             List<String> labels,
-            int page
+            int page,
+            History historyOrigin
     ) implements AiReviewGuiState {
+        public LabelPicker(
+                UUID viewerId, long generation, EventDetails details,
+                int returnPage, List<String> labels, int page
+        ) {
+            this(viewerId, generation, details, returnPage, labels, page, null);
+        }
+
         public LabelPicker {
             requireViewer(viewerId, generation);
             if (details == null || returnPage < 0 || page < 0) {
@@ -68,8 +117,18 @@ sealed interface AiReviewGuiState {
             CorrectionDecision decision,
             String proposalId,
             String description,
-            boolean adminRequested
+            boolean adminRequested,
+            History historyOrigin
     ) implements AiReviewGuiState {
+        public Confirm(
+                UUID viewerId, long generation, EventDetails details,
+                int returnPage, WriteKind kind, CorrectionDecision decision,
+                String proposalId, String description, boolean adminRequested
+        ) {
+            this(viewerId, generation, details, returnPage, kind, decision,
+                    proposalId, description, adminRequested, null);
+        }
+
         public Confirm {
             requireViewer(viewerId, generation);
             if (details == null || returnPage < 0 || kind == null || description == null || description.isBlank()) {

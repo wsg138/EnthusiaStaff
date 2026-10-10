@@ -16,6 +16,15 @@ interface AiReviewClient {
         throw new AiReviewClientException(AiReviewClientException.Category.UNAVAILABLE);
     }
 
+    default DecisionHistoryPage listDecisions(
+            int limit, String cursor, AiReviewHistoryFilter filter
+    ) {
+        if (filter == AiReviewHistoryFilter.ALL) {
+            return listDecisions(limit, cursor);
+        }
+        throw new AiReviewClientException(AiReviewClientException.Category.UNAVAILABLE);
+    }
+
 
     EventDetails event(String eventId);
 

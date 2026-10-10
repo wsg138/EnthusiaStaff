@@ -96,7 +96,49 @@ final class AiReviewGuiController implements Listener {
         }
     }
 
+    void openHistory(Player viewer) {
+        openHistory(viewer, null, List.of(), AiReviewHistoryFilter.ALL);
+    }
+
+    private void openHistory(
+            Player viewer, String cursor, List<String> previousCursors,
+            AiReviewHistoryFilter filter
+    ) {
+        if (!subsystem.activeDuty(viewer) || !AiReviewPermissions.queue(viewer)) {
+            deny(viewer, AiReviewPermissions.QUEUE);
+            viewer.closeInventory();
+            return;
+        }
+        if (!subsystem.enabled()) {
+            message(viewer, subsystem.disabledReason(), NamedTextColor.GRAY);
+            return;
+        }
+        UUID token = beginLoad(viewer);
+        message(viewer, "Loading saved AI decisions…", NamedTextColor.GRAY);
+        int limit = Math.min(subsystem.configuration().pageSize(), AiReviewGuiRenderer.CONTENT_SLOTS.size());
+        subsystem.loadDecisions(
+                limit, cursor, filter,
+                page -> onEntity(viewer, () -> {
+                    if (loadCurrent(viewer, token)
+                            && subsystem.activeDuty(viewer)
+                            && AiReviewPermissions.queue(viewer)) {
+                        open(viewer, new AiReviewGuiState.History(
+                                viewer.getUniqueId(), nextGeneration(viewer),
+                                page.items(), cursor, page.nextCursor(), previousCursors, filter
+                        ));
+                    }
+                }),
+                issue -> loadFailed(viewer, token, issue)
+        );
+    }
+
     void openEvent(Player viewer, String eventId, int returnPage) {
+        openEvent(viewer, eventId, returnPage, null);
+    }
+
+    private void openEvent(
+            Player viewer, String eventId, int returnPage, AiReviewGuiState.History historyOrigin
+    ) {
         if (!subsystem.activeDuty(viewer)) {
             message(viewer, "AI review requires active staff mode.", NamedTextColor.RED);
             viewer.closeInventory();
@@ -118,7 +160,8 @@ final class AiReviewGuiController implements Listener {
                                 viewer.getUniqueId(),
                                 nextGeneration(viewer),
                                 details,
-                                returnPage
+                                returnPage,
+                                historyOrigin
                         ));
                     }
                 }),
@@ -153,6 +196,7 @@ final class AiReviewGuiController implements Listener {
             return;
         }
         if (!(state instanceof AiReviewGuiState.Queue)
+                && !(state instanceof AiReviewGuiState.History)
                 && !AiReviewPermissions.detail(viewer)) {
             viewer.closeInventory();
             return;
@@ -165,6 +209,8 @@ final class AiReviewGuiController implements Listener {
         }
         if (state instanceof AiReviewGuiState.Queue queue) {
             queueClick(viewer, queue, slot);
+        } else if (state instanceof AiReviewGuiState.History history) {
+            historyClick(viewer, history, slot);
         } else if (state instanceof AiReviewGuiState.Detail detail) {
             detailClick(viewer, detail, slot);
         } else if (state instanceof AiReviewGuiState.LabelPicker picker) {
@@ -203,6 +249,10 @@ final class AiReviewGuiController implements Listener {
     }
 
     private void queueClick(Player viewer, AiReviewGuiState.Queue state, int slot) {
+        if (slot == AiReviewGuiRenderer.HISTORY_TOGGLE) {
+            openHistory(viewer);
+            return;
+        }
         if (slot == AiReviewGuiRenderer.CLOSE) {
             viewer.closeInventory();
             return;
@@ -228,17 +278,68 @@ final class AiReviewGuiController implements Listener {
         }
     }
 
+    private void historyClick(Player viewer, AiReviewGuiState.History state, int slot) {
+        switch (slot) {
+            case AiReviewGuiRenderer.CLOSE -> viewer.closeInventory();
+            case AiReviewGuiRenderer.HISTORY_TOGGLE -> openQueue(viewer);
+            case AiReviewGuiRenderer.HISTORY_FILTER ->
+                    openHistory(viewer, null, List.of(), state.filter().next());
+            case AiReviewGuiRenderer.REFRESH ->
+                    openHistory(viewer, state.cursor(), state.previousCursors(), state.filter());
+            case AiReviewGuiRenderer.PREVIOUS -> historyPrevious(viewer, state);
+            case AiReviewGuiRenderer.NEXT -> historyNext(viewer, state);
+            default -> historyOpenItem(viewer, state, slot);
+        }
+    }
+
+    private void historyPrevious(Player viewer, AiReviewGuiState.History state) {
+        if (state.previousCursors().isEmpty()) {
+            return;
+        }
+        var previous = AiReviewHistoryNavigation.previous(state);
+        openHistory(viewer, previous.cursor(), previous.previousCursors(), state.filter());
+    }
+
+    private void historyNext(Player viewer, AiReviewGuiState.History state) {
+        if (state.nextCursor() == null
+                || state.previousCursors().size() >= AiReviewHistoryNavigation.MAX_PREVIOUS_PAGES) {
+            return;
+        }
+        var next = AiReviewHistoryNavigation.next(state);
+        openHistory(viewer, next.cursor(), next.previousCursors(), state.filter());
+    }
+
+    private void historyOpenItem(Player viewer, AiReviewGuiState.History state, int slot) {
+        int index = AiReviewGuiRenderer.CONTENT_SLOTS.indexOf(slot);
+        if (index < 0 || index >= state.items().size()) {
+            return;
+        }
+        if (!AiReviewPermissions.detail(viewer)) {
+            deny(viewer, AiReviewPermissions.DETAIL);
+            return;
+        }
+        openEvent(viewer, state.items().get(index).eventId(), 0, state);
+    }
+
     private void detailClick(Player viewer, AiReviewGuiState.Detail state, int slot) {
         if (slot == AiReviewGuiRenderer.CLOSE) {
             viewer.closeInventory();
             return;
         }
         if (slot == AiReviewGuiRenderer.BACK) {
-            openQueue(viewer, state.returnPage(), false);
+            if (state.historyOrigin() != null) {
+                AiReviewGuiState.History h = state.historyOrigin();
+                open(viewer, new AiReviewGuiState.History(
+                        viewer.getUniqueId(), nextGeneration(viewer), h.items(),
+                        h.cursor(), h.nextCursor(), h.previousCursors(), h.filter()
+                ));
+            } else {
+                openQueue(viewer, state.returnPage(), false);
+            }
             return;
         }
         if (slot == AiReviewGuiRenderer.REFRESH) {
-            openEvent(viewer, state.details().eventId(), state.returnPage());
+            openEvent(viewer, state.details().eventId(), state.returnPage(), state.historyOrigin());
             return;
         }
         if (!AiReviewPermissions.correct(viewer)) {
@@ -274,7 +375,8 @@ final class AiReviewGuiController implements Listener {
                     state.details(),
                     state.returnPage(),
                     SEMANTIC_LABELS,
-                    0
+                    0,
+                    state.historyOrigin()
             ));
         } else if (slot == AiReviewGuiRenderer.APPROVE) {
             Correction pending = state.details().latestPendingCorrection();
@@ -307,7 +409,8 @@ final class AiReviewGuiController implements Listener {
                     viewer.getUniqueId(),
                     nextGeneration(viewer),
                     state.details(),
-                    state.returnPage()
+                    state.returnPage(),
+                    state.historyOrigin()
             ));
             return;
         }
@@ -342,7 +445,8 @@ final class AiReviewGuiController implements Listener {
                 decision,
                 null,
                 "Change semantic label to " + label,
-                false
+                false,
+                state.historyOrigin()
         ));
     }
 
@@ -356,7 +460,8 @@ final class AiReviewGuiController implements Listener {
                     viewer.getUniqueId(),
                     nextGeneration(viewer),
                     state.details(),
-                    state.returnPage()
+                    state.returnPage(),
+                    state.historyOrigin()
             ));
             return;
         }
@@ -417,7 +522,8 @@ final class AiReviewGuiController implements Listener {
                     if (!validAgainstFresh(state, fresh)) {
                         message(viewer, "The central review state changed; no write was made.", NamedTextColor.YELLOW);
                         open(viewer, new AiReviewGuiState.Detail(
-                                viewer.getUniqueId(), nextGeneration(viewer), fresh, state.returnPage()
+                                viewer.getUniqueId(), nextGeneration(viewer), fresh,
+                                state.returnPage(), state.historyOrigin()
                         ));
                         return;
                     }
@@ -457,8 +563,10 @@ final class AiReviewGuiController implements Listener {
                     reviewerId,
                     authority,
                     note,
-                    correction -> writeComplete(viewer, correction, state.returnPage()),
-                    issue -> writeFailed(viewer, fresh, state.returnPage(), issue)
+                    correction -> writeComplete(viewer, correction, state.returnPage(),
+                            state.historyOrigin()),
+                    issue -> writeFailed(viewer, fresh, state.returnPage(), issue,
+                            state.historyOrigin())
             );
             return;
         }
@@ -468,12 +576,17 @@ final class AiReviewGuiController implements Listener {
                 authority,
                 state.decision(),
                 note,
-                correction -> writeComplete(viewer, correction, state.returnPage()),
-                issue -> writeFailed(viewer, fresh, state.returnPage(), issue)
+                correction -> writeComplete(viewer, correction, state.returnPage(),
+                        state.historyOrigin()),
+                issue -> writeFailed(viewer, fresh, state.returnPage(), issue,
+                        state.historyOrigin())
         );
     }
 
-    private void writeComplete(Player viewer, Correction correction, int returnPage) {
+    private void writeComplete(
+            Player viewer, Correction correction, int returnPage,
+            AiReviewGuiState.History historyOrigin
+    ) {
         onEntity(viewer, () -> {
             if (!subsystem.activeDuty(viewer)) {
                 viewer.closeInventory();
@@ -487,25 +600,39 @@ final class AiReviewGuiController implements Listener {
                     correction.status() == AiReviewModels.CorrectionStatus.ACCEPTED
                             ? NamedTextColor.GREEN : NamedTextColor.GOLD
             );
-            subsystem.refreshQueue(
-                    false,
-                    () -> onEntity(viewer, () -> openQueue(viewer, returnPage, false))
-            );
+            if (historyOrigin != null) {
+                openHistory(viewer, historyOrigin.cursor(), historyOrigin.previousCursors(),
+                        historyOrigin.filter());
+            } else {
+                subsystem.refreshQueue(
+                        false,
+                        () -> onEntity(viewer, () -> openQueue(viewer, returnPage, false))
+                );
+            }
         });
     }
 
-    private void writeFailed(Player viewer, EventDetails fresh, int returnPage, String issue) {
+    private void writeFailed(
+            Player viewer, EventDetails fresh, int returnPage, String issue,
+            AiReviewGuiState.History historyOrigin
+    ) {
         onEntity(viewer, () -> {
-            message(viewer, "No correction was committed: " + issue + '.', NamedTextColor.YELLOW);
+            message(viewer, AiReviewWriteFeedback.message(issue), NamedTextColor.YELLOW);
+            if (AiReviewWriteFeedback.outcomeUncertain(issue)) {
+                // The API might have saved the vote before its reply was lost.
+                // Never reopen a stale pre-write snapshot as if it were authoritative.
+                return;
+            }
             if ("central review conflict".equals(issue)) {
-                openEvent(viewer, fresh.eventId(), returnPage);
+                openEvent(viewer, fresh.eventId(), returnPage, historyOrigin);
                 return;
             }
             open(viewer, new AiReviewGuiState.Detail(
                     viewer.getUniqueId(),
                     nextGeneration(viewer),
                     fresh,
-                    returnPage
+                    returnPage,
+                    historyOrigin
             ));
         });
     }
@@ -528,7 +655,8 @@ final class AiReviewGuiController implements Listener {
                 decision,
                 proposalId,
                 description,
-                adminRequested
+                adminRequested,
+                state.historyOrigin()
         ));
     }
 
@@ -543,7 +671,8 @@ final class AiReviewGuiController implements Listener {
                 state.details(),
                 state.returnPage(),
                 state.labels(),
-                page
+                page,
+                state.historyOrigin()
         ));
     }
 
@@ -564,11 +693,13 @@ final class AiReviewGuiController implements Listener {
     private void open(Player viewer, AiReviewGuiState state) {
         onEntity(viewer, () -> {
             if (!viewer.isOnline()
+                    || !subsystem.activeDuty(viewer)
                     || !AiReviewPermissions.queue(viewer)
                     || activeGeneration.getOrDefault(viewer.getUniqueId(), -1L) != state.generation()) {
                 return;
             }
             if (!(state instanceof AiReviewGuiState.Queue)
+                    && !(state instanceof AiReviewGuiState.History)
                     && !AiReviewPermissions.detail(viewer)) {
                 return;
             }

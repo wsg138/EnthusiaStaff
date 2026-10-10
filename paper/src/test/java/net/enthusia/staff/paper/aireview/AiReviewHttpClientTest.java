@@ -85,6 +85,71 @@ class AiReviewHttpClientTest {
     }
 
     @Test
+    void historyFiltersAreServerSideAndNeverSendFreeText() throws Exception {
+        try (MiniServer server = new MiniServer(request ->
+                Response.json(200, "{\"items\":[],\"next_cursor\":null}"))) {
+            AiReviewHttpClient client = client(server, 64 * 1024, 2_000);
+            var history = client.listDecisions(10, null, AiReviewHistoryFilter.FAIL_OPEN);
+            assertTrue(history.items().isEmpty());
+            assertEquals("/v1/decisions?limit=10&filter=fail_open",
+                    server.awaitRequest().target());
+        }
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.EnumSource(AiReviewHistoryFilter.class)
+    void allHistoryFiltersAreEncodedAsFixedServerSideValues(
+            AiReviewHistoryFilter filter
+    ) throws Exception {
+        try (MiniServer server = new MiniServer(request ->
+                Response.json(200, "{\"items\":[],\"next_cursor\":null}"))) {
+            AiReviewHttpClient client = client(server, 64 * 1024, 2_000);
+            assertTrue(client.listDecisions(2, null, filter).items().isEmpty());
+            String expected = "/v1/decisions?limit=2"
+                    + (filter == AiReviewHistoryFilter.ALL
+                            ? "" : "&filter=" + filter.apiValue());
+            assertEquals(expected, server.awaitRequest().target());
+        }
+    }
+
+    @Test
+    void historyContractKeepsCorrectedOriginalAndFailOpenUntrusted() throws Exception {
+        String response = """
+                {"items":[
+                  {"event_id":"corrected-1","occurred_at":"2026-10-09T10:00:00Z",
+                   "finalized_at":"2026-10-09T10:00:01Z","platform":"minecraft",
+                   "channel_profile":"minecraft_public","ingestion_status":"INGESTED",
+                   "message_action":"BLOCK","semantic_label":"LOW_LEVEL_HARASSMENT",
+                   "review_priority":"NORMAL","reason_codes":["staff_review"],
+                   "local_model_version":"synthetic-1","policy_version":"test-policy",
+                   "degraded":false,"corrected":true,
+                   "text":"synthetic-private-message","sender_id":"synthetic-private-player"},
+                  {"event_id":"failopen-1","occurred_at":"2026-10-09T10:00:02Z",
+                   "finalized_at":"2026-10-09T10:00:03Z","platform":"discord",
+                   "channel_profile":"discord_general","ingestion_status":"FAIL_OPEN",
+                   "message_action":"ALLOW","semantic_label":"SAFE",
+                   "review_priority":"NONE","reason_codes":["classifier_unavailable"],
+                   "local_model_version":"synthetic-1","policy_version":"test-policy",
+                   "degraded":true,"corrected":false}
+                ],"next_cursor":null}
+                """;
+        try (MiniServer server = new MiniServer(request -> Response.json(200, response))) {
+            var items = client(server, 64 * 1024, 2_000).listDecisions(2, null).items();
+            assertEquals(2, items.size());
+            assertEquals("LOW_LEVEL_HARASSMENT", items.get(0).semanticLabel());
+            assertEquals(MessageAction.BLOCK, items.get(0).messageAction());
+            assertTrue(items.get(0).corrected());
+            assertTrue(AiReviewHistoryPresentation.summarize(items.get(0))
+                    .lore().contains("Staff correction recorded"));
+            assertEquals("FAIL_OPEN", items.get(1).ingestionStatus());
+            assertTrue(AiReviewHistoryPresentation.summarize(items.get(1))
+                    .lore().contains("Fail-open is NOT a verified safe decision."));
+            assertFalse(items.toString().contains("synthetic-private-message"));
+            assertFalse(items.toString().contains("synthetic-private-player"));
+        }
+    }
+
+    @Test
     void historyRejectsMalformedOrUnboundedPage() throws Exception {
         try (MiniServer server = new MiniServer(request ->
                 Response.json(200, "{\"items\":[{}],\"next_cursor\":null}"))) {
@@ -348,6 +413,24 @@ class AiReviewHttpClientTest {
             );
             assertEquals(Category.TIMEOUT, exception.category());
             assertEquals(1, server.awaitRequestCount(1));
+        }
+    }
+
+    @Test
+    void correctionMayBeAcceptedByServerBeforeItsResponseTimesOut() throws Exception {
+        java.util.concurrent.atomic.AtomicBoolean serverAccepted = new java.util.concurrent.atomic.AtomicBoolean();
+        try (MiniServer server = new MiniServer(request -> {
+            serverAccepted.set(true);
+            return new Response(201, correctionJson().getBytes(StandardCharsets.UTF_8), 700);
+        })) {
+            AiReviewHttpClient client = client(server, 64 * 1024, 250);
+            var failure = assertThrows(AiReviewClientException.class, () ->
+                    client.correct("event-1", "reviewer-a", CorrectionAuthority.STAFF, decision(), null));
+            assertEquals(Category.TIMEOUT, failure.category());
+            assertTrue(serverAccepted.get(), "The write reached the server before the reply was lost");
+            String issue = "central review timeout; retry backoff 5s";
+            assertTrue(AiReviewWriteFeedback.outcomeUncertain(issue));
+            assertTrue(AiReviewWriteFeedback.message(issue).contains("status UNKNOWN"));
         }
     }
 
