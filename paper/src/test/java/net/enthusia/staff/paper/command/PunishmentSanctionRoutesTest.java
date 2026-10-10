@@ -69,6 +69,19 @@ class PunishmentSanctionRoutesTest {
     }
 
     @Test
+    void legacyPlayerShortcutsCannotImplicitlyTargetTheLatestCase() throws IOException {
+        String source = Files.readString(Path.of(
+                "src/main/java/net/enthusia/staff/paper/command/SanctionChangeCommand.java"
+        )).replace("\r\n", "\n");
+        int route = source.indexOf("String route = CommandRoute.canonicalName(command);");
+        int multi = source.indexOf("sender instanceof Player && !central && arguments.length > SINGLE_ARGUMENT", route);
+        int gui = source.indexOf("if (openAliasGui(sender, arguments, route, central))", route);
+        assertTrue(route >= 0 && multi > route && gui > multi,
+                "Player legacy text commands must reject ambiguous multi-argument writes before dispatch");
+        assertTrue(source.contains("picker.open(player, arguments[0], selection,"));
+    }
+
+    @Test
     void caseDetailSuggestsSpecificUnpunishIdButNeverRunsItAutomatically() throws IOException {
         String source = Files.readString(Path.of(
                 "src/main/java/net/enthusia/staff/paper/command/CaseCommand.java"
