@@ -80,13 +80,14 @@ import org.bukkit.plugin.java.JavaPlugin;
 
 final class PaperCommandRegistrar {
     private static final List<String> PUNISHMENT_COMMANDS =
-            List.of("punish", "ban", "mute", "warn", "kick", "ipban");
+            List.of("punish", "unpunish", "ban", "mute", "warn", "kick", "ipban");
     private static final List<String> SANCTION_CHANGE_COMMANDS =
             List.of("removepunishment", "unban", "unmute", "removewarning", "unwarn");
     private static final List<String> INVENTORY_COMMANDS = List.of("invsee", "endersee");
 
     private final Dependencies dependencies;
     private final ReloadableModerationFeatureSettings moderationSettings;
+    private SanctionLifecycleCommand sanctionLifecycle;
 
     PaperCommandRegistrar(Dependencies dependencies) {
         this.dependencies = Objects.requireNonNull(dependencies, "dependencies");
@@ -153,7 +154,7 @@ final class PaperCommandRegistrar {
                 dependencies.environment().moderationFeatures().get()
         ));
         estaff.addSuccessfulReloadHook(dependencies.policyV2()::reload);
-        estaff.configureSanctionLifecycle(new SanctionLifecycleCommand(
+        sanctionLifecycle = new SanctionLifecycleCommand(
                 plugin(),
                 clock(),
                 dependencies.environment().serverId(),
@@ -161,7 +162,8 @@ final class PaperCommandRegistrar {
                 storage(PaperStorageBindings::sanctionChangeService),
                 moderationSettings::current,
                 workers()
-        ));
+        );
+        estaff.configureSanctionLifecycle(sanctionLifecycle);
     }
 
     private void registerAccountLinkCommands() {
@@ -215,6 +217,7 @@ final class PaperCommandRegistrar {
         PunishmentCommand command = new PunishmentCommand(
                 plugin(), writeMode(), drafts, players, activeAuthorization, punishmentGui, requestHandler, workers()
         );
+        command.configureSanctionLifecycle(sanctionLifecycle);
         PUNISHMENT_COMMANDS.forEach(name -> bindCompleting(name, command, command));
     }
 
