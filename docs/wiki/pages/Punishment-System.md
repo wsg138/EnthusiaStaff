@@ -171,9 +171,12 @@ The existing `/removepunishment <player>` and `/unwarn <player>`,
 `/removewarning <player>`, `/unban <player>` and `/unmute <player>`
 also open this exact-punishment picker. The warning aliases list **warnings only**,
 while ban/mute aliases only display matching punishment types; none
-silently changes the latest sanction. The legacy multi-argument console
+silently changes the latest sanction. For player-issued `/unwarn`, `/removewarning`, `/unban`, and
+`/unmute` commands, the old multi-argument text forms are rejected rather
+than implicitly changing the latest case. The legacy multi-argument **console**
 syntax remains available for compatibility and still has its own confirmation
-and authorization safeguards.
+and authorization safeguards. Case-wide `/removepunishment <case> <action>`
+remains a separate reviewed workflow when case-level actions are intended.
 
 The picker currently loads the most recent **100 cases** from the player
 record; for an older historical case, use `/history <player> [page]`
