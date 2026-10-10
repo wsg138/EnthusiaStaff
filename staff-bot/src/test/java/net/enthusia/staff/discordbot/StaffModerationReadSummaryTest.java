@@ -45,7 +45,7 @@ class StaffModerationReadSummaryTest {
     }
 
     private static final class SummaryData implements StaffModerationReadService.ReadData {
-        private final VersionedSubject subject = subject();
+        private final VersionedSubject subject = StaffModerationReadSummaryTest.subject();
 
         @Override
         public Optional<VersionedSubject> subjectForDiscord(DiscordUserId userId) {

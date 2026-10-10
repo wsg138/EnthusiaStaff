@@ -46,33 +46,53 @@ class DiscordModerationOperationMatrixTest {
                 DiscordModerationOperation.VIEW_NOTES,
                 DiscordModerationOperation.VIEW_EVIDENCE
         );
+        Set<DiscordModerationOperation> investigations = EnumSet.of(
+                DiscordModerationOperation.CREATE_INVESTIGATION_CASE,
+                DiscordModerationOperation.ADD_NOTE,
+                DiscordModerationOperation.EDIT_NOTE,
+                DiscordModerationOperation.CAPTURE_EVIDENCE
+        );
         Map<StaffRank, Set<DiscordModerationOperation>> expected = new EnumMap<>(StaffRank.class);
-        expected.put(StaffRank.HELPER, with(reads, DiscordModerationOperation.ISSUE_SANCTION));
-        expected.put(StaffRank.MOD, moderatorOperations(reads));
-        expected.put(StaffRank.DEVELOPER, moderatorOperations(reads));
+        expected.put(StaffRank.HELPER, with(reads, investigations, DiscordModerationOperation.ISSUE_SANCTION));
+        expected.put(StaffRank.MOD, moderatorOperations(reads, investigations));
+        expected.put(StaffRank.DEVELOPER, moderatorOperations(reads, investigations));
         expected.put(StaffRank.ADMIN, EnumSet.allOf(DiscordModerationOperation.class));
         expected.put(StaffRank.FOUNDER, EnumSet.allOf(DiscordModerationOperation.class));
         expected.put(StaffRank.SYSTEM, EnumSet.noneOf(DiscordModerationOperation.class));
         return expected;
     }
 
-    private static Set<DiscordModerationOperation> moderatorOperations(Set<DiscordModerationOperation> reads) {
+    private static Set<DiscordModerationOperation> moderatorOperations(
+            Set<DiscordModerationOperation> reads,
+            Set<DiscordModerationOperation> investigations
+    ) {
         return with(
                 reads,
+                investigations,
                 DiscordModerationOperation.ISSUE_SANCTION,
                 DiscordModerationOperation.END_SANCTION,
                 DiscordModerationOperation.REVOKE_SANCTION,
                 DiscordModerationOperation.APPROVE_SANCTION_REQUEST,
-                DiscordModerationOperation.REQUEST_OVERTURN
+                DiscordModerationOperation.REQUEST_OVERTURN,
+                DiscordModerationOperation.RESOLVE_EVASION_ALERT
         );
+    }
+
+    private static Set<DiscordModerationOperation> with(
+            Set<DiscordModerationOperation> base,
+            Set<DiscordModerationOperation> second,
+            DiscordModerationOperation... additions
+    ) {
+        EnumSet<DiscordModerationOperation> result = EnumSet.copyOf(base);
+        result.addAll(second);
+        result.addAll(java.util.List.of(additions));
+        return result;
     }
 
     private static Set<DiscordModerationOperation> with(
             Set<DiscordModerationOperation> base,
             DiscordModerationOperation... additions
     ) {
-        EnumSet<DiscordModerationOperation> result = EnumSet.copyOf(base);
-        result.addAll(java.util.List.of(additions));
-        return result;
+        return with(base, Set.of(), additions);
     }
 }

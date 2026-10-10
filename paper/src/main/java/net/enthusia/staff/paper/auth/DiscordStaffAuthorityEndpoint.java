@@ -18,14 +18,15 @@ import java.util.logging.Level;
 import java.util.regex.Pattern;
 import net.enthusia.staff.domain.auth.StaffRank;
 import net.enthusia.staff.protocol.StaffAuthorityHttpSigning;
+import net.kyori.adventure.text.Component;
 import net.luckperms.api.LuckPerms;
 import net.luckperms.api.LuckPermsProvider;
 import net.luckperms.api.model.user.User;
 import org.bukkit.plugin.java.JavaPlugin;
 
 /**
- * Optional authority bridge for the isolated Discord staff bot.
- * Rank is calculated from current LuckPerms data on every request; Discord roles are never inputs.
+ * Optional authenticated bridge for the isolated Discord staff bot.
+ * Rank is resolved from LuckPerms and D09 alerts carry only a generic durable alert identifier.
  */
 public final class DiscordStaffAuthorityEndpoint implements AutoCloseable {
     public static final String CREDENTIAL_ENV = "ENTHUSIA_STAFF_DISCORD_AUTHORITY_SECRET";
@@ -41,6 +42,7 @@ public final class DiscordStaffAuthorityEndpoint implements AutoCloseable {
     private static final Duration SHUTDOWN_TIMEOUT = Duration.ofSeconds(2);
     private static final Pattern ROLE_GROUP = Pattern.compile("[a-z0-9_.-]{1,64}");
     private static final String RANK_PATH = "/v1/staff-rank";
+    private static final String ALERT_PATH = "/v1/staff-alert";
     private static final String ROLE_ELIGIBILITY_PATH = "/v1/role-eligibility";
     private static final String GET_METHOD = "GET";
     private static final String POST_METHOD = "POST";
@@ -73,18 +75,12 @@ public final class DiscordStaffAuthorityEndpoint implements AutoCloseable {
                 reviewDependencies, this::reviewActor, this::resolve);
         HttpServer createdServer = HttpServer.create(
                 bindAddress(configuration.bindHost(), configuration.port()), BACKLOG);
-        ThreadPoolExecutor createdExecutor = new ThreadPoolExecutor(
-                WORKER_THREADS,
-                WORKER_THREADS,
-                0L,
-                TimeUnit.MILLISECONDS,
-                new ArrayBlockingQueue<>(BACKLOG),
-                Thread.ofPlatform().daemon(true).name("discord-staff-authority-", 0).factory(),
-                new ThreadPoolExecutor.AbortPolicy()
-        );
+        this.server = createdServer;
+        this.executor = executor();
         try {
-            createdServer.setExecutor(createdExecutor);
+            createdServer.setExecutor(executor);
             createdServer.createContext(RANK_PATH, this::handleRank);
+            createdServer.createContext(ALERT_PATH, this::handleAlert);
             createdServer.createContext(ROLE_ELIGIBILITY_PATH, this::handleRoleEligibility);
             if (webPunishments != null) {
                 createdServer.createContext("/v1/staff-punishments/", this::handlePunishment);
@@ -94,12 +90,10 @@ public final class DiscordStaffAuthorityEndpoint implements AutoCloseable {
             }
             createdServer.start();
         } catch (RuntimeException exception) {
-            createdServer.stop(0);
-            createdExecutor.shutdownNow();
+            server.stop(0);
+            executor.shutdownNow();
             throw exception;
         }
-        this.server = createdServer;
-        this.executor = createdExecutor;
     }
 
     public static Optional<DiscordStaffAuthorityEndpoint> startIfConfigured(JavaPlugin plugin) {
@@ -175,17 +169,13 @@ public final class DiscordStaffAuthorityEndpoint implements AutoCloseable {
                 respond(exchange, 401, "", null);
                 return;
             }
-            UUID playerId = playerId(exchange.getRequestURI().getRawQuery());
+            UUID playerId = queryUuid(exchange.getRequestURI().getRawQuery(), "player");
             if (playerId == null) {
                 respond(exchange, 400, "", authorization);
                 return;
             }
             Optional<StaffRank> rank = resolve(playerId);
-            if (rank.isEmpty()) {
-                respond(exchange, 404, "", authorization);
-                return;
-            }
-            respond(exchange, 200, rank.orElseThrow().name(), authorization);
+            respond(exchange, rank.isPresent() ? 200 : 404, rank.map(Enum::name).orElse(""), authorization);
         } catch (RuntimeException exception) {
             log(plugin, "discord_staff_authority_request_failed", exception);
             if (exchange.getResponseCode() == -1) {
@@ -208,7 +198,7 @@ public final class DiscordStaffAuthorityEndpoint implements AutoCloseable {
                 respond(exchange, 401, "", null);
                 return;
             }
-            UUID playerId = playerId(exchange.getRequestURI().getRawQuery());
+            UUID playerId = queryUuid(exchange.getRequestURI().getRawQuery(), "player");
             if (playerId == null) {
                 respond(exchange, 400, "", authorization);
                 return;
@@ -216,6 +206,36 @@ public final class DiscordStaffAuthorityEndpoint implements AutoCloseable {
             respond(exchange, 200, roleGroups(loadUser(playerId)), authorization);
         } catch (RuntimeException exception) {
             log(plugin, "discord_role_eligibility_request_failed", exception);
+            if (exchange.getResponseCode() == -1) {
+                respond(exchange, 503, "", authorization);
+            }
+        } finally {
+            exchange.close();
+        }
+    }
+
+    /** D09 alert bridge accepts only opaque alert IDs, never case evidence or raw linked identities. */
+    private void handleAlert(HttpExchange exchange) throws IOException {
+        DiscordStaffAuthorityAuthenticator.Result authorization = null;
+        try {
+            if (!POST_METHOD.equals(exchange.getRequestMethod())) {
+                respond(exchange, 405, "", null);
+                return;
+            }
+            authorization = authenticate(exchange);
+            if (!authorization.accepted()) {
+                respond(exchange, 401, "", null);
+                return;
+            }
+            UUID alertId = queryUuid(exchange.getRequestURI().getRawQuery(), "alert");
+            if (alertId == null) {
+                respond(exchange, 400, "", authorization);
+                return;
+            }
+            scheduleStaffAlert(alertId);
+            respond(exchange, 202, "accepted", authorization);
+        } catch (RuntimeException exception) {
+            log(plugin, "discord_staff_alert_request_failed", exception);
             if (exchange.getResponseCode() == -1) {
                 respond(exchange, 503, "", authorization);
             }
@@ -413,12 +433,26 @@ public final class DiscordStaffAuthorityEndpoint implements AutoCloseable {
         }
     }
 
-    private static UUID playerId(String rawQuery) {
-        if (rawQuery == null || !rawQuery.startsWith("player=") || rawQuery.indexOf('&') >= 0) {
+    private void scheduleStaffAlert(UUID alertId) {
+        plugin.getServer().getGlobalRegionScheduler().execute(plugin, () -> {
+            Component message = Component.text("Linked-alt investigation alert " + alertId
+                    + ". Review private Discord moderation tools; no automatic punishment was applied.");
+            plugin.getServer().getOnlinePlayers().stream()
+                    .filter(player -> PaperStaffRankResolver.resolve(player::hasPermission).isPresent())
+                    .forEach(player -> player.sendMessage(message));
+        });
+    }
+
+    private static UUID queryUuid(String rawQuery, String key) {
+        if (rawQuery == null || key == null || key.isBlank()) {
+            return null;
+        }
+        String prefix = key + "=";
+        if (!rawQuery.startsWith(prefix) || rawQuery.indexOf('&') >= 0) {
             return null;
         }
         try {
-            return UUID.fromString(URLDecoder.decode(rawQuery.substring("player=".length()), StandardCharsets.UTF_8));
+            return UUID.fromString(URLDecoder.decode(rawQuery.substring(prefix.length()), StandardCharsets.UTF_8));
         } catch (IllegalArgumentException exception) {
             return null;
         }
@@ -467,6 +501,18 @@ public final class DiscordStaffAuthorityEndpoint implements AutoCloseable {
         } catch (NumberFormatException exception) {
             throw new IllegalArgumentException("authority port must be numeric", exception);
         }
+    }
+
+    private static ThreadPoolExecutor executor() {
+        return new ThreadPoolExecutor(
+                WORKER_THREADS,
+                WORKER_THREADS,
+                0L,
+                TimeUnit.MILLISECONDS,
+                new ArrayBlockingQueue<>(BACKLOG),
+                Thread.ofPlatform().daemon(true).name("discord-staff-authority-", 0).factory(),
+                new ThreadPoolExecutor.AbortPolicy()
+        );
     }
 
     private static void log(JavaPlugin plugin, String code, Throwable failure) {

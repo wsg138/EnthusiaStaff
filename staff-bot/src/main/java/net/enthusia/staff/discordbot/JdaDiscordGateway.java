@@ -57,6 +57,7 @@ final class JdaDiscordGateway implements DiscordGateway, DiscordChatEgress, Disc
     private DiscordChatIngress chatIngress;
     private JDA jda;
     private JdaStaffModerationListener moderationListener;
+    private JdaDiscordInvestigationEvidenceListener investigationEvidenceListener;
     private JdaModerationUiPreviewListener previewListener;
     private ModerationReadApiServer productionReadApi;
     private AiModerationReadApiServer aiModerationReadApi;
@@ -168,7 +169,8 @@ final class JdaDiscordGateway implements DiscordGateway, DiscordChatEgress, Disc
     private Set<GatewayIntent> gatewayIntents() {
         return gatewayIntents(
                 moderation.flatMap(StaffModerationRuntime::managedRoleShadow).isPresent(),
-                chatConfiguration.map(configuration -> !configuration.ingressRoutes().isEmpty()).orElse(false)
+                chatConfiguration.map(configuration -> !configuration.ingressRoutes().isEmpty()).orElse(false),
+                moderation.map(StaffModerationRuntime::investigationsEnabled).orElse(false)
         );
     }
 
@@ -177,11 +179,16 @@ final class JdaDiscordGateway implements DiscordGateway, DiscordChatEgress, Disc
     }
 
     static Set<GatewayIntent> gatewayIntents(boolean managedRoleShadowEnabled, boolean discordChatIngressEnabled) {
+        return gatewayIntents(managedRoleShadowEnabled, discordChatIngressEnabled, false);
+    }
+
+    static Set<GatewayIntent> gatewayIntents(
+            boolean managedRoleShadowEnabled, boolean discordChatIngressEnabled, boolean investigationsEnabled) {
         EnumSet<GatewayIntent> intents = EnumSet.noneOf(GatewayIntent.class);
         if (managedRoleShadowEnabled) {
             intents.add(GatewayIntent.GUILD_MEMBERS);
         }
-        if (discordChatIngressEnabled) {
+        if (discordChatIngressEnabled || investigationsEnabled) {
             intents.add(GatewayIntent.GUILD_MESSAGES);
             intents.add(GatewayIntent.MESSAGE_CONTENT);
         }
@@ -224,6 +231,11 @@ final class JdaDiscordGateway implements DiscordGateway, DiscordChatEgress, Disc
                     configuration.environment().guildId(), workers, interactions, runtime,
                     configuration.moderationWebUri(), configuration.discordToken());
             builder.addEventListeners(moderationListener);
+            runtime.investigationService().ifPresent(service -> {
+                investigationEvidenceListener = new JdaDiscordInvestigationEvidenceListener(
+                        configuration.environment().guildId(), workers, service);
+                builder.addEventListeners(investigationEvidenceListener);
+            });
         });
     }
 
@@ -262,6 +274,9 @@ final class JdaDiscordGateway implements DiscordGateway, DiscordChatEgress, Disc
                 previewListener.enable(jda);
             } else if (moderationListener != null) {
                 moderationListener.enable(jda);
+            }
+            if (investigationEvidenceListener != null) {
+                investigationEvidenceListener.enable();
             }
             enableRoleSync();
             enableManagedRoleShadow();
@@ -304,6 +319,9 @@ final class JdaDiscordGateway implements DiscordGateway, DiscordChatEgress, Disc
             }
             if (moderationListener != null) {
                 moderationListener.disable();
+            }
+            if (investigationEvidenceListener != null) {
+                investigationEvidenceListener.disable();
             }
             if (roleSyncCoordinator != null) {
                 roleSyncCoordinator.disable();
@@ -598,6 +616,9 @@ final class JdaDiscordGateway implements DiscordGateway, DiscordChatEgress, Disc
         if (moderationListener != null) {
             moderationListener.disable();
         }
+        if (investigationEvidenceListener != null) {
+            investigationEvidenceListener.disable();
+        }
     }
 
     @Override
@@ -607,6 +628,12 @@ final class JdaDiscordGateway implements DiscordGateway, DiscordChatEgress, Disc
             current = jda;
         }
         return current == null || current.awaitShutdown(timeout.toMillis(), TimeUnit.MILLISECONDS);
+    }
+
+    static Set<GatewayIntent> requiredGatewayIntents(boolean investigationsEnabled) {
+        return investigationsEnabled
+                ? Set.of(GatewayIntent.GUILD_MESSAGES, GatewayIntent.MESSAGE_CONTENT)
+                : Set.of();
     }
 
     static Set<CacheFlag> requiredCacheFlags() {

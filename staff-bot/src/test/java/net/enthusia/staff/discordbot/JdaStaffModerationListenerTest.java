@@ -14,6 +14,7 @@ import org.junit.jupiter.api.Test;
 
 class JdaStaffModerationListenerTest {
     private static final String USER_ID_OPTION = "user-id";
+
     @Test
     void staffReadCommandsAreCompleteAndDefaultDisabledForDiscovery() {
         var commands = JdaStaffModerationListener.commands();
@@ -125,6 +126,21 @@ class JdaStaffModerationListenerTest {
         assertTrue(console.getOptions().stream().allMatch(option ->
                 option.getType() == OptionType.STRING && option.isRequired()));
         assertEquals(DefaultMemberPermissions.DISABLED, console.getDefaultPermissions());
+    }
+
+    @Test
+    void optionalD09InvestigationCommandsComposeWithAllExistingReviewAndModerationSurfaces() {
+        var onlyInvestigations = JdaStaffModerationListener.commands(false, false, false, true);
+        assertEquals(15, onlyInvestigations.size());
+        assertEquals(15, names(onlyInvestigations).size());
+        assertTrue(names(onlyInvestigations).containsAll(Set.of(
+                "case-create", "note-add", "note-edit", "evasion-resolve",
+                "review-request", "review-queue")));
+        var combined = JdaStaffModerationListener.commands(true, true, true, true);
+        assertEquals(25, combined.size());
+        assertEquals(25, names(combined).size());
+        assertTrue(combined.stream().allMatch(command ->
+                DefaultMemberPermissions.DISABLED.equals(command.getDefaultPermissions())));
     }
 
     @Test
