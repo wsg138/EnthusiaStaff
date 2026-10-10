@@ -177,7 +177,10 @@ final class PaperIntegrationManager implements Listener {
                 new net.enthusia.staff.paper.auth.StaffWebPunishmentService.Dependencies(
                         clock(), dependencies.policy().writeMode(), dependencies.stores().punishmentDraftWorkflow(),
                         dependencies.stores().players(), dependencies.policy().reasons(),
-                        dependencies.policy().authorization()))
+                        dependencies.policy().authorization()),
+                new net.enthusia.staff.paper.auth.StaffWebReviewService.Dependencies(
+                        clock(), dependencies.policy().writeMode(), dependencies.stores().punishmentRequests(),
+                        dependencies.stores().staffSessions()))
                 .ifPresent(endpoint -> discordStaffAuthority = endpoint);
     }
 
@@ -825,6 +828,8 @@ final class PaperIntegrationManager implements Listener {
     record Stores(
             Supplier<PunishmentService> punishmentService,
             Supplier<net.enthusia.staff.domain.application.PunishmentDraftWorkflow> punishmentDraftWorkflow,
+            Supplier<net.enthusia.staff.domain.application.PunishmentRequestService> punishmentRequests,
+            Supplier<net.enthusia.staff.domain.ports.StaffSessionStore> staffSessions,
             Supplier<net.enthusia.staff.domain.ports.PlayerDirectory> players,
             Supplier<EconomyJournalStore> economyJournal,
             Supplier<InventoryJournalStore> inventoryJournal

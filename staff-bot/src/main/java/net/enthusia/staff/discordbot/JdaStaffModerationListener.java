@@ -57,6 +57,10 @@ final class JdaStaffModerationListener extends ListenerAdapter {
     private static final String COMMAND_OPTION = "command";
     private static final String TYPE_OPTION = "type";
     private static final String CONSOLE = "console";
+    private static final String REVIEW_REQUEST = "review-request";
+    private static final String REVIEW_ID = "request-id";
+    private static final String REVIEW_DECISION = "decision";
+    private static final String REVIEW_NOTE = "note";
     private static final String NOTIFICATION_TEST = "notification-test";
     private static final String MODERATE = "moderate";
     private static final String PUNISH = "punish";
@@ -95,6 +99,7 @@ final class JdaStaffModerationListener extends ListenerAdapter {
     private volatile ModerationReadRequestAuthorizer webAuthorizer;
     private final Optional<DiscordPunishmentCommandController> punishments;
     private final Optional<DiscordCommandBridgeCoordinator> commandBridge;
+    private final HttpStaffAuthorityClient reviewAuthority;
     private final java.util.concurrent.atomic.AtomicBoolean enabled = new java.util.concurrent.atomic.AtomicBoolean();
 
     JdaStaffModerationListener(
@@ -124,6 +129,7 @@ final class JdaStaffModerationListener extends ListenerAdapter {
         this.punishments = moderation.punishmentService().map(DiscordPunishmentCommandController::new);
         this.actors = moderation.actors();
         this.commandBridge = moderation.commandBridge();
+        this.reviewAuthority = moderation.authority();
         this.webIssuer = webIssuer;
         this.webModeration = webIssuer.isPresent() ? Optional.of(moderation) : Optional.empty();
         this.controller = new StaffModerationController(
@@ -176,6 +182,10 @@ final class JdaStaffModerationListener extends ListenerAdapter {
         }
         long actorId = event.getUser().getIdLong();
         String actorName = event.getUser().getName();
+        if (REVIEW_REQUEST.equals(event.getName())) {
+            dispatchMinecraftReview(event, actorId, actorName);
+            return;
+        }
         if (CONSOLE.equals(event.getName())) {
             dispatchConsole(event, actorId);
             return;
@@ -189,6 +199,60 @@ final class JdaStaffModerationListener extends ListenerAdapter {
             return;
         }
         dispatchReadCommand(event, actorId, actorName);
+    }
+
+    /** Discord decisions are never authoritative until Paper returns a committed case/request state. */
+    private void dispatchMinecraftReview(SlashCommandInteractionEvent event, long actorId, String actorName) {
+        if (event.getOption(REVIEW_ID) == null || event.getOption(REVIEW_DECISION) == null) {
+            event.reply("A request ID and decision are required.").setEphemeral(true).queue();
+            return;
+        }
+        String id = event.getOption(REVIEW_ID).getAsString();
+        String decision = event.getOption(REVIEW_DECISION).getAsString().toLowerCase(java.util.Locale.ROOT);
+        String note = event.getOption(REVIEW_NOTE) == null
+                ? "" : event.getOption(REVIEW_NOTE).getAsString();
+        if (!id.matches("[0-9a-fA-F-]{36}")
+                || (!"approve".equals(decision) && !"deny".equals(decision))) {
+            event.reply("Use an exact punishment request UUID and approve or deny.").setEphemeral(true).queue();
+            return;
+        }
+        if ("deny".equals(decision) && note.isBlank()) {
+            event.reply("A denial reason is required.").setEphemeral(true).queue();
+            return;
+        }
+        long interactionId = event.getIdLong();
+        if (!claim(interactionId, event)) {
+            return;
+        }
+        event.deferReply(true).queue(hook -> {
+            boolean scheduled = workers.tryExecute(() -> {
+                try {
+                    var actor = actors.invoker(
+                            new DiscordUserId(Long.toUnsignedString(actorId)), actorName);
+                    var response = reviewAuthority.review(decision, java.util.Map.of(
+                            "actorId", actor.id().toString(),
+                            "requestId", java.util.UUID.fromString(id).toString(),
+                            "note", note
+                    ));
+                    String state = response.path("state").asText();
+                    if ("APPROVED".equals(state)) {
+                        hook.sendMessage("Approved and saved. Network enforcement is queued. Case: "
+                                + response.path("caseId").asText()).queue();
+                    } else if ("DENIED".equals(state)) {
+                        hook.sendMessage("Punishment request denied. No punishment was applied.").queue();
+                    } else {
+                        hook.sendMessage("Decision was not confirmed. Check its current state in-game.").queue();
+                    }
+                } catch (RuntimeException exception) {
+                    log("discord_minecraft_review_failed", exception);
+                    hook.sendMessage("Review was not confirmed. Check the current request in-game before retrying.")
+                            .queue();
+                }
+            });
+            if (!scheduled) {
+                hook.sendMessage("The staff review worker is busy. Try again shortly.").queue();
+            }
+        }, failure -> interactions.release(interactionId));
     }
 
     private void dispatchConsole(SlashCommandInteractionEvent event, long actorId) {
@@ -812,7 +876,13 @@ final class JdaStaffModerationListener extends ListenerAdapter {
                 userSlash(LINKED, "View private linked-account information", discovery),
                 userSlash(HISTORY, "View recent moderation history", discovery),
                 userSlash(NOTES, "View recent private staff notes", discovery),
-                stringSlash(CASE, "View a moderation case by exact ID", CASE_ID_OPTION, "16-character case ID", discovery)
+                stringSlash(CASE, "View a moderation case by exact ID", CASE_ID_OPTION, "16-character case ID", discovery),
+                Commands.slash(REVIEW_REQUEST, "Approve or deny a Minecraft punishment request")
+                        .addOption(OptionType.STRING, REVIEW_ID, "Exact request UUID", true)
+                        .addOptions(new OptionData(OptionType.STRING, REVIEW_DECISION, "Review decision", true)
+                                .addChoice("Approve", "approve").addChoice("Deny", "deny"))
+                        .addOption(OptionType.STRING, REVIEW_NOTE, "Required for denial", false)
+                        .setDefaultPermissions(discovery)
         ));
         if (includePunishments) {
             commands.addAll(punishmentCommands(discovery));

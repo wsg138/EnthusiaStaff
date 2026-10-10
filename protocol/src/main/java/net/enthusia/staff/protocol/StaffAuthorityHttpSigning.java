@@ -34,7 +34,8 @@ public final class StaffAuthorityHttpSigning {
     }
 
     public static String punishmentRequestTarget(String path, byte[] body) {
-        if (path == null || !path.matches("/v1/staff-punishments/(capabilities|prepare|confirm|status)")
+        if (path == null || !path.matches("(?:/v1/staff-punishments/(?:capabilities|prepare|confirm|status)"
+                        + "|/v1/staff-reviews/(?:approve|deny))")
                 || body == null || body.length > 8192) {
             throw new IllegalArgumentException("invalid staff punishment request");
         }

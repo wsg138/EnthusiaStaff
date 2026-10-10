@@ -201,7 +201,28 @@ public final class MuteEnforcementListener implements Listener, AutoCloseable {
                     ? "You are muted from public chat"
                     : "You are muted";
             notifyPlayer(player, prefix + " (case " + mute.caseId() + ", expires " + expiration + ").");
+        } else {
+            recordSuspectedChat(player.getUniqueId());
         }
+    }
+
+    private void recordSuspectedChat(UUID playerId) {
+        Instant now = clock.instant();
+        Instant last = lastMuteEvasionAlert.putIfAbsent(playerId, now);
+        if (last != null && (last.plus(ATTEMPT_THROTTLE).isAfter(now)
+                || !lastMuteEvasionAlert.replace(playerId, last, now))) {
+            return;
+        }
+        submit(() -> {
+            try {
+                AltMuteEvasionAlertStore alerts = muteEvasionAlerts.get();
+                if (alerts != null) {
+                    alerts.recordSuspectedChat(playerId, serverId, now);
+                }
+            } catch (RuntimeException exception) {
+                plugin.getLogger().log(Level.WARNING, "Suspected-alt chat review lookup failed", exception);
+            }
+        });
     }
 
     private void recordInheritedMuteAttempt(UUID playerId, ActiveSanction mute) {

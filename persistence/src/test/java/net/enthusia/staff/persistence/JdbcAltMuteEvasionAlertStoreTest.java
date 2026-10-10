@@ -49,6 +49,17 @@ class JdbcAltMuteEvasionAlertStoreTest {
                 () -> store.recordBlockedChat(player, mute, "", NOW));
     }
 
+    @Test
+    void suspectedChatRequiresExactActorServerAndTime() {
+        UUID player = UUID.randomUUID();
+        assertThrows(IllegalArgumentException.class,
+                () -> store.recordSuspectedChat(null, "SMP", NOW));
+        assertThrows(IllegalArgumentException.class,
+                () -> store.recordSuspectedChat(player, "", NOW));
+        assertThrows(IllegalArgumentException.class,
+                () -> store.recordSuspectedChat(player, "SMP", null));
+    }
+
     private static ActiveSanction sanction(UUID player, SanctionType type, Optional<UUID> inherited) {
         return new ActiveSanction(
                 UUID.randomUUID(), new CaseId("0123456789ABCDEF"), player,

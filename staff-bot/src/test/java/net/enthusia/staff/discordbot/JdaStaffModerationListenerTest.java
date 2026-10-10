@@ -18,7 +18,7 @@ class JdaStaffModerationListenerTest {
     void staffReadCommandsAreCompleteAndDefaultDisabledForDiscovery() {
         var commands = JdaStaffModerationListener.commands();
 
-        assertEquals(9, commands.size());
+        assertEquals(10, commands.size());
         assertEquals(Set.of(
                 "moderate",
                 "punish",
@@ -28,7 +28,8 @@ class JdaStaffModerationListenerTest {
                 "linked",
                 "history",
                 "notes",
-                "case"
+                "case",
+                "review-request"
         ), names(commands));
         assertTrue(commands.stream().allMatch(command ->
                 DefaultMemberPermissions.DISABLED.equals(command.getDefaultPermissions())));
@@ -42,7 +43,7 @@ class JdaStaffModerationListenerTest {
     @Test
     void productionWebKeepsStaffCommandsAndAllowsChannelLaunch() {
         var commands = JdaStaffModerationListener.commands(false, true);
-        assertEquals(9, commands.size());
+        assertEquals(10, commands.size());
         assertTrue(commands.stream().allMatch(command ->
                 DefaultMemberPermissions.DISABLED.equals(command.getDefaultPermissions())));
         for (String name : java.util.List.of("moderate", "punish")) {
@@ -57,13 +58,28 @@ class JdaStaffModerationListenerTest {
     void enforcementRuntimeAddsApprovedQuickCommandsAndSelfPreview() {
         var commands = JdaStaffModerationListener.commands(true);
 
-        assertEquals(18, commands.size());
+        assertEquals(19, commands.size());
         assertTrue(names(commands).containsAll(Set.of(
                 "warn", "mute", "unmute", "kick", "ban", "unban", "restrict", "unrestrict",
                 "notification-test"
         )));
         assertTrue(commands.stream().allMatch(command ->
                 DefaultMemberPermissions.DISABLED.equals(command.getDefaultPermissions())));
+    }
+
+    @Test
+    void minecraftReviewCommandRequiresExactIdAndExplicitApproveOrDenyChoice() {
+        SlashCommandData command = (SlashCommandData) command(
+                JdaStaffModerationListener.commands(), "review-request"
+        );
+        assertEquals(java.util.List.of("request-id", "decision", "note"),
+                command.getOptions().stream().map(option -> option.getName()).toList());
+        assertTrue(command.getOptions().getFirst().isRequired());
+        assertTrue(command.getOptions().get(1).isRequired());
+        assertTrue(!command.getOptions().get(2).isRequired());
+        assertEquals(Set.of("approve", "deny"),
+                command.getOptions().get(1).getChoices().stream()
+                        .map(choice -> choice.getAsString()).collect(Collectors.toSet()));
     }
 
     @Test
@@ -91,7 +107,7 @@ class JdaStaffModerationListenerTest {
     void commandBridgeAddsOnlyThePrivateConsoleCommand() {
         var commands = JdaStaffModerationListener.commands(false, false, true);
 
-        assertEquals(10, commands.size());
+        assertEquals(11, commands.size());
         SlashCommandData console = (SlashCommandData) command(commands, "console");
         assertEquals(
                 java.util.List.of("server", "command"),
