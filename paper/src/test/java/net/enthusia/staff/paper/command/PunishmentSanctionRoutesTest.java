@@ -65,7 +65,7 @@ class PunishmentSanctionRoutesTest {
         assertNull(PunishmentSanctionRoutes.rewrite("unpunish", new String[0]));
         assertFalse(PunishmentSanctionRoutes.handles("warn", new String[]{"remove", WARN_ONE}));
         assertFalse(PunishmentSanctionRoutes.handles("punish", new String[]{"PlayerName"}));
-        assertTrue(PunishmentSanctionRoutes.usage().contains("/history <player>"));
+        assertTrue(PunishmentSanctionRoutes.usage().contains("/unpunish <player>"));
     }
 
     @Test
@@ -79,6 +79,41 @@ class PunishmentSanctionRoutesTest {
     }
 
     @Test
+    void inGameCommandsSelectPunishmentsWithGuiAndNoTypedSanctionId() {
+        assertTrue(PunishmentSanctionRoutes.isPickerRequest("unpunish", new String[]{"Notch"}));
+        assertTrue(PunishmentSanctionRoutes.isPickerRequest("punish", new String[]{"remove", "Notch"}));
+        assertTrue(PunishmentSanctionRoutes.isPickerRequest("punish", new String[]{"reduce", "Notch"}));
+        assertTrue(PunishmentSanctionRoutes.isPickerRequest("punish", new String[]{"change", "Notch"}));
+        assertTrue(PunishmentSanctionRoutes.isPickerRequest("punish", new String[]{"end", "Notch"}));
+        assertTrue(PunishmentSanctionRoutes.isPickerRequest("punish", new String[]{"overturn", "Notch"}));
+        assertFalse(PunishmentSanctionRoutes.isPickerRequest("punish", new String[]{"Notch"}));
+        assertFalse(PunishmentSanctionRoutes.isPickerRequest("warn", new String[]{"Notch"}));
+        assertFalse(PunishmentSanctionRoutes.isPickerRequest("unpunish",
+                new String[]{WARN_ONE, "Wrong warning"}));
+        assertTrue(PunishmentSanctionRoutes.pickerTarget("punish",
+                new String[]{"remove", "Notch"}).equals("Notch"));
+        assertTrue(PunishmentSanctionRoutes.pickerAction("unpunish", new String[]{"Notch"})
+                .equals("remove"));
+        assertTrue(PunishmentSanctionRoutes.pickerAction("punish",
+                new String[]{"change", "Notch"}).equals("change"));
+    }
+
+    @Test
+    void pickerUsesOnePersistedSanctionAndAuditConfirmation() throws IOException {
+        String source = Files.readString(Path.of(
+                "src/main/java/net/enthusia/staff/paper/command/ExactSanctionPickerGui.java"
+        )).replace("\r\n", "\n");
+        assertTrue(source.contains("for (SanctionReview sanction : review.sanctions())"));
+        assertTrue(source.contains("new Entry(review, sanction)"));
+        assertTrue(source.contains("new Selection(state, chosen, action(state.action))"));
+        assertTrue(source.contains("service.exactRevision(state.selection.entry.sanction.sanctionId())"));
+        assertTrue(source.contains("state.selection.entry.sanction.revision()"));
+        assertTrue(source.contains("lifecycle.execute(viewer, \"punish\", args)"));
+        assertTrue(source.contains("if (!submitting.add(viewer.getUniqueId()))"));
+        assertTrue(source.contains("new Confirmation(capture.selection, capture.expiration, value)"));
+    }
+
+    @Test
     void NewRoutesAreRegisteredAndAuthorityGated() throws IOException {
         Path base = Path.of("src/main/java/net/enthusia/staff/paper");
         String registrar = Files.readString(base.resolve("PaperCommandRegistrar.java"))
@@ -89,6 +124,9 @@ class PunishmentSanctionRoutesTest {
                 .replace("\r\n", "\n");
         assertTrue(registrar.contains("List.of(\"punish\", \"unpunish\""));
         assertTrue(registrar.contains("command.configureSanctionLifecycle(sanctionLifecycle)"));
+        assertTrue(registrar.contains("command.configureExactSanctionPicker(exactPicker)"));
+        assertTrue(command.contains("PunishmentSanctionRoutes.isPickerRequest(route, args)"));
+        assertTrue(command.contains("exactSanctionPicker.open(player,"));
         assertTrue(command.indexOf("PunishmentSanctionRoutes.handles(route, args)")
                 < command.indexOf("requireDraftPermission(sender, actor)"));
         assertTrue(command.contains("sanctionLifecycle.execute(sender, label, routed)"));
