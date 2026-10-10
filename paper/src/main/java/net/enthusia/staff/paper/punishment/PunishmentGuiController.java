@@ -786,14 +786,20 @@ public final class PunishmentGuiController implements Listener {
             PunishmentDraftConfirmation result
     ) {
         if (result instanceof PunishmentDraftConfirmation.Applied applied) {
-            finish(viewer, "Punishment committed as case " + applied.accepted().caseId()
-                    + (applied.accepted().replayed() ? " (idempotent replay)" : "") + '.');
+            finish(viewer, "Punishment saved | Case " + applied.accepted().caseId()
+                    + (applied.accepted().replayed() ? " (already processed)" : "") + '.');
+            if (!applied.accepted().replayed() && state.assessment().isPresent()) {
+                PunishmentAssessment assessment = state.assessment().orElseThrow();
+                PunishmentPublicAnnouncement.publish(plugin, state.draft().visibility(), false,
+                        state.target().currentUsername().orElse(state.target().playerId().toString()),
+                        assessment.sanctions(), assessment.policy().publicReason());
+            }
             return;
         }
         if (result instanceof PunishmentDraftConfirmation.Requested requested) {
-            finish(viewer, "Punishment request "
-                    + (requested.submitted().replayed() ? "replayed" : "submitted")
-                    + "; expires " + requested.submitted().request().expiresAt() + '.');
+            finish(viewer, "Approval request "
+                    + (requested.submitted().replayed() ? "already exists" : "submitted")
+                    + ". No punishment has been applied yet.");
             return;
         }
         handleRejected(viewer, actor, state, (PunishmentDraftConfirmation.Rejected) result);

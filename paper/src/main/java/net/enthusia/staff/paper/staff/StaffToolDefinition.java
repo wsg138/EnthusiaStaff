@@ -104,7 +104,7 @@ enum StaffToolDefinition {
             false,
             false,
             CooldownClass.MENU,
-            "Right-click to open the staff tools menu."
+            "Right-click to open tools; sneak + right-click to launch forward."
     );
 
     enum CooldownClass {

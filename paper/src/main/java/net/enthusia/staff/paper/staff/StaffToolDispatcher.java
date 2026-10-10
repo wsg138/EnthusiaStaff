@@ -126,6 +126,12 @@ public final class StaffToolDispatcher implements Listener, CommandExecutor, Tab
         }
         event.setCancelled(true);
         if (resolution.valid()
+                && resolution.tool() == StaffToolDefinition.STAFF_TOOLS
+                && player.isSneaking()) {
+            launch(player);
+            return;
+        }
+        if (resolution.valid()
                 && resolution.tool() == StaffToolDefinition.CHEAT_TESTER
                 && player.isSneaking()) {
             dispatchCheatConfiguration(player, resolution.tool());
@@ -186,6 +192,12 @@ public final class StaffToolDispatcher implements Listener, CommandExecutor, Tab
             return;
         }
         cancellation.accept(true);
+        if (resolution.valid()
+                && resolution.tool() == StaffToolDefinition.STAFF_TOOLS
+                && player.isSneaking()) {
+            launch(player);
+            return;
+        }
         if (resolution.valid()
                 && resolution.tool() == StaffToolDefinition.CHEAT_TESTER
                 && player.isSneaking()) {
@@ -255,6 +267,26 @@ public final class StaffToolDispatcher implements Listener, CommandExecutor, Tab
 
     void exitStaffMode(Player player) {
         runCommand(player, "staff");
+    }
+
+    /** Fast movement from the existing dashboard item; keeps the nine protected hotbar slots intact. */
+    void launch(Player player) {
+        if (!hasToolAuthority(player, StaffToolDefinition.STAFF_TOOLS)) {
+            return;
+        }
+        // Prevent accidental repeated propulsion and keep the movement server-authoritative.
+        if (!cooldowns.acquire(player.getUniqueId(), StaffToolDefinition.STAFF_TOOLS,
+                java.time.Duration.ofMillis(350)).allowed()) {
+            return;
+        }
+        org.bukkit.util.Vector direction = player.getEyeLocation().getDirection();
+        if (direction.lengthSquared() < 0.0001) {
+            return;
+        }
+        org.bukkit.util.Vector velocity = direction.normalize().multiply(2.8);
+        velocity.setY(Math.max(0.25, velocity.getY() + 0.25));
+        player.setVelocity(velocity);
+        staffMode.logStaffAction(player, "staff-launch", "Staff dashboard movement boost");
     }
 
     void dispatchInvestigationAction(Player player, InvestigationMenuAction action, String target) {
@@ -436,12 +468,16 @@ public final class StaffToolDispatcher implements Listener, CommandExecutor, Tab
             dispatch(player, StaffToolDefinition.RANDOM_TELEPORT, null);
             return;
         }
+        if (arguments.length == ACTION_ARGUMENTS && arguments[0].equalsIgnoreCase("launch")) {
+            launch(player);
+            return;
+        }
         if (isFollowCommand(arguments)) {
             beginNamedFollowOrSpectate(player.getUniqueId(), arguments[1]);
             return;
         }
         player.sendMessage(StaffMessageStyle.style(Component.text(
-                "Usage: /" + label + " | /" + label + " help | /" + label + " random | /" + label + " spectate <player>"
+                "Usage: /" + label + " [help | random | launch | spectate <player>]"
         )));
     }
 
@@ -472,7 +508,7 @@ public final class StaffToolDispatcher implements Listener, CommandExecutor, Tab
             return List.of();
         }
         String prefix = arguments[0].toLowerCase(Locale.ROOT);
-        return List.of("help", "random", "spectate", "follow").stream()
+        return List.of("help", "random", "launch", "spectate", "follow").stream()
                 .filter(value -> value.startsWith(prefix))
                 .toList();
     }

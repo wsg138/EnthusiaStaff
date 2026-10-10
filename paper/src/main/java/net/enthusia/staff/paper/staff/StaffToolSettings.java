@@ -15,10 +15,10 @@ record StaffToolSettings(
         Duration toggleCooldown,
         Duration menuCooldown
 ) {
-    private static final long DEFAULT_RANDOM_COOLDOWN_MILLIS = 2_000L;
-    private static final long DEFAULT_TARGET_COOLDOWN_MILLIS = 750L;
-    private static final long DEFAULT_TOGGLE_COOLDOWN_MILLIS = 500L;
-    private static final long DEFAULT_MENU_COOLDOWN_MILLIS = 500L;
+    private static final long DEFAULT_RANDOM_COOLDOWN_MILLIS = 250L;
+    private static final long DEFAULT_TARGET_COOLDOWN_MILLIS = 100L;
+    private static final long DEFAULT_TOGGLE_COOLDOWN_MILLIS = 100L;
+    private static final long DEFAULT_MENU_COOLDOWN_MILLIS = 100L;
 
     StaffToolSettings {
         disabledServers = normalize(disabledServers);
@@ -34,10 +34,14 @@ record StaffToolSettings(
         return new StaffToolSettings(
                 Set.copyOf(configuration.getStringList("staff-tools.random-teleport.disabled-servers")),
                 Set.copyOf(configuration.getStringList("staff-tools.random-teleport.disabled-worlds")),
-                millis(configuration, "staff-tools.cooldowns.random-teleport-millis", DEFAULT_RANDOM_COOLDOWN_MILLIS),
-                millis(configuration, "staff-tools.cooldowns.target-tool-millis", DEFAULT_TARGET_COOLDOWN_MILLIS),
-                millis(configuration, "staff-tools.cooldowns.toggle-tool-millis", DEFAULT_TOGGLE_COOLDOWN_MILLIS),
-                millis(configuration, "staff-tools.cooldowns.menu-millis", DEFAULT_MENU_COOLDOWN_MILLIS)
+                migratedMillis(configuration, "staff-tools.cooldowns.random-teleport-millis",
+                        2_000L, DEFAULT_RANDOM_COOLDOWN_MILLIS),
+                migratedMillis(configuration, "staff-tools.cooldowns.target-tool-millis",
+                        750L, DEFAULT_TARGET_COOLDOWN_MILLIS),
+                migratedMillis(configuration, "staff-tools.cooldowns.toggle-tool-millis",
+                        500L, DEFAULT_TOGGLE_COOLDOWN_MILLIS),
+                migratedMillis(configuration, "staff-tools.cooldowns.menu-millis",
+                        500L, DEFAULT_MENU_COOLDOWN_MILLIS)
         );
     }
 
@@ -56,6 +60,14 @@ record StaffToolSettings(
 
     boolean worldEnabled(String worldName) {
         return worldName != null && !disabledWorlds.contains(normalize(worldName));
+    }
+
+    /** Existing generated configs retain old defaults; map only those exact legacy values. */
+    private static Duration migratedMillis(FileConfiguration configuration, String path,
+            long legacyDefault, long currentDefault) {
+        Duration configured = millis(configuration, path, currentDefault);
+        return configured.toMillis() == legacyDefault
+                ? Duration.ofMillis(currentDefault) : configured;
     }
 
     private static Duration millis(FileConfiguration configuration, String path, long fallback) {

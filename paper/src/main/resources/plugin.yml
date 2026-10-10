@@ -104,7 +104,7 @@ commands:
     permission: enthusiastaff.staffmode
   stafftools:
     description: Use the staff-mode operational tool menu and text fallbacks
-    usage: /stafftools | /stafftools help | /stafftools random | /stafftools spectate <player>
+    usage: /stafftools [help | random | launch | spectate <player>]
     permission: enthusiastaff.stafftools.menu
   cheattester:
     description: Configure and run bounded evidence-only cheat tester probes and virtual fake bases

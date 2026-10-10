@@ -21,6 +21,7 @@ final class StaffToolsMenuRenderer {
     static final int NEXT_SLOT = 52;
     static final int CLOSE_SLOT = 53;
     static final int EXIT_SLOT = 51;
+    static final int LAUNCH_SLOT = 50;
     static final int CONFIRM_EXIT_SLOT = 24;
     static final int CANCEL_EXIT_SLOT = 20;
 
@@ -73,6 +74,12 @@ final class StaffToolsMenuRenderer {
                 Material.PAPER,
                 "Staff commands",
                 List.of(Component.text("Click for your available commands and shortcuts.", NamedTextColor.GRAY))
+        ));
+        inventory.setItem(LAUNCH_SLOT, item(
+                Material.FIREWORK_ROCKET,
+                "Launch Forward",
+                List.of(Component.text("Propel yourself in the direction you are facing.", NamedTextColor.GRAY),
+                        Component.text("Shortcut: sneak + right-click the Staff Tools star.", NamedTextColor.AQUA))
         ));
         inventory.setItem(EXIT_SLOT, item(
                 Material.BARRIER,

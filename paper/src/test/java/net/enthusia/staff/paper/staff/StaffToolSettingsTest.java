@@ -106,6 +106,20 @@ class StaffToolSettingsTest {
         assertThrows(IllegalArgumentException.class, () -> StaffToolSettings.load(configuration(MENU_COOLDOWN, 60_001L)));
     }
 
+    @Test
+    void legacyGeneratedCooldownValuesAreReducedWithoutChangingCustomSettings() {
+        assertEquals(Duration.ofMillis(250), StaffToolSettings.load(configuration(RANDOM_COOLDOWN, 2000L))
+                .cooldownFor(StaffToolDefinition.RANDOM_TELEPORT));
+        assertEquals(Duration.ofMillis(100), StaffToolSettings.load(configuration(TARGET_COOLDOWN, 750L))
+                .cooldownFor(StaffToolDefinition.FREEZE));
+        assertEquals(Duration.ofMillis(100), StaffToolSettings.load(configuration(TOGGLE_COOLDOWN, 500L))
+                .cooldownFor(StaffToolDefinition.VANISH));
+        assertEquals(Duration.ofMillis(100), StaffToolSettings.load(configuration(MENU_COOLDOWN, 500L))
+                .cooldownFor(StaffToolDefinition.STAFF_TOOLS));
+        assertEquals(Duration.ofMillis(75), StaffToolSettings.load(configuration(TARGET_COOLDOWN, 75L))
+                .cooldownFor(StaffToolDefinition.FREEZE));
+    }
+
     private static YamlConfiguration configuration(String path, long value) {
         YamlConfiguration configuration = new YamlConfiguration();
         configuration.set(path, value);
