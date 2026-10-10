@@ -33,8 +33,12 @@ commands:
     usage: /history <player|uuid> [page]
     permission: enthusiastaff.history.view
   punish:
-    description: Open the central punishment GUI or execute an explicit automation path
-    usage: /punish [player] or /punish resume <player>
+    description: Open the punishment GUI or change one exact sanction by ID
+    usage: /punish [player] or /punish remove|end|reduce|change <sanction-id> ...
+  unpunish:
+    description: Revoke one exact punishment by sanction ID while preserving audit history
+    usage: /unpunish <sanction-id> <written reason>
+    permission: enthusiastaff.remove
   ban:
     description: Open a ban-filtered central punishment workflow
     usage: /ban <player> [reason-id]

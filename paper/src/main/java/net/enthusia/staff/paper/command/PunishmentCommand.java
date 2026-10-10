@@ -12,6 +12,7 @@ import java.util.concurrent.RejectedExecutionException;
 import java.util.function.Supplier;
 import java.util.logging.Level;
 import net.enthusia.staff.domain.OperationalMode;
+import net.enthusia.staff.domain.sanction.SanctionChangeAction;
 import net.enthusia.staff.domain.application.PreparePunishmentDraftRequest;
 import net.enthusia.staff.domain.application.PunishmentDraft;
 import net.enthusia.staff.domain.application.PunishmentDraftCleanupException;
@@ -31,6 +32,7 @@ import net.enthusia.staff.paper.auth.PaperActorResolver;
 import net.enthusia.staff.paper.auth.StaffTargetGuard;
 import net.enthusia.staff.paper.punishment.PunishmentGuiController;
 import net.enthusia.staff.paper.punishment.PunishmentRequestPresentation;
+import net.enthusia.staff.paper.sanction.SanctionChangeAccess;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.command.Command;
@@ -76,6 +78,8 @@ public final class PunishmentCommand implements CommandExecutor, TabCompleter {
     private final PunishmentRequestCommandHandler requestCommands;
     private final ExecutorService workers;
     private final StaffTargetGuard targetGuard;
+    private volatile SanctionLifecycleCommand sanctionLifecycle;
+    private volatile ExactSanctionPickerGui exactSanctionPicker;
 
     public PunishmentCommand(
             JavaPlugin plugin,
@@ -115,11 +119,40 @@ public final class PunishmentCommand implements CommandExecutor, TabCompleter {
         this.targetGuard = java.util.Objects.requireNonNull(targetGuard, "targetGuard");
     }
 
+    public void configureSanctionLifecycle(SanctionLifecycleCommand lifecycle) {
+        sanctionLifecycle = java.util.Objects.requireNonNull(lifecycle, "lifecycle");
+    }
+
+    public void configureExactSanctionPicker(ExactSanctionPickerGui picker) {
+        exactSanctionPicker = java.util.Objects.requireNonNull(picker, "picker");
+    }
+
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
         Actor actor = PaperActorResolver.resolve(sender).orElse(null);
         String route = CommandRoute.canonicalName(command);
         if (!banRouteAllowed(sender, actor, route)) {
+            return true;
+        }
+        if (PunishmentSanctionRoutes.handles(route, args)) {
+            if (sender instanceof Player player && PunishmentSanctionRoutes.isPickerRequest(route, args)) {
+                if (exactSanctionPicker == null) {
+                    sender.sendMessage(StaffMessageStyle.error("Punishment selection is not configured."));
+                } else {
+                    exactSanctionPicker.open(player,
+                            PunishmentSanctionRoutes.pickerTarget(route, args),
+                            PunishmentSanctionRoutes.pickerAction(route, args));
+                }
+                return true;
+            }
+            String[] routed = PunishmentSanctionRoutes.rewrite(route, args);
+            if (routed == null) {
+                sender.sendMessage(StaffMessageStyle.usage(PunishmentSanctionRoutes.usage()));
+            } else if (sanctionLifecycle == null) {
+                sender.sendMessage(StaffMessageStyle.error("Exact sanction changes are not configured."));
+            } else {
+                sanctionLifecycle.execute(sender, label, routed);
+            }
             return true;
         }
         if (handleRequestCommand(sender, actor, route, args)) {
@@ -608,6 +641,10 @@ public final class PunishmentCommand implements CommandExecutor, TabCompleter {
         )));
         if (CENTRAL_COMMAND.equals(route)) {
             sender.sendMessage(StaffMessageStyle.style(Component.text(
+                    "Punishment changes: /punish remove|end|reduce|change <player> opens a selector.", 
+                    NamedTextColor.GRAY
+            )));
+            sender.sendMessage(StaffMessageStyle.style(Component.text(
                     "Request review: /punish requests | review | approve | deny",
                     NamedTextColor.GRAY
             )));
@@ -616,8 +653,42 @@ public final class PunishmentCommand implements CommandExecutor, TabCompleter {
 
     @Override
     public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
-        List<String> completions = new ArrayList<>(requestCommands.complete(CommandRoute.canonicalName(command), args));
+        String route = CommandRoute.canonicalName(command);
+        if ("unpunish".equals(route)) {
+            return args.length == 1 && sender.hasPermission("enthusiastaff.remove")
+                    ? onlineNames(sender, args[0]) : List.of();
+        }
+        if (CENTRAL_COMMAND.equals(route) && args.length == SUBCOMMAND_ARGUMENT_COUNT
+                && PunishmentSanctionRoutes.handles(route, args)) {
+            String action = PunishmentSanctionRoutes.pickerAction(route, args);
+            Actor actor = PaperActorResolver.resolve(sender).orElse(null);
+            if (actor == null || !SanctionChangeAccess.canChangeAnything(authorization, actor)) {
+                return List.of();
+            }
+            boolean permitted = "change".equals(action)
+                    ? java.util.stream.Stream.of(
+                            SanctionChangeAction.REVOKE,
+                            SanctionChangeAction.END_EARLY,
+                            SanctionChangeAction.REDUCE_DURATION,
+                            SanctionChangeAction.FULL_OVERTURN
+                    ).anyMatch(selected -> ExactSanctionPickerGui.hasActionPermissions(
+                            sender::hasPermission, selected)
+                            && authorization.permits(actor, selected.requiredModerationAction()))
+                    : ExactSanctionPickerGui.hasActionPermissions(
+                            sender::hasPermission, ExactSanctionPickerGui.action(action))
+                            && authorization.permits(
+                                    actor, ExactSanctionPickerGui.action(action).requiredModerationAction());
+            return permitted ? onlineNames(sender, args[1]) : List.of();
+        }
+        List<String> completions = new ArrayList<>(requestCommands.complete(route, args));
         if (args.length == SINGLE_ARGUMENT_COUNT) {
+            if (CENTRAL_COMMAND.equals(route)) {
+                for (String action : List.of("remove", "end", "reduce", "change", "overturn")) {
+                    if (action.startsWith(args[0].toLowerCase(Locale.ROOT))) {
+                        completions.add(action);
+                    }
+                }
+            }
             String prefix = args[0].toLowerCase(Locale.ROOT);
             if (CONFIRM_SUBCOMMAND.startsWith(prefix)) {
                 completions.add(CONFIRM_SUBCOMMAND);
@@ -643,6 +714,17 @@ public final class PunishmentCommand implements CommandExecutor, TabCompleter {
                     .toList();
         }
         return completions;
+    }
+
+    private static List<String> onlineNames(CommandSender sender, String prefix) {
+        if (!(sender instanceof Player player)) {
+            return List.of();
+        }
+        String normalized = prefix.toLowerCase(Locale.ROOT);
+        return player.getServer().getOnlinePlayers().stream()
+                .map(Player::getName)
+                .filter(name -> name.toLowerCase(Locale.ROOT).startsWith(normalized))
+                .toList();
     }
 
     record Dependencies(

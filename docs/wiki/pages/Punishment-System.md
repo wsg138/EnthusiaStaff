@@ -127,6 +127,65 @@ Use the approved mutation commands rather than deleting rows or editing the data
 
 Select the exact case/sanction when multiple actions exist. A change should preserve the original record and explain whether it is a reduction, early ending, revocation, correction, appeal result or full overturn.
 
+### Select and change an individual punishment (new draft GUI)
+
+No one needs to type a sanction UUID in-game. Use the player name:
+
+```text
+/unpunish <player>
+/punish remove <player>
+/punish end <player>
+/punish reduce <player>
+/punish change <player>
+```
+
+The menu lists individual punishments from recent case history, including **each
+warning separately** even when several warnings share the same case. Entries show
+their type, case reason, issue time, status, expiration, and short reference.
+Choose exactly one punishment. `/punish change` then offers an action selection;
+the other commands preselect the appropriate action. For reductions, provide a
+new shorter duration such as `2d` or an ISO-8601 UTC expiration in the
+private chat prompt. Next enter the written audit reason and click the final
+**Confirm selected punishment** button.
+
+The internal sanction ID never needs to be typed: the selected entry is bound
+to its exact persisted UUID and expected revision, and the final write flows
+through the existing exact-sanction lifecycle. A changed/stale record, missing
+authority, or non-active moderation mode rejects the mutation. No command
+silently chooses "the most recent warning." Existing case and event records
+remain auditable; other sanctions are not the target of the change.
+
+Mods may revoke, end, or reduce within their rank/hierarchy and permissions;
+full overturn is limited to Admin/Founder. A reduction cannot extend a
+punishment. The GUI includes a cancellation option, requires an audit reason,
+and asks for a separate final confirmation. Staff Mode remains required.
+
+For console and automation only, the explicit `/estaff sanction` and exact-ID
+`/punish remove|end|reduce <sanction-id> ...` commands remain available.
+`/case` still displays IDs for investigation, but normal staff do not need
+to copy them into commands.
+
+**These commands are in a draft PR, not confirmed deployed on live SMP.**
+
+The existing `/removepunishment <player>` and `/unwarn <player>`,
+`/removewarning <player>`, `/unban <player>` and `/unmute <player>`
+also open this exact-punishment picker. The warning aliases list **warnings only**,
+while ban/mute aliases only display matching punishment types; none
+silently changes the latest sanction. For player-issued `/unwarn`, `/removewarning`, `/unban`, and
+`/unmute` commands, the old multi-argument text forms are rejected rather
+than implicitly changing the latest case. The legacy multi-argument **console**
+syntax remains available for compatibility and still has its own confirmation
+and authorization safeguards. Case-wide `/removepunishment <case> <action>`
+remains a separate reviewed workflow when case-level actions are intended.
+
+The picker currently loads the most recent **100 cases** from the player
+record; for an older historical case, use `/history <player> [page]`
+and `/case <case-id>`. The latter exposes a clickable suggested
+`/unpunish` command for the selected sanction without needing to type its
+UUID manually.
+
+**Do not assume this draft is installed on the live server.**
+
 Use `/history <player|uuid> [page]` for the newest-first moderation timeline and `/case [view] <case-id>` for complete case, sanction, request, appeal and mutation detail. Exact sanction changes use `/estaff sanction reduce|end|revoke|overturn` and always preserve the original decision and append audit history. See [[Moderation, Punishments, and Reports]] for source files and remaining staging work.
 
 ## Stop and ask for help when

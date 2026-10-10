@@ -47,6 +47,7 @@ public final class SanctionChangeCommand implements CommandExecutor, TabComplete
     private final AuthorizationPolicy authorization;
     private final ExecutorService workers;
     private final SanctionChangeGuiController gui;
+    private volatile ExactSanctionPickerGui exactPicker;
 
     public SanctionChangeCommand(
             JavaPlugin plugin,
@@ -68,6 +69,10 @@ public final class SanctionChangeCommand implements CommandExecutor, TabComplete
         this.gui = gui;
     }
 
+    public void configureExactSanctionPicker(ExactSanctionPickerGui picker) {
+        exactPicker = java.util.Objects.requireNonNull(picker, "picker");
+    }
+
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] arguments) {
         Actor actor = authorizedActor(sender);
@@ -76,6 +81,13 @@ public final class SanctionChangeCommand implements CommandExecutor, TabComplete
         }
         String route = CommandRoute.canonicalName(command);
         boolean central = route.equals("removepunishment");
+        if (sender instanceof Player && !central && arguments.length > SINGLE_ARGUMENT) {
+            sender.sendMessage(StaffMessageStyle.usage(
+                    "Use /" + route + " <player> to choose the exact punishment in the GUI. "
+                            + "Multi-argument legacy shortcuts are console-only."
+            ));
+            return true;
+        }
         if (openAliasGui(sender, arguments, route, central)) {
             return true;
         }
@@ -111,7 +123,18 @@ public final class SanctionChangeCommand implements CommandExecutor, TabComplete
     }
 
     private boolean openAliasGui(CommandSender sender, String[] arguments, String route, boolean central) {
-        if (central || arguments.length != SINGLE_ARGUMENT || !(sender instanceof Player player)) {
+        if (arguments.length != SINGLE_ARGUMENT || !(sender instanceof Player player)) {
+            return false;
+        }
+        ExactSanctionPickerGui picker = exactPicker;
+        if (picker != null) {
+            SanctionChangeAction action = central ? null : SanctionChangeAccess.aliasAction(route);
+            String selection = action == SanctionChangeAction.END_EARLY ? "end"
+                    : action == SanctionChangeAction.REVOKE ? "remove" : "change";
+            picker.open(player, arguments[0], selection, SanctionChangeAccess.aliasTypes(route));
+            return true;
+        }
+        if (central) {
             return false;
         }
         gui.open(player, arguments[0], route);

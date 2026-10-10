@@ -23,6 +23,7 @@ class CommandPermissionConfigurationTest {
     private static final Map<String, String> EXPECTED_PERMISSIONS = Map.ofEntries(
             Map.entry("history", HistoryCommand.VIEW_PERMISSION),
             Map.entry("removepunishment", REMOVE_PERMISSION),
+            Map.entry("unpunish", REMOVE_PERMISSION),
             Map.entry("unban", REMOVE_PERMISSION),
             Map.entry("unmute", REMOVE_PERMISSION),
             Map.entry("removewarning", REMOVE_PERMISSION),
