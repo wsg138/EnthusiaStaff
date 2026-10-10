@@ -85,6 +85,18 @@ class AiReviewHttpClientTest {
     }
 
     @Test
+    void historyFiltersAreServerSideAndNeverSendFreeText() throws Exception {
+        try (MiniServer server = new MiniServer(request ->
+                Response.json(200, "{\"items\":[],\"next_cursor\":null}"))) {
+            AiReviewHttpClient client = client(server, 64 * 1024, 2_000);
+            var history = client.listDecisions(10, null, AiReviewHistoryFilter.FAIL_OPEN);
+            assertTrue(history.items().isEmpty());
+            assertEquals("/v1/decisions?limit=10&filter=fail_open",
+                    server.awaitRequest().target());
+        }
+    }
+
+    @Test
     void historyRejectsMalformedOrUnboundedPage() throws Exception {
         try (MiniServer server = new MiniServer(request ->
                 Response.json(200, "{\"items\":[{}],\"next_cursor\":null}"))) {
