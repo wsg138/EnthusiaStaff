@@ -182,17 +182,25 @@ public final class ExactSanctionPickerGui implements Listener {
             show(viewer, new Listing(state.session, state.action, state.entries, state.page - 1));
         } else if (slot == NEXT && (state.page + 1) * PAGE_SIZE < state.entries.size()) {
             show(viewer, new Listing(state.session, state.action, state.entries, state.page + 1));
-        } else if (slot < PAGE_SIZE) {
-            int index = state.page * PAGE_SIZE + slot;
-            if (index < state.entries.size()) {
-                Entry chosen = state.entries.get(index);
+        } else {
+            pageEntry(state.entries, state.page, slot).ifPresent(chosen -> {
                 if ("change".equals(state.action)) {
                     show(viewer, new Choice(state, chosen));
                 } else {
                     beginInput(viewer, new Selection(state, chosen, action(state.action)));
                 }
-            }
+            });
         }
+    }
+
+    /** Stable slot-to-record mapping even when a case contains multiple warnings. */
+    static <T> Optional<T> pageEntry(List<T> entries, int page, int slot) {
+        if (entries == null || page < 0 || slot < 0 || slot >= PAGE_SIZE) {
+            return Optional.empty();
+        }
+        long index = (long) page * PAGE_SIZE + slot;
+        return index < entries.size()
+                ? Optional.of(entries.get((int) index)) : Optional.empty();
     }
 
     private void choiceClick(Player viewer, Choice state, int slot) {
