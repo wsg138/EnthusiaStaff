@@ -27,6 +27,7 @@ final class AiReviewGuiRenderer {
     static final int BACK = 45;
     static final int REFRESH = 49;
     static final int HISTORY_TOGGLE = 48;
+    static final int HISTORY_FILTER = 47;
     static final int NEXT = 53;
     static final int CLOSE = 50;
     static final int ALLOW = 20;
@@ -111,6 +112,11 @@ final class AiReviewGuiRenderer {
         inventory.setItem(HISTORY_TOGGLE, item(Material.BOOKSHELF, "Flagged review queue", List.of(
                 "Return to cases that need staff attention"
         )));
+        inventory.setItem(HISTORY_FILTER, item(Material.HOPPER,
+                "Filter: " + state.filter().displayName(), List.of(
+                        "Click to cycle decision-history filters",
+                        "Changing filters returns to page one"
+                )));
         if (!state.previousCursors().isEmpty()) {
             inventory.setItem(PREVIOUS, item(Material.ARROW, "Previous page", List.of()));
         }
@@ -328,7 +334,8 @@ final class AiReviewGuiRenderer {
             return Component.text("AI Review Queue · Page " + (queue.page() + 1));
         }
         if (state instanceof AiReviewGuiState.History history) {
-            return Component.text("AI Decisions · Page " + (history.previousCursors().size() + 1));
+            return Component.text("AI " + history.filter().displayName() + " · Page "
+                    + (history.previousCursors().size() + 1));
         }
         if (state instanceof AiReviewGuiState.LabelPicker) {
             return Component.text("AI Review · Semantic Label");
