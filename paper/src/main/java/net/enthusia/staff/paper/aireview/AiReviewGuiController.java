@@ -279,41 +279,46 @@ final class AiReviewGuiController implements Listener {
     }
 
     private void historyClick(Player viewer, AiReviewGuiState.History state, int slot) {
-        if (slot == AiReviewGuiRenderer.CLOSE) {
-            viewer.closeInventory();
+        switch (slot) {
+            case AiReviewGuiRenderer.CLOSE -> viewer.closeInventory();
+            case AiReviewGuiRenderer.HISTORY_TOGGLE -> openQueue(viewer);
+            case AiReviewGuiRenderer.HISTORY_FILTER ->
+                    openHistory(viewer, null, List.of(), state.filter().next());
+            case AiReviewGuiRenderer.REFRESH ->
+                    openHistory(viewer, state.cursor(), state.previousCursors(), state.filter());
+            case AiReviewGuiRenderer.PREVIOUS -> historyPrevious(viewer, state);
+            case AiReviewGuiRenderer.NEXT -> historyNext(viewer, state);
+            default -> historyOpenItem(viewer, state, slot);
+        }
+    }
+
+    private void historyPrevious(Player viewer, AiReviewGuiState.History state) {
+        if (state.previousCursors().isEmpty()) {
             return;
         }
-        if (slot == AiReviewGuiRenderer.HISTORY_TOGGLE) {
-            openQueue(viewer);
+        var previous = AiReviewHistoryNavigation.previous(state);
+        openHistory(viewer, previous.cursor(), previous.previousCursors(), state.filter());
+    }
+
+    private void historyNext(Player viewer, AiReviewGuiState.History state) {
+        if (state.nextCursor() == null
+                || state.previousCursors().size() >= AiReviewHistoryNavigation.MAX_PREVIOUS_PAGES) {
             return;
         }
-        if (slot == AiReviewGuiRenderer.HISTORY_FILTER) {
-            openHistory(viewer, null, List.of(), state.filter().next());
+        var next = AiReviewHistoryNavigation.next(state);
+        openHistory(viewer, next.cursor(), next.previousCursors(), state.filter());
+    }
+
+    private void historyOpenItem(Player viewer, AiReviewGuiState.History state, int slot) {
+        int index = AiReviewGuiRenderer.CONTENT_SLOTS.indexOf(slot);
+        if (index < 0 || index >= state.items().size()) {
             return;
         }
-        if (slot == AiReviewGuiRenderer.REFRESH) {
-            openHistory(viewer, state.cursor(), state.previousCursors(), state.filter());
+        if (!AiReviewPermissions.detail(viewer)) {
+            deny(viewer, AiReviewPermissions.DETAIL);
             return;
         }
-        if (slot == AiReviewGuiRenderer.PREVIOUS && !state.previousCursors().isEmpty()) {
-            var previous = AiReviewHistoryNavigation.previous(state);
-            openHistory(viewer, previous.cursor(), previous.previousCursors(), state.filter());
-            return;
-        }
-        if (slot == AiReviewGuiRenderer.NEXT && state.nextCursor() != null
-                && state.previousCursors().size() < AiReviewHistoryNavigation.MAX_PREVIOUS_PAGES) {
-            var next = AiReviewHistoryNavigation.next(state);
-            openHistory(viewer, next.cursor(), next.previousCursors(), state.filter());
-            return;
-        }
-        int slotIndex = AiReviewGuiRenderer.CONTENT_SLOTS.indexOf(slot);
-        if (slotIndex >= 0 && slotIndex < state.items().size()) {
-            if (!AiReviewPermissions.detail(viewer)) {
-                deny(viewer, AiReviewPermissions.DETAIL);
-                return;
-            }
-            openEvent(viewer, state.items().get(slotIndex).eventId(), 0, state);
-        }
+        openEvent(viewer, state.items().get(index).eventId(), 0, state);
     }
 
     private void detailClick(Player viewer, AiReviewGuiState.Detail state, int slot) {
