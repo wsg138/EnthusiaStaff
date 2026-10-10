@@ -416,6 +416,24 @@ class AiReviewHttpClientTest {
         }
     }
 
+    @Test
+    void correctionMayBeAcceptedByServerBeforeItsResponseTimesOut() throws Exception {
+        java.util.concurrent.atomic.AtomicBoolean serverAccepted = new java.util.concurrent.atomic.AtomicBoolean();
+        try (MiniServer server = new MiniServer(request -> {
+            serverAccepted.set(true);
+            return new Response(201, correctionJson().getBytes(StandardCharsets.UTF_8), 700);
+        })) {
+            AiReviewHttpClient client = client(server, 64 * 1024, 250);
+            var failure = assertThrows(AiReviewClientException.class, () ->
+                    client.correct("event-1", "reviewer-a", CorrectionAuthority.STAFF, decision(), null));
+            assertEquals(Category.TIMEOUT, failure.category());
+            assertTrue(serverAccepted.get(), "The write reached the server before the reply was lost");
+            String issue = "central review timeout; retry backoff 5s";
+            assertTrue(AiReviewWriteFeedback.outcomeUncertain(issue));
+            assertTrue(AiReviewWriteFeedback.message(issue).contains("status UNKNOWN"));
+        }
+    }
+
     private AiReviewHttpClient client(MiniServer server, int maxBytes, long timeoutMillis) {
         AiReviewConfiguration configuration = new AiReviewConfiguration(
                 server.uri(),
