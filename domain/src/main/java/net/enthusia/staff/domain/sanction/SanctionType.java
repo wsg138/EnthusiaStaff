@@ -22,6 +22,6 @@ public enum SanctionType {
     }
 
     public boolean inheritsAcrossAltRelationships() {
-        return isBan() || this == MUTE;
+        return isBan() || this == MUTE || this == PUBLIC_MUTE;
     }
 }

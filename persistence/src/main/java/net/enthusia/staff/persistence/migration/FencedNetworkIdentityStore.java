@@ -47,6 +47,16 @@ public final class FencedNetworkIdentityStore implements NetworkIdentityStore {
     }
 
     @Override
+    public NetworkIdentityObservationResult observeConnectedAlts(
+            UUID joiningPlayerId, Instant observedAt, boolean suppressAutomatedEvidence
+    ) {
+        return fence.execute(
+                () -> delegate.observeConnectedAlts(joiningPlayerId, observedAt, suppressAutomatedEvidence),
+                () -> delegate.observeConnectedAlts(joiningPlayerId, observedAt, true)
+        );
+    }
+
+    @Override
     public List<AltRelationshipSummary> relationships(UUID playerId) {
         return delegate.relationships(playerId);
     }

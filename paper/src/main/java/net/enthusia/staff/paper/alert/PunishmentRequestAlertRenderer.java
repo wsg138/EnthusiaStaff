@@ -72,25 +72,23 @@ public final class PunishmentRequestAlertRenderer {
             String target,
             String actor
     ) {
-        Component heading = Component.text(reviewerHeading(intent.eventType()), NamedTextColor.GOLD);
-        Component details = baseDetails(request, target)
-                .append(line("Requester: " + request.proposal().requester().displayName()))
-                .append(line("Required reviewer: " + request.proposal().requiredRank()))
-                .append(line("Expires: " + request.expiresAt()));
+        Component message = Component.text(reviewerHeading(intent.eventType()), NamedTextColor.GOLD)
+                .append(line("Player: " + target + " | " + request.proposal().publicReason()))
+                .append(line("Requested by " + request.proposal().requester().displayName()
+                        + " | ID: " + request.requestId()));
         if (intent.eventType() == PunishmentRequestLifecycleEventType.REQUEST_CLAIMED) {
-            details = details.append(line("Claimed by: " + actor));
+            message = message.append(line("In review by " + actor));
         }
         if (hasCase(intent.eventType())) {
-            details = details.append(line("Case: " + request.resultingCaseId()));
+            message = message.append(line("Case: " + request.resultingCaseId()));
         }
         if (request.status() == PunishmentRequestStatus.PENDING) {
-            String command = "/punish review " + request.requestId();
-            details = details.append(Component.newline()).append(
-                    Component.text("[Open request]", NamedTextColor.AQUA)
-                            .clickEvent(ClickEvent.runCommand(command))
+            message = message.append(Component.newline()).append(
+                    Component.text("[Review request]", NamedTextColor.AQUA)
+                            .clickEvent(ClickEvent.runCommand("/punish review " + request.requestId()))
             );
         }
-        return heading.append(details);
+        return message;
     }
 
     private static Component operational(

@@ -155,6 +155,15 @@ class NetworkIdentityWriteFenceIntegrationTest {
         }
 
         @Override
+        public NetworkIdentityObservationResult observeConnectedAlts(
+                UUID joiningPlayerId, Instant observedAt, boolean suppressEvidence
+        ) {
+            observations.incrementAndGet();
+            suppressAutomatedEvidence.set(suppressEvidence);
+            return new NetworkIdentityObservationResult(0, 0, 0, suppressEvidence);
+        }
+
+        @Override
         public List<AltRelationshipSummary> relationships(UUID playerId) {
             return List.of();
         }

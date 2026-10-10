@@ -31,6 +31,9 @@ import net.enthusia.staff.common.security.ProtectedNetworkIdentity;
 import net.enthusia.staff.domain.alt.AltRelationshipState;
 import net.enthusia.staff.domain.alt.NetworkIdentityObservationResult;
 import net.enthusia.staff.domain.alt.NetworkIdentityRetentionResult;
+import net.enthusia.staff.domain.moderation.DiscordMinecraftLinkSource;
+import net.enthusia.staff.domain.moderation.DiscordUserId;
+import net.enthusia.staff.persistence.JdbcDiscordModerationPersistenceStore;
 import net.enthusia.staff.persistence.JdbcNetworkIdentityStore;
 import net.enthusia.staff.persistence.MariaDb;
 import net.enthusia.staff.persistence.MariaDbRuntime;
@@ -131,6 +134,98 @@ class NetworkIdentityStoreIntegrationTest {
     }
 
     @Test
+    void verifiedSameDiscordAccountsShareBanAndBothMuteTypesAcrossDifferentNetworks() throws SQLException {
+        Instant now = Instant.parse("2026-10-10T19:00:00Z");
+        UUID moderator = UUID.randomUUID();
+        UUID source = UUID.randomUUID();
+        UUID second = UUID.randomUUID();
+        UUID third = UUID.randomUUID();
+        MariaDbIntegrationSupport.insertPlayer(DATABASE, moderator, "StaffReviewer", now.minusSeconds(100));
+        MariaDbIntegrationSupport.insertPlayer(DATABASE, source, "OneAccount", now.minusSeconds(100));
+        MariaDbIntegrationSupport.insertPlayer(DATABASE, second, "TwoAccount", now.minusSeconds(100));
+        MariaDbIntegrationSupport.insertPlayer(DATABASE, third, "ThreeAccount", now.minusSeconds(100));
+        String caseId = "ALTLINKCASE00001";
+        MariaDbIntegrationSupport.insertCase(DATABASE, caseId, source, moderator, now.minusSeconds(30));
+        UUID ban = UUID.randomUUID();
+        UUID mute = UUID.randomUUID();
+        UUID publicMute = UUID.randomUUID();
+        MariaDbIntegrationSupport.insertSanction(DATABASE, ban, caseId, source,
+                "BAN", "ACTIVE", now.minusSeconds(20), now.plusSeconds(900));
+        MariaDbIntegrationSupport.insertSanction(DATABASE, mute, caseId, source,
+                "MUTE", "ACTIVE", now.minusSeconds(20), now.plusSeconds(900));
+        MariaDbIntegrationSupport.insertSanction(DATABASE, publicMute, caseId, source,
+                "PUBLIC_MUTE", "ACTIVE", now.minusSeconds(20), now.plusSeconds(900));
+
+        JdbcDiscordModerationPersistenceStore accounts = new JdbcDiscordModerationPersistenceStore(dataSource);
+        DiscordUserId shared = new DiscordUserId("18446744073709550013");
+        accounts.link(shared, source, DiscordMinecraftLinkSource.STAFF_RECOVERY, "test-link-" + source, now);
+        accounts.link(shared, second, DiscordMinecraftLinkSource.STAFF_RECOVERY, "test-link-" + second, now);
+        accounts.link(shared, third, DiscordMinecraftLinkSource.STAFF_RECOVERY, "test-link-" + third, now);
+
+        NetworkIdentityObservationResult first = store().observeConnectedAlts(second, now.plusSeconds(3), false);
+        NetworkIdentityObservationResult secondJoin = store().observeConnectedAlts(third, now.plusSeconds(4), false);
+        assertEquals(3, first.inheritedSanctions());
+        assertEquals(3, secondJoin.inheritedSanctions());
+        assertEquals(0, store().observeConnectedAlts(third, now.plusSeconds(5), false).inheritedSanctions());
+        for (UUID other : new UUID[]{second, third}) {
+            assertEquals(1, inheritedSanctionCount(other, ban));
+            assertEquals(1, inheritedSanctionCount(other, mute));
+            assertEquals(1, inheritedSanctionCount(other, publicMute));
+            assertEquals(0, relationshipCount(other));
+        }
+    }
+
+    @Test
+    void manuallyConfirmedSiblingsOverrideCurrentVerifiedDiscordLink() throws SQLException {
+        Instant now = Instant.parse("2026-10-10T20:00:00Z");
+        UUID moderator = UUID.randomUUID();
+        UUID source = UUID.randomUUID();
+        UUID sibling = UUID.randomUUID();
+        MariaDbIntegrationSupport.insertPlayer(DATABASE, moderator, "Reviewer", now.minusSeconds(100));
+        MariaDbIntegrationSupport.insertPlayer(DATABASE, source, "Banned", now.minusSeconds(100));
+        MariaDbIntegrationSupport.insertPlayer(DATABASE, sibling, "Sibling", now.minusSeconds(100));
+        String caseId = "ALTLINKCASE00002";
+        MariaDbIntegrationSupport.insertCase(DATABASE, caseId, source, moderator, now.minusSeconds(30));
+        UUID ban = UUID.randomUUID();
+        MariaDbIntegrationSupport.insertSanction(DATABASE, ban, caseId, source,
+                "BAN", "ACTIVE", now.minusSeconds(20), null);
+
+        JdbcDiscordModerationPersistenceStore accounts = new JdbcDiscordModerationPersistenceStore(dataSource);
+        DiscordUserId shared = new DiscordUserId("18446744073709550014");
+        accounts.link(shared, source, DiscordMinecraftLinkSource.STAFF_RECOVERY, "sibling-source-" + source, now);
+        accounts.link(shared, sibling, DiscordMinecraftLinkSource.STAFF_RECOVERY, "sibling-target-" + sibling, now);
+        assertTrue(store().setRelationship(source, sibling, AltRelationshipState.SHARED_HOUSEHOLD,
+                moderator, now, "Confirmed distinct siblings"));
+        assertEquals(0, store().observeConnectedAlts(sibling, now.plusSeconds(1), false).inheritedSanctions());
+        assertEquals(0, inheritedSanctionCount(sibling, ban));
+    }
+
+    @Test
+    void manuallyAssignedNinetyPercentRelationshipInheritsWithoutNetworkOrDiscordMatch()
+            throws SQLException {
+        Instant now = Instant.parse("2026-10-10T20:30:00Z");
+        UUID reviewer = UUID.randomUUID();
+        UUID banned = UUID.randomUUID();
+        UUID other = UUID.randomUUID();
+        MariaDbIntegrationSupport.insertPlayer(DATABASE, reviewer, "Reviewer", now.minusSeconds(100));
+        MariaDbIntegrationSupport.insertPlayer(DATABASE, banned, "AccountOne", now.minusSeconds(100));
+        MariaDbIntegrationSupport.insertPlayer(DATABASE, other, "AccountTwo", now.minusSeconds(100));
+        String caseId = "ALTLINKCASE00003";
+        MariaDbIntegrationSupport.insertCase(DATABASE, caseId, banned, reviewer, now.minusSeconds(30));
+        UUID sanction = UUID.randomUUID();
+        MariaDbIntegrationSupport.insertSanction(DATABASE, sanction, caseId, banned,
+                "BAN", "ACTIVE", now.minusSeconds(20), null);
+
+        assertTrue(store().setRelationship(banned, other, AltRelationshipState.CONFIDENT,
+                reviewer, now, "Evidence under the automatic threshold"));
+        assertEquals(0, store().observeConnectedAlts(other, now.plusSeconds(1), false).inheritedSanctions());
+        assertTrue(store().setRelationship(banned, other, AltRelationshipState.VERY_CONFIDENT,
+                reviewer, now.plusSeconds(2), "Additional independent evidence now confirmed"));
+        assertEquals(1, store().observeConnectedAlts(other, now.plusSeconds(3), false).inheritedSanctions());
+        assertEquals(1, inheritedSanctionCount(other, sanction));
+    }
+
+    @Test
     void simultaneousPlayLowersAutomaticConfidenceAndNeverOverridesManualDecisions() throws SQLException {
         Instant now = Instant.parse("2026-08-07T15:00:00Z");
         UUID actor = UUID.randomUUID();
@@ -168,7 +263,7 @@ class NetworkIdentityStoreIntegrationTest {
     }
 
     @Test
-    void stableOfflineSingleNewAccountStillInheritsExactlyOnce() throws SQLException {
+    void newSharedNetworkAccountWithoutHighConfidenceOnlyAlerts() throws SQLException {
         Instant now = Instant.parse("2026-08-07T15:15:00Z");
         AltInheritanceFixture fixture = automaticInheritanceFixture(now, (byte) 21, "ALTCASE000000021");
 
@@ -179,9 +274,10 @@ class NetworkIdentityStoreIntegrationTest {
                 fixture.joining(), fixture.identity(), now.plusSeconds(1), false
         );
 
-        assertEquals(1, first.inheritedSanctions());
+        assertEquals(0, first.inheritedSanctions());
         assertEquals(0, retry.inheritedSanctions());
-        assertEquals(1, inheritedSanctionCount(fixture.joining(), fixture.sourceSanction()));
+        assertEquals(0, inheritedSanctionCount(fixture.joining(), fixture.sourceSanction()));
+        assertTrue(first.alertsCreated() > 0);
     }
 
     @Test
@@ -690,6 +786,11 @@ class NetworkIdentityStoreIntegrationTest {
         try (Connection connection = dataSource.getConnection();
              java.sql.Statement statement = connection.createStatement()) {
             statement.executeUpdate("DELETE FROM staff_alerts");
+            statement.executeUpdate("DELETE FROM discord_minecraft_links");
+            statement.executeUpdate("DELETE FROM moderation_subject_main_accounts");
+            statement.executeUpdate("DELETE FROM moderation_subject_minecraft_identities");
+            statement.executeUpdate("DELETE FROM moderation_subject_discord_identities");
+            statement.executeUpdate("DELETE FROM moderation_subjects");
             statement.executeUpdate("DELETE FROM cutover_records");
             statement.executeUpdate("DELETE FROM discord_outbox");
             statement.executeUpdate("DELETE FROM network_outbox");

@@ -1201,11 +1201,16 @@ public final class EnthusiaStaffVelocityPlugin {
         directory.recordSeen(playerId, event.getPlayer().getUsername(), PlayerPlatform.JAVA, loaded.serverId(), now);
         NetworkIdentityStore identityStore = networkIdentityStore;
         NetworkIdentityProtector protector = networkIdentityProtector;
-        if (identityStore == null || protector == null) {
+        if (identityStore == null) {
+            return;
+        }
+        boolean suppressEvidence = current != OperationalMode.ACTIVE;
+        // Verified Discord peers and manual high-confidence alts work even with IP matching disabled.
+        identityStore.observeConnectedAlts(playerId, now, suppressEvidence);
+        if (protector == null) {
             return;
         }
         byte[] rawAddress = event.getPlayer().getRemoteAddress().getAddress().getAddress();
-        boolean suppressEvidence = current != OperationalMode.ACTIVE;
         try {
             identityStore.observeAndInherit(playerId, protector.protect(rawAddress), now, suppressEvidence);
         } finally {

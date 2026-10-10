@@ -19,7 +19,8 @@ class SanctionTypeTest {
                 SanctionType.BAN,
                 SanctionType.NETWORK_BAN,
                 SanctionType.NETWORK_IDENTITY_BAN,
-                SanctionType.MUTE
+                SanctionType.MUTE,
+                SanctionType.PUBLIC_MUTE
         ), inheritable);
     }
 }

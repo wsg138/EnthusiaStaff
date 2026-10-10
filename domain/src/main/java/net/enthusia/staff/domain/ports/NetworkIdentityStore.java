@@ -17,6 +17,11 @@ public interface NetworkIdentityStore {
             boolean suppressAutomatedEvidence
     );
 
+    /** Reconcile current verified Discord peers and manual >=85% alt decisions without IP matching. */
+    NetworkIdentityObservationResult observeConnectedAlts(
+            UUID joiningPlayerId, Instant observedAt, boolean suppressAutomatedEvidence
+    );
+
     List<AltRelationshipSummary> relationships(UUID playerId);
 
     boolean setRelationship(

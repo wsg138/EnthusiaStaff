@@ -1,26 +1,20 @@
 package net.enthusia.staff.domain.alt;
 
-import java.time.Instant;
-import java.util.Optional;
-
+/**
+ * Unified moderation inheritance rule. Only verified same-person identities or
+ * manual very-high-confidence relationships inherit automatically. Network
+ * overlap alone never warrants automatic sanctions.
+ */
 public final class AltInheritancePolicy {
-    public boolean shouldInherit(
-            AltRelationshipState relationshipState,
-            boolean relationshipCreatedByObservation,
-            Instant joiningFirstSeenAt,
-            Optional<Instant> cutoverAt,
-            boolean hasProtectedRelationshipHistory
-    ) {
-        if (relationshipState == null || joiningFirstSeenAt == null || cutoverAt == null) {
-            throw new IllegalArgumentException("alt inheritance policy fields must be present");
-        }
-        if (relationshipState.inheritsAutomatically()) {
-            return true;
-        }
-        if (relationshipState.preventsAutomaticInheritance() || hasProtectedRelationshipHistory
-                || !relationshipCreatedByObservation || cutoverAt.isEmpty()) {
+    public static final double AUTOMATIC_THRESHOLD = 0.85;
+
+    public boolean shouldInherit(AltRelationshipState relationshipState, boolean currentlyVerifiedDiscordLink) {
+        if (relationshipState != null && relationshipState.preventsAutomaticInheritance()) {
             return false;
         }
-        return !joiningFirstSeenAt.isBefore(cutoverAt.orElseThrow());
+        if (currentlyVerifiedDiscordLink) {
+            return true;
+        }
+        return relationshipState != null && relationshipState.inheritsAutomatically();
     }
 }
