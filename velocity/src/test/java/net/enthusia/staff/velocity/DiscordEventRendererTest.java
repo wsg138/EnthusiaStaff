@@ -53,6 +53,21 @@ final class DiscordEventRendererTest {
     }
 
     @Test
+    void punishmentChannelNeverRevealsPrivateAltRelationshipMetadata() {
+        String payload = "{\"caseId\":\"case-1\",\"targetId\":\"target\","
+                + "\"sourcePlayerId\":\"private-source\",\"sourceSanctionId\":\"private-sanction\","
+                + "\"relationshipState\":\"CONFIRMED_ALT\"}";
+        String punishment = renderer.render(message("punishments", "SANCTION_INHERITED", payload));
+        assertTrue(punishment.contains("caseId=case-1"));
+        assertFalse(punishment.contains("private-source"));
+        assertFalse(punishment.contains("private-sanction"));
+        assertFalse(punishment.contains("relationshipState"));
+        String alert = renderer.render(message("alerts", "ALT_EVASION_REVIEW", payload));
+        assertTrue(alert.contains("sourcePlayerId=private-source"));
+        assertTrue(alert.contains("relationshipState=CONFIRMED_ALT"));
+    }
+
+    @Test
     void freezeEventsRenderUnderPunishmentsWithReason() {
         String rendered = renderer.render(message(
                 "punishments",
