@@ -182,6 +182,8 @@ final class VelocityConfigurationReloadCoordinator {
                 current.backendSecretEnvironments(), candidate.backendSecretEnvironments());
         changed(changes, "network-identity.enabled",
                 current.networkIdentityEnabled(), candidate.networkIdentityEnabled());
+        changed(changes, "alt-inheritance.enabled",
+                current.altInheritanceEnabled(), candidate.altInheritanceEnabled());
         changed(changes, "network-identity.hmac-key-version",
                 current.networkIdentityHmacKeyVersion(), candidate.networkIdentityHmacKeyVersion());
         changed(changes, "network-identity.hmac-secret-environment",

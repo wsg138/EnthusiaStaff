@@ -1145,6 +1145,7 @@ public final class EnthusiaStaffVelocityPlugin {
      */
     private void queueOnlineAltReconciliation() {
         if (authorityMode.get() != OperationalMode.ACTIVE || shuttingDown.get()
+                || configuration == null || !configuration.altInheritanceEnabled()
                 || networkIdentityStore == null
                 || !onlineAltReconcileRunning.compareAndSet(false, true)) {
             return;
@@ -1162,7 +1163,8 @@ public final class EnthusiaStaffVelocityPlugin {
 
     private void reconcileOnlineAlts() {
         NetworkIdentityStore store = networkIdentityStore;
-        if (store == null || authorityMode.get() != OperationalMode.ACTIVE || shuttingDown.get()) {
+        if (store == null || configuration == null || !configuration.altInheritanceEnabled()
+                || authorityMode.get() != OperationalMode.ACTIVE || shuttingDown.get()) {
             return;
         }
         List<UUID> players = proxy.getAllPlayers().stream()
@@ -1263,7 +1265,7 @@ public final class EnthusiaStaffVelocityPlugin {
         directory.recordSeen(playerId, event.getPlayer().getUsername(), PlayerPlatform.JAVA, loaded.serverId(), now);
         NetworkIdentityStore identityStore = networkIdentityStore;
         NetworkIdentityProtector protector = networkIdentityProtector;
-        if (identityStore == null) {
+        if (identityStore == null || !loaded.altInheritanceEnabled()) {
             return;
         }
         boolean suppressEvidence = current != OperationalMode.ACTIVE;

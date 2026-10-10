@@ -66,6 +66,11 @@ class CaseSanctionHierarchyIntegrationTest {
     void clearFixtures() throws SQLException {
         try (HikariDataSource dataSource = MariaDb.open(databaseConfig());
              Connection connection = dataSource.getConnection()) {
+            // Test fixtures can contain derived child sanctions referencing source sanctions.
+            try (PreparedStatement detach = connection.prepareStatement(
+                    "UPDATE sanctions SET inherited_from = NULL WHERE inherited_from IS NOT NULL")) {
+                detach.executeUpdate();
+            }
             for (String sql : List.of(
                     "DELETE FROM network_outbox_deliveries",
                     "DELETE FROM network_outbox",

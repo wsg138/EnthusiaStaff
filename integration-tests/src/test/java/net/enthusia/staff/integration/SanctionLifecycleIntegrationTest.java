@@ -68,6 +68,11 @@ class SanctionLifecycleIntegrationTest {
     void clearFixtures() throws SQLException {
         try (HikariDataSource dataSource = MariaDb.open(databaseConfig());
              Connection connection = dataSource.getConnection()) {
+            // Break fixture-only child→source FKs before deleting all sanctions.
+            try (PreparedStatement detach = connection.prepareStatement(
+                    "UPDATE sanctions SET inherited_from = NULL WHERE inherited_from IS NOT NULL")) {
+                detach.executeUpdate();
+            }
             for (String table : List.of(
                     "network_outbox_deliveries",
                     NETWORK_OUTBOX_TABLE,
