@@ -1223,6 +1223,7 @@ public final class StaffModeManager implements Listener {
         StaffDutyTier tier = StaffDutyTier.of(rank);
         if (tier == null || tier == StaffDutyTier.HELPER) {
             event.setCancelled(true);
+            audit(player, rank, "item-drop-denied", describe(event.getItemDrop().getItemStack()));
             return;
         }
         // Mod/Developer: logged-not-blocked. Admin/Founder: unrestricted but logged.
@@ -1283,6 +1284,8 @@ public final class StaffModeManager implements Listener {
         StaffDutyTier tier = StaffDutyTier.of(rank);
         if (tier == null || tier == StaffDutyTier.HELPER) {
             event.setCancelled(true);
+            audit(player, rank, "inventory-swap-hands-denied",
+                    describe(event.getMainHandItem()) + " <-> " + describe(event.getOffHandItem()));
             return;
         }
         // Mod/Developer: logged-not-blocked (staff/empty inventory toggle). Admin/Founder: logged.
