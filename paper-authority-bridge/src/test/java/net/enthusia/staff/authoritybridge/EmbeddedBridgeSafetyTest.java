@@ -1,5 +1,6 @@
 package net.enthusia.staff.authoritybridge;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -41,7 +42,7 @@ class EmbeddedBridgeSafetyTest {
     void offlineImportPlannerCapsLookupCandidatesAndAdvancesDeterministically() {
         Map<String, UUID> links = new LinkedHashMap<>();
         for (int i = 0; i < 5_000; i++) {
-            links.put(Integer.toString(i + 100_000), new UUID(0L, i + 1));
+            links.put(Integer.toString(i + 100_000), fixturePlayer(i + 1));
         }
         TransitionSnapshotPlanner.LinkBatch first =
                 TransitionSnapshotPlanner.selectLinkBatch(links, 0, 128, Set.of());
@@ -60,7 +61,7 @@ class EmbeddedBridgeSafetyTest {
         UUID known = new UUID(0L, 5_000);
         Map<String, UUID> links = new LinkedHashMap<>();
         for (int i = 0; i < 300; i++) {
-            links.put(Integer.toString(i), new UUID(0L, i + 1));
+            links.put(Integer.toString(i), fixturePlayer(i + 1));
         }
         links.put("current", known);
         TransitionSnapshotPlanner.LinkBatch batch =
@@ -73,11 +74,11 @@ class EmbeddedBridgeSafetyTest {
     @Test
     void borrowedPaperConnectionPoolIsNotClosedByCollectorAdapter() {
         DataSource primaryPool = (DataSource) Proxy.newProxyInstance(
-                DataSource.class.getClassLoader(), new Class<?>[]{DataSource.class},
+                Thread.currentThread().getContextClassLoader(), new Class<?>[]{DataSource.class},
                 (proxy, method, args) -> {
                     throw new AssertionError("borrowed pool must not be called during open or close");
                 });
-        TransitionDataRuntime.borrow(primaryPool).close();
+        assertDoesNotThrow(() -> TransitionDataRuntime.borrow(primaryPool).close());
     }
 
     @Test
@@ -100,6 +101,10 @@ class EmbeddedBridgeSafetyTest {
                 "src/main/java/net/enthusia/staff/authoritybridge/TransitionDataCollector.java"));
         assertFalse(source.contains("getOfflinePlayer("));
         assertFalse(source.contains("getLastSeen("));
+    }
+
+    private static UUID fixturePlayer(long id) {
+        return new UUID(0L, id);
     }
 
     @Test

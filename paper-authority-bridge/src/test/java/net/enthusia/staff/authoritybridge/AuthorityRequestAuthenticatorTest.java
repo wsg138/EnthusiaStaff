@@ -103,6 +103,44 @@ class AuthorityRequestAuthenticatorTest {
         ).accepted());
     }
 
+    @Test
+    void invalidSignatureAndTamperedTargetAreRejected() throws Exception {
+        String secret = testKeyMaterial();
+        AuthorityRequestAuthenticator authenticator = new AuthorityRequestAuthenticator(
+                secret, CLOCK, new ReplayGuard(8, Duration.ofMinutes(2)));
+        StaffAuthorityHttpSigning.RequestProof forged = StaffAuthorityHttpSigning.signRequest(
+                testKeyMaterial(), GET_METHOD, TARGET, NOW, NONCE);
+        InetAddress peer = InetAddress.getLoopbackAddress();
+        assertFalse(authenticator.authenticate(peer, GET_METHOD, TARGET,
+                forged.timestamp(), forged.nonce(), forged.signature()).accepted());
+
+        StaffAuthorityHttpSigning.RequestProof valid = StaffAuthorityHttpSigning.signRequest(
+                secret, GET_METHOD, TARGET, NOW, NONCE);
+        assertFalse(authenticator.authenticate(peer, GET_METHOD,
+                TARGET.replace("0f48cf03", "1f48cf03"),
+                valid.timestamp(), valid.nonce(), valid.signature()).accepted());
+        assertTrue(authenticator.authenticate(peer, GET_METHOD, TARGET,
+                valid.timestamp(), valid.nonce(), valid.signature()).accepted());
+    }
+
+    @Test
+    void staleTimestampAndMalformedNonceAreRejectedWithoutConsumingReplayEntry() {
+        String secret = testKeyMaterial();
+        AuthorityRequestAuthenticator authenticator = new AuthorityRequestAuthenticator(
+                secret, CLOCK, new ReplayGuard(8, Duration.ofMinutes(2)));
+        StaffAuthorityHttpSigning.RequestProof stale = StaffAuthorityHttpSigning.signRequest(
+                secret, GET_METHOD, TARGET, NOW.minusSeconds(90), NONCE);
+        InetAddress peer = InetAddress.getLoopbackAddress();
+        assertFalse(authenticator.authenticate(peer, GET_METHOD, TARGET,
+                stale.timestamp(), stale.nonce(), stale.signature()).accepted());
+        assertFalse(authenticator.authenticate(peer, GET_METHOD, TARGET,
+                stale.timestamp(), "bad-nonce", stale.signature()).accepted());
+        StaffAuthorityHttpSigning.RequestProof current = StaffAuthorityHttpSigning.signRequest(
+                secret, GET_METHOD, TARGET, NOW, NONCE);
+        assertTrue(authenticator.authenticate(peer, GET_METHOD, TARGET,
+                current.timestamp(), current.nonce(), current.signature()).accepted());
+    }
+
     private static String testKeyMaterial() {
         return UUID.randomUUID().toString() + UUID.randomUUID();
     }

@@ -7,6 +7,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Properties;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.logging.Level;
 import javax.sql.DataSource;
 import net.luckperms.api.LuckPermsProvider;
@@ -25,6 +26,7 @@ public final class EmbeddedAuthorityBridge implements AutoCloseable {
     private final JavaPlugin owner;
     private final Path directory;
     private final boolean collectorEnabled;
+    private final AtomicBoolean closed = new AtomicBoolean();
     private AuthorityEndpoint endpoint;
     private TransitionDataCollector collector;
 
@@ -63,7 +65,7 @@ public final class EmbeddedAuthorityBridge implements AutoCloseable {
 
     /** Start only after the primary Paper database bootstrap migrated the schema. */
     public void startCollector(DataSource dataSource, String serverId, DatabaseConfig primaryDatabase) {
-        if (!collectorEnabled || collector != null) {
+        if (closed.get() || !collectorEnabled || collector != null) {
             return;
         }
         if (owner.getServer().getPluginManager().getPlugin(LEGACY_PLUGIN) != null) {
@@ -128,6 +130,9 @@ public final class EmbeddedAuthorityBridge implements AutoCloseable {
 
     @Override
     public void close() {
+        if (!closed.compareAndSet(false, true)) {
+            return;
+        }
         if (collector != null) {
             try {
                 collector.close();
@@ -135,11 +140,9 @@ public final class EmbeddedAuthorityBridge implements AutoCloseable {
                 owner.getLogger().log(Level.WARNING,
                         "embedded_transition_collector_close_failed type={0}", exception.getClass().getSimpleName());
             }
-            collector = null;
         }
         if (endpoint != null) {
             endpoint.close();
-            endpoint = null;
         }
     }
 }

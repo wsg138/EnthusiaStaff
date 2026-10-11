@@ -19,7 +19,6 @@ import net.enthusia.staff.domain.application.DiscordSrvMigrationService;
 import net.enthusia.staff.domain.application.DiscordSrvMigrationService.DiscordSrvLinkProvider;
 import net.enthusia.staff.domain.application.DiscordSrvMigrationService.ImportReport;
 import net.enthusia.staff.domain.application.DiscordSrvMigrationService.MirrorResult;
-import net.enthusia.staff.domain.player.PlayerIdentity;
 import net.enthusia.staff.domain.player.PlayerPlatform;
 import net.enthusia.staff.persistence.TransitionDataRuntime;
 import org.bukkit.entity.Player;
@@ -146,11 +145,17 @@ final class TransitionDataCollector implements AutoCloseable, Listener {
         Instant now = clock.instant();
         Map<UUID, TransitionSnapshotPlanner.Observation> observations = new LinkedHashMap<>(pending);
         for (Player player : plugin.getServer().getOnlinePlayers()) {
-            observations.put(player.getUniqueId(), new TransitionSnapshotPlanner.Observation(
-                    player.getUniqueId(), player.getName(), now, true));
+            captureOnline(player, now, observations);
         }
         Map<String, UUID> links = discordSrv.map(DiscordSrvTransitionLinkSource::snapshotLinks).orElse(Map.of());
         return new Capture(links, List.copyOf(observations.values()));
+    }
+
+    private static void captureOnline(
+            Player player, Instant now, Map<UUID, TransitionSnapshotPlanner.Observation> observations
+    ) {
+        observations.put(player.getUniqueId(), new TransitionSnapshotPlanner.Observation(
+                player.getUniqueId(), player.getName(), now, true));
     }
 
     private void persist(Capture snapshot) {
@@ -189,14 +194,20 @@ final class TransitionDataCollector implements AutoCloseable, Listener {
             if (onlineIds.contains(playerId)) {
                 continue;
             }
-            Optional<PlayerIdentity> identity = data.players().find(playerId.toString());
-            identity.flatMap(PlayerIdentity::currentUsername).ifPresent(name -> observations.add(
-                    new TransitionSnapshotPlanner.Observation(
-                            playerId, name, identity.orElseThrow().lastSeenAt(), false)));
+            appendPersistedIdentity(playerId, observations);
         }
         return new PlannedSnapshot(
                 TransitionSnapshotPlanner.plan(batch.links(), observations), batch.nextCursor(),
                 snapshot.links().size() - batch.links().size());
+    }
+
+    private void appendPersistedIdentity(
+            UUID playerId, List<TransitionSnapshotPlanner.Observation> observations
+    ) {
+        data.players().find(playerId.toString()).ifPresent(identity ->
+                identity.currentUsername().ifPresent(name -> observations.add(
+                        new TransitionSnapshotPlanner.Observation(
+                                playerId, name, identity.lastSeenAt(), false))));
     }
 
     private void persistObservation(TransitionSnapshotPlanner.Observation observation) {
