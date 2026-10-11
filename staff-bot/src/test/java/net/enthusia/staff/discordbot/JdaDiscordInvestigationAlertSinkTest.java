@@ -45,6 +45,26 @@ class JdaDiscordInvestigationAlertSinkTest {
     }
 
     @Test
+    void onlyFirstRecordedDeliveryAttemptMayPingStaff() {
+        var initial = DiscordInvestigationAlertControlsTest.alert();
+        assertTrue(JdaDiscordInvestigationAlertSink.shouldPingStaff(initial));
+        assertTrue(JdaDiscordInvestigationAlertSink.alertContent(initial, "123").startsWith("<@&123> "));
+
+        var retry = new net.enthusia.staff.domain.investigation.EvasionAlert(
+                initial.alertId(), initial.operationKey(), initial.context(), initial.state(),
+                net.enthusia.staff.domain.investigation.EvasionAlert.DeliveryState.RETRY,
+                initial.minecraftDelivery(), 1, initial.minecraftAttempts(),
+                Optional.of("DISCORD_ALERT_SEND_TIMEOUT"), initial.minecraftErrorCode(),
+                initial.discordNextAttemptAt(), initial.minecraftNextAttemptAt(),
+                initial.createdAt(), initial.updatedAt(), initial.revision() + 1, false);
+        assertFalse(JdaDiscordInvestigationAlertSink.shouldPingStaff(retry));
+        String retryContent = JdaDiscordInvestigationAlertSink.alertContent(retry, "123");
+        assertTrue(retryContent.startsWith("**Linked-alt investigation alert**"));
+        assertFalse(retryContent.contains("<@&123>"));
+        assertFalse(JdaDiscordInvestigationAlertSink.shouldPingStaff(null));
+    }
+
+    @Test
     void timedOutSendCancelsPendingDiscordRequest() {
         CompletableFuture<Object> request = new CompletableFuture<>();
 

@@ -70,11 +70,31 @@ class JdaStaffModerationListenerTest {
     }
 
     @Test
-    void reviewQueueUsesDefaultDisabledPermissionAndNoArguments() {
+    void reviewQueueSupportsPrivateFilteredViewsWithoutNewPermissions() {
         SlashCommandData queue = (SlashCommandData) command(
                 JdaStaffModerationListener.commands(), "review-queue");
-        assertEquals(0, queue.getOptions().size());
+        assertEquals(1, queue.getOptions().size());
+        var view = queue.getOptions().getFirst();
+        assertEquals("view", view.getName());
+        assertEquals(OptionType.STRING, view.getType());
+        assertTrue(!view.isRequired());
+        assertEquals(Set.of("all", "punishments", "reports", "alts"),
+                view.getChoices().stream().map(choice -> choice.getAsString()).collect(Collectors.toSet()));
         assertEquals(DefaultMemberPermissions.DISABLED, queue.getDefaultPermissions());
+    }
+
+    @Test
+    void reviewQueueViewsOnlyReadTheirChosenCaseKind() {
+        var queue = JdaStaffModerationListener.ReviewQueueView.class;
+        assertEquals(JdaStaffModerationListener.ReviewQueueView.ALL,
+                JdaStaffModerationListener.ReviewQueueView.parse(null));
+        assertEquals(JdaStaffModerationListener.ReviewQueueView.ALL,
+                JdaStaffModerationListener.ReviewQueueView.parse("invalid"));
+        for (var view : queue.getEnumConstants()) {
+            assertTrue(view == JdaStaffModerationListener.ReviewQueueView.ALL
+                    || (view.showPunishments() ? !view.showReports() && !view.showAlts()
+                    : view.showReports() != view.showAlts()));
+        }
     }
 
     @Test
