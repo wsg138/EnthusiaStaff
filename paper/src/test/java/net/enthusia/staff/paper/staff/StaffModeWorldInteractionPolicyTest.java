@@ -4,8 +4,10 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.util.Set;
 import net.enthusia.staff.domain.auth.StaffRank;
 import org.bukkit.event.block.Action;
+import org.bukkit.event.inventory.InventoryAction;
 import org.junit.jupiter.api.Test;
 
 class StaffModeWorldInteractionPolicyTest {
@@ -20,6 +22,39 @@ class StaffModeWorldInteractionPolicyTest {
                 StaffModeWorldInteractionListener.blockEditAuditAction("block-break", false));
         assertEquals("block-place",
                 StaffModeWorldInteractionListener.blockEditAuditAction("block-place", false));
+    }
+
+    @Test
+    void deniedContainerAuditTracksMutationsNotOrdinaryPlayerInventoryClicks() {
+        int topSize = 27;
+        assertTrue(StaffModeWorldInteractionPolicy.blocksContainerEdit(StaffDutyTier.HELPER));
+        assertTrue(StaffModeWorldInteractionListener.shouldAuditDeniedContainerClick(
+                InventoryAction.PICKUP_ALL, 3, topSize));
+        assertTrue(StaffModeWorldInteractionListener.shouldAuditDeniedContainerClick(
+                InventoryAction.PLACE_ALL, 12, topSize));
+        assertFalse(StaffModeWorldInteractionListener.shouldAuditDeniedContainerClick(
+                InventoryAction.PICKUP_ALL, 32, topSize));
+        assertFalse(StaffModeWorldInteractionListener.shouldAuditDeniedContainerClick(
+                InventoryAction.NOTHING, 3, topSize));
+        assertFalse(StaffModeWorldInteractionListener.shouldAuditDeniedContainerClick(
+                null, 3, topSize));
+    }
+
+    @Test
+    void deniedContainerAuditIncludesTransferAndProtectedDragAttempts() {
+        int topSize = 27;
+        assertTrue(StaffModeWorldInteractionListener.shouldAuditDeniedContainerClick(
+                InventoryAction.MOVE_TO_OTHER_INVENTORY, 33, topSize));
+        assertTrue(StaffModeWorldInteractionListener.shouldAuditDeniedContainerClick(
+                InventoryAction.COLLECT_TO_CURSOR, 33, topSize));
+        assertFalse(StaffModeWorldInteractionListener.shouldAuditDeniedContainerClick(
+                InventoryAction.HOTBAR_SWAP, 32, topSize));
+        assertTrue(StaffModeWorldInteractionListener.shouldAuditDeniedContainerClick(
+                InventoryAction.HOTBAR_SWAP, 8, topSize));
+        assertFalse(StaffModeWorldInteractionListener.touchesProtectedContainerSlot(
+                Set.of(27, 28, 35), topSize));
+        assertTrue(StaffModeWorldInteractionListener.touchesProtectedContainerSlot(
+                Set.of(27, 8, 35), topSize));
     }
 
     @Test

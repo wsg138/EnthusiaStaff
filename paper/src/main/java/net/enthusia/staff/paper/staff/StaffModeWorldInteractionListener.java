@@ -1,6 +1,7 @@
 package net.enthusia.staff.paper.staff;
 
 import java.util.Objects;
+import java.util.Set;
 import org.bukkit.Material;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockState;
@@ -14,6 +15,7 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.block.Action;
 import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.block.BlockPlaceEvent;
+import org.bukkit.event.inventory.InventoryAction;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryDragEvent;
 import org.bukkit.event.inventory.InventoryType;
@@ -40,6 +42,7 @@ import org.bukkit.inventory.InventoryHolder;
  */
 public final class StaffModeWorldInteractionListener implements Listener {
     private static final String CONTAINER_EDIT_ACTION = "container-edit";
+    private static final String CONTAINER_EDIT_DENIED_ACTION = "container-edit-denied";
 
     private final StaffModeManager staffMode;
 
@@ -174,6 +177,12 @@ public final class StaffModeWorldInteractionListener implements Listener {
             // the top inventory is insufficient: shift-click, hotbar swap, double-click/collect,
             // and similar actions can mutate the container from the player's inventory.
             event.setCancelled(true);
+            if (shouldAuditDeniedContainerClick(event.getAction(),
+                    event.getRawSlot(), top.getSize())) {
+                staffMode.logStaffAction(player, CONTAINER_EDIT_DENIED_ACTION,
+                        top.getType() + " raw-slot=" + event.getRawSlot()
+                                + " action=" + event.getAction());
+            }
             return;
         }
         if (StaffModeWorldInteractionPolicy.logsContainerEdit(tier)) {
@@ -192,21 +201,43 @@ public final class StaffModeWorldInteractionListener implements Listener {
             return;
         }
         if (staffMode.isUnrestricted(player)) {
-            boolean touchesContainer = event.getRawSlots().stream().anyMatch(slot -> slot < top.getSize());
+            boolean touchesContainer = touchesProtectedContainerSlot(event.getRawSlots(), top.getSize());
             if (touchesContainer) {
                 staffMode.logStaffAction(player, CONTAINER_EDIT_ACTION, top.getType() + " drag");
             }
             return;
         }
         StaffDutyTier tier = staffMode.dutyTier(player);
+        boolean touchesProtectedContainer = touchesProtectedContainerSlot(event.getRawSlots(), top.getSize());
         if (StaffModeWorldInteractionPolicy.blocksContainerEdit(tier)) {
             event.setCancelled(true);
+            if (touchesProtectedContainer) {
+                staffMode.logStaffAction(player, CONTAINER_EDIT_DENIED_ACTION,
+                        top.getType() + " drag");
+            }
             return;
         }
-        boolean touchesProtectedContainer = event.getRawSlots().stream().anyMatch(slot -> slot < top.getSize());
         if (touchesProtectedContainer && StaffModeWorldInteractionPolicy.logsContainerEdit(tier)) {
             staffMode.logStaffAction(player, CONTAINER_EDIT_ACTION, top.getType() + " drag");
         }
+    }
+
+    /**
+     * Lower-inventory normal clicks are blocked by the existing safety policy, but
+     * are not evidence of an attempted container mutation. Only record clicks
+     * directly targeting the protected top inventory or transfer/collect actions.
+     */
+    static boolean shouldAuditDeniedContainerClick(InventoryAction action, int rawSlot, int topSize) {
+        if (action == null || action == InventoryAction.NOTHING) {
+            return false;
+        }
+        return (rawSlot >= 0 && rawSlot < topSize)
+                || action == InventoryAction.MOVE_TO_OTHER_INVENTORY
+                || action == InventoryAction.COLLECT_TO_CURSOR;
+    }
+
+    static boolean touchesProtectedContainerSlot(Set<Integer> rawSlots, int topSize) {
+        return rawSlots.stream().anyMatch(slot -> slot >= 0 && slot < topSize);
     }
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
