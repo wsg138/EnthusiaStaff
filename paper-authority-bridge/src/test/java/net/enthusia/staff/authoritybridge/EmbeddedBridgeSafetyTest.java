@@ -9,6 +9,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Instant;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
@@ -101,6 +104,27 @@ class EmbeddedBridgeSafetyTest {
                 "src/main/java/net/enthusia/staff/authoritybridge/TransitionDataCollector.java"));
         assertFalse(source.contains("getOfflinePlayer("));
         assertFalse(source.contains("getLastSeen("));
+    }
+
+    @Test
+    void acknowledgedObservationRetiresWithoutDiscardingNewerConcurrentEvent() {
+        UUID id = fixturePlayer(19);
+        TransitionSnapshotPlanner.Observation first = new TransitionSnapshotPlanner.Observation(
+                id, "First", Instant.parse("2026-10-11T14:00:00Z"), true);
+        TransitionSnapshotPlanner.Observation newer = new TransitionSnapshotPlanner.Observation(
+                id, "First", Instant.parse("2026-10-11T14:01:00Z"), false);
+        ConcurrentMap<UUID, TransitionSnapshotPlanner.Observation> pending = new ConcurrentHashMap<>();
+        pending.put(id, first);
+        TransitionDataCollector.retireAcknowledged(pending, Map.of(id, first));
+        assertTrue(pending.isEmpty());
+
+        pending.put(id, first);
+        pending.replace(id, newer);
+        TransitionDataCollector.retireAcknowledged(pending, Map.of(id, first));
+        assertEquals(newer, pending.get(id));
+
+        TransitionDataCollector.retireAcknowledged(pending, Map.of(id, newer));
+        assertTrue(pending.isEmpty());
     }
 
     private static UUID fixturePlayer(long id) {

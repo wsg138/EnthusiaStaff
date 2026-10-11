@@ -27,6 +27,7 @@ public final class EmbeddedAuthorityBridge implements AutoCloseable {
     private final Path directory;
     private final boolean collectorEnabled;
     private final AtomicBoolean closed = new AtomicBoolean();
+    private final Object lifecycleLock = new Object();
     private AuthorityEndpoint endpoint;
     private TransitionDataCollector collector;
 
@@ -65,6 +66,12 @@ public final class EmbeddedAuthorityBridge implements AutoCloseable {
 
     /** Start only after the primary Paper database bootstrap migrated the schema. */
     public void startCollector(DataSource dataSource, String serverId, DatabaseConfig primaryDatabase) {
+        synchronized (lifecycleLock) {
+            startCollectorLocked(dataSource, serverId, primaryDatabase);
+        }
+    }
+
+    private void startCollectorLocked(DataSource dataSource, String serverId, DatabaseConfig primaryDatabase) {
         if (closed.get() || !collectorEnabled || collector != null) {
             return;
         }
@@ -130,6 +137,12 @@ public final class EmbeddedAuthorityBridge implements AutoCloseable {
 
     @Override
     public void close() {
+        synchronized (lifecycleLock) {
+            closeLocked();
+        }
+    }
+
+    private void closeLocked() {
         if (!closed.compareAndSet(false, true)) {
             return;
         }

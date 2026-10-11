@@ -10,6 +10,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -43,7 +44,7 @@ final class TransitionDataCollector implements AutoCloseable, Listener {
     private final ThreadPoolExecutor worker;
     private final Clock clock;
     private final AtomicBoolean passInFlight = new AtomicBoolean();
-    private final Map<UUID, TransitionSnapshotPlanner.Observation> pending = new java.util.concurrent.ConcurrentHashMap<>();
+    private final ConcurrentMap<UUID, TransitionSnapshotPlanner.Observation> pending = new java.util.concurrent.ConcurrentHashMap<>();
     private volatile ScheduledTask task;
     private int offlineCursor;
 
@@ -143,12 +144,13 @@ final class TransitionDataCollector implements AutoCloseable, Listener {
 
     private Capture capture() {
         Instant now = clock.instant();
-        Map<UUID, TransitionSnapshotPlanner.Observation> observations = new LinkedHashMap<>(pending);
+        Map<UUID, TransitionSnapshotPlanner.Observation> pendingSnapshot = Map.copyOf(pending);
+        Map<UUID, TransitionSnapshotPlanner.Observation> observations = new LinkedHashMap<>(pendingSnapshot);
         for (Player player : plugin.getServer().getOnlinePlayers()) {
             captureOnline(player, now, observations);
         }
         Map<String, UUID> links = discordSrv.map(DiscordSrvTransitionLinkSource::snapshotLinks).orElse(Map.of());
-        return new Capture(links, List.copyOf(observations.values()));
+        return new Capture(links, List.copyOf(observations.values()), pendingSnapshot);
     }
 
     private static void captureOnline(
@@ -163,14 +165,12 @@ final class TransitionDataCollector implements AutoCloseable, Listener {
             for (TransitionSnapshotPlanner.Observation observation
                     : TransitionSnapshotPlanner.plan(Map.of(), snapshot.observations()).observations()) {
                 persistObservation(observation);
-                if (!observation.online()) {
-                    pending.remove(observation.playerId(), observation);
-                }
             }
             PlannedSnapshot planned = planPersistedLinks(snapshot);
             TransitionSnapshotPlanner.Plan plan = planned.plan();
             ImportReport report = migration.importSnapshot(new ReadOnlySnapshotProvider(plan.importableLinks()));
             offlineCursor = planned.nextCursor();
+            retireAcknowledged(pending, snapshot.pendingSnapshot());
             plugin.getLogger().log(Level.INFO,
                     "enthusiastaff_transition_collector_pass observed={0} imported={1} unchanged={2} conflicts={3} skipped={4} deferred={5}",
                     new Object[]{snapshot.observations().size(), report.imported(), report.unchanged(),
@@ -210,6 +210,14 @@ final class TransitionDataCollector implements AutoCloseable, Listener {
                                 playerId, name, identity.lastSeenAt(), false))));
     }
 
+    /** Compare-and-remove retains a newer quit/join event received while persistence was in flight. */
+    static void retireAcknowledged(
+            ConcurrentMap<UUID, TransitionSnapshotPlanner.Observation> pending,
+            Map<UUID, TransitionSnapshotPlanner.Observation> acknowledged
+    ) {
+        acknowledged.forEach((playerId, event) -> pending.remove(playerId, event));
+    }
+
     private void persistObservation(TransitionSnapshotPlanner.Observation observation) {
         data.players().recordSeen(observation.playerId(), observation.username(), PlayerPlatform.UNKNOWN,
                 configuration.serverId(), observation.seenAt());
@@ -246,10 +254,15 @@ final class TransitionDataCollector implements AutoCloseable, Listener {
 
     private record PlannedSnapshot(TransitionSnapshotPlanner.Plan plan, int nextCursor, int deferred) { }
 
-    private record Capture(Map<String, UUID> links, List<TransitionSnapshotPlanner.Observation> observations) {
+    private record Capture(
+            Map<String, UUID> links,
+            List<TransitionSnapshotPlanner.Observation> observations,
+            Map<UUID, TransitionSnapshotPlanner.Observation> pendingSnapshot
+    ) {
         private Capture {
             links = Map.copyOf(links);
             observations = List.copyOf(observations);
+            pendingSnapshot = Map.copyOf(pendingSnapshot);
         }
     }
 
