@@ -17,7 +17,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: wsg138/AnarchyExploitFixes
-          ref: 57b8f196a5fb1f7fa08e451ba4d0df592a585da5
+          ref: 6e9a06d35f0b9975de09c75bb5832a39f4289e99
           path: aef
           persist-credentials: false
 
