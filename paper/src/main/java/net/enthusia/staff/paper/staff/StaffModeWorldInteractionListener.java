@@ -337,16 +337,20 @@ public final class StaffModeWorldInteractionListener implements Listener {
         StaffDutyTier tier = staffMode.dutyTier(player);
         if (StaffModeWorldInteractionPolicy.blocksWorldUse(tier)) {
             event.setCancelled(true);
-            if (auditDenied) {
-                staffMode.logStaffAction(player, worldUseAuditAction(action, true), detail);
-            }
-        } else if (StaffModeWorldInteractionPolicy.logsWorldInteraction(tier)) {
-            staffMode.logStaffAction(player, action, detail);
+        }
+        String auditedAction = worldUseAuditAction(tier, action, auditDenied);
+        if (auditedAction != null) {
+            staffMode.logStaffAction(player, auditedAction, detail);
         }
     }
 
-    static String worldUseAuditAction(String action, boolean denied) {
-        return denied ? action + "-denied" : action;
+    // Keep the logging decision tied to the same tier policy that enforces the
+    // denial. Entity-interact variants opt out until duplicate events are handled.
+    static String worldUseAuditAction(StaffDutyTier tier, String action, boolean auditDenied) {
+        if (StaffModeWorldInteractionPolicy.blocksWorldUse(tier)) {
+            return auditDenied ? action + "-denied" : null;
+        }
+        return StaffModeWorldInteractionPolicy.logsWorldInteraction(tier) ? action : null;
     }
 
     private static boolean isContainer(Block block) {
