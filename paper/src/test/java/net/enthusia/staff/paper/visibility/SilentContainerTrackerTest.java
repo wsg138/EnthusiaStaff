@@ -1,5 +1,6 @@
 package net.enthusia.staff.paper.visibility;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -24,6 +25,19 @@ class SilentContainerTrackerTest {
 
     private static SilentContainerTracker tracker() {
         return new SilentContainerTracker(VANISHED_CHECK, CLOCK);
+    }
+
+    @Test
+    void packetRecipientWorldCanBeReadWithoutBukkitCallsAndUpdatesAcrossWorldChange() {
+        SilentContainerTracker tracker = tracker();
+        UUID worldB = UUID.fromString("44444444-4444-4444-4444-444444444444");
+        assertEquals(null, tracker.worldForRecipient(VISIBLE));
+        tracker.rememberWorld(VISIBLE, WORLD);
+        assertEquals(WORLD, tracker.worldForRecipient(VISIBLE));
+        tracker.rememberWorld(VISIBLE, worldB);
+        assertEquals(worldB, tracker.worldForRecipient(VISIBLE));
+        tracker.forgetWorld(VISIBLE);
+        assertEquals(null, tracker.worldForRecipient(VISIBLE));
     }
 
     @Test

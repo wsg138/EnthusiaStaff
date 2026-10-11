@@ -34,18 +34,19 @@ class CheatTesterControlStateTest {
         assertFalse(state.authorized(null));
         assertFalse(state.select(denied, CheatTesterType.VELOCITY, true));
         assertFalse(state.select(staff, CheatTesterType.VELOCITY, true));
-        assertEquals(CheatTesterType.TOTEM_REFILL, state.selected(staffId));
+        assertEquals(CheatTesterType.NO_FALL, state.selected(staffId));
 
         staffMode.add(staffId);
+        assertFalse(state.select(staff, CheatTesterType.TOTEM_REFILL, true));
         assertFalse(state.select(staff, CheatTesterType.FAKE_ENTITY, false));
         assertTrue(state.select(staff, CheatTesterType.VELOCITY, true));
         assertEquals(CheatTesterType.VELOCITY, state.selected(staffId));
 
         state.clearSelection(staffId);
-        assertEquals(CheatTesterType.TOTEM_REFILL, state.selected(staffId));
+        assertEquals(CheatTesterType.NO_FALL, state.selected(staffId));
         assertTrue(state.select(staff, CheatTesterType.NO_FALL, true));
         state.clear();
-        assertEquals(CheatTesterType.TOTEM_REFILL, state.selected(staffId));
+        assertEquals(CheatTesterType.NO_FALL, state.selected(staffId));
     }
 
     @Test
@@ -57,7 +58,7 @@ class CheatTesterControlStateTest {
 
         assertTrue(state.select(staff, CheatTesterType.AUTO_ARMOR, true));
         state.cycle(staff, false);
-        assertEquals(CheatTesterType.TOTEM_REFILL, state.selected(staffId));
+        assertEquals(CheatTesterType.NO_FALL, state.selected(staffId));
 
         assertTrue(state.select(staff, CheatTesterType.AUTO_ARMOR, true));
         state.cycle(staff, true);
@@ -79,6 +80,7 @@ class CheatTesterControlStateTest {
         assertFalse(state.canStart(staff, player(targetId, Set.of(), false), CheatTesterType.VELOCITY, true, false));
         assertFalse(state.canStart(staff, target, null, true, false));
         assertFalse(state.canStart(staff, target, CheatTesterType.VELOCITY, true, true));
+        assertFalse(state.canStart(staff, target, CheatTesterType.TOTEM_REFILL, true, false));
         assertFalse(state.canStart(staff, target, CheatTesterType.FAKE_ENTITY, false, false));
         assertTrue(state.canStart(staff, target, CheatTesterType.VELOCITY, true, false));
 

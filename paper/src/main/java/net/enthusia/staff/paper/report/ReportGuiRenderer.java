@@ -11,6 +11,8 @@ import net.enthusia.staff.domain.report.ReportSummary;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Bukkit;
+import org.bukkit.OfflinePlayer;
+import org.bukkit.entity.Player;
 import org.bukkit.Material;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
@@ -64,15 +66,16 @@ final class ReportGuiRenderer {
             ReportSummary summary = state.reports().get(offset + index);
             inventory.setItem(configuration.contentSlots().get(index), item(
                     stateMaterial(summary.state(), configuration),
-                    summary.reasonId(),
+                    summary.reasonId().replace('-', ' ').replace('_', ' '),
                     List.of(
-                            Component.text("Target: " + summary.targetId(), NamedTextColor.WHITE),
+                            Component.text("Target: " + displayName(summary.targetId()), NamedTextColor.WHITE),
+                            Component.text("Reporter: " + displayName(summary.reporterId()), NamedTextColor.GRAY),
                             Component.text("State: " + summary.state(), NamedTextColor.GRAY),
-                            Component.text("Assigned: " + summary.assignedTo().map(UUID::toString).orElse("none"),
+                            Component.text("Assigned: " + summary.assignedTo().map(ReportGuiRenderer::displayName).orElse("none"),
                                     NamedTextColor.GRAY),
                             Component.text("Server: " + summary.serverId(), NamedTextColor.DARK_GRAY),
                             Component.text("Updated: " + summary.updatedAt(), NamedTextColor.DARK_GRAY),
-                            Component.text("Revision: " + summary.revision(), NamedTextColor.DARK_GRAY),
+                            Component.text("Report ID: " + shortId(summary.reportId()), NamedTextColor.DARK_GRAY),
                             Component.text(configuration.message("click-inspect"), NamedTextColor.YELLOW)
                     )
             ));
@@ -140,9 +143,12 @@ final class ReportGuiRenderer {
     ) {
         inventory.setItem(configuration.slot("detail-header"), item(
                 stateMaterial(summary.state(), configuration),
-                "Report " + summary.reportId(),
+                "Report " + shortId(summary.reportId()),
                 List.of(
-                        Component.text(summary.reasonId(), NamedTextColor.WHITE),
+                        Component.text(summary.reasonId().replace('-', ' ').replace('_', ' '), NamedTextColor.WHITE),
+                        Component.text("Reporter: " + displayName(summary.reporterId()), NamedTextColor.GRAY),
+                        Component.text("Target: " + displayName(summary.targetId()), NamedTextColor.WHITE),
+                        Component.text("Report ID: " + summary.reportId(), NamedTextColor.DARK_GRAY),
                         Component.text("State: " + summary.state(), NamedTextColor.GRAY),
                         Component.text("Revision: " + summary.revision(), NamedTextColor.DARK_GRAY),
                         Component.text("Created: " + summary.createdAt(), NamedTextColor.DARK_GRAY),
@@ -160,12 +166,18 @@ final class ReportGuiRenderer {
         inventory.setItem(configuration.slot("detail-reporter"), item(
                 configuration.material("reporter"),
                 configuration.message("reporter"),
-                List.of(Component.text(summary.reporterId().toString(), NamedTextColor.GRAY))
+                List.of(
+                        Component.text("Username: " + displayName(summary.reporterId()), NamedTextColor.WHITE),
+                        Component.text("UUID: " + summary.reporterId(), NamedTextColor.DARK_GRAY)
+                )
         ));
         inventory.setItem(configuration.slot("detail-target"), item(
                 configuration.material("target"),
                 configuration.message("target"),
-                List.of(Component.text(summary.targetId().toString(), NamedTextColor.GRAY))
+                List.of(
+                        Component.text("Username: " + displayName(summary.targetId()), NamedTextColor.WHITE),
+                        Component.text("UUID: " + summary.targetId(), NamedTextColor.DARK_GRAY)
+                )
         ));
         inventory.setItem(configuration.slot("detail-location"), item(
                 configuration.material("location"),
@@ -193,7 +205,8 @@ final class ReportGuiRenderer {
                                 NamedTextColor.GRAY),
                         Component.text("Client snapshots: " + details.clientEvidenceSnapshots().size(),
                                 NamedTextColor.GRAY),
-                        Component.text(configuration.message("sensitive-evidence"), NamedTextColor.YELLOW)
+                        Component.text("Click to choose evidence to inspect", NamedTextColor.YELLOW),
+                        Component.text(configuration.message("sensitive-evidence"), NamedTextColor.DARK_GRAY)
                 )
         ));
         inventory.setItem(configuration.slot("detail-description"), item(
@@ -321,7 +334,8 @@ final class ReportGuiRenderer {
         if (snapshots.isEmpty()) {
             lore.add(Component.text(configuration.message("snapshot-none"), NamedTextColor.DARK_GRAY));
         } else {
-            lore.add(Component.text(configuration.message("snapshot-protected"), NamedTextColor.YELLOW));
+            lore.add(Component.text(configuration.message("snapshot-protected"), NamedTextColor.GRAY));
+            lore.add(Component.text("Click to inspect evidence (permission required)", NamedTextColor.YELLOW));
         }
         return item(material, name, lore);
     }
@@ -384,6 +398,23 @@ final class ReportGuiRenderer {
 
     private static String shortId(UUID id) {
         return id.toString().substring(0, 8);
+    }
+
+    // Render occurs on the viewer's scheduler. Prefer locally known names and
+    // retain UUIDs for accountability when a profile has not been cached.
+    private static String displayName(UUID id) {
+        Player online = Bukkit.getPlayer(id);
+        if (online != null) {
+            return humanName(id, online.getName());
+        }
+        OfflinePlayer cached = Bukkit.getOfflinePlayer(id);
+        return humanName(id, cached.getName());
+    }
+
+    static String humanName(UUID id, String cachedName) {
+        return cachedName == null || cachedName.isBlank()
+                ? "Unknown (" + shortId(id) + ")"
+                : cachedName;
     }
 
     private static String queueKey(ReportQueue queue) {

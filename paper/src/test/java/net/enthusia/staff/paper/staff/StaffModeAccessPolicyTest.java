@@ -27,6 +27,16 @@ class StaffModeAccessPolicyTest {
     }
 
     @Test
+    void deniedGameModeAuditRecordsOnlyRequestedMode() {
+        assertEquals("requested=CREATIVE",
+                StaffModeManager.deniedGameModeAuditDetail(GameMode.CREATIVE));
+        assertEquals("requested=ADVENTURE",
+                StaffModeManager.deniedGameModeAuditDetail(GameMode.ADVENTURE));
+        assertFalse(StaffModeAccessPolicy.allowsGameMode(StaffRank.HELPER, GameMode.CREATIVE));
+        assertTrue(StaffModeAccessPolicy.allowsGameMode(StaffRank.HELPER, GameMode.SPECTATOR));
+    }
+
+    @Test
     void developerKeepsSeparateModerationAuthorityButUnrestrictedTechnicalStaffMode() {
         assertFalse(StaffRank.DEVELOPER.canApprovePunishmentRequests());
         assertFalse(StaffModeAccessPolicy.blocksInventoryMutation(StaffRank.DEVELOPER, false));

@@ -2,6 +2,7 @@ package net.enthusia.staff.paper.integration;
 
 import dev.rosewood.rosechat.api.staff.BridgeRegistration;
 import dev.rosewood.rosechat.api.staff.BroadcastContext;
+import dev.rosewood.rosechat.api.staff.ChannelClassification;
 import dev.rosewood.rosechat.api.staff.ChannelRecipientContext;
 import dev.rosewood.rosechat.api.staff.MessageSurface;
 import dev.rosewood.rosechat.api.staff.ModerationDecision;
@@ -342,6 +343,19 @@ public final class RoseChatIntegration implements AutoCloseable {
         }
     }
 
+    // RoseChat authorizes channel membership before this final visibility filter.
+    // The world vanish matrix is not a staff-chat recipient permission matrix.
+    static boolean canReceiveChannelMessage(StaffVisibilityService visibility, ChannelRecipientContext context) {
+        Objects.requireNonNull(visibility, "visibility");
+        Objects.requireNonNull(context, "context");
+        if (context.classification() == ChannelClassification.STAFF) {
+            return true;
+        }
+        return context.senderId()
+                .map(senderId -> visibility.canSee(context.recipientId(), senderId))
+                .orElse(true);
+    }
+
     private static final class StaffBridge implements RoseChatModerationBridge {
         private static final Logger log = Logger.getLogger(StaffBridge.class.getName());
         private final StaffChannelConfiguration channels;
@@ -435,9 +449,7 @@ public final class RoseChatIntegration implements AutoCloseable {
 
         @Override
         public boolean canReceiveChannelMessage(ChannelRecipientContext context) {
-            return context.senderId()
-                    .map(senderId -> visibility.canSee(context.recipientId(), senderId))
-                    .orElse(true);
+            return RoseChatIntegration.canReceiveChannelMessage(visibility, context);
         }
 
         @Override

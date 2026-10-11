@@ -139,7 +139,7 @@ class InspectReportSectionTest {
     }
 
     private static void collect(Component component, List<String> commands) {
-        ClickEvent event = component.clickEvent();
+        ClickEvent<?> event = component.clickEvent();
         if (event != null) {
             assertEquals(ClickEvent.Action.RUN_COMMAND, event.action());
             commands.add(ClickEventTestValues.textValue(event));

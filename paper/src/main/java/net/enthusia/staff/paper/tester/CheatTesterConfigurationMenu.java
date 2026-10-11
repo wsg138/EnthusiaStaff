@@ -136,11 +136,14 @@ final class CheatTesterConfigurationMenu implements Listener {
     }
 
     private static ItemStack testerItem(CheatTesterType type, CheatTesterType selected, boolean fakeReady) {
+        boolean totemSafetyHold = type == CheatTesterType.TOTEM_REFILL;
         boolean unavailable = type == CheatTesterType.FAKE_ENTITY && !fakeReady;
-        List<Component> lore = unavailable
-                ? List.of(Component.text("Unavailable: ProtocolLib packet support is not healthy.", NamedTextColor.RED))
-                : List.of(Component.text(type == selected ? "Selected" : "Click to select", type == selected
-                        ? NamedTextColor.GREEN : NamedTextColor.GRAY));
+        List<Component> lore = totemSafetyHold
+                ? List.of(Component.text("Temporarily disabled: reported totem loss during restore.", NamedTextColor.RED))
+                : unavailable
+                        ? List.of(Component.text("Unavailable: ProtocolLib packet support is not healthy.", NamedTextColor.RED))
+                        : List.of(Component.text(type == selected ? "Selected" : "Click to select", type == selected
+                                ? NamedTextColor.GREEN : NamedTextColor.GRAY));
         return item(material(type), type.displayName(), lore);
     }
 

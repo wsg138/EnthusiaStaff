@@ -14,6 +14,9 @@ import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
 import org.bukkit.block.data.type.Chest;
 import org.bukkit.entity.Player;
+import org.bukkit.event.player.PlayerChangedWorldEvent;
+import org.bukkit.event.player.PlayerJoinEvent;
+import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
@@ -46,6 +49,9 @@ public final class SilentContainerTracker implements Listener {
     private final Clock clock;
     /** Block positions with at least one recorded viewer. */
     private final Map<BlockKey, Set<UUID>> viewers = new ConcurrentHashMap<>();
+    // Packet listeners can execute on Netty threads. Never query a Bukkit
+    // player's World from that listener; cache the immutable world UUID here.
+    private final Map<UUID, UUID> recipientWorldIds = new ConcurrentHashMap<>();
     /** Positions whose close animation should stay silent until the timestamp. */
     private final Map<BlockKey, Long> silentUntilMillis = new ConcurrentHashMap<>();
 
@@ -54,11 +60,52 @@ public final class SilentContainerTracker implements Listener {
         this.clock = Objects.requireNonNull(clock, "clock");
     }
 
+    void rememberWorld(UUID playerId, UUID worldId) {
+        recipientWorldIds.put(Objects.requireNonNull(playerId, "playerId"),
+                Objects.requireNonNull(worldId, "worldId"));
+    }
+
+    UUID worldForRecipient(UUID playerId) {
+        return recipientWorldIds.get(playerId);
+    }
+
+    void forgetWorld(UUID playerId) {
+        recipientWorldIds.remove(playerId);
+    }
+
+    void seedOnlinePlayers(Iterable<? extends Player> players) {
+        for (Player player : players) {
+            recordWorld(player);
+        }
+    }
+
+    private void recordWorld(Player player) {
+        if (player != null && player.getWorld() != null) {
+            rememberWorld(player.getUniqueId(), player.getWorld().getUID());
+        }
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR)
+    public void onPlayerJoin(PlayerJoinEvent event) {
+        recordWorld(event.getPlayer());
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR)
+    public void onPlayerWorldChange(PlayerChangedWorldEvent event) {
+        recordWorld(event.getPlayer());
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR)
+    public void onPlayerQuit(PlayerQuitEvent event) {
+        forgetWorld(event.getPlayer().getUniqueId());
+    }
+
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onInventoryOpen(InventoryOpenEvent event) {
         if (!(event.getPlayer() instanceof Player player)) {
             return;
         }
+        recordWorld(player);
         List<BlockKey> positions = containerPositions(event.getInventory());
         if (positions.isEmpty()) {
             return;
