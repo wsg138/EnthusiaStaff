@@ -12,6 +12,7 @@ import org.bukkit.event.inventory.InventoryAction;
 import org.junit.jupiter.api.Test;
 
 class StaffModeWorldInteractionPolicyTest {
+    private static final String BUCKET_FILL_ACTION = "bucket-fill";
     @Test
     void rejectedBlockEditsHaveDistinctAuditActionNames() {
         assertTrue(StaffModeWorldInteractionPolicy.blocksBlockEdit(StaffDutyTier.HELPER));
@@ -32,7 +33,7 @@ class StaffModeWorldInteractionPolicyTest {
         assertFalse(StaffModeWorldInteractionPolicy.blocksWorldUse(StaffDutyTier.ADMIN));
         for (StaffDutyTier tier : java.util.List.of(StaffDutyTier.HELPER, StaffDutyTier.MOD)) {
             assertEquals(Optional.of("bucket-fill-denied"),
-                    StaffModeWorldInteractionListener.worldUseAuditAction(tier, "bucket-fill", true));
+                    StaffModeWorldInteractionListener.worldUseAuditAction(tier, BUCKET_FILL_ACTION, true));
             assertEquals(Optional.of("block-harvest-denied"),
                     StaffModeWorldInteractionListener.worldUseAuditAction(tier, "block-harvest", true));
             assertEquals(Optional.of("entity-shear-denied"),
@@ -44,12 +45,12 @@ class StaffModeWorldInteractionPolicyTest {
             assertEquals(Optional.empty(), StaffModeWorldInteractionListener.worldUseAuditAction(
                     tier, "entity-interact", false), "avoid duplicate entity-interact audits");
         }
-        assertEquals(Optional.of("bucket-fill"),
+        assertEquals(Optional.of(BUCKET_FILL_ACTION),
                 StaffModeWorldInteractionListener.worldUseAuditAction(StaffDutyTier.ADMIN,
-                        "bucket-fill", true));
-        assertEquals(Optional.of("bucket-fill"),
+                        BUCKET_FILL_ACTION, true));
+        assertEquals(Optional.of(BUCKET_FILL_ACTION),
                 StaffModeWorldInteractionListener.worldUseAuditAction(StaffDutyTier.DEVELOPER,
-                        "bucket-fill", true));
+                        BUCKET_FILL_ACTION, true));
         assertEquals(Optional.empty(), StaffModeWorldInteractionListener.worldUseAuditAction(
                 null, "entity-interact", false));
         assertEquals(Optional.of("fishing-denied"), StaffModeWorldInteractionListener.worldUseAuditAction(
