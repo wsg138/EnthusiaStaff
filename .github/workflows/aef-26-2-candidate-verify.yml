@@ -17,7 +17,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: wsg138/AnarchyExploitFixes
-          ref: 2b77d013a7d77b441b533586fc0c7b34fd9739d9
+          ref: 74b897e8c98a679e826779bcc5cb1a0c03007602
           path: aef
           persist-credentials: false
 
@@ -135,7 +135,7 @@ jobs:
         if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: aef-26-2-candidate-2b77d013a7
+          name: aef-26-2-candidate-74b897e8c9
           path: |
             aef/AnarchyExploitFixesFolia/build/libs/*.jar
             aef/AnarchyExploitFixesLegacy/build/libs/*.jar
