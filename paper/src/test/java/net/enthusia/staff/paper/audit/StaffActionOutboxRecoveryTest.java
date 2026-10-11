@@ -140,6 +140,29 @@ class StaffActionOutboxRecoveryTest {
     }
 
     @Test
+    void oversizedLegacyEntryIsBoundedAndBlocksLaterReplay() throws Exception {
+        UUID valid = UUID.randomUUID();
+        Files.writeString(journal(), "x".repeat(40_000) + "\n"
+                + record(valid, "later") + "\n", StandardCharsets.UTF_8);
+        List<UUID> observed = new ArrayList<>();
+        StaffActionOutboxRecovery recovery = new StaffActionOutboxRecovery(
+                directory, LOG, (id, json, timestamp) -> observed.add(id));
+        recovery.recoverOnce();
+        assertTrue(observed.isEmpty());
+        assertFalse(Files.exists(checkpoint()));
+    }
+
+    @Test
+    void acceptsWindowsCrLfJsonlRows() throws Exception {
+        UUID id = UUID.randomUUID();
+        Files.writeString(journal(), record(id, "placed") + "\r\n", StandardCharsets.UTF_8);
+        List<UUID> observed = new ArrayList<>();
+        new StaffActionOutboxRecovery(directory, LOG, (uuid, json, timestamp) ->
+                observed.add(uuid)).recoverOnce();
+        assertEquals(List.of(id), observed);
+    }
+
+    @Test
     void invalidJsonMustNotSkipFollowingEntries() throws Exception {
         UUID id = UUID.randomUUID();
         Files.writeString(journal(), "{invalid-json}\n"

@@ -2,6 +2,7 @@ package net.enthusia.staff.paper.audit;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.nio.charset.StandardCharsets;
@@ -128,24 +129,11 @@ final class StaffActionOutboxRecovery {
             }
             file.seek(position);
             while (processed < limit) {
-                long start = file.getFilePointer();
-                String latin1 = file.readLine();
-                if (latin1 == null) {
-                    break;
+                String json = readCompleteLine(file);
+                if (json == null) {
+                    break; // EOF or an incomplete final line: never checkpoint it.
                 }
                 long end = file.getFilePointer();
-                // Never commit a partially written final JSONL record.
-                file.seek(end - 1);
-                int terminator = file.read();
-                file.seek(end);
-                if (terminator != '\n') {
-                    break;
-                }
-                if (end - start > MAX_RECORD_BYTES) {
-                    warnOnce("Staff-action journal has an oversized record; recovery paused for inspection", null);
-                    break;
-                }
-                String json = new String(latin1.getBytes(StandardCharsets.ISO_8859_1), StandardCharsets.UTF_8);
                 JsonNode node = JSON.readTree(json);
                 if (node == null || !node.hasNonNull("eventId") || !node.hasNonNull("ts")) {
                     // Historical logs did not carry an ID. They cannot be replayed with
@@ -175,6 +163,29 @@ final class StaffActionOutboxRecovery {
             }
         }
         return processed;
+    }
+
+    /**
+     * Reads no more than one bounded complete UTF-8 JSONL record. The limit is
+     * checked while reading, so a malformed/legacy entry cannot allocate an
+     * unbounded Java String before being rejected. CRLF and LF are supported.
+     */
+    private static String readCompleteLine(RandomAccessFile input) throws IOException {
+        ByteArrayOutputStream buffer = new ByteArrayOutputStream();
+        for (int index = 0; index < MAX_RECORD_BYTES; index++) {
+            int value = input.read();
+            if (value == -1) {
+                return null;
+            }
+            if (value == '\n') {
+                byte[] raw = buffer.toByteArray();
+                int length = raw.length > 0 && raw[raw.length - 1] == '\r'
+                        ? raw.length - 1 : raw.length;
+                return new String(raw, 0, length, StandardCharsets.UTF_8);
+            }
+            buffer.write(value);
+        }
+        throw new IOException("Staff-action journal record exceeds maximum byte length");
     }
 
     private void warnOnce(String message, Exception error) {
