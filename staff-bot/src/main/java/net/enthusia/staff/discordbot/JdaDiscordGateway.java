@@ -20,6 +20,7 @@ import net.dv8tion.jda.api.Permission;
 import net.dv8tion.jda.api.entities.ApplicationInfo;
 import net.dv8tion.jda.api.entities.Guild;
 import net.dv8tion.jda.api.entities.Member;
+import net.dv8tion.jda.api.entities.Message;
 import net.dv8tion.jda.api.entities.User;
 import net.dv8tion.jda.api.entities.channel.concrete.TextChannel;
 import net.dv8tion.jda.api.events.ExceptionEvent;
@@ -55,6 +56,7 @@ final class JdaDiscordGateway implements DiscordGateway, DiscordChatEgress, Disc
     private final DiscordChatSenderIdentityResolver chatSenderIdentities;
     private final Object lifecycleLock = new Object();
     private DiscordChatIngress chatIngress;
+    private volatile DiscordChatPostObserver chatPublicationObserver;
     private JDA jda;
     private JdaStaffModerationListener moderationListener;
     private JdaDiscordInvestigationEvidenceListener investigationEvidenceListener;
@@ -109,6 +111,19 @@ final class JdaDiscordGateway implements DiscordGateway, DiscordChatEgress, Disc
                 throw new IllegalStateException("Discord chat ingress is already installed");
             }
             chatIngress = ingress;
+        }
+    }
+
+    void installChatPublicationObserver(DiscordChatPostObserver observer) {
+        Objects.requireNonNull(observer, "observer");
+        synchronized (lifecycleLock) {
+            if (jda != null || chatPublicationObserver != null
+                    || chatConfiguration.isEmpty()
+                    || configuration.environment() != StaffBotEnvironment.STAGING) {
+                throw new IllegalStateException(
+                        "post-send identity handoff requires an unstarted staging bridge");
+            }
+            chatPublicationObserver = observer;
         }
     }
 
@@ -366,9 +381,10 @@ final class JdaDiscordGateway implements DiscordGateway, DiscordChatEgress, Disc
                 chatSenderIdentity(api, channel.getGuild(), message.minecraftPlayerId())
         );
         try {
-            channel.sendMessage(content)
+            Message published = channel.sendMessage(content)
                     .setAllowedMentions(List.of())
                     .complete();
+            notifyChatPublished(channel, message.canonicalMessageId(), message.plainText(), published);
             return true;
         } catch (RuntimeException failure) {
             return false;
@@ -423,18 +439,20 @@ final class JdaDiscordGateway implements DiscordGateway, DiscordChatEgress, Disc
         if (artifacts.isEmpty()
                 || !channel.getGuild().getSelfMember().hasPermission(
                         channel, Permission.MESSAGE_ATTACH_FILES)) {
-            return sendRenderedText(channel, content);
+            return sendRenderedText(channel, content, message);
         }
 
         List<FileUpload> uploads = artifactUploads(artifacts);
         if (uploads.isEmpty()) {
-            return sendRenderedText(channel, content);
+            return sendRenderedText(channel, content, message);
         }
         try {
             MessageCreateAction action = channel.sendMessage(content)
                     .setAllowedMentions(List.of())
                     .addFiles(uploads);
-            action.complete();
+            Message published = action.complete();
+            notifyChatPublished(
+                    channel, message.canonicalMessageId(), message.canonicalPlainText(), published);
             return true;
         } catch (RuntimeException failure) {
             // Delivery is ambiguous once the REST request is submitted; do not risk a duplicate
@@ -442,6 +460,23 @@ final class JdaDiscordGateway implements DiscordGateway, DiscordChatEgress, Disc
             return false;
         } finally {
             closeUploads(uploads);
+        }
+    }
+
+    private void notifyChatPublished(
+            TextChannel channel, String canonicalId, String canonicalText, Message posted) {
+        DiscordChatPostObserver observer = chatPublicationObserver;
+        if (observer == null) {
+            return;
+        }
+        try {
+            observer.published(new DiscordChatPublication(
+                    channel.getGuild().getIdLong(), channel.getIdLong(), posted.getId(),
+                    canonicalId, canonicalText));
+        } catch (RuntimeException failure) {
+            // Successful Discord delivery must never be retried merely because the
+            // independent moderation identity handoff failed. No private text in logs.
+            LOGGER.log(System.Logger.Level.WARNING, "post_send_identity_handoff_failed");
         }
     }
 
@@ -474,11 +509,14 @@ final class JdaDiscordGateway implements DiscordGateway, DiscordChatEgress, Disc
         }
     }
 
-    private static boolean sendRenderedText(TextChannel channel, String content) {
+    private boolean sendRenderedText(
+            TextChannel channel, String content, ChatBridgeRenderedMessage original) {
         try {
-            channel.sendMessage(content)
+            Message published = channel.sendMessage(content)
                     .setAllowedMentions(List.of())
                     .complete();
+            notifyChatPublished(
+                    channel, original.canonicalMessageId(), original.canonicalPlainText(), published);
             return true;
         } catch (RuntimeException failure) {
             return false;
