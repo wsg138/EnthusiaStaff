@@ -6,12 +6,12 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import org.junit.jupiter.api.Test;
 
 class DiscordChatPublicationTest {
-    private static final String DISCORD_MESSAGE_ID = "1405605074331373718";
+    private static final String DISCORD_MESSAGE_ID = "1234567890123456789";
 
     @Test
     void preservesActualPostSendIdentityAndUndecoratedText() {
         DiscordChatPublication receipt = new DiscordChatPublication(
-                1405605074331373718L, 1405605074331373717L,
+                1234567890123456789L, 1234567890123456788L,
                 DISCORD_MESSAGE_ID, "rosechat-canonical-message", "hello *world*"
         );
         assertEquals(DISCORD_MESSAGE_ID, receipt.discordMessageId());
