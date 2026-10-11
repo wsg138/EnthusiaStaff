@@ -11,6 +11,9 @@ import org.junit.jupiter.api.Test;
 
 final class DiscordEventRendererTest {
     private static final String REPORTS = "reports";
+    private static final String PUNISHMENTS = "punishments";
+    private static final String ALERTS = "alerts";
+    private static final String STAFF_LOGS = "logs-staffmode";
     private static final String REPORT_CREATED = "REPORT_CREATED";
 
     private final DiscordEventRenderer renderer = new DiscordEventRenderer();
@@ -43,20 +46,20 @@ final class DiscordEventRendererTest {
         String payload = "{\"eventId\":\"" + eventId + "\",\"action\":\"staff-mode-exited\","
                 + "\"detail\":\"session=test-session path=local-session reason=manual\","
                 + "\"token\":\"never-render-this\",\"reasonId\":\"safe-reason\"}";
-        String privateLog = renderer.render(message("logs-staffmode", "STAFF_ACTION", payload));
+        String privateLog = renderer.render(message(STAFF_LOGS, "STAFF_ACTION", payload));
         assertTrue(privateLog.contains("eventId=" + eventId));
         assertTrue(privateLog.contains("action=staff-mode-exited"));
         assertFalse(privateLog.contains("never-render-this"));
         assertFalse(privateLog.contains("token="));
-        assertFalse(renderer.render(message("reports", REPORT_CREATED, payload)).contains(eventId));
-        assertFalse(renderer.render(message("alerts", "ALERT_CREATED", payload)).contains(eventId));
-        assertFalse(renderer.render(message("punishments", "PUNISHMENT_CREATED", payload)).contains(eventId));
+        assertFalse(renderer.render(message(REPORTS, REPORT_CREATED, payload)).contains(eventId));
+        assertFalse(renderer.render(message(ALERTS, "ALERT_CREATED", payload)).contains(eventId));
+        assertFalse(renderer.render(message(PUNISHMENTS, "PUNISHMENT_CREATED", payload)).contains(eventId));
     }
 
     @Test
     void punishmentArraysAreBoundedAndNestedValuesAreWithheld() {
         String rendered = renderer.render(message(
-                "punishments",
+                PUNISHMENTS,
                 "PUNISHMENT_CREATED",
                 "{\"caseId\":\"case-1\",\"sanctionIds\":[\"1\",\"2\",\"3\",\"4\",\"5\","
                         + "\"6\",\"7\",\"8\",\"9\"],\"reasonId\":{\"raw\":\"secret\"}}"
@@ -73,12 +76,12 @@ final class DiscordEventRendererTest {
         String payload = "{\"caseId\":\"case-1\",\"targetId\":\"target\","
                 + "\"sourcePlayerId\":\"private-source\",\"sourceSanctionId\":\"private-sanction\","
                 + "\"relationshipState\":\"CONFIRMED_ALT\"}";
-        String punishment = renderer.render(message("punishments", "SANCTION_INHERITED", payload));
+        String punishment = renderer.render(message(PUNISHMENTS, "SANCTION_INHERITED", payload));
         assertTrue(punishment.contains("caseId=case-1"));
         assertFalse(punishment.contains("private-source"));
         assertFalse(punishment.contains("private-sanction"));
         assertFalse(punishment.contains("relationshipState"));
-        String alert = renderer.render(message("alerts", "ALT_EVASION_REVIEW", payload));
+        String alert = renderer.render(message(ALERTS, "ALT_EVASION_REVIEW", payload));
         assertTrue(alert.contains("sourcePlayerId=private-source"));
         assertTrue(alert.contains("relationshipState=CONFIRMED_ALT"));
     }
@@ -86,7 +89,7 @@ final class DiscordEventRendererTest {
     @Test
     void freezeEventsRenderUnderPunishmentsWithReason() {
         String rendered = renderer.render(message(
-                "punishments",
+                PUNISHMENTS,
                 "PLAYER_FROZEN",
                 "{\"targetId\":\"target\",\"reason\":\"line1\\nline2 `code`\"}"
         ));
@@ -98,7 +101,7 @@ final class DiscordEventRendererTest {
     @Test
     void altReviewAlertShowsEvidenceCategoryWithoutRawNetworkAddress() {
         String rendered = renderer.render(message(
-                "alerts", "ALT_EVASION_REVIEW",
+                ALERTS, "ALT_EVASION_REVIEW",
                 "{\"targetId\":\"joining\",\"relatedPlayerId\":\"sanctioned\","
                         + "\"sanctionType\":\"BAN\",\"relationshipState\":\"SAME_NETWORK\","
                         + "\"confidencePolicyGrade\":0.25,\"trigger\":\"JOIN\","
@@ -114,7 +117,7 @@ final class DiscordEventRendererTest {
     @Test
     void approvalRequiredAlertExposesOnlySafeReviewMetadata() {
         String rendered = renderer.render(message(
-                "alerts", "PUNISHMENT_APPROVAL_REQUIRED",
+                ALERTS, "PUNISHMENT_APPROVAL_REQUIRED",
                 "{\"requestId\":\"request-1\",\"targetId\":\"target-1\","
                         + "\"requesterId\":\"staff-1\",\"reasonId\":\"cheating\","
                         + "\"requiredRank\":\"MOD\",\"visibility\":\"PRIVATE\","
@@ -131,7 +134,7 @@ final class DiscordEventRendererTest {
     void fieldTruncationDoesNotSplitSurrogatePair() {
         String reason = "a".repeat(178) + "😀" + "z";
         String rendered = renderer.render(message(
-                "punishments",
+                PUNISHMENTS,
                 "PLAYER_FROZEN",
                 "{\"reason\":\"" + reason + "\"}"
         ));
@@ -145,7 +148,7 @@ final class DiscordEventRendererTest {
         String normalizedTail = "a".repeat(79) + "😀z";
         String reason = " ".repeat(100) + normalizedTail;
         String rendered = renderer.render(message(
-                "logs-staffmode",
+                STAFF_LOGS,
                 "PLAYER_FROZEN",
                 "{\"reason\":\"" + reason + "\"}"
         ));
@@ -157,7 +160,7 @@ final class DiscordEventRendererTest {
     void unmatchedPayloadSurrogateIsReplacedBeforeDelivery() {
         String escapedHighSurrogate = "\\u" + "D83D";
         String rendered = renderer.render(message(
-                "logs-staffmode",
+                STAFF_LOGS,
                 "PLAYER_FROZEN",
                 "{\"reason\":\"before" + escapedHighSurrogate + "after\"}"
         ));
