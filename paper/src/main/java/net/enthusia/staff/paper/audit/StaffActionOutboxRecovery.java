@@ -36,6 +36,7 @@ import java.util.logging.Logger;
 final class StaffActionOutboxRecovery {
     private static final int MAX_PER_TICK = 200;
     private static final int MAX_RECORD_BYTES = 16_384;
+    private static final int EMPTY_RECORD_LENGTH = 0;
     private static final int RETENTION_DAYS = 30;
     private static final String PREFIX = "staff-actions-";
     private static final String EXTENSION = ".jsonl";
@@ -119,11 +120,14 @@ final class StaffActionOutboxRecovery {
             warnOnce("Staff-action recovery checkpoint unreadable; manual repair required", exception);
             return 0;
         }
+        return replayFromCheckpoint(journal, checkpoint, position, limit);
+    }
+
+    private int replayFromCheckpoint(Path journal, Path checkpoint, long position, int limit) {
         long accepted = position;
         int processed = 0;
         try (RandomAccessFile file = new RandomAccessFile(journal.toFile(), "r")) {
             if (position > file.length()) {
-                // A rotated/truncated journal cannot reuse an old byte offset.
                 warnOnce("Staff-action journal shorter than checkpoint; refusing automatic offset reset", null);
                 return 0;
             }
@@ -133,36 +137,42 @@ final class StaffActionOutboxRecovery {
                 if (json == null) {
                     break; // EOF or an incomplete final line: never checkpoint it.
                 }
-                long end = file.getFilePointer();
-                JsonNode node = JSON.readTree(json);
-                if (node == null || !node.hasNonNull("eventId") || !node.hasNonNull("ts")) {
-                    // Historical logs did not carry an ID. They cannot be replayed with
-                    // safe deduplication and must not be given random IDs.
-                    warnOnce("Staff-action journal contains legacy/unidentified record; not replaying it", null);
-                    accepted = end;
-                    processed++;
-                    continue;
-                }
-                UUID eventId = UUID.fromString(node.path("eventId").asText());
-                Instant timestamp = Instant.parse(node.path("ts").asText());
-                writer.accept(eventId, json, timestamp);
-                accepted = end;
+                storeRecordOrSkipLegacy(json);
+                accepted = file.getFilePointer();
                 processed++;
             }
         } catch (Exception exception) {
-            // Leave failed row uncommitted in the checkpoint for a future retry.
+            // Keep the failed row in the journal; it will be retried next pass.
             warnOnce("Staff-action Discord replay paused; will retry undelivered record", exception);
         } finally {
-            if (accepted != position) {
-                try {
-                    writePosition(checkpoint, accepted);
-                } catch (IOException exception) {
-                    // Replays are safe: the database row uses a stable unique ID.
-                    warnOnce("Staff-action replay checkpoint write failed", exception);
-                }
-            }
+            checkpointAcceptedRows(checkpoint, position, accepted);
         }
         return processed;
+    }
+
+    private void storeRecordOrSkipLegacy(String json) throws Exception {
+        JsonNode node = JSON.readTree(json);
+        if (node == null || !node.hasNonNull("eventId") || !node.hasNonNull("ts")) {
+            // Pre-upgrade entries have no unique ID. Inventing one would duplicate
+            // potentially delivered historical staff-action notifications.
+            warnOnce("Staff-action journal contains legacy/unidentified record; not replaying it", null);
+            return;
+        }
+        UUID eventId = UUID.fromString(node.path("eventId").asText());
+        Instant timestamp = Instant.parse(node.path("ts").asText());
+        writer.accept(eventId, json, timestamp);
+    }
+
+    private void checkpointAcceptedRows(Path checkpoint, long oldPosition, long accepted) {
+        if (oldPosition == accepted) {
+            return;
+        }
+        try {
+            writePosition(checkpoint, accepted);
+        } catch (IOException exception) {
+            // The stable database ID permits duplicate offers after checkpoint failures.
+            warnOnce("Staff-action replay checkpoint write failed", exception);
+        }
     }
 
     /**
@@ -179,7 +189,7 @@ final class StaffActionOutboxRecovery {
             }
             if (value == '\n') {
                 byte[] raw = buffer.toByteArray();
-                int length = raw.length > 0 && raw[raw.length - 1] == '\r'
+                int length = raw.length > EMPTY_RECORD_LENGTH && raw[raw.length - 1] == '\r'
                         ? raw.length - 1 : raw.length;
                 return new String(raw, 0, length, StandardCharsets.UTF_8);
             }
