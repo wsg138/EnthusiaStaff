@@ -43,10 +43,10 @@ class CheatTesterControlStateTest {
         assertEquals(CheatTesterType.VELOCITY, state.selected(staffId));
 
         state.clearSelection(staffId);
-        assertEquals(CheatTesterType.TOTEM_REFILL, state.selected(staffId));
+        assertEquals(CheatTesterType.NO_FALL, state.selected(staffId));
         assertTrue(state.select(staff, CheatTesterType.NO_FALL, true));
         state.clear();
-        assertEquals(CheatTesterType.TOTEM_REFILL, state.selected(staffId));
+        assertEquals(CheatTesterType.NO_FALL, state.selected(staffId));
     }
 
     @Test
