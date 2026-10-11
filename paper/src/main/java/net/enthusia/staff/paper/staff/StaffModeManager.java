@@ -1154,11 +1154,19 @@ public final class StaffModeManager implements Listener {
         if (rank == null || !StaffModeAccessPolicy.allowsGameMode(rank, event.getNewGameMode())) {
             event.setCancelled(true);
             if (!transitions.contains(playerId)) {
+                // Internal restoration transitions are not staff-initiated attempts.
+                // Only the requested mode is needed; actor/rank are in the audit envelope.
+                logStaffAction(player, "gamemode-change-denied",
+                        deniedGameModeAuditDetail(event.getNewGameMode()));
                 player.sendMessage(StaffMessageStyle.style(Component.text(
                         "Your staff rank cannot use that game mode while staff mode is active."
                 )));
             }
         }
+    }
+
+    static String deniedGameModeAuditDetail(GameMode requested) {
+        return "requested=" + requested;
     }
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
