@@ -155,7 +155,8 @@ final class TransitionDataCollector implements AutoCloseable, Listener {
 
     private void persist(Capture snapshot) {
         try {
-            for (TransitionSnapshotPlanner.Observation observation : snapshot.observations()) {
+            for (TransitionSnapshotPlanner.Observation observation
+                    : TransitionSnapshotPlanner.plan(Map.of(), snapshot.observations()).observations()) {
                 persistObservation(observation);
                 if (!observation.online()) {
                     pending.remove(observation.playerId(), observation);
@@ -166,9 +167,9 @@ final class TransitionDataCollector implements AutoCloseable, Listener {
             ImportReport report = migration.importSnapshot(new ReadOnlySnapshotProvider(plan.importableLinks()));
             offlineCursor = planned.nextCursor();
             plugin.getLogger().log(Level.INFO,
-                    "enthusiastaff_transition_collector_pass observed={0} imported={1} unchanged={2} conflicts={3} skipped={4}",
+                    "enthusiastaff_transition_collector_pass observed={0} imported={1} unchanged={2} conflicts={3} skipped={4} deferred={5}",
                     new Object[]{snapshot.observations().size(), report.imported(), report.unchanged(),
-                            report.conflicts().size(), plan.skippedLinks()});
+                            report.conflicts().size(), plan.skippedLinks(), planned.deferred()});
         } catch (RuntimeException exception) {
             logFailure("enthusiastaff_transition_collector_pass_failed", exception);
         } finally {
@@ -194,7 +195,8 @@ final class TransitionDataCollector implements AutoCloseable, Listener {
                             playerId, name, identity.orElseThrow().lastSeenAt(), false)));
         }
         return new PlannedSnapshot(
-                TransitionSnapshotPlanner.plan(batch.links(), observations), batch.nextCursor());
+                TransitionSnapshotPlanner.plan(batch.links(), observations), batch.nextCursor(),
+                snapshot.links().size() - batch.links().size());
     }
 
     private void persistObservation(TransitionSnapshotPlanner.Observation observation) {
@@ -231,7 +233,7 @@ final class TransitionDataCollector implements AutoCloseable, Listener {
         }
     }
 
-    private record PlannedSnapshot(TransitionSnapshotPlanner.Plan plan, int nextCursor) { }
+    private record PlannedSnapshot(TransitionSnapshotPlanner.Plan plan, int nextCursor, int deferred) { }
 
     private record Capture(Map<String, UUID> links, List<TransitionSnapshotPlanner.Observation> observations) {
         private Capture {
