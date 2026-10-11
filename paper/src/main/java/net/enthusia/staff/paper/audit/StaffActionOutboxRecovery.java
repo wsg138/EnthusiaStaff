@@ -37,6 +37,8 @@ final class StaffActionOutboxRecovery {
     private static final int MAX_PER_TICK = 200;
     private static final int MAX_RECORD_BYTES = 16_384;
     private static final int EMPTY_RECORD_LENGTH = 0;
+    private static final int END_OF_FILE = -1;
+    private static final int LINE_FEED_BYTE = '\n';
     private static final int RETENTION_DAYS = 30;
     private static final String PREFIX = "staff-actions-";
     private static final String EXTENSION = ".jsonl";
@@ -184,10 +186,10 @@ final class StaffActionOutboxRecovery {
         ByteArrayOutputStream buffer = new ByteArrayOutputStream();
         for (int index = 0; index < MAX_RECORD_BYTES; index++) {
             int value = input.read();
-            if (value == -1) {
+            if (value == END_OF_FILE) {
                 return null;
             }
-            if (value == '\n') {
+            if (value == LINE_FEED_BYTE) {
                 byte[] raw = buffer.toByteArray();
                 int length = raw.length > EMPTY_RECORD_LENGTH && raw[raw.length - 1] == '\r'
                         ? raw.length - 1 : raw.length;
