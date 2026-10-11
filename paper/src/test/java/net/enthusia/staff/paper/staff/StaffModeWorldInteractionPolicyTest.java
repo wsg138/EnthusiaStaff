@@ -6,11 +6,22 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.Set;
 import net.enthusia.staff.domain.auth.StaffRank;
+import org.bukkit.Material;
 import org.bukkit.event.block.Action;
 import org.bukkit.event.inventory.InventoryAction;
 import org.junit.jupiter.api.Test;
 
 class StaffModeWorldInteractionPolicyTest {
+    @Test
+    void farmlandTramplingIsDeniedForAnyProtectedStaffOrVanishedPlayer() {
+        assertTrue(StaffModeWorldInteractionPolicy.blocksFarmlandTrampling(Material.FARMLAND, true));
+        assertFalse(StaffModeWorldInteractionPolicy.blocksFarmlandTrampling(Material.FARMLAND, false));
+        assertFalse(StaffModeWorldInteractionPolicy.blocksFarmlandTrampling(Material.WHEAT, true));
+        assertFalse(StaffModeWorldInteractionPolicy.blocksFarmlandTrampling(Material.DIRT, true));
+        assertFalse(StaffModeWorldInteractionPolicy.blocksFarmlandTrampling(null, true));
+    }
+
+
     @Test
     void rejectedBlockEditsHaveDistinctAuditActionNames() {
         assertTrue(StaffModeWorldInteractionPolicy.blocksBlockEdit(StaffDutyTier.HELPER));

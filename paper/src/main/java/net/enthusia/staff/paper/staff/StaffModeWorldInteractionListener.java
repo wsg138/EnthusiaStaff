@@ -15,6 +15,7 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.block.Action;
 import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.block.BlockPlaceEvent;
+import org.bukkit.event.entity.EntityChangeBlockEvent;
 import org.bukkit.event.inventory.InventoryAction;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryDragEvent;
@@ -111,6 +112,17 @@ public final class StaffModeWorldInteractionListener implements Listener {
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     public void onInteract(PlayerInteractEvent event) {
         Player player = event.getPlayer();
+        // Paper/Bukkit farmland trampling is a PHYSICAL block interaction.
+        // Run before the tier/unrestricted checks: passive damage is not a
+        // permissible world edit for staff mode or standalone vanish.
+        if (event.getAction() == Action.PHYSICAL
+                && StaffModeWorldInteractionPolicy.blocksFarmlandTrampling(
+                        event.getClickedBlock() == null ? null : event.getClickedBlock().getType(),
+                        staffMode.protectsFarmland(player.getUniqueId()))) {
+            event.setCancelled(true);
+            staffMode.logStaffAction(player, "farmland-trample-denied", describe(event.getClickedBlock()));
+            return;
+        }
         if (!onDuty(player)) {
             return;
         }
@@ -154,6 +166,22 @@ public final class StaffModeWorldInteractionListener implements Listener {
                     "block-interact",
                     action + " " + describe(event.getClickedBlock())
             );
+        }
+    }
+
+    // Defensive fallback for implementations that notify an entity-caused block
+    // change without exposing the corresponding PHYSICAL interaction. Only a
+    // player's attempted farmland conversion is affected.
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+    public void onFarmlandChange(EntityChangeBlockEvent event) {
+        if (!(event.getEntity() instanceof Player player)) {
+            return;
+        }
+        if (StaffModeWorldInteractionPolicy.blocksFarmlandTrampling(
+                event.getBlock().getType(), staffMode.protectsFarmland(player.getUniqueId()))
+                && event.getTo() == Material.DIRT) {
+            event.setCancelled(true);
+            staffMode.logStaffAction(player, "farmland-trample-denied", describe(event.getBlock()));
         }
     }
 
