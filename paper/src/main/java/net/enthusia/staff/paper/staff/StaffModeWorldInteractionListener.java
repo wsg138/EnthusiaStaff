@@ -233,8 +233,7 @@ public final class StaffModeWorldInteractionListener implements Listener {
         }
         return (rawSlot >= 0 && rawSlot < topSize)
                 || action == InventoryAction.MOVE_TO_OTHER_INVENTORY
-                || action == InventoryAction.COLLECT_TO_CURSOR
-                || action == InventoryAction.HOTBAR_SWAP;
+                || action == InventoryAction.COLLECT_TO_CURSOR;
     }
 
     static boolean touchesProtectedContainerSlot(Set<Integer> rawSlots, int topSize) {

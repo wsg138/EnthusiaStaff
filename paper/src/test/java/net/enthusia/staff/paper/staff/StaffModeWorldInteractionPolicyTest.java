@@ -47,8 +47,10 @@ class StaffModeWorldInteractionPolicyTest {
                 InventoryAction.MOVE_TO_OTHER_INVENTORY, 33, topSize));
         assertTrue(StaffModeWorldInteractionListener.shouldAuditDeniedContainerClick(
                 InventoryAction.COLLECT_TO_CURSOR, 33, topSize));
-        assertTrue(StaffModeWorldInteractionListener.shouldAuditDeniedContainerClick(
+        assertFalse(StaffModeWorldInteractionListener.shouldAuditDeniedContainerClick(
                 InventoryAction.HOTBAR_SWAP, 32, topSize));
+        assertTrue(StaffModeWorldInteractionListener.shouldAuditDeniedContainerClick(
+                InventoryAction.HOTBAR_SWAP, 8, topSize));
         assertFalse(StaffModeWorldInteractionListener.touchesProtectedContainerSlot(
                 Set.of(27, 28, 35), topSize));
         assertTrue(StaffModeWorldInteractionListener.touchesProtectedContainerSlot(
