@@ -102,23 +102,30 @@ class StaffActionJournalRecoveryIntegrationTest {
             recover.invoke(logger);
             assertEquals(1, outboxCount(eventId));
 
-            // Model successful Discord outbox delivery. Replay must never reset its state.
+            // A later crash must not reset an already delivered database event.
             markDelivered(eventId);
-            Path cursor = journal.resolveSibling(journal.getFileName() + ".cursor");
-            assertTrue(Files.isRegularFile(cursor));
-            Files.delete(cursor); // Crash before journal checkpoint persistence.
             close.invoke(logger);
+            assertRestartKeepsDeliveredState(create, recover, close,
+                    executor, source, journal, eventId);
+        }
+    }
 
-            Object restarted = create.newInstance(Logger.getLogger(getClass().getName()),
-                    executor, source, "SMP", "", directory);
-            try {
-                recover.invoke(restarted);
-                assertEquals(1, outboxCount(eventId));
-                assertEquals("DELIVERED", outboxState(eventId));
-                assertEquals(1, outboxCountByKey(OUTBOX_KEY_PREFIX + eventId));
-            } finally {
-                close.invoke(restarted);
-            }
+    private void assertRestartKeepsDeliveredState(
+            Constructor<?> create, Method recover, Method close, ExecutorService executor,
+            Supplier<DataSource> source, Path journal, UUID eventId
+    ) throws Exception {
+        Path cursor = journal.resolveSibling(journal.getFileName() + ".cursor");
+        assertTrue(Files.isRegularFile(cursor));
+        Files.delete(cursor); // Simulate crash between DB commit and cursor replacement.
+        Object restarted = create.newInstance(Logger.getLogger(getClass().getName()),
+                executor, source, "SMP", "", directory);
+        try {
+            recover.invoke(restarted);
+            assertEquals(1, outboxCount(eventId));
+            assertEquals("DELIVERED", outboxState(eventId));
+            assertEquals(1, outboxCountByKey(OUTBOX_KEY_PREFIX + eventId));
+        } finally {
+            close.invoke(restarted);
         }
     }
 
