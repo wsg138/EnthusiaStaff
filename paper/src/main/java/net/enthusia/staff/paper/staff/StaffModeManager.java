@@ -1639,7 +1639,7 @@ public final class StaffModeManager implements Listener {
         // The player and Bukkit state were captured on the entity scheduler before restore.
         // This callback runs on the bounded persistence worker only after completeExit succeeds.
         try {
-            logger.log(exitAudit.playerId(), exitAudit.playerName(), exitAudit.rank(),
+            logger.recordStaffAction(exitAudit.playerId(), exitAudit.playerName(), exitAudit.rank(),
                     exitAudit.vanished(), false, "staff-mode-exited",
                     StaffModeLifecycleAudit.detail(sessionId,
                             exitAudit.previouslyActive() ? "local-session" : "recovered-session",

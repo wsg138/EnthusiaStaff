@@ -61,9 +61,8 @@ class StaffActionLoggerJournalTest {
             StaffActionLogger logger = new StaffActionLogger(
                     Logger.getLogger(StaffActionLoggerJournalTest.class.getName()),
                     executor, () -> null, "SMP", "", directory);
-            // StaffActionLogger.log is an audit append, not a JUL logger call.
-            // A method reference avoids PMD treating it as an unguarded log statement.
-            AuditAppend append = logger::log;
+            // This audit append is unconditional; it must not be gated on JUL levels.
+            AuditAppend append = logger::recordStaffAction;
             append.append(UUID.randomUUID(), "Example", null, true, true,
                     "block-break", "x".repeat(5_000));
             logger.close();
