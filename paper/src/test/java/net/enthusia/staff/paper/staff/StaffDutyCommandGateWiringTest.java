@@ -1,5 +1,6 @@
 package net.enthusia.staff.paper.staff;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -12,6 +13,20 @@ class StaffDutyCommandGateWiringTest {
     private static final Path SOURCE = Path.of(
             "src/main/java/net/enthusia/staff/paper/staff/StaffDutyCommandGate.java"
     );
+
+    @Test
+    void offDutyDenialsRetainOnlyRecognizedCommandRoot() {
+        assertEquals("ban", StaffDutyCommandGate.commandName("/minecraft:ban Target secret-reason"));
+        assertEquals("/ban (arguments withheld)",
+                StaffDutyCommandGate.deniedCommandAuditDetail(
+                        StaffDutyCommandGate.commandName("/minecraft:ban Target secret-reason")));
+        assertEquals("/estaff (arguments withheld)",
+                StaffDutyCommandGate.deniedCommandAuditDetail("estaff"));
+        assertEquals("/unknown (arguments withheld)",
+                StaffDutyCommandGate.deniedCommandAuditDetail(null));
+        assertEquals("/unknown (arguments withheld)",
+                StaffDutyCommandGate.deniedCommandAuditDetail("auth-with-token-in-command-root"));
+    }
 
     @Test
     void restrictedCommandsAcceptExplicitUnrestrictedIdentityAuthority() throws IOException {
