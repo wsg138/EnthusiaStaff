@@ -1,19 +1,25 @@
 package net.enthusia.staff.authoritybridge;
 
 import java.io.IOException;
+import java.io.InputStream;
+import java.nio.channels.Channels;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
+import java.nio.file.OpenOption;
+import java.nio.file.StandardOpenOption;
 import java.nio.file.attribute.AclEntry;
 import java.nio.file.attribute.AclEntryPermission;
 import java.nio.file.attribute.AclEntryType;
 import java.nio.file.attribute.AclFileAttributeView;
+import java.nio.file.attribute.FileAttribute;
 import java.nio.file.attribute.PosixFileAttributeView;
 import java.nio.file.attribute.PosixFilePermissions;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.EnumSet;
 import java.util.List;
+import java.util.Set;
 
 /**
  * Copies only legacy bridge secret-bearing configuration files into the Paper data directory.
@@ -112,7 +118,30 @@ public final class LegacyBridgeConfigMigration {
             return Files.createTempFile(folder, ".bridge-import-", ".tmp",
                     PosixFilePermissions.asFileAttribute(PosixFilePermissions.fromString("rw-------")));
         }
-        return Files.createTempFile(folder, ".bridge-import-", ".tmp");
+        AclFileAttributeView acl = Files.getFileAttributeView(folder, AclFileAttributeView.class);
+        if (acl == null) {
+            throw new IOException("filesystem cannot protect temporary configuration");
+        }
+        return Files.createTempFile(folder, ".bridge-import-", ".tmp", ownerOnlyAcl(acl));
+    }
+
+    private static FileAttribute<List<AclEntry>> ownerOnlyAcl(AclFileAttributeView view) throws IOException {
+        List<AclEntry> entries = List.of(AclEntry.newBuilder()
+                .setType(AclEntryType.ALLOW)
+                .setPrincipal(view.getOwner())
+                .setPermissions(EnumSet.allOf(AclEntryPermission.class))
+                .build());
+        return new FileAttribute<>() {
+            @Override
+            public String name() {
+                return "acl:acl";
+            }
+
+            @Override
+            public List<AclEntry> value() {
+                return entries;
+            }
+        };
     }
 
     private static void secure(Path file) throws IOException {
@@ -125,11 +154,7 @@ public final class LegacyBridgeConfigMigration {
         if (acl == null) {
             throw new IOException("filesystem cannot restrict migrated configuration");
         }
-        acl.setAcl(List.of(AclEntry.newBuilder()
-                .setType(AclEntryType.ALLOW)
-                .setPrincipal(acl.getOwner())
-                .setPermissions(EnumSet.allOf(AclEntryPermission.class))
-                .build()));
+        acl.setAcl(ownerOnlyAcl(acl).value());
     }
 
     private static byte[] readSafe(Path file) throws IOException {
@@ -137,11 +162,14 @@ public final class LegacyBridgeConfigMigration {
                 || Files.size(file) > MAX_FILE_BYTES) {
             throw new IOException("legacy configuration is unsafe or oversized");
         }
-        byte[] content = Files.readAllBytes(file);
-        if (content.length > MAX_FILE_BYTES) {
-            throw new IOException("legacy configuration exceeds size limit");
+        try (InputStream input = Channels.newInputStream(Files.newByteChannel(
+                file, Set.<OpenOption>of(StandardOpenOption.READ, LinkOption.NOFOLLOW_LINKS)))) {
+            byte[] content = input.readNBytes(MAX_FILE_BYTES + 1);
+            if (content.length > MAX_FILE_BYTES) {
+                throw new IOException("legacy configuration exceeds size limit");
+            }
+            return content;
         }
-        return content;
     }
 
     private static void requireDirectory(Path folder) throws IOException {
