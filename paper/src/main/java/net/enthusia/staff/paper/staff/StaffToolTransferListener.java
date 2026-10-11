@@ -33,19 +33,45 @@ public final class StaffToolTransferListener implements Listener {
                 || !staffMode.active(player.getUniqueId())) {
             return;
         }
+        if (blocksToolTransfer(player, event)) {
+            event.setCancelled(true);
+        }
+    }
+
+    /**
+     * Observe denied attempts after every cancellation handler. This does not
+     * mutate the event; running at MONITOR also records transfers denied by
+     * StaffModeManager when it runs before this listener at HIGHEST.
+     */
+    @EventHandler(priority = EventPriority.MONITOR)
+    public void onDeniedToolTransferAudit(InventoryClickEvent event) {
+        if (!(event.getWhoClicked() instanceof Player player)
+                || !staffMode.active(player.getUniqueId())
+                || !blocksToolTransfer(player, event)) {
+            return;
+        }
+        // Only enum-valued metadata, never an ItemStack, NBT, or tool token.
+        staffMode.logStaffAction(player, "staff-tool-transfer-denied",
+                transferAuditDetail(event.getClick(), event.getView().getTopInventory().getType().name()));
+    }
+
+    static String transferAuditDetail(org.bukkit.event.inventory.ClickType click,
+                                      String containerType) {
+        return "click=" + click + " container=" + containerType;
+    }
+
+    private boolean blocksToolTransfer(Player player, InventoryClickEvent event) {
         int hotbarButton = event.getHotbarButton();
         boolean referencedHotbarTool = hotbarButton >= 0
                 && hotbarButton < HOTBAR_SIZE
                 && isStaffTool(player.getInventory().getItem(hotbarButton));
-        if (StaffModeAccessPolicy.blocksStaffToolTransfer(
+        return StaffModeAccessPolicy.blocksStaffToolTransfer(
                 event.getClick(),
                 isStaffTool(event.getCurrentItem()),
                 isStaffTool(event.getCursor()),
                 referencedHotbarTool,
                 isStaffTool(player.getInventory().getItemInOffHand())
-        )) {
-            event.setCancelled(true);
-        }
+        );
     }
 
     private boolean isStaffTool(ItemStack item) {
