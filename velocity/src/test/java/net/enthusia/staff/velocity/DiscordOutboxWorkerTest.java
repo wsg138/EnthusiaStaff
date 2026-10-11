@@ -28,6 +28,7 @@ import org.slf4j.helpers.NOPLogger;
 final class DiscordOutboxWorkerTest {
     private static final Instant NOW = Instant.parse("2026-08-10T12:00:00Z");
     private static final String REPORTS = "reports";
+    private static final String ALERTS = "alerts";
     private static final String REPORT_CREATED = "REPORT_CREATED";
     private static final String STAGING_HOST = "discord-staging.example.test";
 
@@ -57,9 +58,9 @@ final class DiscordOutboxWorkerTest {
 
     @Test
     void retriesAreDeliveredWithoutAnotherRolePing() {
-        DiscordOutboxMessage initial = message("alerts", "DISCORD_CHANNEL_UNHEALTHY",
+        DiscordOutboxMessage initial = message(ALERTS, "DISCORD_CHANNEL_UNHEALTHY",
                 "{\"destination\":\"reports\"}");
-        DiscordOutboxMessage retried = new DiscordOutboxMessage(UUID.randomUUID(), "alerts",
+        DiscordOutboxMessage retried = new DiscordOutboxMessage(UUID.randomUUID(), ALERTS,
                 "DISCORD_CHANNEL_UNHEALTHY", "{\"destination\":\"reports\"}",
                 2, NOW.minusSeconds(1));
         List<Boolean> pingFlags = new ArrayList<>();
@@ -71,7 +72,7 @@ final class DiscordOutboxWorkerTest {
 
             @Override
             public Delivery send(DiscordWebhookRoute route, String content, boolean allowRolePing) {
-                assertEquals("alerts", route.destination());
+                assertEquals(ALERTS, route.destination());
                 pingFlags.add(allowRolePing);
                 return Delivery.delivered();
             }
@@ -101,7 +102,7 @@ final class DiscordOutboxWorkerTest {
 
     @Test
     void redirectFailureUsesDurableRetryPath() {
-        DiscordOutboxMessage message = message("alerts", "DISCORD_CHANNEL_UNHEALTHY", "{\"destination\":\"reports\"}");
+        DiscordOutboxMessage message = message(ALERTS, "DISCORD_CHANNEL_UNHEALTHY", "{\"destination\":\"reports\"}");
         FakeStore store = new FakeStore(List.of(message));
         DiscordWebhookTransport transport = (route, content) ->
                 DiscordWebhookTransport.Delivery.failed("HTTP_REDIRECT_REJECTED");
@@ -170,8 +171,8 @@ final class DiscordOutboxWorkerTest {
                         REPORTS, URI.create("https://" + STAGING_HOST + "/reports"), hosts),
                 "logs-staffmode", DiscordWebhookRoute.approvedStaging(
                         "logs-staffmode", URI.create("https://" + STAGING_HOST + "/staffmode"), hosts),
-                "alerts", DiscordWebhookRoute.approvedStaging(
-                        "alerts", URI.create("https://" + STAGING_HOST + "/alerts"), hosts)
+                ALERTS, DiscordWebhookRoute.approvedStaging(
+                        ALERTS, URI.create("https://" + STAGING_HOST + "/alerts"), hosts)
         );
     }
 
