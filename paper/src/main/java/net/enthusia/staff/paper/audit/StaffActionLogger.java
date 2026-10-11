@@ -116,6 +116,23 @@ public final class StaffActionLogger implements AutoCloseable {
         enqueueOutbox(eventId, line, now);
     }
 
+    /**
+     * Unconditionally records a staff audit event through the same durable journal/outbox
+     * path as {@link #log}. This is not a JUL log-level-filtered message: skipping it
+     * would silently drop a required audit event.
+     */
+    public void recordStaffAction(
+            UUID actorId,
+            String actorName,
+            StaffRank rank,
+            boolean vanished,
+            boolean staffMode,
+            String action,
+            String detail
+    ) {
+        log(actorId, actorName, rank, vanished, staffMode, action, detail);
+    }
+
     private void writeFiles(String line, Instant now) {
         synchronized (fileLock) {
             try {
