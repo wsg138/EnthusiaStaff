@@ -1,6 +1,7 @@
 package net.enthusia.staff.paper.staff;
 
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import org.bukkit.Material;
 import org.bukkit.block.Block;
@@ -338,19 +339,20 @@ public final class StaffModeWorldInteractionListener implements Listener {
         if (StaffModeWorldInteractionPolicy.blocksWorldUse(tier)) {
             event.setCancelled(true);
         }
-        String auditedAction = worldUseAuditAction(tier, action, auditDenied);
-        if (auditedAction != null) {
-            staffMode.logStaffAction(player, auditedAction, detail);
+        Optional<String> auditedAction = worldUseAuditAction(tier, action, auditDenied);
+        if (auditedAction.isPresent()) {
+            staffMode.logStaffAction(player, auditedAction.orElseThrow(), detail);
         }
     }
 
     // Keep the logging decision tied to the same tier policy that enforces the
     // denial. Entity-interact variants opt out until duplicate events are handled.
-    static String worldUseAuditAction(StaffDutyTier tier, String action, boolean auditDenied) {
+    static Optional<String> worldUseAuditAction(StaffDutyTier tier, String action, boolean auditDenied) {
         if (StaffModeWorldInteractionPolicy.blocksWorldUse(tier)) {
-            return auditDenied ? action + "-denied" : null;
+            return auditDenied ? Optional.of(action + "-denied") : Optional.empty();
         }
-        return StaffModeWorldInteractionPolicy.logsWorldInteraction(tier) ? action : null;
+        return StaffModeWorldInteractionPolicy.logsWorldInteraction(tier)
+                ? Optional.of(action) : Optional.empty();
     }
 
     private static boolean isContainer(Block block) {
