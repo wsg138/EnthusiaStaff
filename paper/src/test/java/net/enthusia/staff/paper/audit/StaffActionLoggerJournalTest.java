@@ -12,6 +12,7 @@ import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.UUID;
 import java.util.concurrent.Executors;
+import java.util.logging.Level;
 import java.util.logging.Logger;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -58,9 +59,11 @@ class StaffActionLoggerJournalTest {
     void writesOneStableEventIdToBothLocalAuditsWithBoundedSafeDetail() throws Exception {
         var executor = Executors.newSingleThreadExecutor();
         try {
+            Logger diagnosticLogger = Logger.getLogger(StaffActionLoggerJournalTest.class.getName()
+                    + ".unconditional-audit");
+            diagnosticLogger.setLevel(Level.OFF);
             StaffActionLogger logger = new StaffActionLogger(
-                    Logger.getLogger(StaffActionLoggerJournalTest.class.getName()),
-                    executor, () -> null, "SMP", "", directory);
+                    diagnosticLogger, executor, () -> null, "SMP", "", directory);
             // This audit append is unconditional; it must not be gated on JUL levels.
             AuditAppend append = logger::recordStaffAction;
             append.append(UUID.randomUUID(), "Example", null, true, true,
