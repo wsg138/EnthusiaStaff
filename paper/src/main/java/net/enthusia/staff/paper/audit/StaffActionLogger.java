@@ -157,8 +157,9 @@ public final class StaffActionLogger implements AutoCloseable {
                 StandardCharsets.UTF_8,
                 StandardOpenOption.CREATE, StandardOpenOption.APPEND));
         pruneOldFiles(logDir, LOG_FILE_PREFIX, ".log");
-        pruneOldFiles(outboxDir, LOG_FILE_PREFIX, ".jsonl");
-        pruneOldFiles(outboxDir, LOG_FILE_PREFIX, ".jsonl.cursor");
+        // Discord journals and their cursors are pruned by recovery *only* after
+        // every journal event has been durably acknowledged in the database.
+        // Time-only deletion could erase an outage backlog before replay.
     }
 
     private void pruneOldFiles(Path directory, String prefix, String suffix) {

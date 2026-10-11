@@ -163,6 +163,55 @@ class StaffActionOutboxRecoveryTest {
     }
 
     @Test
+    void oldJournalSurvivesDatabaseOutageAndIsPrunedAfterAcceptance() throws Exception {
+        Path old = oldJournal();
+        UUID id = UUID.randomUUID();
+        Files.writeString(old, record(id, "delayed") + "\n", StandardCharsets.UTF_8);
+        AtomicBoolean databaseAvailable = new AtomicBoolean(false);
+        List<UUID> received = new ArrayList<>();
+        StaffActionOutboxRecovery recovery = new StaffActionOutboxRecovery(
+                directory, LOG, (eventId, json, when) -> {
+                    if (!databaseAvailable.get()) {
+                        throw new java.sql.SQLException("database unavailable past retention");
+                    }
+                    received.add(eventId);
+                });
+
+        recovery.recoverOnce();
+        assertTrue(Files.exists(old)); // Must not age-delete undelivered events.
+        assertFalse(Files.exists(cursorFor(old)));
+        databaseAvailable.set(true);
+        recovery.recoverOnce();
+        assertEquals(List.of(id), received);
+        assertFalse(Files.exists(old)); // Completed historical backlog can be pruned.
+        assertFalse(Files.exists(cursorFor(old)));
+    }
+
+    @Test
+    void oldLegacyJournalIsRetainedEvenAfterReplayOfLaterIdentifiedRecords() throws Exception {
+        Path old = oldJournal();
+        UUID id = UUID.randomUUID();
+        Files.writeString(old, "{\"ts\":\"" + TIMESTAMP + "\",\"action\":\"legacy\"}\n"
+                + record(id, "new") + "\n", StandardCharsets.UTF_8);
+        List<UUID> received = new ArrayList<>();
+        new StaffActionOutboxRecovery(directory, LOG, (eventId, json, when) ->
+                received.add(eventId)).recoverOnce();
+        assertEquals(List.of(id), received);
+        assertTrue(Files.exists(old)); // Unknown legacy delivery status needs manual review.
+    }
+
+    @Test
+    void oldTruncatedJournalIsRetainedWithoutAdvancingItsCursor() throws Exception {
+        Path old = oldJournal();
+        Files.writeString(old, record(UUID.randomUUID(), "partial"), StandardCharsets.UTF_8);
+        new StaffActionOutboxRecovery(directory, LOG, (eventId, json, when) -> {
+            throw new AssertionError("incomplete entry must not be offered");
+        }).recoverOnce();
+        assertTrue(Files.exists(old));
+        assertFalse(Files.exists(cursorFor(old)));
+    }
+
+    @Test
     void invalidJsonMustNotSkipFollowingEntries() throws Exception {
         UUID id = UUID.randomUUID();
         Files.writeString(journal(), "{invalid-json}\n"
@@ -187,9 +236,19 @@ class StaffActionOutboxRecoveryTest {
     }
 
     private Path journal() {
-        // Use today's UTC date: the replay service only reads retained journals.
+        // Use today's UTC date for ordinary event replay and cursor tests.
         String day = java.time.LocalDate.now(java.time.ZoneOffset.UTC).toString();
         return directory.resolve("staff-actions-" + day + ".jsonl");
+    }
+
+    private Path oldJournal() {
+        String date = java.time.LocalDate.now(java.time.ZoneOffset.UTC)
+                .minusDays(45).toString();
+        return directory.resolve("staff-actions-" + date + ".jsonl");
+    }
+
+    private Path cursorFor(Path journal) {
+        return journal.resolveSibling(journal.getFileName().toString() + ".cursor");
     }
 
     private Path checkpoint() {
