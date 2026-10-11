@@ -60,7 +60,18 @@ public final class StaffDutyCommandGate implements Listener {
         }
         if (requiresOnDuty(name, message, player)) {
             deny(event, player);
+            // The rejected command never reaches the ordinary uncancelled-command
+            // listener. Record its known root only; never retain arguments.
+            staffMode.logStaffAction(player, "staff-command-denied-off-duty",
+                    deniedCommandAuditDetail(name));
         }
+    }
+
+    static String deniedCommandAuditDetail(String name) {
+        if (name != null && (ON_DUTY_COMMANDS.contains(name) || ESTAFF_COMMAND.equals(name))) {
+            return "/" + name + " (arguments withheld)";
+        }
+        return "/unknown (arguments withheld)";
     }
 
     private static boolean isAlwaysAllowed(String name) {
