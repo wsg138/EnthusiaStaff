@@ -155,6 +155,7 @@ public final class StaffBotRuntime implements AutoCloseable {
                 configuration.interactionCapacity(), configuration.interactionTtl());
         Optional<StaffModerationRuntime> moderation = Optional.empty();
         Optional<StaffBotChatTransport> chatTransport = Optional.empty();
+        Optional<AiMirrorRegistrationPublisher> mirrorPublisher = Optional.empty();
         try {
             moderation = StaffModerationRuntime.open(
                     moderationConfigFile,
@@ -169,11 +170,18 @@ public final class StaffBotRuntime implements AutoCloseable {
                     configuration, workers, replayGuard, moderation, chatConfiguration);
             chatTransport = chatConfiguration.map(
                     current -> StaffBotChatTransport.create(current, gateway, gateway));
+            mirrorPublisher = AiMirrorPublicationConfig.fromEnvironment(
+                    configuration.environment(), chatConfiguration.orElse(null), System.getenv())
+                    .map(AiMirrorRegistrationPublisher::create);
+            AiMirrorRegistrationPublisher installedMirror = mirrorPublisher.orElse(null);
+            if (installedMirror != null) {
+                gateway.installChatPublicationObserver(installedMirror);
+            }
             if (chatConfiguration.map(current -> !current.ingressRoutes().isEmpty()).orElse(false)) {
                 gateway.installChatIngress(chatTransport.orElseThrow());
             }
-            Optional<StaffBotChatLifecycle> chat =
-                    chatTransport.map(current -> (StaffBotChatLifecycle) current);
+            Optional<StaffBotChatLifecycle> chat = chatTransport.map(current ->
+                    installedMirror == null ? current : new AiMirrorChatLifecycle(current, installedMirror));
             return new StaffBotRuntime(
                     configuration,
                     health,
@@ -184,6 +192,7 @@ public final class StaffBotRuntime implements AutoCloseable {
                     moderation,
                     new RuntimeServices(tunnel, chat));
         } catch (IOException | RuntimeException exception) {
+            mirrorPublisher.ifPresent(AiMirrorRegistrationPublisher::close);
             chatTransport.ifPresent(StaffBotChatTransport::close);
             moderation.ifPresent(StaffModerationRuntime::close);
             workers.close();
