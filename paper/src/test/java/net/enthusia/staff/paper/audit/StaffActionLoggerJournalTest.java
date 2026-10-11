@@ -28,6 +28,33 @@ class StaffActionLoggerJournalTest {
     Path directory;
 
     @Test
+    void brokenJournalWriterIsClosedAndReopenedAfterFilesystemRecovery() throws Exception {
+        var executor = Executors.newSingleThreadExecutor();
+        String date = LocalDate.now(ZoneOffset.UTC).toString();
+        Path journal = directory.resolve("discord-outbox/staff-actions-" + date + ".jsonl");
+        Files.createDirectories(journal); // A directory at the file path prevents opening.
+        try {
+            StaffActionLogger logger = new StaffActionLogger(
+                    Logger.getLogger(StaffActionLoggerJournalTest.class.getName()),
+                    executor, () -> null, "SMP", "", directory);
+            AuditAppend append = logger::log;
+            append.append(UUID.randomUUID(), "Example", null, true, true,
+                    "block-break", "initial-journal-unavailable");
+            Files.delete(journal);
+            append.append(UUID.randomUUID(), "Example", null, true, true,
+                    "block-break", "recovered-journal");
+            logger.close();
+
+            String content = Files.readString(journal, StandardCharsets.UTF_8);
+            assertEquals(1, content.lines().count());
+            assertEquals("recovered-journal",
+                    new ObjectMapper().readTree(content).path("detail").asText());
+        } finally {
+            executor.shutdownNow();
+        }
+    }
+
+    @Test
     void writesOneStableEventIdToBothLocalAuditsWithBoundedSafeDetail() throws Exception {
         var executor = Executors.newSingleThreadExecutor();
         try {

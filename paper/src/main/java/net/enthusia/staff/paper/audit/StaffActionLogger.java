@@ -130,6 +130,9 @@ public final class StaffActionLogger implements AutoCloseable {
                 outboxWriter.get().newLine();
                 outboxWriter.get().flush();
             } catch (IOException | RuntimeException exception) {
+                // Close half-open or failed journal writers; the next action can retry opening.
+                closeWriters();
+                currentDate = Optional.empty();
                 log.log(Level.WARNING, "Staff action file logging failed; the action was not recorded", exception);
             }
         }
@@ -137,7 +140,8 @@ public final class StaffActionLogger implements AutoCloseable {
 
     private void rotateIfNeeded(Instant now) throws IOException {
         String date = DATE.format(LocalDate.ofInstant(now, ZoneOffset.UTC));
-        if (currentDate.map(date::equals).orElse(false) && actionWriter.isPresent()) {
+        if (currentDate.map(date::equals).orElse(false)
+                && actionWriter.isPresent() && outboxWriter.isPresent()) {
             return;
         }
         closeWriters();
