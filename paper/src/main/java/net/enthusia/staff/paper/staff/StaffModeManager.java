@@ -545,7 +545,7 @@ public final class StaffModeManager implements Listener {
                     StaffSessionSnapshot exiting = loaded.beginExit(playerId, clock.instant()).orElseThrow(() ->
                             new IllegalStateException("active staff session disappeared during rank-removal exit"));
                     message(playerId, RANK_REMOVED_MESSAGE);
-                    restoreAndVerify(playerId, exiting, loaded);
+                    restoreAndVerify(playerId, exiting, loaded, "rank-removed");
                     return;
                 }
                 rememberToolInventoryPreference(playerId);
@@ -813,7 +813,7 @@ public final class StaffModeManager implements Listener {
                 try {
                     StaffSessionSnapshot exiting = loaded.beginExit(playerId, clock.instant()).orElseThrow(() ->
                             new IllegalStateException("active staff session disappeared during recovery exit"));
-                    restoreAndVerify(playerId, exiting, loaded);
+                    restoreAndVerify(playerId, exiting, loaded, "rank-removed");
                 } catch (RuntimeException exception) {
                     recoveryGate.retry(playerId);
                     plugin.getLogger().log(Level.SEVERE, "Staff session recovery exit failed", exception);
@@ -1623,7 +1623,11 @@ public final class StaffModeManager implements Listener {
         } catch (RuntimeException exception) {
             vanished = false;
         }
-        return new ExitAuditContext(playerId, playerName, ranks.get(playerId),
+        StaffRank rank = ranks.get(playerId);
+        if (rank == null) {
+            rank = PaperStaffRankResolver.resolve(player::hasPermission).orElse(null);
+        }
+        return new ExitAuditContext(playerId, playerName, rank,
                 vanished, active.containsKey(playerId));
     }
 
