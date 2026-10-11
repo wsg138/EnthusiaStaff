@@ -69,6 +69,24 @@ class StaffModeWorldInteractionPolicyTest {
     }
 
     @Test
+    void dedicatedArmorStandManipulationAuditDistinguishesDeniedFromAllowedEdits() {
+        assertTrue(StaffModeWorldInteractionPolicy.blocksContainerEntityEdit(StaffDutyTier.HELPER));
+        assertTrue(StaffModeWorldInteractionPolicy.blocksContainerEntityEdit(null));
+        assertFalse(StaffModeWorldInteractionPolicy.blocksContainerEntityEdit(StaffDutyTier.MOD));
+
+        assertEquals("armor-stand-edit-denied",
+                StaffModeWorldInteractionListener.armorStandEditAuditAction(StaffDutyTier.HELPER));
+        assertEquals("armor-stand-edit-denied",
+                StaffModeWorldInteractionListener.armorStandEditAuditAction(null));
+        assertEquals("armor-stand-edit",
+                StaffModeWorldInteractionListener.armorStandEditAuditAction(StaffDutyTier.MOD));
+        assertEquals("armor-stand-edit",
+                StaffModeWorldInteractionListener.armorStandEditAuditAction(StaffDutyTier.ADMIN));
+        assertEquals("armor-stand-edit",
+                StaffModeWorldInteractionListener.armorStandEditAuditAction(StaffDutyTier.DEVELOPER));
+    }
+
+    @Test
     void deniedContainerAuditTracksMutationsNotOrdinaryPlayerInventoryClicks() {
         int topSize = 27;
         assertTrue(StaffModeWorldInteractionPolicy.blocksContainerEdit(StaffDutyTier.HELPER));
