@@ -38,6 +38,22 @@ final class DiscordEventRendererTest {
     }
 
     @Test
+    void staffActionEventsExposeStableCorrelationIdOnlyToPrivateStaffLogs() {
+        String eventId = "41dfab4a-31a0-442b-8ae9-483140b1a960";
+        String payload = "{\"eventId\":\"" + eventId + "\",\"action\":\"staff-mode-exited\","
+                + "\"detail\":\"session=test-session path=local-session reason=manual\","
+                + "\"token\":\"never-render-this\",\"reasonId\":\"safe-reason\"}";
+        String privateLog = renderer.render(message("logs-staffmode", "STAFF_ACTION", payload));
+        assertTrue(privateLog.contains("eventId=" + eventId));
+        assertTrue(privateLog.contains("action=staff-mode-exited"));
+        assertFalse(privateLog.contains("never-render-this"));
+        assertFalse(privateLog.contains("token="));
+        assertFalse(renderer.render(message("reports", REPORT_CREATED, payload)).contains(eventId));
+        assertFalse(renderer.render(message("alerts", "ALERT_CREATED", payload)).contains(eventId));
+        assertFalse(renderer.render(message("punishments", "PUNISHMENT_CREATED", payload)).contains(eventId));
+    }
+
+    @Test
     void punishmentArraysAreBoundedAndNestedValuesAreWithheld() {
         String rendered = renderer.render(message(
                 "punishments",

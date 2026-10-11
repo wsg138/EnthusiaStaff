@@ -31,7 +31,7 @@ final class DiscordEventRenderer {
             ),
             "reports", List.of("reportId", TARGET_ID, "reasonId", "serverId", "status", STATE, "actorId"),
             "logs-staffmode", List.of(
-                    "staffId", TARGET_ID, "actorId", "actor", "name", "sessionId",
+                    "eventId", "staffId", TARGET_ID, "actorId", "actor", "name", "sessionId",
                     "rank", "active", "vanished", "staffMode", "server", "serverId",
                     "action", "detail", "reason", "ts", STATE
             ),
