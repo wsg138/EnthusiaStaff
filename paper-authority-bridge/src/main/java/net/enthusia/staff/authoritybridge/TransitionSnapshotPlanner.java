@@ -36,6 +36,15 @@ final class TransitionSnapshotPlanner {
                 links.size() - importable.size());
     }
 
+    /** A quit/join event wins over an online roster that may still include a departing player. */
+    static Map<UUID, Observation> mergePending(
+            Map<UUID, Observation> online, Map<UUID, Observation> pending
+    ) {
+        Map<UUID, Observation> observations = new LinkedHashMap<>(online);
+        observations.putAll(pending);
+        return observations;
+    }
+
     /** Pure bounded round-robin candidate planning; no Bukkit or database calls. */
     static LinkBatch selectLinkBatch(Map<String, UUID> links, int cursor, int limit, Set<UUID> priority) {
         if (links == null || priority == null || cursor < 0 || limit < 1) {

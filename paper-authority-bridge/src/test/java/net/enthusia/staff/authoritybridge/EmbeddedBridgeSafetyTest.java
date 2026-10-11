@@ -107,6 +107,25 @@ class EmbeddedBridgeSafetyTest {
     }
 
     @Test
+    void quitEventWinsOverRosterUntilNewJoinIsObserved() {
+        UUID id = fixturePlayer(71);
+        Instant now = Instant.parse("2026-10-11T14:00:00Z");
+        TransitionSnapshotPlanner.Observation online =
+                new TransitionSnapshotPlanner.Observation(id, "Active", now, true);
+        TransitionSnapshotPlanner.Observation quit =
+                new TransitionSnapshotPlanner.Observation(id, "Active", now.plusSeconds(1), false);
+        TransitionSnapshotPlanner.Observation rejoin =
+                new TransitionSnapshotPlanner.Observation(id, "Active", now.plusSeconds(2), true);
+
+        assertEquals(quit, TransitionSnapshotPlanner.mergePending(
+                Map.of(id, online), Map.of(id, quit)).get(id));
+        assertEquals(rejoin, TransitionSnapshotPlanner.mergePending(
+                Map.of(id, online), Map.of(id, rejoin)).get(id));
+        assertEquals(online, TransitionSnapshotPlanner.mergePending(
+                Map.of(id, online), Map.of()).get(id));
+    }
+
+    @Test
     void acknowledgedObservationRetiresWithoutDiscardingNewerConcurrentEvent() {
         UUID id = fixturePlayer(19);
         TransitionSnapshotPlanner.Observation first = new TransitionSnapshotPlanner.Observation(

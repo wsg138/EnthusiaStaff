@@ -145,10 +145,12 @@ final class TransitionDataCollector implements AutoCloseable, Listener {
     private Capture capture() {
         Instant now = clock.instant();
         Map<UUID, TransitionSnapshotPlanner.Observation> pendingSnapshot = Map.copyOf(pending);
-        Map<UUID, TransitionSnapshotPlanner.Observation> observations = new LinkedHashMap<>(pendingSnapshot);
+        Map<UUID, TransitionSnapshotPlanner.Observation> online = new LinkedHashMap<>();
         for (Player player : plugin.getServer().getOnlinePlayers()) {
-            captureOnline(player, now, observations);
+            captureOnline(player, now, online);
         }
+        Map<UUID, TransitionSnapshotPlanner.Observation> observations =
+                TransitionSnapshotPlanner.mergePending(online, pendingSnapshot);
         Map<String, UUID> links = discordSrv.map(DiscordSrvTransitionLinkSource::snapshotLinks).orElse(Map.of());
         return new Capture(links, List.copyOf(observations.values()), pendingSnapshot);
     }
