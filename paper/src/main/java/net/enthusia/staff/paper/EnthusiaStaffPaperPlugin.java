@@ -20,6 +20,8 @@ import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.logging.Level;
 import net.enthusia.discord.platform.api.ManagedRolePlatform;
+import net.enthusia.staff.authoritybridge.EmbeddedAuthorityBridge;
+import net.enthusia.staff.authoritybridge.LegacyBridgeConfigMigration;
 import net.enthusia.staff.moderation.api.PunishmentLifecyclePlatform;
 import net.enthusia.staff.domain.OperationalMode;
 import net.enthusia.staff.domain.auth.AuthorizationPolicy;
@@ -93,6 +95,7 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
     private PaperDatabaseConfiguration.Settings databaseSettings;
     private PaperOperationalTaskCoordinator operationalTasks;
     private PaperCommandBridgeRuntime commandBridge;
+    private EmbeddedAuthorityBridge embeddedAuthorityBridge;
     private Optional<PaperManagedRolePlatform> managedRolePlatform = Optional.empty();
     private Optional<PaperPunishmentLifecyclePlatform> punishmentLifecyclePlatform = Optional.empty();
 
@@ -114,6 +117,7 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
             return;
         }
         databaseSettings = PaperDatabaseConfiguration.snapshot(getConfig());
+        startEmbeddedAuthority();
         if (Files.notExists(reasonPolicyFile())) {
             saveResource("reason-policies.yml", false);
         }
@@ -594,6 +598,45 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
         }
     }
 
+    private void startEmbeddedAuthority() {
+        try {
+            LegacyBridgeConfigMigration.Result result = LegacyBridgeConfigMigration.migrate(dataDirectory());
+            if (result.copied() > 0) {
+                getLogger().log(Level.INFO,
+                        "legacy_bridge_configuration_imported files={0} source_preserved=true features_default_off=true",
+                        result.copied());
+            }
+            embeddedAuthorityBridge = EmbeddedAuthorityBridge.open(this, dataDirectory());
+        } catch (RuntimeException exception) {
+            featureIssues.put("embedded-authority", "Private authority service unavailable; feature disabled");
+            getLogger().log(Level.WARNING,
+                    "embedded_authority_start_failed type={0}", exception.getClass().getSimpleName());
+        }
+    }
+
+    private void startEmbeddedCollector(MariaDbRuntime storage) {
+        if (embeddedAuthorityBridge == null || lifecycle.stopping()) {
+            return;
+        }
+        boolean scheduled = scheduleGlobal(() -> {
+            if (lifecycle.stopping()) {
+                return;
+            }
+            try {
+                DatabaseConfig primary = new PaperDatabaseConfiguration(
+                        databaseSettings, System::getenv).load().orElseThrow();
+                embeddedAuthorityBridge.startCollector(storage.dataSource(), networkServerId(), primary);
+            } catch (RuntimeException exception) {
+                featureIssues.put("embedded-collector", "Transition collection unavailable; feature disabled");
+                getLogger().log(Level.WARNING,
+                        "embedded_collector_start_failed type={0}", exception.getClass().getSimpleName());
+            }
+        });
+        if (!scheduled) {
+            featureIssues.put("embedded-collector", "Collector startup could not be scheduled");
+        }
+    }
+
     private void finishStorageFollowUp(PaperStorageBindings bindings) {
         if (lifecycle.stopping()
                 || lifecycle.storage().filter(current -> current == bindings).isEmpty()) {
@@ -608,6 +651,7 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
                     exception);
         }
         startCommandBridge(bindings.runtime());
+        startEmbeddedCollector(bindings.runtime());
         if (!lifecycle.stopping()) {
             registerOperationalStateTask();
         }
@@ -722,6 +766,7 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
         resources.close("operational task coordinator", operationalTasks);
         resources.close("punishment-request alert controller", alertController);
         resources.close("Discord command bridge", commandBridge);
+        resources.close("embedded authority bridge", embeddedAuthorityBridge);
         cancelOperationalStateTask();
         closeChannelClient();
     }

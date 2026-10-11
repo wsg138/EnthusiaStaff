@@ -73,7 +73,19 @@ tasks.register<JacocoReport>("jacocoAggregateReport") {
         files(subprojects.map { it.layout.buildDirectory.file("jacoco/test.exec") })
     )
     sourceDirectories.setFrom(files(mainSourceSets.map { it.allSource.srcDirs }))
-    classDirectories.setFrom(files(mainSourceSets.map { it.output.classesDirs }))
+    // The Paper runtime embeds bridge sources, while the standalone bridge also compiles
+    // them. Report those classes once, from the canonical authority-bridge project.
+    // Otherwise JaCoCo rejects distinct bytecode sharing the same fully qualified name.
+    classDirectories.setFrom(files(productionProjects.map { project ->
+        val classes = project.extensions.getByType<SourceSetContainer>().named("main").get().output.classesDirs
+        if (project.name == "paper") {
+            classes.asFileTree.matching {
+                exclude("net/enthusia/staff/authoritybridge/**")
+            }
+        } else {
+            classes
+        }
+    }))
 
     reports {
         xml.required.set(true)

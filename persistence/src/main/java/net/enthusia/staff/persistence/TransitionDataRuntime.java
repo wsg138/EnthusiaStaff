@@ -6,6 +6,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import javax.sql.DataSource;
 import net.enthusia.staff.domain.application.DiscordSrvMigrationService.ImportStore;
 import net.enthusia.staff.domain.moderation.DiscordMinecraftLinkSource;
 import net.enthusia.staff.domain.moderation.DiscordUserId;
@@ -21,12 +22,14 @@ public final class TransitionDataRuntime implements AutoCloseable {
             "db/migration/V19__discord_moderation_persistence.sql",
             "db/migration/V20__discord_account_linking.sql");
 
-    private final HikariDataSource dataSource;
+    private final DataSource dataSource;
+    private final boolean ownsDataSource;
     private final PlayerDirectory players;
     private final ImportStore discordSrvImports;
 
-    private TransitionDataRuntime(HikariDataSource dataSource) {
+    private TransitionDataRuntime(DataSource dataSource, boolean ownsDataSource) {
         this.dataSource = dataSource;
+        this.ownsDataSource = ownsDataSource;
         this.players = new JdbcPlayerDirectory(dataSource);
         this.discordSrvImports = new DiscordImportStore(dataSource);
     }
@@ -38,11 +41,16 @@ public final class TransitionDataRuntime implements AutoCloseable {
         HikariDataSource dataSource = openDataSource(database);
         try {
             migrate(dataSource);
-            return new TransitionDataRuntime(dataSource);
+            return new TransitionDataRuntime(dataSource, true);
         } catch (RuntimeException exception) {
             dataSource.close();
             throw exception;
         }
+    }
+
+    /** Reuse the already migrated primary Paper pool without a second Flyway pass. */
+    public static TransitionDataRuntime borrow(DataSource dataSource) {
+        return new TransitionDataRuntime(java.util.Objects.requireNonNull(dataSource), false);
     }
 
     public PlayerDirectory players() {
@@ -101,14 +109,16 @@ public final class TransitionDataRuntime implements AutoCloseable {
 
     @Override
     public void close() {
-        dataSource.close();
+        if (ownsDataSource) {
+            ((HikariDataSource) dataSource).close();
+        }
     }
 
     private static final class DiscordImportStore implements ImportStore {
         private final JdbcDiscordIdentityRepository identities;
         private final JdbcDiscordLinkRepository links;
 
-        private DiscordImportStore(HikariDataSource dataSource) {
+        private DiscordImportStore(DataSource dataSource) {
             identities = new JdbcDiscordIdentityRepository(dataSource);
             links = new JdbcDiscordLinkRepository(dataSource);
         }

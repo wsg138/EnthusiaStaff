@@ -2,6 +2,9 @@ package net.enthusia.staff.authoritybridge;
 
 import java.time.Instant;
 import java.util.Collection;
+import java.util.Comparator;
+import java.util.LinkedHashSet;
+import java.util.Set;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -31,6 +34,46 @@ final class TransitionSnapshotPlanner {
                 List.copyOf(usable.values()),
                 Map.copyOf(importable),
                 links.size() - importable.size());
+    }
+
+    /** A quit/join event wins over an online roster that may still include a departing player. */
+    static Map<UUID, Observation> mergePending(
+            Map<UUID, Observation> online, Map<UUID, Observation> pending
+    ) {
+        Map<UUID, Observation> observations = new LinkedHashMap<>(online);
+        observations.putAll(pending);
+        return observations;
+    }
+
+    /** Pure bounded round-robin candidate planning; no Bukkit or database calls. */
+    static LinkBatch selectLinkBatch(Map<String, UUID> links, int cursor, int limit, Set<UUID> priority) {
+        if (links == null || priority == null || cursor < 0 || limit < 1) {
+            throw new IllegalArgumentException("invalid transition link batch arguments");
+        }
+        List<UUID> sorted = links.values().stream().distinct()
+                .sorted(Comparator.comparing(UUID::toString)).toList();
+        if (sorted.isEmpty()) {
+            return new LinkBatch(Map.of(), 0);
+        }
+        int start = cursor % sorted.size();
+        int count = Math.min(sorted.size(), limit);
+        Set<UUID> selected = new LinkedHashSet<>(priority);
+        for (int offset = 0; offset < count; offset++) {
+            selected.add(sorted.get((start + offset) % sorted.size()));
+        }
+        Map<String, UUID> chosen = new LinkedHashMap<>();
+        links.forEach((discordId, playerId) -> {
+            if (selected.contains(playerId)) {
+                chosen.put(discordId, playerId);
+            }
+        });
+        return new LinkBatch(chosen, (start + count) % sorted.size());
+    }
+
+    record LinkBatch(Map<String, UUID> links, int nextCursor) {
+        LinkBatch {
+            links = Map.copyOf(links);
+        }
     }
 
     private static Map<UUID, Observation> usableObservations(Collection<Observation> observations) {
