@@ -110,6 +110,65 @@ class StaffActionJournalRecoveryIntegrationTest {
         }
     }
 
+    @Test
+    void oldJournalWithMiddleLegacyRecordRemainsIntactAfterRealMariaDbAcceptance() throws Exception {
+        String paperJar = System.getProperty(PAPER_JAR_PROPERTY);
+        assertNotNull(paperJar);
+        Path jar = Path.of(paperJar);
+        assertTrue(Files.isRegularFile(jar));
+
+        UUID firstId = UUID.randomUUID();
+        UUID thirdId = UUID.randomUUID();
+        String timestamp = Instant.now().toString();
+        Path history = directory.resolve("discord-outbox");
+        Files.createDirectories(history);
+        Path journal = history.resolve("staff-actions-"
+                + LocalDate.now(ZoneOffset.UTC).minusDays(45) + ".jsonl");
+        String acceptedRecordOne = "{\"eventId\":\"" + firstId
+                + "\",\"ts\":\"" + timestamp + "\",\"action\":\"first\",\"forwardChannel\":\"\"}\n";
+        String legacyRecord = "{\"ts\":\"" + timestamp
+                + "\",\"action\":\"legacy\",\"forwardChannel\":\"\"}\n";
+        String acceptedRecordThree = "{\"eventId\":\"" + thirdId
+                + "\",\"ts\":\"" + timestamp + "\",\"action\":\"third\",\"forwardChannel\":\"\"}\n";
+        Files.writeString(journal, acceptedRecordOne + legacyRecord + acceptedRecordThree,
+                StandardCharsets.UTF_8);
+
+        try (MariaDbRuntime runtime = MariaDb.initialize(databaseConfig(DATABASE));
+             HikariDataSource datasource = datasource();
+             URLClassLoader isolated = new URLClassLoader(
+                     new URL[]{jar.toUri().toURL()}, ClassLoader.getPlatformClassLoader());
+             ExecutorService executor = Executors.newSingleThreadExecutor()) {
+            assertNotNull(runtime.discordOutboxStore());
+            Class<?> loggerType = Class.forName(LOGGER_CLASS, true, isolated);
+            Constructor<?> create = loggerType.getConstructor(Logger.class, ExecutorService.class,
+                    Supplier.class, String.class, String.class, Path.class);
+            Method recover = loggerType.getMethod("recoverOutboxOnce");
+            Method close = loggerType.getMethod("close");
+            Supplier<DataSource> source = () -> datasource;
+            Object logger = create.newInstance(Logger.getLogger(getClass().getName()),
+                    executor, source, "SMP", "", directory);
+            try {
+                recover.invoke(logger);
+                assertEquals(1, outboxCount(firstId));
+                assertEquals(1, outboxCount(thirdId));
+                assertEquals(1, outboxCountByKey(OUTBOX_KEY_PREFIX + firstId));
+                assertEquals(1, outboxCountByKey(OUTBOX_KEY_PREFIX + thirdId));
+                Path cursor = journal.resolveSibling(journal.getFileName() + ".cursor");
+                assertTrue(Files.exists(cursor));
+                assertEquals(Files.size(journal),
+                        Long.parseLong(Files.readString(cursor, StandardCharsets.UTF_8).strip()));
+                assertTrue(Files.exists(journal),
+                        "Unidentified middle record must not be age-pruned despite EOF checkpoint");
+                recover.invoke(logger);
+                assertTrue(Files.exists(journal));
+                assertEquals(acceptedRecordOne + legacyRecord + acceptedRecordThree,
+                        Files.readString(journal, StandardCharsets.UTF_8));
+            } finally {
+                close.invoke(logger);
+            }
+        }
+    }
+
     private void assertRestartKeepsDeliveredState(
             Constructor<?> create, Method recover, Method close, ExecutorService executor,
             Supplier<DataSource> source, Path journal, UUID eventId
