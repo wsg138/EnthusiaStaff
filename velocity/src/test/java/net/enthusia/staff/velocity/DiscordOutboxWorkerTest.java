@@ -56,6 +56,32 @@ final class DiscordOutboxWorkerTest {
     }
 
     @Test
+    void retriesAreDeliveredWithoutAnotherRolePing() {
+        DiscordOutboxMessage initial = message("alerts", "DISCORD_CHANNEL_UNHEALTHY",
+                "{\"destination\":\"reports\"}");
+        DiscordOutboxMessage retried = new DiscordOutboxMessage(UUID.randomUUID(), "alerts",
+                "DISCORD_CHANNEL_UNHEALTHY", "{\"destination\":\"reports\"}",
+                2, NOW.minusSeconds(1));
+        List<Boolean> pingFlags = new ArrayList<>();
+        DiscordWebhookTransport transport = new DiscordWebhookTransport() {
+            @Override
+            public Delivery send(DiscordWebhookRoute route, String content) {
+                throw new AssertionError("worker must pass the durable delivery attempt");
+            }
+
+            @Override
+            public Delivery send(DiscordWebhookRoute route, String content, boolean allowRolePing) {
+                assertEquals("alerts", route.destination());
+                pingFlags.add(allowRolePing);
+                return Delivery.delivered();
+            }
+        };
+
+        worker(new FakeStore(List.of(initial, retried)), transport).runOnce();
+        assertEquals(List.of(true, false), pingFlags);
+    }
+
+    @Test
     void poisonPayloadFailsWithoutCallingTransport() {
         DiscordOutboxMessage message = message(REPORTS, REPORT_CREATED, "not-json");
         FakeStore store = new FakeStore(List.of(message));

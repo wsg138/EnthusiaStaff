@@ -179,7 +179,8 @@ final class DiscordOutboxWorker implements AutoCloseable {
         } catch (IllegalArgumentException exception) {
             return DiscordWebhookTransport.Delivery.failed("PAYLOAD_REJECTED");
         }
-        return transport.send(route, content);
+        // A retry after a timeout may duplicate delivery; never repeat a staff-role ping.
+        return transport.send(route, content, message.attemptCount() == 0);
     }
 
     private static void validateDependencies(
