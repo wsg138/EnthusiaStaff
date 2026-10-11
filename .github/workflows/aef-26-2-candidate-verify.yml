@@ -85,6 +85,13 @@ jobs:
                       ready = True
                       break
           finally:
+              if ready and process.poll() is None:
+                  # Exercise console dispatch and asynchronous module reload on
+                  # an isolated server, never the live network.
+                  process.stdin.write("aef version\n")
+                  process.stdin.write("aef reload\n")
+                  process.stdin.flush()
+                  time.sleep(8)
               if process.poll() is None:
                   try:
                       process.stdin.write("stop\n")
@@ -103,9 +110,15 @@ jobs:
           bad = any(s in full for s in ("Error occurred while enabling AnarchyExploitFixes",
                                        "Could not load 'plugins/aef.jar'",
                                        "Could not load plugin 'aef.jar'"))
-          print(f"Paper 26.2 ready={ready}; AEF enable observed={enabled}; pre-ready disabled={bool(disabled)}; critical load failure={bad}")
+          console_version = "2.7.13-enthusia-26.2-SNAPSHOT by" in full
+          reload_started = "Reloading AnarchyExploitFixes" in full
+          reload_completed = "Reload complete." in full
+          module_error = any("Failed while loading config" in line
+                             or ("[AEF]" in line and ("ERROR" in line or " SEVERE" in line))
+                             for line in messages)
+          print(f"Paper 26.2 ready={ready}; AEF enabled={enabled}; version={console_version}; reload_started={reload_started}; reload_completed={reload_completed}; module_error={module_error}; bad={bad}")
           print("Startup log saved:", log)
-          if not ready or not enabled or disabled or bad:
+          if not ready or not enabled or disabled or bad or module_error or not console_version or not reload_started or not reload_completed:
               print("Candidate is NOT ready for deployment; inspect smoke artifact.",file=sys.stderr)
               sys.exit(1)
           PY
