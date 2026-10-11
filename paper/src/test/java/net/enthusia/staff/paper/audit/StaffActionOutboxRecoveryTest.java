@@ -201,6 +201,75 @@ class StaffActionOutboxRecoveryTest {
     }
 
     @Test
+    void oldMixedJournalPreservesUnidentifiedRecordEvenWhenCursorReachedEof() throws Exception {
+        Path old = oldJournal();
+        UUID first = UUID.randomUUID();
+        UUID third = UUID.randomUUID();
+        Files.writeString(old, record(first, "first") + "\n"
+                + "{\"ts\":\"" + TIMESTAMP + "\",\"action\":\"legacy\"}\n"
+                + record(third, "third") + "\n", StandardCharsets.UTF_8);
+        List<UUID> delivered = new ArrayList<>();
+        StaffActionOutboxRecovery recovery = new StaffActionOutboxRecovery(
+                directory, LOG, (id, json, when) -> delivered.add(id));
+        recovery.recoverOnce();
+        assertEquals(List.of(first, third), delivered);
+        assertEquals(Files.size(old),
+                Long.parseLong(Files.readString(cursorFor(old), StandardCharsets.UTF_8).strip()));
+        assertTrue(Files.exists(old), "a skipped middle record must block pruning");
+        recovery.recoverOnce();
+        assertTrue(Files.exists(old), "retention must not delete the legacy record on retry");
+    }
+
+    @Test
+    void oldMixedJournalWithPreexistingEofCheckpointIsNeverPruned() throws Exception {
+        Path old = oldJournal();
+        Files.writeString(old, record(UUID.randomUUID(), "first") + "\n"
+                + "{\"ts\":\"" + TIMESTAMP + "\",\"action\":\"legacy\"}\n"
+                + record(UUID.randomUUID(), "last") + "\n", StandardCharsets.UTF_8);
+        Files.writeString(cursorFor(old), Long.toString(Files.size(old)), StandardCharsets.UTF_8);
+        new StaffActionOutboxRecovery(directory, LOG, (id, json, when) -> {
+            throw new AssertionError("checkpointed records must not be offered again");
+        }).recoverOnce();
+        assertTrue(Files.exists(old), "preexisting mixed journal must be retained");
+        assertTrue(Files.exists(cursorFor(old)));
+    }
+
+    @Test
+    void largeOldJournalUsesBoundedRetentionValidationBeforeDeletion() throws Exception {
+        Path old = oldJournal();
+        StringBuilder contents = new StringBuilder();
+        for (int i = 0; i < 215; i++) {
+            contents.append(record(UUID.randomUUID(), "event")).append('\n');
+        }
+        Files.writeString(old, contents.toString(), StandardCharsets.UTF_8);
+        List<UUID> delivered = new ArrayList<>();
+        StaffActionOutboxRecovery recovery = new StaffActionOutboxRecovery(
+                directory, LOG, (id, json, when) -> delivered.add(id));
+        recovery.recoverOnce(); // 200 delivery records; no scan budget left.
+        assertEquals(200, delivered.size());
+        assertTrue(Files.exists(old));
+        recovery.recoverOnce(); // Remaining 15 delivered; 185 retention records checked.
+        assertEquals(215, delivered.size());
+        assertTrue(Files.exists(old));
+        recovery.recoverOnce(); // Remaining 30 retention records validated; safe to remove.
+        assertFalse(Files.exists(old));
+        assertFalse(Files.exists(cursorFor(old)));
+    }
+
+    @Test
+    void oldMalformedLastRecordIsRetainedEvenWithEofCheckpoint() throws Exception {
+        Path old = oldJournal();
+        Files.writeString(old, record(UUID.randomUUID(), "first") + "\n"
+                + "{\"eventId\":\"not-a-uuid\",\"ts\":\"" + TIMESTAMP + "\"}\n",
+                StandardCharsets.UTF_8);
+        Files.writeString(cursorFor(old), Long.toString(Files.size(old)), StandardCharsets.UTF_8);
+        new StaffActionOutboxRecovery(directory, LOG, (id, json, when) -> {
+            throw new AssertionError("checkpointed records must not be offered again");
+        }).recoverOnce();
+        assertTrue(Files.exists(old));
+    }
+
+    @Test
     void oldTruncatedJournalIsRetainedWithoutAdvancingItsCursor() throws Exception {
         Path old = oldJournal();
         Files.writeString(old, record(UUID.randomUUID(), "partial"), StandardCharsets.UTF_8);

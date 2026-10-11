@@ -12,13 +12,16 @@ import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.nio.file.attribute.FileTime;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
@@ -35,6 +38,7 @@ import java.util.logging.Logger;
  */
 final class StaffActionOutboxRecovery {
     private static final int MAX_PER_TICK = 200;
+    private static final int MAX_PRUNE_TRACKED_JOURNALS = 256;
     private static final int MAX_RECORD_BYTES = 16_384;
     private static final int EMPTY_RECORD_LENGTH = 0;
     private static final int END_OF_FILE = -1;
@@ -54,6 +58,27 @@ final class StaffActionOutboxRecovery {
     private final Logger log;
     private final OutboxWriter writer;
     private final AtomicBoolean running = new AtomicBoolean();
+    // Only recovery's async scheduler accesses this map. Each old journal is
+    // validated incrementally; a completed replay cursor alone is not proof
+    // that legacy records were delivered.
+    private final Map<Path, PruneScan> pruneScans = new LinkedHashMap<>() {
+        @Override
+        protected boolean removeEldestEntry(Map.Entry<Path, PruneScan> eldest) {
+            return size() > MAX_PRUNE_TRACKED_JOURNALS;
+        }
+    };
+
+    private static final class PruneScan {
+        private final long size;
+        private final FileTime modified;
+        private long offset;
+        private boolean unsafe;
+
+        private PruneScan(long size, FileTime modified) {
+            this.size = size;
+            this.modified = modified;
+        }
+    }
     private final AtomicLong nextWarningAtMillis = new AtomicLong();
     private static final long WARNING_INTERVAL_MILLIS = 60_000L;
 
@@ -78,7 +103,8 @@ final class StaffActionOutboxRecovery {
                     break;
                 }
                 remaining -= replay(journal, remaining);
-                pruneCompletedOldJournal(journal);
+                // Share the per-pass record budget with retention validation.
+                remaining -= pruneCompletedOldJournal(journal, remaining);
             }
         } catch (IOException | RuntimeException exception) {
             warnOnce("Staff-action Discord recovery could not read journal directory", exception);
@@ -116,24 +142,32 @@ final class StaffActionOutboxRecovery {
     }
 
     /**
-     * Only a fully acknowledged, old journal may be removed. The replay cursor
-     * reflects committed database acceptance, not merely an attempted send.
-     * Legacy first records are preserved for manual migration/inspection.
+     * A fully acknowledged cursor is necessary but not sufficient for pruning:
+     * older replay code advanced past unidentified records without inserting
+     * them into MariaDB. Verify EVERY record, using the same bounded budget as
+     * journal replay, before removing historical data.
      */
-    private void pruneCompletedOldJournal(Path journal) {
-        if (!pastRetentionPeriod(journal)) {
-            return;
+    private int pruneCompletedOldJournal(Path journal, int budget) {
+        if (budget == 0 || !pastRetentionPeriod(journal)) {
+            return 0;
         }
         try {
-            if (!safeToPrune(journal)) {
-                return;
+            PruneResult result = safeToPrune(journal, budget);
+            if (result.complete()) {
+                // Verify that the checkpoint still describes this entire file.
+                // A historical journal should no longer be written by the logger.
+                Files.delete(journal);
+                Files.deleteIfExists(checkpointFor(journal));
+                pruneScans.remove(journal);
             }
-            Files.delete(journal);
-            Files.deleteIfExists(checkpointFor(journal));
+            return result.scanned();
         } catch (IOException | RuntimeException exception) {
             warnOnce("Old staff-action journal retention check failed; preserving journal", exception);
+            return 0;
         }
     }
+
+    private record PruneResult(int scanned, boolean complete) {}
 
     private static boolean pastRetentionPeriod(Path journal) {
         String name = journal.getFileName().toString();
@@ -141,33 +175,79 @@ final class StaffActionOutboxRecovery {
         return date.isBefore(LocalDate.now(ZoneOffset.UTC).minusDays(RETENTION_DAYS));
     }
 
-    private boolean safeToPrune(Path journal) throws IOException {
+    private PruneResult safeToPrune(Path journal, int budget) throws IOException {
         Path checkpoint = checkpointFor(journal);
         if (!Files.isRegularFile(journal, LinkOption.NOFOLLOW_LINKS)
                 || Files.isSymbolicLink(journal)
                 || !Files.isRegularFile(checkpoint, LinkOption.NOFOLLOW_LINKS)
                 || Files.isSymbolicLink(checkpoint)) {
-            return false;
+            return new PruneResult(0, false);
         }
         long size = Files.size(journal);
         long acknowledged = readPosition(checkpoint);
         if (size == 0 || acknowledged != size) {
+            pruneScans.remove(journal);
             warnOnce("Old staff-action Discord journal retained pending database replay", null);
-            return false;
+            return new PruneResult(0, false);
         }
-        return firstRecordHasStableId(journal);
-    }
+        FileTime modified = Files.getLastModifiedTime(journal, LinkOption.NOFOLLOW_LINKS);
+        PruneScan scan = pruneScans.get(journal);
+        if (scan == null || scan.size != size || !scan.modified.equals(modified)) {
+            scan = new PruneScan(size, modified);
+            pruneScans.put(journal, scan);
+        }
+        if (scan.unsafe) {
+            return new PruneResult(0, false);
+        }
 
-    private boolean firstRecordHasStableId(Path journal) throws IOException {
+        int inspected = 0;
         try (RandomAccessFile file = new RandomAccessFile(journal.toFile(), "r")) {
-            String first = readCompleteLine(file);
-            JsonNode initial = first == null ? null : JSON.readTree(first);
-            if (initial != null && initial.hasNonNull("eventId") && initial.hasNonNull("ts")) {
-                return true;
+            if (file.length() != size) {
+                pruneScans.remove(journal);
+                return new PruneResult(0, false);
+            }
+            file.seek(scan.offset);
+            while (inspected < budget && scan.offset < size) {
+                String json = readCompleteLine(file);
+                if (json == null || !hasReplaySafeIdentity(json)) {
+                    // A legacy, partial, malformed, or unidentified record must
+                    // be kept for manual inspection, even if a cursor says EOF.
+                    scan.unsafe = true;
+                    warnOnce("Historical staff-action journal retained: unsafe legacy record", null);
+                    return new PruneResult(inspected + 1, false);
+                }
+                scan.offset = file.getFilePointer();
+                inspected++;
             }
         }
-        warnOnce("Historical staff-action journal retained: unsafe to prune legacy records", null);
-        return false;
+
+        if (scan.offset != size) {
+            return new PruneResult(inspected, false);
+        }
+        // A changed file invalidates all validation progress. Rechecking the
+        // full cursor and file metadata also catches normal concurrent growth.
+        if (Files.size(journal) != size
+                || !Files.getLastModifiedTime(journal, LinkOption.NOFOLLOW_LINKS).equals(modified)
+                || readPosition(checkpoint) != size) {
+            pruneScans.remove(journal);
+            return new PruneResult(inspected, false);
+        }
+        return new PruneResult(inspected, true);
+    }
+
+    private static boolean hasReplaySafeIdentity(String json) {
+        try {
+            JsonNode node = JSON.readTree(json);
+            if (node == null || !node.path("eventId").isTextual()
+                    || !node.path("ts").isTextual()) {
+                return false;
+            }
+            UUID.fromString(node.path("eventId").asText());
+            Instant.parse(node.path("ts").asText());
+            return true;
+        } catch (IOException | RuntimeException exception) {
+            return false;
+        }
     }
 
     private int replay(Path journal, int limit) {
