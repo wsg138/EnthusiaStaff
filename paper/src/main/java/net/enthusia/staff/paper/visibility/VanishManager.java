@@ -91,6 +91,7 @@ public final class VanishManager implements Listener {
         this.audiences = new VanishAudienceCoordinator<>(this::onEntity, this::refreshPair);
         this.spectatorTabPackets = installSpectatorTabPackets();
         this.silentContainers = new SilentContainerTracker(visibility::isVanished, clock);
+        this.silentContainers.seedOnlinePlayers(plugin.getServer().getOnlinePlayers());
         this.silentContainerPackets = installSilentContainerPackets();
     }
 

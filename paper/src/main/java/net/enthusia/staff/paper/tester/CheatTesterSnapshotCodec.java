@@ -63,14 +63,22 @@ final class CheatTesterSnapshotCodec {
             Consumer<Throwable> failure
     ) {
         requireRestoreArguments(player, encoded, success, failure);
-        Snapshot snapshot = decode(encoded);
-        try {
+        runWithFailureCallback(() -> {
+            // Decode inside the guarded restore: a corrupt, obsolete, or unparseable
+            // item snapshot must report failure to the journal recovery coordinator.
+            Snapshot snapshot = decode(encoded);
             applyBaseState(player, snapshot);
             if (restoreMovement) {
                 restoreMovement(player, snapshot, success, failure);
             } else {
                 success.run();
             }
+        }, failure);
+    }
+
+    static void runWithFailureCallback(Runnable operation, Consumer<Throwable> failure) {
+        try {
+            operation.run();
         } catch (RuntimeException exception) {
             failure.accept(exception);
         }
