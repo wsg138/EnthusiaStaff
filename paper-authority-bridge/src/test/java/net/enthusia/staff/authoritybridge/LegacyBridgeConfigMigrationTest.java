@@ -18,7 +18,7 @@ class LegacyBridgeConfigMigrationTest {
     private static final String PAPER_DIRECTORY = "EnthusiaStaff";
     private static final String AUTHORITY = "authority.properties";
     private static final String COLLECTOR = "collector.properties";
-    private static final String SAMPLE_SECRET = "authority.secret=" + "sample-not-a-real-key-0123456789ABCDEF";
+    private static final String SAMPLE_CONFIG = "public-example-test-data-with-no-credential";
     @TempDir
     Path folder;
 
@@ -34,8 +34,8 @@ class LegacyBridgeConfigMigrationTest {
     void copiesOnlyTwoKnownFilesPreservesBytesAndLegacyAndIsIdempotent() throws IOException {
         Path legacy = Files.createDirectory(folder.resolve(OLD_DIRECTORY));
         Path target = Files.createDirectory(folder.resolve(PAPER_DIRECTORY));
-        byte[] secret = (SAMPLE_SECRET + "\n").getBytes(java.nio.charset.StandardCharsets.UTF_8);
-        byte[] collector = "db.credential=example-only\r\n".getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        byte[] secret = (SAMPLE_CONFIG + "\n").getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        byte[] collector = "sample-field=example-only\r\n".getBytes(java.nio.charset.StandardCharsets.UTF_8);
         Files.write(legacy.resolve(AUTHORITY), secret);
         Files.write(legacy.resolve(COLLECTOR), collector);
         Files.writeString(legacy.resolve("other.properties"), "do not migrate");
@@ -56,15 +56,15 @@ class LegacyBridgeConfigMigrationTest {
     void preExistingConflictingConfigFailsWithoutOverwritingOrPartialInstall() throws IOException {
         Path legacy = Files.createDirectory(folder.resolve(OLD_DIRECTORY));
         Path target = Files.createDirectory(folder.resolve(PAPER_DIRECTORY));
-        Files.writeString(legacy.resolve(AUTHORITY), SAMPLE_SECRET);
-        Files.writeString(legacy.resolve(COLLECTOR), "db.credential=old-example");
-        Files.writeString(target.resolve(COLLECTOR), "db.credential=new-example");
+        Files.writeString(legacy.resolve(AUTHORITY), SAMPLE_CONFIG);
+        Files.writeString(legacy.resolve(COLLECTOR), "sample-field=old-example");
+        Files.writeString(target.resolve(COLLECTOR), "sample-field=new-example");
         IllegalStateException failure = assertThrows(IllegalStateException.class,
                 () -> LegacyBridgeConfigMigration.migrate(target));
         assertFalse(failure.getMessage().contains("old-example"));
         assertFalse(failure.getMessage().contains("new-example"));
         assertFalse(Files.exists(target.resolve(AUTHORITY)));
-        assertEquals("db.credential=new-example", Files.readString(target.resolve(COLLECTOR)));
+        assertEquals("sample-field=new-example", Files.readString(target.resolve(COLLECTOR)));
         assertEquals(Set.of(COLLECTOR), fileNames(target));
     }
 
@@ -72,7 +72,7 @@ class LegacyBridgeConfigMigrationTest {
     void importedFileHasOwnerOnlyPosixPermissionsWhenSupported() throws IOException {
         Path legacy = Files.createDirectory(folder.resolve(OLD_DIRECTORY));
         Path target = Files.createDirectory(folder.resolve(PAPER_DIRECTORY));
-        Files.writeString(legacy.resolve(AUTHORITY), SAMPLE_SECRET);
+        Files.writeString(legacy.resolve(AUTHORITY), SAMPLE_CONFIG);
         LegacyBridgeConfigMigration.migrate(target);
         if (Files.getFileStore(target).supportsFileAttributeView("posix")) {
             assertEquals(java.nio.file.attribute.PosixFilePermissions.fromString("rw-------"),
@@ -84,7 +84,7 @@ class LegacyBridgeConfigMigrationTest {
     void rejectsOversizedFilesBeforeInstallingEitherConfig() throws IOException {
         Path legacy = Files.createDirectory(folder.resolve(OLD_DIRECTORY));
         Path target = Files.createDirectory(folder.resolve(PAPER_DIRECTORY));
-        Files.writeString(legacy.resolve(AUTHORITY), SAMPLE_SECRET);
+        Files.writeString(legacy.resolve(AUTHORITY), SAMPLE_CONFIG);
         Files.write(legacy.resolve(COLLECTOR), new byte[65_537]);
         assertThrows(IllegalStateException.class, () -> LegacyBridgeConfigMigration.migrate(target));
         assertTrue(fileNames(target).isEmpty());
@@ -94,7 +94,7 @@ class LegacyBridgeConfigMigrationTest {
     void refusesSymlinkedLegacyConfigurationWhenFilesystemSupportsIt() throws IOException {
         Path legacy = Files.createDirectory(folder.resolve(OLD_DIRECTORY));
         Path target = Files.createDirectory(folder.resolve(PAPER_DIRECTORY));
-        Path external = Files.writeString(folder.resolve("outside"), SAMPLE_SECRET);
+        Path external = Files.writeString(folder.resolve("outside"), SAMPLE_CONFIG);
         try {
             Files.createSymbolicLink(legacy.resolve(AUTHORITY), external);
         } catch (UnsupportedOperationException | java.nio.file.FileSystemException
