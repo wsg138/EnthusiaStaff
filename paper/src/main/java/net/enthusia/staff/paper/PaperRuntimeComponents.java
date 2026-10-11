@@ -4,6 +4,7 @@ import java.time.Clock;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
 import java.util.logging.Level;
 import javax.sql.DataSource;
@@ -316,8 +317,8 @@ record PaperRuntimeComponents(
 
     /**
      * Builds and wires the staff-action audit pipeline (overnight permission model):
-     * per-server JSON-lines file log, Discord-bot outbox file, best-effort {@code discord_outbox}
-     * insert, plus the vanished/on-duty command+teleport+gamemode audit listener.
+     * per-server JSON-lines audit/journal files and an asynchronously reconciled
+     * {@code discord_outbox}, plus vanished/on-duty command, teleport and gamemode logging.
      */
     private static StaffActionLogger createStaffActionLogger(
             Dependencies dependencies,
@@ -336,6 +337,15 @@ record PaperRuntimeComponents(
         staffMode.setActionLogger(logger);
         staffMode.setVanishedLookup(vanish::isVanished);
         registerListener(plugin, new StaffActionAuditListener(logger, staffMode, vanish));
+        // Recovery is bounded and runs off-thread. Paper cancels plugin-owned
+        // scheduler tasks on disable; the replay database key is stable across restarts.
+        try {
+            plugin.getServer().getAsyncScheduler().runAtFixedRate(
+                    plugin, ignored -> logger.recoverOutboxOnce(), 15L, 15L, TimeUnit.SECONDS);
+        } catch (RuntimeException exception) {
+            plugin.getLogger().log(Level.WARNING,
+                    "Staff-action Discord recovery scheduling failed; local journal retained", exception);
+        }
         return logger;
     }
 
