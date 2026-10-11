@@ -36,6 +36,7 @@ import org.bukkit.plugin.java.JavaPlugin;
 
 public final class ReportGuiController implements Listener {
     private static final String MANAGE_PERMISSION = "enthusiastaff.reports.manage";
+    private static final String EVIDENCE_PERMISSION = "enthusiastaff.reports.evidence";
 
     private final JavaPlugin plugin;
     private final Clock clock;
@@ -230,11 +231,82 @@ public final class ReportGuiController implements Listener {
             viewer.closeInventory();
             return;
         }
+        if (slot == gui.slot("detail-evidence")) {
+            showEvidenceOptions(viewer, state.details());
+            return;
+        }
+        if (slot == gui.slot("detail-public-chat")) {
+            openEvidence(viewer, state.details(), "public");
+            return;
+        }
+        if (slot == gui.slot("detail-private-message")) {
+            openEvidence(viewer, state.details(), "private");
+            return;
+        }
+        if (slot == gui.slot("detail-client-evidence")) {
+            openEvidence(viewer, state.details(), "client");
+            return;
+        }
         List<ReportAction> actions = ReportGuiAccess.actions(state.details().summary(), viewer.getUniqueId());
         int actionIndex = gui.actionSlots().indexOf(slot);
         if (actionIndex >= 0 && actionIndex < actions.size()) {
             beginInput(viewer, state, actions.get(actionIndex), gui);
         }
+    }
+
+    private void showEvidenceOptions(Player viewer, ReportDetails details) {
+        if (!viewer.hasPermission(EVIDENCE_PERMISSION)) {
+            message(viewer, "Sensitive evidence requires " + EVIDENCE_PERMISSION + ".");
+            return;
+        }
+        UUID reportId = details.summary().reportId();
+        onEntity(viewer, () -> {
+            if (!viewer.hasPermission(EVIDENCE_PERMISSION)) {
+                return;
+            }
+            viewer.closeInventory();
+            Component menu = Component.text("Report evidence: ", NamedTextColor.GRAY)
+                    .append(evidenceLink(reportId, "public", details.publicChatSnapshots().size()))
+                    .append(Component.text(" | ", NamedTextColor.DARK_GRAY))
+                    .append(evidenceLink(reportId, "private", details.privateMessageSnapshots().size()))
+                    .append(Component.text(" | ", NamedTextColor.DARK_GRAY))
+                    .append(evidenceLink(reportId, "client", details.clientEvidenceSnapshots().size()));
+            viewer.sendMessage(StaffMessageStyle.style(menu));
+        });
+    }
+
+    private static Component evidenceLink(UUID reportId, String kind, int count) {
+        Component link = Component.text(kind + " (" + count + ")", count == 0
+                ? NamedTextColor.DARK_GRAY : NamedTextColor.AQUA);
+        return count == 0 ? link
+                : link.clickEvent(ClickEvent.runCommand("/reports evidence " + reportId + " " + kind));
+    }
+
+    private void openEvidence(Player viewer, ReportDetails details, String kind) {
+        if (!viewer.hasPermission(EVIDENCE_PERMISSION)) {
+            message(viewer, "Sensitive evidence requires " + EVIDENCE_PERMISSION + ".");
+            return;
+        }
+        boolean hasEvidence = switch (kind) {
+            case "public" -> !details.publicChatSnapshots().isEmpty();
+            case "private" -> !details.privateMessageSnapshots().isEmpty();
+            case "client" -> !details.clientEvidenceSnapshots().isEmpty();
+            default -> false;
+        };
+        if (!hasEvidence) {
+            message(viewer, "No retained " + kind + " evidence in this report.");
+            return;
+        }
+        UUID reportId = details.summary().reportId();
+        onEntity(viewer, () -> {
+            if (!viewer.hasPermission(EVIDENCE_PERMISSION)) {
+                return;
+            }
+            viewer.closeInventory();
+            // The existing command path reloads evidence and rechecks access rights;
+            // do not send sensitive snapshots directly from the GUI state.
+            viewer.performCommand("reports evidence " + reportId + " " + kind);
+        });
     }
 
     private void reviewClick(
