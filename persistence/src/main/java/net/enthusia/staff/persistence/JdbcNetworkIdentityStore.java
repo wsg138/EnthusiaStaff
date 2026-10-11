@@ -35,7 +35,7 @@ public final class JdbcNetworkIdentityStore implements NetworkIdentityStore {
     private static final UUID SYSTEM_ACTOR = new UUID(0L, 0L);
     private static final int MAX_AUTOMATED_MATCHES = 20;
     private static final int MATCH_QUERY_LIMIT = MAX_AUTOMATED_MATCHES + 1;
-        private static final int MAX_VERIFIED_LINKED_ACCOUNTS = 100;
+    private static final int MAX_VERIFIED_LINKED_ACCOUNTS = 100;
     private static final int MAX_RETENTION_BATCH_SIZE = 5_000;
     private static final Duration EVIDENCE_REFRESH_INTERVAL = Duration.ofHours(24);
     private static final List<SanctionType> INHERITABLE_SANCTION_TYPES = Arrays.stream(SanctionType.values())
@@ -432,7 +432,10 @@ public final class JdbcNetworkIdentityStore implements NetworkIdentityStore {
                 boolean stillVerified = !protectedPair && verifiedLinkPeers(connection, pair.lower())
                         .stream().anyMatch(peer -> peer.playerId().equals(pair.upper()));
                 if (protectedPair || (!state.inheritsAutomatically() && !stillVerified)) {
-                    revokeExemptedInheritedSanctions(connection, pair, actorId, changedAt, state);
+                    revokeExemptedInheritedSanctions(
+                            connection, json, pair, actorId, changedAt,
+                            state.name(), "ALT_RELATIONSHIP_EXEMPTION"
+                    );
                 }
                 insertRelationshipAudit(connection, pair, actorId, state.name(), changedAt, reason);
                 connection.commit();
@@ -448,9 +451,44 @@ public final class JdbcNetworkIdentityStore implements NetworkIdentityStore {
         }
     }
 
-    /** Relationship exemptions reverse existing inherited sanctions between this exact pair only. */
-    private void revokeExemptedInheritedSanctions(
-            Connection connection, PlayerPair pair, UUID actorId, Instant now, AltRelationshipState state
+    /**
+     * Reconcile existing inherited sanctions in the *same* transaction as a verified Discord unlink.
+     * Keep sanctions supported independently by a manually confirmed/high-confidence pair; do not
+     * let a historical Discord link remain an authority once its current link disappears.
+     */
+    static void revokeUnsupportedAfterDiscordUnlink(
+            Connection connection, UUID unlinkedPlayer, java.util.Set<UUID> formerPeers, Instant now
+    ) throws SQLException {
+        if (formerPeers.size() > MAX_VERIFIED_LINKED_ACCOUNTS) {
+            throw new SQLException("Discord unlink requires manual reconciliation: peer set exceeds safety bound");
+        }
+        ObjectMapper mapper = new ObjectMapper();
+        AltInheritancePolicy policy = new AltInheritancePolicy();
+        for (UUID peer : formerPeers) {
+            if (peer.equals(unlinkedPlayer)) {
+                continue;
+            }
+            PlayerPair pair = ordered(unlinkedPlayer, peer);
+            Relationship relationship = lockRelationship(connection, pair);
+            AltRelationshipState state = relationship == null ? null : relationship.state();
+            if (policy.shouldInherit(state, false)) {
+                continue;
+            }
+            try {
+                revokeExemptedInheritedSanctions(
+                        connection, mapper, pair, SYSTEM_ACTOR, now,
+                        "DISCORD_VERIFIED_LINK_REMOVED", "DISCORD_LINK_SANCTION_REVOKED"
+                );
+            } catch (JsonProcessingException exception) {
+                throw new SQLException("Unable to serialize Discord unlink sanction reconciliation", exception);
+            }
+        }
+    }
+
+    /** Revoke derived sanctions for one relationship with transactional network/Discord audit. */
+    private static void revokeExemptedInheritedSanctions(
+            Connection connection, ObjectMapper json, PlayerPair pair, UUID actorId, Instant now,
+            String reasonCode, String eventType
     ) throws SQLException, JsonProcessingException {
         record Derived(UUID sanctionId, UUID targetId, String caseId) { }
         List<Derived> inherited = new ArrayList<>();
@@ -488,13 +526,13 @@ public final class JdbcNetworkIdentityStore implements NetworkIdentityStore {
                 }
             }
             String key = "alt-exception:" + UUID.nameUUIDFromBytes(
-                    (derived.sanctionId() + ":" + state.name()).getBytes(java.nio.charset.StandardCharsets.UTF_8));
+                    (derived.sanctionId() + ":" + reasonCode).getBytes(java.nio.charset.StandardCharsets.UTF_8));
             String payload = json.writeValueAsString(Map.of(
                     "caseId", derived.caseId(),
                     "targetId", derived.targetId().toString(),
                     "sanctionId", derived.sanctionId().toString(),
-                    "action", "ALT_RELATIONSHIP_EXEMPTION",
-                    "relationshipState", state.name()
+                    "action", eventType,
+                    "relationshipState", reasonCode
             ));
             try (PreparedStatement network = connection.prepareStatement("""
                     INSERT INTO network_outbox(message_id, idempotency_key, destination, message_type,
@@ -504,12 +542,12 @@ public final class JdbcNetworkIdentityStore implements NetworkIdentityStore {
                  PreparedStatement discord = connection.prepareStatement("""
                     INSERT INTO discord_outbox(message_id, idempotency_key, destination, event_type,
                         payload_json, available_at, created_at)
-                    VALUES (?, ?, 'punishments', 'ALT_SANCTION_EXEMPTION', ?, ?, ?)
+                    VALUES (?, ?, 'punishments', ?, ?, ?, ?)
                     """);
                  PreparedStatement event = connection.prepareStatement("""
                     INSERT INTO sanction_events(event_id, sanction_id, event_type, actor_id,
                         occurred_at, reason, event_json, idempotency_key, case_id, subject_id)
-                    VALUES (?, ?, 'ALT_RELATIONSHIP_EXEMPTION', ?, ?, ?, ?, ?, ?, ?)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """)) {
                 network.setBytes(1, UuidBytes.toBytes(UUID.randomUUID()));
                 network.setString(2, key + ":network");
@@ -521,20 +559,22 @@ public final class JdbcNetworkIdentityStore implements NetworkIdentityStore {
 
                 discord.setBytes(1, UuidBytes.toBytes(UUID.randomUUID()));
                 discord.setString(2, key + ":discord");
-                discord.setString(3, payload);
-                discord.setTimestamp(4, Timestamp.from(now));
+                discord.setString(3, eventType);
+                discord.setString(4, payload);
                 discord.setTimestamp(5, Timestamp.from(now));
+                discord.setTimestamp(6, Timestamp.from(now));
                 discord.executeUpdate();
 
                 event.setBytes(1, UuidBytes.toBytes(UUID.randomUUID()));
                 event.setBytes(2, UuidBytes.toBytes(derived.sanctionId()));
-                event.setBytes(3, UuidBytes.toBytes(actorId));
-                event.setTimestamp(4, Timestamp.from(now));
-                event.setString(5, "Alt relationship exempted: " + state.name());
-                event.setString(6, payload);
-                event.setString(7, key + ":event");
-                event.setString(8, derived.caseId());
-                event.setBytes(9, UuidBytes.toBytes(derived.targetId()));
+                event.setString(3, eventType);
+                event.setBytes(4, UuidBytes.toBytes(actorId));
+                event.setTimestamp(5, Timestamp.from(now));
+                event.setString(6, "Inherited sanction reconciled: " + reasonCode);
+                event.setString(7, payload);
+                event.setString(8, key + ":event");
+                event.setString(9, derived.caseId());
+                event.setBytes(10, UuidBytes.toBytes(derived.targetId()));
                 event.executeUpdate();
             }
         }
