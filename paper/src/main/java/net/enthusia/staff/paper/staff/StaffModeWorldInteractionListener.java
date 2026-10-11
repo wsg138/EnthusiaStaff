@@ -33,6 +33,7 @@ import org.bukkit.event.player.PlayerItemConsumeEvent;
 import org.bukkit.event.player.PlayerShearEntityEvent;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.InventoryHolder;
+import org.bukkit.inventory.EquipmentSlot;
 
 /**
  * Tiered world-interaction enforcement for on-duty staff.
@@ -278,7 +279,9 @@ public final class StaffModeWorldInteractionListener implements Listener {
             return;
         }
         if (event.getRightClicked() instanceof ItemFrame || event.getRightClicked() instanceof ArmorStand) {
-            handleContainerEntity(player, event, event.getRightClicked().getType().toString());
+            handleContainerEntity(player, event, event.getRightClicked().getType().toString(),
+                    event.getRightClicked() instanceof ItemFrame
+                            && shouldAuditDeniedItemFrame(event.getHand()));
             return;
         }
         // Interact and InteractAtEntity may both fire; defer denied logging until deduplicated.
@@ -292,7 +295,7 @@ public final class StaffModeWorldInteractionListener implements Listener {
             return;
         }
         if (event.getRightClicked() instanceof ItemFrame || event.getRightClicked() instanceof ArmorStand) {
-            handleContainerEntity(player, event, event.getRightClicked().getType().toString());
+            handleContainerEntity(player, event, event.getRightClicked().getType().toString(), false);
             return;
         }
         cancelWorldUse(player, event, "entity-interact-at", event.getRightClicked().getType().toString(), false);
@@ -346,7 +349,15 @@ public final class StaffModeWorldInteractionListener implements Listener {
         cancelWorldUse(event.getPlayer(), event, "fishing", event.getState().toString(), true);
     }
 
-    private void handleContainerEntity(Player player, Cancellable event, String detail) {
+    // An entity click may also dispatch PlayerInteractAtEntityEvent. Only the generic
+    // main-hand item-frame interaction may record a denied edit; the precise variant
+    // still cancels, but never records the same attempt twice.
+    static boolean shouldAuditDeniedItemFrame(EquipmentSlot hand) {
+        return hand == EquipmentSlot.HAND;
+    }
+
+    private void handleContainerEntity(Player player, Cancellable event, String detail,
+                                       boolean auditDeniedItemFrame) {
         if (staffMode.isUnrestricted(player)) {
             staffMode.logStaffAction(player, "container-entity-edit", detail);
             return;
@@ -354,6 +365,9 @@ public final class StaffModeWorldInteractionListener implements Listener {
         StaffDutyTier tier = staffMode.dutyTier(player);
         if (StaffModeWorldInteractionPolicy.blocksContainerEntityEdit(tier)) {
             event.setCancelled(true);
+            if (auditDeniedItemFrame) {
+                staffMode.logStaffAction(player, "item-frame-edit-denied", detail);
+            }
             return;
         }
         if (StaffModeWorldInteractionPolicy.logsContainerEdit(tier)) {
