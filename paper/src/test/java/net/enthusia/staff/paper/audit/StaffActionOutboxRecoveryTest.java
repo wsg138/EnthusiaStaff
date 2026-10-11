@@ -25,6 +25,10 @@ class StaffActionOutboxRecoveryTest {
 
     private static final Logger LOG = Logger.getLogger(StaffActionOutboxRecoveryTest.class.getName());
     private static final String TIMESTAMP = "2026-10-11T12:34:56Z";
+    private static final String FIRST_ACTION = "first";
+    private static final String JOURNAL_PREFIX = "staff-actions-";
+    private static final String JOURNAL_EXTENSION = ".jsonl";
+    private static final String LEGACY_TIMESTAMP_PREFIX = "{\"ts\":\"";
 
     @Test
     void aDatabaseOutageRetainsFailedRowAndRecoversWithoutReplayingCheckpointedRecords()
@@ -32,7 +36,7 @@ class StaffActionOutboxRecoveryTest {
         UUID one = UUID.randomUUID();
         UUID two = UUID.randomUUID();
         Path journal = journal();
-        Files.writeString(journal, record(one, "first") + "\n"
+        Files.writeString(journal, record(one, FIRST_ACTION) + "\n"
                 + record(two, "second") + "\n", StandardCharsets.UTF_8);
         List<UUID> attempts = new ArrayList<>();
         AtomicBoolean unavailable = new AtomicBoolean(true);
@@ -56,11 +60,11 @@ class StaffActionOutboxRecoveryTest {
     @Test
     void databaseOutageStopsThePassBeforeHammeringLaterJournals() throws Exception {
         Path first = oldJournal();
-        Path second = directory.resolve("staff-actions-"
-                + java.time.LocalDate.now(java.time.ZoneOffset.UTC).minusDays(44) + ".jsonl");
+        Path second = directory.resolve(JOURNAL_PREFIX
+                + java.time.LocalDate.now(java.time.ZoneOffset.UTC).minusDays(44) + JOURNAL_EXTENSION);
         UUID firstId = UUID.randomUUID();
         UUID secondId = UUID.randomUUID();
-        Files.writeString(first, record(firstId, "first") + "\n", StandardCharsets.UTF_8);
+        Files.writeString(first, record(firstId, FIRST_ACTION) + "\n", StandardCharsets.UTF_8);
         Files.writeString(second, record(secondId, "second") + "\n", StandardCharsets.UTF_8);
         List<UUID> attempts = new ArrayList<>();
         AtomicBoolean unavailable = new AtomicBoolean(true);
@@ -88,8 +92,8 @@ class StaffActionOutboxRecoveryTest {
     @Test
     void malformedJournalDoesNotPreventAnotherJournalFromReplaying() throws Exception {
         Path bad = oldJournal();
-        Path good = directory.resolve("staff-actions-"
-                + java.time.LocalDate.now(java.time.ZoneOffset.UTC).minusDays(44) + ".jsonl");
+        Path good = directory.resolve(JOURNAL_PREFIX
+                + java.time.LocalDate.now(java.time.ZoneOffset.UTC).minusDays(44) + JOURNAL_EXTENSION);
         UUID id = UUID.randomUUID();
         Files.writeString(bad, "{invalid-json}\n", StandardCharsets.UTF_8);
         Files.writeString(good, record(id, "good") + "\n", StandardCharsets.UTF_8);
@@ -140,7 +144,7 @@ class StaffActionOutboxRecoveryTest {
     void legacyRecordsWithoutEventIdsCannotBeSafelyReplayed() throws Exception {
         UUID eventId = UUID.randomUUID();
         Files.writeString(journal(),
-                "{\"ts\":\"" + TIMESTAMP + "\",\"action\":\"old\"}\n"
+                LEGACY_TIMESTAMP_PREFIX + TIMESTAMP + "\",\"action\":\"old\"}\n"
                         + record(eventId, "new") + "\n", StandardCharsets.UTF_8);
         List<UUID> observed = new ArrayList<>();
         StaffActionOutboxRecovery recovery = new StaffActionOutboxRecovery(
@@ -238,7 +242,7 @@ class StaffActionOutboxRecoveryTest {
     void oldLegacyJournalIsRetainedEvenAfterReplayOfLaterIdentifiedRecords() throws Exception {
         Path old = oldJournal();
         UUID id = UUID.randomUUID();
-        Files.writeString(old, "{\"ts\":\"" + TIMESTAMP + "\",\"action\":\"legacy\"}\n"
+        Files.writeString(old, LEGACY_TIMESTAMP_PREFIX + TIMESTAMP + "\",\"action\":\"legacy\"}\n"
                 + record(id, "new") + "\n", StandardCharsets.UTF_8);
         List<UUID> received = new ArrayList<>();
         new StaffActionOutboxRecovery(directory, LOG, (eventId, json, when) ->
@@ -252,8 +256,8 @@ class StaffActionOutboxRecoveryTest {
         Path old = oldJournal();
         UUID first = UUID.randomUUID();
         UUID third = UUID.randomUUID();
-        Files.writeString(old, record(first, "first") + "\n"
-                + "{\"ts\":\"" + TIMESTAMP + "\",\"action\":\"legacy\"}\n"
+        Files.writeString(old, record(first, FIRST_ACTION) + "\n"
+                + LEGACY_TIMESTAMP_PREFIX + TIMESTAMP + "\",\"action\":\"legacy\"}\n"
                 + record(third, "third") + "\n", StandardCharsets.UTF_8);
         List<UUID> delivered = new ArrayList<>();
         StaffActionOutboxRecovery recovery = new StaffActionOutboxRecovery(
@@ -270,8 +274,8 @@ class StaffActionOutboxRecoveryTest {
     @Test
     void oldMixedJournalWithPreexistingEofCheckpointIsNeverPruned() throws Exception {
         Path old = oldJournal();
-        Files.writeString(old, record(UUID.randomUUID(), "first") + "\n"
-                + "{\"ts\":\"" + TIMESTAMP + "\",\"action\":\"legacy\"}\n"
+        Files.writeString(old, record(UUID.randomUUID(), FIRST_ACTION) + "\n"
+                + LEGACY_TIMESTAMP_PREFIX + TIMESTAMP + "\",\"action\":\"legacy\"}\n"
                 + record(UUID.randomUUID(), "last") + "\n", StandardCharsets.UTF_8);
         Files.writeString(cursorFor(old), Long.toString(Files.size(old)), StandardCharsets.UTF_8);
         new StaffActionOutboxRecovery(directory, LOG, (id, json, when) -> {
@@ -306,7 +310,7 @@ class StaffActionOutboxRecoveryTest {
     @Test
     void oldMalformedLastRecordIsRetainedEvenWithEofCheckpoint() throws Exception {
         Path old = oldJournal();
-        Files.writeString(old, record(UUID.randomUUID(), "first") + "\n"
+        Files.writeString(old, record(UUID.randomUUID(), FIRST_ACTION) + "\n"
                 + "{\"eventId\":\"not-a-uuid\",\"ts\":\"" + TIMESTAMP + "\"}\n",
                 StandardCharsets.UTF_8);
         Files.writeString(cursorFor(old), Long.toString(Files.size(old)), StandardCharsets.UTF_8);
@@ -354,13 +358,13 @@ class StaffActionOutboxRecoveryTest {
     private Path journal() {
         // Use today's UTC date for ordinary event replay and cursor tests.
         String day = java.time.LocalDate.now(java.time.ZoneOffset.UTC).toString();
-        return directory.resolve("staff-actions-" + day + ".jsonl");
+        return directory.resolve(JOURNAL_PREFIX + day + JOURNAL_EXTENSION);
     }
 
     private Path oldJournal() {
         String date = java.time.LocalDate.now(java.time.ZoneOffset.UTC)
                 .minusDays(45).toString();
-        return directory.resolve("staff-actions-" + date + ".jsonl");
+        return directory.resolve(JOURNAL_PREFIX + date + JOURNAL_EXTENSION);
     }
 
     private Path cursorFor(Path journal) {

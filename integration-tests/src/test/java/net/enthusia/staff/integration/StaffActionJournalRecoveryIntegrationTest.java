@@ -11,6 +11,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
+import java.io.IOException;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Method;
 import java.net.URL;
@@ -119,19 +120,8 @@ class StaffActionJournalRecoveryIntegrationTest {
 
         UUID firstId = UUID.randomUUID();
         UUID thirdId = UUID.randomUUID();
-        String timestamp = Instant.now().toString();
-        Path history = directory.resolve("discord-outbox");
-        Files.createDirectories(history);
-        Path journal = history.resolve("staff-actions-"
-                + LocalDate.now(ZoneOffset.UTC).minusDays(45) + ".jsonl");
-        String acceptedRecordOne = "{\"eventId\":\"" + firstId
-                + "\",\"ts\":\"" + timestamp + "\",\"action\":\"first\",\"forwardChannel\":\"\"}\n";
-        String legacyRecord = "{\"ts\":\"" + timestamp
-                + "\",\"action\":\"legacy\",\"forwardChannel\":\"\"}\n";
-        String acceptedRecordThree = "{\"eventId\":\"" + thirdId
-                + "\",\"ts\":\"" + timestamp + "\",\"action\":\"third\",\"forwardChannel\":\"\"}\n";
-        Files.writeString(journal, acceptedRecordOne + legacyRecord + acceptedRecordThree,
-                StandardCharsets.UTF_8);
+        Path journal = writeMixedLegacyJournal(firstId, thirdId);
+        String originalRecords = Files.readString(journal, StandardCharsets.UTF_8);
 
         try (MariaDbRuntime runtime = MariaDb.initialize(databaseConfig(DATABASE));
              HikariDataSource datasource = datasource();
@@ -161,12 +151,28 @@ class StaffActionJournalRecoveryIntegrationTest {
                         "Unidentified middle record must not be age-pruned despite EOF checkpoint");
                 recover.invoke(logger);
                 assertTrue(Files.exists(journal));
-                assertEquals(acceptedRecordOne + legacyRecord + acceptedRecordThree,
-                        Files.readString(journal, StandardCharsets.UTF_8));
+                assertEquals(originalRecords, Files.readString(journal, StandardCharsets.UTF_8));
             } finally {
                 close.invoke(logger);
             }
         }
+    }
+
+    private Path writeMixedLegacyJournal(UUID firstId, UUID thirdId) throws IOException {
+        String timestamp = Instant.now().toString();
+        Path history = directory.resolve("discord-outbox");
+        Files.createDirectories(history);
+        Path journal = history.resolve("staff-actions-"
+                + LocalDate.now(ZoneOffset.UTC).minusDays(45) + ".jsonl");
+        String acceptedRecordOne = "{\"eventId\":\"" + firstId
+                + "\",\"ts\":\"" + timestamp + "\",\"action\":\"first\",\"forwardChannel\":\"\"}\n";
+        String legacyRecord = "{\"ts\":\"" + timestamp
+                + "\",\"action\":\"legacy\",\"forwardChannel\":\"\"}\n";
+        String acceptedRecordThree = "{\"eventId\":\"" + thirdId
+                + "\",\"ts\":\"" + timestamp + "\",\"action\":\"third\",\"forwardChannel\":\"\"}\n";
+        Files.writeString(journal, acceptedRecordOne + legacyRecord + acceptedRecordThree,
+                StandardCharsets.UTF_8);
+        return journal;
     }
 
     private void assertRestartKeepsDeliveredState(
