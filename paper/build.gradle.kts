@@ -31,6 +31,12 @@ dependencies {
     testImplementation("net.luckperms:api:5.4")
 }
 
+// Paper 26.2 publishes Java 25-only API variants; this deployable module
+// must compile with the same target without changing the network's other modules.
+tasks.withType<JavaCompile>().configureEach {
+    options.release.set(25)
+}
+
 tasks.processResources {
     val resolvedPluginVersion = project.version.toString()
     inputs.property("pluginVersion", resolvedPluginVersion)
