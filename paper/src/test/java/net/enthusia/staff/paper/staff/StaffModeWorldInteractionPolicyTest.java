@@ -25,6 +25,25 @@ class StaffModeWorldInteractionPolicyTest {
     }
 
     @Test
+    void deniedWorldUseAuditsMeaningfulAttemptsWithoutChangingTierPolicy() {
+        assertTrue(StaffModeWorldInteractionPolicy.blocksWorldUse(StaffDutyTier.HELPER));
+        assertTrue(StaffModeWorldInteractionPolicy.blocksWorldUse(StaffDutyTier.MOD));
+        assertFalse(StaffModeWorldInteractionPolicy.blocksWorldUse(StaffDutyTier.ADMIN));
+        assertEquals("bucket-fill-denied",
+                StaffModeWorldInteractionListener.worldUseAuditAction("bucket-fill", true));
+        assertEquals("block-harvest-denied",
+                StaffModeWorldInteractionListener.worldUseAuditAction("block-harvest", true));
+        assertEquals("entity-shear-denied",
+                StaffModeWorldInteractionListener.worldUseAuditAction("entity-shear", true));
+        assertEquals("item-consume-denied",
+                StaffModeWorldInteractionListener.worldUseAuditAction("item-consume", true));
+        assertEquals("fishing-denied",
+                StaffModeWorldInteractionListener.worldUseAuditAction("fishing", true));
+        assertEquals("bucket-fill",
+                StaffModeWorldInteractionListener.worldUseAuditAction("bucket-fill", false));
+    }
+
+    @Test
     void deniedContainerAuditTracksMutationsNotOrdinaryPlayerInventoryClicks() {
         int topSize = 27;
         assertTrue(StaffModeWorldInteractionPolicy.blocksContainerEdit(StaffDutyTier.HELPER));

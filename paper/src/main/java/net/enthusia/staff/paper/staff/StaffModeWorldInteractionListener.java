@@ -95,17 +95,17 @@ public final class StaffModeWorldInteractionListener implements Listener {
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     public void onBucketFill(PlayerBucketFillEvent event) {
-        cancelWorldUse(event.getPlayer(), event, "bucket-fill", describe(event.getBlockClicked()));
+        cancelWorldUse(event.getPlayer(), event, "bucket-fill", describe(event.getBlockClicked()), true);
     }
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     public void onBucketEmpty(PlayerBucketEmptyEvent event) {
-        cancelWorldUse(event.getPlayer(), event, "bucket-empty", describe(event.getBlockClicked()));
+        cancelWorldUse(event.getPlayer(), event, "bucket-empty", describe(event.getBlockClicked()), true);
     }
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     public void onHarvest(PlayerHarvestBlockEvent event) {
-        cancelWorldUse(event.getPlayer(), event, "block-harvest", describe(event.getHarvestedBlock()));
+        cancelWorldUse(event.getPlayer(), event, "block-harvest", describe(event.getHarvestedBlock()), true);
     }
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
@@ -250,7 +250,8 @@ public final class StaffModeWorldInteractionListener implements Listener {
             handleContainerEntity(player, event, event.getRightClicked().getType().toString());
             return;
         }
-        cancelWorldUse(player, event, "entity-interact", event.getRightClicked().getType().toString());
+        // Interact and InteractAtEntity may both fire; defer denied logging until deduplicated.
+        cancelWorldUse(player, event, "entity-interact", event.getRightClicked().getType().toString(), false);
     }
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
@@ -263,7 +264,7 @@ public final class StaffModeWorldInteractionListener implements Listener {
             handleContainerEntity(player, event, event.getRightClicked().getType().toString());
             return;
         }
-        cancelWorldUse(player, event, "entity-interact-at", event.getRightClicked().getType().toString());
+        cancelWorldUse(player, event, "entity-interact-at", event.getRightClicked().getType().toString(), false);
     }
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
@@ -291,18 +292,18 @@ public final class StaffModeWorldInteractionListener implements Listener {
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     public void onShear(PlayerShearEntityEvent event) {
         cancelWorldUse(event.getPlayer(), event, "entity-shear",
-                event.getEntity().getType().toString());
+                event.getEntity().getType().toString(), true);
     }
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     public void onConsume(PlayerItemConsumeEvent event) {
         cancelWorldUse(event.getPlayer(), event, "item-consume",
-                event.getItem().getType().toString());
+                event.getItem().getType().toString(), true);
     }
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     public void onFish(PlayerFishEvent event) {
-        cancelWorldUse(event.getPlayer(), event, "fishing", event.getState().toString());
+        cancelWorldUse(event.getPlayer(), event, "fishing", event.getState().toString(), true);
     }
 
     private void handleContainerEntity(Player player, Cancellable event, String detail) {
@@ -324,7 +325,8 @@ public final class StaffModeWorldInteractionListener implements Listener {
         return staffMode.active(player.getUniqueId());
     }
 
-    private void cancelWorldUse(Player player, Cancellable event, String action, String detail) {
+    private void cancelWorldUse(Player player, Cancellable event, String action,
+                                String detail, boolean auditDenied) {
         if (!onDuty(player)) {
             return;
         }
@@ -335,9 +337,16 @@ public final class StaffModeWorldInteractionListener implements Listener {
         StaffDutyTier tier = staffMode.dutyTier(player);
         if (StaffModeWorldInteractionPolicy.blocksWorldUse(tier)) {
             event.setCancelled(true);
+            if (auditDenied) {
+                staffMode.logStaffAction(player, worldUseAuditAction(action, true), detail);
+            }
         } else if (StaffModeWorldInteractionPolicy.logsWorldInteraction(tier)) {
             staffMode.logStaffAction(player, action, detail);
         }
+    }
+
+    static String worldUseAuditAction(String action, boolean denied) {
+        return denied ? action + "-denied" : action;
     }
 
     private static boolean isContainer(Block block) {
