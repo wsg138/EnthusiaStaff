@@ -37,6 +37,15 @@ tasks.withType<JavaCompile>().configureEach {
     options.release.set(25)
 }
 
+
+// Compile the bridge implementation into Paper without the standalone plugin descriptor.
+sourceSets {
+    named("main") {
+        java.srcDir(project(":paper-authority-bridge").file("src/main/java"))
+        java.exclude("**/EnthusiaStaffAuthorityBridgePlugin.java")
+    }
+}
+
 tasks.processResources {
     val resolvedPluginVersion = project.version.toString()
     inputs.property("pluginVersion", resolvedPluginVersion)

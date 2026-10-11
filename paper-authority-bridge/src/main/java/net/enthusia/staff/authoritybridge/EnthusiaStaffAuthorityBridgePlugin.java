@@ -17,6 +17,11 @@ public final class EnthusiaStaffAuthorityBridgePlugin extends JavaPlugin {
     public void onEnable() {
         try {
             Files.createDirectories(getDataFolder().toPath());
+            // No transition work may run in two plugins even when only one port is reachable.
+            if (EmbeddedAuthorityBridge.requested(
+                    getDataFolder().toPath().getParent().resolve("EnthusiaStaff"))) {
+                throw new IllegalStateException("embedded authority bridge requested in main Staff plugin");
+            }
             startAuthority();
         } catch (IOException | RuntimeException exception) {
             getLogger().log(Level.SEVERE,
