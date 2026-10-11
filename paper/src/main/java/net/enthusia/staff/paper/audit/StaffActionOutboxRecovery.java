@@ -105,7 +105,13 @@ final class StaffActionOutboxRecovery {
                 if (remaining == 0) {
                     break;
                 }
-                remaining -= replay(journal, remaining);
+                ReplayResult replayed = replay(journal, remaining);
+                remaining -= replayed.inspected();
+                if (replayed.outboxUnavailable()) {
+                    // Once a database insertion fails, do not hammer it for
+                    // every other journal during this pass.
+                    break;
+                }
                 // Share the per-pass record budget with retention validation.
                 remaining -= pruneCompletedOldJournal(journal, remaining);
             }
@@ -253,25 +259,35 @@ final class StaffActionOutboxRecovery {
         }
     }
 
-    private int replay(Path journal, int limit) {
+    private record ReplayResult(int inspected, boolean outboxUnavailable) {}
+
+    private static final class OutboxInsertionFailure extends Exception {
+        private static final long serialVersionUID = 1L;
+        private OutboxInsertionFailure(Exception cause) {
+            super(cause);
+        }
+    }
+
+    private ReplayResult replay(Path journal, int limit) {
         Path checkpoint = checkpointFor(journal);
         long position;
         try {
             position = readPosition(checkpoint);
         } catch (IOException | NumberFormatException exception) {
             warnOnce("Staff-action recovery checkpoint unreadable; manual repair required", exception);
-            return 0;
+            return new ReplayResult(0, false);
         }
         return replayFromCheckpoint(journal, checkpoint, position, limit);
     }
 
-    private int replayFromCheckpoint(Path journal, Path checkpoint, long position, int limit) {
+    private ReplayResult replayFromCheckpoint(Path journal, Path checkpoint, long position, int limit) {
         long accepted = position;
         int processed = 0;
+        boolean outboxUnavailable = false;
         try (RandomAccessFile file = new RandomAccessFile(journal.toFile(), "r")) {
             if (position > file.length()) {
                 warnOnce("Staff-action journal shorter than checkpoint; refusing automatic offset reset", null);
-                return 0;
+                return new ReplayResult(0, false);
             }
             file.seek(position);
             while (processed < limit) {
@@ -279,17 +295,22 @@ final class StaffActionOutboxRecovery {
                 if (json == null) {
                     break; // EOF or an incomplete final line: never checkpoint it.
                 }
+                // Count every complete row inspected, including a rejected
+                // database write, so outages cannot bypass the work budget.
+                processed++;
                 storeRecordOrSkipLegacy(json);
                 accepted = file.getFilePointer();
-                processed++;
             }
+        } catch (OutboxInsertionFailure exception) {
+            outboxUnavailable = true;
+            warnOnce("Staff-action outbox unavailable; pausing replay until next pass", exception);
         } catch (Exception exception) {
             // Keep the failed row in the journal; it will be retried next pass.
             warnOnce("Staff-action Discord replay paused; will retry undelivered record", exception);
         } finally {
             checkpointAcceptedRows(checkpoint, position, accepted);
         }
-        return processed;
+        return new ReplayResult(processed, outboxUnavailable);
     }
 
     private void storeRecordOrSkipLegacy(String json) throws Exception {
@@ -302,7 +323,11 @@ final class StaffActionOutboxRecovery {
         }
         UUID eventId = UUID.fromString(node.path("eventId").asText());
         Instant timestamp = Instant.parse(node.path("ts").asText());
-        writer.accept(eventId, json, timestamp);
+        try {
+            writer.accept(eventId, json, timestamp);
+        } catch (Exception exception) {
+            throw new OutboxInsertionFailure(exception);
+        }
     }
 
     private void checkpointAcceptedRows(Path checkpoint, long oldPosition, long accepted) {

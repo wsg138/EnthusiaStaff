@@ -54,6 +54,53 @@ class StaffActionOutboxRecoveryTest {
     }
 
     @Test
+    void databaseOutageStopsThePassBeforeHammeringLaterJournals() throws Exception {
+        Path first = oldJournal();
+        Path second = directory.resolve("staff-actions-"
+                + java.time.LocalDate.now(java.time.ZoneOffset.UTC).minusDays(44) + ".jsonl");
+        UUID firstId = UUID.randomUUID();
+        UUID secondId = UUID.randomUUID();
+        Files.writeString(first, record(firstId, "first") + "\n", StandardCharsets.UTF_8);
+        Files.writeString(second, record(secondId, "second") + "\n", StandardCharsets.UTF_8);
+        List<UUID> attempts = new ArrayList<>();
+        AtomicBoolean unavailable = new AtomicBoolean(true);
+        StaffActionOutboxRecovery recovery = new StaffActionOutboxRecovery(
+                directory, LOG, (id, json, time) -> {
+                    attempts.add(id);
+                    if (unavailable.get()) {
+                        throw new java.sql.SQLException("simulated database outage");
+                    }
+                });
+        recovery.recoverOnce();
+        assertEquals(List.of(firstId), attempts,
+                "A failed outbox write must pause later journals until the next pass");
+        assertTrue(Files.exists(first));
+        assertTrue(Files.exists(second));
+        assertFalse(Files.exists(cursorFor(first)));
+
+        unavailable.set(false);
+        recovery.recoverOnce();
+        assertEquals(List.of(firstId, firstId, secondId), attempts);
+        assertFalse(Files.exists(first));
+        assertFalse(Files.exists(second));
+    }
+
+    @Test
+    void malformedJournalDoesNotPreventAnotherJournalFromReplaying() throws Exception {
+        Path bad = oldJournal();
+        Path good = directory.resolve("staff-actions-"
+                + java.time.LocalDate.now(java.time.ZoneOffset.UTC).minusDays(44) + ".jsonl");
+        UUID id = UUID.randomUUID();
+        Files.writeString(bad, "{invalid-json}\n", StandardCharsets.UTF_8);
+        Files.writeString(good, record(id, "good") + "\n", StandardCharsets.UTF_8);
+        List<UUID> delivered = new ArrayList<>();
+        new StaffActionOutboxRecovery(directory, LOG,
+                (eventId, json, when) -> delivered.add(eventId)).recoverOnce();
+        assertEquals(List.of(id), delivered);
+        assertTrue(Files.exists(bad), "malformed historical evidence must remain");
+    }
+
+    @Test
     void crashBeforeCursorUpdateCanReplaySameStableIdWithoutCreatingSecondDbRow()
             throws Exception {
         UUID eventId = UUID.randomUUID();
