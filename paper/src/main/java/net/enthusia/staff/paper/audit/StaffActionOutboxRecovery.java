@@ -121,39 +121,53 @@ final class StaffActionOutboxRecovery {
      * Legacy first records are preserved for manual migration/inspection.
      */
     private void pruneCompletedOldJournal(Path journal) {
-        String name = journal.getFileName().toString();
-        LocalDate date = LocalDate.parse(name.substring(PREFIX.length(), PREFIX.length() + 10));
-        if (!date.isBefore(LocalDate.now(ZoneOffset.UTC).minusDays(RETENTION_DAYS))) {
+        if (!pastRetentionPeriod(journal)) {
             return;
         }
-        Path checkpoint = checkpointFor(journal);
         try {
-            if (!Files.isRegularFile(journal, LinkOption.NOFOLLOW_LINKS)
-                    || Files.isSymbolicLink(journal)
-                    || !Files.isRegularFile(checkpoint, LinkOption.NOFOLLOW_LINKS)
-                    || Files.isSymbolicLink(checkpoint)) {
+            if (!safeToPrune(journal)) {
                 return;
-            }
-            long size = Files.size(journal);
-            long acknowledged = readPosition(checkpoint);
-            if (size == 0 || acknowledged != size) {
-                warnOnce("Old staff-action Discord journal retained pending database replay", null);
-                return;
-            }
-            try (RandomAccessFile file = new RandomAccessFile(journal.toFile(), "r")) {
-                String first = readCompleteLine(file);
-                JsonNode initial = first == null ? null : JSON.readTree(first);
-                if (initial == null || !initial.hasNonNull("eventId")
-                        || !initial.hasNonNull("ts")) {
-                    warnOnce("Historical staff-action journal retained: unsafe to prune legacy records", null);
-                    return;
-                }
             }
             Files.delete(journal);
-            Files.deleteIfExists(checkpoint);
+            Files.deleteIfExists(checkpointFor(journal));
         } catch (IOException | RuntimeException exception) {
             warnOnce("Old staff-action journal retention check failed; preserving journal", exception);
         }
+    }
+
+    private static boolean pastRetentionPeriod(Path journal) {
+        String name = journal.getFileName().toString();
+        LocalDate date = LocalDate.parse(name.substring(PREFIX.length(), PREFIX.length() + 10));
+        return date.isBefore(LocalDate.now(ZoneOffset.UTC).minusDays(RETENTION_DAYS));
+    }
+
+    private boolean safeToPrune(Path journal) throws IOException {
+        Path checkpoint = checkpointFor(journal);
+        if (!Files.isRegularFile(journal, LinkOption.NOFOLLOW_LINKS)
+                || Files.isSymbolicLink(journal)
+                || !Files.isRegularFile(checkpoint, LinkOption.NOFOLLOW_LINKS)
+                || Files.isSymbolicLink(checkpoint)) {
+            return false;
+        }
+        long size = Files.size(journal);
+        long acknowledged = readPosition(checkpoint);
+        if (size == 0 || acknowledged != size) {
+            warnOnce("Old staff-action Discord journal retained pending database replay", null);
+            return false;
+        }
+        return firstRecordHasStableId(journal);
+    }
+
+    private boolean firstRecordHasStableId(Path journal) throws IOException {
+        try (RandomAccessFile file = new RandomAccessFile(journal.toFile(), "r")) {
+            String first = readCompleteLine(file);
+            JsonNode initial = first == null ? null : JSON.readTree(first);
+            if (initial != null && initial.hasNonNull("eventId") && initial.hasNonNull("ts")) {
+                return true;
+            }
+        }
+        warnOnce("Historical staff-action journal retained: unsafe to prune legacy records", null);
+        return false;
     }
 
     private int replay(Path journal, int limit) {
