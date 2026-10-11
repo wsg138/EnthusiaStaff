@@ -429,6 +429,8 @@ public final class StaffModeManager implements Listener {
                 StaffModeActivationCoordinator.ActivationPath.INITIAL_ENTRY,
                 "");
         if (active.get(playerId) == session) {
+            logStaffAction(player, "staff-mode-entered",
+                    StaffModeLifecycleAudit.detail(session.sessionId(), "fresh-entry", "initial"));
             entryListener.accept(player);
             sendInventoryEntryMessage(player);
         }
@@ -543,7 +545,7 @@ public final class StaffModeManager implements Listener {
                     StaffSessionSnapshot exiting = loaded.beginExit(playerId, clock.instant()).orElseThrow(() ->
                             new IllegalStateException("active staff session disappeared during rank-removal exit"));
                     message(playerId, RANK_REMOVED_MESSAGE);
-                    restoreAndVerify(playerId, exiting, loaded);
+                    restoreAndVerify(playerId, exiting, loaded, "rank-removed");
                     return;
                 }
                 rememberToolInventoryPreference(playerId);
@@ -701,15 +703,21 @@ public final class StaffModeManager implements Listener {
             pendingLocalSessions.put(playerId, rebound);
             onEntity(
                     playerId,
-                    current -> activateDurableSession(
-                            playerId,
-                            rebound,
-                            loaded,
-                            current,
-                            rank,
-                            StaffModeActivationCoordinator.ActivationPath.INITIAL_ENTRY,
-                            "Your network Staff Mode session resumed on this backend."
-                    ),
+                    current -> {
+                        activateDurableSession(
+                                playerId,
+                                rebound,
+                                loaded,
+                                current,
+                                rank,
+                                StaffModeActivationCoordinator.ActivationPath.INITIAL_ENTRY,
+                                "Your network Staff Mode session resumed on this backend."
+                        );
+                        if (active.get(playerId) == rebound) {
+                            logStaffAction(current, "staff-mode-resumed",
+                                    StaffModeLifecycleAudit.detail(rebound.sessionId(), "detached-rebind", "resume"));
+                        }
+                    },
                     () -> detachUnappliedLease(playerId, rebound, loaded, captured.checksum())
             );
         } catch (RuntimeException exception) {
@@ -805,7 +813,7 @@ public final class StaffModeManager implements Listener {
                 try {
                     StaffSessionSnapshot exiting = loaded.beginExit(playerId, clock.instant()).orElseThrow(() ->
                             new IllegalStateException("active staff session disappeared during recovery exit"));
-                    restoreAndVerify(playerId, exiting, loaded);
+                    restoreAndVerify(playerId, exiting, loaded, "rank-removed");
                 } catch (RuntimeException exception) {
                     recoveryGate.retry(playerId);
                     plugin.getLogger().log(Level.SEVERE, "Staff session recovery exit failed", exception);
@@ -828,6 +836,10 @@ public final class StaffModeManager implements Listener {
                 StaffModeActivationCoordinator.ActivationPath.ACTIVE_RECOVERY,
                 "Your active staff session was resumed."
         );
+        if (active.get(playerId) == session) {
+            logStaffAction(player, "staff-mode-resumed",
+                    StaffModeLifecycleAudit.detail(session.sessionId(), "active-recovery", "resume"));
+        }
     }
 
     private void activateDurableSession(
@@ -1526,7 +1538,7 @@ public final class StaffModeManager implements Listener {
                 message(playerId, "No active staff session was found.");
                 return;
             }
-            restoreAndVerify(playerId, session, loaded);
+            restoreAndVerify(playerId, session, loaded, StaffModeLifecycleAudit.exitReason(operation));
         })) {
             transitions.remove(playerId);
             message(playerId, "The bounded work queue is full; staff mode exit did not start.");
@@ -1534,8 +1546,14 @@ public final class StaffModeManager implements Listener {
     }
 
     private void restoreAndVerify(UUID playerId, StaffSessionSnapshot session, StaffSessionStore loaded) {
+        restoreAndVerify(playerId, session, loaded, "recovery");
+    }
+
+    private void restoreAndVerify(UUID playerId, StaffSessionSnapshot session,
+                                  StaffSessionStore loaded, String reason) {
         onEntity(playerId, player -> {
             try {
+                ExitAuditContext exitAudit = captureExitAudit(playerId, player);
                 if (!restoreSavedState(player, session)) {
                     recoveryGate.retry(playerId);
                     submit(() -> loaded.recoveryRequired(
@@ -1546,7 +1564,8 @@ public final class StaffModeManager implements Listener {
                 }
                 String restoredChecksum = codec.verifiedRestorationChecksum(
                         player, session.serverId(), session.snapshot(), session.checksum());
-                if (!submit(() -> completeRestoration(playerId, session, loaded, restoredChecksum))) {
+                if (!submit(() -> completeRestoration(
+                        playerId, session, loaded, restoredChecksum, exitAudit, reason))) {
                     retainRecoveryAfterRuntimeExit(playerId);
                     player.sendMessage(StaffMessageStyle.style(Component.text(
                             "State was restored, but durable verification is still pending; contact an administrator."
@@ -1587,11 +1606,56 @@ public final class StaffModeManager implements Listener {
         }
     }
 
+    private record ExitAuditContext(UUID playerId, String playerName, StaffRank rank,
+                                    boolean vanished, boolean previouslyActive) {
+    }
+
+    private ExitAuditContext captureExitAudit(UUID playerId, Player player) {
+        String playerName;
+        try {
+            playerName = player.getName();
+        } catch (RuntimeException exception) {
+            playerName = "?";
+        }
+        boolean vanished;
+        try {
+            vanished = Boolean.TRUE.equals(vanishedLookup.apply(playerId));
+        } catch (RuntimeException exception) {
+            vanished = false;
+        }
+        StaffRank rank = ranks.get(playerId);
+        if (rank == null) {
+            rank = PaperStaffRankResolver.resolve(player::hasPermission).orElse(null);
+        }
+        return new ExitAuditContext(playerId, playerName, rank,
+                vanished, active.containsKey(playerId));
+    }
+
+    private void logCommittedExit(ExitAuditContext exitAudit, UUID sessionId, String reason) {
+        net.enthusia.staff.paper.audit.StaffActionLogger logger = actionLogger;
+        if (logger == null) {
+            return;
+        }
+        // The player and Bukkit state were captured on the entity scheduler before restore.
+        // This callback runs on the bounded persistence worker only after completeExit succeeds.
+        try {
+            logger.recordStaffAction(exitAudit.playerId(), exitAudit.playerName(), exitAudit.rank(),
+                    exitAudit.vanished(), false, "staff-mode-exited",
+                    StaffModeLifecycleAudit.detail(sessionId,
+                            exitAudit.previouslyActive() ? "local-session" : "recovered-session",
+                            reason));
+        } catch (RuntimeException exception) {
+            plugin.getLogger().log(Level.WARNING, "Confirmed staff-mode exit audit failed", exception);
+        }
+    }
+
     private void completeRestoration(
             UUID playerId,
             StaffSessionSnapshot session,
             StaffSessionStore loaded,
-            String restoredChecksum
+            String restoredChecksum,
+            ExitAuditContext exitAudit,
+            String reason
     ) {
         boolean closed;
         try {
@@ -1608,6 +1672,7 @@ public final class StaffModeManager implements Listener {
             return;
         }
         completeRuntimeExit(playerId);
+        logCommittedExit(exitAudit, session.sessionId(), reason);
         safeMessage(playerId, "Staff mode exited; your exact saved state was restored and verified.");
     }
 
