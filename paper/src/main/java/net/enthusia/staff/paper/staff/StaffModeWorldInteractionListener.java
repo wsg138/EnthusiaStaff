@@ -45,6 +45,8 @@ import org.bukkit.inventory.InventoryHolder;
 public final class StaffModeWorldInteractionListener implements Listener {
     private static final String CONTAINER_EDIT_ACTION = "container-edit";
     private static final String CONTAINER_EDIT_DENIED_ACTION = "container-edit-denied";
+    private static final String ARMOR_STAND_EDIT_ACTION = "armor-stand-edit";
+    private static final String ARMOR_STAND_EDIT_DENIED_ACTION = "armor-stand-edit-denied";
 
     private final StaffModeManager staffMode;
 
@@ -303,19 +305,28 @@ public final class StaffModeWorldInteractionListener implements Listener {
             return;
         }
         if (staffMode.isUnrestricted(player)) {
-            staffMode.logStaffAction(player, "armor-stand-edit",
+            staffMode.logStaffAction(player, ARMOR_STAND_EDIT_ACTION,
                     event.getRightClicked().getType().toString());
             return;
         }
         StaffDutyTier tier = staffMode.dutyTier(player);
         if (StaffModeWorldInteractionPolicy.blocksContainerEntityEdit(tier)) {
             event.setCancelled(true);
+            // Only the dedicated manipulation event records this denied edit.
+            // General entity-interact variants can both fire for one click.
+            staffMode.logStaffAction(player, armorStandEditAuditAction(tier),
+                    event.getRightClicked().getType().toString());
             return;
         }
         if (StaffModeWorldInteractionPolicy.logsContainerEdit(tier)) {
-            staffMode.logStaffAction(player, "armor-stand-edit",
+            staffMode.logStaffAction(player, armorStandEditAuditAction(tier),
                     event.getRightClicked().getType().toString());
         }
+    }
+
+    static String armorStandEditAuditAction(StaffDutyTier tier) {
+        return StaffModeWorldInteractionPolicy.blocksContainerEntityEdit(tier)
+                ? ARMOR_STAND_EDIT_DENIED_ACTION : ARMOR_STAND_EDIT_ACTION;
     }
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
