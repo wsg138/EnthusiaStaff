@@ -292,6 +292,70 @@ class NetworkIdentityStoreIntegrationTest {
         assertTrue(accounts.unlink(discord, linkedAlt, altLink.revision(),
                 "unlink-derived-" + linkedAlt, now.plusSeconds(3)).replayed());
         assertEquals(0, store().observeConnectedAlts(linkedAlt, now.plusSeconds(4), false).inheritedSanctions());
+
+        // The unique target/source row must reactivate after a fresh verified link,
+        // not get stuck REVOKED behind INSERT IGNORE.
+        accounts.link(discord, linkedAlt, DiscordMinecraftLinkSource.STAFF_RECOVERY,
+                "relink-after-unlink-" + linkedAlt, now.plusSeconds(5));
+        assertEquals(1, store().observeConnectedAlts(linkedAlt, now.plusSeconds(6), false).inheritedSanctions());
+        assertEquals(0, store().observeConnectedAlts(linkedAlt, now.plusSeconds(7), false).inheritedSanctions());
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement state = connection.prepareStatement("""
+                    SELECT status, revision FROM sanctions WHERE target_id = ? AND inherited_from = ?
+                    """);
+             PreparedStatement eventCount = connection.prepareStatement("""
+                    SELECT COUNT(*) FROM sanction_events WHERE event_type = 'INHERITED'
+                    AND sanction_id IN (
+                      SELECT sanction_id FROM sanctions WHERE target_id = ? AND inherited_from = ?)
+                    """)) {
+            state.setBytes(1, MariaDbIntegrationSupport.uuidBytes(linkedAlt));
+            state.setBytes(2, MariaDbIntegrationSupport.uuidBytes(sanction));
+            try (ResultSet rows = state.executeQuery()) {
+                assertTrue(rows.next());
+                assertEquals("ACTIVE", rows.getString("status"));
+                assertEquals(2L, rows.getLong("revision"));
+            }
+            eventCount.setBytes(1, MariaDbIntegrationSupport.uuidBytes(linkedAlt));
+            eventCount.setBytes(2, MariaDbIntegrationSupport.uuidBytes(sanction));
+            assertEquals(2, readCount(eventCount));
+        }
+
+        // Explicit staff revocation must remain terminal even while the verified link exists.
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement revoke = connection.prepareStatement("""
+                    UPDATE sanctions SET status = 'REVOKED', ended_at = ?, revision = revision + 1
+                    WHERE target_id = ? AND inherited_from = ? AND status = 'ACTIVE'
+                    """);
+             PreparedStatement manualEvent = connection.prepareStatement("""
+                    INSERT INTO sanction_events(event_id, sanction_id, event_type, actor_id,
+                        occurred_at, reason, event_json, idempotency_key)
+                    SELECT ?, sanction_id, 'MANUAL_REVOKED', ?, ?, 'Staff override', '{}', ?
+                    FROM sanctions WHERE target_id = ? AND inherited_from = ?
+                    """)) {
+            revoke.setTimestamp(1, java.sql.Timestamp.from(now.plusSeconds(8)));
+            revoke.setBytes(2, MariaDbIntegrationSupport.uuidBytes(linkedAlt));
+            revoke.setBytes(3, MariaDbIntegrationSupport.uuidBytes(sanction));
+            assertEquals(1, revoke.executeUpdate());
+            manualEvent.setBytes(1, MariaDbIntegrationSupport.uuidBytes(UUID.randomUUID()));
+            manualEvent.setBytes(2, MariaDbIntegrationSupport.uuidBytes(reviewer));
+            manualEvent.setTimestamp(3, java.sql.Timestamp.from(now.plusSeconds(8)));
+            manualEvent.setString(4, "manual-override-" + linkedAlt);
+            manualEvent.setBytes(5, MariaDbIntegrationSupport.uuidBytes(linkedAlt));
+            manualEvent.setBytes(6, MariaDbIntegrationSupport.uuidBytes(sanction));
+            assertEquals(1, manualEvent.executeUpdate());
+        }
+        assertEquals(0, store().observeConnectedAlts(linkedAlt, now.plusSeconds(9), false).inheritedSanctions());
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement("""
+                    SELECT status FROM sanctions WHERE target_id = ? AND inherited_from = ?
+                    """)) {
+            statement.setBytes(1, MariaDbIntegrationSupport.uuidBytes(linkedAlt));
+            statement.setBytes(2, MariaDbIntegrationSupport.uuidBytes(sanction));
+            try (ResultSet rows = statement.executeQuery()) {
+                assertTrue(rows.next());
+                assertEquals("REVOKED", rows.getString("status"));
+            }
+        }
     }
 
     @Test
