@@ -13,6 +13,10 @@ import java.time.Duration;
 interface DiscordWebhookTransport {
     Delivery send(DiscordWebhookRoute route, String content);
 
+    default Delivery send(DiscordWebhookRoute route, String content, boolean allowRolePing) {
+        return send(route, content);
+    }
+
     record Delivery(boolean success, String errorCode) {
         public Delivery {
             if (errorCode == null || errorCode.isBlank()) {
@@ -35,6 +39,7 @@ interface DiscordWebhookTransport {
         private static final int HTTP_CLIENT_ERROR_MINIMUM = 400;
         private static final int HTTP_TOO_MANY_REQUESTS = 429;
         private static final int HTTP_SERVER_ERROR_MINIMUM = 500;
+        private static final String ALERTS_DESTINATION = "alerts";
 
         @FunctionalInterface
         interface HttpExchange {
@@ -89,11 +94,16 @@ interface DiscordWebhookTransport {
 
         @Override
         public Delivery send(DiscordWebhookRoute route, String content) {
+            return send(route, content, true);
+        }
+
+        @Override
+        public Delivery send(DiscordWebhookRoute route, String content, boolean allowRolePing) {
             if (route == null || content == null || content.isBlank()) {
                 return Delivery.failed("INVALID_DELIVERY_INPUT");
             }
             try {
-                ObjectNode body = buildEmbedBody(route, content);
+                ObjectNode body = buildEmbedBody(route, content, allowRolePing);
                 int statusCode = exchange.post(
                         route.endpoint(),
                         requestTimeout,
@@ -113,15 +123,12 @@ interface DiscordWebhookTransport {
          * cannot introduce new destinations or mass mentions; an explicit role ping
          * is allowed only for the private alerts destination and a configured role.
          */
-        private ObjectNode buildEmbedBody(DiscordWebhookRoute route, String rendered) {
+        private ObjectNode buildEmbedBody(DiscordWebhookRoute route, String rendered, boolean allowRolePing) {
             String[] lines = rendered.split("\\n");
             ObjectNode body = json.createObjectNode();
             ObjectNode mentions = body.putObject("allowed_mentions");
             mentions.putArray("parse");
-            if ("alerts".equals(route.destination()) && !alertRoleId.isEmpty()) {
-                body.put("content", "<@&" + alertRoleId + ">");
-                mentions.putArray("roles").add(alertRoleId);
-            }
+            appendConfiguredStaffRoleMention(body, mentions, route, allowRolePing);
             var embeds = body.putArray("embeds");
             ObjectNode embed = embeds.addObject();
             embed.put("title", prettyTitle(lines[0]));
@@ -143,6 +150,15 @@ interface DiscordWebhookTransport {
                 field.put("inline", isCompact(name));
             }
             return body;
+        }
+
+        private void appendConfiguredStaffRoleMention(
+                ObjectNode body, ObjectNode mentions, DiscordWebhookRoute route, boolean allowed
+        ) {
+            if (allowed && ALERTS_DESTINATION.equals(route.destination()) && !alertRoleId.isEmpty()) {
+                body.put("content", "<@&" + alertRoleId + ">");
+                mentions.putArray("roles").add(alertRoleId);
+            }
         }
 
         private static String prettyTitle(String raw) {
@@ -171,7 +187,7 @@ interface DiscordWebhookTransport {
                 case "punishments" -> 0xCD4A4A;
                 case "logs-staffmode" -> 0x5382B4;
                 case "reports" -> 0xD69C42;
-                case "alerts" -> 0xC87A39;
+                case ALERTS_DESTINATION -> 0xC87A39;
                 default -> 0x697586;
             };
         }

@@ -1,6 +1,7 @@
 package net.enthusia.staff.paper.staff;
 
 import java.util.Objects;
+import org.bukkit.Material;
 import org.bukkit.event.block.Action;
 
 /**
@@ -61,6 +62,15 @@ final class StaffModeWorldInteractionPolicy {
         return tier == StaffDutyTier.MOD
                 || tier == StaffDutyTier.DEVELOPER
                 || tier == StaffDutyTier.ADMIN;
+    }
+
+    /**
+     * Protect existing farmland from passive trampling while staff mode (including
+     * transitions) or standalone vanish is active. Intentionally ignores
+     * unrestricted permissions; normal farming remains unchanged.
+     */
+    static boolean blocksFarmlandTrampling(Material block, boolean protectedStaffOrVanished) {
+        return protectedStaffOrVanished && block == Material.FARMLAND;
     }
 
     /** Whether a {@link PlayerInteractEvent} block interaction must be cancelled. */

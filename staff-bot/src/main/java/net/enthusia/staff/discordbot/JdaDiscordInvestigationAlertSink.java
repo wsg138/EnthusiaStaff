@@ -16,6 +16,7 @@ import net.dv8tion.jda.api.components.buttons.Button;
 import net.dv8tion.jda.api.entities.Message;
 import net.dv8tion.jda.api.entities.Role;
 import net.dv8tion.jda.api.entities.channel.concrete.TextChannel;
+import net.dv8tion.jda.api.requests.restaction.MessageCreateAction;
 import net.dv8tion.jda.api.utils.cache.CacheFlag;
 import net.enthusia.staff.domain.investigation.EvasionAlert;
 
@@ -73,15 +74,28 @@ final class JdaDiscordInvestigationAlertSink implements DiscordInvestigationAler
             return Delivery.retry(privacyError.orElseThrow());
         }
         try {
-            CompletableFuture<Message> request = channel.sendMessage("<@&" + staffRoleId + "> " + content(alert))
-                    .setAllowedMentions(List.of(Message.MentionType.ROLE))
-                    .mentionRoles(List.of(staffRoleId))
-                    .addComponents(ActionRow.of(buttons(alert)))
-                    .submit();
+            boolean initialAttempt = shouldPingStaff(alert);
+            MessageCreateAction action = channel.sendMessage(alertContent(alert, staffRoleId))
+                    .setAllowedMentions(initialAttempt ? List.of(Message.MentionType.ROLE) : List.of());
+            if (initialAttempt) {
+                action.mentionRoles(List.of(staffRoleId));
+            }
+            CompletableFuture<Message> request = action.addComponents(ActionRow.of(buttons(alert))).submit();
             return awaitSend(request, SEND_TIMEOUT);
         } catch (RuntimeException exception) {
             return Delivery.retry("DISCORD_ALERT_SEND_FAILED");
         }
+    }
+
+    static boolean shouldPingStaff(EvasionAlert alert) {
+        // A timed-out REST request may already have reached Discord. On subsequent
+        // durable attempts, deliver the alert quietly rather than pinging staff twice.
+        return alert != null && alert.discordAttempts() == 0;
+    }
+
+    static String alertContent(EvasionAlert alert, String staffRoleId) {
+        String prefix = shouldPingStaff(alert) ? "<@&" + staffRoleId + "> " : "";
+        return prefix + content(alert);
     }
 
     static Delivery awaitSend(CompletableFuture<?> request, Duration timeout) {

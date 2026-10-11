@@ -61,6 +61,7 @@ final class JdaStaffModerationListener extends ListenerAdapter {
     private static final String CONSOLE = "console";
     private static final String REVIEW_REQUEST = "review-request";
     private static final String REVIEW_QUEUE = "review-queue";
+    private static final String REVIEW_VIEW_OPTION = "view";
     private static final String REVIEW_MODAL_NOTE = "review-note";
     private static final String REPORT_MODAL_NOTE = "report-note";
     private static final String REVIEW_ID = "request-id";
@@ -222,8 +223,37 @@ final class JdaStaffModerationListener extends ListenerAdapter {
         dispatchReadCommand(event, actorId, actorName);
     }
 
+    enum ReviewQueueView {
+        ALL, PUNISHMENTS, REPORTS, ALTS;
+
+        static ReviewQueueView parse(String value) {
+            if (value == null) {
+                return ALL;
+            }
+            return switch (value) {
+                case "punishments" -> PUNISHMENTS;
+                case "reports" -> REPORTS;
+                case "alts" -> ALTS;
+                default -> ALL;
+            };
+        }
+
+        boolean showPunishments() {
+            return this == ALL || this == PUNISHMENTS;
+        }
+
+        boolean showReports() {
+            return this == ALL || this == REPORTS;
+        }
+
+        boolean showAlts() {
+            return this == ALL || this == ALTS;
+        }
+    }
+
     /** Private interactive queue. Every button is HMAC-bound to the invoker and short-lived. */
     private void dispatchReviewQueue(SlashCommandInteractionEvent event, long actorId, String actorName) {
+        ReviewQueueView view = ReviewQueueView.parse(option(event, REVIEW_VIEW_OPTION, "all"));
         long interactionId = event.getIdLong();
         if (!claim(interactionId, event)) {
             return;
@@ -238,17 +268,26 @@ final class JdaStaffModerationListener extends ListenerAdapter {
                         return;
                     }
                     var pulse = moderationRuntime.reviewPulse();
-                    var altAlerts = moderationRuntime.pendingAltAlerts(2);
-                    var reports = moderationRuntime.pendingReports(altAlerts.isEmpty() ? 2 : 1);
-                    var reviews = moderationRuntime.pendingReviews(5 - reports.size() - altAlerts.size());
-                    StringBuilder message = new StringBuilder("**Staff review center**\n")
+                    var altAlerts = view.showAlts()
+                            ? moderationRuntime.pendingAltAlerts(view == ReviewQueueView.ALL ? 2 : 5)
+                            : java.util.List.<net.enthusia.staff.persistence.DiscordStaffReadRuntime.PendingAltAlert>of();
+                    var reports = view.showReports()
+                            ? moderationRuntime.pendingReports(
+                                    view == ReviewQueueView.ALL ? (altAlerts.isEmpty() ? 2 : 1) : 5)
+                            : java.util.List.<net.enthusia.staff.persistence.DiscordStaffReadRuntime.PendingReport>of();
+                    var reviews = view.showPunishments()
+                            ? moderationRuntime.pendingReviews(
+                                    view == ReviewQueueView.ALL ? 5 - reports.size() - altAlerts.size() : 5)
+                            : java.util.List.<net.enthusia.staff.persistence.DiscordStaffReadRuntime.PendingReview>of();
+                    StringBuilder message = new StringBuilder(512).append("**Staff review center · ")
+                            .append(view.name().toLowerCase(java.util.Locale.ROOT)).append("**\n")
                             .append("Pending punishments: ").append(pulse.pendingPunishmentRequests())
                             .append(" | Open reports: ").append(pulse.openReports())
                             .append(" | Claimed reports: ").append(pulse.claimedReports())
                             .append(" | Alt alert events (24h): ").append(pulse.altSignalsInLastDay())
                             .append("\n");
                     if (reviews.isEmpty() && reports.isEmpty() && altAlerts.isEmpty()) {
-                        hook.sendMessage(message.append("No actionable punishment requests, reports or alt alerts.").toString())
+                        hook.sendMessage(message.append("No actionable items in this view. Try another /review-queue view.").toString())
                                 .queue();
                         return;
                     }
@@ -310,7 +349,8 @@ final class JdaStaffModerationListener extends ListenerAdapter {
                         ));
                         number++;
                     }
-                    message.append("Controls expire shortly. Every action rechecks Minecraft authority and state.");
+                    message.append("Showing at most five items; select another /review-queue view for more. "
+                            + "Controls expire shortly. Every action rechecks Minecraft authority and state.");
                     hook.sendMessage(message.toString()).addComponents(rows).queue();
                 } catch (RuntimeException exception) {
                     log("discord_review_queue_failed", exception);
@@ -1317,7 +1357,13 @@ final class JdaStaffModerationListener extends ListenerAdapter {
                 userSlash(HISTORY, "View recent moderation history", discovery),
                 userSlash(NOTES, "View recent private staff notes", discovery),
                 stringSlash(CASE, "View a moderation case by exact ID", CASE_ID_OPTION, "16-character case ID", discovery),
-                Commands.slash(REVIEW_QUEUE, "View Minecraft punishment requests with Approve/Deny buttons")
+                Commands.slash(REVIEW_QUEUE, "Review punishments, reports and alt-evasion alerts")
+                        .addOptions(new OptionData(OptionType.STRING, REVIEW_VIEW_OPTION,
+                                "Choose a queue to see up to five matching cases", false)
+                                .addChoice("All (mixed)", "all")
+                                .addChoice("Punishment approvals", "punishments")
+                                .addChoice("Player reports", "reports")
+                                .addChoice("Alt-evasion alerts", "alts"))
                         .setDefaultPermissions(discovery),
                 Commands.slash(REVIEW_REQUEST, "Approve or deny a Minecraft punishment request")
                         .addOption(OptionType.STRING, REVIEW_ID, "Exact request UUID", true)

@@ -1,6 +1,7 @@
 package net.enthusia.staff.paper.staff;
 
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import org.bukkit.Material;
 import org.bukkit.block.Block;
@@ -15,6 +16,7 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.block.Action;
 import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.block.BlockPlaceEvent;
+import org.bukkit.event.entity.EntityChangeBlockEvent;
 import org.bukkit.event.inventory.InventoryAction;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryDragEvent;
@@ -95,22 +97,33 @@ public final class StaffModeWorldInteractionListener implements Listener {
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     public void onBucketFill(PlayerBucketFillEvent event) {
-        cancelWorldUse(event.getPlayer(), event, "bucket-fill", describe(event.getBlockClicked()));
+        cancelWorldUse(event.getPlayer(), event, "bucket-fill", describe(event.getBlockClicked()), true);
     }
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     public void onBucketEmpty(PlayerBucketEmptyEvent event) {
-        cancelWorldUse(event.getPlayer(), event, "bucket-empty", describe(event.getBlockClicked()));
+        cancelWorldUse(event.getPlayer(), event, "bucket-empty", describe(event.getBlockClicked()), true);
     }
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     public void onHarvest(PlayerHarvestBlockEvent event) {
-        cancelWorldUse(event.getPlayer(), event, "block-harvest", describe(event.getHarvestedBlock()));
+        cancelWorldUse(event.getPlayer(), event, "block-harvest", describe(event.getHarvestedBlock()), true);
     }
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     public void onInteract(PlayerInteractEvent event) {
         Player player = event.getPlayer();
+        // Paper/Bukkit farmland trampling is a PHYSICAL block interaction.
+        // Run before the tier/unrestricted checks: passive damage is not a
+        // permissible world edit for staff mode or standalone vanish.
+        if (event.getAction() == Action.PHYSICAL
+                && StaffModeWorldInteractionPolicy.blocksFarmlandTrampling(
+                        event.getClickedBlock() == null ? null : event.getClickedBlock().getType(),
+                        staffMode.protectsFarmland(player.getUniqueId()))) {
+            event.setCancelled(true);
+            staffMode.logStaffAction(player, "farmland-trample-denied", describe(event.getClickedBlock()));
+            return;
+        }
         if (!onDuty(player)) {
             return;
         }
@@ -154,6 +167,22 @@ public final class StaffModeWorldInteractionListener implements Listener {
                     "block-interact",
                     action + " " + describe(event.getClickedBlock())
             );
+        }
+    }
+
+    // Defensive fallback for implementations that notify an entity-caused block
+    // change without exposing the corresponding PHYSICAL interaction. Only a
+    // player's attempted farmland conversion is affected.
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+    public void onFarmlandChange(EntityChangeBlockEvent event) {
+        if (!(event.getEntity() instanceof Player player)) {
+            return;
+        }
+        if (StaffModeWorldInteractionPolicy.blocksFarmlandTrampling(
+                event.getBlock().getType(), staffMode.protectsFarmland(player.getUniqueId()))
+                && event.getTo() == Material.DIRT) {
+            event.setCancelled(true);
+            staffMode.logStaffAction(player, "farmland-trample-denied", describe(event.getBlock()));
         }
     }
 
@@ -250,7 +279,8 @@ public final class StaffModeWorldInteractionListener implements Listener {
             handleContainerEntity(player, event, event.getRightClicked().getType().toString());
             return;
         }
-        cancelWorldUse(player, event, "entity-interact", event.getRightClicked().getType().toString());
+        // Interact and InteractAtEntity may both fire; defer denied logging until deduplicated.
+        cancelWorldUse(player, event, "entity-interact", event.getRightClicked().getType().toString(), false);
     }
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
@@ -263,7 +293,7 @@ public final class StaffModeWorldInteractionListener implements Listener {
             handleContainerEntity(player, event, event.getRightClicked().getType().toString());
             return;
         }
-        cancelWorldUse(player, event, "entity-interact-at", event.getRightClicked().getType().toString());
+        cancelWorldUse(player, event, "entity-interact-at", event.getRightClicked().getType().toString(), false);
     }
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
@@ -291,18 +321,18 @@ public final class StaffModeWorldInteractionListener implements Listener {
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     public void onShear(PlayerShearEntityEvent event) {
         cancelWorldUse(event.getPlayer(), event, "entity-shear",
-                event.getEntity().getType().toString());
+                event.getEntity().getType().toString(), true);
     }
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     public void onConsume(PlayerItemConsumeEvent event) {
         cancelWorldUse(event.getPlayer(), event, "item-consume",
-                event.getItem().getType().toString());
+                event.getItem().getType().toString(), true);
     }
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     public void onFish(PlayerFishEvent event) {
-        cancelWorldUse(event.getPlayer(), event, "fishing", event.getState().toString());
+        cancelWorldUse(event.getPlayer(), event, "fishing", event.getState().toString(), true);
     }
 
     private void handleContainerEntity(Player player, Cancellable event, String detail) {
@@ -324,7 +354,8 @@ public final class StaffModeWorldInteractionListener implements Listener {
         return staffMode.active(player.getUniqueId());
     }
 
-    private void cancelWorldUse(Player player, Cancellable event, String action, String detail) {
+    private void cancelWorldUse(Player player, Cancellable event, String action,
+                                String detail, boolean auditDenied) {
         if (!onDuty(player)) {
             return;
         }
@@ -335,9 +366,21 @@ public final class StaffModeWorldInteractionListener implements Listener {
         StaffDutyTier tier = staffMode.dutyTier(player);
         if (StaffModeWorldInteractionPolicy.blocksWorldUse(tier)) {
             event.setCancelled(true);
-        } else if (StaffModeWorldInteractionPolicy.logsWorldInteraction(tier)) {
-            staffMode.logStaffAction(player, action, detail);
         }
+        Optional<String> auditedAction = worldUseAuditAction(tier, action, auditDenied);
+        if (auditedAction.isPresent()) {
+            staffMode.logStaffAction(player, auditedAction.orElseThrow(), detail);
+        }
+    }
+
+    // Keep the logging decision tied to the same tier policy that enforces the
+    // denial. Entity-interact variants opt out until duplicate events are handled.
+    static Optional<String> worldUseAuditAction(StaffDutyTier tier, String action, boolean auditDenied) {
+        if (StaffModeWorldInteractionPolicy.blocksWorldUse(tier)) {
+            return auditDenied ? Optional.of(action + "-denied") : Optional.empty();
+        }
+        return StaffModeWorldInteractionPolicy.logsWorldInteraction(tier)
+                ? Optional.of(action) : Optional.empty();
     }
 
     private static boolean isContainer(Block block) {

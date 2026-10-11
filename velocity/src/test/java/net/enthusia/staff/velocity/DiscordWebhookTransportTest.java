@@ -87,6 +87,10 @@ final class DiscordWebhookTransportTest {
         assertEquals("<@&" + role + ">", alertPayload.path("content").asText());
         assertEquals(role, alertPayload.path("allowed_mentions").path("roles").get(0).asText());
         assertEquals(0, alertPayload.path("allowed_mentions").path("parse").size());
+        transport.send(alert, "ALT_EVASION_REVIEW\\ntargetId=player", false);
+        JsonNode quietRetry = new ObjectMapper().readTree(sent.get());
+        assertTrue(quietRetry.path("content").isMissingNode());
+        assertTrue(quietRetry.path("allowed_mentions").path("roles").isMissingNode());
         transport.send(punishment, "PUNISHMENT_CREATED\\ntargetId=player");
         JsonNode punishmentPayload = new ObjectMapper().readTree(sent.get());
         assertTrue(punishmentPayload.path("content").isMissingNode());

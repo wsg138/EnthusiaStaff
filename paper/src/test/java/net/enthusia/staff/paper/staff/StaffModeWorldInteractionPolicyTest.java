@@ -4,13 +4,26 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.util.Optional;
 import java.util.Set;
 import net.enthusia.staff.domain.auth.StaffRank;
+import org.bukkit.Material;
 import org.bukkit.event.block.Action;
 import org.bukkit.event.inventory.InventoryAction;
 import org.junit.jupiter.api.Test;
 
 class StaffModeWorldInteractionPolicyTest {
+    private static final String BUCKET_FILL_ACTION = "bucket-fill";
+    @Test
+    void farmlandTramplingIsDeniedForAnyProtectedStaffOrVanishedPlayer() {
+        assertTrue(StaffModeWorldInteractionPolicy.blocksFarmlandTrampling(Material.FARMLAND, true));
+        assertFalse(StaffModeWorldInteractionPolicy.blocksFarmlandTrampling(Material.FARMLAND, false));
+        assertFalse(StaffModeWorldInteractionPolicy.blocksFarmlandTrampling(Material.WHEAT, true));
+        assertFalse(StaffModeWorldInteractionPolicy.blocksFarmlandTrampling(Material.DIRT, true));
+        assertFalse(StaffModeWorldInteractionPolicy.blocksFarmlandTrampling(null, true));
+    }
+
+
     @Test
     void rejectedBlockEditsHaveDistinctAuditActionNames() {
         assertTrue(StaffModeWorldInteractionPolicy.blocksBlockEdit(StaffDutyTier.HELPER));
@@ -22,6 +35,37 @@ class StaffModeWorldInteractionPolicyTest {
                 StaffModeWorldInteractionListener.blockEditAuditAction("block-break", false));
         assertEquals("block-place",
                 StaffModeWorldInteractionListener.blockEditAuditAction("block-place", false));
+    }
+
+    @Test
+    void deniedWorldUseAuditsMeaningfulAttemptsWithoutChangingTierPolicy() {
+        assertTrue(StaffModeWorldInteractionPolicy.blocksWorldUse(StaffDutyTier.HELPER));
+        assertTrue(StaffModeWorldInteractionPolicy.blocksWorldUse(StaffDutyTier.MOD));
+        assertFalse(StaffModeWorldInteractionPolicy.blocksWorldUse(StaffDutyTier.ADMIN));
+        for (StaffDutyTier tier : java.util.List.of(StaffDutyTier.HELPER, StaffDutyTier.MOD)) {
+            assertEquals(Optional.of("bucket-fill-denied"),
+                    StaffModeWorldInteractionListener.worldUseAuditAction(tier, BUCKET_FILL_ACTION, true));
+            assertEquals(Optional.of("block-harvest-denied"),
+                    StaffModeWorldInteractionListener.worldUseAuditAction(tier, "block-harvest", true));
+            assertEquals(Optional.of("entity-shear-denied"),
+                    StaffModeWorldInteractionListener.worldUseAuditAction(tier, "entity-shear", true));
+            assertEquals(Optional.of("item-consume-denied"),
+                    StaffModeWorldInteractionListener.worldUseAuditAction(tier, "item-consume", true));
+            assertEquals(Optional.of("fishing-denied"),
+                    StaffModeWorldInteractionListener.worldUseAuditAction(tier, "fishing", true));
+            assertEquals(Optional.empty(), StaffModeWorldInteractionListener.worldUseAuditAction(
+                    tier, "entity-interact", false), "avoid duplicate entity-interact audits");
+        }
+        assertEquals(Optional.of(BUCKET_FILL_ACTION),
+                StaffModeWorldInteractionListener.worldUseAuditAction(StaffDutyTier.ADMIN,
+                        BUCKET_FILL_ACTION, true));
+        assertEquals(Optional.of(BUCKET_FILL_ACTION),
+                StaffModeWorldInteractionListener.worldUseAuditAction(StaffDutyTier.DEVELOPER,
+                        BUCKET_FILL_ACTION, true));
+        assertEquals(Optional.empty(), StaffModeWorldInteractionListener.worldUseAuditAction(
+                null, "entity-interact", false));
+        assertEquals(Optional.of("fishing-denied"), StaffModeWorldInteractionListener.worldUseAuditAction(
+                null, "fishing", true));
     }
 
     @Test

@@ -1711,6 +1711,15 @@ public final class StaffModeManager implements Listener {
         return active.containsKey(playerId) || transitions.contains(playerId) || handoffGaps.contains(playerId);
     }
 
+    /**
+     * Prevent passive farmland damage during any staff-mode transition or while
+     * vanished, even for unrestricted technical staff. This does not change
+     * ordinary block-edit permissions.
+     */
+    public boolean protectsFarmland(UUID playerId) {
+        return protectedMode(playerId) || Boolean.TRUE.equals(vanishedLookup.apply(playerId));
+    }
+
     public boolean isUnrestricted(Player player) {
         if (player == null) {
             return false;
