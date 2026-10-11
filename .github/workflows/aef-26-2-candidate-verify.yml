@@ -1,0 +1,48 @@
+name: AEF Paper 26.2 Candidate Verification
+
+on:
+  push:
+    branches:
+      - ci/aef-26-2-verify
+
+permissions:
+  contents: read
+
+jobs:
+  verify-aef:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout exact AEF candidate commit (public, no credentials retained)
+        uses: actions/checkout@v4
+        with:
+          repository: wsg138/AnarchyExploitFixes
+          ref: 57b8f196a5fb1f7fa08e451ba4d0df592a585da5
+          path: aef
+          persist-credentials: false
+
+      - name: Set up Java 25
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Compile both plugin variants and run shared tests
+        working-directory: aef
+        run: |
+          chmod +x gradlew
+          ./gradlew --no-daemon --stacktrace clean build
+
+      - name: Upload candidate JARs and JUnit results
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: aef-26-2-candidate-57b8f196a5
+          path: |
+            aef/AnarchyExploitFixesFolia/build/libs/*.jar
+            aef/AnarchyExploitFixesLegacy/build/libs/*.jar
+            aef/shared/build/test-results/test/*.xml
+          if-no-files-found: error
