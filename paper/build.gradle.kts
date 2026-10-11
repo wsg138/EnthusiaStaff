@@ -20,15 +20,21 @@ dependencies {
     implementation(project(":moderation-platform-api"))
     compileOnly(integrationContractsProject)
     implementation("com.fasterxml.jackson.dataformat:jackson-dataformat-yaml:2.20.1")
-    compileOnly("io.papermc.paper:paper-api:1.21.11-R0.1-SNAPSHOT")
+    compileOnly("io.papermc.paper:paper-api:26.2.build.122-stable")
     compileOnly("net.dmulloy2:ProtocolLib:5.4.0")
     compileOnly("net.luckperms:api:5.4")
     compileOnly("top.polar:api:2.0.0")
     testImplementation(integrationContractsProject)
     testRuntimeOnly(files(integrationContractMainOutput))
-    testImplementation("io.papermc.paper:paper-api:1.21.11-R0.1-SNAPSHOT")
+    testImplementation("io.papermc.paper:paper-api:26.2.build.122-stable")
     testImplementation("net.dmulloy2:ProtocolLib:5.4.0")
     testImplementation("net.luckperms:api:5.4")
+}
+
+// Paper 26.2 publishes Java 25-only API variants; this deployable module
+// must compile with the same target without changing the network's other modules.
+tasks.withType<JavaCompile>().configureEach {
+    options.release.set(25)
 }
 
 tasks.processResources {

@@ -45,6 +45,8 @@ import org.bukkit.event.player.PlayerGameModeChangeEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.event.player.PlayerSwapHandItemsEvent;
+import org.bukkit.event.player.PlayerExpChangeEvent;
+import com.destroystokyo.paper.event.player.PlayerPickupExperienceEvent;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.persistence.PersistentDataContainer;
@@ -1201,6 +1203,11 @@ public final class StaffModeManager implements Listener {
             return;
         }
         StaffRank rank = rankForAction(player);
+        if (isStaffTool(event.getItemDrop().getItemStack())) {
+            event.setCancelled(true);
+            audit(player, rank, "staff-tool-drop-denied", "protected staff tool");
+            return;
+        }
         if (isUnrestricted(player)) {
             audit(player, rank, "item-drop", describe(event.getItemDrop().getItemStack()));
             return;
@@ -1233,6 +1240,26 @@ public final class StaffModeManager implements Listener {
         audit(player, rank, "item-pickup", describe(event.getItem().getItemStack()));
     }
 
+    // Orbs must remain in the world while the player is invisible or working from
+    // a temporary staff inventory/XP profile.
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+    public void onPickupExperience(PlayerPickupExperienceEvent event) {
+        if (blocksPassiveExperience(event.getPlayer().getUniqueId())) {
+            event.setCancelled(true);
+        }
+    }
+
+    @EventHandler(priority = EventPriority.HIGHEST)
+    public void onExperienceChange(PlayerExpChangeEvent event) {
+        if (blocksPassiveExperience(event.getPlayer().getUniqueId())) {
+            event.setAmount(0);
+        }
+    }
+
+    private boolean blocksPassiveExperience(UUID playerId) {
+        return protectedMode(playerId) || Boolean.TRUE.equals(vanishedLookup.apply(playerId));
+    }
+
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     public void onSwapHands(PlayerSwapHandItemsEvent event) {
         Player player = event.getPlayer();
@@ -1261,6 +1288,16 @@ public final class StaffModeManager implements Listener {
             return;
         }
         StaffRank rank = rankForAction(player);
+        int hotbarButton = event.getHotbarButton();
+        boolean hotbarStaffTool = hotbarButton >= 0 && hotbarButton < 9
+                && isStaffTool(player.getInventory().getItem(hotbarButton));
+        if (StaffModeAccessPolicy.blocksStaffToolTransfer(
+                event.getClick(), isStaffTool(event.getCurrentItem()),
+                isStaffTool(event.getCursor()), hotbarStaffTool,
+                isStaffTool(player.getInventory().getItemInOffHand()))) {
+            event.setCancelled(true);
+            return;
+        }
         boolean ender = event.getView().getTopInventory().getType() == InventoryType.ENDER_CHEST;
         if (isUnrestricted(player)) {
             audit(player, rank, INVENTORY_EDIT_ACTION,
@@ -1286,6 +1323,10 @@ public final class StaffModeManager implements Listener {
             return;
         }
         StaffRank rank = rankForAction(player);
+        if (isStaffTool(event.getOldCursor())) {
+            event.setCancelled(true);
+            return;
+        }
         boolean ender = event.getView().getTopInventory().getType() == InventoryType.ENDER_CHEST;
         if (isUnrestricted(player)) {
             audit(player, rank, INVENTORY_EDIT_ACTION,

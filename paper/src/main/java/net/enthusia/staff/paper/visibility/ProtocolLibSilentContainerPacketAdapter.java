@@ -96,7 +96,13 @@ final class ProtocolLibSilentContainerPacketAdapter implements SilentContainerPa
             Clock clock
     ) {
         Player recipient = event.getPlayer();
-        if (recipient == null || recipient.getWorld() == null) {
+        if (recipient == null) {
+            return;
+        }
+        UUID recipientId = recipient.getUniqueId();
+        UUID worldId = tracker.worldForRecipient(recipientId);
+        if (worldId == null) {
+            // Missing/stale world state fails open for this packet, not permanently.
             return;
         }
         PacketContainer packet = event.getPacket();
@@ -104,9 +110,8 @@ final class ProtocolLibSilentContainerPacketAdapter implements SilentContainerPa
         if (position == null) {
             return;
         }
-        UUID recipientId = recipient.getUniqueId();
         BlockKey key = new BlockKey(
-                recipient.getWorld().getUID(),
+                worldId,
                 position.getX(),
                 position.getY(),
                 position.getZ()

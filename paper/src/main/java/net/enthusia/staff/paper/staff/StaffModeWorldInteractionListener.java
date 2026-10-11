@@ -57,12 +57,7 @@ public final class StaffModeWorldInteractionListener implements Listener {
             staffMode.logStaffAction(player, "block-break", describe(event.getBlock()));
             return;
         }
-        StaffDutyTier tier = staffMode.dutyTier(player);
-        if (StaffModeWorldInteractionPolicy.blocksBlockEdit(tier)) {
-            event.setCancelled(true);
-        } else if (StaffModeWorldInteractionPolicy.logsWorldInteraction(tier)) {
-            staffMode.logStaffAction(player, "block-break", describe(event.getBlock()));
-        }
+        auditRankedBlockEdit(player, event, event.getBlock(), "block-break");
     }
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
@@ -75,12 +70,24 @@ public final class StaffModeWorldInteractionListener implements Listener {
             staffMode.logStaffAction(player, "block-place", describe(event.getBlockPlaced()));
             return;
         }
+        auditRankedBlockEdit(player, event, event.getBlockPlaced(), "block-place");
+    }
+
+    private void auditRankedBlockEdit(Player player, Cancellable event, Block block, String action) {
         StaffDutyTier tier = staffMode.dutyTier(player);
-        if (StaffModeWorldInteractionPolicy.blocksBlockEdit(tier)) {
+        boolean denied = StaffModeWorldInteractionPolicy.blocksBlockEdit(tier);
+        if (denied) {
             event.setCancelled(true);
-        } else if (StaffModeWorldInteractionPolicy.logsWorldInteraction(tier)) {
-            staffMode.logStaffAction(player, "block-place", describe(event.getBlockPlaced()));
         }
+        if (denied || StaffModeWorldInteractionPolicy.logsWorldInteraction(tier)) {
+            // Keep rejected attempts distinct from successful edits. Only block type and
+            // location are recorded; never include item NBT, chat or command arguments.
+            staffMode.logStaffAction(player, blockEditAuditAction(action, denied), describe(block));
+        }
+    }
+
+    static String blockEditAuditAction(String action, boolean denied) {
+        return denied ? action + "-denied" : action;
     }
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)

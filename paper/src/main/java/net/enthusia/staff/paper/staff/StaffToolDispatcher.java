@@ -99,7 +99,7 @@ public final class StaffToolDispatcher implements Listener, CommandExecutor, Tab
         configured.put(StaffToolDefinition.RANDOM_TELEPORT, (player, ignored) -> randomTeleport.begin(player));
         configured.put(
                 StaffToolDefinition.PLAYER_INSPECTOR,
-                (player, targetId) -> runTargetCommand(player, "inspect", targetId, null)
+                (player, targetId) -> runTargetCommand(player, "enthusiastaff:inspect", targetId, null)
         );
         configured.put(
                 StaffToolDefinition.FREEZE,

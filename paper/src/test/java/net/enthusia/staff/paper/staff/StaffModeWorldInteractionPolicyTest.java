@@ -10,6 +10,19 @@ import org.junit.jupiter.api.Test;
 
 class StaffModeWorldInteractionPolicyTest {
     @Test
+    void rejectedBlockEditsHaveDistinctAuditActionNames() {
+        assertTrue(StaffModeWorldInteractionPolicy.blocksBlockEdit(StaffDutyTier.HELPER));
+        assertEquals("block-break-denied",
+                StaffModeWorldInteractionListener.blockEditAuditAction("block-break", true));
+        assertEquals("block-place-denied",
+                StaffModeWorldInteractionListener.blockEditAuditAction("block-place", true));
+        assertEquals("block-break",
+                StaffModeWorldInteractionListener.blockEditAuditAction("block-break", false));
+        assertEquals("block-place",
+                StaffModeWorldInteractionListener.blockEditAuditAction("block-place", false));
+    }
+
+    @Test
     void helperTierKeepsFullLockdown() {
         assertTrue(StaffModeWorldInteractionPolicy.blocksBlockEdit(StaffDutyTier.HELPER));
         assertTrue(StaffModeWorldInteractionPolicy.blocksWorldUse(StaffDutyTier.HELPER));

@@ -16,8 +16,9 @@ import org.bukkit.entity.Player;
 final class CheatTesterControlState {
     private static final String PERMISSION = "enthusiastaff.cheattester";
     private static final String CANCEL_ANY_PERMISSION = "enthusiastaff.cheattester.cancel-any";
+    // Safety hold: a live target lost its offhand totem during this probe.
+    // Keep it unavailable until a real 26.2 end-to-end restore/reconnect test passes.
     private static final List<CheatTesterType> SELECTABLE = List.of(
-            CheatTesterType.TOTEM_REFILL,
             CheatTesterType.NO_FALL,
             CheatTesterType.VELOCITY,
             CheatTesterType.AUTO_ARMOR,
@@ -43,7 +44,7 @@ final class CheatTesterControlState {
     }
 
     CheatTesterType selected(UUID staffId) {
-        return selections.getOrDefault(staffId, CheatTesterType.TOTEM_REFILL);
+        return selections.getOrDefault(staffId, CheatTesterType.NO_FALL);
     }
 
     boolean select(Player staff, CheatTesterType type, boolean fakeAvailable) {
@@ -132,6 +133,13 @@ final class CheatTesterControlState {
     }
 
     private static boolean providerAvailable(Player staff, CheatTesterType type, boolean fakeAvailable) {
+        if (type == CheatTesterType.TOTEM_REFILL) {
+            staff.sendMessage(StaffMessageStyle.style(Component.text(
+                    "Totem Refill is temporarily disabled: exact offhand restoration is under investigation.",
+                    NamedTextColor.RED
+            )));
+            return false;
+        }
         if (type != CheatTesterType.FAKE_ENTITY || fakeAvailable) {
             return true;
         }
