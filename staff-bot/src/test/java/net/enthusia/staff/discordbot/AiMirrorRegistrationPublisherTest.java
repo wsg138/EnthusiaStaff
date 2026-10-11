@@ -5,13 +5,19 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpRequest;
+import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.Flow;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
@@ -70,7 +76,15 @@ class AiMirrorRegistrationPublisherTest {
                     .firstValue("X-Client-Id").orElseThrow());
             assertEquals("Bearer example-private-token", request.headers()
                     .firstValue("Authorization").orElseThrow());
-            assertTrue(request.bodyPublisher().isPresent());
+            JsonNode body = new ObjectMapper().readTree(bodyText(request));
+            assertEquals("rosechat:canonical:1", body.get("canonical_message_id").asText());
+            assertEquals("hello original", body.get("canonical_text").asText());
+            assertEquals("discord", body.get("platform").asText());
+            assertEquals("discord_general", body.get("channel_profile").asText());
+            assertEquals(Long.toString(GUILD), body.get("scope_id").asText());
+            assertEquals(Long.toString(CHANNEL), body.get("channel_id").asText());
+            assertEquals(SNOWFLAKE, body.get("external_message_id").asText());
+            assertEquals(7, body.size());
         }
     }
 
@@ -110,6 +124,36 @@ class AiMirrorRegistrationPublisherTest {
                 StaffBotEnvironment.STAGING, null, Map.of()).isEmpty());
         assertTrue(AiMirrorPublicationConfig.fromEnvironment(
                 StaffBotEnvironment.PRODUCTION, null, Map.of()).isEmpty());
+    }
+
+    private static String bodyText(HttpRequest request) throws Exception {
+        ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+        CountDownLatch done = new CountDownLatch(1);
+        request.bodyPublisher().orElseThrow().subscribe(new Flow.Subscriber<ByteBuffer>() {
+            @Override
+            public void onSubscribe(Flow.Subscription subscription) {
+                subscription.request(Long.MAX_VALUE);
+            }
+
+            @Override
+            public void onNext(ByteBuffer item) {
+                byte[] chunk = new byte[item.remaining()];
+                item.get(chunk);
+                bytes.writeBytes(chunk);
+            }
+
+            @Override
+            public void onError(Throwable error) {
+                done.countDown();
+            }
+
+            @Override
+            public void onComplete() {
+                done.countDown();
+            }
+        });
+        assertTrue(done.await(3, TimeUnit.SECONDS));
+        return bytes.toString(StandardCharsets.UTF_8);
     }
 
     @Test
