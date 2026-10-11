@@ -21,6 +21,7 @@ import java.util.function.Supplier;
 import java.util.logging.Level;
 import net.enthusia.discord.platform.api.ManagedRolePlatform;
 import net.enthusia.staff.authoritybridge.EmbeddedAuthorityBridge;
+import net.enthusia.staff.authoritybridge.LegacyBridgeConfigMigration;
 import net.enthusia.staff.moderation.api.PunishmentLifecyclePlatform;
 import net.enthusia.staff.domain.OperationalMode;
 import net.enthusia.staff.domain.auth.AuthorizationPolicy;
@@ -599,6 +600,12 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
 
     private void startEmbeddedAuthority() {
         try {
+            LegacyBridgeConfigMigration.Result result = LegacyBridgeConfigMigration.migrate(dataDirectory());
+            if (result.copied() > 0) {
+                getLogger().log(Level.INFO,
+                        "legacy_bridge_configuration_imported files={0} source_preserved=true features_default_off=true",
+                        result.copied());
+            }
             embeddedAuthorityBridge = EmbeddedAuthorityBridge.open(this, dataDirectory());
         } catch (RuntimeException exception) {
             featureIssues.put("embedded-authority", "Private authority service unavailable; feature disabled");
