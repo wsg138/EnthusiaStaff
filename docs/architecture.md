@@ -9,6 +9,12 @@ This document is the architecture checkpoint for the Enthusia Network moderation
 
 The project targets Java 21, Paper 1.21.11, and the Java-21-compatible Velocity 3.4.0-SNAPSHOT API line. The current Velocity 4.1 snapshot is built for Java 25 and is intentionally not used. Paper 1.21.8 through 1.21.11 remains a compatibility target; version-sensitive operations live behind adapters and must be exercised against every supported server build before cutover.
 
+### Transition authority bridge packaging (October 2026)
+
+The original two-artifact statement above is the *long-term deployment architecture*, not an inventory of all transitional compatibility builds. The separately packaged `EnthusiaStaff-AuthorityBridge.jar` currently exists for private signed rank lookup and read-only DiscordSRV/player observations. The Paper module now **compiles its implementation into `EnthusiaStaff-Paper.jar`** behind default-off independent flags, while retaining the separate artifact for staged rollback. The standalone plugin's entrypoint and plugin.yml do not enter the Paper JAR. Only one runtime may provide these bridge services at a time. Paper's primary migrated MariaDB pool is borrowed after storage bootstrap; no new transition Flyway run is permitted in embedded mode.
+
+See [authority bridge consolidation and staged migration](authority-bridge-consolidation.md). This packaging change does not activate production moderation or policy v2. Paper currently builds against Java 25 / Paper 26.2 API; the historical Java 21 / Paper 1.21.11 compatibility statement above must not be treated as a current Paper deployment guarantee.
+
 ## Module graph
 
 Dependencies point down only:
