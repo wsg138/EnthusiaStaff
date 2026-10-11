@@ -334,6 +334,7 @@ final class ReportGuiRenderer {
         if (snapshots.isEmpty()) {
             lore.add(Component.text(configuration.message("snapshot-none"), NamedTextColor.DARK_GRAY));
         } else {
+            lore.add(Component.text(configuration.message("snapshot-protected"), NamedTextColor.GRAY));
             lore.add(Component.text("Click to inspect evidence (permission required)", NamedTextColor.YELLOW));
         }
         return item(material, name, lore);
