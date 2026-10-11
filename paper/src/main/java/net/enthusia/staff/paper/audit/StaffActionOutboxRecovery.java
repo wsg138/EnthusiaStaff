@@ -5,6 +5,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.RandomAccessFile;
+import java.nio.ByteBuffer;
+import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.DirectoryStream;
@@ -12,6 +14,7 @@ import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.nio.file.StandardOpenOption;
 import java.nio.file.attribute.FileTime;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -373,11 +376,34 @@ final class StaffActionOutboxRecovery {
         if (Files.isSymbolicLink(temporary)) {
             throw new IOException("Unsafe staff-action checkpoint temporary path");
         }
-        Files.writeString(temporary, Long.toString(position), StandardCharsets.UTF_8);
+
+        // A rename alone does not ensure that the checkpoint's bytes survive
+        // a host crash. Force the complete temporary file before renaming.
+        try (FileChannel file = FileChannel.open(temporary, StandardOpenOption.CREATE,
+                StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.WRITE)) {
+            ByteBuffer bytes = StandardCharsets.UTF_8.encode(Long.toString(position));
+            while (bytes.hasRemaining()) {
+                file.write(bytes);
+            }
+            file.force(true);
+        }
+
         try {
             Files.move(temporary, checkpoint, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
         } catch (AtomicMoveNotSupportedException exception) {
             Files.move(temporary, checkpoint, StandardCopyOption.REPLACE_EXISTING);
+        }
+
+        // Directory fsync makes the renamed entry durable on supporting
+        // filesystems. Windows and some providers reject directory channels.
+        Path directory = checkpoint.getParent();
+        if (directory != null) {
+            try (FileChannel parent = FileChannel.open(directory, StandardOpenOption.READ)) {
+                parent.force(true);
+            } catch (IOException | UnsupportedOperationException exception) {
+                // Best effort: file bytes have been forced, and crash replay
+                // remains safe because each event has a stable database ID.
+            }
         }
     }
 }
