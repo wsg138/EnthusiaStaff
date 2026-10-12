@@ -229,7 +229,7 @@ final class StaffActionDiscordFailureIntegrationTest {
         }
         try (Connection db = connection();
              PreparedStatement q = db.prepareStatement(
-                     "SELECT " + column + " FROM discord_outbox WHERE message_id=?")) {
+                     "SELECT state, last_error_code, attempt_count FROM discord_outbox WHERE message_id=?")) {
             q.setBytes(1, bytes(id));
             try (ResultSet result = q.executeQuery()) {
                 assertTrue(result.next());
