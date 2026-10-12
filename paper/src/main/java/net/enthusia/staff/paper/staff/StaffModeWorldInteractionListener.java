@@ -193,7 +193,8 @@ public final class StaffModeWorldInteractionListener implements Listener {
                 && action == Action.RIGHT_CLICK_BLOCK
                 && hand == EquipmentSlot.HAND
                 && !container
-                && (heldItem == null || !heldItem.name().endsWith("_BUCKET"));
+                && (heldItem == null || (heldItem != Material.BUCKET
+                        && !heldItem.name().endsWith("_BUCKET")));
     }
 
     // Defensive fallback for implementations that notify an entity-caused block
