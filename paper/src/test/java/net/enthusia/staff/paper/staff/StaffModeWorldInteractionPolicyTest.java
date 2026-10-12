@@ -38,6 +38,42 @@ class StaffModeWorldInteractionPolicyTest {
     }
 
     @Test
+    void deniedMainHandBlockUseIsAuditedOnlyWithoutSeparateActionProducers() {
+        // Helper/unknown-tier right-clicks are blocked, but only the generic
+        // non-container main-hand use should create block-interact-denied.
+        assertTrue(StaffModeWorldInteractionListener.shouldAuditDeniedBlockInteraction(
+                StaffDutyTier.HELPER, Action.RIGHT_CLICK_BLOCK,
+                org.bukkit.inventory.EquipmentSlot.HAND, Material.STICK, false));
+        assertTrue(StaffModeWorldInteractionListener.shouldAuditDeniedBlockInteraction(
+                null, Action.RIGHT_CLICK_BLOCK,
+                org.bukkit.inventory.EquipmentSlot.HAND, null, false));
+        assertFalse(StaffModeWorldInteractionListener.shouldAuditDeniedBlockInteraction(
+                StaffDutyTier.MOD, Action.RIGHT_CLICK_BLOCK,
+                org.bukkit.inventory.EquipmentSlot.HAND, Material.STICK, false));
+        assertFalse(StaffModeWorldInteractionListener.shouldAuditDeniedBlockInteraction(
+                StaffDutyTier.ADMIN, Action.RIGHT_CLICK_BLOCK,
+                org.bukkit.inventory.EquipmentSlot.HAND, Material.STICK, false));
+        assertFalse(StaffModeWorldInteractionListener.shouldAuditDeniedBlockInteraction(
+                StaffDutyTier.HELPER, Action.RIGHT_CLICK_BLOCK,
+                org.bukkit.inventory.EquipmentSlot.OFF_HAND, Material.STICK, false));
+        assertFalse(StaffModeWorldInteractionListener.shouldAuditDeniedBlockInteraction(
+                StaffDutyTier.HELPER, Action.RIGHT_CLICK_BLOCK,
+                org.bukkit.inventory.EquipmentSlot.HAND, Material.STICK, true));
+        assertFalse(StaffModeWorldInteractionListener.shouldAuditDeniedBlockInteraction(
+                StaffDutyTier.HELPER, Action.RIGHT_CLICK_BLOCK,
+                org.bukkit.inventory.EquipmentSlot.HAND, Material.WATER_BUCKET, false));
+        assertFalse(StaffModeWorldInteractionListener.shouldAuditDeniedBlockInteraction(
+                StaffDutyTier.HELPER, Action.RIGHT_CLICK_BLOCK,
+                org.bukkit.inventory.EquipmentSlot.HAND, Material.BUCKET, false));
+        for (Action nonUse : java.util.List.of(Action.LEFT_CLICK_BLOCK,
+                Action.PHYSICAL, Action.RIGHT_CLICK_AIR, Action.LEFT_CLICK_AIR)) {
+            assertFalse(StaffModeWorldInteractionListener.shouldAuditDeniedBlockInteraction(
+                    StaffDutyTier.HELPER, nonUse,
+                    org.bukkit.inventory.EquipmentSlot.HAND, Material.STICK, false));
+        }
+    }
+
+    @Test
     void deniedWorldUseAuditsMeaningfulAttemptsWithoutChangingTierPolicy() {
         assertTrue(StaffModeWorldInteractionPolicy.blocksWorldUse(StaffDutyTier.HELPER));
         assertTrue(StaffModeWorldInteractionPolicy.blocksWorldUse(StaffDutyTier.MOD));
