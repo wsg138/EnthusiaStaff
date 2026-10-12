@@ -110,17 +110,63 @@ public final class StaffModeWorldInteractionListener implements Listener {
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     public void onBucketFill(PlayerBucketFillEvent event) {
-        cancelWorldUse(event.getPlayer(), event, "bucket-fill", describe(event.getBlockClicked()), true);
+        cancelWorldUse(event.getPlayer(), event, "bucket-fill", describe(event.getBlockClicked()), true, true);
     }
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     public void onBucketEmpty(PlayerBucketEmptyEvent event) {
-        cancelWorldUse(event.getPlayer(), event, "bucket-empty", describe(event.getBlockClicked()), true);
+        cancelWorldUse(event.getPlayer(), event, "bucket-empty", describe(event.getBlockClicked()), true, true);
     }
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     public void onHarvest(PlayerHarvestBlockEvent event) {
-        cancelWorldUse(event.getPlayer(), event, "block-harvest", describe(event.getHarvestedBlock()), true);
+        cancelWorldUse(event.getPlayer(), event, "block-harvest", describe(event.getHarvestedBlock()), true, true);
+    }
+
+    // Only non-cancelled actual gameplay events are recorded as successful uses.
+    // Enforcement (including denied-action auditing) remains at HIGHEST.
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onCompletedBucketFill(PlayerBucketFillEvent event) {
+        auditCompletedWorldUse(event.getPlayer(), "bucket-fill", describe(event.getBlockClicked()));
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onCompletedBucketEmpty(PlayerBucketEmptyEvent event) {
+        auditCompletedWorldUse(event.getPlayer(), "bucket-empty", describe(event.getBlockClicked()));
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onCompletedHarvest(PlayerHarvestBlockEvent event) {
+        auditCompletedWorldUse(event.getPlayer(), "block-harvest", describe(event.getHarvestedBlock()));
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onCompletedShear(PlayerShearEntityEvent event) {
+        auditCompletedWorldUse(event.getPlayer(), "entity-shear",
+                event.getEntity().getType().toString());
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onCompletedConsume(PlayerItemConsumeEvent event) {
+        auditCompletedWorldUse(event.getPlayer(), "item-consume",
+                event.getItem().getType().toString());
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onCompletedFish(PlayerFishEvent event) {
+        auditCompletedWorldUse(event.getPlayer(), "fishing", event.getState().toString());
+    }
+
+    private void auditCompletedWorldUse(Player player, String action, String detail) {
+        if (onDuty(player) && shouldAuditCompletedWorldUse(
+                staffMode.isUnrestricted(player), staffMode.dutyTier(player))) {
+            staffMode.logStaffAction(player, action, detail);
+        }
+    }
+
+    static boolean shouldAuditCompletedWorldUse(boolean unrestricted, StaffDutyTier tier) {
+        return unrestricted || (StaffModeWorldInteractionPolicy.logsWorldInteraction(tier)
+                && !StaffModeWorldInteractionPolicy.blocksWorldUse(tier));
     }
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
@@ -404,18 +450,18 @@ public final class StaffModeWorldInteractionListener implements Listener {
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     public void onShear(PlayerShearEntityEvent event) {
         cancelWorldUse(event.getPlayer(), event, "entity-shear",
-                event.getEntity().getType().toString(), true);
+                event.getEntity().getType().toString(), true, true);
     }
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     public void onConsume(PlayerItemConsumeEvent event) {
         cancelWorldUse(event.getPlayer(), event, "item-consume",
-                event.getItem().getType().toString(), true);
+                event.getItem().getType().toString(), true, true);
     }
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     public void onFish(PlayerFishEvent event) {
-        cancelWorldUse(event.getPlayer(), event, "fishing", event.getState().toString(), true);
+        cancelWorldUse(event.getPlayer(), event, "fishing", event.getState().toString(), true, true);
     }
 
     // An entity click may also dispatch PlayerInteractAtEntityEvent. Only the generic
@@ -450,19 +496,27 @@ public final class StaffModeWorldInteractionListener implements Listener {
 
     private void cancelWorldUse(Player player, Cancellable event, String action,
                                 String detail, boolean auditDenied) {
+        cancelWorldUse(player, event, action, detail, auditDenied, false);
+    }
+
+    private void cancelWorldUse(Player player, Cancellable event, String action,
+                                String detail, boolean auditDenied, boolean deferSuccessfulAudit) {
         if (!onDuty(player)) {
             return;
         }
         if (staffMode.isUnrestricted(player)) {
-            staffMode.logStaffAction(player, action, detail);
+            if (!deferSuccessfulAudit) {
+                staffMode.logStaffAction(player, action, detail);
+            }
             return;
         }
         StaffDutyTier tier = staffMode.dutyTier(player);
-        if (StaffModeWorldInteractionPolicy.blocksWorldUse(tier)) {
+        boolean denied = StaffModeWorldInteractionPolicy.blocksWorldUse(tier);
+        if (denied) {
             event.setCancelled(true);
         }
         Optional<String> auditedAction = worldUseAuditAction(tier, action, auditDenied);
-        if (auditedAction.isPresent()) {
+        if (auditedAction.isPresent() && (denied || !deferSuccessfulAudit)) {
             staffMode.logStaffAction(player, auditedAction.orElseThrow(), detail);
         }
     }
