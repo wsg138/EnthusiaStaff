@@ -23,7 +23,6 @@ import java.sql.Timestamp;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
-import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
@@ -98,8 +97,13 @@ final class StaffActionDiscordPipelineIntegrationTest {
                 executor.shutdown();
                 assertTrue(executor.awaitTermination(10, TimeUnit.SECONDS));
 
-                Path journal = directory.resolve("discord-outbox/staff-actions-"
-                        + LocalDate.now(ZoneOffset.UTC) + ".jsonl");
+                List<Path> journals;
+                try (var listed = Files.list(directory.resolve("discord-outbox"))) {
+                    journals = listed.filter(file -> file.getFileName().toString().startsWith("staff-actions-")
+                            && file.getFileName().toString().endsWith(".jsonl")).toList();
+                }
+                assertEquals(1, journals.size());
+                Path journal = journals.getFirst();
                 JsonNode record = json.readTree(Files.readString(journal, StandardCharsets.UTF_8));
                 UUID eventId = UUID.fromString(record.path("eventId").asText());
                 assertEquals(actorId.toString(), record.path("actor").asText());
