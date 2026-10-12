@@ -34,6 +34,7 @@ Use two disposable, consented test player identities with explicit staging HELPE
 | A08 | On-duty MOD performs permitted drop/swap and edits | Existing allowed-action IDs; no denied audit for allowed actions |
 | A09 | Off-duty identity attempts a gated command, including arguments | `staff-command-denied-off-duty`; audit detail is only allowlisted command root + `arguments withheld`; no target, reason or command text leaked |
 | A10 | Repeat normal player pickup attempts near staff or idle beside items | No new high-rate passive-pickup denial audit flood; measure event and queue rate |
+| A11 | HELPER right-clicks a non-container block with ordinary main-hand item; repeat using offhand, bucket, and a viewable chest | One `block-interact-denied` for the main-hand non-container action only; existing bucket/container actions keep their own audit IDs, no extra offhand or air-click logs; measure repeated click/backlog volume |
 
 Also sample existing block place/break, bucket, shearing, harvesting, fishing, consuming, combat and staff mode visibility logs. **Do not claim all possible Staff Mode actions have been audited** based only on this matrix.
 
