@@ -6,6 +6,8 @@ dependencies {
     testImplementation(project(":domain"))
     testImplementation(project(":persistence"))
     testImplementation(project(":protocol"))
+    testImplementation(project(":velocity"))
+    testImplementation("com.velocitypowered:velocity-api:3.4.0-SNAPSHOT")
     testImplementation("com.zaxxer:HikariCP:6.3.3")
     testImplementation("com.fasterxml.jackson.core:jackson-databind:2.20.1")
     testImplementation("org.flywaydb:flyway-core:12.8.1")
