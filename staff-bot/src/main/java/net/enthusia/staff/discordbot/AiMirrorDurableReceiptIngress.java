@@ -10,6 +10,7 @@ import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.Consumer;
 
 /**
  * Inert nonblocking post-send receipt journal ingress. Not constructed or
@@ -42,12 +43,25 @@ final class AiMirrorDurableReceiptIngress implements DiscordChatPostObserver, Au
 
     static AiMirrorDurableReceiptIngress withStore(
             AiMirrorPublicationConfig config, AiMirrorEncryptedOutbox store) {
+        return withStore(config, store, receipt -> { });
+    }
+
+    /**
+     * Notify an off-JDA worker only after the encrypted record has been
+     * durably committed. The callback must be nonblocking and may decline
+     * fast admission; the journal retains the record for slow recovery.
+     */
+    static AiMirrorDurableReceiptIngress withStore(
+            AiMirrorPublicationConfig config, AiMirrorEncryptedOutbox store,
+            Consumer<AiMirrorEncryptedOutbox.Saved> afterCommit) {
         Objects.requireNonNull(store, "store");
+        Objects.requireNonNull(afterCommit, "afterCommit");
         if (!store.accepts(config)) {
             throw new IllegalArgumentException("durable receipt journal scope mismatch");
         }
         return new AiMirrorDurableReceiptIngress(config, publication -> {
-            store.save(publication);
+            AiMirrorEncryptedOutbox.Saved saved = store.save(publication);
+            afterCommit.accept(saved);
         });
     }
 
