@@ -80,9 +80,9 @@ class StaffModeInventoryAuditOwnershipTest {
         assertTrue(source.contains("StaffModeWorldInteractionListener.isProtectedContainerInventory(top)"));
         assertTrue(source.contains("StaffModeWorldInteractionListener.shouldAuditCompletedContainerClick("));
         assertTrue(source.contains("StaffModeWorldInteractionListener.touchesProtectedContainerSlot("));
-        assertTrue(source.contains("dedicatedContainerClickAuditOwner(player, true, event)"));
-        assertTrue(source.contains("dedicatedContainerClickAuditOwner(player, false, event)"));
-        assertTrue(source.contains("dedicatedContainerDragAuditOwner(player, true, event)"));
-        assertTrue(source.contains("dedicatedContainerDragAuditOwner(player, false, event)"));
+        // Completed MONITOR listeners now use one computed unrestricted flag,
+        // instead of the old early HIGHEST allowed-action branches.
+        assertTrue(source.contains("dedicatedContainerClickAuditOwner(player, unrestricted, event)"));
+        assertTrue(source.contains("dedicatedContainerDragAuditOwner(player, unrestricted, event)"));
     }
 }

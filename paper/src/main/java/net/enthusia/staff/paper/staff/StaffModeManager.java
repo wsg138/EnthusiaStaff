@@ -1370,12 +1370,7 @@ public final class StaffModeManager implements Listener {
         }
         boolean ender = event.getView().getTopInventory().getType() == InventoryType.ENDER_CHEST;
         if (isUnrestricted(player)) {
-            if (shouldAuditGenericInventoryClick(event.getAction(),
-                    dedicatedContainerClickAuditOwner(player, true, event))) {
-                audit(player, rank, INVENTORY_EDIT_ACTION,
-                        event.getClick() + " container=" + event.getView().getTopInventory().getType()
-                                + " item=" + describe(event.getCurrentItem()));
-            }
+            // Permitted edits are audited at MONITOR after other cancellation handlers.
             return;
         }
         if (rank == null || StaffModeAccessPolicy.blocksInventoryMutation(rank, ender)) {
@@ -1402,14 +1397,7 @@ public final class StaffModeManager implements Listener {
             }
             return;
         }
-        StaffDutyTier tier = StaffDutyTier.of(rank);
-        if ((tier == StaffDutyTier.MOD || tier == StaffDutyTier.DEVELOPER || tier == StaffDutyTier.ADMIN)
-                && shouldAuditGenericInventoryClick(event.getAction(),
-                        dedicatedContainerClickAuditOwner(player, false, event))) {
-            audit(player, rank, INVENTORY_EDIT_ACTION,
-                    event.getClick() + " container=" + event.getView().getTopInventory().getType()
-                            + " item=" + describe(event.getCurrentItem()));
-        }
+        // Allowed clicks are recorded by onCompletedInventoryClick, not here.
     }
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
@@ -1424,11 +1412,7 @@ public final class StaffModeManager implements Listener {
         }
         boolean ender = event.getView().getTopInventory().getType() == InventoryType.ENDER_CHEST;
         if (isUnrestricted(player)) {
-            if (!dedicatedContainerDragAuditOwner(player, true, event)) {
-                audit(player, rank, INVENTORY_EDIT_ACTION,
-                        "drag container=" + event.getView().getTopInventory().getType()
-                                + " cursor=" + describe(event.getOldCursor()));
-            }
+            // Permitted edits are audited at MONITOR after other cancellation handlers.
             return;
         }
         if (rank == null
@@ -1454,9 +1438,51 @@ public final class StaffModeManager implements Listener {
             }
             return;
         }
+        // Allowed drags are recorded by onCompletedInventoryDrag, not here.
+    }
+
+    static boolean shouldAuditCompletedGenericInventoryEdit(boolean unrestricted,
+                                                            StaffRank rank, boolean enderChestView) {
+        if (unrestricted) {
+            return true;
+        }
+        if (rank == null || StaffModeAccessPolicy.blocksInventoryMutation(rank, enderChestView)) {
+            return false;
+        }
         StaffDutyTier tier = StaffDutyTier.of(rank);
-        if ((tier == StaffDutyTier.MOD || tier == StaffDutyTier.DEVELOPER || tier == StaffDutyTier.ADMIN)
-                && !dedicatedContainerDragAuditOwner(player, false, event)) {
+        return tier == StaffDutyTier.MOD || tier == StaffDutyTier.DEVELOPER || tier == StaffDutyTier.ADMIN;
+    }
+
+    // Generic inventory edits have the same final-state guarantee as completed
+    // protected-container edits. The existing owner filter prevents duplicate
+    // inventory-edit/container-edit records for one successful mutation.
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onCompletedInventoryClick(InventoryClickEvent event) {
+        if (!(event.getWhoClicked() instanceof Player player) || !protectedMode(player.getUniqueId())) {
+            return;
+        }
+        StaffRank rank = rankForAction(player);
+        boolean unrestricted = isUnrestricted(player);
+        boolean ender = event.getView().getTopInventory().getType() == InventoryType.ENDER_CHEST;
+        if (shouldAuditCompletedGenericInventoryEdit(unrestricted, rank, ender)
+                && shouldAuditGenericInventoryClick(event.getAction(),
+                        dedicatedContainerClickAuditOwner(player, unrestricted, event))) {
+            audit(player, rank, INVENTORY_EDIT_ACTION,
+                    event.getClick() + " container=" + event.getView().getTopInventory().getType()
+                            + " item=" + describe(event.getCurrentItem()));
+        }
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onCompletedInventoryDrag(InventoryDragEvent event) {
+        if (!(event.getWhoClicked() instanceof Player player) || !protectedMode(player.getUniqueId())) {
+            return;
+        }
+        StaffRank rank = rankForAction(player);
+        boolean unrestricted = isUnrestricted(player);
+        boolean ender = event.getView().getTopInventory().getType() == InventoryType.ENDER_CHEST;
+        if (shouldAuditCompletedGenericInventoryEdit(unrestricted, rank, ender)
+                && !dedicatedContainerDragAuditOwner(player, unrestricted, event)) {
             audit(player, rank, INVENTORY_EDIT_ACTION,
                     "drag container=" + event.getView().getTopInventory().getType()
                             + " cursor=" + describe(event.getOldCursor()));
