@@ -66,6 +66,7 @@ public final class VanishManager implements Listener {
     private final AtomicBoolean durableVanishLoaded = new AtomicBoolean();
     private final AtomicInteger rankReconciliationPass = new AtomicInteger();
     private final VanishAudienceCoordinator<Player> audiences;
+    private final PresenceTransitionRevisions presenceRevisions = new PresenceTransitionRevisions();
     private final SpectatorTabPacketAdapter spectatorTabPackets;
     private final SilentContainerTracker silentContainers;
     private final SilentContainerPacketAdapter silentContainerPackets;
@@ -650,7 +651,8 @@ public final class VanishManager implements Listener {
             }
             rememberCommittedState(playerId, rank, vanished, restoreSelectedMode, selectedGameMode);
             boolean viewerChanged = publishViewerRank(playerId, rank);
-            Set<UUID> presenceViewers = presenceViewers(playerId);
+            Map<UUID, Boolean> presenceViewers = presenceViewers(playerId);
+            UUID revision = presenceRevisions.advance(playerId);
             visibility.setVanished(playerId, rank, vanished);
             if (vanished) {
                 hiddenSpectators.remove(playerId);
@@ -664,8 +666,10 @@ public final class VanishManager implements Listener {
                             vanished,
                             viewerChanged,
                             restoreSelectedMode,
-                            presenceViewers
-                    )
+                            presenceViewers,
+                            revision
+                    ),
+                    () -> presenceRevisions.retire(playerId, revision)
             );
             return true;
         } catch (RuntimeException exception) {
@@ -729,9 +733,13 @@ public final class VanishManager implements Listener {
             boolean vanished,
             boolean viewerChanged,
             boolean restoreSelectedMode,
-            Set<UUID> presenceViewers
+            Map<UUID, Boolean> presenceViewers,
+            UUID revision
     ) {
         UUID playerId = player.getUniqueId();
+        if (!presenceRevisions.isCurrent(playerId, revision)) {
+            return;
+        }
         if (vanished) {
             if (!staffMode.transitioning(playerId)) {
                 reconcileVanishedGameMode(player);
@@ -747,20 +755,34 @@ public final class VanishManager implements Listener {
             audiences.refreshViewer(playerId);
         }
         audiences.refreshTarget(playerId);
-        publishPresenceTransition(playerId, vanished, presenceViewers);
+        publishPresenceTransition(playerId, vanished, presenceViewers, revision);
         player.sendMessage(StaffMessageStyle.style(Component.text(vanished ? "Vanish enabled." : "Vanish disabled.")));
     }
 
-    private Set<UUID> presenceViewers(UUID subjectId) {
-        return Set.copyOf(audiences.playerIds().stream()
-                .filter(viewerId -> !viewerId.equals(subjectId))
-                .toList());
+    private Map<UUID, Boolean> presenceViewers(UUID subjectId) {
+        return PresenceTransitionAudience.capture(
+                subjectId,
+                audiences.playerIds(),
+                visibility::canSee
+        );
     }
 
-    private void publishPresenceTransition(UUID subjectId, boolean vanished, Set<UUID> viewerIds) {
+    private void publishPresenceTransition(
+            UUID subjectId,
+            boolean vanished,
+            Map<UUID, Boolean> visibilityBefore,
+            UUID revision
+    ) {
         PresenceTransitionSink sink = presenceTransitionSink;
-        for (UUID viewerId : viewerIds) {
+        for (Map.Entry<UUID, Boolean> entry : visibilityBefore.entrySet()) {
+            UUID viewerId = entry.getKey();
+            if (!shouldPublishPresence(subjectId, viewerId, vanished, entry.getValue(), revision)) {
+                continue;
+            }
             audiences.onOwner(viewerId, ignored -> {
+                if (!shouldPublishPresence(subjectId, viewerId, vanished, entry.getValue(), revision)) {
+                    return;
+                }
                 try {
                     sink.publish(subjectId, viewerId, vanished);
                 } catch (RuntimeException | LinkageError exception) {
@@ -772,6 +794,15 @@ public final class VanishManager implements Listener {
                 }
             });
         }
+    }
+
+    private boolean shouldPublishPresence(
+            UUID subjectId, UUID viewerId, boolean vanished, boolean before, UUID revision
+    ) {
+        return presenceRevisions.isCurrent(subjectId, revision)
+                && PresenceTransitionAudience.shouldNotify(
+                        before, visibility.canSee(viewerId, subjectId), vanished
+                );
     }
 
     private void reconcileLiveRank(Player player) {
@@ -1114,6 +1145,7 @@ public final class VanishManager implements Listener {
             event.quitMessage(null);
         }
         UUID playerId = player.getUniqueId();
+        presenceRevisions.retire(playerId);
         audiences.remove(playerId);
         visibility.removeViewer(playerId);
         onlineStaffRanks.remove(playerId);
