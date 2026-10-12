@@ -10,6 +10,7 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.util.Locale;
+import java.util.concurrent.atomic.AtomicBoolean;
 import org.junit.jupiter.api.Test;
 
 class StaffBotHealthServerTest {
@@ -33,6 +34,45 @@ class StaffBotHealthServerTest {
             assertEquals(200, ready.statusCode());
             assertTrue(ready.body().contains("\"ready\":true"));
         }
+    }
+
+    @Test
+    void durableRecoveryFailureRevokesReadinessWithoutExposingReceiptData()
+            throws Exception {
+        StaffBotHealth health = new StaffBotHealth(StaffBotEnvironment.STAGING);
+        AtomicBoolean safe = new AtomicBoolean(true);
+        health.requireCriticalReadiness(safe::get);
+        health.transition(StaffBotHealth.Phase.READY, DiscordRuntimeIdentityValidator.READY);
+        try (StaffBotHealthServer server = new StaffBotHealthServer(
+                loopbackEphemeralAddress(), health)) {
+            server.start();
+            HttpClient client = HttpClient.newHttpClient();
+            URI base = URI.create("http://" + host(server.boundAddress())
+                    + ":" + server.boundAddress().getPort());
+            assertEquals(200, get(client, base.resolve("/ready")).statusCode());
+            safe.set(false);
+            HttpResponse<String> unhealthy = get(client, base.resolve("/ready"));
+            assertEquals(503, unhealthy.statusCode());
+            assertTrue(unhealthy.body().contains("mirror_recovery_unavailable"));
+            assertFalse(unhealthy.body().contains("canonicalMessageId"));
+            assertTrue(health.failedEver());
+            assertEquals(200, get(client, base.resolve("/health")).statusCode());
+            safe.set(true);
+            assertEquals(503, get(client, base.resolve("/ready")).statusCode());
+        }
+    }
+
+    @Test
+    void failingReadinessCallbackCannotExposeItsExceptionOrMarkReady() {
+        StaffBotHealth health = new StaffBotHealth(StaffBotEnvironment.STAGING);
+        health.requireCriticalReadiness(() -> {
+            throw new IllegalStateException("synthetic sensitive receipt");
+        });
+        health.transition(StaffBotHealth.Phase.READY, DiscordRuntimeIdentityValidator.READY);
+        assertFalse(health.isReady());
+        assertEquals("mirror_recovery_unavailable", health.snapshot().reason());
+        assertTrue(health.failedEver());
+        assertFalse(health.snapshot().reason().contains("sensitive"));
     }
 
     @Test

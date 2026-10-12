@@ -136,6 +136,10 @@ final class AiMirrorDurableRecoverySession
         }
     }
 
+    boolean unhealthy() {
+        return ingress.failed() || recovery.failed();
+    }
+
     AiMirrorDurableReceiptIngress.Stats ingressStats() {
         return ingress.stats();
     }
