@@ -57,6 +57,29 @@ final class DiscordEventRendererTest {
     }
 
     @Test
+    void punishmentWebhookWithholdsPrivateExplanationWithoutHidingPublicAuditFields() {
+        String rendered = renderer.render(message(
+                PUNISHMENTS,
+                "PUNISHMENT_CREATED",
+                "{\"caseId\":\"case-privacy\",\"targetId\":\"target-1\","
+                        + "\"reasonId\":\"griefing\",\"publicReason\":\"Damaging builds\","
+                        + "\"sanctionDetails\":[\"BAN (7 days)\"],"
+                        + "\"internalExplanation\":\"Private investigation notes: home IP and evidence\","
+                        + "\"investigationNotes\":\"should-never-render\"}"
+        ));
+
+        assertTrue(rendered.contains("caseId=case-privacy"));
+        assertTrue(rendered.contains("targetId=target-1"));
+        assertTrue(rendered.contains("reasonId=griefing"));
+        assertTrue(rendered.contains("publicReason=Damaging builds"));
+        assertTrue(rendered.contains("sanctionDetails=BAN (7 days)"));
+        assertFalse(rendered.contains("Private investigation notes"));
+        assertFalse(rendered.contains("home IP"));
+        assertFalse(rendered.contains("internalExplanation"));
+        assertFalse(rendered.contains("should-never-render"));
+    }
+
+    @Test
     void punishmentArraysAreBoundedAndNestedValuesAreWithheld() {
         String rendered = renderer.render(message(
                 PUNISHMENTS,
