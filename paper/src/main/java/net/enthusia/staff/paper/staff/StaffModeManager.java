@@ -266,7 +266,8 @@ public final class StaffModeManager implements Listener {
         }
     }
 
-    private static String describe(ItemStack item) {
+    // Shared with the protected-container audit to retain material/count without NBT.
+    static String describe(ItemStack item) {
         if (item == null || item.getType().isAir()) {
             return "empty";
         }
