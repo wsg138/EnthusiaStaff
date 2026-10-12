@@ -160,6 +160,14 @@ public final class StaffModeWorldInteractionListener implements Listener {
         }
         if (StaffModeWorldInteractionPolicy.blocksBlockInteraction(tier, action)) {
             event.setCancelled(true);
+            if (shouldAuditDeniedBlockInteraction(tier, action, event.getHand(),
+                    event.getItem() == null ? null : event.getItem().getType(),
+                    isContainer(event.getClickedBlock()))) {
+                // Only a meaningful main-hand block use: do not duplicate the
+                // separate bucket, container, block-break, or offhand audits.
+                staffMode.logStaffAction(player, "block-interact-denied",
+                        action + " " + describe(event.getClickedBlock()));
+            }
             return;
         }
         if (StaffModeWorldInteractionPolicy.logsWorldInteraction(tier)
@@ -171,6 +179,21 @@ public final class StaffModeWorldInteractionListener implements Listener {
                     action + " " + describe(event.getClickedBlock())
             );
         }
+    }
+
+    /**
+     * A denied right-click block use would otherwise leave no audit event.
+     * Block-break/place, bucket and protected-container paths have their own
+     * audit IDs, so avoid duplicating those or the secondary offhand event.
+     */
+    static boolean shouldAuditDeniedBlockInteraction(
+            StaffDutyTier tier, Action action, EquipmentSlot hand, Material heldItem, boolean container
+    ) {
+        return StaffModeWorldInteractionPolicy.blocksBlockInteraction(tier, action)
+                && action == Action.RIGHT_CLICK_BLOCK
+                && hand == EquipmentSlot.HAND
+                && !container
+                && (heldItem == null || !heldItem.name().endsWith("_BUCKET"));
     }
 
     // Defensive fallback for implementations that notify an entity-caused block
