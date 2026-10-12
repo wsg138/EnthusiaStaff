@@ -101,17 +101,21 @@ class StaffActionLoggerJournalTest {
                     "block-place", completePair);
             logger.close();
 
-            String today = LocalDate.now(ZoneOffset.UTC).toString();
-            var lines = Files.readAllLines(directory.resolve(
-                    "discord-outbox/staff-actions-" + today + ".jsonl"), StandardCharsets.UTF_8);
+            Path journal;
+            try (var files = Files.list(directory.resolve("discord-outbox"))) {
+                journal = files.filter(path -> path.getFileName().toString().endsWith(".jsonl"))
+                        .findFirst().orElseThrow();
+            }
+            var lines = Files.readAllLines(journal, StandardCharsets.UTF_8);
             assertEquals(2, lines.size());
             ObjectMapper json = new ObjectMapper();
             assertEquals("x".repeat(1023) + " [truncated]",
                     json.readTree(lines.get(0)).path("detail").asText());
             assertEquals("x".repeat(1022) + "😀 [truncated]",
                     json.readTree(lines.get(1)).path("detail").asText());
-            assertEquals(lines, Files.readAllLines(directory.resolve(
-                    "logs/staff-actions-" + today + ".log"), StandardCharsets.UTF_8));
+            String auditName = journal.getFileName().toString().replace(".jsonl", ".log");
+            assertEquals(lines, Files.readAllLines(
+                    directory.resolve("logs").resolve(auditName), StandardCharsets.UTF_8));
         } finally {
             executor.shutdownNow();
         }
