@@ -300,6 +300,13 @@ public final class StaffModeWorldInteractionListener implements Listener {
                 staffMode.logStaffAction(player, CONTAINER_EDIT_DENIED_ACTION,
                         top.getType() + " raw-slot=" + event.getRawSlot()
                                 + " action=" + event.getAction());
+            } else if (shouldAuditDeniedPlayerInventoryClick(tier, event.getAction(),
+                    event.getRawSlot(), top.getSize(), true)) {
+                // The generic manager is registered later and ignores this cancelled
+                // event, so record a meaningful HELPER lower-inventory denial here.
+                staffMode.logStaffAction(player, "inventory-edit-denied",
+                        "click=" + event.getClick() + " action=" + event.getAction()
+                                + " raw-slot=" + event.getRawSlot());
             }
         }
     }
@@ -339,6 +346,10 @@ public final class StaffModeWorldInteractionListener implements Listener {
             if (touchesProtectedContainerSlot(event.getRawSlots(), top.getSize())) {
                 staffMode.logStaffAction(player, CONTAINER_EDIT_DENIED_ACTION,
                         top.getType() + " drag");
+            } else if (shouldAuditDeniedPlayerInventoryDrag(tier,
+                    event.getRawSlots(), top.getSize(), true)) {
+                staffMode.logStaffAction(player, "inventory-edit-denied",
+                        "drag affected-slots=" + event.getRawSlots().size());
             }
         }
     }
@@ -381,6 +392,37 @@ public final class StaffModeWorldInteractionListener implements Listener {
     // Shift-click and collect-to-cursor can mutate the top from a lower slot.
     static boolean shouldAuditCompletedContainerClick(InventoryAction action, int rawSlot, int topSize) {
         return shouldAuditDeniedContainerClick(action, rawSlot, topSize);
+    }
+
+    /**
+     * Separate HELPER's ordinary player-inventory denial from a real attempt
+     * to mutate the protected top container. Container edits already have a
+     * distinct event owner and should never create a second denied record.
+     */
+    static boolean shouldAuditDeniedPlayerInventoryClick(StaffDutyTier tier,
+            InventoryAction action, int rawSlot, int topSize, boolean protectedTop) {
+        return tier == StaffDutyTier.HELPER
+                && action != null && action != InventoryAction.NOTHING
+                && rawSlot >= 0
+                && (!protectedTop || (rawSlot >= topSize
+                        && !shouldAuditDeniedContainerClick(action, rawSlot, topSize)));
+    }
+
+    static boolean shouldAuditDeniedPlayerInventoryDrag(StaffDutyTier tier,
+            Set<Integer> rawSlots, int topSize, boolean protectedTop) {
+        return tier == StaffDutyTier.HELPER
+                && rawSlots != null && !rawSlots.isEmpty()
+                && (!protectedTop || !touchesProtectedContainerSlot(rawSlots, topSize));
+    }
+
+    // When the Ender Chest view itself is rank-restricted, a normal lower
+    // inventory action remains denied by StaffModeManager, but is not a
+    // top-container transfer and should receive a generic denied audit.
+    static boolean shouldAuditDeniedEnderLowerClick(InventoryAction action,
+            int rawSlot, int topSize) {
+        return action != null && action != InventoryAction.NOTHING
+                && rawSlot >= topSize
+                && !shouldAuditDeniedContainerClick(action, rawSlot, topSize);
     }
 
     static boolean touchesProtectedContainerSlot(Set<Integer> rawSlots, int topSize) {

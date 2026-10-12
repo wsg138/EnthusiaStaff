@@ -1380,11 +1380,23 @@ public final class StaffModeManager implements Listener {
         }
         if (rank == null || StaffModeAccessPolicy.blocksInventoryMutation(rank, ender)) {
             event.setCancelled(true);
+            int topSize = event.getView().getTopInventory().getSize();
+            StaffDutyTier deniedTier = StaffDutyTier.of(rank);
+            boolean protectedTop = StaffModeWorldInteractionListener.isProtectedContainerInventory(
+                    event.getView().getTopInventory());
             if (shouldAuditDeniedEnderChestEdit(rank, ender,
                     StaffModeWorldInteractionListener.shouldAuditDeniedContainerClick(
-                            event.getAction(), event.getRawSlot(),
-                            event.getView().getTopInventory().getSize()))) {
+                            event.getAction(), event.getRawSlot(), topSize))) {
                 audit(player, rank, "ender-chest-edit-denied",
+                        "click=" + event.getClick() + " action=" + event.getAction()
+                                + " raw-slot=" + event.getRawSlot());
+            } else if (StaffModeWorldInteractionListener.shouldAuditDeniedPlayerInventoryClick(
+                    deniedTier, event.getAction(), event.getRawSlot(), topSize, protectedTop)
+                    || (ender && rank != null && StaffModeAccessPolicy.blocksEnderChestMutation(rank)
+                            && deniedTier != StaffDutyTier.HELPER
+                            && StaffModeWorldInteractionListener.shouldAuditDeniedEnderLowerClick(
+                                    event.getAction(), event.getRawSlot(), topSize))) {
+                audit(player, rank, "inventory-edit-denied",
                         "click=" + event.getClick() + " action=" + event.getAction()
                                 + " raw-slot=" + event.getRawSlot());
             }
@@ -1423,10 +1435,21 @@ public final class StaffModeManager implements Listener {
                 || StaffModeAccessPolicy.blocksInventoryMutation(rank, ender)
                 || isStaffTool(event.getOldCursor())) {
             event.setCancelled(true);
-            if (shouldAuditDeniedEnderChestEdit(rank, ender,
-                    StaffModeWorldInteractionListener.touchesProtectedContainerSlot(
-                            event.getRawSlots(), event.getView().getTopInventory().getSize()))) {
+            int topSize = event.getView().getTopInventory().getSize();
+            StaffDutyTier deniedTier = StaffDutyTier.of(rank);
+            boolean topTouched = StaffModeWorldInteractionListener.touchesProtectedContainerSlot(
+                    event.getRawSlots(), topSize);
+            if (shouldAuditDeniedEnderChestEdit(rank, ender, topTouched)) {
                 audit(player, rank, "ender-chest-edit-denied",
+                        "drag affected-slots=" + event.getRawSlots().size());
+            } else if (StaffModeWorldInteractionListener.shouldAuditDeniedPlayerInventoryDrag(
+                    deniedTier, event.getRawSlots(), topSize,
+                    StaffModeWorldInteractionListener.isProtectedContainerInventory(
+                            event.getView().getTopInventory()))
+                    || (ender && rank != null && StaffModeAccessPolicy.blocksEnderChestMutation(rank)
+                            && deniedTier != StaffDutyTier.HELPER
+                            && !topTouched && !event.getRawSlots().isEmpty())) {
+                audit(player, rank, "inventory-edit-denied",
                         "drag affected-slots=" + event.getRawSlots().size());
             }
             return;
