@@ -37,7 +37,17 @@ If the available environment cannot safely satisfy all of these constraints, **d
 6. Only after the ordinary action matrix passes, test staging-only DB interruption, 429/5xx/timeout replay, outbox backlog and recovery. Discord delivery remains **at least once**; no exactly-once HTTP guarantee.
 7. Roll back only staging artifacts if needed. Require explicit separate permission for any production deployment, restart, configuration change, Discord cutover, or Policy v2 enablement.
 
-## 4. Acceptance status model
+## 4. Owner-authorized low-impact live observations (2026-10-12)
+
+The owner subsequently selected the **existing live SMP/Velocity server** for limited read-only and harmless-action validation rather than provisioning a spare server. This permission does **not** extend to the destructive/fault-injection tests in section 3. The independently isolated runtime above remains the requirement for simulating outages, 429/5xx, database failures, backlog pressure, and rollback.
+
+Only after read-only verification of the installed Paper/Velocity JAR versions, current private route, and outbox health, an authorized operator may perform one or two low-frequency, reversible actions with a consenting staff test identity: staff-mode entry/normal exit and a benign audit-generating interaction. Correlate the sanitized timestamp and event ID through existing local audit journal, read-only DB outbox status and the already configured private staff log channel. If a component is missing, outdated, disabled, or routed unexpectedly, **record NOT RUN and stop** rather than enabling webhooks, changing permissions, promoting JARs, or restarting production to make the test work.
+
+Do **not** perform production punishment/approval flows, synthetic alt-evasion logins, webhook retries/429/5xx, database outages, injected malformed journals, high-volume clicks, manual dead-letter requeue, config changes, DiscordSRV/Policy v2 cutovers or any production restart without a separate review and authorization. Never store raw player messages, staff private notes, credentials, or webhook tokens in public logs or issues. Read-only inspection alone is **not** a real Discord end-to-end PASS; every claimed delivered event must have independently observed, matching private-channel evidence.
+
+Live remote access via Blackboard was intermittent/uninitialized at this checkpoint, so **no real server observation or live test has yet been executed**. Do not infer current production plugin versions from the mutable GitHub staging tag.
+
+## 5. Acceptance status model
 
 - **Code and artifact ready:** exact-source release hash verified, GitHub-hosted unit/MariaDB/runtime tests green.
 - **Interactive test ready:** independently isolated Paper/Velocity/DB setup and staging-only webhook configured, backups saved, private channel confirmed.
@@ -45,4 +55,4 @@ If the available environment cannot safely satisfy all of these constraints, **d
 
 Never collapse these stages into one `passed` status. Without an isolated runtime or private webhook, stop at **code and artifact ready**.
 
-**Owner decision required only for interactive testing:** identify the disposable non-Pi server/environment to use and privately provision its DB/webhook secrets. Do not paste them into chat. If none exists, the remaining automated testing can continue in GitHub-hosted jobs, but private Discord and true player interaction tests remain unverified.
+**Current operator prerequisites:** For the narrowly authorized live observations, establish a reliable approved read-only view of the already running Paper/Velocity configuration, existing audit/DB status and private staff Discord evidence; do not paste secrets into chat. To run any outage, retry, failure-injection or restart test, separately provision a disposable non-Pi staging environment and dedicated private webhook/relay. Until either is available, mark those cases NOT RUN and continue hosted CI only.
