@@ -287,6 +287,18 @@ Expected behavior:
 - MariaDB or Paper-authority failure during a request fails closed; do not fall back to Discord roles or cached privilege guesses.
 - Paper authority unavailable means staff-sensitive reads/actions remain unavailable until authority returns.
 
+When the additional staging-only durable mirror registration mode is
+explicitly selected, `/ready` also requires both encrypted receipt
+ingress and recovery workers to remain healthy. If either reports a
+terminal storage/replay failure after the Discord identity becomes ready,
+readiness fails closed with HTTP 503 and the **fixed** non-sensitive reason
+`mirror_recovery_unavailable`. That failure remains latched until process
+restart, even if a later callback briefly reports healthy. `/health`
+continues to represent process liveness. No receipt text, IDs, paths,
+credentials or underlying exception details enter these status responses.
+When durable mode is disabled (the default), previous health behavior
+remains unchanged.
+
 DB initialization currently happens before the health listener starts, so a DB startup failure is observed through process exit/console rather than `/health`. Bloom/Pterodactyl should therefore use process restart policy plus readiness checks after successful startup.
 
 ## Startup order
