@@ -85,4 +85,35 @@ class StaffActionLoggerJournalTest {
             executor.shutdownNow();
         }
     }
+
+    @Test
+    void truncationRetainsWholeUnicodeCharactersAcrossTheUtf8JournalBoundary() throws Exception {
+        var executor = Executors.newSingleThreadExecutor();
+        try {
+            StaffActionLogger logger = new StaffActionLogger(
+                    Logger.getLogger(StaffActionLoggerJournalTest.class.getName() + ".unicode"),
+                    executor, () -> null, "SMP", "", directory);
+            String splitPair = "x".repeat(1023) + "😀" + "secret-after-boundary";
+            String completePair = "x".repeat(1022) + "😀" + "secret-after-boundary";
+            logger.recordStaffAction(UUID.randomUUID(), "Example", null, false, true,
+                    "block-place", splitPair);
+            logger.recordStaffAction(UUID.randomUUID(), "Example", null, false, true,
+                    "block-place", completePair);
+            logger.close();
+
+            String today = LocalDate.now(ZoneOffset.UTC).toString();
+            var lines = Files.readAllLines(directory.resolve(
+                    "discord-outbox/staff-actions-" + today + ".jsonl"), StandardCharsets.UTF_8);
+            assertEquals(2, lines.size());
+            ObjectMapper json = new ObjectMapper();
+            assertEquals("x".repeat(1023) + " [truncated]",
+                    json.readTree(lines.get(0)).path("detail").asText());
+            assertEquals("x".repeat(1022) + "😀 [truncated]",
+                    json.readTree(lines.get(1)).path("detail").asText());
+            assertEquals(lines, Files.readAllLines(directory.resolve(
+                    "logs/staff-actions-" + today + ".log"), StandardCharsets.UTF_8));
+        } finally {
+            executor.shutdownNow();
+        }
+    }
 }
