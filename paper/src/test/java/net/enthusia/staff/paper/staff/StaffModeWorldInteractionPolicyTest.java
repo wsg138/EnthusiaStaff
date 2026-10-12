@@ -2,13 +2,19 @@ package net.enthusia.staff.paper.staff;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.lang.reflect.Method;
 import java.util.Optional;
 import java.util.Set;
 import net.enthusia.staff.domain.auth.StaffRank;
 import org.bukkit.Material;
+import org.bukkit.event.EventHandler;
+import org.bukkit.event.EventPriority;
 import org.bukkit.event.block.Action;
+import org.bukkit.event.block.BlockBreakEvent;
+import org.bukkit.event.block.BlockPlaceEvent;
 import org.bukkit.event.inventory.InventoryAction;
 import org.junit.jupiter.api.Test;
 
@@ -35,6 +41,48 @@ class StaffModeWorldInteractionPolicyTest {
                 StaffModeWorldInteractionListener.blockEditAuditAction("block-break", false));
         assertEquals("block-place",
                 StaffModeWorldInteractionListener.blockEditAuditAction("block-place", false));
+    }
+
+    @Test
+    void allowedBlockEditsAreAuditedOnlyAfterOtherCancellationHandlers() throws Exception {
+        assertFinalBlockAudit("onCompletedBlockBreak", BlockBreakEvent.class);
+        assertFinalBlockAudit("onCompletedBlockPlace", BlockPlaceEvent.class);
+        assertEnforcementPriority("onBlockBreak", BlockBreakEvent.class);
+        assertEnforcementPriority("onBlockPlace", BlockPlaceEvent.class);
+    }
+
+    @Test
+    void completedEditAuditPreservesDutyTierPermissionRules() {
+        assertFalse(StaffModeWorldInteractionListener.shouldAuditCompletedBlockEdit(
+                false, StaffDutyTier.HELPER));
+        assertFalse(StaffModeWorldInteractionListener.shouldAuditCompletedBlockEdit(
+                false, null));
+        assertTrue(StaffModeWorldInteractionListener.shouldAuditCompletedBlockEdit(
+                false, StaffDutyTier.MOD));
+        assertTrue(StaffModeWorldInteractionListener.shouldAuditCompletedBlockEdit(
+                false, StaffDutyTier.DEVELOPER));
+        assertTrue(StaffModeWorldInteractionListener.shouldAuditCompletedBlockEdit(
+                false, StaffDutyTier.ADMIN));
+        assertTrue(StaffModeWorldInteractionListener.shouldAuditCompletedBlockEdit(
+                true, StaffDutyTier.HELPER));
+    }
+
+    private static void assertFinalBlockAudit(String methodName, Class<?> eventType) throws Exception {
+        Method callback = StaffModeWorldInteractionListener.class.getMethod(methodName, eventType);
+        EventHandler registration = callback.getAnnotation(EventHandler.class);
+        assertNotNull(registration);
+        assertEquals(EventPriority.MONITOR, registration.priority());
+        assertTrue(registration.ignoreCancelled(),
+                "Cancelled events must not produce successful block-edit records");
+    }
+
+    private static void assertEnforcementPriority(String methodName, Class<?> eventType)
+            throws Exception {
+        Method callback = StaffModeWorldInteractionListener.class.getMethod(methodName, eventType);
+        EventHandler registration = callback.getAnnotation(EventHandler.class);
+        assertNotNull(registration);
+        assertEquals(EventPriority.HIGHEST, registration.priority());
+        assertTrue(registration.ignoreCancelled());
     }
 
     @Test
