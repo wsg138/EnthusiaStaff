@@ -1,5 +1,6 @@
 package net.enthusia.staff.paper.staff;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -7,7 +8,9 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Set;
+import org.bukkit.Material;
 import org.bukkit.event.inventory.InventoryAction;
+import org.bukkit.inventory.ItemStack;
 import org.junit.jupiter.api.Test;
 
 class StaffModeInventoryAuditOwnershipTest {
@@ -52,6 +55,18 @@ class StaffModeInventoryAuditOwnershipTest {
                 Set.of(2, 33), 27));
         assertFalse(StaffModeWorldInteractionListener.touchesProtectedContainerSlot(
                 Set.of(27, 33), 27));
+    }
+
+    @Test
+    void specializedAuditRetainsMaterialAndAmountWithoutSensitiveItemMetadata()
+            throws IOException {
+        assertEquals("DIAMONDx3", StaffModeManager.describe(new ItemStack(Material.DIAMOND, 3)));
+        assertEquals("empty", StaffModeManager.describe(null));
+        Path world = Path.of(
+                "src/main/java/net/enthusia/staff/paper/staff/StaffModeWorldInteractionListener.java");
+        String source = Files.readString(world);
+        assertTrue(source.contains("StaffModeManager.describe(event.getCurrentItem())"));
+        assertTrue(source.contains("StaffModeManager.describe(event.getOldCursor())"));
     }
 
     @Test
