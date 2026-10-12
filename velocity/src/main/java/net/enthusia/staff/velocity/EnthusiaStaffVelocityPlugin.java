@@ -1056,7 +1056,10 @@ public final class EnthusiaStaffVelocityPlugin {
                         apiClock,
                         WebsiteReviewerAuthority.production(logger),
                         new PolicyV2PublicWebsiteView(new JdbcPolicyV2Store(runtime.dataSource()))
-                ),
+                ).withAccounts(new WebsiteAccountReader(runtime.dataSource(), apiClock, discordId ->
+                        net.enthusia.staff.domain.application.AccountLinkingService.issueFromDiscord(
+                                apiClock, new java.security.SecureRandom(), runtime.discordModerationPersistenceStore(),
+                                runtime.accountLinkingStore(), discordId))),
                 apiClock,
                 (message, failure) -> logger.error(message, failure)
         );

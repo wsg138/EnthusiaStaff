@@ -50,10 +50,22 @@ public final class AccountLinkingService {
     }
 
     public IssuedCode issueFromDiscord(DiscordUserId discordUserId) {
+        return issueFromDiscord(clock, random, identities, codes, discordUserId);
+    }
+
+    /** Issues the same self-service challenge for an authenticated website Discord identity. */
+    public static IssuedCode issueFromDiscord(
+            Clock clock, SecureRandom random, DiscordModerationPersistenceStore identities,
+            AccountLinkingStore codes, DiscordUserId discordUserId
+    ) {
+        require(clock, "clock");
+        require(random, "random");
+        require(identities, "identities");
+        require(codes, "codes");
         require(discordUserId, "discordUserId");
         Instant now = clock.instant();
         identities.ensureDiscordSubject(discordUserId, now);
-        String raw = generateCode();
+        String raw = generateCode(random);
         Instant expiresAt = now.plus(CODE_TTL);
         codes.issueFromDiscord(discordUserId, hash(raw), now, expiresAt);
         return new IssuedCode(raw, expiresAt, Direction.DISCORD_TO_MINECRAFT);
@@ -152,6 +164,10 @@ public final class AccountLinkingService {
     }
 
     private String generateCode() {
+        return generateCode(random);
+    }
+
+    private static String generateCode(SecureRandom random) {
         char[] value = new char[CODE_LENGTH];
         for (int index = 0; index < value.length; index++) {
             value[index] = CODE_ALPHABET[random.nextInt(CODE_ALPHABET.length)];
@@ -210,6 +226,9 @@ public final class AccountLinkingService {
     }
 
     public record IssuedCode(String code, Instant expiresAt, Direction direction) {
+        public String requestId() {
+            return hash(code);
+        }
         public IssuedCode {
             if (code == null || code.isBlank() || expiresAt == null || direction == null) {
                 throw new IllegalArgumentException("issued code fields must be present");
