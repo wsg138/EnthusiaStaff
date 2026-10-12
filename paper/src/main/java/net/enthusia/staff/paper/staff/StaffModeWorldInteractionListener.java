@@ -229,19 +229,12 @@ public final class StaffModeWorldInteractionListener implements Listener {
             return;
         }
         Inventory top = event.getView().getTopInventory();
-        if (!isProtectedContainerInventory(top)) {
-            return;
-        }
-        if (staffMode.isUnrestricted(player)) {
-            staffMode.logStaffAction(player, CONTAINER_EDIT_ACTION,
-                    top.getType() + " raw-slot=" + event.getRawSlot() + " action=" + event.getAction());
+        if (!isProtectedContainerInventory(top) || staffMode.isUnrestricted(player)) {
             return;
         }
         StaffDutyTier tier = staffMode.dutyTier(player);
         if (StaffModeWorldInteractionPolicy.blocksContainerEdit(tier)) {
-            // Cancel every click while a protected container is open. Cancelling only clicks in
-            // the top inventory is insufficient: shift-click, hotbar swap, double-click/collect,
-            // and similar actions can mutate the container from the player's inventory.
+            // Cancel lower-inventory transfers too: shift-click and collect can mutate the top.
             event.setCancelled(true);
             if (shouldAuditDeniedContainerClick(event.getAction(),
                     event.getRawSlot(), top.getSize())) {
@@ -249,11 +242,23 @@ public final class StaffModeWorldInteractionListener implements Listener {
                         top.getType() + " raw-slot=" + event.getRawSlot()
                                 + " action=" + event.getAction());
             }
+        }
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onCompletedContainerEdit(InventoryClickEvent event) {
+        if (!(event.getWhoClicked() instanceof Player player) || !onDuty(player)) {
             return;
         }
-        if (StaffModeWorldInteractionPolicy.logsContainerEdit(tier)) {
+        Inventory top = event.getView().getTopInventory();
+        if (isProtectedContainerInventory(top)
+                && shouldAuditCompletedContainerEdit(staffMode.isUnrestricted(player),
+                        staffMode.dutyTier(player))) {
+            // A later StaffModeManager or third-party handler may deny the edit.
+            // Only successful, uncancelled events reach this callback.
             staffMode.logStaffAction(player, CONTAINER_EDIT_ACTION,
-                    top.getType() + " raw-slot=" + event.getRawSlot() + " action=" + event.getAction());
+                    top.getType() + " raw-slot=" + event.getRawSlot()
+                            + " action=" + event.getAction());
         }
     }
 
@@ -263,29 +268,35 @@ public final class StaffModeWorldInteractionListener implements Listener {
             return;
         }
         Inventory top = event.getView().getTopInventory();
-        if (!isProtectedContainerInventory(top)) {
-            return;
-        }
-        if (staffMode.isUnrestricted(player)) {
-            boolean touchesContainer = touchesProtectedContainerSlot(event.getRawSlots(), top.getSize());
-            if (touchesContainer) {
-                staffMode.logStaffAction(player, CONTAINER_EDIT_ACTION, top.getType() + " drag");
-            }
+        if (!isProtectedContainerInventory(top) || staffMode.isUnrestricted(player)) {
             return;
         }
         StaffDutyTier tier = staffMode.dutyTier(player);
-        boolean touchesProtectedContainer = touchesProtectedContainerSlot(event.getRawSlots(), top.getSize());
         if (StaffModeWorldInteractionPolicy.blocksContainerEdit(tier)) {
             event.setCancelled(true);
-            if (touchesProtectedContainer) {
+            if (touchesProtectedContainerSlot(event.getRawSlots(), top.getSize())) {
                 staffMode.logStaffAction(player, CONTAINER_EDIT_DENIED_ACTION,
                         top.getType() + " drag");
             }
+        }
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onCompletedContainerDrag(InventoryDragEvent event) {
+        if (!(event.getWhoClicked() instanceof Player player) || !onDuty(player)) {
             return;
         }
-        if (touchesProtectedContainer && StaffModeWorldInteractionPolicy.logsContainerEdit(tier)) {
+        Inventory top = event.getView().getTopInventory();
+        if (isProtectedContainerInventory(top)
+                && touchesProtectedContainerSlot(event.getRawSlots(), top.getSize())
+                && shouldAuditCompletedContainerEdit(staffMode.isUnrestricted(player),
+                        staffMode.dutyTier(player))) {
             staffMode.logStaffAction(player, CONTAINER_EDIT_ACTION, top.getType() + " drag");
         }
+    }
+
+    static boolean shouldAuditCompletedContainerEdit(boolean unrestricted, StaffDutyTier tier) {
+        return unrestricted || StaffModeWorldInteractionPolicy.logsContainerEdit(tier);
     }
 
     /**
