@@ -1,7 +1,7 @@
 # Discord Channel Mapping — Staff Plugin Logging
 
 **Authoritative mapping of Staff plugin Discord outbox destinations to Discord channels.**
-Last updated: 2026-10-10 (unified staff event and review-alert checkpoint; staged only)
+Last updated: 2026-10-12 (source-verified event matrix and punishment-note privacy; staging release only)
 
 ## Destination → Channel Map
 
@@ -42,13 +42,15 @@ Fired for every new punishment from **every** source:
 | `reasonId` | Configured reason ID (e.g., `chat.ai-moderation`) |
 | `family` | Punishment family/category |
 | `publicReason` | Human-readable public reason |
-| `internalExplanation` | Full internal notes — **includes exact offending message for RoseChat mutes** (truncated to 1,000 chars) |
+| `internalExplanation` | **Not rendered in Discord webhooks.** Internal case notes remain in the protected case/outbox storage; the punishment embed deliberately excludes this field. |
 | `issuedAt` | Timestamp of issuance |
 | `actorName` | Display name of issuer (staff name or "Enthusia AI Moderation") |
 | `actorRank` | Rank of issuer (HELPER, MOD, ADMIN, FOUNDER, SYSTEM) |
 | `sanctionTypes` | List of sanction types (e.g., `["PUBLIC_MUTE"]`) |
 | `sanctionDetails` | Human-readable per-sanction details (e.g., `["PUBLIC_MUTE (30 days)"]`) |
 | `sanctionIds` | Individual sanction UUIDs |
+
+The `PUNISHMENT_CREATED` webhook view is a **whitelisted projection**, not a dump of the persisted punishment case. The private `internalExplanation` field may exist in MariaDB, including sensitive moderation evidence, but the outbound Discord renderer excludes it (PR #531). Do not copy raw outbox payloads into Discord or public CI logs to bypass this boundary. The public reason, sanction type/duration, actor and case identifiers remain visible.
 
 ### Event: `SANCTION_CHANGED`
 Fired when a sanction is modified after creation:
@@ -87,7 +89,7 @@ Helper punishment request workflow (not final punishments):
 | Staff `/ban` (Founder only) | PunishmentService | ✅ Yes |
 | Staff `/mute`, `/kick`, `/warn` | PunishmentService | ✅ Yes |
 | Staff `/freeze` | FreezeStore → punishments | ✅ Yes (in #in-game-punishments) |
-| RoseChat AI moderation | RoseChatAutomatedModerationProvider → PunishmentService | ✅ Yes (with message content) |
+| RoseChat AI moderation | RoseChatAutomatedModerationProvider → PunishmentService | ✅ Via the Staff punishment pipeline when enabled; **offending chat text and internal investigation notes are not shown in the Discord embed** |
 | Polar anticheat | **No integration** | ❌ Not logged |
 | Other automated systems | **No integration** | ❌ Not logged |
 
