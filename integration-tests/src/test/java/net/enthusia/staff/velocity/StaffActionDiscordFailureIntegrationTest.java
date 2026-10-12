@@ -233,7 +233,7 @@ final class StaffActionDiscordFailureIntegrationTest {
             q.setBytes(1, bytes(id));
             try (ResultSet result = q.executeQuery()) {
                 assertTrue(result.next());
-                return result.getString(1);
+                return result.getString(column);
             }
         }
     }
