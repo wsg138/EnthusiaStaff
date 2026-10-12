@@ -477,7 +477,8 @@ public final class StaffModeWorldInteractionListener implements Listener {
         }
     }
 
-    private static boolean isProtectedContainerInventory(Inventory inventory) {
+    // Shared by StaffModeManager so one permitted top-container edit has one audit owner.
+    static boolean isProtectedContainerInventory(Inventory inventory) {
         if (inventory == null || inventory.getType() == InventoryType.PLAYER) {
             return false;
         }
