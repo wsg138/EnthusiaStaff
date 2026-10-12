@@ -171,6 +171,34 @@ class StaffModeWorldInteractionPolicyTest {
     }
 
     @Test
+    void completedContainerEditsWaitForFinalCancellationState() throws Exception {
+        assertFinalBlockAudit("onCompletedContainerEdit",
+                org.bukkit.event.inventory.InventoryClickEvent.class);
+        assertFinalBlockAudit("onCompletedContainerDrag",
+                org.bukkit.event.inventory.InventoryDragEvent.class);
+        assertEnforcementPriority("onContainerEdit",
+                org.bukkit.event.inventory.InventoryClickEvent.class);
+        assertEnforcementPriority("onContainerDrag",
+                org.bukkit.event.inventory.InventoryDragEvent.class);
+    }
+
+    @Test
+    void completedContainerEditAuditDoesNotOverrideTierRestrictions() {
+        assertFalse(StaffModeWorldInteractionListener.shouldAuditCompletedContainerEdit(
+                false, StaffDutyTier.HELPER));
+        assertFalse(StaffModeWorldInteractionListener.shouldAuditCompletedContainerEdit(
+                false, null));
+        assertTrue(StaffModeWorldInteractionListener.shouldAuditCompletedContainerEdit(
+                false, StaffDutyTier.MOD));
+        assertTrue(StaffModeWorldInteractionListener.shouldAuditCompletedContainerEdit(
+                false, StaffDutyTier.DEVELOPER));
+        assertTrue(StaffModeWorldInteractionListener.shouldAuditCompletedContainerEdit(
+                false, StaffDutyTier.ADMIN));
+        assertTrue(StaffModeWorldInteractionListener.shouldAuditCompletedContainerEdit(
+                true, StaffDutyTier.HELPER));
+    }
+
+    @Test
     void deniedContainerAuditTracksMutationsNotOrdinaryPlayerInventoryClicks() {
         int topSize = 27;
         assertTrue(StaffModeWorldInteractionPolicy.blocksContainerEdit(StaffDutyTier.HELPER));
