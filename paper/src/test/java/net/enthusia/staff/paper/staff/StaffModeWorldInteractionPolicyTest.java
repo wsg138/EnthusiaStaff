@@ -215,6 +215,21 @@ class StaffModeWorldInteractionPolicyTest {
     }
 
     @Test
+    void completedContainerClickAuditIgnoresNoOpAndUnrelatedLowerInventoryClicks() {
+        int topSize = 27;
+        assertFalse(StaffModeWorldInteractionListener.shouldAuditCompletedContainerClick(
+                InventoryAction.NOTHING, 3, topSize));
+        assertFalse(StaffModeWorldInteractionListener.shouldAuditCompletedContainerClick(
+                InventoryAction.PICKUP_ALL, 32, topSize));
+        assertTrue(StaffModeWorldInteractionListener.shouldAuditCompletedContainerClick(
+                InventoryAction.PICKUP_ALL, 3, topSize));
+        assertTrue(StaffModeWorldInteractionListener.shouldAuditCompletedContainerClick(
+                InventoryAction.MOVE_TO_OTHER_INVENTORY, 32, topSize));
+        assertTrue(StaffModeWorldInteractionListener.shouldAuditCompletedContainerClick(
+                InventoryAction.COLLECT_TO_CURSOR, 32, topSize));
+    }
+
+    @Test
     void deniedContainerAuditIncludesTransferAndProtectedDragAttempts() {
         int topSize = 27;
         assertTrue(StaffModeWorldInteractionListener.shouldAuditDeniedContainerClick(

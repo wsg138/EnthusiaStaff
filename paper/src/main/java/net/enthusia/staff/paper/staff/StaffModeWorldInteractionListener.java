@@ -252,10 +252,12 @@ public final class StaffModeWorldInteractionListener implements Listener {
         }
         Inventory top = event.getView().getTopInventory();
         if (isProtectedContainerInventory(top)
+                && shouldAuditCompletedContainerClick(event.getAction(),
+                        event.getRawSlot(), top.getSize())
                 && shouldAuditCompletedContainerEdit(staffMode.isUnrestricted(player),
                         staffMode.dutyTier(player))) {
             // A later StaffModeManager or third-party handler may deny the edit.
-            // Only successful, uncancelled events reach this callback.
+            // Only non-cancelled attempts that can mutate the top container are audited.
             staffMode.logStaffAction(player, CONTAINER_EDIT_ACTION,
                     top.getType() + " raw-slot=" + event.getRawSlot()
                             + " action=" + event.getAction());
@@ -311,6 +313,13 @@ public final class StaffModeWorldInteractionListener implements Listener {
         return (rawSlot >= 0 && rawSlot < topSize)
                 || action == InventoryAction.MOVE_TO_OTHER_INVENTORY
                 || action == InventoryAction.COLLECT_TO_CURSOR;
+    }
+
+    // Reuse the denied-attempt filter: ordinary clicks in the player's lower
+    // inventory and no-op actions do not demonstrate a container edit.
+    // Shift-click and collect-to-cursor can mutate the top from a lower slot.
+    static boolean shouldAuditCompletedContainerClick(InventoryAction action, int rawSlot, int topSize) {
+        return shouldAuditDeniedContainerClick(action, rawSlot, topSize);
     }
 
     static boolean touchesProtectedContainerSlot(Set<Integer> rawSlots, int topSize) {
