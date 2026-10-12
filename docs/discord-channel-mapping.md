@@ -21,7 +21,7 @@ Fired for every freeze/unfreeze from **every** source (staff `/freeze` command, 
 reconciliation). These are punishments: they land in #in-game-punishments with the target,
 the acting staffer, and the freeze reason.
 
-**Rich fields included:**
+**Fields eligible for the punishment webhook embed:**
 | Field | Description |
 |---|---|
 | `targetId` | Frozen player's UUID |
@@ -29,10 +29,10 @@ the acting staffer, and the freeze reason.
 | `reason` | Freeze reason |
 
 ### Event: `PUNISHMENT_CREATED`
-Fired for every new punishment from **every** source:
+Emitted for new punishments committed through **EnthusiaStaff's punishment pipeline** (not independent external punishment sources):
 - Staff commands (`/punish`, `/ban`, `/mute`, `/kick`, `/warn`, `/freeze`)
 - RoseChat AI automated moderation (30-day public mutes)
-- Any future automated source via `PunishmentService.create()`
+- Other sources invoking `PunishmentService.create()` with the required authority and policy
 
 **Rich fields included:**
 | Field | Description |
@@ -42,7 +42,6 @@ Fired for every new punishment from **every** source:
 | `reasonId` | Configured reason ID (e.g., `chat.ai-moderation`) |
 | `family` | Punishment family/category |
 | `publicReason` | Human-readable public reason |
-| `internalExplanation` | **Not rendered in Discord webhooks.** Internal case notes remain in the protected case/outbox storage; the punishment embed deliberately excludes this field. |
 | `issuedAt` | Timestamp of issuance |
 | `actorName` | Display name of issuer (staff name or "Enthusia AI Moderation") |
 | `actorRank` | Rank of issuer (HELPER, MOD, ADMIN, FOUNDER, SYSTEM) |
