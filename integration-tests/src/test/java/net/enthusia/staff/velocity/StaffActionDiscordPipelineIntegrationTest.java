@@ -2,7 +2,6 @@ package net.enthusia.staff.velocity;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.fasterxml.jackson.databind.JsonNode;
@@ -69,7 +68,6 @@ final class StaffActionDiscordPipelineIntegrationTest {
     void actualPaperJournalReplaysOnceAndVelocityDeliversMentionSafeEmbed() throws Exception {
         Path paperJar = Path.of(System.getProperty("enthusia.paperRuntimeJar"));
         assertTrue(Files.isRegularFile(paperJar));
-        ObjectMapper json = new ObjectMapper();
         try (MariaDbRuntime runtime = MariaDb.initialize(databaseConfig());
              URLClassLoader isolated = new URLClassLoader(
                      new URL[]{paperJar.toUri().toURL()}, ClassLoader.getPlatformClassLoader());
@@ -84,75 +82,92 @@ final class StaffActionDiscordPipelineIntegrationTest {
                     boolean.class, boolean.class, String.class, String.class);
             Method recover = loggerType.getMethod("recoverOutboxOnce");
             Method close = loggerType.getMethod("close");
-
             AtomicBoolean disconnected = new AtomicBoolean(true);
             Supplier<DataSource> source = () -> disconnected.get() ? null : runtime.dataSource();
             Object paperLogger = constructor.newInstance(
-                    Logger.getLogger(getClass().getName()), executor, source,
-                    "TEST", "", directory);
+                    Logger.getLogger(getClass().getName()), executor, source, "TEST", "", directory);
             try {
-                UUID actorId = UUID.randomUUID();
-                append.invoke(paperLogger, actorId, "TestModerator", null,
-                        false, true, "staff-mode-entered", "path=fresh-entry");
-                executor.shutdown();
-                assertTrue(executor.awaitTermination(10, TimeUnit.SECONDS));
-
-                List<Path> journals;
-                try (var listed = Files.list(directory.resolve("discord-outbox"))) {
-                    journals = listed.filter(file -> file.getFileName().toString().startsWith("staff-actions-")
-                            && file.getFileName().toString().endsWith(".jsonl")).toList();
-                }
-                assertEquals(1, journals.size());
-                Path journal = journals.getFirst();
-                JsonNode record = json.readTree(Files.readString(journal, StandardCharsets.UTF_8));
-                UUID eventId = UUID.fromString(record.path("eventId").asText());
-                assertEquals(actorId.toString(), record.path("actor").asText());
-                assertEquals(0, countByEvent(eventId));
-
-                // The immediate Paper->DB insert failed. Recover the original event ID
-                // twice: MariaDB must preserve one row, not generate another message.
-                disconnected.set(false);
-                recover.invoke(paperLogger);
-                recover.invoke(paperLogger);
-                assertEquals(1, countByEvent(eventId));
-                assertEquals("PENDING", state(eventId));
-                insertChannel();
-
-                List<JsonNode> acceptedRequests = new ArrayList<>();
-                DiscordWebhookTransport.Jdk transport = new DiscordWebhookTransport.Jdk(
-                        Duration.ofSeconds(2), (uri, timeout, body) -> {
-                            assertEquals("https", uri.getScheme());
-                            assertEquals(STAGING_HOST, uri.getHost());
-                            assertEquals(Duration.ofSeconds(2), timeout);
-                            acceptedRequests.add(json.readTree(body));
-                            return 204;
-                        });
-                Clock clock = Clock.fixed(Instant.now().plusSeconds(30), ZoneOffset.UTC);
-                try (DiscordOutboxWorker worker = new DiscordOutboxWorker(
-                        null, null, LoggerFactory.getLogger(getClass()), clock, null,
-                        runtime.discordOutboxStore(), routes(), 3, 2,
-                        Duration.ofMinutes(5), Duration.ofSeconds(2),
-                        new DiscordEventRenderer(), transport)) {
-                    worker.runOnce();
-                    worker.runOnce();
-                }
-
-                assertEquals(1, countByEvent(eventId));
-                assertEquals("DELIVERED", state(eventId));
-                assertEquals(1, acceptedRequests.size());
-                JsonNode payload = acceptedRequests.getFirst();
-                assertEquals("STAFF ACTION", payload.path("embeds").get(0).path("title").asText());
-                assertTrue(payload.toString().contains(eventId.toString()));
-                assertTrue(payload.toString().contains("staff-mode-entered"));
-                assertFalse(payload.has("content"), "Staff-action logs must never carry role mentions");
-                assertEquals(0, payload.path("allowed_mentions").path("parse").size());
-                assertFalse(payload.path("allowed_mentions").has("roles"));
-                assertTrue(payload.toString().contains("fresh-entry"));
-                assertNotNull(record.path("eventId").textValue());
+                UUID eventId = recordAndReplay(paperLogger, append, recover, disconnected, executor);
+                verifyVelocityDelivery(runtime, eventId);
             } finally {
                 close.invoke(paperLogger);
             }
         }
+    }
+
+    private UUID recordAndReplay(
+            Object logger, Method append, Method recover, AtomicBoolean disconnected,
+            ExecutorService executor
+    ) throws Exception {
+        UUID actorId = UUID.randomUUID();
+        append.invoke(logger, actorId, "TestModerator", null,
+                false, true, "staff-mode-entered", "path=fresh-entry");
+        executor.shutdown();
+        assertTrue(executor.awaitTermination(10, TimeUnit.SECONDS));
+
+        Path journal = singleJournal();
+        JsonNode record = new ObjectMapper().readTree(Files.readString(journal, StandardCharsets.UTF_8));
+        UUID eventId = UUID.fromString(record.path("eventId").asText());
+        assertEquals(actorId.toString(), record.path("actor").asText());
+        assertEquals(0, countByEvent(eventId));
+
+        disconnected.set(false);
+        recover.invoke(logger);
+        assertEquals(1, countByEvent(eventId));
+        Path cursor = journal.resolveSibling(journal.getFileName() + ".cursor");
+        assertTrue(Files.isRegularFile(cursor));
+        Files.delete(cursor); // Simulated crash after MariaDB commit but before cursor replacement.
+        recover.invoke(logger); // Must offer the same event ID again, without duplicating the row.
+        assertEquals(1, countByEvent(eventId));
+        assertEquals("PENDING", state(eventId));
+        insertChannel();
+        return eventId;
+    }
+
+    private Path singleJournal() throws Exception {
+        List<Path> journals;
+        try (var listed = Files.list(directory.resolve("discord-outbox"))) {
+            journals = listed.filter(file -> file.getFileName().toString().startsWith("staff-actions-")
+                    && file.getFileName().toString().endsWith(".jsonl")).toList();
+        }
+        assertEquals(1, journals.size());
+        return journals.getFirst();
+    }
+
+    private void verifyVelocityDelivery(MariaDbRuntime runtime, UUID eventId) throws Exception {
+        ObjectMapper json = new ObjectMapper();
+        List<JsonNode> requests = new ArrayList<>();
+        DiscordWebhookTransport.Jdk transport = new DiscordWebhookTransport.Jdk(
+                Duration.ofSeconds(2), (uri, timeout, body) -> {
+                    assertEquals("https", uri.getScheme());
+                    assertEquals(STAGING_HOST, uri.getHost());
+                    assertEquals(Duration.ofSeconds(2), timeout);
+                    requests.add(json.readTree(body));
+                    return 204;
+                });
+        Clock clock = Clock.fixed(Instant.now().plusSeconds(30), ZoneOffset.UTC);
+        try (DiscordOutboxWorker worker = new DiscordOutboxWorker(
+                null, null, LoggerFactory.getLogger(getClass()), clock, null,
+                runtime.discordOutboxStore(), routes(), 3, 2,
+                Duration.ofMinutes(5), Duration.ofSeconds(2),
+                new DiscordEventRenderer(), transport)) {
+            worker.runOnce();
+            worker.runOnce();
+        }
+        assertEquals(1, countByEvent(eventId));
+        assertEquals("DELIVERED", state(eventId));
+        assertEquals(1, requests.size());
+        assertMentionSafeStaffAction(requests.getFirst(), eventId);
+    }
+
+    private static void assertMentionSafeStaffAction(JsonNode payload, UUID eventId) {
+        assertEquals("STAFF ACTION", payload.path("embeds").get(0).path("title").asText());
+        assertTrue(payload.toString().contains(eventId.toString()));
+        assertTrue(payload.toString().contains("staff-mode-entered"));
+        assertTrue(payload.toString().contains("fresh-entry"));
+        assertFalse(payload.has("content"), "Staff-action logs must never carry role mentions");
+        assertEquals(0, payload.path("allowed_mentions").path("parse").size());
+        assertFalse(payload.path("allowed_mentions").has("roles"));
     }
 
     private static DatabaseConfig databaseConfig() {
