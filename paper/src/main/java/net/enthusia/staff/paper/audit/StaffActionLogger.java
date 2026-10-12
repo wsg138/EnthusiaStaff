@@ -228,7 +228,13 @@ public final class StaffActionLogger implements AutoCloseable {
         if (safe.length() <= MAX_AUDIT_DETAIL_LENGTH) {
             return safe;
         }
-        return safe.substring(0, MAX_AUDIT_DETAIL_LENGTH) + " [truncated]";
+        int boundary = MAX_AUDIT_DETAIL_LENGTH;
+        if (Character.isHighSurrogate(safe.charAt(boundary - 1))
+                && Character.isLowSurrogate(safe.charAt(boundary))) {
+            // Keep UTF-16 surrogate pairs intact before the journal's UTF-8 encoding.
+            boundary--;
+        }
+        return safe.substring(0, boundary) + " [truncated]";
     }
 
     private void warnOutbox(String warning, Exception exception) {
