@@ -1341,6 +1341,17 @@ public final class StaffModeManager implements Listener {
         return action != null && action != InventoryAction.NOTHING && !dedicatedContainerOwner;
     }
 
+    // HELPER/unknown denied container interactions are already owned by the world listener.
+    // MOD (in exceptional Ender Chest views) and ADMIN need a distinct denied edit record
+    // when StaffModeAccessPolicy blocks their Ender Chest mutation at this handler.
+    static boolean shouldAuditDeniedEnderChestEdit(
+            StaffRank rank, boolean enderChestView, boolean meaningfulContainerAttempt) {
+        return enderChestView
+                && meaningfulContainerAttempt
+                && StaffModeAccessPolicy.blocksEnderChestMutation(rank)
+                && !StaffModeWorldInteractionPolicy.blocksContainerEdit(StaffDutyTier.of(rank));
+    }
+
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     public void onInventoryClick(InventoryClickEvent event) {
         if (!(event.getWhoClicked() instanceof Player player) || !protectedMode(player.getUniqueId())) {
@@ -1369,6 +1380,14 @@ public final class StaffModeManager implements Listener {
         }
         if (rank == null || StaffModeAccessPolicy.blocksInventoryMutation(rank, ender)) {
             event.setCancelled(true);
+            if (shouldAuditDeniedEnderChestEdit(rank, ender,
+                    StaffModeWorldInteractionListener.shouldAuditDeniedContainerClick(
+                            event.getAction(), event.getRawSlot(),
+                            event.getView().getTopInventory().getSize()))) {
+                audit(player, rank, "ender-chest-edit-denied",
+                        "click=" + event.getClick() + " action=" + event.getAction()
+                                + " raw-slot=" + event.getRawSlot());
+            }
             return;
         }
         StaffDutyTier tier = StaffDutyTier.of(rank);
@@ -1404,6 +1423,12 @@ public final class StaffModeManager implements Listener {
                 || StaffModeAccessPolicy.blocksInventoryMutation(rank, ender)
                 || isStaffTool(event.getOldCursor())) {
             event.setCancelled(true);
+            if (shouldAuditDeniedEnderChestEdit(rank, ender,
+                    StaffModeWorldInteractionListener.touchesProtectedContainerSlot(
+                            event.getRawSlots(), event.getView().getTopInventory().getSize()))) {
+                audit(player, rank, "ender-chest-edit-denied",
+                        "drag affected-slots=" + event.getRawSlots().size());
+            }
             return;
         }
         StaffDutyTier tier = StaffDutyTier.of(rank);
