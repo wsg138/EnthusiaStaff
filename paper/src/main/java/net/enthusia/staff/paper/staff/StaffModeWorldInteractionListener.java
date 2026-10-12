@@ -419,12 +419,7 @@ public final class StaffModeWorldInteractionListener implements Listener {
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     public void onArmorStandManipulate(PlayerArmorStandManipulateEvent event) {
         Player player = event.getPlayer();
-        if (!onDuty(player)) {
-            return;
-        }
-        if (staffMode.isUnrestricted(player)) {
-            staffMode.logStaffAction(player, ARMOR_STAND_EDIT_ACTION,
-                    event.getRightClicked().getType().toString());
+        if (!onDuty(player) || staffMode.isUnrestricted(player)) {
             return;
         }
         StaffDutyTier tier = staffMode.dutyTier(player);
@@ -434,12 +429,27 @@ public final class StaffModeWorldInteractionListener implements Listener {
             // General entity-interact variants can both fire for one click.
             staffMode.logStaffAction(player, armorStandEditAuditAction(tier),
                     event.getRightClicked().getType().toString());
+        }
+    }
+
+    // An allowed armor-stand equipment mutation must survive other protection
+    // plugins' cancellation handlers before it is recorded as successful.
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onCompletedArmorStandManipulate(PlayerArmorStandManipulateEvent event) {
+        Player player = event.getPlayer();
+        if (!onDuty(player)) {
             return;
         }
-        if (StaffModeWorldInteractionPolicy.logsContainerEdit(tier)) {
-            staffMode.logStaffAction(player, armorStandEditAuditAction(tier),
+        if (shouldAuditCompletedArmorStandManipulate(
+                staffMode.isUnrestricted(player), staffMode.dutyTier(player))) {
+            staffMode.logStaffAction(player, ARMOR_STAND_EDIT_ACTION,
                     event.getRightClicked().getType().toString());
         }
+    }
+
+    static boolean shouldAuditCompletedArmorStandManipulate(boolean unrestricted, StaffDutyTier tier) {
+        return unrestricted || (StaffModeWorldInteractionPolicy.logsContainerEdit(tier)
+                && !StaffModeWorldInteractionPolicy.blocksContainerEntityEdit(tier));
     }
 
     static String armorStandEditAuditAction(StaffDutyTier tier) {
