@@ -171,6 +171,18 @@ operator switch, actual HTTP replay-after-crash acceptance or production
 authorization. Do not enable for real Discord traffic or use as evidence
 of full mirror coverage or safe cross-bot deletion.
 
+A separate `AiMirrorDurableReceiptIngress` prototype accepts only scoped
+actual post-send receipts into a queue of at most 64 pending, served by one
+daemon disk writer. Submission is nonblocking; queue overflow is counted and
+does not delay Discord delivery. Disk failure closes admission; pending tasks
+are discarded on pause/close. It **only persists encrypted receipts**: it
+does not make API calls, start scheduling, send Discord messages, or connect
+itself to StaffBotRuntime. Synthetic tests cover blocked disk I/O, overflow,
+scope rejection, encrypted persistence/reopening and fail-closed disk errors.
+Admission cannot guarantee zero loss on queue overflow, crash-before-fsync or
+full/failed storage. Activation requires separate privacy-reviewed
+staging-only config and lifecycle wiring.
+
 The opt-in zero-cost cross-language test harness in the private repository
 runs a disposable loopback Python API and the actual Java StaffBot HTTP client,
 including PENDING -> 409 -> FINAL -> 200, strict structured IDs, replay,
