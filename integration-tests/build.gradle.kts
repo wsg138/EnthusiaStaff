@@ -7,6 +7,8 @@ dependencies {
     testImplementation(project(":persistence"))
     testImplementation(project(":protocol"))
     testImplementation(project(":velocity"))
+    // Velocity disables its plain jar; expose compiled production classes to JUnit at runtime.
+    testRuntimeOnly(files(project(":velocity").layout.buildDirectory.dir("classes/java/main")))
     testImplementation("com.velocitypowered:velocity-api:3.4.0-SNAPSHOT")
     testImplementation("com.zaxxer:HikariCP:6.3.3")
     testImplementation("com.fasterxml.jackson.core:jackson-databind:2.20.1")
