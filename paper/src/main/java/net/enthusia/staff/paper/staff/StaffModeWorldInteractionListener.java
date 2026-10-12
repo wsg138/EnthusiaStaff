@@ -140,32 +140,54 @@ public final class StaffModeWorldInteractionListener implements Listener {
         if (!onDuty(player)) {
             return;
         }
-        if (staffMode.isUnrestricted(player)) {
-            auditUnrestrictedInteraction(player, event);
-            return;
+        if (!staffMode.isUnrestricted(player)) {
+            enforceRankedInteraction(player, event);
         }
-        enforceRankedInteraction(player, event);
     }
 
-    private void auditUnrestrictedInteraction(Player player, PlayerInteractEvent event) {
-        Action action = event.getAction();
-        if (action == Action.LEFT_CLICK_AIR || action == Action.RIGHT_CLICK_AIR) {
+    // Successful block interactions and permitted HELPER container views belong at
+    // MONITOR. A later protection plugin may cancel a still-allowed HIGHEST event.
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onCompletedInteract(PlayerInteractEvent event) {
+        Player player = event.getPlayer();
+        if (!onDuty(player)) {
             return;
         }
-        staffMode.logStaffAction(
-                player,
-                "block-interact",
-                action + " " + describe(event.getClickedBlock())
-        );
+        Action action = event.getAction();
+        StaffDutyTier tier = staffMode.dutyTier(player);
+        if (!staffMode.isUnrestricted(player)
+                && shouldAuditCompletedContainerView(tier, action,
+                        isContainer(event.getClickedBlock()))) {
+            staffMode.logStaffAction(player, "container-view", describe(event.getClickedBlock()));
+            return;
+        }
+        if (shouldAuditCompletedBlockInteraction(staffMode.isUnrestricted(player), tier, action)) {
+            staffMode.logStaffAction(player, "block-interact",
+                    action + " " + describe(event.getClickedBlock()));
+        }
+    }
+
+    static boolean shouldAuditCompletedContainerView(StaffDutyTier tier, Action action,
+                                                     boolean container) {
+        return action == Action.RIGHT_CLICK_BLOCK
+                && container
+                && StaffModeWorldInteractionPolicy.allowsContainerView(tier);
+    }
+
+    static boolean shouldAuditCompletedBlockInteraction(boolean unrestricted,
+                                                        StaffDutyTier tier, Action action) {
+        if (action == Action.LEFT_CLICK_AIR || action == Action.RIGHT_CLICK_AIR) {
+            return false;
+        }
+        return unrestricted || (StaffModeWorldInteractionPolicy.logsWorldInteraction(tier)
+                && !StaffModeWorldInteractionPolicy.blocksBlockInteraction(tier, action));
     }
 
     private void enforceRankedInteraction(Player player, PlayerInteractEvent event) {
         Action action = event.getAction();
         StaffDutyTier tier = staffMode.dutyTier(player);
-        if (action == Action.RIGHT_CLICK_BLOCK
-                && isContainer(event.getClickedBlock())
-                && StaffModeWorldInteractionPolicy.allowsContainerView(tier)) {
-            staffMode.logStaffAction(player, "container-view", describe(event.getClickedBlock()));
+        // Allowed HELPER container views are audited at MONITOR after cancellation.
+        if (shouldAuditCompletedContainerView(tier, action, isContainer(event.getClickedBlock()))) {
             return;
         }
         if (StaffModeWorldInteractionPolicy.blocksBlockInteraction(tier, action)) {
@@ -179,15 +201,6 @@ public final class StaffModeWorldInteractionListener implements Listener {
                         action + " " + describe(event.getClickedBlock()));
             }
             return;
-        }
-        if (StaffModeWorldInteractionPolicy.logsWorldInteraction(tier)
-                && action != Action.LEFT_CLICK_AIR
-                && action != Action.RIGHT_CLICK_AIR) {
-            staffMode.logStaffAction(
-                    player,
-                    "block-interact",
-                    action + " " + describe(event.getClickedBlock())
-            );
         }
     }
 
