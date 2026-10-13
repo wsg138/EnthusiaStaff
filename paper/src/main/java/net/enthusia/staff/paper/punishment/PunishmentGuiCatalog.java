@@ -52,10 +52,12 @@ final class PunishmentGuiCatalog {
             return List.of();
         }
         return available(actor, commandName).stream()
-                .filter(policy -> searchRank(policy, normalized) < 4)
-                .sorted(Comparator.comparingInt((ReasonPolicy policy) -> searchRank(policy, normalized))
-                        .thenComparing(ReasonPolicy::publicReason)
-                        .thenComparing(ReasonPolicy::id))
+                .map(policy -> new RankedResult(policy, searchRank(policy, normalized)))
+                .filter(result -> result.rank() < 4)
+                .sorted(Comparator.comparingInt(RankedResult::rank)
+                        .thenComparing(result -> result.policy().publicReason())
+                        .thenComparing(result -> result.policy().id()))
+                .map(RankedResult::policy)
                 .toList();
     }
 
@@ -71,12 +73,18 @@ final class PunishmentGuiCatalog {
         if (id.contains(query) || name.contains(query)) {
             return 2;
         }
-        if (policy.family().toLowerCase(Locale.ROOT).contains(query)
-                || policy.examples().stream().map(example -> example.toLowerCase(Locale.ROOT))
-                        .anyMatch(example -> example.contains(query))) {
+        if (policy.family().toLowerCase(Locale.ROOT).contains(query)) {
             return 3;
         }
+        for (String example : policy.examples()) {
+            if (example.toLowerCase(Locale.ROOT).contains(query)) {
+                return 3;
+            }
+        }
         return 4;
+    }
+
+    private record RankedResult(ReasonPolicy policy, int rank) {
     }
 
     private static String normalizeQuery(String query) {

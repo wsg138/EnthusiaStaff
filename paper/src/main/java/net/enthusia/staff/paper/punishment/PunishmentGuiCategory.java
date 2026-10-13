@@ -1,6 +1,5 @@
 package net.enthusia.staff.paper.punishment;
 
-import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
 import net.kyori.adventure.text.format.NamedTextColor;
@@ -32,6 +31,11 @@ enum PunishmentGuiCategory {
     OTHER("other", "Other Rules", "Additional configured reasons", Material.MAP,
             NamedTextColor.GRAY, Set.of());
 
+    private static final Set<String> MAPPED_FAMILIES = List.of(values()).stream()
+            .filter(category -> category != OTHER)
+            .flatMap(category -> category.families.stream())
+            .collect(java.util.stream.Collectors.toUnmodifiableSet());
+
     private final String id;
     private final String title;
     private final String description;
@@ -57,17 +61,25 @@ enum PunishmentGuiCategory {
     Set<String> families() { return families; }
 
     boolean includes(String family) {
-        return this == OTHER ? Arrays.stream(values()).filter(value -> value != OTHER)
-                .noneMatch(value -> value.families.contains(family)) : families.contains(family);
+        return this == OTHER ? !MAPPED_FAMILIES.contains(family) : families.contains(family);
     }
 
     static PunishmentGuiCategory forFamily(String family) {
-        return Arrays.stream(values()).filter(value -> value != OTHER && value.families.contains(family))
-                .findFirst().orElse(OTHER);
+        for (PunishmentGuiCategory category : values()) {
+            if (category != OTHER && category.families.contains(family)) {
+                return category;
+            }
+        }
+        return OTHER;
     }
 
     static PunishmentGuiCategory byId(String id) {
-        return Arrays.stream(values()).filter(value -> value.id.equals(id)).findFirst().orElse(null);
+        for (PunishmentGuiCategory category : values()) {
+            if (category.id.equals(id)) {
+                return category;
+            }
+        }
+        return null;
     }
 
     static List<PunishmentGuiCategory> ordered() {
