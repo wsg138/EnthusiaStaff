@@ -25,15 +25,25 @@ class DiscordAccountAgeGateTest {
     }
 
     @Test
-    void accountAgeGateIsEnabledByDefaultAndExplicitlyDisableable() {
-        assertTrue(DiscordAccountAgeGateConfiguration.fromEnvironment(Map.of()).enabled());
-        assertTrue(DiscordAccountAgeGateConfiguration.fromEnvironment(Map.of(
-                DiscordAccountAgeGateConfiguration.ENABLED_KEY, "true")).enabled());
-        assertFalse(DiscordAccountAgeGateConfiguration.fromEnvironment(Map.of(
-                DiscordAccountAgeGateConfiguration.ENABLED_KEY, "FALSE")).enabled());
+    void accountAgeGateIsProductionDefaultOnAndNeverEnforcedBySharedGuildStagingBot() {
+        assertTrue(DiscordAccountAgeGateConfiguration.fromEnvironment(
+                StaffBotEnvironment.PRODUCTION, Map.of()).enabled());
+        assertFalse(DiscordAccountAgeGateConfiguration.fromEnvironment(
+                StaffBotEnvironment.STAGING, Map.of()).enabled());
+        assertTrue(DiscordAccountAgeGateConfiguration.fromEnvironment(
+                StaffBotEnvironment.PRODUCTION,
+                Map.of(DiscordAccountAgeGateConfiguration.ENABLED_KEY, "true")).enabled());
+        assertFalse(DiscordAccountAgeGateConfiguration.fromEnvironment(
+                StaffBotEnvironment.PRODUCTION,
+                Map.of(DiscordAccountAgeGateConfiguration.ENABLED_KEY, "FALSE")).enabled());
         assertThrows(IllegalArgumentException.class,
-                () -> DiscordAccountAgeGateConfiguration.fromEnvironment(Map.of(
-                        DiscordAccountAgeGateConfiguration.ENABLED_KEY, "yes")));
+                () -> DiscordAccountAgeGateConfiguration.fromEnvironment(
+                        StaffBotEnvironment.STAGING,
+                        Map.of(DiscordAccountAgeGateConfiguration.ENABLED_KEY, "true")));
+        assertThrows(IllegalArgumentException.class,
+                () -> DiscordAccountAgeGateConfiguration.fromEnvironment(
+                        StaffBotEnvironment.PRODUCTION,
+                        Map.of(DiscordAccountAgeGateConfiguration.ENABLED_KEY, "yes")));
     }
 
     @Test

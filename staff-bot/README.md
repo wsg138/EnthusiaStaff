@@ -62,8 +62,10 @@ The smoke test connects to Discord, validates the configured application/guild i
 
 ## Discord account-age admission rule
 
-The StaffBot **enables its Discord account-age gate by default** during normal
-environment-based startup. Every new *human* Discord member receives an age
+The **PRODUCTION** StaffBot enables its Discord account-age gate by default
+during normal environment-based startup. The pinned STAGING StaffBot stays
+disabled by default and refuses explicit enablement because it shares the
+live guild. Every new *human* Discord member receives an age
 check based on their Discord account creation timestamp (not Minecraft account
 age). Accounts younger than **21 complete days** are kicked *after joining*,
 unless their exact Discord user ID is bypassed. Accounts exactly 21 days old
@@ -87,7 +89,7 @@ approved users.
 
 To **turn off** the gate intentionally, set
 `ENTHUSIA_STAFF_BOT_ACCOUNT_AGE_GATE_ENABLED=false`; unset or `true`
-means enforcement enabled. This setting is independent of
+means enforcement enabled in PRODUCTION only. This setting is independent of
 `ENTHUSIA_STAFF_BOT_DISCORD_ENFORCEMENT_ENABLED` for punishment actions.
 
 **Prerequisites before installing the default-on build:** enable the
@@ -101,8 +103,8 @@ the kick can be executed. Members who join while the bot is offline
 are not automatically rescanned.
 
 The pinned STAGING and PRODUCTION StaffBot applications both reference the
-Enthusia guild. **Do not enable this gate on the existing staging application
-as a destructive test.** Use source-level tests or a separately authorized
+Enthusia guild. **STAGING rejects account-age enforcement and may not be
+used as a destructive test.** Use source-level tests or a separately authorized
 isolated guild/application for real join/kick acceptance. This runbook does
 not authorize a live bot deployment.
 

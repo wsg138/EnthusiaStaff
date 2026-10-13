@@ -215,7 +215,7 @@ public final class StaffBotConfiguration {
                 : productionWebsiteConfiguration(values, base);
         return new StaffBotConfiguration(
                 new StaffBotConfiguration(configured, optionalSecret(values.get(AI_READ_TOKEN_KEY))),
-                DiscordAccountAgeGateConfiguration.fromEnvironment(values));
+                DiscordAccountAgeGateConfiguration.fromEnvironment(configured.environment(), values));
     }
 
     private static StaffBotConfiguration baseConfiguration(Map<String, String> values) {
