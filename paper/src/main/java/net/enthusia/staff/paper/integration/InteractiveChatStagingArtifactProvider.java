@@ -347,6 +347,25 @@ public final class InteractiveChatStagingArtifactProvider
         }
     }
 
+    static BufferedImage renderDetachedTooltip(Method method, List<?> components, Object styleKey)
+            throws ReflectiveOperationException {
+        try {
+            return (BufferedImage) method.invoke(null, components, styleKey);
+        } catch (InvocationTargetException failure) {
+            Throwable cause = failure.getCause();
+            if (cause instanceof ReflectiveOperationException reflective) {
+                throw reflective;
+            }
+            if (cause instanceof RuntimeException runtime) {
+                throw runtime;
+            }
+            if (cause instanceof Error error) {
+                throw error;
+            }
+            throw failure;
+        }
+    }
+
     static String plainItemTitle(String value) {
         String filtered = value.replaceAll("(?i)§[0-9a-fk-or]", "")
                 .replaceAll("(?i)</?reset>", "").strip();
@@ -766,9 +785,9 @@ public final class InteractiveChatStagingArtifactProvider
         private void renderItemTooltip(List<RichChatArtifact> artifacts,
                 RenderJob job, String suffix, int ordinal) {
             try {
-                BufferedImage tooltip = (BufferedImage) invoke(
-                        renderTooltipMethod.orElseThrow(), null,
-                        job.tooltipComponents(), job.tooltipStyleKey());
+                BufferedImage tooltip = renderDetachedTooltip(
+                        renderTooltipMethod.orElseThrow(), job.tooltipComponents(),
+                        job.tooltipStyleKey());
                 if (tooltip == null) {
                     return;
                 }
