@@ -207,6 +207,18 @@ final class StaffModerationReadService {
         return new MinecraftResolution.Resolved(minecraftTarget(resolved.identity().playerId()));
     }
 
+    Optional<String> minecraftChatUsername(UUID playerId) {
+        if (playerId == null) {
+            return Optional.empty();
+        }
+        try {
+            return data.player(playerId).flatMap(PlayerIdentity::currentUsername);
+        } catch (RuntimeException ignored) {
+            // Chat is best-effort. Never block delivery on an unavailable identity DB.
+            return Optional.empty();
+        }
+    }
+
     Target minecraftTarget(UUID playerId) {
         if (playerId == null) {
             throw new IllegalArgumentException("Minecraft target must be present");
