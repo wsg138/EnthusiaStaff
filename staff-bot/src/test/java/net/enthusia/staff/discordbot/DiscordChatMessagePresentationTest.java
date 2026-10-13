@@ -34,6 +34,14 @@ class DiscordChatMessagePresentationTest {
     void unlinkedAndAltPlayersShowOnlyTheirCleanMinecraftName() {
         assertEquals("Toxik", DiscordChatMessagePresentation.minecraftName(
                 Optional.empty(), "✧ **[Admin]<reset> Toxik"));
+        assertEquals("Toxik", DiscordChatMessagePresentation.minecraftName(
+                Optional.empty(), "✧ **[Admin]<reset> Toxik [Mod]"));
+        assertEquals("Toxik", DiscordChatMessagePresentation.minecraftName(
+                Optional.empty(), "Toxik ✦ Avid"));
+        assertEquals("Toxik", DiscordChatMessagePresentation.minecraftName(
+                Optional.empty(), "[Admin] Toxik:"));
+        assertEquals("Player", DiscordChatMessagePresentation.minecraftName(
+                Optional.empty(), "[Admin]"));
         assertEquals(ALT_MINECRAFT_NAME, DiscordChatMessagePresentation.minecraftName(
                 Optional.of(ALT_MINECRAFT_NAME), "✧ **[Avid]<reset> SomethingElse"));
         assertEquals(ALT_MINECRAFT_NAME, DiscordChatMessagePresentation.sender(Optional.empty(), ALT_MINECRAFT_NAME));
