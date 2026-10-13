@@ -24,7 +24,7 @@ import org.bukkit.inventory.meta.ItemMeta;
 
 /** Player-owned, paginated reason picker; never trusts item names or user-written NBT. */
 final class ReportReasonMenu implements Listener {
-    private static final int PAGE_SIZE = 45;
+    private static final int PAGE_SIZE = 36;
     private static final int INVENTORY_SIZE = 54;
     private final ReasonPolicyRepository policies;
     private final Selected selected;
@@ -62,6 +62,20 @@ final class ReportReasonMenu implements Listener {
                             Component.text(policy.publicReason(), NamedTextColor.GRAY),
                             Component.text("Click to select this reason", NamedTextColor.YELLOW))));
         }
+        // Dedicated control rows keep page navigation separate from reason choices.
+        ItemStack border = item(Material.GRAY_STAINED_GLASS_PANE, " ", List.of());
+        for (int slot = PAGE_SIZE; slot < INVENTORY_SIZE; slot++) {
+            inventory.setItem(slot, border);
+        }
+        inventory.setItem(40, item(Material.PLAYER_HEAD, "Reporting " + target, List.of(
+                Component.text("Choose the reason for this player", NamedTextColor.WHITE),
+                Component.text("The target will not be notified", NamedTextColor.GRAY))));
+        inventory.setItem(41, item(Material.BOOK, "How to report", List.of(
+                Component.text("1. Select a reason above", NamedTextColor.WHITE),
+                Component.text("2. Describe what happened in chat", NamedTextColor.WHITE),
+                Component.text("A report is not sent until step 2", NamedTextColor.YELLOW))));
+        inventory.setItem(48, item(Material.CLOCK, "Page " + (current + 1) + " / " + (maxPage + 1),
+                List.of(Component.text(available.size() + " available reasons", NamedTextColor.GRAY))));
         if (current > 0) {
             inventory.setItem(45, item(Material.ARROW, "Previous Page", List.of()));
         }
