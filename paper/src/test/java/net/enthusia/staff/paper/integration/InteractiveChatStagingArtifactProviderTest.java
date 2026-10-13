@@ -2,6 +2,8 @@ package net.enthusia.staff.paper.integration;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import java.util.List;
@@ -104,6 +106,62 @@ class InteractiveChatStagingArtifactProviderTest {
 
         assertEquals(first, second);
         assertNotEquals(playerId, first);
+    }
+
+    @Test
+    void customTooltipKeyIsCapturedAndCarriedToAsyncRenderJob() throws Exception {
+        var factory = FakeNmsAddon.class.getMethod("getInstance");
+        var lookup = FakeNmsWrapper.class.getMethod(
+                "getCustomTooltipResourceLocation", org.bukkit.inventory.ItemStack.class);
+
+        Object captured = InteractiveChatStagingArtifactProvider.captureTooltipStyle(
+                factory, lookup, null);
+        assertSame(FakeNmsWrapper.CUSTOM_KEY, captured);
+        var job = new InteractiveChatStagingArtifactProvider.RenderJob(
+                InteractiveChatStagingArtifactProvider.Kind.ITEM,
+                12, null, null, "Custom sword", List.of("tooltip"), captured);
+        assertSame(captured, job.tooltipStyleKey());
+    }
+
+    @Test
+    void missingOrFailingTooltipStyleApiKeepsNormalBackground() throws Exception {
+        var lookup = FakeNmsWrapper.class.getMethod(
+                "getCustomTooltipResourceLocation", org.bukkit.inventory.ItemStack.class);
+        var unavailable = BrokenNmsAddon.class.getMethod("getInstance");
+
+        assertNull(InteractiveChatStagingArtifactProvider.captureTooltipStyle(
+                unavailable, lookup, null));
+        assertNull(InteractiveChatStagingArtifactProvider.captureTooltipStyle(
+                FakeNmsAddon.class.getMethod("getInstance"),
+                FakeNmsWrapper.class.getMethod("missingStyle",
+                        org.bukkit.inventory.ItemStack.class), null));
+        assertNull(new InteractiveChatStagingArtifactProvider.RenderJob(
+                InteractiveChatStagingArtifactProvider.Kind.ITEM,
+                0, null, null).tooltipStyleKey());
+    }
+
+    public static final class FakeNmsAddon {
+        public static FakeNmsWrapper getInstance() {
+            return new FakeNmsWrapper();
+        }
+    }
+
+    public static final class BrokenNmsAddon {
+        public static FakeNmsWrapper getInstance() {
+            throw new IllegalStateException("addon version not supported");
+        }
+    }
+
+    public static final class FakeNmsWrapper {
+        static final Object CUSTOM_KEY = new Object();
+
+        public Object getCustomTooltipResourceLocation(org.bukkit.inventory.ItemStack item) {
+            return CUSTOM_KEY;
+        }
+
+        public Object missingStyle(org.bukkit.inventory.ItemStack item) {
+            throw new IllegalStateException("missing tooltip style");
+        }
     }
 
     @Test
