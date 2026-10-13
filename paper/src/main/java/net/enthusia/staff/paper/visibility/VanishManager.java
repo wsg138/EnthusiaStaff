@@ -651,6 +651,7 @@ public final class VanishManager implements Listener {
             rememberCommittedState(playerId, rank, vanished, restoreSelectedMode, selectedGameMode);
             boolean viewerChanged = publishViewerRank(playerId, rank);
             Set<UUID> presenceViewers = presenceViewers(playerId);
+            boolean previouslyVanished = visibility.isVanished(playerId);
             visibility.setVanished(playerId, rank, vanished);
             if (vanished) {
                 hiddenSpectators.remove(playerId);
@@ -664,7 +665,8 @@ public final class VanishManager implements Listener {
                             vanished,
                             viewerChanged,
                             restoreSelectedMode,
-                            presenceViewers
+                            presenceViewers,
+                            previouslyVanished
                     )
             );
             return true;
@@ -729,7 +731,8 @@ public final class VanishManager implements Listener {
             boolean vanished,
             boolean viewerChanged,
             boolean restoreSelectedMode,
-            Set<UUID> presenceViewers
+            Set<UUID> presenceViewers,
+            boolean previouslyVanished
     ) {
         UUID playerId = player.getUniqueId();
         if (vanished) {
@@ -748,7 +751,20 @@ public final class VanishManager implements Listener {
         }
         audiences.refreshTarget(playerId);
         publishPresenceTransition(playerId, vanished, presenceViewers);
+        // Record confirmed, changed state only after the durable persistence path.
+        // A repeated same-state write/reconciliation must not imply another toggle.
+        if (visibility.isVanished(playerId) == vanished) {
+            committedVanishAuditAction(previouslyVanished, vanished)
+                    .ifPresent(action -> staffMode.logStaffAction(player, action, "durable-visibility-transition"));
+        }
         player.sendMessage(StaffMessageStyle.style(Component.text(vanished ? "Vanish enabled." : "Vanish disabled.")));
+    }
+
+    static java.util.Optional<String> committedVanishAuditAction(boolean before, boolean after) {
+        if (before == after) {
+            return java.util.Optional.empty();
+        }
+        return java.util.Optional.of(after ? "vanish-enabled" : "vanish-disabled");
     }
 
     private Set<UUID> presenceViewers(UUID subjectId) {
