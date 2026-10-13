@@ -261,10 +261,13 @@ final class JdbcReportStateStore {
             statement.setBytes(1, UuidBytes.toBytes(UUID.randomUUID()));
             statement.setString(2, request.idempotencyKey().value() + ":discord");
             statement.setString(3, "REPORT_" + next.name());
+            var names = ReportPlayerNames.forReport(connection, request.reportId());
             statement.setString(4, json.writeValueAsString(Map.of(
                     REPORT_ID_FIELD, request.reportId().toString(),
                     "targetId", targetId.toString(),
                     "actorId", request.actorId().toString(),
+                    "targetName", names.target(),
+                    "reporterName", names.reporter(),
                     STATE_FIELD, next.name()
             )));
             statement.setTimestamp(5, Timestamp.from(request.changedAt()));

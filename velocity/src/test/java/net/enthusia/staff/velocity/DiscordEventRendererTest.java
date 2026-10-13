@@ -19,25 +19,24 @@ final class DiscordEventRendererTest {
     private final DiscordEventRenderer renderer = new DiscordEventRenderer();
 
     @Test
-    void reportRenderingOmitsReporterAndNestedEvidence() {
-        String rendered = renderer.render(message(
-                REPORTS,
-                REPORT_CREATED,
+    void reportRenderingUsesReadableNamesWithoutLeakingInternalIdsOrEvidence() {
+        String rendered = renderer.render(message(REPORTS, REPORT_CREATED,
                 "{\"reportId\":\"r-1\",\"reporterId\":\"private-reporter\","
-                        + "\"targetId\":\"target-1\",\"reasonId\":\"spam\",\"serverId\":\"SMP\","
-                        + "\"targetClientEvidence\":{\"client\":\"sensitive\"},"
-                        + "\"description\":\"private body\"}"
-        ));
-
+                        + "\"targetId\":\"target-1\",\"targetName\":\"Steve\","
+                        + "\"reporterName\":\"Alex\",\"reasonId\":\"combat.cheating\","
+                        + "\"serverId\":\"SMP\",\"description\":\"secret evidence\","
+                        + "\"targetClientEvidence\":{\"client\":\"sensitive\"}}"));
         assertTrue(rendered.contains(REPORT_CREATED));
         assertTrue(rendered.contains("reportId=r-1"));
-        assertTrue(rendered.contains("targetId=target-1"));
-        assertTrue(rendered.contains("reasonId=spam"));
+        assertTrue(rendered.contains("targetName=Steve"));
+        assertTrue(rendered.contains("reporterName=Alex"));
+        assertTrue(rendered.contains("reason=Combat Cheating"));
         assertTrue(rendered.contains("serverId=SMP"));
+        assertFalse(rendered.contains("targetId="));
+        assertFalse(rendered.contains("reporterId="));
         assertFalse(rendered.contains("private-reporter"));
-        assertFalse(rendered.contains("targetClientEvidence"));
+        assertFalse(rendered.contains("secret evidence"));
         assertFalse(rendered.contains("sensitive"));
-        assertFalse(rendered.contains("private body"));
     }
 
     @Test

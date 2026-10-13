@@ -146,8 +146,8 @@ public final class DiscordStaffReadRuntime implements AutoCloseable {
     }
 
     /** Bounded, non-evidentiary report queue for the private Discord review surface. */
-    public record PendingReport(UUID reportId, UUID targetId, String reasonId,
-            String state, long revision) { }
+    public record PendingReport(UUID reportId, UUID targetId, String targetName,
+            String reporterName, String reasonId, String state, long revision) { }
 
     public List<PendingReport> pendingReports(int limit) {
         if (limit < 1 || limit > 10) {
@@ -155,10 +155,14 @@ public final class DiscordStaffReadRuntime implements AutoCloseable {
         }
         try (var connection = dataSource.getConnection();
              var statement = connection.prepareStatement("""
-                    SELECT report_id, target_id, reason_id, state, revision
-                      FROM reports
-                     WHERE state IN ('OPEN', 'CLAIMED', 'AWAITING_REVIEW')
-                     ORDER BY created_at ASC, report_id ASC
+                    SELECT r.report_id, r.target_id, r.reason_id, r.state, r.revision,
+                           target.current_username AS target_name,
+                           reporter.current_username AS reporter_name
+                      FROM reports r
+                      LEFT JOIN players target ON target.player_id = r.target_id
+                      LEFT JOIN players reporter ON reporter.player_id = r.reporter_id
+                     WHERE r.state IN ('OPEN', 'CLAIMED', 'AWAITING_REVIEW')
+                     ORDER BY r.created_at ASC, r.report_id ASC
                      LIMIT ?
                     """)) {
             statement.setInt(1, limit);
@@ -168,6 +172,8 @@ public final class DiscordStaffReadRuntime implements AutoCloseable {
                     result.add(new PendingReport(
                             UuidBytes.fromBytes(rows.getBytes("report_id")),
                             UuidBytes.fromBytes(rows.getBytes("target_id")),
+                            ReportPlayerNames.display(rows.getString("target_name")),
+                            ReportPlayerNames.display(rows.getString("reporter_name")),
                             rows.getString("reason_id"), rows.getString("state"),
                             rows.getLong("revision")));
                 }

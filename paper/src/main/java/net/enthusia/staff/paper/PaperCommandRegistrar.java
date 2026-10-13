@@ -268,6 +268,8 @@ final class PaperCommandRegistrar {
                 workers()
         );
         bindCompleting("report", report, report);
+        plugin().getServer().getPluginManager().registerEvents(report.reasonMenu(), plugin());
+        plugin().getServer().getPluginManager().registerEvents(report, plugin());
         ClientCommand client = new ClientCommand(
                 plugin(), dependencies.evidence().clientEvidence(),
                 storage(PaperStorageBindings::clientEvidenceStore), workers()

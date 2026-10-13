@@ -287,7 +287,7 @@ public final class ReportsCommand implements CommandExecutor, TabCompleter {
         send(sender, queue + " reports: " + summaries.size());
         for (ReportSummary summary : summaries) {
             send(sender, summary.reportId() + " rev=" + summary.revision() + " " + summary.state()
-                    + " target=" + summary.targetId() + " reason=" + summary.reasonId()
+                    + " target=" + summary.targetId() + " reason=" + net.enthusia.staff.domain.report.ReportReasonLabel.display(summary.reasonId())
                     + " server=" + summary.serverId());
         }
     }
@@ -307,7 +307,7 @@ public final class ReportsCommand implements CommandExecutor, TabCompleter {
         send(sender, "Report " + summary.reportId() + " rev=" + summary.revision() + " state=" + summary.state());
         send(sender, "Reporter=" + summary.reporterId() + " target=" + summary.targetId()
                 + " assigned=" + summary.assignedTo().map(UUID::toString).orElse("none"));
-        send(sender, "Reason=" + summary.reasonId() + " description=" + details.description());
+        send(sender, "Reason=" + net.enthusia.staff.domain.report.ReportReasonLabel.display(summary.reasonId()) + " description=" + details.description());
         sendEvidenceAware(
                 sender,
                 () -> "Server=" + summary.serverId() + " world=" + details.worldId().orElse(UNAVAILABLE)
