@@ -2,6 +2,7 @@ package net.enthusia.staff.paper.punishment;
 
 import java.util.Comparator;
 import java.util.List;
+import java.util.Locale;
 import java.util.Optional;
 import net.enthusia.staff.domain.auth.Actor;
 import net.enthusia.staff.domain.auth.AuthorizationPolicy;
@@ -38,6 +39,48 @@ final class PunishmentGuiCatalog {
                 .filter(policy -> category.includes(policy.family()))
                 .sorted(Comparator.comparing(ReasonPolicy::publicReason).thenComparing(ReasonPolicy::id))
                 .toList();
+    }
+
+    /**
+     * Search is a pure presentation filter over the *same* rank/command-limited
+     * manual reasons that the category picker uses. It never reads history.
+     */
+    List<ReasonPolicy> search(Actor actor, String commandName, String query) {
+        String normalized = normalizeQuery(query);
+        if (normalized.codePointCount(0, normalized.length()) < 2
+                || normalized.codePointCount(0, normalized.length()) > 64) {
+            return List.of();
+        }
+        return available(actor, commandName).stream()
+                .filter(policy -> searchRank(policy, normalized) < 4)
+                .sorted(Comparator.comparingInt((ReasonPolicy policy) -> searchRank(policy, normalized))
+                        .thenComparing(ReasonPolicy::publicReason)
+                        .thenComparing(ReasonPolicy::id))
+                .toList();
+    }
+
+    private static int searchRank(ReasonPolicy policy, String query) {
+        String id = policy.id().toLowerCase(Locale.ROOT);
+        String name = policy.publicReason().toLowerCase(Locale.ROOT);
+        if (id.equals(query) || name.equals(query)) {
+            return 0;
+        }
+        if (id.startsWith(query) || name.startsWith(query)) {
+            return 1;
+        }
+        if (id.contains(query) || name.contains(query)) {
+            return 2;
+        }
+        if (policy.family().toLowerCase(Locale.ROOT).contains(query)
+                || policy.examples().stream().map(example -> example.toLowerCase(Locale.ROOT))
+                        .anyMatch(example -> example.contains(query))) {
+            return 3;
+        }
+        return 4;
+    }
+
+    private static String normalizeQuery(String query) {
+        return query == null ? "" : query.strip().replaceAll("\\s+", " ").toLowerCase(Locale.ROOT);
     }
 
     String categoryId(String family) {

@@ -88,6 +88,21 @@ class PunishmentGuiSecurityRegressionTest {
         assertFalse(method.contains("Back · Categories"));
     }
 
+    @Test
+    void searchCancelsChatAndExpiresWithoutPersistingPunishments() throws IOException {
+        String controller = readNormalized(CONTROLLER);
+        String handler = method(controller, "public void onChat(", "public void onQuit(");
+        assertTrue(handler.contains("searchCaptures.remove(viewer.getUniqueId())"));
+        assertTrue(handler.contains("event.setCancelled(true)"));
+        String selection = method(controller, "private void searchClick(", "private void reviewClick(");
+        assertTrue(selection.contains("catalog.search(actor, state.commandName(), state.query())"));
+        assertTrue(selection.contains("prepare(viewer, actor, state, results.get(index))"));
+        String capture = method(controller, "private void startSearch(", "private void reviewClick(");
+        assertTrue(capture.contains("20L * 60L"));
+        assertTrue(capture.contains("searchCaptures.remove(viewer.getUniqueId(), capture)"));
+        assertTrue(capture.contains("targetAllowed(viewer, actor, origin.target().playerId())"));
+    }
+
     private static String method(String source, String startMarker, String endMarker) {
         int start = source.indexOf(startMarker);
         int end = source.indexOf(endMarker, start + startMarker.length());

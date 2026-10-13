@@ -38,6 +38,7 @@ final class PunishmentGuiRenderer {
     static final int HISTORY_SLOT = 46;
     static final int BACK_SLOT = 47;
     static final int CONFIRM_SLOT = 49;
+    static final int SEARCH_SLOT = 50;
     static final int CLOSE_SLOT = 51;
     static final int NEXT_SLOT = 53;
     static final int TARGET_REFRESH_SLOT = 49;
@@ -55,6 +56,7 @@ final class PunishmentGuiRenderer {
     private static final int MAX_HEADER_SANCTIONS = 4;
     private static final int MAX_LADDER_SLOTS = 18;
     private static final int MAX_HISTORY_REASON_LENGTH = 64;
+    private static final int[] CATEGORY_GRID = {20, 22, 24, 29, 31, 33, 40};
     private static final int FIRST_HISTORY_PAGE = 1;
     private static final String CLOSE_LABEL = "Close";
     private static final List<String> SUCCESS_STATUS_TERMS =
@@ -85,6 +87,8 @@ final class PunishmentGuiRenderer {
             renderCategories(inventory, categories, actor);
         } else if (state instanceof PunishmentGuiState.Reasons reasons) {
             renderReasons(inventory, reasons, actor);
+        } else if (state instanceof PunishmentGuiState.Search search) {
+            renderSearch(inventory, search, actor);
         } else if (state instanceof PunishmentGuiState.Review review) {
             renderReview(inventory, review, actor);
         } else if (state instanceof PunishmentGuiState.History history) {
@@ -131,17 +135,15 @@ final class PunishmentGuiRenderer {
                     "Your current rank and route have no selectable configured reasons.");
         }
         footerHistory(inventory);
+        inventory.setItem(SEARCH_SLOT, searchButton());
         inventory.setItem(CLOSE_SLOT, button(Material.BARRIER, CLOSE_LABEL, NamedTextColor.RED));
     }
 
     static int categorySlot(int index, int total) {
-        if (index < 0 || index >= total || total > PunishmentGuiCategory.values().length) {
+        if (total < 1 || total > CATEGORY_GRID.length || index < 0 || index >= total) {
             return -1;
         }
-        int row = index / 5;
-        int inRow = Math.min(5, total - row * 5);
-        int firstRow = total <= 10 ? 1 : 0;
-        return CONTENT_START + (firstRow + row) * 9 + (9 - inRow) / 2 + index % 5;
+        return CATEGORY_GRID[index];
     }
 
     static int categoryIndex(int slot, int total) {
@@ -217,8 +219,38 @@ final class PunishmentGuiRenderer {
         }
         pageControls(inventory, state.page(), reasons.size());
         footerHistory(inventory);
+        inventory.setItem(SEARCH_SLOT, searchButton());
         inventory.setItem(BACK_SLOT, button(Material.ARROW, "Back · Categories", NamedTextColor.AQUA));
         inventory.setItem(CLOSE_SLOT, button(Material.BARRIER, CLOSE_LABEL, NamedTextColor.RED));
+    }
+
+    private void renderSearch(Inventory inventory, PunishmentGuiState.Search state, Actor actor) {
+        List<ReasonPolicy> results = catalog.search(actor, state.commandName(), state.query());
+        int offset = state.page() * CONTENT_SIZE;
+        for (int index = 0; index < CONTENT_SIZE && offset + index < results.size(); index++) {
+            ReasonPolicy policy = results.get(offset + index);
+            List<Component> lore = new ArrayList<>(reasonLore(policy, state.overview()));
+            lore.add(Component.text("Category: "
+                    + PunishmentGuiCategory.forFamily(policy.family()).title(), NamedTextColor.GRAY));
+            inventory.setItem(CONTENT_START + index, item(
+                    reasonMaterial(policy), policy.publicReason(), reasonNameColor(policy), lore
+            ));
+        }
+        if (results.isEmpty()) {
+            emptyState(inventory, "No matching reasons", "Click Search to try different words.");
+        }
+        pageControls(inventory, state.page(), results.size());
+        footerHistory(inventory);
+        inventory.setItem(BACK_SLOT, button(Material.ARROW, "Back to Categories", NamedTextColor.AQUA));
+        inventory.setItem(SEARCH_SLOT, searchButton());
+        inventory.setItem(CLOSE_SLOT, button(Material.BARRIER, CLOSE_LABEL, NamedTextColor.RED));
+    }
+
+    private static ItemStack searchButton() {
+        return item(Material.COMPASS, "Search All Reasons", NamedTextColor.AQUA, List.of(
+                Component.text("Find a specific reason by name, ID or example.", NamedTextColor.GRAY),
+                Component.text("Type privately in the next chat prompt.", NamedTextColor.YELLOW)
+        ));
     }
 
     private void renderReview(Inventory inventory, PunishmentGuiState.Review state, Actor actor) {
@@ -297,6 +329,7 @@ final class PunishmentGuiRenderer {
     private static ItemStack workflowItem(PunishmentGuiState state) {
         String phase = state instanceof PunishmentGuiState.Categories ? "Categories"
                 : state instanceof PunishmentGuiState.Reasons ? "Exact Reason"
+                : state instanceof PunishmentGuiState.Search ? "Search Results"
                 : state instanceof PunishmentGuiState.Review ? "Review & Confirm"
                 : "History";
         return item(
@@ -405,6 +438,10 @@ final class PunishmentGuiRenderer {
                             + (overview.recentCasesTruncated() ? "+" : ""), NamedTextColor.GOLD
             ));
         }
+        lore.add(Component.text("Exact reason: " + policy.id(), NamedTextColor.DARK_GRAY));
+        lore.add(Component.text("Family: " + policy.family(), NamedTextColor.GRAY));
+        lore.add(Component.text("First step without history: "
+                + compact(policy.steps().getFirst().label(), 44), NamedTextColor.DARK_GRAY));
         lore.add(Component.text("Possible outcomes: " + policy.steps().size() + " step"
                         + (policy.steps().size() == 1 ? "" : "s"),
                 NamedTextColor.GRAY));
@@ -779,6 +816,9 @@ final class PunishmentGuiRenderer {
             PunishmentGuiCategory category = PunishmentGuiCategory.byId(reasons.categoryId());
             return Component.text("Punish · " + (category == null ? "Reasons" : category.title()),
                     NamedTextColor.DARK_AQUA);
+        }
+        if (state instanceof PunishmentGuiState.Search) {
+            return Component.text("Punish - Search Results", NamedTextColor.DARK_AQUA);
         }
         if (state instanceof PunishmentGuiState.Review) {
             return Component.text("Review · " + target, NamedTextColor.DARK_AQUA);

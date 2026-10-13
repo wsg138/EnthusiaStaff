@@ -128,10 +128,10 @@ class PunishmentGuiCatalogTest {
                         policy("cheating.polar.template", "cheating.polar.template", StaffRank.MOD, SanctionType.BAN)
                 )), new DefaultAuthorizationPolicy());
 
-        assertEquals(List.of("cheating"), categoryIds(catalog, StaffRank.MOD, "punish"));
-        assertEquals(List.of("cheating.manual"), catalog.reasons(actor(StaffRank.MOD), "punish", "cheating")
+        assertEquals(List.of("gameplay"), categoryIds(catalog, StaffRank.MOD, "punish"));
+        assertEquals(List.of("cheating.manual"), catalog.reasons(actor(StaffRank.MOD), "punish", "gameplay")
                 .stream().map(ReasonPolicy::id).toList());
-        assertEquals(Set.of("cheating"), PunishmentGuiCategory.CHEATING.families());
+        assertTrue(PunishmentGuiCategory.GAMEPLAY.families().contains("cheating"));
     }
 
     @Test
@@ -158,7 +158,7 @@ class PunishmentGuiCatalogTest {
                             loaded.aliases(), loaded.removedReasons()),
                     new DefaultAuthorizationPolicy());
             List<PunishmentGuiCategory> categories = catalog.categories(actor(StaffRank.FOUNDER), "punish");
-            assertEquals(10, categories.size());
+            assertEquals(6, categories.size());
             assertFalse(categories.contains(PunishmentGuiCategory.OTHER));
             List<String> visibleIds = categories.stream()
                     .flatMap(category -> catalog.reasons(actor(StaffRank.FOUNDER), "punish", category.id()).stream())
@@ -169,6 +169,85 @@ class PunishmentGuiCatalogTest {
         } catch (java.io.IOException exception) {
             throw new IllegalStateException(exception);
         }
+    }
+
+    @Test
+    void bundledPolicyEveryManualReasonIsSearchableByExactId() {
+        try (InputStream input = getClass().getClassLoader().getResourceAsStream("reason-policies.yml")) {
+            var loaded = new ReasonPolicyConfigurationLoader().load(
+                    java.util.Objects.requireNonNull(input), "reason-policies.yml");
+            var catalog = new PunishmentGuiCatalog(
+                    new AtomicReasonPolicyRepository(loaded.version(), loaded.policies(),
+                            loaded.aliases(), loaded.removedReasons()),
+                    new DefaultAuthorizationPolicy());
+            var founder = actor(StaffRank.FOUNDER);
+            for (ReasonPolicy policy : loaded.policies()) {
+                if (policy.id().startsWith("cheating.polar.") || policy.family().startsWith("cheating.polar")) {
+                    assertTrue(catalog.search(founder, "punish", policy.id()).isEmpty());
+                } else {
+                    var results = catalog.search(founder, "punish", policy.id());
+                    assertFalse(results.isEmpty(), "Not searchable: " + policy.id());
+                    assertEquals(policy.id(), results.getFirst().id());
+                }
+            }
+        } catch (java.io.IOException exception) {
+            throw new IllegalStateException(exception);
+        }
+    }
+
+    @Test
+    void unknownNewFamilyFallsBackToOtherWithoutChangingPolicyFamily() {
+        ReasonPolicy extra = policy("new.unknown-offense", "new-family", StaffRank.MOD, SanctionType.MUTE);
+        PunishmentGuiCatalog catalog = new PunishmentGuiCatalog(
+                new AtomicReasonPolicyRepository("vFuture", List.of(extra)),
+                new DefaultAuthorizationPolicy());
+        assertEquals(List.of("other"), categoryIds(catalog, StaffRank.MOD, "punish"));
+        assertEquals(extra.id(), catalog.reasons(actor(StaffRank.MOD), "punish", "other").getFirst().id());
+        assertEquals("new-family", extra.family());
+    }
+
+    @Test
+    void allSixGroupsHaveNoOverlappingFamilyKeys() {
+        Set<String> families = new java.util.HashSet<>();
+        for (PunishmentGuiCategory category : PunishmentGuiCategory.ordered()) {
+            for (String family : category.families()) {
+                assertTrue(families.add(family), "Mapped to two categories: " + family);
+                assertEquals(category, PunishmentGuiCategory.forFamily(family));
+            }
+        }
+        assertEquals(6, PunishmentGuiCategory.values().length - 1);
+    }
+
+    @Test
+    void searchRespectsRankCommandFiltersAndHidesSystemOnlyTemplates() {
+        PunishmentGuiCatalog catalog = new PunishmentGuiCatalog(
+                new AtomicReasonPolicyRepository("v1", List.of(
+                        policy("cheating.manual", "cheating", StaffRank.MOD, SanctionType.NETWORK_BAN),
+                        policy("cheating.polar.template", "cheating.polar.template",
+                                StaffRank.MOD, SanctionType.NETWORK_BAN),
+                        policy("safety.admin", "safety", StaffRank.ADMIN, SanctionType.NETWORK_BAN),
+                        policy("spam.low-level", "spam", StaffRank.MOD, SanctionType.MUTE)
+                )), new DefaultAuthorizationPolicy());
+
+        assertEquals(List.of("cheating.manual"),
+                catalog.search(actor(StaffRank.MOD), "ban", "cheating").stream()
+                        .map(ReasonPolicy::id).toList());
+        assertTrue(catalog.search(actor(StaffRank.MOD), "mute", "cheating").isEmpty());
+        assertTrue(catalog.search(actor(StaffRank.HELPER), "ban", "admin").isEmpty());
+        assertEquals(List.of("safety.admin"),
+                catalog.search(actor(StaffRank.DEVELOPER), "ban", "admin").stream()
+                        .map(ReasonPolicy::id).toList());
+    }
+
+    @Test
+    void searchIsCaseInsensitiveAndRejectsUnboundedQueries() {
+        PunishmentGuiCatalog catalog = catalog();
+        assertEquals(List.of("chat.mod"),
+                catalog.search(actor(StaffRank.MOD), "mute", "  CHAT.MOD  ").stream()
+                        .map(ReasonPolicy::id).toList());
+        assertTrue(catalog.search(actor(StaffRank.MOD), "mute", "a").isEmpty());
+        assertTrue(catalog.search(actor(StaffRank.MOD), "mute", "a".repeat(65)).isEmpty());
+        assertTrue(catalog.search(actor(StaffRank.MOD), "mute", null).isEmpty());
     }
 
     private static List<String> categoryIds(PunishmentGuiCatalog catalog, StaffRank rank, String command) {
