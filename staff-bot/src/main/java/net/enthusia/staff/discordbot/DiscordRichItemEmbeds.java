@@ -20,33 +20,61 @@ final class DiscordRichItemEmbeds {
     private DiscordRichItemEmbeds() {
     }
 
-    static List<MessageEmbed> create(List<ChatBridgeArtifact> artifacts, String minecraftName) {
+    /**
+     * Keep only artifacts actually referenced by embeds. An unattached tooltip otherwise
+     * appears as a raw Discord file / ALT image when its item could not be rendered.
+     * Item and tooltip pairs share their original placeholder position.
+     */
+    static List<ChatBridgeArtifact> referencedArtifacts(List<ChatBridgeArtifact> artifacts) {
         Objects.requireNonNull(artifacts, "artifacts");
-        String player = validPlayerName(minecraftName);
         List<ChatBridgeArtifact> ordered = artifacts.stream().filter(Objects::nonNull)
                 .sorted(Comparator.comparingInt(ChatBridgeArtifact::position)
                         .thenComparing(ChatBridgeArtifact::filename))
                 .toList();
-        List<MessageEmbed> result = new ArrayList<>();
-        ChatBridgeArtifact icon = ordered.stream()
-                .filter(item -> item.kind() == ChatBridgeArtifact.Kind.ITEM)
-                .findFirst().orElse(null);
-        ChatBridgeArtifact tooltip = ordered.stream()
-                .filter(item -> item.kind() == ChatBridgeArtifact.Kind.TOOLTIP)
-                .findFirst().orElse(null);
-        if (icon != null) {
-            EmbedBuilder embed = new EmbedBuilder()
-                    .setColor(ITEM_BORDER_COLOR)
-                    .setTitle(player + "'s Item")
-                    .setDescription(icon.altText())
-                    .setThumbnail("attachment://" + icon.filename());
-            if (tooltip != null) {
-                embed.setImage("attachment://" + tooltip.filename());
-            }
-            result.add(embed.build());
-        }
+        List<ChatBridgeArtifact> tooltips = new ArrayList<>(ordered.stream()
+                .filter(a -> a.kind() == ChatBridgeArtifact.Kind.TOOLTIP).toList());
+        List<ChatBridgeArtifact> kept = new ArrayList<>();
         for (ChatBridgeArtifact artifact : ordered) {
-            if (artifact.kind() == ChatBridgeArtifact.Kind.INVENTORY
+            if (artifact.kind() == ChatBridgeArtifact.Kind.ITEM) {
+                kept.add(artifact);
+                for (int index = 0; index < tooltips.size(); index++) {
+                    ChatBridgeArtifact candidate = tooltips.get(index);
+                    if (candidate.position() == artifact.position()) {
+                        kept.add(candidate);
+                        tooltips.remove(index);
+                        break;
+                    }
+                }
+            } else if (artifact.kind() == ChatBridgeArtifact.Kind.INVENTORY
+                    || artifact.kind() == ChatBridgeArtifact.Kind.ENDER_CHEST) {
+                kept.add(artifact);
+            }
+        }
+        return List.copyOf(kept);
+    }
+
+    static List<MessageEmbed> create(List<ChatBridgeArtifact> artifacts, String minecraftName) {
+        List<ChatBridgeArtifact> selected = referencedArtifacts(artifacts);
+        String player = validPlayerName(minecraftName);
+        List<MessageEmbed> result = new ArrayList<>();
+        for (int index = 0; index < selected.size(); index++) {
+            ChatBridgeArtifact artifact = selected.get(index);
+            if (artifact.kind() == ChatBridgeArtifact.Kind.ITEM) {
+                EmbedBuilder embed = new EmbedBuilder()
+                        .setColor(ITEM_BORDER_COLOR)
+                        .setTitle(player + "'s Item")
+                        .setDescription(artifact.altText())
+                        .setThumbnail("attachment://" + artifact.filename());
+                if (index + 1 < selected.size()) {
+                    ChatBridgeArtifact next = selected.get(index + 1);
+                    if (next.kind() == ChatBridgeArtifact.Kind.TOOLTIP
+                            && next.position() == artifact.position()) {
+                        embed.setImage("attachment://" + next.filename());
+                        index++;
+                    }
+                }
+                result.add(embed.build());
+            } else if (artifact.kind() == ChatBridgeArtifact.Kind.INVENTORY
                     || artifact.kind() == ChatBridgeArtifact.Kind.ENDER_CHEST) {
                 boolean ender = artifact.kind() == ChatBridgeArtifact.Kind.ENDER_CHEST;
                 result.add(new EmbedBuilder()
