@@ -91,7 +91,6 @@ final class JdbcWebsiteAppealStore {
         List<AppealRow> existing = appeals.selectCandidates(
                 connection,
                 appealId,
-                punishmentId,
                 idempotencyKey,
                 true
         );
@@ -114,6 +113,15 @@ final class JdbcWebsiteAppealStore {
         );
         if (rejection != null) {
             return rejection;
+        }
+        List<AppealRow> afterLock = appeals.selectCandidates(connection, appealId, idempotencyKey, true);
+        if (!afterLock.isEmpty()) {
+            return existingResult(afterLock, appealId, punishmentId, caseId, accountToken, idempotencyKey);
+        }
+        // Repeated attempts must originate in the player submission workflow, which owns
+        // the cooldown. Legacy direct acceptance must not create another attempt.
+        if (appeals.hasPunishment(connection, punishmentId)) {
+            throw conflict("APPEAL_IDEMPOTENCY_CONFLICT", "An appeal already exists for this punishment");
         }
         return insertPreparation(
                 connection,
@@ -153,7 +161,6 @@ final class JdbcWebsiteAppealStore {
             List<AppealRow> concurrent = appeals.selectCandidates(
                     connection,
                     appealId,
-                    punishmentId,
                     idempotencyKey,
                     true
             );

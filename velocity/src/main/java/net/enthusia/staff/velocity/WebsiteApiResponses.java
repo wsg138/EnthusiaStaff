@@ -8,6 +8,7 @@ import net.enthusia.staff.domain.policyv2.publicview.PolicyV2PublicApiAdapter;
 import net.enthusia.staff.domain.website.PublicPunishment;
 import net.enthusia.staff.domain.website.PunishmentCodeBinding;
 import net.enthusia.staff.domain.website.WebsiteAppealCandidate;
+import net.enthusia.staff.domain.website.WebsiteAccountPunishment;
 import net.enthusia.staff.domain.website.WebsiteAppealView;
 
 final class WebsiteApiResponses {
@@ -59,6 +60,22 @@ final class WebsiteApiResponses {
         response.put("type", candidate.punishmentType());
         response.put("reason", candidate.publicReason());
         response.put("createdAt", candidate.issuedAt().toString());
+        return response;
+    }
+
+    static Map<String, Object> accountPunishment(WebsiteAccountPunishment item) {
+        Map<String, Object> response = new LinkedHashMap<>();
+        response.put("id", item.punishmentId().toString());
+        response.put(CASE_ID, item.caseId().value());
+        response.put("type", item.type());
+        response.put("reason", item.reason());
+        response.put("createdAt", item.issuedAt().toString());
+        response.put("minecraftUuid", item.minecraftId().toString());
+        response.put("minecraftName", item.minecraftName());
+        response.put("active", item.active());
+        response.put("expiresAt", item.expiresAt() == null ? null : item.expiresAt().toString());
+        response.put("nextAppealAt", item.nextAppealAt() == null ? null : item.nextAppealAt().toString());
+        response.put("appealable", item.appealable());
         return response;
     }
 

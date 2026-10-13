@@ -26,11 +26,13 @@ import net.enthusia.staff.domain.website.WebsiteAppealPage;
 import net.enthusia.staff.domain.website.WebsiteAppealSubmission;
 import net.enthusia.staff.domain.website.WebsiteAppealView;
 import net.enthusia.staff.domain.website.WebsiteModerationException;
+import net.enthusia.staff.domain.website.WebsiteAccountPunishmentPage;
 
 public final class JdbcWebsiteModerationStore implements WebsiteModerationStore {
     private static final int MAX_BATCH = 5_000;
 
     private final DataSource dataSource;
+    private final JdbcLinkedWebsiteAppealStore linkedAppeals;
     private final JdbcPublicPunishmentRegistry publicRegistry;
     private final JdbcPunishmentCodeStore punishmentCodes;
     private final JdbcWebsiteAppealStore appeals;
@@ -66,6 +68,19 @@ public final class JdbcWebsiteModerationStore implements WebsiteModerationStore 
                 new JdbcWebsiteAppealRateLimiter(codeProtector)
         );
         this.appealLifecycle = new JdbcWebsiteAppealLifecycleStore(dataSource, codeProtector, json);
+        this.linkedAppeals = new JdbcLinkedWebsiteAppealStore(dataSource, appealWorkflow);
+    }
+
+    @Override
+    public WebsiteAccountPunishmentPage linkedPunishments(String discordId, Optional<UUID> minecraftId,
+            String scope, Optional<String> cursor, int limit, Instant now) {
+        return linkedAppeals.list(discordId, minecraftId, scope, cursor, limit, now);
+    }
+
+    @Override
+    public WebsiteAppealSubmission submitLinkedAppeal(String discordId, UUID minecraftId,
+            UUID punishmentId, String accountId, String reason, String idempotencyKey, Instant now) {
+        return linkedAppeals.submit(discordId, minecraftId, punishmentId, accountId, reason, idempotencyKey, now);
     }
 
     @Override

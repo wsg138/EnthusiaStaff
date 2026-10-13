@@ -21,7 +21,9 @@ public record WebsiteAppealView(
     public WebsiteAppealView {
         if (appealId == null || punishmentId == null || caseId == null
                 || punishmentType == null || punishmentType.isBlank()
-                || playerUsername == null || !playerUsername.matches("[A-Za-z0-9_]{1,16}")
+                || playerUsername == null || playerUsername.isBlank() || playerUsername.length() > 32
+                || playerUsername.codePoints().anyMatch(Character::isISOControl)
+                || playerUsername.indexOf('<') >= 0 || playerUsername.indexOf('>') >= 0
                 || reason == null || reason.isBlank() || state == null || state.isBlank()
                 || version < 1 || createdAt == null || updatedAt == null) {
             throw new IllegalArgumentException("Website appeal fields are invalid");

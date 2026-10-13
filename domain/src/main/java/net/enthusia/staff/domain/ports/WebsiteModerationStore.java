@@ -18,9 +18,24 @@ import net.enthusia.staff.domain.website.WebsiteAppealPage;
 import net.enthusia.staff.domain.website.WebsiteAppealSubmission;
 import net.enthusia.staff.domain.website.WebsiteAppealView;
 import net.enthusia.staff.domain.website.WebsiteModerationException;
+import net.enthusia.staff.domain.website.WebsiteAccountPunishmentPage;
 
 public interface WebsiteModerationStore {
     String APPEAL_WORKFLOW_UNAVAILABLE = "Website appeal workflow is unavailable";
+
+    default WebsiteAccountPunishmentPage linkedPunishments(
+            String discordId, Optional<UUID> minecraftId, String scope,
+            Optional<String> cursor, int limit, Instant now
+    ) {
+        throw unavailableAppealWorkflow();
+    }
+
+    default WebsiteAppealSubmission submitLinkedAppeal(
+            String discordId, UUID minecraftId, UUID punishmentId, String accountId,
+            String reason, String idempotencyKey, Instant now
+    ) {
+        throw unavailableAppealWorkflow();
+    }
 
     PublicPunishmentPage listPublic(
             PublicPunishmentFilter filter,

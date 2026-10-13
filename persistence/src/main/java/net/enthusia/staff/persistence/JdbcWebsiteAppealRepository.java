@@ -18,7 +18,6 @@ final class JdbcWebsiteAppealRepository {
     List<AppealRow> selectCandidates(
             Connection connection,
             UUID appealId,
-            UUID punishmentId,
             String idempotencyKey,
             boolean lock
     ) throws SQLException {
@@ -26,12 +25,11 @@ final class JdbcWebsiteAppealRepository {
                 SELECT appeal_id, punishment_id, case_id, player_account_token,
                        idempotency_key, state, outcome_code
                 FROM website_appeal_requests
-                WHERE appeal_id = ? OR punishment_id = ? OR idempotency_key = ?
+                WHERE appeal_id = ? OR idempotency_key = ?
                 """ + lockClause(lock);
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
             statement.setBytes(1, UuidBytes.toBytes(appealId));
-            statement.setBytes(2, UuidBytes.toBytes(punishmentId));
-            statement.setString(3, idempotencyKey);
+            statement.setString(2, idempotencyKey);
             try (ResultSet result = statement.executeQuery()) {
                 List<AppealRow> candidates = new ArrayList<>();
                 while (result.next()) {
@@ -53,6 +51,16 @@ final class JdbcWebsiteAppealRepository {
             statement.setBytes(1, UuidBytes.toBytes(appealId));
             try (ResultSet result = statement.executeQuery()) {
                 return result.next() ? readAppeal(result) : null;
+            }
+        }
+    }
+
+    boolean hasPunishment(Connection connection, UUID punishmentId) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement(
+                "SELECT appeal_id FROM website_appeal_requests WHERE punishment_id = ? LIMIT 1 FOR UPDATE")) {
+            statement.setBytes(1, UuidBytes.toBytes(punishmentId));
+            try (ResultSet result = statement.executeQuery()) {
+                return result.next();
             }
         }
     }

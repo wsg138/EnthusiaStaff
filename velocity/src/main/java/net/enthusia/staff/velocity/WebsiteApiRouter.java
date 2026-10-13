@@ -59,6 +59,8 @@ final class WebsiteApiRouter {
             ACTOR_ACCOUNT_ID, ACTOR_RANK, "reason"
     );
     private static final Set<String> ELIGIBLE_FIELDS = Set.of(ACCOUNT_ID);
+    private static final Set<String> LINKED_PUNISHMENT_FIELDS = Set.of("discordUserId", "minecraftUuid", "scope", "cursor");
+    private static final Set<String> LINKED_SUBMIT_FIELDS = Set.of(ACCOUNT_ID, "discordUserId", "minecraftUuid", PUNISHMENT_ID, "reason", IDEMPOTENCY_KEY);
     private static final Set<String> MINE_FIELDS = Set.of(ACCOUNT_ID);
     private static final Set<String> SUBMIT_FIELDS = Set.of(
             PUNISHMENT_ID, ACCOUNT_ID, "username", "reason", IDEMPOTENCY_KEY
@@ -200,6 +202,12 @@ final class WebsiteApiRouter {
         requireNoQuery(query);
         if (ELIGIBLE_APPEALS_PATH.equals(path)) {
             return appealWorkflow.eligible(decoder.jsonBody(headers, body, ELIGIBLE_FIELDS));
+        }
+        if ((APPEAL_PREFIX + "linked").equals(path)) {
+            return appealWorkflow.linked(decoder.jsonBody(headers, body, LINKED_PUNISHMENT_FIELDS));
+        }
+        if ((APPEAL_PREFIX + "linked/submit").equals(path)) {
+            return appealWorkflow.submitLinked(decoder.jsonBody(headers, body, LINKED_SUBMIT_FIELDS));
         }
         if (MINE_APPEALS_PATH.equals(path)) {
             return appealWorkflow.mine(decoder.jsonBody(headers, body, MINE_FIELDS));

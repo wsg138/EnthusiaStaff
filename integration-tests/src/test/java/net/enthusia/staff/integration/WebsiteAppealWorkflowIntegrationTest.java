@@ -112,7 +112,7 @@ class WebsiteAppealWorkflowIntegrationTest {
         assertFalse(information.requiresAcceptance());
         assertEquals("INFORMATION_REQUESTED", information.appeal().state());
         assertEquals(3, information.appeal().version());
-        assertEquals(1, store.eligibleAppeals(ACCOUNT_ID, 100, NOW.plusSeconds(5)).size());
+        assertEquals(0, store.eligibleAppeals(ACCOUNT_ID, 100, NOW.plusSeconds(5)).size());
         return appealId;
     }
 
@@ -121,16 +121,11 @@ class WebsiteAppealWorkflowIntegrationTest {
             AppealFixture fixture,
             UUID appealId
     ) {
-        WebsiteAppealSubmission resubmitted = store.submitAppeal(
-                fixture.sanctionId(), ACCOUNT_ID, PLAYER_NAME,
-                "Additional event context requested by the reviewer is included.",
-                "submission-workflow-2", NOW.plusSeconds(6)
-        );
-        assertFalse(resubmitted.replayed());
-        assertEquals(OPEN_STATE, resubmitted.appeal().state());
-        assertEquals(4, resubmitted.appeal().version());
-
-        WebsiteAppealMutation claimed = claim(store, appealId, 4, "claim-approve-1", 7);
+        WebsiteModerationException cooldown = assertThrows(WebsiteModerationException.class,
+                () -> store.submitAppeal(fixture.sanctionId(), ACCOUNT_ID, PLAYER_NAME,
+                        "Additional context should be supplied in the existing appeal thread.",
+                        "submission-workflow-2", NOW.plusSeconds(6)));
+        assertEquals("APPEAL_COOLDOWN", cooldown.code());
         WebsiteModerationException stale = assertThrows(
                 WebsiteModerationException.class,
                 () -> store.prepareAppealDecision(
@@ -142,14 +137,14 @@ class WebsiteAppealWorkflowIntegrationTest {
         assertEquals("STALE_APPEAL_STATE", stale.code());
 
         WebsiteAppealDecisionPreparation approved = store.prepareAppealDecision(
-                appealId, claimed.appeal().version(), "approve",
+                appealId, 3, "approve",
                 "The appeal is supported by the reviewed evidence.",
                 REVIEWER_ID, REVIEWER_RANK, "decision-approve-1", NOW.plusSeconds(9)
         );
         assertTrue(approved.requiresAcceptance());
         assertEquals(ACCOUNT_ID, approved.playerAccountId());
         assertEquals("APPROVAL_PENDING", approved.appeal().state());
-        assertEquals(6, approved.appeal().version());
+        assertEquals(4, approved.appeal().version());
     }
 
     private static void assertApprovalReplayAfterRestart(UUID appealId) {
@@ -157,7 +152,7 @@ class WebsiteAppealWorkflowIntegrationTest {
             WebsiteAppealDecisionPreparation replay = runtime.websiteModerationStore(CODE_PROTECTOR)
                     .prepareAppealDecision(
                             appealId,
-                            5,
+                            3,
                             "approve",
                             "The appeal is supported by the reviewed evidence.",
                             REVIEWER_ID,
@@ -243,7 +238,7 @@ class WebsiteAppealWorkflowIntegrationTest {
                             "submission-second-open", NOW.plusSeconds(2)
                     )
             );
-            assertEquals("APPEAL_ALREADY_EXISTS", conflict.code());
+            assertEquals("APPEAL_COOLDOWN", conflict.code());
             assertEquals(1, store.listAppeals(OPEN_STATE, Optional.empty(), 100, NOW).items().size());
         }
     }

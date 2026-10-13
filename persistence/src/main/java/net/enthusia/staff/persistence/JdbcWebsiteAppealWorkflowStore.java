@@ -93,8 +93,6 @@ final class JdbcWebsiteAppealWorkflowStore {
                      FROM punishment_codes pc
                      JOIN sanctions s ON s.sanction_id = pc.sanction_id
                      JOIN cases c ON c.case_id = pc.case_id
-                     LEFT JOIN website_appeal_requests a
-                         ON a.punishment_id = pc.sanction_id
                      WHERE pc.claimed_account_token = ?
                        AND pc.status = 'ACTIVE'
                        AND s.status IN ('ACTIVE', 'APPLIED')
@@ -103,13 +101,18 @@ final class JdbcWebsiteAppealWorkflowStore {
                            'BAN', 'NETWORK_BAN', 'NETWORK_IDENTITY_BAN', 'MUTE', 'PUBLIC_MUTE'
                        )
                        AND c.state <> 'FULLY_OVERTURNED'
-                       AND (a.appeal_id IS NULL OR a.state = 'INFORMATION_REQUESTED')
+                       AND NOT EXISTS (SELECT 1 FROM website_appeal_requests a
+                         LEFT JOIN website_appeal_events e ON e.appeal_id = a.appeal_id
+                           AND e.event_type IN ('SUBMITTED','RESUBMITTED')
+                         WHERE a.punishment_id = s.sanction_id
+                           AND GREATEST(a.created_at, COALESCE(e.created_at, a.created_at)) > ?)
                      ORDER BY s.issued_at DESC, pc.sanction_id DESC
                      LIMIT ?
                      """)) {
             statement.setBytes(1, accountToken);
             statement.setTimestamp(2, Timestamp.from(now));
-            statement.setInt(3, limit);
+            statement.setTimestamp(3, Timestamp.from(now.minus(JdbcLinkedWebsiteAppealStore.APPEAL_INTERVAL)));
+            statement.setInt(4, limit);
             try (ResultSet result = statement.executeQuery()) {
                 List<WebsiteAppealCandidate> candidates = new ArrayList<>();
                 while (result.next()) {
@@ -176,11 +179,8 @@ final class JdbcWebsiteAppealWorkflowStore {
                         true
                 );
                 requireEligibleBinding(code, accountToken, now);
-                rateLimiter.enforce(connection, accountId, punishmentId, idempotencyKey, now);
-                AppealRow existing = selectByPunishment(connection, punishmentId, true);
-                WebsiteAppealSubmission result = writeSubmission(
-                        connection, code, existing, accountToken, request
-                );
+                WebsiteAppealSubmission result = submitVerifiedPunishment(connection,
+                        punishmentId, code.caseId(), accountId, username, reason, idempotencyKey, now);
                 connection.commit();
                 return result;
             } catch (SQLException exception) {
@@ -197,16 +197,69 @@ final class JdbcWebsiteAppealWorkflowStore {
         }
     }
 
-    private WebsiteAppealSubmission writeSubmission(
-            Connection connection,
-            JdbcPunishmentCodeRepository.CodeRow code,
-            AppealRow existing,
-            byte[] accountToken,
-            SubmissionRequest request
-    ) throws SQLException {
-        return existing == null
-                ? insertSubmission(connection, code, accountToken, request)
-                : resubmit(connection, existing, accountToken, request);
+    WebsiteAppealSubmission submitVerifiedPunishment(Connection connection, UUID punishmentId,
+            CaseId caseId, String accountId, String username, String reason,
+            String idempotencyKey, Instant now) throws SQLException {
+        SubmissionRequest request = new SubmissionRequest(punishmentId, accountId, username, reason, idempotencyKey, now);
+        validateSubmission(request);
+        byte[] token = accountToken(accountId);
+        lockSanction(connection, punishmentId);
+        AppealRow replay = submissionReplay(connection, punishmentId, token, idempotencyKey);
+        if (replay != null) {
+            requireSameSubmission(replay, token, request);
+            return new WebsiteAppealSubmission(view(replay), true);
+        }
+        requireAppealInterval(connection, punishmentId, now);
+        rateLimiter.enforce(connection, accountId, punishmentId, idempotencyKey, now);
+        return insertSubmission(connection, punishmentId, caseId, token, request);
+    }
+
+    private static void lockSanction(Connection connection, UUID punishmentId) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement(
+                "SELECT sanction_id FROM sanctions WHERE sanction_id = ? FOR UPDATE")) {
+            statement.setBytes(1, UuidBytes.toBytes(punishmentId));
+            try (ResultSet result = statement.executeQuery()) {
+                if (!result.next()) throw notFound("PUNISHMENT_NOT_FOUND", "The punishment could not be found");
+            }
+        }
+    }
+
+    private AppealRow submissionReplay(Connection connection, UUID punishmentId, byte[] token, String key)
+            throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement(APPEAL_SELECT + """
+                WHERE a.punishment_id = ? AND a.player_account_token = ?
+                  AND a.submission_idempotency_key = ? FOR UPDATE
+                """)) {
+            statement.setBytes(1, UuidBytes.toBytes(punishmentId));
+            statement.setBytes(2, token);
+            statement.setString(3, key);
+            try (ResultSet result = statement.executeQuery()) {
+                return result.next() ? readAppeal(result) : null;
+            }
+        }
+    }
+
+    private static void requireAppealInterval(Connection connection, UUID punishmentId, Instant now)
+            throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement("""
+                SELECT GREATEST(a.created_at, COALESCE(e.created_at, a.created_at)) AS last_submission
+                FROM website_appeal_requests a
+                LEFT JOIN website_appeal_events e ON e.appeal_id = a.appeal_id
+                  AND e.event_type IN ('SUBMITTED','RESUBMITTED')
+                WHERE a.punishment_id = ?
+                ORDER BY last_submission DESC LIMIT 1 FOR UPDATE
+                """)) {
+            statement.setBytes(1, UuidBytes.toBytes(punishmentId));
+            try (ResultSet result = statement.executeQuery()) {
+                if (!result.next()) return;
+                Timestamp last = result.getTimestamp("last_submission");
+                if (last != null && last.toInstant().plus(JdbcLinkedWebsiteAppealStore.APPEAL_INTERVAL).isAfter(now)) {
+                    throw new WebsiteModerationException(WebsiteModerationException.Kind.RATE_LIMITED,
+                            "APPEAL_COOLDOWN", "This punishment can be appealed again on "
+                            + last.toInstant().plus(JdbcLinkedWebsiteAppealStore.APPEAL_INTERVAL));
+                }
+            }
+        }
     }
 
     WebsiteAppealPage list(
@@ -409,12 +462,8 @@ final class JdbcWebsiteAppealWorkflowStore {
         return null;
     }
 
-    private WebsiteAppealSubmission insertSubmission(
-            Connection connection,
-            JdbcPunishmentCodeRepository.CodeRow code,
-            byte[] accountToken,
-            SubmissionRequest request
-    ) throws SQLException {
+    private WebsiteAppealSubmission insertSubmission(Connection connection, UUID punishmentId,
+            CaseId caseId, byte[] accountToken, SubmissionRequest request) throws SQLException {
         UUID appealId = UUID.randomUUID();
         try (PreparedStatement statement = connection.prepareStatement("""
                 INSERT INTO website_appeal_requests(
@@ -424,8 +473,8 @@ final class JdbcWebsiteAppealWorkflowStore {
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'OPEN', 1, ?, ?)
                 """)) {
             statement.setBytes(1, UuidBytes.toBytes(appealId));
-            statement.setBytes(2, UuidBytes.toBytes(code.sanctionId()));
-            statement.setString(3, code.caseId().value());
+            statement.setBytes(2, UuidBytes.toBytes(punishmentId));
+            statement.setString(3, caseId.value());
             statement.setBytes(4, accountToken);
             statement.setString(5, request.accountId());
             statement.setString(6, request.username());
@@ -444,51 +493,6 @@ final class JdbcWebsiteAppealWorkflowStore {
                 request.reason(), request.idempotencyKey(), request.now()
         ));
         return new WebsiteAppealSubmission(view(selectById(connection, appealId, false)), false);
-    }
-
-    private WebsiteAppealSubmission resubmit(
-            Connection connection,
-            AppealRow existing,
-            byte[] accountToken,
-            SubmissionRequest request
-    ) throws SQLException {
-        if (existing.submissionIdempotencyKey() != null
-                && existing.submissionIdempotencyKey().equals(request.idempotencyKey())) {
-            requireSameSubmission(existing, accountToken, request);
-            return new WebsiteAppealSubmission(view(existing), true);
-        }
-        if (!INFORMATION_REQUESTED.equals(existing.state())) {
-            throw conflict("APPEAL_ALREADY_EXISTS", "That punishment already has an appeal");
-        }
-        requireSameAccount(existing, accountToken, request);
-        long nextRevision = existing.revision() + 1;
-        try (PreparedStatement statement = connection.prepareStatement("""
-                UPDATE website_appeal_requests
-                SET appeal_reason = ?, submission_idempotency_key = ?, state = 'OPEN',
-                    revision = ?, decision_type = NULL, decision_idempotency_key = NULL,
-                    reviewer_account_id = NULL, reviewer_rank = NULL,
-                    decision_note = NULL, decided_at = NULL, updated_at = ?
-                WHERE appeal_id = ? AND revision = ? AND state = 'INFORMATION_REQUESTED'
-                """)) {
-            statement.setString(1, request.reason());
-            statement.setString(2, request.idempotencyKey());
-            statement.setLong(3, nextRevision);
-            statement.setTimestamp(4, Timestamp.from(request.now()));
-            statement.setBytes(5, UuidBytes.toBytes(existing.appealId()));
-            statement.setLong(6, existing.revision());
-            JdbcTransactionSupport.requireSingleUpdate(
-                    statement.executeUpdate(),
-                    "Website appeal changed during resubmission"
-            );
-        }
-        insertEvent(connection, new AppealEvent(
-                existing.appealId(), nextRevision, "RESUBMITTED", null, null,
-                request.reason(), request.idempotencyKey(), request.now()
-        ));
-        return new WebsiteAppealSubmission(
-                view(selectById(connection, existing.appealId(), false)),
-                false
-        );
     }
 
     private void updateDecision(
@@ -538,17 +542,6 @@ final class JdbcWebsiteAppealWorkflowStore {
         boolean requiresAcceptance = "APPROVE".equals(request.decision())
                 && APPROVAL_PENDING.equals(existing.state());
         return Optional.of(preparation(existing, true, requiresAcceptance));
-    }
-
-    private AppealRow selectByPunishment(Connection connection, UUID punishmentId, boolean lock)
-            throws SQLException {
-        String sql = APPEAL_SELECT + " WHERE a.punishment_id = ?" + lockClause(lock);
-        try (PreparedStatement statement = connection.prepareStatement(sql)) {
-            statement.setBytes(1, UuidBytes.toBytes(punishmentId));
-            try (ResultSet result = statement.executeQuery()) {
-                return result.next() ? readAppeal(result) : null;
-            }
-        }
     }
 
     private AppealRow selectById(Connection connection, UUID appealId, boolean lock)
@@ -679,10 +672,10 @@ final class JdbcWebsiteAppealWorkflowStore {
             SubmissionRequest request
     ) {
         if (!request.accountId().equals(existing.playerAccountId())
-                || !MessageDigest.isEqual(accountToken, existing.accountToken())
-                || !request.username().equals(existing.playerUsername())) {
+                || !MessageDigest.isEqual(accountToken, existing.accountToken())) {
             throw conflict("APPEAL_ACCOUNT_CONFLICT", "The appeal belongs to another account");
         }
+        // A display-name change must not turn an exact retry into another appeal attempt.
     }
 
     private byte[] accountToken(String accountId) {
@@ -739,8 +732,9 @@ final class JdbcWebsiteAppealWorkflowStore {
     private static void validateSubmission(SubmissionRequest request) {
         requireValidSubmission(request.punishmentId() != null);
         requireValidSubmission(validNonBlankLength(request.accountId(), 1, 128));
-        requireValidSubmission(request.username() != null
-                && request.username().matches("[A-Za-z0-9_]{1,16}"));
+        requireValidSubmission(validNonBlankLength(request.username(), 1, 32)
+                && request.username().chars().noneMatch(Character::isISOControl)
+                && !request.username().contains("<") && !request.username().contains(">"));
         requireValidSubmission(validLength(request.reason(), 10, 1_000));
         requireValidSubmission(validIdempotencyKey(request.idempotencyKey()));
         requireValidSubmission(request.now() != null);

@@ -75,6 +75,32 @@ final class WebsiteAppealWorkflowEndpoint {
         );
     }
 
+    Object linked(ObjectNode input) {
+        String scope = input.has("scope") ? decoder.text(input, "scope", 16) : "ACTIVE";
+        if (!Set.of("ACTIVE", "EXPIRED", "ALL").contains(scope)) {
+            throw badRequest("INVALID_PUNISHMENT_SCOPE", "The punishment filter is invalid");
+        }
+        var page = store.linkedPunishments(decoder.text(input, "discordUserId", 22),
+                input.hasNonNull("minecraftUuid") ? Optional.of(decoder.uuid(input, "minecraftUuid")) : Optional.empty(),
+                scope,
+                input.hasNonNull("cursor") ? Optional.of(decoder.text(input, "cursor", 256)) : Optional.empty(),
+                100, clock.instant());
+        Map<String, Object> response = new LinkedHashMap<>();
+        response.put("punishments", page.punishments().stream().map(WebsiteApiResponses::accountPunishment).toList());
+        response.put("nextCursor", page.nextCursor().orElse(null));
+        return response;
+    }
+
+    Object submitLinked(ObjectNode input) {
+        var submission = store.submitLinkedAppeal(decoder.text(input, "discordUserId", 22),
+                decoder.uuid(input, "minecraftUuid"), decoder.uuid(input, "punishmentId"),
+                decoder.uuidText(input, "accountId"), appealReason(input),
+                decoder.text(input, IDEMPOTENCY_KEY, 128), clock.instant());
+        Map<String, Object> response = new LinkedHashMap<>(WebsiteApiResponses.appeal(submission.appeal()));
+        response.put("replayed", submission.replayed());
+        return response;
+    }
+
     Object mine(ObjectNode input) {
         String accountId = decoder.uuidText(input, "accountId");
         return Map.of(
