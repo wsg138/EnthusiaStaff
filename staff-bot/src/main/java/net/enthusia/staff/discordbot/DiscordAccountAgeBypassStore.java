@@ -65,7 +65,8 @@ final class DiscordAccountAgeBypassStore {
         return ids.contains(id);
     }
 
-    synchronized boolean add(long id) throws IOException {
+    boolean add(long id) throws IOException {
+        synchronized (this) {
         if (ids.contains(id)) {
             return false;
         }
@@ -77,9 +78,11 @@ final class DiscordAccountAgeBypassStore {
         persist(next);
         ids = Set.copyOf(next);
         return true;
+        }
     }
 
-    synchronized boolean remove(long id) throws IOException {
+    boolean remove(long id) throws IOException {
+        synchronized (this) {
         if (!ids.contains(id)) {
             return false;
         }
@@ -99,6 +102,16 @@ final class DiscordAccountAgeBypassStore {
         if (parent == null || !Files.isDirectory(parent)) {
             throw new IOException("account-age bypass directory does not exist");
         }
+        Path temporary = Files.createTempFile(parent, ".age-bypass-", ".tmp");
+        try {
+            writeTemporary(temporary, serialized(next));
+            replaceAtomically(temporary, parent);
+        } finally {
+            Files.deleteIfExists(temporary);
+        }
+    }
+
+    private static String serialized(Set<Long> next) {
         StringBuilder lines = new StringBuilder();
         TreeSet<String> sorted = new TreeSet<>();
         for (long id : next) {
@@ -107,31 +120,37 @@ final class DiscordAccountAgeBypassStore {
         for (String id : sorted) {
             lines.append(id).append('\n');
         }
-        Path temporary = Files.createTempFile(parent, ".age-bypass-", ".tmp");
+        return lines.toString();
+    }
+
+    private static void writeTemporary(Path temporary, String lines) throws IOException {
         try {
-            try {
-                Files.setPosixFilePermissions(temporary, PosixFilePermissions.fromString("rw-------"));
-            } catch (UnsupportedOperationException ignored) {
-                // Windows has no POSIX permissions; existing ACLs protect the container.
-            }
-            Files.writeString(temporary, lines.toString(), StandardCharsets.UTF_8,
-                    StandardOpenOption.TRUNCATE_EXISTING);
-            try (FileChannel channel = FileChannel.open(temporary, StandardOpenOption.WRITE)) {
-                channel.force(true);
-            }
-            try {
-                Files.move(temporary, file, StandardCopyOption.ATOMIC_MOVE,
-                        StandardCopyOption.REPLACE_EXISTING);
-            } catch (AtomicMoveNotSupportedException failure) {
-                throw new IOException("atomic account-age bypass persistence is unsupported", failure);
-            }
-            try (FileChannel directory = FileChannel.open(parent, StandardOpenOption.READ)) {
-                directory.force(true);
-            } catch (IOException | UnsupportedOperationException ignored) {
-                // Windows and some filesystems do not support directory fsync.
-            }
-        } finally {
-            Files.deleteIfExists(temporary);
+            Files.setPosixFilePermissions(temporary, PosixFilePermissions.fromString("rw-------"));
+        } catch (UnsupportedOperationException ignored) {
+            // Windows has no POSIX permissions; existing ACLs protect the container.
+        }
+        Files.writeString(temporary, lines, StandardCharsets.UTF_8, StandardOpenOption.TRUNCATE_EXISTING);
+        try (FileChannel channel = FileChannel.open(temporary, StandardOpenOption.WRITE)) {
+            channel.force(true);
         }
     }
+
+    private void replaceAtomically(Path temporary, Path parent) throws IOException {
+        try {
+            Files.move(temporary, file, StandardCopyOption.ATOMIC_MOVE,
+                    StandardCopyOption.REPLACE_EXISTING);
+        } catch (AtomicMoveNotSupportedException failure) {
+            throw new IOException("atomic account-age bypass persistence is unsupported", failure);
+        }
+        syncDirectory(parent);
+    }
+
+    private static void syncDirectory(Path parent) {
+        try (FileChannel directory = FileChannel.open(parent, StandardOpenOption.READ)) {
+            directory.force(true);
+        } catch (IOException | UnsupportedOperationException ignored) {
+            // Windows and some filesystems do not support directory fsync.
+        }
+    }
+
 }

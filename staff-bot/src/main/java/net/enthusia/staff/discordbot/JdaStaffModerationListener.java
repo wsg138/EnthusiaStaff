@@ -1379,20 +1379,8 @@ final class JdaStaffModerationListener extends ListenerAdapter {
                 userSlash(HISTORY, "View recent moderation history", discovery),
                 userSlash(NOTES, "View recent private staff notes", discovery),
                 stringSlash(CASE, "View a moderation case by exact ID", CASE_ID_OPTION, "16-character case ID", discovery),
-                Commands.slash(REVIEW_QUEUE, "Review punishments, reports and alt-evasion alerts")
-                        .addOptions(new OptionData(OptionType.STRING, REVIEW_VIEW_OPTION,
-                                "Choose a queue to see up to five matching cases", false)
-                                .addChoice("All (mixed)", "all")
-                                .addChoice("Punishment approvals", "punishments")
-                                .addChoice("Player reports", "reports")
-                                .addChoice("Alt-evasion alerts", "alts"))
-                        .setDefaultPermissions(discovery),
-                Commands.slash(REVIEW_REQUEST, "Approve or deny a Minecraft punishment request")
-                        .addOption(OptionType.STRING, REVIEW_ID, "Exact request UUID", true)
-                        .addOptions(new OptionData(OptionType.STRING, REVIEW_DECISION, "Review decision", true)
-                                .addChoice("Approve", "approve").addChoice("Deny", "deny"))
-                        .addOption(OptionType.STRING, REVIEW_NOTE, "Required for denial", false)
-                        .setDefaultPermissions(discovery)
+                reviewQueueSlash(discovery),
+                reviewRequestSlash(discovery)
         ));
         if (includePunishments) {
             commands.addAll(punishmentCommands(discovery));
@@ -1410,6 +1398,26 @@ final class JdaStaffModerationListener extends ListenerAdapter {
             commands.add(DiscordAccountAgeGateListener.command());
         }
         return List.copyOf(commands);
+    }
+
+    private static CommandData reviewQueueSlash(DefaultMemberPermissions discovery) {
+        return Commands.slash(REVIEW_QUEUE, "Review punishments, reports and alt-evasion alerts")
+                .addOptions(new OptionData(OptionType.STRING, REVIEW_VIEW_OPTION,
+                        "Choose a queue to see up to five matching cases", false)
+                        .addChoice("All (mixed)", "all")
+                        .addChoice("Punishment approvals", "punishments")
+                        .addChoice("Player reports", "reports")
+                        .addChoice("Alt-evasion alerts", "alts"))
+                .setDefaultPermissions(discovery);
+    }
+
+    private static CommandData reviewRequestSlash(DefaultMemberPermissions discovery) {
+        return Commands.slash(REVIEW_REQUEST, "Approve or deny a Minecraft punishment request")
+                .addOption(OptionType.STRING, REVIEW_ID, "Exact request UUID", true)
+                .addOptions(new OptionData(OptionType.STRING, REVIEW_DECISION, "Review decision", true)
+                        .addChoice("Approve", "approve").addChoice("Deny", "deny"))
+                .addOption(OptionType.STRING, REVIEW_NOTE, "Required for denial", false)
+                .setDefaultPermissions(discovery);
     }
 
     private static CommandData moderateSlash(

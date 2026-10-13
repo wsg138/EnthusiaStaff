@@ -18,10 +18,7 @@ import net.dv8tion.jda.api.interactions.commands.build.CommandData;
 import net.dv8tion.jda.api.interactions.commands.build.Commands;
 import net.dv8tion.jda.api.interactions.commands.build.OptionData;
 
-/**
- * The join event arrives after Discord admits a member. Remove accounts younger than
- * 21 days except explicitly allowlisted IDs, with authenticated private management.
- */
+/** Checks newly joined human Discord accounts against a 21-day threshold and durable bypass list. */
 final class DiscordAccountAgeGateListener extends ListenerAdapter {
     static final String COMMAND = "agebypass";
     private static final System.Logger LOGGER =
@@ -72,12 +69,10 @@ final class DiscordAccountAgeGateListener extends ListenerAdapter {
         }
         Guild guild = event.getJDA().getGuildById(guildId);
         if (guild != null) {
-            // When no moderation listener is installed there is no updateCommands
-            // owner; upsert just this command instead of replacing guild commands.
+            // No moderation command-list owner: upsert rather than replace all guild commands.
             guild.upsertCommand(command()).queue(
-                    ignored -> LOGGER.log(System.Logger.Level.INFO, "account_age_bypass_command_registered"),
-                    failure -> LOGGER.log(System.Logger.Level.ERROR,
-                            "account_age_bypass_command_registration_failed type={0}",
+                    ignored -> logInfo("account_age_bypass_command_registered"),
+                    failure -> logError("account_age_bypass_command_registration_failed type={0}",
                             failure.getClass().getSimpleName()));
         }
     }
@@ -88,99 +83,135 @@ final class DiscordAccountAgeGateListener extends ListenerAdapter {
             return;
         }
         Member admin = event.getMember();
-        if (event.getGuild() == null || event.getGuild().getIdLong() != guildId
-                || admin == null || !admin.hasPermission(Permission.MANAGE_SERVER)) {
-            event.reply("Only members with Manage Server permission can manage age exceptions.")
-                    .setEphemeral(true).queue();
+        if (!authorized(event.getGuild(), admin)) {
+            replyPrivate(event, "Only members with Manage Server permission can manage age exceptions.");
             return;
         }
         if (event.getOption("action") == null || event.getOption("user-id") == null) {
-            event.reply("A valid action and exact user ID are required.").setEphemeral(true).queue();
+            replyPrivate(event, "A valid action and exact user ID are required.");
             return;
         }
         String action = event.getOption("action").getAsString();
-        String input = event.getOption("user-id").getAsString();
         final long target;
         try {
-            target = DiscordAccountAgeBypassStore.parseId(input);
+            target = DiscordAccountAgeBypassStore.parseId(event.getOption("user-id").getAsString());
         } catch (IllegalArgumentException invalid) {
-            event.reply("The Discord user ID must be 16-20 decimal digits.")
-                    .setEphemeral(true).queue();
+            replyPrivate(event, "The Discord user ID must be 16-20 decimal digits.");
             return;
         }
-        long actor = admin.getIdLong();
+        queueCommand(event, admin.getIdLong(), action, target);
+    }
+
+    private boolean authorized(Guild guild, Member admin) {
+        return guild != null && guild.getIdLong() == guildId
+                && admin != null && admin.hasPermission(Permission.MANAGE_SERVER);
+    }
+
+    private static void replyPrivate(SlashCommandInteractionEvent event, String message) {
+        event.reply(message).setEphemeral(true).queue();
+    }
+
+    private void queueCommand(SlashCommandInteractionEvent event, long actor, String action, long target) {
         event.deferReply(true).queue(hook -> {
-            if (!workers.tryExecute(() -> {
-                try {
-                    String result = switch (action) {
-                        case "add" -> bypass.add(target) ? "Bypass saved." : "ID was already allowed.";
-                        case "remove" -> bypass.remove(target) ? "Bypass removed." : "ID was not allowed.";
-                        case "check" -> bypass.contains(target) ? "ID is bypassed." : "ID is not bypassed.";
-                        default -> "Unknown bypass action.";
-                    };
-                    if ("add".equals(action) || "remove".equals(action)) {
-                        LOGGER.log(System.Logger.Level.INFO,
-                                "discord_account_age_bypass_change action={0} actor={1} target={2}",
-                                action, Long.toUnsignedString(actor), Long.toUnsignedString(target));
-                    }
-                    hook.editOriginal(result + " User ID: " + Long.toUnsignedString(target)).queue();
-                } catch (IOException failure) {
-                    LOGGER.log(System.Logger.Level.ERROR,
-                            "discord_account_age_bypass_store_failed type={0}",
-                            failure.getClass().getSimpleName());
-                    hook.editOriginal("Could not save the bypass list; no change applied.").queue();
-                }
-            })) {
+            if (!workers.tryExecute(() -> executeCommand(hook, actor, action, target))) {
                 hook.editOriginal("The staff bot is busy; retry the command.").queue();
             }
         });
     }
 
+    private void executeCommand(net.dv8tion.jda.api.interactions.InteractionHook hook,
+            long actor, String action, long target) {
+        try {
+            String result = applyAction(action, target);
+            if (isMutation(action)) {
+                logInfo("discord_account_age_bypass_change action={0} actor={1} target={2}",
+                        action, Long.toUnsignedString(actor), Long.toUnsignedString(target));
+            }
+            hook.editOriginal(result + " User ID: " + Long.toUnsignedString(target)).queue();
+        } catch (IOException failure) {
+            logError("discord_account_age_bypass_store_failed type={0}",
+                    failure.getClass().getSimpleName());
+            hook.editOriginal("Could not save the bypass list; no change applied.").queue();
+        }
+    }
+
+    private String applyAction(String action, long target) throws IOException {
+        return switch (action) {
+            case "add" -> bypass.add(target) ? "Bypass saved." : "ID was already allowed.";
+            case "remove" -> bypass.remove(target) ? "Bypass removed." : "ID was not allowed.";
+            case "check" -> bypass.contains(target) ? "ID is bypassed." : "ID is not bypassed.";
+            default -> "Unknown bypass action.";
+        };
+    }
+
+    private static boolean isMutation(String action) {
+        return "add".equals(action) || "remove".equals(action);
+    }
+
     @Override
     public void onGuildMemberJoin(GuildMemberJoinEvent event) {
-        if (event.getGuild().getIdLong() != guildId || event.getUser().isBot()
-                || bypass.contains(event.getUser().getIdLong())
-                || !tooNew(event.getUser().getTimeCreated().toInstant(), clock.instant())) {
+        if (!requiresKick(event)) {
             return;
         }
         Guild guild = event.getGuild();
         Member member = event.getMember();
-        if (!guild.getSelfMember().hasPermission(Permission.KICK_MEMBERS)
-                || !guild.getSelfMember().canInteract(member)) {
-            LOGGER.log(System.Logger.Level.ERROR,
-                    "discord_account_age_gate_permission_denied guild={0} user={1}",
+        if (!canKick(guild, member)) {
+            logError("discord_account_age_gate_permission_denied guild={0} user={1}",
                     guild.getId(), member.getId());
             return;
         }
+        queueKick(event, guild, member);
+    }
+
+    private boolean requiresKick(GuildMemberJoinEvent event) {
+        return event.getGuild().getIdLong() == guildId
+                && !event.getUser().isBot()
+                && !bypass.contains(event.getUser().getIdLong())
+                && tooNew(event.getUser().getTimeCreated().toInstant(), clock.instant());
+    }
+
+    private static boolean canKick(Guild guild, Member member) {
+        return guild.getSelfMember().hasPermission(Permission.KICK_MEMBERS)
+                && guild.getSelfMember().canInteract(member);
+    }
+
+    private void queueKick(GuildMemberJoinEvent event, Guild guild, Member member) {
         try {
             long memberId = member.getIdLong();
-            Instant accountCreated = event.getUser().getTimeCreated().toInstant();
+            Instant createdAt = event.getUser().getTimeCreated().toInstant();
             member.kick().reason(AUDIT_REASON)
-                    // Last-chance guard: an admin may add a bypass while REST
-                    // is waiting in the JDA queue. Never kick after that grant.
+                    // Recheck immediately before sending: an admin may have just granted a bypass.
                     .setCheck(() -> !bypass.contains(memberId)
-                            && tooNew(accountCreated, clock.instant()))
+                            && tooNew(createdAt, clock.instant()))
                     .queue(
-                            ignored -> LOGGER.log(System.Logger.Level.INFO,
-                                    "discord_account_age_gate_kicked guild={0} user={1}",
+                            ignored -> logInfo("discord_account_age_gate_kicked guild={0} user={1}",
                                     guild.getId(), member.getId()),
-                            failure -> {
-                                if (bypass.contains(memberId)
-                                        || !tooNew(accountCreated, clock.instant())) {
-                                    LOGGER.log(System.Logger.Level.INFO,
-                                            "discord_account_age_gate_kick_suppressed guild={0} user={1}",
-                                            guild.getId(), member.getId());
-                                    return;
-                                }
-                                LOGGER.log(System.Logger.Level.ERROR,
-                                        "discord_account_age_gate_kick_failed guild={0} user={1} error={2}",
-                                        guild.getId(), member.getId(),
-                                        failure.getClass().getSimpleName());
-                            });
+                            failure -> kickFailed(guild, member, createdAt, failure));
         } catch (RuntimeException failure) {
-            LOGGER.log(System.Logger.Level.ERROR,
-                    "discord_account_age_gate_dispatch_failed guild={0} user={1} error={2}",
+            logError("discord_account_age_gate_dispatch_failed guild={0} user={1} error={2}",
                     guild.getId(), member.getId(), failure.getClass().getSimpleName());
+        }
+    }
+
+    private void kickFailed(Guild guild, Member member, Instant createdAt, Throwable failure) {
+        if (bypass.contains(member.getIdLong()) || !tooNew(createdAt, clock.instant())) {
+            logInfo("discord_account_age_gate_kick_suppressed guild={0} user={1}",
+                    guild.getId(), member.getId());
+            return;
+        }
+        logError("discord_account_age_gate_kick_failed guild={0} user={1} error={2}",
+                guild.getId(), member.getId(), failure.getClass().getSimpleName());
+    }
+
+    private static void logInfo(String pattern, Object... parameters) {
+        if (LOGGER.isLoggable(System.Logger.Level.INFO)) {
+            LOGGER.log(System.Logger.Level.INFO, pattern, parameters);
+        }
+    }
+
+    private static void logError(String pattern, Object... parameters) {
+        if (LOGGER.isLoggable(System.Logger.Level.ERROR)) {
+            LOGGER.log(System.Logger.Level.ERROR, pattern, parameters);
         }
     }
 }

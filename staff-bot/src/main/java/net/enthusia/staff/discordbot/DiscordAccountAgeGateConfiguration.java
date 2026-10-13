@@ -22,11 +22,13 @@ record DiscordAccountAgeGateConfiguration(boolean enabled, Path bypassFile) {
         // instance must never unexpectedly remove real members from that guild.
         boolean production = environment == StaffBotEnvironment.PRODUCTION;
         String raw = values.getOrDefault(ENABLED_KEY, Boolean.toString(production)).trim();
-        if ("false".equalsIgnoreCase(raw)) {
+        boolean enabled = switch (raw.toLowerCase(java.util.Locale.ROOT)) {
+            case "true" -> true;
+            case "false" -> false;
+            default -> throw new IllegalArgumentException("account age gate enabled must be true or false");
+        };
+        if (!enabled) {
             return disabled();
-        }
-        if (!"true".equalsIgnoreCase(raw)) {
-            throw new IllegalArgumentException("account age gate enabled must be true or false");
         }
         if (!production) {
             throw new IllegalArgumentException("staging StaffBot may not enforce account-age kicks in the shared guild");
