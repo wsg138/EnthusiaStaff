@@ -1,8 +1,12 @@
 package net.enthusia.staff.paper.staff;
 
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 import org.bukkit.Material;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockState;
@@ -30,6 +34,7 @@ import org.bukkit.event.player.PlayerInteractAtEntityEvent;
 import org.bukkit.event.player.PlayerInteractEntityEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerItemConsumeEvent;
+import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.event.player.PlayerShearEntityEvent;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.InventoryHolder;
@@ -50,6 +55,7 @@ public final class StaffModeWorldInteractionListener implements Listener {
     private static final String ARMOR_STAND_EDIT_DENIED_ACTION = "armor-stand-edit-denied";
 
     private final StaffModeManager staffMode;
+    private final PairedEntityInteractionAudit pairedEntityAudit = new PairedEntityInteractionAudit();
 
     public StaffModeWorldInteractionListener(StaffModeManager staffMode) {
         this.staffMode = Objects.requireNonNull(staffMode, "staffMode");
@@ -441,8 +447,9 @@ public final class StaffModeWorldInteractionListener implements Listener {
                             && shouldAuditDeniedItemFrame(event.getHand()));
             return;
         }
-        // Interact and InteractAtEntity may both fire; defer denied logging until deduplicated.
-        cancelWorldUse(player, event, "entity-interact", event.getRightClicked().getType().toString(), false);
+        // Paired generic/precise variants are logged only once after cancellation.
+        cancelWorldUse(player, event, "entity-interact", event.getRightClicked().getType().toString(),
+                false, true);
     }
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
@@ -455,7 +462,79 @@ public final class StaffModeWorldInteractionListener implements Listener {
             handleContainerEntity(player, event, event.getRightClicked().getType().toString(), false);
             return;
         }
-        cancelWorldUse(player, event, "entity-interact-at", event.getRightClicked().getType().toString(), false);
+        cancelWorldUse(player, event, "entity-interact-at", event.getRightClicked().getType().toString(),
+                false, true);
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onCompletedInteractEntity(PlayerInteractEntityEvent event) {
+        auditCompletedEntityInteraction(event, false);
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onCompletedInteractAtEntity(PlayerInteractAtEntityEvent event) {
+        auditCompletedEntityInteraction(event, true);
+    }
+
+    private void auditCompletedEntityInteraction(PlayerInteractEntityEvent event, boolean precise) {
+        Player player = event.getPlayer();
+        if (!onDuty(player)
+                || event.getRightClicked() instanceof ItemFrame
+                || event.getRightClicked() instanceof ArmorStand
+                || !shouldAuditCompletedWorldUse(staffMode.isUnrestricted(player), staffMode.dutyTier(player))) {
+            return;
+        }
+        if (pairedEntityAudit.allow(player.getUniqueId(), event.getRightClicked().getUniqueId(),
+                event.getHand(), precise, System.nanoTime())) {
+            staffMode.logStaffAction(player, precise ? "entity-interact-at" : "entity-interact",
+                    event.getRightClicked().getType().toString());
+        }
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR)
+    public void onPairedEntityAuditQuit(PlayerQuitEvent event) {
+        pairedEntityAudit.forget(event.getPlayer().getUniqueId());
+    }
+
+    /**
+     * A normal interaction often emits a generic + precise event within one
+     * server tick. Suppress only that cross-variant duplicate for the same
+     * player, entity and hand; never coalesce two generic clicks or two precise
+     * clicks. A small bounded cache avoids retaining disconnected player IDs.
+     */
+    static final class PairedEntityInteractionAudit {
+        private static final long WINDOW_NANOS = TimeUnit.MILLISECONDS.toNanos(10);
+        private static final int MAX_ACTORS = 256;
+        private final Map<UUID, Entry> recent = new LinkedHashMap<>(16, 0.75f, true) {
+            @Override
+            protected boolean removeEldestEntry(Map.Entry<UUID, Entry> eldest) {
+                return size() > MAX_ACTORS;
+            }
+        };
+
+        boolean allow(UUID actor, UUID entity, EquipmentSlot hand, boolean precise, long nowNanos) {
+            Entry previous = recent.get(actor);
+            if (previous != null
+                    && previous.precise() != precise
+                    && previous.entity().equals(entity)
+                    && previous.hand() == hand
+                    && nowNanos - previous.atNanos() >= 0
+                    && nowNanos - previous.atNanos() <= WINDOW_NANOS) {
+                return false;
+            }
+            recent.put(actor, new Entry(entity, hand, precise, nowNanos));
+            return true;
+        }
+
+        void forget(UUID actor) {
+            recent.remove(actor);
+        }
+
+        int trackedActors() {
+            return recent.size();
+        }
+
+        private record Entry(UUID entity, EquipmentSlot hand, boolean precise, long atNanos) { }
     }
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
