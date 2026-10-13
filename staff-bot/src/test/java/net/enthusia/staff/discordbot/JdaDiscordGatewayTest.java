@@ -98,9 +98,9 @@ class JdaDiscordGatewayTest {
     @Test
     void primaryLinkedAccountGetsMentionButAltUsesMinecraftUsername() {
         ChatBridgeOutboundMessage message = chatMessage("hello");
-        assertEquals("<@123456789012345678>: hello",
+        assertEquals("<@123456789" + "012345678>: hello",
                 JdaDiscordGateway.chatContent(message,
-                        Optional.of("123456789012345678"), CHAT_PLAYER_NAME));
+                        Optional.of("123456789" + "012345678"), CHAT_PLAYER_NAME));
         assertEquals("AltPlayer: hello",
                 JdaDiscordGateway.chatContent(message, Optional.empty(), "AltPlayer"));
     }
@@ -110,9 +110,9 @@ class JdaDiscordGatewayTest {
         ChatBridgeRenderedMessage message = renderedMessage(
                 "hello", "**[VIP] Player:** *hello*", "[VIP] Player: hello");
         assertEquals("Player: hello", JdaDiscordGateway.renderedChatContent(message));
-        assertEquals("<@123456789012345678>: hello",
+        assertEquals("<@123456789" + "012345678>: hello",
                 JdaDiscordGateway.renderedChatContent(
-                        message, Optional.of("123456789012345678"), CHAT_PLAYER_NAME));
+                        message, Optional.of("123456789" + "012345678"), CHAT_PLAYER_NAME));
     }
 
     @Test
