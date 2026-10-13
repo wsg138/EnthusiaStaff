@@ -107,6 +107,38 @@ class InteractiveChatStagingArtifactProviderTest {
     }
 
     @Test
+    void earlierInventoryPlaceholderGetsPriorityOverLaterItemShares() {
+        var lateItemA = new InteractiveChatStagingArtifactProvider.RenderJob(
+                InteractiveChatStagingArtifactProvider.Kind.ITEM, 20, null, null);
+        var lateItemB = new InteractiveChatStagingArtifactProvider.RenderJob(
+                InteractiveChatStagingArtifactProvider.Kind.ITEM, 35, null, null);
+        var firstInventory = new InteractiveChatStagingArtifactProvider.RenderJob(
+                InteractiveChatStagingArtifactProvider.Kind.INVENTORY, 3, null, null);
+        var snapshot = new InteractiveChatStagingArtifactProvider.Snapshot(
+                new Object(), List.of(lateItemA, lateItemB, firstInventory));
+
+        assertEquals(List.of(firstInventory, lateItemA, lateItemB), snapshot.jobs());
+        assertEquals(List.of(3, 20, 35), snapshot.jobs().stream()
+                .map(InteractiveChatStagingArtifactProvider.RenderJob::position).toList());
+    }
+
+    @Test
+    void tiedPlaceholdersHaveStableKindOrderAndSnapshotsAreImmutable() {
+        var item = new InteractiveChatStagingArtifactProvider.RenderJob(
+                InteractiveChatStagingArtifactProvider.Kind.ITEM, 5, null, null);
+        var inventory = new InteractiveChatStagingArtifactProvider.RenderJob(
+                InteractiveChatStagingArtifactProvider.Kind.INVENTORY, 5, null, null);
+        var ender = new InteractiveChatStagingArtifactProvider.RenderJob(
+                InteractiveChatStagingArtifactProvider.Kind.ENDER_CHEST, 5, null, null);
+        var source = new java.util.ArrayList<>(List.of(ender, inventory, item));
+        var snapshot = new InteractiveChatStagingArtifactProvider.Snapshot(new Object(), source);
+        source.clear();
+
+        assertEquals(List.of(item, inventory, ender), snapshot.jobs());
+        assertThrows(UnsupportedOperationException.class, () -> snapshot.jobs().clear());
+    }
+
+    @Test
     void placeholderPermissionsMatchInteractiveChatContracts() {
         assertEquals(
                 "interactivechat.module.item",
