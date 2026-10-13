@@ -167,7 +167,8 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
         );
         aiReview.start();
         safetyCheckBridge = PrivateSafetyCheckBridge.create(
-                this, json, System::getenv, runtimeComponents.staffMode()::authorityActive
+                this, json, System::getenv, runtimeComponents.staffMode()::authorityActive,
+                networkServerId()
         );
         if (safetyCheckBridge != null) {
             safetyCheckBridge.start();

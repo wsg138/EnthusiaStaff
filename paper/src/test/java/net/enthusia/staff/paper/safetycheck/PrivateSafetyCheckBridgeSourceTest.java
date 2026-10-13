@@ -60,6 +60,30 @@ class PrivateSafetyCheckBridgeSourceTest {
     }
 
     @Test
+    void delayedHttpCallbacksCannotPermanentlyConsumeUndisplayedPrompts() throws Exception {
+        String code = source();
+        assertTrue(code.contains("boolean scheduled = player.getScheduler().execute("));
+        assertTrue(code.contains("presented.remove(marker)"));
+        assertTrue(code.contains("if (!scheduled)"));
+        assertTrue(code.contains("if (!active.get() || !player.isOnline())"));
+    }
+
+    @Test
+    void liveRecipientsAreSelectedOnPaperGlobalScheduler() throws Exception {
+        String code = source();
+        assertTrue(code.contains("getGlobalRegionScheduler().execute("));
+        assertTrue(code.contains("activeDuty.test(staff.getUniqueId())"));
+        assertTrue(code.contains("scope.equals(targetScope)"));
+    }
+
+    @Test
+    void safetyConfigMustMatchActualServerIdentity() throws Exception {
+        String code = source();
+        assertTrue(code.contains("verifiedScope("));
+        assertTrue(code.contains("Safety scope differs from server identity"));
+    }
+
+    @Test
     void guiIsPrivateNonBlockingAndPreservesPlayerIdentity() throws Exception {
         String code = source();
         assertTrue(code.contains("getUniqueId()"));

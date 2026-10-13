@@ -79,7 +79,7 @@ public final class PrivateSafetyCheckBridge implements Listener, AutoCloseable {
 
     public static PrivateSafetyCheckBridge create(
             JavaPlugin plugin, ObjectMapper mapper, Function<String, String> env,
-            Predicate<UUID> activeDuty
+            Predicate<UUID> activeDuty, String expectedServerScope
     ) {
         if (!plugin.getConfig().getBoolean(PREFIX + "enabled", false)) {
             return null;
@@ -96,7 +96,8 @@ public final class PrivateSafetyCheckBridge implements Listener, AutoCloseable {
                                 || "127.0.0.1".equals(uri.getHost()))))) {
                 throw new IllegalArgumentException("Invalid private API URL");
             }
-            String scope = required(plugin.getConfig().getString(PREFIX + "scope-id"));
+            String scope = verifiedScope(
+                    plugin.getConfig().getString(PREFIX + "scope-id"), expectedServerScope);
             String replyClient = required(plugin.getConfig().getString(PREFIX + "reply-client-id"));
             String alertClient = required(plugin.getConfig().getString(PREFIX + "alerts-client-id"));
             String replyEnv = required(plugin.getConfig().getString(
@@ -116,6 +117,16 @@ public final class PrivateSafetyCheckBridge implements Listener, AutoCloseable {
             plugin.getLogger().warning("Private safety GUI disabled: invalid/incomplete configuration");
             return null;
         }
+    }
+
+    static String verifiedScope(String configured, String expected) {
+        // Never allow this server to inspect or deliver another scope's
+        // sensitive player checks because an admin copied a configuration.
+        String scope = required(configured);
+        if (!scope.equals(required(expected))) {
+            throw new IllegalArgumentException("Safety scope differs from server identity");
+        }
+        return scope;
     }
 
     private static String required(String text) {
@@ -182,7 +193,14 @@ public final class PrivateSafetyCheckBridge implements Listener, AutoCloseable {
                 .thenAccept(response -> {
                     JsonNode items = response.path("items");
                     if (items.isArray()) {
-                        items.forEach(this::deliver);
+                        // HTTP futures run on client threads. Enumerate live
+                        // Paper players on the server's global scheduler.
+                        plugin.getServer().getGlobalRegionScheduler().execute(
+                                plugin, () -> {
+                                    if (active.get()) {
+                                        items.forEach(this::deliver);
+                                    }
+                                });
                     }
                 })
                 .exceptionally(failure -> null)
@@ -202,15 +220,36 @@ public final class PrivateSafetyCheckBridge implements Listener, AutoCloseable {
                         return;
                     }
                     String id = check.path("check_id").asText("");
-                    if (id.isBlank() || !presented.add(uuid + ":" + id)) {
+                    if (id.isBlank()) {
                         return;
                     }
-                    player.getScheduler().execute(plugin,
+                    String marker = uuid + ":" + id;
+                    if (!presented.add(marker)) {
+                        return;
+                    }
+                    // An asynchronous response can outlive logout/reload. If
+                    // entity scheduling fails or the player goes offline,
+                    // allow a later successful reconnect to show the prompt.
+                    boolean scheduled = player.getScheduler().execute(
+                            plugin,
                             () -> {
-                                if (active.get() && player.isOnline()) {
-                                    show(player, id);
+                                if (!active.get() || !player.isOnline()) {
+                                    presented.remove(marker);
+                                    return;
                                 }
-                            }, null, 1L);
+                                try {
+                                    show(player, id);
+                                } catch (RuntimeException exception) {
+                                    presented.remove(marker);
+                                    plugin.getLogger().warning(
+                                            "Private safety prompt could not be displayed");
+                                }
+                            },
+                            () -> presented.remove(marker), 1L
+                    );
+                    if (!scheduled) {
+                        presented.remove(marker);
+                    }
                 })
                 .exceptionally(failure -> null)
                 .whenComplete((none, failure) -> resolving.remove(uuid));
@@ -289,7 +328,12 @@ public final class PrivateSafetyCheckBridge implements Listener, AutoCloseable {
                     // Best-effort local support notice when the API is
                     // unreachable: never ACK the API outbox here.
                     if (playerMayNeedHelp) {
-                        offerLocalFallback(holder.player);
+                        plugin.getServer().getGlobalRegionScheduler().execute(
+                                plugin, () -> {
+                                    if (active.get()) {
+                                        offerLocalFallback(holder.player);
+                                    }
+                                });
                     }
                     player.getScheduler().execute(plugin, () -> {
                         if (player.isOnline()) {

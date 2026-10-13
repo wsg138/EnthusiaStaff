@@ -51,7 +51,7 @@ In Paper `config.yml`:
 ai-safety-check:
   enabled: false
   base-url: "https://your-private-api"
-  scope-id: "smp"
+  scope-id: "smp"  # Must equal the local EnthusiaStaff networkServerId
   reply-client-id: "paper-safety-reply"
   alerts-client-id: "paper-safety-alerts"
   reply-token-environment: ES_SAFETY_REPLY_TOKEN
@@ -70,6 +70,13 @@ In API service configuration, use `AI_MOD_SAFETY_CHECKS_ENABLED=true`
   Git commits, Java stack traces or Minecraft client payloads).
 - Enforce HTTPS except loopback test traffic; don't use a public proxy or
   redirect a bearer-bearing request.
+- At startup the configured `scope-id` is **required to match the plugin's
+  own `networkServerId()` exactly**. A copied configuration for another
+  server is disabled, rather than querying another server's private checks.
+- HTTP completion callbacks never enumerate Minecraft players directly:
+  sensitive staff-recipient selection runs via the global Paper scheduler,
+  with per-player sends on entity schedulers. Failed or offline prompt
+  scheduling releases its presentation marker so a later reconnect can retry.
 
 The API source must actually classify a credible `SELF_HARM_CHECK`.
 API main still uses a fail-open stub and the model is **not accepted**.
