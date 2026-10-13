@@ -44,6 +44,23 @@ sealed interface PunishmentGuiState {
         }
     }
 
+    record Search(
+            UUID viewerId,
+            PlayerIdentity target,
+            String commandName,
+            PunishmentGuiOverview overview,
+            String query,
+            int page
+    ) implements PunishmentGuiState {
+        public Search {
+            validate(viewerId, target, commandName, overview, page);
+            if (query == null || query.codePointCount(0, query.length()) < 2
+                    || query.codePointCount(0, query.length()) > 64) {
+                throw new IllegalArgumentException("punishment search query must be 2–64 characters");
+            }
+        }
+    }
+
     record Review(
             UUID viewerId,
             PlayerIdentity target,

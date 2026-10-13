@@ -685,7 +685,7 @@ public final class StaffModeWorldInteractionListener implements Listener {
                 ? Optional.of(action) : Optional.empty();
     }
 
-    private static boolean isContainer(Block block) {
+    static boolean isContainer(Block block) {
         if (block == null) {
             return false;
         }

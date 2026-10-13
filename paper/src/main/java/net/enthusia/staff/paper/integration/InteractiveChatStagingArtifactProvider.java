@@ -9,6 +9,7 @@ import java.lang.reflect.Method;
 import java.nio.charset.StandardCharsets;
 import java.time.Clock;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -103,10 +104,21 @@ public final class InteractiveChatStagingArtifactProvider
         }
     }
 
+    /**
+     * Render in chat order, not in provider discovery order. With a four-file wire limit,
+     * an earlier [inventory] must not be crowded out by later [item] placeholders.
+     */
+    static List<RenderJob> orderedJobs(List<RenderJob> jobs) {
+        List<RenderJob> sorted = new ArrayList<>(Objects.requireNonNull(jobs, "jobs"));
+        sorted.sort(Comparator.comparingInt(RenderJob::position)
+                .thenComparingInt(job -> job.kind().ordinal()));
+        return List.copyOf(sorted);
+    }
+
     record Snapshot(Object interactivePlayer, List<RenderJob> jobs) {
         Snapshot {
             Objects.requireNonNull(interactivePlayer, "interactivePlayer");
-            jobs = List.copyOf(Objects.requireNonNull(jobs, "jobs"));
+            jobs = orderedJobs(jobs);
         }
     }
 

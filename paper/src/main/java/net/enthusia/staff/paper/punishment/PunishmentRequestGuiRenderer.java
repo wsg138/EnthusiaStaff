@@ -6,6 +6,7 @@ import net.enthusia.staff.domain.application.PunishmentApprovalRequest;
 import net.enthusia.staff.domain.application.PunishmentRequestStatus;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
+import net.kyori.adventure.text.format.TextDecoration;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.inventory.Inventory;
@@ -35,7 +36,7 @@ final class PunishmentRequestGuiRenderer {
     }
 
     static Inventory renderQueue(PunishmentRequestGuiState.Queue state) {
-        String title = "Punishment requests " + (state.page() + 1) + '/' + state.totalPages();
+        String title = "Requests | " + (state.page() + 1) + "/" + state.totalPages();
         Inventory inventory = create(state, QUEUE_SIZE, title);
         fillFooter(inventory);
         for (int slot = 0; slot < state.requests().size(); slot++) {
@@ -59,7 +60,7 @@ final class PunishmentRequestGuiRenderer {
 
     static Inventory renderReview(PunishmentRequestGuiState.Review state) {
         PunishmentApprovalRequest request = state.lease().request();
-        Inventory inventory = create(state, STANDARD_SIZE, "Claimed punishment request");
+        Inventory inventory = create(state, STANDARD_SIZE, "Request | Review");
         inventory.setItem(SUMMARY_SLOT, requestItem(
                 new PunishmentRequestGuiState.RequestView(request, state.targetName()),
                 "claimed by you",
@@ -78,7 +79,7 @@ final class PunishmentRequestGuiRenderer {
         inventory.setItem(BACK_SLOT, item(Material.ARROW, "Back to queue", List.of()));
         inventory.setItem(APPROVE_SLOT, item(
                 Material.LIME_CONCRETE,
-                "Approve request",
+                "Approve Punishment",
                 List.of(
                         Component.text("Creates the frozen punishment atomically", NamedTextColor.GREEN),
                         Component.text("The current claim and revision are rechecked", NamedTextColor.GRAY)
@@ -86,7 +87,7 @@ final class PunishmentRequestGuiRenderer {
         ));
         inventory.setItem(DENY_SLOT, item(
                 Material.RED_CONCRETE,
-                "Deny request",
+                "Deny Punishment",
                 List.of(Component.text("Select an audited denial reason", NamedTextColor.YELLOW))
         ));
         inventory.setItem(REVIEW_CLOSE_SLOT, item(Material.BARRIER, CLOSE_LABEL, List.of()));
@@ -95,7 +96,7 @@ final class PunishmentRequestGuiRenderer {
 
     static Inventory renderDetails(PunishmentRequestGuiState.Details state) {
         PunishmentApprovalRequest request = state.view().request();
-        Inventory inventory = create(state, STANDARD_SIZE, "Punishment request details");
+        Inventory inventory = create(state, STANDARD_SIZE, "Request | Details");
         inventory.setItem(SUMMARY_SLOT, requestItem(
                 state.view(),
                 PunishmentRequestPresentation.status(request.status()),
@@ -121,7 +122,7 @@ final class PunishmentRequestGuiRenderer {
     }
 
     static Inventory renderDenial(PunishmentRequestGuiState.Denial state) {
-        Inventory inventory = create(state, STANDARD_SIZE, "Deny punishment request");
+        Inventory inventory = create(state, STANDARD_SIZE, "Request | Deny");
         for (PunishmentRequestDenialPreset preset : PunishmentRequestDenialPreset.values()) {
             denialItem(inventory, preset);
         }
@@ -139,6 +140,7 @@ final class PunishmentRequestGuiRenderer {
         PunishmentRequestGuiHolder holder = new PunishmentRequestGuiHolder(state);
         Inventory inventory = Bukkit.createInventory(holder, size, Component.text(title));
         holder.attach(inventory);
+        fill(inventory);
         return inventory;
     }
 
@@ -229,18 +231,37 @@ final class PunishmentRequestGuiRenderer {
         ));
     }
 
+    private static void fill(Inventory inventory) {
+        ItemStack body = item(Material.BLACK_STAINED_GLASS_PANE, " ", List.of());
+        ItemStack border = item(Material.GRAY_STAINED_GLASS_PANE, " ", List.of());
+        for (int slot = 0; slot < inventory.getSize(); slot++) {
+            int row = slot / 9;
+            boolean frame = inventory.getSize() == QUEUE_SIZE ? row == 5 : row == 0 || row == 2;
+            inventory.setItem(slot, frame ? border : body);
+        }
+        if (inventory.getSize() == STANDARD_SIZE) {
+            ItemStack accent = item(Material.CYAN_STAINED_GLASS_PANE, " ", List.of());
+            inventory.setItem(1, accent);
+            inventory.setItem(7, accent);
+        }
+    }
+
     private static void fillFooter(Inventory inventory) {
-        ItemStack filler = item(Material.GRAY_STAINED_GLASS_PANE, " ", List.of());
+        ItemStack frame = item(Material.GRAY_STAINED_GLASS_PANE, " ", List.of());
         for (int slot = QUEUE_CONTENT_SIZE; slot < inventory.getSize(); slot++) {
-            inventory.setItem(slot, filler);
+            inventory.setItem(slot, frame);
         }
     }
 
     private static ItemStack item(Material material, String name, List<Component> lore) {
         ItemStack stack = ItemStack.of(material);
         ItemMeta meta = stack.getItemMeta();
-        meta.displayName(Component.text(name, NamedTextColor.WHITE));
-        meta.lore(lore);
+        meta.displayName(Component.text(name, NamedTextColor.WHITE)
+                .decoration(TextDecoration.BOLD, true)
+                .decoration(TextDecoration.ITALIC, false));
+        meta.lore(lore.stream()
+                .map(line -> line.decoration(TextDecoration.ITALIC, false))
+                .toList());
         stack.setItemMeta(meta);
         return stack;
     }
