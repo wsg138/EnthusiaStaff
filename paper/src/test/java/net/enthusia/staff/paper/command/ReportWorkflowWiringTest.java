@@ -52,6 +52,10 @@ final class ReportWorkflowWiringTest {
         assertTrue(source.contains("submission.publicChatContext()"));
         assertTrue(source.contains("dependencies.chat().privateSnapshot("));
         assertTrue(source.contains("submission.targetClientEvidence().filter("));
+        assertTrue(source.contains("org.bukkit.Bukkit.isOwnedByCurrentRegion(onlineTarget)"));
+        assertTrue(source.contains("dependencies.clientEvidence().capture(ownedTarget)"));
+        assertTrue(source.contains("coordinates(ownedTarget.getLocation())"));
+        assertFalse(source.contains("coordinates(onlineTarget.getLocation())"));
         assertTrue(source.contains("REPORT_RESTRICTIONS"));
         assertFalse(source.contains("RoseChat"));
     }
