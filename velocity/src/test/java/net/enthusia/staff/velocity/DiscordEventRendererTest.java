@@ -83,10 +83,10 @@ final class DiscordEventRendererTest {
     void punishmentAllowsVerifiedUsernameAndDiscordButNotInternalNotes() {
         String rendered = renderer.render(message(
                 PUNISHMENTS, "PUNISHMENT_CREATED",
-                "{\\\"caseId\\\":\\\"case-safe\\\",\\\"targetId\\\":\\\"uuid\\\","
-                        + "\\\"targetUsername\\\":\\\"Player123\\\","
-                        + "\\\"targetDiscordUserId\\\":\\\"123456789012345678\\\","
-                        + "\\\"internalExplanation\\\":\\\"hidden private evidence\\\"}"
+                "{\"caseId\":\"case-safe\",\"targetId\":\"uuid\","
+                        + "\"targetUsername\":\"Player123\","
+                        + "\"targetDiscordUserId\":\"123456789012345678\","
+                        + "\"internalExplanation\":\"hidden private evidence\"}"
         ));
         assertTrue(rendered.contains("targetUsername=Player123"));
         assertTrue(rendered.contains("targetDiscordUserId="));
