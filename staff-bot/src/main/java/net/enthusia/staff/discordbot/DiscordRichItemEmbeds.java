@@ -16,6 +16,7 @@ final class DiscordRichItemEmbeds {
     private static final int ITEM_BORDER_COLOR = 0x50C7CF;
     private static final int INVENTORY_BORDER_COLOR = 0xD2A53F;
     private static final int ENDER_BORDER_COLOR = 0x9D72E3;
+    private static final int PREVIEW_BORDER_COLOR = 0x7B8794;
 
     private DiscordRichItemEmbeds() {
     }
@@ -48,7 +49,9 @@ final class DiscordRichItemEmbeds {
                     }
                 }
             } else if (artifact.kind() == ChatBridgeArtifact.Kind.INVENTORY
-                    || artifact.kind() == ChatBridgeArtifact.Kind.ENDER_CHEST) {
+                    || artifact.kind() == ChatBridgeArtifact.Kind.ENDER_CHEST
+                    || artifact.kind() == ChatBridgeArtifact.Kind.MAP
+                    || artifact.kind() == ChatBridgeArtifact.Kind.OTHER) {
                 kept.add(artifact);
             }
         }
@@ -82,6 +85,17 @@ final class DiscordRichItemEmbeds {
                 result.add(new EmbedBuilder()
                         .setColor(ender ? ENDER_BORDER_COLOR : INVENTORY_BORDER_COLOR)
                         .setTitle(player + (ender ? "'s Ender Chest" : "'s Inventory"))
+                        .setImage("attachment://" + artifact.filename())
+                        .build());
+            } else if (artifact.kind() == ChatBridgeArtifact.Kind.MAP
+                    || artifact.kind() == ChatBridgeArtifact.Kind.OTHER) {
+                // Other rich providers can publish map and custom PNG previews too.
+                // Preserve them as embeds rather than silently dropping their attachments.
+                boolean map = artifact.kind() == ChatBridgeArtifact.Kind.MAP;
+                result.add(new EmbedBuilder()
+                        .setColor(PREVIEW_BORDER_COLOR)
+                        .setTitle(player + (map ? "'s Map" : "'s Image"))
+                        .setDescription(artifact.altText())
                         .setImage("attachment://" + artifact.filename())
                         .build());
             }
