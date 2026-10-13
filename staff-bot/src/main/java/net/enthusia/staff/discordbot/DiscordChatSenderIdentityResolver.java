@@ -105,6 +105,29 @@ final class DiscordChatSenderIdentityResolver {
         return resolved;
     }
 
+    /**
+     * Identity used for an actual Discord ping must not come from the presentation cache.
+     * Main-account selection and links can change before the ordinary cache TTL expires.
+     */
+    Optional<String> resolveFresh(UUID minecraftPlayerId) {
+        Objects.requireNonNull(minecraftPlayerId, "minecraftPlayerId");
+        long lookupGeneration;
+        synchronized (this) {
+            lookupGeneration = generation;
+        }
+        Optional<String> resolved;
+        try {
+            Optional<String> candidate = lookup.apply(minecraftPlayerId);
+            resolved = candidate == null ? Optional.empty() : candidate.flatMap(
+                    DiscordChatSenderIdentityResolver::validatedDiscordId);
+        } catch (RuntimeException failure) {
+            return Optional.empty();
+        }
+        synchronized (this) {
+            return generation == lookupGeneration ? resolved : Optional.empty();
+        }
+    }
+
     synchronized void clear() {
         generation++;
         cache.clear();
