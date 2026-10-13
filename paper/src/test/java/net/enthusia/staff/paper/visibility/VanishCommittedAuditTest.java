@@ -16,6 +16,15 @@ class VanishCommittedAuditTest {
     }
 
     @Test
+    void staleRecoveryNeverSupersedesDurableVisibilityUpdate() {
+        assertTrue(VanishManager.recoverySnapshotCurrent(3L, 3L, false));
+        org.junit.jupiter.api.Assertions.assertFalse(
+                VanishManager.recoverySnapshotCurrent(3L, 4L, false));
+        org.junit.jupiter.api.Assertions.assertFalse(
+                VanishManager.recoverySnapshotCurrent(3L, 3L, true));
+    }
+
+    @Test
     void committedAuditSupportsDisconnectedPlayersWithoutBukkitPlayerArgument() throws Exception {
         // The committed state is audited by UUID/name/rank after persistence.
         // It must not depend on the availability of an online Bukkit Player.
