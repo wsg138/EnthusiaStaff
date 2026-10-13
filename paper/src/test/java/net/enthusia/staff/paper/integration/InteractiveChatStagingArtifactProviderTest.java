@@ -30,6 +30,42 @@ class InteractiveChatStagingArtifactProviderTest {
     }
 
     @Test
+    void budgetRejectsOrphanTooltipIfItemIconCouldNotFit() {
+        var inventory = new net.enthusia.staff.api.chat.RichChatArtifact(
+                net.enthusia.staff.api.chat.RichChatArtifact.Kind.INVENTORY,
+                0, "inventory.png", "image/png", "Inventory", new byte[240_000]);
+        var skippedIcon = new net.enthusia.staff.api.chat.RichChatArtifact(
+                net.enthusia.staff.api.chat.RichChatArtifact.Kind.ITEM,
+                8, "icon.png", "image/png", "Item", new byte[240_000]);
+        var orphanTooltip = new net.enthusia.staff.api.chat.RichChatArtifact(
+                net.enthusia.staff.api.chat.RichChatArtifact.Kind.TOOLTIP,
+                8, "tooltip.png", "image/png", "Details", new byte[10_000]);
+        var laterPreview = new net.enthusia.staff.api.chat.RichChatArtifact(
+                net.enthusia.staff.api.chat.RichChatArtifact.Kind.MAP,
+                22, "map.png", "image/png", "Map", new byte[100_000]);
+
+        var kept = InteractiveChatStagingArtifactProvider.withinBundleBudget(
+                List.of(inventory, skippedIcon, orphanTooltip, laterPreview));
+        assertEquals(List.of(inventory, laterPreview), kept);
+    }
+
+    @Test
+    void budgetRetainsMatchedItemTooltipAndIgnoresLoneTooltip() {
+        var orphan = new net.enthusia.staff.api.chat.RichChatArtifact(
+                net.enthusia.staff.api.chat.RichChatArtifact.Kind.TOOLTIP,
+                1, "orphan.png", "image/png", "Details", new byte[] {1});
+        var icon = new net.enthusia.staff.api.chat.RichChatArtifact(
+                net.enthusia.staff.api.chat.RichChatArtifact.Kind.ITEM,
+                10, "icon.png", "image/png", "Item", new byte[] {2});
+        var tooltip = new net.enthusia.staff.api.chat.RichChatArtifact(
+                net.enthusia.staff.api.chat.RichChatArtifact.Kind.TOOLTIP,
+                10, "tooltip.png", "image/png", "Details", new byte[] {3});
+        assertEquals(List.of(icon, tooltip),
+                InteractiveChatStagingArtifactProvider.withinBundleBudget(
+                        List.of(orphan, icon, tooltip)));
+    }
+
+    @Test
     void itemCardTitleUsesCleanItemName() {
         assertEquals("Diamond Spear",
                 InteractiveChatStagingArtifactProvider.plainItemTitle("§bDiamond Spear<reset>"));
