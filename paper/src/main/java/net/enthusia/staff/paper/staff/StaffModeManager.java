@@ -255,10 +255,6 @@ public final class StaffModeManager implements Listener {
     }
 
     /**
-     * Writes one staff-action audit line for an allowed on-duty world/inventory interaction
-     * (Mod logged-not-blocked, Developer/Admin/Founder unrestricted-but-logged). Never throws.
-     */
-    /**
      * Logs a successfully committed vanish state transition without requiring
      * an online player callback. Runs from VanishManager's persistence worker;
      * actor identity was captured on the player owner thread before dispatch.
@@ -280,6 +276,10 @@ public final class StaffModeManager implements Listener {
         }
     }
 
+    /**
+     * Writes one staff-action audit line for an allowed on-duty world/inventory interaction
+     * (Mod logged-not-blocked, Developer/Admin/Founder unrestricted-but-logged). Never throws.
+     */
     public void logStaffAction(Player player, String action, String detail) {
         try {
             audit(player, rankForAction(player), action, detail);
