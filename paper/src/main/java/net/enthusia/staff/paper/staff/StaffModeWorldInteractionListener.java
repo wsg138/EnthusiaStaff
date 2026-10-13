@@ -505,15 +505,15 @@ public final class StaffModeWorldInteractionListener implements Listener {
     static final class PairedEntityInteractionAudit {
         private static final long WINDOW_NANOS = TimeUnit.MILLISECONDS.toNanos(10);
         private static final int MAX_ACTORS = 256;
-        private final Map<UUID, Entry> recent = new LinkedHashMap<>(16, 0.75f, true) {
+        private final Map<UUID, InteractionRecord> recent = new LinkedHashMap<>(16, 0.75f, true) {
             @Override
-            protected boolean removeEldestEntry(Map.Entry<UUID, Entry> eldest) {
+            protected boolean removeEldestEntry(Map.Entry<UUID, InteractionRecord> eldest) {
                 return size() > MAX_ACTORS;
             }
         };
 
         boolean allow(UUID actor, UUID entity, EquipmentSlot hand, boolean precise, long nowNanos) {
-            Entry previous = recent.get(actor);
+            InteractionRecord previous = recent.get(actor);
             if (previous != null
                     && previous.precise() != precise
                     && previous.entity().equals(entity)
@@ -522,7 +522,7 @@ public final class StaffModeWorldInteractionListener implements Listener {
                     && nowNanos - previous.atNanos() <= WINDOW_NANOS) {
                 return false;
             }
-            recent.put(actor, new Entry(entity, hand, precise, nowNanos));
+            recent.put(actor, new InteractionRecord(entity, hand, precise, nowNanos));
             return true;
         }
 
@@ -534,7 +534,7 @@ public final class StaffModeWorldInteractionListener implements Listener {
             return recent.size();
         }
 
-        private record Entry(UUID entity, EquipmentSlot hand, boolean precise, long atNanos) { }
+        private record InteractionRecord(UUID entity, EquipmentSlot hand, boolean precise, long atNanos) { }
     }
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
