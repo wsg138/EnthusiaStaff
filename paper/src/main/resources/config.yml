@@ -155,6 +155,11 @@ discord-chat-bridge:
   #
   # Backward-compatible staging fallback: when mode is omitted, shadow-enabled=true selects SHADOW.
   shadow-enabled: false
+  # Optional Independent InteractiveChat image fallback. Disabled until the
+  # pinned SHADOW test channel has been visually accepted by staff.
+  # Renders material/amount/slot labels, not actual Minecraft textures/lore.
+  # Does not require the InteractiveChat DiscordSRV addon.
+  independent-rich-renderer-enabled: false
   #
   # Required only for mode: AUTHORITATIVE. This acknowledgement is intentionally local to Paper;
   # StaffBot production has a separate explicit environment acknowledgement.
