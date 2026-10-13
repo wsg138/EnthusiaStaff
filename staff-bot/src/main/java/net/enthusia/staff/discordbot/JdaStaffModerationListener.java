@@ -303,8 +303,13 @@ final class JdaStaffModerationListener extends ListenerAdapter {
                             .append(" | Alt alert events (24h): ").append(pulse.altSignalsInLastDay())
                             .append("\n");
                     if (reviews.isEmpty() && reports.isEmpty() && altAlerts.isEmpty()) {
-                        hook.sendMessage(message.append("No actionable items in this view. Try another /review-queue view.").toString())
-                                .queue();
+                        if (view == ReviewQueueView.REPORTS) {
+                            hook.sendMessageEmbeds(DiscordReportReviewCard.render(pulse, reports)).queue();
+                        } else {
+                            hook.sendMessage(message.append(
+                                    "No actionable items in this view. Try another /review-queue view.").toString())
+                                    .queue();
+                        }
                         return;
                     }
                     java.util.List<ActionRow> rows = new ArrayList<>();
@@ -369,7 +374,12 @@ final class JdaStaffModerationListener extends ListenerAdapter {
                     }
                     message.append("Showing at most five items; select another /review-queue view for more. "
                             + "Controls expire shortly. Every action rechecks Minecraft authority and state.");
-                    hook.sendMessage(message.toString()).addComponents(rows).queue();
+                    if (view == ReviewQueueView.REPORTS) {
+                        hook.sendMessageEmbeds(DiscordReportReviewCard.render(pulse, reports))
+                                .addComponents(rows).queue();
+                    } else {
+                        hook.sendMessage(message.toString()).addComponents(rows).queue();
+                    }
                 } catch (RuntimeException exception) {
                     log("discord_review_queue_failed", exception);
                     hook.sendMessage("The private review queue could not be loaded.").queue();
