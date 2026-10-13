@@ -70,8 +70,14 @@ ai-safety-check:
 In API service configuration, use `AI_MOD_SAFETY_CHECKS_ENABLED=true`
 **only on isolated staging** with separate credential entries:
 
-- Paper reply client: `safety:respond` only.
-- Paper alert client: `safety:alerts` only.
+- Paper reply client: `safety:respond` only, with API
+  `"scope_id":"smp"` matching the actual networkServerId.
+- Paper alert client: `safety:alerts` only, with the same bound
+  `"scope_id":"smp"`. Never share tokens between servers.
+- The API enforces these credential scopes for pending prompts, player
+  replies, staff-alert pagination and delivery acknowledgment. A
+  missing/incorrect scope produces 403 or fails API client configuration;
+  updating Paper config alone is not sufficient.
 - No `safety:open` client is required for the automated API trigger.
 - Staff permission `enthusiastaff.safety.alerts`: grant explicitly to
   staff authorized to see sensitive welfare alerts; default false.
