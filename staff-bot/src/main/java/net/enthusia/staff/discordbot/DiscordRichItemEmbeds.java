@@ -29,6 +29,8 @@ final class DiscordRichItemEmbeds {
         Objects.requireNonNull(artifacts, "artifacts");
         List<ChatBridgeArtifact> ordered = artifacts.stream().filter(Objects::nonNull)
                 .sorted(Comparator.comparingInt(ChatBridgeArtifact::position)
+                        .thenComparingInt(artifact -> artifact.kind() == ChatBridgeArtifact.Kind.ITEM
+                                ? 0 : artifact.kind() == ChatBridgeArtifact.Kind.TOOLTIP ? 1 : 2)
                         .thenComparing(ChatBridgeArtifact::filename))
                 .toList();
         List<ChatBridgeArtifact> tooltips = new ArrayList<>(ordered.stream()
