@@ -84,6 +84,19 @@ class PrivateSafetyCheckBridgeSourceTest {
     }
 
     @Test
+    void helpChoiceGivesOptionalNonBlockingResourceScreen() throws Exception {
+        String code = source();
+        assertTrue(code.contains("private enum Screen { QUESTION, SUPPORT }"));
+        assertTrue(code.contains("showSupport(player)"));
+        assertTrue(code.contains("holder.screen == Screen.SUPPORT"));
+        assertTrue(code.contains("sendSupportDetail(player, event.getSlot())"));
+        assertTrue(code.contains("getScheduler().execute(plugin"));
+        assertTrue(code.contains("local emergency services"));
+        assertTrue(code.contains("call or text 988"));
+        assertTrue(code.contains("Reach out to someone you trust"));
+    }
+
+    @Test
     void guiIsPrivateNonBlockingAndPreservesPlayerIdentity() throws Exception {
         String code = source();
         assertTrue(code.contains("getUniqueId()"));

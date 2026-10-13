@@ -19,6 +19,15 @@ matching check it opens a private 27-slot inventory with four options:
 - **I'm not sure:** `UNSURE`, same supportive guidance and staff alert.
 - **I'd rather not answer:** `DECLINED`, no new alert solely for declining.
 
+Selecting `NEEDS_HELP` or `UNSURE` also opens an **optional second
+27-slot support screen** on the player's next safe entity-scheduler tick.
+It provides explicit steps for immediate danger, contacting a trusted
+person, U.S. 988 support (with a non-U.S. caveat), and closing the menu.
+Guidance is private; choosing a resource does not create punishments,
+medical assessments or further mandatory disclosures. The first player
+answer is independently submitted to the API and can queue the staff
+alert even when the resource screen is closed.
+
 Closing the inventory does not block play. No message deletion, mute, ban,
 strike, reputation penalty, public broadcast or chat-model retraining occurs.
 

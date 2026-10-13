@@ -255,40 +255,83 @@ public final class PrivateSafetyCheckBridge implements Listener, AutoCloseable {
                 .whenComplete((none, failure) -> resolving.remove(uuid));
     }
 
+    private enum Screen { QUESTION, SUPPORT }
+
     private static final class Holder implements InventoryHolder {
         final UUID player;
         final String check;
+        final Screen screen;
         Inventory inventory;
-        Holder(UUID player, String check) {
+        Holder(UUID player, String check, Screen screen) {
             this.player = player;
             this.check = check;
+            this.screen = screen;
         }
         @Override public Inventory getInventory() {
             return Objects.requireNonNull(inventory);
         }
     }
 
-    private static void option(Inventory inv, int slot, Material material, String text) {
+    private static void option(
+            Inventory inv, int slot, Material material, String text,
+            NamedTextColor color, String explanation
+    ) {
         ItemStack item = new ItemStack(material);
         ItemMeta meta = item.getItemMeta();
-        meta.displayName(Component.text(text, NamedTextColor.WHITE));
+        meta.displayName(Component.text(text, color));
+        meta.lore(List.of(Component.text(explanation, NamedTextColor.GRAY)));
         item.setItemMeta(meta);
         inv.setItem(slot, item);
     }
 
     private void show(Player player, String id) {
-        Holder holder = new Holder(player.getUniqueId(), id);
+        Holder holder = new Holder(player.getUniqueId(), id, Screen.QUESTION);
         Inventory inv = Bukkit.createInventory(holder, 27,
                 Component.text("Private safety check", NamedTextColor.AQUA));
         holder.inventory = inv;
-        option(inv, 10, Material.LIME_CONCRETE, "I'm safe");
-        option(inv, 12, Material.PINK_WOOL, "I might hurt myself / need help");
-        option(inv, 14, Material.YELLOW_CONCRETE, "I'm not sure");
-        option(inv, 16, Material.GRAY_CONCRETE, "I'd rather not answer");
+        option(inv, 10, Material.LIME_CONCRETE, "I'm safe",
+                NamedTextColor.GREEN, "No urgent alert from this answer.");
+        option(inv, 12, Material.PINK_WOOL, "I might hurt myself / need help",
+                NamedTextColor.LIGHT_PURPLE, "Get support and privately alert staff.");
+        option(inv, 14, Material.YELLOW_CONCRETE, "I'm not sure",
+                NamedTextColor.YELLOW, "See help options and privately alert staff.");
+        option(inv, 16, Material.GRAY_CONCRETE, "I'd rather not answer",
+                NamedTextColor.GRAY, "You may leave. You do not have to answer.");
         player.openInventory(inv);
         player.sendMessage(Component.text(
                 "We're concerned about you. You can answer privately, or just close the window.",
                 NamedTextColor.AQUA));
+    }
+
+    private void showSupport(Player player) {
+        Holder holder = new Holder(player.getUniqueId(), "", Screen.SUPPORT);
+        Inventory inv = Bukkit.createInventory(holder, 27,
+                Component.text("Help and next steps", NamedTextColor.AQUA));
+        holder.inventory = inv;
+        option(inv, 10, Material.RED_WOOL, "If you're in immediate danger",
+                NamedTextColor.RED, "Contact local emergency services now.");
+        option(inv, 12, Material.BOOK, "Reach out to someone you trust",
+                NamedTextColor.AQUA, "Ask a nearby trusted person to stay with you.");
+        option(inv, 14, Material.PAPER, "U.S. support: call or text 988",
+                NamedTextColor.GREEN, "Outside the U.S.? Use local support services.");
+        option(inv, 16, Material.LIME_CONCRETE, "Close and keep playing",
+                NamedTextColor.GREEN, "You can leave this screen at any time.");
+        player.openInventory(inv);
+    }
+
+    private static void sendSupportDetail(Player player, int slot) {
+        String message = switch (slot) {
+            case 10 -> "If you might act soon or are in immediate danger, "
+                    + "contact your local emergency services now.";
+            case 12 -> "Please contact a trusted person nearby, let them know "
+                    + "you could use support, and ask them to stay with you.";
+            case 14 -> "In the United States, you can call or text 988. "
+                    + "If you are elsewhere, contact a local crisis service.";
+            default -> null;
+        };
+        if (message != null) {
+            player.sendMessage(Component.text(message, NamedTextColor.AQUA));
+        }
     }
 
     @EventHandler public void click(InventoryClickEvent event) {
@@ -299,6 +342,14 @@ public final class PrivateSafetyCheckBridge implements Listener, AutoCloseable {
         if (!(event.getWhoClicked() instanceof Player player)
                 || !holder.player.equals(player.getUniqueId())
                 || event.getClickedInventory() != event.getView().getTopInventory()) {
+            return;
+        }
+        if (holder.screen == Screen.SUPPORT) {
+            if (event.getSlot() == 10 || event.getSlot() == 12
+                    || event.getSlot() == 14 || event.getSlot() == 16) {
+                player.closeInventory();
+                sendSupportDetail(player, event.getSlot());
+            }
             return;
         }
         String decision = switch (event.getSlot()) {
@@ -317,6 +368,13 @@ public final class PrivateSafetyCheckBridge implements Listener, AutoCloseable {
                     "If you may hurt yourself, reach out to someone you trust right now. "
                     + "If in immediate danger, contact local emergency services. "
                     + "In the U.S., call or text 988 for support.", NamedTextColor.AQUA));
+            // Never re-open a GUI during InventoryClickEvent. Provide optional
+            // next steps on the player's entity scheduler one tick later.
+            player.getScheduler().execute(plugin, () -> {
+                if (active.get() && player.isOnline()) {
+                    showSupport(player);
+                }
+            }, null, 1L);
         } else if ("SAFE".equals(decision)) {
             player.sendMessage(Component.text("Thank you for letting us know.", NamedTextColor.GREEN));
         }
