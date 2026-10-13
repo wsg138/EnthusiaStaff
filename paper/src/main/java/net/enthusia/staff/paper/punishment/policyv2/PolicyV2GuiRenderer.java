@@ -7,6 +7,7 @@ import net.enthusia.staff.domain.policyv2.IncidentAttributeValue;
 import net.enthusia.staff.domain.policyv2.OffensePolicy;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
+import net.kyori.adventure.text.format.TextDecoration;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.inventory.Inventory;
@@ -27,6 +28,7 @@ final class PolicyV2GuiRenderer {
         PolicyV2GuiHolder holder = new PolicyV2GuiHolder(state);
         Inventory inventory = Bukkit.createInventory(holder, 54, title(state));
         holder.attach(inventory);
+        fill(inventory);
         header(inventory, state);
         renderBody(inventory, state);
         return inventory;
@@ -267,6 +269,20 @@ final class PolicyV2GuiRenderer {
                 values.stream().map(value -> (Component) Component.text(value, NamedTextColor.GRAY)).toList());
     }
 
+    private static void fill(Inventory inventory) {
+        ItemStack body = pane(Material.BLACK_STAINED_GLASS_PANE);
+        ItemStack border = pane(Material.GRAY_STAINED_GLASS_PANE);
+        for (int slot = 0; slot < inventory.getSize(); slot++) {
+            inventory.setItem(slot, slot < CONTENT_START || slot >= 45 ? border : body);
+        }
+        inventory.setItem(1, pane(Material.CYAN_STAINED_GLASS_PANE));
+        inventory.setItem(7, pane(Material.CYAN_STAINED_GLASS_PANE));
+    }
+
+    private static ItemStack pane(Material material) {
+        return item(material, " ", NamedTextColor.DARK_GRAY, List.of());
+    }
+
     private static void header(Inventory inventory, PolicyV2GuiState state) {
         inventory.setItem(4, item(
                 Material.PLAYER_HEAD,
@@ -315,8 +331,10 @@ final class PolicyV2GuiRenderer {
     ) {
         ItemStack stack = new ItemStack(material);
         ItemMeta meta = stack.getItemMeta();
-        meta.displayName(Component.text(name, color));
-        meta.lore(List.copyOf(lore));
+        meta.displayName(Component.text(name, color)
+                .decoration(TextDecoration.BOLD, true)
+                .decoration(TextDecoration.ITALIC, false));
+        meta.lore(lore.stream().map(line -> line.decoration(TextDecoration.ITALIC, false)).toList());
         stack.setItemMeta(meta);
         return stack;
     }

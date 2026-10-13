@@ -23,6 +23,7 @@ import net.enthusia.staff.domain.sanction.SanctionLength;
 import net.enthusia.staff.domain.sanction.SanctionSpec;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
+import net.kyori.adventure.text.format.TextDecoration;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.entity.Player;
@@ -133,7 +134,19 @@ final class PunishmentGuiRenderer {
         if (categories.isEmpty()) {
             emptyState(inventory, "No punishment categories available",
                     "Your current rank and route have no selectable configured reasons.");
+        } else {
+            inventory.setItem(13, item(
+                    Material.OAK_SIGN,
+                    "Choose a Category",
+                    NamedTextColor.AQUA,
+                    List.of(
+                            Component.text("Pick what happened, not the punishment.", NamedTextColor.WHITE),
+                            Component.text("Each category contains exact rule violations.", NamedTextColor.GRAY),
+                            Component.text("Or use Search below to find one directly.", NamedTextColor.GRAY)
+                    )
+            ));
         }
+        inventory.setItem(48, pageLabel("Categories", categories.size(), categories.size(), 0));
         footerHistory(inventory);
         inventory.setItem(SEARCH_SLOT, searchButton());
         inventory.setItem(CLOSE_SLOT, button(Material.BARRIER, CLOSE_LABEL, NamedTextColor.RED));
@@ -163,22 +176,20 @@ final class PunishmentGuiRenderer {
         List<Component> lore = new ArrayList<>();
         lore.add(Component.text(category.description(), NamedTextColor.GRAY));
         lore.add(Component.text(
-                reasons.size() + " reason" + (reasons.size() == 1 ? "" : "s") + " available",
+                reasons.size() + " exact " + (reasons.size() == 1 ? "reason" : "reasons"),
                 NamedTextColor.WHITE
         ));
-        lore.add(Component.text("For example:", NamedTextColor.DARK_GRAY));
-        categoryExamples(reasons).forEach(policy -> lore.add(Component.text(
-                "• " + compact(policy.publicReason(), 44), NamedTextColor.GRAY
-        )));
+        categoryExamples(reasons).stream().limit(2).forEach(policy ->
+                lore.add(Component.text("  " + compact(policy.publicReason(), 42), NamedTextColor.DARK_GRAY)));
         int recentCases = reasons.stream().map(ReasonPolicy::family).distinct()
                 .mapToInt(overview::familyCaseCount).sum();
         if (overview.casesAvailable() && recentCases > 0) {
             lore.add(Component.text(
-                    "Recent cases: " + recentCases + (overview.recentCasesTruncated() ? "+" : ""),
+                    "Recent related cases: " + recentCases + (overview.recentCasesTruncated() ? "+" : ""),
                     NamedTextColor.GOLD
             ));
         }
-        lore.add(Component.text("Click to choose a reason", NamedTextColor.YELLOW));
+        lore.add(Component.text("Click to browse", NamedTextColor.YELLOW));
         return List.copyOf(lore);
     }
 
@@ -218,6 +229,7 @@ final class PunishmentGuiRenderer {
             emptyState(inventory, "No exact reasons available", "Return to categories and select another group.");
         }
         pageControls(inventory, state.page(), reasons.size());
+        inventory.setItem(48, pageLabel("Reasons", reasons.size(), CONTENT_SIZE, state.page()));
         footerHistory(inventory);
         inventory.setItem(SEARCH_SLOT, searchButton());
         inventory.setItem(BACK_SLOT, button(Material.ARROW, "Back · Categories", NamedTextColor.AQUA));
@@ -240,6 +252,7 @@ final class PunishmentGuiRenderer {
             emptyState(inventory, "No matching reasons", "Click Search to try different words.");
         }
         pageControls(inventory, state.page(), results.size());
+        inventory.setItem(48, pageLabel("Matches", results.size(), CONTENT_SIZE, state.page()));
         footerHistory(inventory);
         inventory.setItem(BACK_SLOT, button(Material.ARROW, "Back to Categories", NamedTextColor.AQUA));
         inventory.setItem(SEARCH_SLOT, searchButton());
@@ -279,15 +292,15 @@ final class PunishmentGuiRenderer {
         inventory.setItem(CONFIRM_SLOT, policy == null
                 ? item(Material.GRAY_DYE, "Reason Unavailable", NamedTextColor.RED,
                         List.of(Component.text("Go back and choose a current reason.", NamedTextColor.YELLOW)))
-                : item(Material.LIME_CONCRETE, "Confirm & Submit", NamedTextColor.GREEN,
+                : item(Material.LIME_CONCRETE, "Submit Punishment", NamedTextColor.GREEN,
                         List.of(
-                                Component.text("Applies the outcome or requests approval", NamedTextColor.WHITE),
+                                Component.text("Applies this sanction or requests approval", NamedTextColor.WHITE),
                                 Component.text("depending on your rank.", NamedTextColor.GRAY),
                                 Component.text("The reason and outcome are checked again.", NamedTextColor.GRAY)
                         )));
         inventory.setItem(CLOSE_SLOT, item(
                 Material.BARRIER,
-                "Save & Close",
+                "Save Draft & Close",
                 NamedTextColor.RED,
                 List.of(Component.text("The draft remains resumable for its configured lifetime.", NamedTextColor.GRAY))
         ));
@@ -315,6 +328,8 @@ final class PunishmentGuiRenderer {
             inventory.setItem(NEXT_SLOT, button(Material.ARROW, "Next History Page", NamedTextColor.AQUA));
         }
         inventory.setItem(BACK_SLOT, button(Material.ARROW, "Back", NamedTextColor.AQUA));
+        inventory.setItem(48, pageLabel("History", state.history().totalEntries(),
+                CONTENT_SIZE, Math.max(0, page - 1)));
         inventory.setItem(CLOSE_SLOT, button(Material.BARRIER, CLOSE_LABEL, NamedTextColor.RED));
     }
 
@@ -327,23 +342,24 @@ final class PunishmentGuiRenderer {
     }
 
     private static ItemStack workflowItem(PunishmentGuiState state) {
-        String phase = state instanceof PunishmentGuiState.Categories ? "Categories"
-                : state instanceof PunishmentGuiState.Reasons ? "Exact Reason"
-                : state instanceof PunishmentGuiState.Search ? "Search Results"
-                : state instanceof PunishmentGuiState.Review ? "Review & Confirm"
-                : "History";
-        return item(
-                Material.KNOWLEDGE_BOOK,
-                "How to use /punish",
+        String phase = state instanceof PunishmentGuiState.Categories ? "Choose Category"
+                : state instanceof PunishmentGuiState.Reasons ? "Choose Exact Reason"
+                : state instanceof PunishmentGuiState.Search ? "Search Exact Reasons"
+                : state instanceof PunishmentGuiState.Review ? "Review & Submit"
+                : "View History";
+        boolean reviewing = state instanceof PunishmentGuiState.Review;
+        return item(Material.KNOWLEDGE_BOOK,
+                "Punishment | " + phase,
                 NamedTextColor.AQUA,
                 List.of(
-                        Component.text("Current step: " + phase, NamedTextColor.WHITE),
-                        Component.text("1. Choose a category and exact reason", NamedTextColor.GRAY),
-                        Component.text("2. Review the outcome for this player", NamedTextColor.GRAY),
-                        Component.text("3. Confirm to apply or request approval", NamedTextColor.GRAY),
-                        Component.text("Nothing happens until you confirm.", NamedTextColor.GREEN)
-                )
-        );
+                        Component.text("1  Choose what happened", NamedTextColor.WHITE),
+                        Component.text("2  Review the calculated outcome", NamedTextColor.WHITE),
+                        Component.text("3  Submit or request approval", NamedTextColor.WHITE),
+                        Component.text(reviewing
+                                        ? "Check the player, reason and sanctions before submitting."
+                                        : "No punishment happens when browsing.",
+                                NamedTextColor.GREEN)
+                ));
     }
 
     private static ItemStack historyHeaderItem(PunishmentGuiState state) {
@@ -427,28 +443,22 @@ final class PunishmentGuiRenderer {
 
     private static List<Component> reasonLore(ReasonPolicy policy, PunishmentGuiOverview overview) {
         List<Component> lore = new ArrayList<>();
-        lore.add(Component.text(
-                "Severity: " + severityLabel(policy.severity()),
-                severityColor(policy.severity())
-        ));
-        lore.add(Component.text("Required rank: " + humanize(policy.requiredRank().name()), NamedTextColor.GRAY));
-        if (overview.casesAvailable() && overview.exactCaseCount(policy.id()) > 0) {
-            lore.add(Component.text(
-                    "Recent cases for this reason: " + overview.exactCaseCount(policy.id())
-                            + (overview.recentCasesTruncated() ? "+" : ""), NamedTextColor.GOLD
-            ));
-        }
-        lore.add(Component.text("Exact reason: " + policy.id(), NamedTextColor.DARK_GRAY));
-        lore.add(Component.text("Family: " + policy.family(), NamedTextColor.GRAY));
-        lore.add(Component.text("First step without history: "
-                + compact(policy.steps().getFirst().label(), 44), NamedTextColor.DARK_GRAY));
-        lore.add(Component.text("Possible outcomes: " + policy.steps().size() + " step"
-                        + (policy.steps().size() == 1 ? "" : "s"),
+        lore.add(Component.text("Severity: " + severityLabel(policy.severity())
+                + " (" + policy.severity() + ")", severityColor(policy.severity())));
+        lore.add(Component.text("Required rank: " + humanize(policy.requiredRank().name()),
                 NamedTextColor.GRAY));
-        if (!policy.examples().isEmpty()) {
-            lore.add(Component.text("Example: " + compact(policy.examples().getFirst(), 54), NamedTextColor.DARK_GRAY));
+        if (overview.casesAvailable() && overview.exactCaseCount(policy.id()) > 0) {
+            lore.add(Component.text("Recent cases: " + overview.exactCaseCount(policy.id())
+                            + (overview.recentCasesTruncated() ? "+" : ""), NamedTextColor.GOLD));
         }
-        lore.add(Component.text("Click to review the outcome", NamedTextColor.YELLOW));
+        lore.add(Component.text("First step without history: "
+                + compact(policy.steps().getFirst().label(), 35), NamedTextColor.GRAY));
+        if (!policy.examples().isEmpty()) {
+            lore.add(Component.text("Example: " + compact(policy.examples().getFirst(), 48),
+                    NamedTextColor.DARK_GRAY));
+        }
+        lore.add(Component.text("ID: " + policy.id(), NamedTextColor.DARK_GRAY));
+        lore.add(Component.text("Click to calculate this player's outcome", NamedTextColor.YELLOW));
         return List.copyOf(lore);
     }
 
@@ -478,7 +488,7 @@ final class PunishmentGuiRenderer {
         if (assessment == null) {
             lore.add(Component.text("Past case details are unavailable for this saved draft.",
                     NamedTextColor.YELLOW));
-            return item(Material.PRISMARINE_CRYSTALS, "Past Punishments", NamedTextColor.AQUA, lore);
+            return item(Material.PRISMARINE_CRYSTALS, "02 | Prior History", NamedTextColor.AQUA, lore);
         }
         int contributing = (int) assessment.escalation().contributions().stream()
                 .filter(value -> value.effective() > 0)
@@ -491,7 +501,7 @@ final class PunishmentGuiRenderer {
             lore.add(Component.text("Older cases discounted: " + decayed, NamedTextColor.AQUA));
         }
         lore.add(Component.text("The outcome below accounts for this history.", NamedTextColor.GRAY));
-        return item(Material.PRISMARINE_CRYSTALS, "Past Punishments", NamedTextColor.AQUA, lore);
+        return item(Material.PRISMARINE_CRYSTALS, "02 | Prior History", NamedTextColor.AQUA, lore);
     }
 
     private static ItemStack recommendationItem(
@@ -507,14 +517,14 @@ final class PunishmentGuiRenderer {
         ));
         lore.add(Component.text(describe(draft.expectation().sanctions()), NamedTextColor.WHITE));
         lore.add(Component.text("This is what confirmation will submit.", NamedTextColor.GRAY));
-        return item(Material.GOLD_INGOT, "Recommended Outcome", NamedTextColor.GOLD, lore);
+        return item(Material.GOLD_INGOT, "03 | Recommended Outcome", NamedTextColor.GOLD, lore);
     }
 
     private static ItemStack safetyItem(PunishmentGuiState.Review state, String activePolicyVersion) {
         boolean currentVersion = state.draft().expectation().configurationVersion().equals(activePolicyVersion);
         return item(
                 Material.CLOCK,
-                "Saved Draft",
+                "04 | Draft & Policy",
                 NamedTextColor.AQUA,
                 List.of(
                         Component.text("Expires: " + formatInstant(state.draft().expiresAt(), state.overview()),
@@ -652,11 +662,11 @@ final class PunishmentGuiRenderer {
     private static LadderVisual ladderVisual(LadderPosition position, boolean permanent) {
         return switch (position) {
             case CURRENT -> new LadderVisual(
-                    permanent ? Material.RED_CONCRETE : Material.YELLOW_CONCRETE,
+                    permanent ? Material.RED_CONCRETE : Material.LIME_CONCRETE,
                     NamedTextColor.GOLD,
                     "▶ "
             );
-            case PRIOR -> new LadderVisual(Material.LIME_CONCRETE, NamedTextColor.GREEN, "✓ ");
+            case PRIOR -> new LadderVisual(Material.LIGHT_GRAY_CONCRETE, NamedTextColor.GRAY, "✓ ");
             case FUTURE -> permanent
                     ? new LadderVisual(Material.RED_CONCRETE, NamedTextColor.RED, "")
                     : new LadderVisual(Material.GRAY_CONCRETE, NamedTextColor.GRAY, "");
@@ -771,8 +781,19 @@ final class PunishmentGuiRenderer {
         if ((page + 1) * CONTENT_SIZE < total) {
             inventory.setItem(NEXT_SLOT, button(Material.ARROW, "Next Page", NamedTextColor.AQUA));
         }
+        inventory.setItem(48, pageLabel("Players", total, CONTENT_SIZE, page));
         inventory.setItem(TARGET_REFRESH_SLOT, button(Material.CLOCK, "Refresh Players", NamedTextColor.YELLOW));
         inventory.setItem(TARGET_CLOSE_SLOT, button(Material.BARRIER, CLOSE_LABEL, NamedTextColor.RED));
+    }
+
+    private static ItemStack pageLabel(String section, long total, int pageSize, int page) {
+        long count = Math.max(0, total);
+        long pages = Math.max(1L, (count + pageSize - 1) / pageSize);
+        return item(Material.MAP, section + " | " + (page + 1) + "/" + pages,
+                NamedTextColor.GRAY, List.of(
+                        Component.text(count + (count == 1 ? " entry" : " entries"), NamedTextColor.WHITE),
+                        Component.text("Page indicator - not a button", NamedTextColor.DARK_GRAY)
+                ));
     }
 
     private static void footerHistory(Inventory inventory) {
@@ -802,12 +823,23 @@ final class PunishmentGuiRenderer {
         ));
     }
 
+    /**
+     * Quiet two-tone panel. Accent panes are visual separators, not controls.
+     * Every screen uses this frame; action items are placed above it.
+     */
     private static void fill(Inventory inventory) {
-        ItemStack content = item(Material.BLACK_STAINED_GLASS_PANE, " ", NamedTextColor.DARK_GRAY, List.of());
-        ItemStack frame = item(Material.GRAY_STAINED_GLASS_PANE, " ", NamedTextColor.DARK_GRAY, List.of());
+        ItemStack body = pane(Material.BLACK_STAINED_GLASS_PANE);
+        ItemStack border = pane(Material.GRAY_STAINED_GLASS_PANE);
         for (int slot = 0; slot < inventory.getSize(); slot++) {
-            inventory.setItem(slot, slot < CONTENT_START || slot >= 45 ? frame : content);
+            inventory.setItem(slot, slot < CONTENT_START || slot >= 45 ? border : body);
         }
+        ItemStack accent = pane(Material.CYAN_STAINED_GLASS_PANE);
+        inventory.setItem(1, accent);
+        inventory.setItem(7, accent);
+    }
+
+    private static ItemStack pane(Material material) {
+        return item(material, " ", NamedTextColor.DARK_GRAY, List.of());
     }
 
     private static Component title(PunishmentGuiState state) {
@@ -818,7 +850,7 @@ final class PunishmentGuiRenderer {
                     NamedTextColor.DARK_AQUA);
         }
         if (state instanceof PunishmentGuiState.Search) {
-            return Component.text("Punish - Search Results", NamedTextColor.DARK_AQUA);
+            return Component.text("Punish | Search", NamedTextColor.DARK_AQUA);
         }
         if (state instanceof PunishmentGuiState.Review) {
             return Component.text("Review · " + target, NamedTextColor.DARK_AQUA);
@@ -834,15 +866,15 @@ final class PunishmentGuiRenderer {
 
     private static Material reasonMaterial(ReasonPolicy policy) {
         if (policy.severity() >= EXTREME_SEVERITY_THRESHOLD) {
-            return Material.RED_CONCRETE;
+            return Material.ENCHANTED_BOOK;
         }
         if (policy.severity() >= HIGH_SEVERITY_THRESHOLD) {
-            return Material.ORANGE_CONCRETE;
+            return Material.WRITABLE_BOOK;
         }
         if (policy.severity() >= MODERATE_SEVERITY_THRESHOLD) {
-            return Material.YELLOW_CONCRETE;
+            return Material.BOOK;
         }
-        return Material.LIGHT_BLUE_CONCRETE;
+        return Material.PAPER;
     }
 
     private static NamedTextColor reasonNameColor(ReasonPolicy policy) {
@@ -892,8 +924,8 @@ final class PunishmentGuiRenderer {
         ItemMeta rawMeta = item.getItemMeta();
         if (rawMeta instanceof SkullMeta meta) {
             meta.setOwningPlayer(Bukkit.getOfflinePlayer(playerId));
-            meta.displayName(Component.text(name, color));
-            meta.lore(lore);
+            meta.displayName(displayName(name, color));
+            meta.lore(cleanLore(lore));
             item.setItemMeta(meta);
             return item;
         }
@@ -903,10 +935,22 @@ final class PunishmentGuiRenderer {
     private static ItemStack item(Material material, String name, NamedTextColor color, List<Component> lore) {
         ItemStack item = ItemStack.of(material);
         ItemMeta meta = item.getItemMeta();
-        meta.displayName(Component.text(name, color));
-        meta.lore(lore);
+        meta.displayName(displayName(name, color));
+        meta.lore(cleanLore(lore));
         item.setItemMeta(meta);
         return item;
+    }
+
+    private static Component displayName(String name, NamedTextColor color) {
+        return Component.text(name, color)
+                .decoration(TextDecoration.ITALIC, false)
+                .decoration(TextDecoration.BOLD, true);
+    }
+
+    private static List<Component> cleanLore(List<Component> lore) {
+        return lore.stream()
+                .map(line -> line.decoration(TextDecoration.ITALIC, false))
+                .toList();
     }
 
     private static Component booleanLine(String label, boolean value) {

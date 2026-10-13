@@ -207,3 +207,61 @@ private search, all relevant permissions and history tests, accessible
 Minecraft + Bedrock navigation, positive and negative policy-parity tests,
 Codacy/CI green, in-game acceptance evidence, rollback proof and no unexpected
 production config changes. Keep old GUI rollback independent of policy changes.
+
+## 9. GUI visual system (owner priority: readability and quality)
+
+Apply the same restrained design to the legacy manual punish screens, saved
+draft review, staff punishment-request queue/review/denial and shadow Policy v2
+screens. All navigation is in 9x6 or 9x3 vanilla inventories, without NMS,
+client resource packs, shaders, external UI plugins or purchases.
+
+### Visual tokens and spacing
+- Base fill: BLACK_STAINED_GLASS_PANE; header and footer: GRAY_STAINED_GLASS_PANE.
+- Cyan accent only for key navigation/status; keep color use deliberate.
+  Green is submission/safe, gold signals review/recency, red signals danger,
+  denial or exit. Decor is noninteractive; no fake buttons.
+- Minecraft's default italic for custom item text is explicitly disabled on
+  every item name and lore line. Item names are bold; supporting lines are not.
+- Header: concise workflow guidance at slot 0, player summary at 4, history
+  at 2, active sanctions at 6, reports at 8. Prominent player context remains
+  visible at each stage. Two cyan accent dividers at header slots 1 and 7.
+- Category browse: six prominent icons in a centered 3x2 layout (20,22,24,
+  29,31,33), an explanatory guide above at slot 13. Unmapped Other appears
+  beneath the main grid only when a family is unknown (40).
+- Reason browse/search: severity communicated by book/paper type and name color,
+  not a full grid of orange/red/yellow concrete. One clear reason name, severity
+  and rank, first configured step labelled **without history**, optional
+  example, exact ID and click guidance. Actual result remains on review.
+- Footer: History 46, Back 47, a noninteractive page indicator 48, primary
+  action 49 (where applicable), Search 50, Close 51, Previous 45/Next 53.
+  Never move action IDs without changing click-controller tests.
+- Review: reason 10, prior offenses 12, recommended outcome 14, draft/policy
+  16. Ladder steps 18–35; selected step is clearly highlighted, older steps
+  muted to light gray, later steps gray (permanent escalation red).
+  Case visibility 37, private note 39, relevant history 41, authority 43.
+  Submission at 49, Save & Close at 51. Existing confirmation semantics stay.
+- Request review: 27-slot, dark body, gray top/bottom frames, prominent
+  green Approve and red Deny, unchanged clicks and audited request leases.
+- Policy v2: same frame and non-italic text, but its SHADOW marker and
+  safe review-only Policy Gap must remain conspicuous.
+
+### Copy and interaction
+- Avoid long multi-line prose and avoid visual clutter in hover cards.
+- Do not convey severity by color alone: text labels and numeric severity
+  are always provided. Red is never used merely as a decorative accent.
+- Every clickable action has a verb; every passive footer item clearly
+  identifies itself as information only. Player UUIDs, reason IDs, and policy
+  versions remain available for auditing.
+- Different roles must see the same visual framework with rank-filtered options.
+- Every GUI must remain usable at 54/27 inventory slots, including Java,
+  Bedrock/Geyser clients and narrow screens. Manual acceptance must confirm
+  this; unit tests cannot prove actual client rendering.
+
+### Explicit acceptance gate
+- In-game capture of target, six categories, densely populated reasons,
+  search, no-match search, selected review with multi-step ladder, history,
+  approval queue/review/denial, and Policy v2 shadow menu.
+- Validate semantic contrast under default resource pack (no custom pack),
+  screen reader/hover text usability, Bedrock compatibility and no lore clipping.
+- No visual change may introduce a new server restart requirement beyond
+  installing the updated Paper JAR at the next normal SMP restart.
