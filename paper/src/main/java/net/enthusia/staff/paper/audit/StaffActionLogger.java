@@ -48,6 +48,9 @@ public final class StaffActionLogger implements AutoCloseable {
     private static final String OUTBOX_EVENT_TYPE = "STAFF_ACTION";
     private static final int MAX_AUDIT_DETAIL_LENGTH = 1024;
     private static final long OUTBOX_WARNING_INTERVAL_MILLIS = 60_000L;
+    // One full server tick: warn when a synchronous audit append/flush exceeds it.
+    private static final long SLOW_FILE_APPEND_NANOS = 50_000_000L;
+    private static final long SLOW_APPEND_WARNING_INTERVAL_MILLIS = 60_000L;
 
     private final Logger log;
     private final ExecutorService workers;
@@ -59,6 +62,7 @@ public final class StaffActionLogger implements AutoCloseable {
     private final Object fileLock = new Object();
     private final StaffActionOutboxRecovery recovery;
     private final AtomicLong nextOutboxWarningAt = new AtomicLong();
+    private final AtomicLong nextSlowAppendWarningAt = new AtomicLong();
     private Optional<String> currentDate = Optional.empty();
     private Optional<BufferedWriter> actionWriter = Optional.empty();
     private Optional<BufferedWriter> outboxWriter = Optional.empty();
@@ -134,24 +138,50 @@ public final class StaffActionLogger implements AutoCloseable {
     }
 
     private void writeFiles(String line, Instant now) {
-        synchronized (fileLock) {
-            try {
-                rotateIfNeeded(now);
-                if (actionWriter.isEmpty() || outboxWriter.isEmpty()) {
-                    return;
+        long startedAt = System.nanoTime();
+        try {
+            synchronized (fileLock) {
+                try {
+                    rotateIfNeeded(now);
+                    if (actionWriter.isEmpty() || outboxWriter.isEmpty()) {
+                        return;
+                    }
+                    actionWriter.get().write(line);
+                    actionWriter.get().newLine();
+                    actionWriter.get().flush();
+                    outboxWriter.get().write(line);
+                    outboxWriter.get().newLine();
+                    outboxWriter.get().flush();
+                } catch (IOException | RuntimeException exception) {
+                    // Close half-open or failed journal writers; the next action can retry opening.
+                    closeWriters();
+                    currentDate = Optional.empty();
+                    log.log(Level.WARNING, "Staff action file logging failed; the action was not recorded", exception);
                 }
-                actionWriter.get().write(line);
-                actionWriter.get().newLine();
-                actionWriter.get().flush();
-                outboxWriter.get().write(line);
-                outboxWriter.get().newLine();
-                outboxWriter.get().flush();
-            } catch (IOException | RuntimeException exception) {
-                // Close half-open or failed journal writers; the next action can retry opening.
-                closeWriters();
-                currentDate = Optional.empty();
-                log.log(Level.WARNING, "Staff action file logging failed; the action was not recorded", exception);
             }
+        } finally {
+            // The duration includes contention on the local writer lock. Warn
+            // outside the lock to avoid further delaying other audit records.
+            warnSlowFileAppend(System.nanoTime() - startedAt);
+        }
+    }
+
+    static boolean isSlowFileAppend(long elapsedNanos) {
+        return elapsedNanos >= SLOW_FILE_APPEND_NANOS;
+    }
+
+    private void warnSlowFileAppend(long elapsedNanos) {
+        if (!isSlowFileAppend(elapsedNanos)) {
+            return;
+        }
+        long now = System.currentTimeMillis();
+        long next = nextSlowAppendWarningAt.get();
+        if (now >= next && nextSlowAppendWarningAt.compareAndSet(next,
+                now + SLOW_APPEND_WARNING_INTERVAL_MILLIS)) {
+            log.log(Level.WARNING,
+                    "Staff-action local append/flush took {0} ms (includes writer contention); "
+                            + "measure under isolated load before changing durability",
+                    elapsedNanos / 1_000_000L);
         }
     }
 
