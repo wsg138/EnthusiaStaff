@@ -14,6 +14,30 @@ class InteractiveChatStagingArtifactProviderTest {
     private static final Pattern ITEM = Pattern.compile("\\[item\\]");
 
     @Test
+    void tooltipAndIconBundleStayWithinAggregateSizeAndMaximumCount() {
+        var first = new net.enthusia.staff.api.chat.RichChatArtifact(
+                net.enthusia.staff.api.chat.RichChatArtifact.Kind.ITEM,
+                0, "icon.png", "image/png", "Item", new byte[240_000]);
+        var tooLarge = new net.enthusia.staff.api.chat.RichChatArtifact(
+                net.enthusia.staff.api.chat.RichChatArtifact.Kind.TOOLTIP,
+                0, "tooltip.png", "image/png", "Details", new byte[240_000]);
+        var small = new net.enthusia.staff.api.chat.RichChatArtifact(
+                net.enthusia.staff.api.chat.RichChatArtifact.Kind.TOOLTIP,
+                0, "small.png", "image/png", "Details", new byte[10]);
+        var result = InteractiveChatStagingArtifactProvider.withinBundleBudget(
+                List.of(first, tooLarge, small));
+        assertEquals(List.of(first, small), result);
+    }
+
+    @Test
+    void itemCardTitleUsesCleanItemName() {
+        assertEquals("Diamond Spear",
+                InteractiveChatStagingArtifactProvider.plainItemTitle("§bDiamond Spear<reset>"));
+        assertEquals("Shared item",
+                InteractiveChatStagingArtifactProvider.plainItemTitle("§b<reset>"));
+    }
+
+    @Test
     void matcherUsesFirstUnescapedPlaceholder() {
         assertEquals(
                 7,

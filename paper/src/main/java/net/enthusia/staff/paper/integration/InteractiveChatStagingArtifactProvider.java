@@ -304,6 +304,34 @@ public final class InteractiveChatStagingArtifactProvider
         services.unregister(RichChatArtifactProvider.class, this);
     }
 
+    static List<RichChatArtifact> withinBundleBudget(List<RichChatArtifact> candidates) {
+        List<RichChatArtifact> kept = new ArrayList<>();
+        long total = 0L;
+        for (RichChatArtifact artifact : candidates) {
+            if (kept.size() >= net.enthusia.staff.protocol.ChatBridgeArtifactBundle.MAX_ARTIFACTS) {
+                break;
+            }
+            long size = artifact.data().length;
+            if (total + size > net.enthusia.staff.protocol.ChatBridgeArtifactBundle.MAX_TOTAL_ARTIFACT_BYTES) {
+                continue;
+            }
+            kept.add(artifact);
+            total += size;
+        }
+        return kept;
+    }
+
+
+    static String plainItemTitle(String value) {
+        String filtered = value.replaceAll("(?i)§[0-9a-fk-or]", "")
+                .replaceAll("(?i)</?reset>", "").strip();
+        if (filtered.isBlank()) {
+            return "Shared item";
+        }
+        return filtered.substring(0, Math.min(filtered.length(), 240));
+    }
+
+
     private static final class ReflectionAccess implements Access {
         private final Field useItem;
         private final Field useInventory;
@@ -671,23 +699,6 @@ public final class InteractiveChatStagingArtifactProvider
             return withinBundleBudget(artifacts);
         }
 
-        static List<RichChatArtifact> withinBundleBudget(List<RichChatArtifact> candidates) {
-            List<RichChatArtifact> kept = new ArrayList<>();
-            long total = 0L;
-            for (RichChatArtifact artifact : candidates) {
-                if (kept.size() >= net.enthusia.staff.protocol.ChatBridgeArtifactBundle.MAX_ARTIFACTS) {
-                    break;
-                }
-                long size = artifact.data().length;
-                if (total + size > net.enthusia.staff.protocol.ChatBridgeArtifactBundle.MAX_TOTAL_ARTIFACT_BYTES) {
-                    continue;
-                }
-                kept.add(artifact);
-                total += size;
-            }
-            return kept;
-        }
-
         private void renderItemTooltip(List<RichChatArtifact> artifacts,
                 RenderJob job, String suffix, int ordinal) {
             try {
@@ -715,15 +726,6 @@ public final class InteractiveChatStagingArtifactProvider
                             failure.getClass().getSimpleName());
                 }
             }
-        }
-
-        static String plainItemTitle(String value) {
-            String filtered = value.replaceAll("(?i)§[0-9a-fk-or]", "")
-                    .replaceAll("(?i)</?reset>", "").strip();
-            if (filtered.isBlank()) {
-                return "Shared item";
-            }
-            return filtered.substring(0, Math.min(filtered.length(), 240));
         }
 
         private static byte[] png(BufferedImage image) {
