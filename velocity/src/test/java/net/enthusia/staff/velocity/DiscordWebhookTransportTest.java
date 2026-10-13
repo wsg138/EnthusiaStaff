@@ -50,6 +50,35 @@ final class DiscordWebhookTransportTest {
     }
 
     @Test
+    void compactPunishmentEmbedShowsLinkedIdentityWithoutTechnicalNoiseOrPing() throws Exception {
+        AtomicReference<String> sent = new AtomicReference<>();
+        DiscordWebhookTransport.Jdk transport = new DiscordWebhookTransport.Jdk(
+                Duration.ofSeconds(2), (uri, timeout, body) -> { sent.set(body); return 204; }
+        );
+        DiscordWebhookRoute route = DiscordWebhookRoute.approvedStaging(
+                "punishments", URI.create("https://" + STAGING_HOST + "/punishments"), Set.of(STAGING_HOST)
+        );
+        String discordId = "123456789" + "012345678";
+        assertTrue(transport.send(route, "PUNISHMENT_CREATED"
+                + "\\ncaseId=CASE-1\\ntargetUsername=ExampleMC\\ntargetId=private-uuid"
+                + "\\ntargetDiscordUserId=" + discordId
+                + "\\npublicReason=Low-level chat spam\\nsanctionTypes=WARNING"
+                + "\\nsanctionDetails=WARNING (instant)\\nactorName=FainNeito").success());
+        JsonNode payload = new ObjectMapper().readTree(sent.get());
+        JsonNode card = payload.path("embeds").get(0);
+        assertEquals("Warning issued", card.path("title").asText());
+        assertTrue(card.path("description").asText().contains("ExampleMC"));
+        assertTrue(card.path("description").asText().contains("<@" + discordId + ">"));
+        assertTrue(card.path("description").asText().contains("Low-level chat spam"));
+        assertFalse(card.toString().contains("private-uuid"));
+        assertFalse(card.toString().contains("Internal Explanation"));
+        assertFalse(card.toString().contains("Sanction IDs"));
+        assertEquals(3, card.path("fields").size());
+        assertEquals(0, payload.path("allowed_mentions").path("parse").size());
+        assertTrue(payload.path("allowed_mentions").path("users").isMissingNode());
+    }
+
+    @Test
     void staffActionUsesEmbedsWithMentionsDisabled() throws Exception {
         AtomicReference<String> sent = new AtomicReference<>();
         DiscordWebhookTransport.Jdk transport = new DiscordWebhookTransport.Jdk(

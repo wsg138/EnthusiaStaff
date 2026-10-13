@@ -359,6 +359,12 @@ public final class JdbcModerationStore implements ModerationStore {
         payload.put("sanctionDetails", plan.sanctions().stream().map(JdbcModerationStore::describeSanction).toList());
         payload.put("sanctionIds", sanctionIds.stream().map(UUID::toString).toList());
         String serialized = json.writeValueAsString(payload);
+        // Snapshot only verified/current identity in the private punishment channel.
+        // Never change the network broadcast or expose internal explanation.
+        Map<String, Object> discordPayload = new LinkedHashMap<>(payload);
+        JdbcPunishmentDiscordIdentity.appendVerifiedCurrentIdentity(
+                connection, plan.targetId(), discordPayload);
+        String discordSerialized = json.writeValueAsString(discordPayload);
         try (PreparedStatement network = connection.prepareStatement("""
                 INSERT INTO network_outbox(message_id, idempotency_key, destination, message_type,
                     protocol_version, payload_json, available_at, created_at)
@@ -379,7 +385,7 @@ public final class JdbcModerationStore implements ModerationStore {
                 """)) {
             discord.setBytes(1, UuidBytes.toBytes(UUID.randomUUID()));
             discord.setString(2, "case:" + plan.caseId().value() + ":discord-created");
-            discord.setString(3, serialized);
+            discord.setString(3, discordSerialized);
             discord.setTimestamp(4, Timestamp.from(plan.issuedAt()));
             discord.setTimestamp(5, Timestamp.from(plan.issuedAt()));
             discord.executeUpdate();
