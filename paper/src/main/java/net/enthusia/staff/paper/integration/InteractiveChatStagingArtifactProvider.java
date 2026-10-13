@@ -86,9 +86,9 @@ public final class InteractiveChatStagingArtifactProvider
     }
 
     record RenderJob(Kind kind, int position, ItemStack item, Inventory inventory,
-            String itemTitle, List<?> tooltipComponents) {
+            String itemTitle, List<?> tooltipComponents, Object tooltipStyleKey) {
         RenderJob(Kind kind, int position, ItemStack item, Inventory inventory) {
-            this(kind, position, item, inventory, "", List.of());
+            this(kind, position, item, inventory, "", List.of(), null);
         }
 
         RenderJob {
@@ -333,6 +333,20 @@ public final class InteractiveChatStagingArtifactProvider
     }
 
 
+    /**
+     * Reads an optional item tooltip-style Key while still on the player's owner thread.
+     * The image worker receives only the detached value; a missing/incompatible API
+     * retains the normal Minecraft tooltip background.
+     */
+    static Object captureTooltipStyle(Method getInstance, Method getStyle, ItemStack item) {
+        try {
+            Object wrapper = getInstance.invoke(null);
+            return getStyle.invoke(wrapper, item);
+        } catch (ReflectiveOperationException | RuntimeException unavailable) {
+            return null;
+        }
+    }
+
     static String plainItemTitle(String value) {
         String filtered = value.replaceAll("(?i)§[0-9a-fk-or]", "")
                 .replaceAll("(?i)</?reset>", "").strip();
@@ -359,6 +373,8 @@ public final class InteractiveChatStagingArtifactProvider
         private final Optional<Method> tooltipHiddenMethod;
         private final Optional<Method> tooltipComponentsMethod;
         private final Optional<Method> renderTooltipMethod;
+        private final Optional<Method> tooltipStyleInstanceMethod;
+        private final Optional<Method> tooltipStyleLookupMethod;
         private final String addonLanguage;
         private final boolean detailedTooltipsEnabled;
         private final boolean itemImagesEnabled;
@@ -465,6 +481,27 @@ public final class InteractiveChatStagingArtifactProvider
                 components = Optional.empty();
                 tooltipImage = Optional.empty();
             }
+            // Custom tooltip backgrounds are optional on older addon versions. Resolve the
+            // style on the player's owner scheduler, never from the async image worker.
+            Optional<Method> styleInstance = Optional.empty();
+            Optional<Method> styleLookup = Optional.empty();
+            if (tooltipImage.isPresent()) {
+                try {
+                    Class<?> addonNms = Class.forName(
+                            "com.loohp.interactivechatdiscordsrvaddon.nms.NMSAddon",
+                            false, addonLoader);
+                    Class<?> addonNmsWrapper = Class.forName(
+                            "com.loohp.interactivechatdiscordsrvaddon.nms.NMSAddonWrapper",
+                            false, addonLoader);
+                    styleInstance = Optional.of(addonNms.getMethod("getInstance"));
+                    styleLookup = Optional.of(addonNmsWrapper.getMethod(
+                            "getCustomTooltipResourceLocation", ItemStack.class));
+                } catch (ReflectiveOperationException | LinkageError unsupportedStyle) {
+                    // Keep the standard tooltip and icon when the style API is absent.
+                }
+            }
+            tooltipStyleInstanceMethod = styleInstance;
+            tooltipStyleLookupMethod = styleLookup;
             itemTitleMethod = itemName;
             itemTooltipMethod = tooltip;
             tooltipHiddenMethod = hidden;
@@ -547,6 +584,7 @@ public final class InteractiveChatStagingArtifactProvider
             }
             String name = "";
             List<?> tooltip = List.of();
+            Object tooltipStyleKey = null;
             if (itemTitleMethod.isPresent() && itemTooltipMethod.isPresent()
                     && tooltipHiddenMethod.isPresent() && tooltipComponentsMethod.isPresent()) {
                 try {
@@ -568,9 +606,15 @@ public final class InteractiveChatStagingArtifactProvider
                     }
                 }
             }
+            if (!tooltip.isEmpty() && tooltipStyleInstanceMethod.isPresent()
+                    && tooltipStyleLookupMethod.isPresent()) {
+                tooltipStyleKey = captureTooltipStyle(
+                        tooltipStyleInstanceMethod.orElseThrow(),
+                        tooltipStyleLookupMethod.orElseThrow(), item);
+            }
             for (int position : positions) {
                 jobs.add(new RenderJob(
-                        Kind.ITEM, position, item.clone(), null, name, tooltip
+                        Kind.ITEM, position, item.clone(), null, name, tooltip, tooltipStyleKey
                 ));
             }
         }
@@ -723,7 +767,8 @@ public final class InteractiveChatStagingArtifactProvider
                 RenderJob job, String suffix, int ordinal) {
             try {
                 BufferedImage tooltip = (BufferedImage) invoke(
-                        renderTooltipMethod.orElseThrow(), null, job.tooltipComponents(), null);
+                        renderTooltipMethod.orElseThrow(), null,
+                        job.tooltipComponents(), job.tooltipStyleKey());
                 if (tooltip == null) {
                     return;
                 }
