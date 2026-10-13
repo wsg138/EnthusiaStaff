@@ -124,6 +124,37 @@ class InteractiveChatStagingArtifactProviderTest {
     }
 
     @Test
+    void detachedImageRendererReceivesCapturedCustomKey() throws Exception {
+        Object custom = FakeNmsWrapper.CUSTOM_KEY;
+        var renderMethod = FakeTooltipRenderer.class.getMethod(
+                "getToolTipImage", List.class, Object.class);
+        var components = List.of("custom lore");
+
+        var image = InteractiveChatStagingArtifactProvider.renderDetachedTooltip(
+                renderMethod, components, custom);
+        assertEquals(16, image.getWidth());
+        assertSame(custom, FakeTooltipRenderer.lastStyle);
+        assertSame(components, FakeTooltipRenderer.lastComponents);
+
+        InteractiveChatStagingArtifactProvider.renderDetachedTooltip(
+                renderMethod, List.of("default lore"), null);
+        assertNull(FakeTooltipRenderer.lastStyle);
+    }
+
+    public static final class FakeTooltipRenderer {
+        static Object lastStyle;
+        static Object lastComponents;
+
+        public static java.awt.image.BufferedImage getToolTipImage(
+                List<?> components, Object styleKey) {
+            lastComponents = components;
+            lastStyle = styleKey;
+            return new java.awt.image.BufferedImage(16, 8,
+                    java.awt.image.BufferedImage.TYPE_INT_ARGB);
+        }
+    }
+
+    @Test
     void missingOrFailingTooltipStyleApiKeepsNormalBackground() throws Exception {
         var lookup = FakeNmsWrapper.class.getMethod(
                 "getCustomTooltipResourceLocation", org.bukkit.inventory.ItemStack.class);
