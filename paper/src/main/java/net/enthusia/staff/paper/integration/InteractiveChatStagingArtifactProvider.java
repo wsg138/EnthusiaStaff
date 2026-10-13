@@ -515,9 +515,11 @@ public final class InteractiveChatStagingArtifactProvider
                         }
                     }
                 } catch (ReflectiveOperationException | RuntimeException unsupported) {
-                    LOGGER.log(System.Logger.Level.DEBUG,
-                            "InteractiveChat tooltip snapshot unavailable: {0}",
-                            unsupported.getClass().getSimpleName());
+                    if (LOGGER.isLoggable(System.Logger.Level.DEBUG)) {
+                        LOGGER.log(System.Logger.Level.DEBUG,
+                                "InteractiveChat tooltip snapshot unavailable: {0}",
+                                unsupported.getClass().getSimpleName());
+                    }
                 }
             }
             jobs.add(new RenderJob(
@@ -707,9 +709,11 @@ public final class InteractiveChatStagingArtifactProvider
                         rendered
                 ));
             } catch (ReflectiveOperationException | RuntimeException failure) {
-                LOGGER.log(System.Logger.Level.DEBUG,
-                        "InteractiveChat tooltip image unavailable: {0}",
-                        failure.getClass().getSimpleName());
+                if (LOGGER.isLoggable(System.Logger.Level.DEBUG)) {
+                    LOGGER.log(System.Logger.Level.DEBUG,
+                            "InteractiveChat tooltip image unavailable: {0}",
+                            failure.getClass().getSimpleName());
+                }
             }
         }
 
