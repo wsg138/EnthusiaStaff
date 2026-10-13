@@ -19,6 +19,20 @@ class SimulatorModelTest {
     }
 
     @Test
+    void simulatorAndProductionPolicyParserRunOnJava21() throws Exception {
+        for (Class<?> type : java.util.List.of(SimulatorMain.class,
+                net.enthusia.staff.paper.config.ReasonPolicyConfigurationLoader.class)) {
+            String resource = "/" + type.getName().replace('.', '/') + ".class";
+            try (var stream = type.getResourceAsStream(resource)) {
+                if (stream == null) throw new AssertionError("Missing class " + resource);
+                byte[] prefix = stream.readNBytes(8);
+                int majorVersion = ((prefix[6] & 0xff) << 8) | (prefix[7] & 0xff);
+                assertEquals(65, majorVersion, type.getName() + " must use Java 21 bytecode");
+            }
+        }
+    }
+
+    @Test
     void evaluatesFirstOffenseAndRelatedRepeatUsingRealEngine() throws Exception {
         assertEquals("Warning", decision("[]").path("selected").path("label").asText());
         JsonNode result = decision("[{\"reasonId\":\"spam.low-level\",\"daysAgo\":7}]");

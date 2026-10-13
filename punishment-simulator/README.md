@@ -7,7 +7,7 @@ or other remote service client and cannot apply punishments.
 ## Build
 Run: gradlew.bat :punishment-simulator:test :punishment-simulator:installDist
 Run the installed bin/punishment-simulator.bat with the absolute path to a
-reason-policies.yml policy snapshot as its sole argument. Requires Java 25+.
+reason-policies.yml policy snapshot as its sole argument. Requires Java 21+.
 
 A terminal prints a random localhost URL and normally opens your browser.
 The tool binds ONLY to 127.0.0.1. Close its terminal to stop it.
