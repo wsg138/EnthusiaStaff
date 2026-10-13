@@ -1184,39 +1184,67 @@ public final class StaffModeManager implements Listener {
         return "requested=" + requested;
     }
 
+    // Combat protection retains HIGHEST ownership. A successful damage audit,
+    // however, must wait until other plugins' cancellation handlers have run.
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     public void onDamage(EntityDamageEvent event) {
         if (!(event.getEntity() instanceof Player player) || !protectedMode(player.getUniqueId())) {
             return;
         }
-        StaffRank rank = rankForAction(player);
-        if (isUnrestricted(player) || StaffModeAccessPolicy.allowsCombatTesting(rank)) {
-            audit(player, rank, "damage-received",
-                    event.getCause() + " damage=" + event.getFinalDamage());
+        if (!permitsCombatAction(isUnrestricted(player), rankForAction(player))) {
+            event.setCancelled(true);
+        }
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onCompletedDamage(EntityDamageEvent event) {
+        if (!(event.getEntity() instanceof Player player) || !protectedMode(player.getUniqueId())) {
             return;
         }
-        event.setCancelled(true);
+        StaffRank rank = rankForAction(player);
+        if (permitsCombatAction(isUnrestricted(player), rank)) {
+            audit(player, rank, "damage-received",
+                    event.getCause() + " damage=" + event.getFinalDamage());
+        }
     }
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     public void onDamageByEntity(EntityDamageByEntityEvent event) {
-        Player actor = null;
-        if (event.getDamager() instanceof Player player) {
-            actor = player;
-        } else if (event.getDamager() instanceof Projectile projectile
-                && projectile.getShooter() instanceof Player player) {
-            actor = player;
+        Player actor = damageActor(event);
+        if (actor == null || !protectedMode(actor.getUniqueId())) {
+            return;
         }
+        if (!permitsCombatAction(isUnrestricted(actor), rankForAction(actor))) {
+            event.setCancelled(true);
+        }
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onCompletedDamageByEntity(EntityDamageByEntityEvent event) {
+        Player actor = damageActor(event);
         if (actor == null || !protectedMode(actor.getUniqueId())) {
             return;
         }
         StaffRank rank = rankForAction(actor);
-        if (isUnrestricted(actor) || StaffModeAccessPolicy.allowsCombatTesting(rank)) {
+        if (permitsCombatAction(isUnrestricted(actor), rank)) {
             audit(actor, rank, "damage-dealt",
                     event.getEntityType() + " damage=" + event.getFinalDamage());
-            return;
         }
-        event.setCancelled(true);
+    }
+
+    private static Player damageActor(EntityDamageByEntityEvent event) {
+        if (event.getDamager() instanceof Player player) {
+            return player;
+        }
+        if (event.getDamager() instanceof Projectile projectile
+                && projectile.getShooter() instanceof Player player) {
+            return player;
+        }
+        return null;
+    }
+
+    static boolean permitsCombatAction(boolean unrestricted, StaffRank rank) {
+        return unrestricted || StaffModeAccessPolicy.allowsCombatTesting(rank);
     }
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
