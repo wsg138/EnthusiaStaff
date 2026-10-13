@@ -12,19 +12,21 @@ import net.enthusia.staff.domain.moderation.MainMinecraftAccount;
 import org.junit.jupiter.api.Test;
 
 class DiscordChatMessagePresentationTest {
+    private static final String MAIN_DISCORD_ID = "123456789012345678";
+    private static final String ALT_MINECRAFT_NAME = "FireFlyy";
     @Test
     void onlyTheExplicitMainMinecraftAccountMayMentionItsLinkedDiscordIdentity() {
         UUID main = UUID.randomUUID();
         UUID alt = UUID.randomUUID();
         var selected = Optional.of(new MainMinecraftAccount(main, MainAccountSelectionSource.AUTOMATIC));
-        var discord = Set.of(new DiscordUserId("123456789012345678"));
-        assertEquals(Optional.of("123456789012345678"),
+        var discord = Set.of(new DiscordUserId(MAIN_DISCORD_ID));
+        assertEquals(Optional.of(MAIN_DISCORD_ID),
                 DiscordChatMessagePresentation.mainDiscordUserId(main, selected, discord));
         assertTrue(DiscordChatMessagePresentation.mainDiscordUserId(alt, selected, discord).isEmpty());
         assertTrue(DiscordChatMessagePresentation.mainDiscordUserId(main, Optional.empty(), discord).isEmpty());
         assertTrue(DiscordChatMessagePresentation.mainDiscordUserId(main, selected, Set.of()).isEmpty());
         assertTrue(DiscordChatMessagePresentation.mainDiscordUserId(main, selected,
-                Set.of(new DiscordUserId("123456789012345678"),
+                Set.of(new DiscordUserId(MAIN_DISCORD_ID),
                         new DiscordUserId("223456789012345678"))).isEmpty());
     }
 
@@ -32,11 +34,11 @@ class DiscordChatMessagePresentationTest {
     void unlinkedAndAltPlayersShowOnlyTheirCleanMinecraftName() {
         assertEquals("Toxik", DiscordChatMessagePresentation.minecraftName(
                 Optional.empty(), "✧ **[Admin]<reset> Toxik"));
-        assertEquals("FireFlyy", DiscordChatMessagePresentation.minecraftName(
-                Optional.of("FireFlyy"), "✧ **[Avid]<reset> SomethingElse"));
-        assertEquals("FireFlyy", DiscordChatMessagePresentation.sender(Optional.empty(), "FireFlyy"));
+        assertEquals(ALT_MINECRAFT_NAME, DiscordChatMessagePresentation.minecraftName(
+                Optional.of(ALT_MINECRAFT_NAME), "✧ **[Avid]<reset> SomethingElse"));
+        assertEquals(ALT_MINECRAFT_NAME, DiscordChatMessagePresentation.sender(Optional.empty(), ALT_MINECRAFT_NAME));
         assertEquals("<@123456789012345678>",
-                DiscordChatMessagePresentation.sender(Optional.of("123456789012345678"), "FireFlyy"));
+                DiscordChatMessagePresentation.sender(Optional.of(MAIN_DISCORD_ID), ALT_MINECRAFT_NAME));
     }
 
     @Test

@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.Set;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
 import net.dv8tion.jda.api.requests.GatewayIntent;
@@ -15,6 +16,7 @@ import net.enthusia.staff.protocol.ChatBridgeRenderedMessage;
 import org.junit.jupiter.api.Test;
 
 class JdaDiscordGatewayTest {
+    private static final String CHAT_PLAYER_NAME = "Player";
     @Test
     void restrictionRuntimeEnablesOnlyMemberOverrideCache() {
         assertEquals(Set.of(CacheFlag.MEMBER_OVERRIDES), JdaDiscordGateway.requiredCacheFlags());
@@ -98,7 +100,7 @@ class JdaDiscordGatewayTest {
         ChatBridgeOutboundMessage message = chatMessage("hello");
         assertEquals("<@123456789012345678>: hello",
                 JdaDiscordGateway.chatContent(message,
-                        Optional.of("123456789012345678"), "Player"));
+                        Optional.of("123456789012345678"), CHAT_PLAYER_NAME));
         assertEquals("AltPlayer: hello",
                 JdaDiscordGateway.chatContent(message, Optional.empty(), "AltPlayer"));
     }
@@ -110,7 +112,7 @@ class JdaDiscordGatewayTest {
         assertEquals("Player: hello", JdaDiscordGateway.renderedChatContent(message));
         assertEquals("<@123456789012345678>: hello",
                 JdaDiscordGateway.renderedChatContent(
-                        message, Optional.of("123456789012345678"), "Player"));
+                        message, Optional.of("123456789012345678"), CHAT_PLAYER_NAME));
     }
 
     @Test
@@ -141,7 +143,7 @@ class JdaDiscordGatewayTest {
                 "SMP",
                 "global",
                 UUID.randomUUID(),
-                "Player",
+                CHAT_PLAYER_NAME,
                 canonical,
                 canonical,
                 canonical,
@@ -163,7 +165,7 @@ class JdaDiscordGatewayTest {
                 "SMP",
                 "global",
                 UUID.randomUUID(),
-                "Player",
+                CHAT_PLAYER_NAME,
                 text
         );
     }
