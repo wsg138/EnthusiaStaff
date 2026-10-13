@@ -12,6 +12,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
+import java.util.HashSet;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
@@ -317,10 +319,17 @@ public final class InteractiveChatStagingArtifactProvider
 
     static List<RichChatArtifact> withinBundleBudget(List<RichChatArtifact> candidates) {
         List<RichChatArtifact> kept = new ArrayList<>();
+        // After skipping an oversized icon, its tooltip has no item thumbnail to
+        // attach to. Never spend the bounded wire budget on an orphan image.
+        Set<Integer> retainedItemPositions = new HashSet<>();
         long total = 0L;
         for (RichChatArtifact artifact : candidates) {
             if (kept.size() >= net.enthusia.staff.protocol.ChatBridgeArtifactBundle.MAX_ARTIFACTS) {
                 break;
+            }
+            if (artifact.kind() == RichChatArtifact.Kind.TOOLTIP
+                    && !retainedItemPositions.contains(artifact.position())) {
+                continue;
             }
             long size = artifact.data().length;
             if (total + size > net.enthusia.staff.protocol.ChatBridgeArtifactBundle.MAX_TOTAL_ARTIFACT_BYTES) {
@@ -328,8 +337,11 @@ public final class InteractiveChatStagingArtifactProvider
             }
             kept.add(artifact);
             total += size;
+            if (artifact.kind() == RichChatArtifact.Kind.ITEM) {
+                retainedItemPositions.add(artifact.position());
+            }
         }
-        return kept;
+        return List.copyOf(kept);
     }
 
 
