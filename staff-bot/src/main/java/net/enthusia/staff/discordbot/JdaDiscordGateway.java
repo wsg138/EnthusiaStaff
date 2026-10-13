@@ -3,6 +3,7 @@ package net.enthusia.staff.discordbot;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.time.Clock;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.EnumSet;
@@ -197,6 +198,10 @@ final class JdaDiscordGateway implements DiscordGateway, DiscordChatEgress, Disc
             JDABuilder builder = baseBuilder(listener);
             addInteractionListener(builder);
             addChatIngressListener(builder);
+            if (staffInteractionsEnabled && configuration.accountAgeGate().enabled()) {
+                builder.addEventListeners(new DiscordAccountAgeGateListener(
+                        configuration.environment().guildId(), Clock.systemUTC()));
+            }
             jda = builder.build();
         }
     }
@@ -219,7 +224,8 @@ final class JdaDiscordGateway implements DiscordGateway, DiscordChatEgress, Disc
                         && moderation.flatMap(StaffModerationRuntime::managedRoleShadow).isPresent(),
                 chatConfiguration.map(configuration -> !configuration.ingressRoutes().isEmpty()).orElse(false),
                 staffInteractionsEnabled
-                        && moderation.map(StaffModerationRuntime::investigationsEnabled).orElse(false)
+                        && moderation.map(StaffModerationRuntime::investigationsEnabled).orElse(false),
+                staffInteractionsEnabled && configuration.accountAgeGate().enabled()
         );
     }
 
@@ -233,8 +239,14 @@ final class JdaDiscordGateway implements DiscordGateway, DiscordChatEgress, Disc
 
     static Set<GatewayIntent> gatewayIntents(
             boolean managedRoleShadowEnabled, boolean discordChatIngressEnabled, boolean investigationsEnabled) {
+        return gatewayIntents(managedRoleShadowEnabled, discordChatIngressEnabled, investigationsEnabled, false);
+    }
+
+    static Set<GatewayIntent> gatewayIntents(
+            boolean managedRoleShadowEnabled, boolean discordChatIngressEnabled,
+            boolean investigationsEnabled, boolean accountAgeGateEnabled) {
         EnumSet<GatewayIntent> intents = EnumSet.noneOf(GatewayIntent.class);
-        if (managedRoleShadowEnabled) {
+        if (managedRoleShadowEnabled || accountAgeGateEnabled) {
             intents.add(GatewayIntent.GUILD_MEMBERS);
         }
         if (discordChatIngressEnabled || investigationsEnabled) {
