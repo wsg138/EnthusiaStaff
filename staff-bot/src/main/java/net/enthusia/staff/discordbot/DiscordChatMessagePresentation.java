@@ -62,9 +62,13 @@ final class DiscordChatMessagePresentation {
 
     static String body(String source) {
         String cleaned = stripCodes(source == null ? "" : source);
-        // InteractiveChat internal correlation tokens must never leak as chat text.
-        cleaned = INTERACTIVE_TOKEN.matcher(cleaned).replaceAll("");
-        return escapeMarkdown(cleaned).strip();
+        // InteractiveChat correlation tokens are not user-facing chat text.
+        boolean itemShare = INTERACTIVE_TOKEN.matcher(cleaned).find();
+        cleaned = INTERACTIVE_TOKEN.matcher(cleaned).replaceAll("").strip();
+        if (cleaned.isEmpty() && itemShare) {
+            return "[Item]";
+        }
+        return escapeMarkdown(cleaned);
     }
 
     private static String stripCodes(String source) {

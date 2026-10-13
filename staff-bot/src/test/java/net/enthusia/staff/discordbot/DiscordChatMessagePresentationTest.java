@@ -47,6 +47,8 @@ class DiscordChatMessagePresentationTest {
                 "§6<gold>hello, how are you?<reset>"));
         assertEquals("Diamond Spear", DiscordChatMessagePresentation.body(
                 "<chat=114583e7-f384-42c7-9352-4d34373c3df0:[i]:>Diamond Spear"));
+        assertEquals("[Item]", DiscordChatMessagePresentation.body(
+                "<chat=114583e7-f384-42c7-9352-4d34373c3df0:[i]:>"));
         assertEquals("hi \\*everyone\\* and @everyone", DiscordChatMessagePresentation.body(
                 "hi *everyone* and @everyone"));
     }
