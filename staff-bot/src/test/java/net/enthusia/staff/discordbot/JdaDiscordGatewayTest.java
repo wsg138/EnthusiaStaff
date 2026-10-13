@@ -90,7 +90,7 @@ class JdaDiscordGatewayTest {
         assertTrue(rendered.startsWith("Player: "));
 
         String unicodeRendered = JdaDiscordGateway.chatContent(
-                chatMessage("x".repeat(1_980) + "\\uD83D\\uDE00"));
+                chatMessage("x".repeat(1_991) + "\uD83D\uDE00"));
         assertTrue(unicodeRendered.length() <= 2_000);
         assertFalse(Character.isHighSurrogate(unicodeRendered.charAt(unicodeRendered.length() - 1)));
     }
