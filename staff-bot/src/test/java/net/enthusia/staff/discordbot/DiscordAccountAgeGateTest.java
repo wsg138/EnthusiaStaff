@@ -47,4 +47,39 @@ class DiscordAccountAgeGateTest {
         assertTrue(JdaDiscordGateway.gatewayIntents(true, false, false, false)
                 .contains(GatewayIntent.GUILD_MEMBERS));
     }
+    @org.junit.jupiter.api.Test
+    void registerBypassCommandOnlyWhenEnabled() {
+        var defaultNames = JdaStaffModerationListener.commands(false, false, false, false)
+                .stream().map(net.dv8tion.jda.api.interactions.commands.build.CommandData::getName).toList();
+        var enabledNames = JdaStaffModerationListener.commands(false, false, false, false, true)
+                .stream().map(net.dv8tion.jda.api.interactions.commands.build.CommandData::getName).toList();
+        assertFalse(defaultNames.contains(DiscordAccountAgeGateListener.COMMAND));
+        assertTrue(enabledNames.contains(DiscordAccountAgeGateListener.COMMAND));
+    }
+
+    @org.junit.jupiter.api.Test
+    void bypassSurvivesRestartAndCanBeRevoked(@org.junit.jupiter.api.io.TempDir java.nio.file.Path folder)
+            throws Exception {
+        java.nio.file.Path file = folder.resolve("discord-age-bypass-ids.txt");
+        long account = DiscordAccountAgeBypassStore.parseId("1410303324745371709");
+        DiscordAccountAgeBypassStore store = DiscordAccountAgeBypassStore.open(file);
+        assertFalse(store.contains(account));
+        assertTrue(store.add(account));
+        assertFalse(store.add(account));
+        assertTrue(DiscordAccountAgeBypassStore.open(file).contains(account));
+        assertTrue(store.remove(account));
+        assertFalse(store.remove(account));
+        assertFalse(DiscordAccountAgeBypassStore.open(file).contains(account));
+        assertThrows(IllegalArgumentException.class,
+                () -> DiscordAccountAgeBypassStore.parseId("username"));
+    }
+
+    @org.junit.jupiter.api.Test
+    void invalidFileIsNotTreatedAsAnEmptyBypassList(@org.junit.jupiter.api.io.TempDir java.nio.file.Path folder)
+            throws Exception {
+        java.nio.file.Path file = folder.resolve("bad-bypass-list.txt");
+        java.nio.file.Files.writeString(file, "not-a-valid-user-id\\n");
+        assertThrows(java.io.IOException.class, () -> DiscordAccountAgeBypassStore.open(file));
+    }
+
 }

@@ -110,6 +110,7 @@ final class JdaStaffModerationListener extends ListenerAdapter {
     private final SignedComponentCodec reviewComponents;
     private final Optional<DiscordInvestigationCommandController> investigations;
     private final java.util.concurrent.atomic.AtomicBoolean enabled = new java.util.concurrent.atomic.AtomicBoolean();
+    private final boolean accountAgeGateEnabled;
 
     JdaStaffModerationListener(
             long guildId,
@@ -117,22 +118,33 @@ final class JdaStaffModerationListener extends ListenerAdapter {
             InteractionReplayGuard interactions,
             StaffModerationRuntime moderation
     ) {
-        this(guildId, workers, interactions, moderation, Optional.empty());
+        this(guildId, workers, interactions, moderation, Optional.empty(), false);
     }
 
     JdaStaffModerationListener(
             long guildId, StaffBotWorkerPool workers, InteractionReplayGuard interactions,
             StaffModerationRuntime moderation, Optional<URI> moderationWebUri, String discordToken
     ) {
+        this(guildId, workers, interactions, moderation, moderationWebUri, discordToken, false);
+    }
+
+    JdaStaffModerationListener(
+            long guildId, StaffBotWorkerPool workers, InteractionReplayGuard interactions,
+            StaffModerationRuntime moderation, Optional<URI> moderationWebUri,
+            String discordToken, boolean accountAgeGateEnabled
+    ) {
         this(guildId, workers, interactions, moderation,
-                moderationWebUri.map(uri -> new ModerationPreviewHostedLaunchIssuer(uri, discordToken, "production")));
+                moderationWebUri.map(uri -> new ModerationPreviewHostedLaunchIssuer(uri, discordToken, "production")),
+                accountAgeGateEnabled);
     }
 
     private JdaStaffModerationListener(
             long guildId, StaffBotWorkerPool workers, InteractionReplayGuard interactions,
-            StaffModerationRuntime moderation, Optional<ModerationPreviewHostedLaunchIssuer> webIssuer
+            StaffModerationRuntime moderation, Optional<ModerationPreviewHostedLaunchIssuer> webIssuer,
+            boolean accountAgeGateEnabled
     ) {
         this.guildId = guildId;
+        this.accountAgeGateEnabled = accountAgeGateEnabled;
         this.workers = workers;
         this.interactions = interactions;
         this.punishments = moderation.punishmentService().map(DiscordPunishmentCommandController::new);
@@ -163,7 +175,7 @@ final class JdaStaffModerationListener extends ListenerAdapter {
         }
         List<CommandData> expected = commands(
                 punishments.isPresent(), webIssuer.isPresent(), commandBridge.isPresent(),
-                investigations.isPresent());
+                investigations.isPresent(), accountAgeGateEnabled);
         guild.updateCommands().addCommands(expected).queue(
                 registered -> commandsRegistered(registered, expected.size()),
                 this::commandRegistrationFailed
@@ -189,6 +201,10 @@ final class JdaStaffModerationListener extends ListenerAdapter {
 
     @Override
     public void onSlashCommandInteraction(SlashCommandInteractionEvent event) {
+        // This command is exclusively handled by DiscordAccountAgeGateListener.
+        if (DiscordAccountAgeGateListener.COMMAND.equals(event.getName())) {
+            return;
+        }
         if (!accepted(guildId(event.getGuild()))) {
             unavailable(event);
             return;
@@ -1340,6 +1356,12 @@ final class JdaStaffModerationListener extends ListenerAdapter {
     static List<CommandData> commands(
             boolean includePunishments, boolean webEnabled,
             boolean includeConsole, boolean includeInvestigations) {
+        return commands(includePunishments, webEnabled, includeConsole, includeInvestigations, false);
+    }
+
+    static List<CommandData> commands(
+            boolean includePunishments, boolean webEnabled,
+            boolean includeConsole, boolean includeInvestigations, boolean includeAgeGate) {
         DefaultMemberPermissions discovery = DefaultMemberPermissions.DISABLED;
         List<CommandData> commands = new ArrayList<>(List.of(
                 moderateSlash(MODERATE, webEnabled, discovery),
@@ -1383,6 +1405,9 @@ final class JdaStaffModerationListener extends ListenerAdapter {
         }
         if (includeInvestigations) {
             commands.addAll(DiscordInvestigationCommandController.commands(discovery));
+        }
+        if (includeAgeGate) {
+            commands.add(DiscordAccountAgeGateListener.command());
         }
         return List.copyOf(commands);
     }

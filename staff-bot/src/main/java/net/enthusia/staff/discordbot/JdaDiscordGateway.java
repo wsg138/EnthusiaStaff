@@ -199,8 +199,14 @@ final class JdaDiscordGateway implements DiscordGateway, DiscordChatEgress, Disc
             addInteractionListener(builder);
             addChatIngressListener(builder);
             if (staffInteractionsEnabled && configuration.accountAgeGate().enabled()) {
-                builder.addEventListeners(new DiscordAccountAgeGateListener(
-                        configuration.environment().guildId(), Clock.systemUTC()));
+                try {
+                    builder.addEventListeners(new DiscordAccountAgeGateListener(
+                            configuration.environment().guildId(), Clock.systemUTC(),
+                            DiscordAccountAgeBypassStore.open(configuration.accountAgeGate().bypassFile()),
+                            workers, moderation.isEmpty() || configuration.uiPreviewEnabled()));
+                } catch (IOException error) {
+                    throw new IllegalStateException("account-age bypass store unavailable; refusing to start gate", error);
+                }
             }
             jda = builder.build();
         }
@@ -293,7 +299,8 @@ final class JdaDiscordGateway implements DiscordGateway, DiscordChatEgress, Disc
         moderation.ifPresent(runtime -> {
             moderationListener = new JdaStaffModerationListener(
                     configuration.environment().guildId(), workers, interactions, runtime,
-                    configuration.moderationWebUri(), discordToken);
+                    configuration.moderationWebUri(), discordToken,
+                    configuration.accountAgeGate().enabled());
             builder.addEventListeners(moderationListener);
             runtime.investigationService().ifPresent(service -> {
                 investigationEvidenceListener = new JdaDiscordInvestigationEvidenceListener(
