@@ -56,6 +56,7 @@ class PrivateSafetyCheckBridgeSourceTest {
         assertTrue(record > outcome && ack > record);
         assertTrue(code.contains("deliveries.isEmpty()"));
         assertTrue(code.contains("delivery_receipt_id"));
+        assertTrue(code.contains("activeDuty.test(staff.getUniqueId())"));
     }
 
     @Test
@@ -71,5 +72,6 @@ class PrivateSafetyCheckBridgeSourceTest {
         assertTrue(code.contains("case 16 -> \"DECLINED\""));
         assertTrue(code.contains("player.closeInventory()"));
         assertTrue(code.contains("player.getScheduler().execute("));
+        assertTrue(code.contains("offerLocalFallback(holder.player)"));
     }
 }

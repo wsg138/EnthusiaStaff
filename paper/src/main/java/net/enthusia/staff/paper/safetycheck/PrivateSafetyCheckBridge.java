@@ -21,6 +21,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Function;
+import java.util.function.Predicate;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Bukkit;
@@ -50,6 +51,7 @@ public final class PrivateSafetyCheckBridge implements Listener, AutoCloseable {
     private final String scope;
     private final Credential replyAuth;
     private final Credential alertsAuth;
+    private final Predicate<UUID> activeDuty;
     private final HttpClient http = HttpClient.newBuilder()
             .followRedirects(HttpClient.Redirect.NEVER)
             .connectTimeout(Duration.ofSeconds(2)).build();
@@ -63,8 +65,10 @@ public final class PrivateSafetyCheckBridge implements Listener, AutoCloseable {
 
     private PrivateSafetyCheckBridge(
             JavaPlugin plugin, ObjectMapper mapper, URI origin, String scope,
-            Credential replyAuth, Credential alertsAuth
+            Credential replyAuth, Credential alertsAuth,
+            Predicate<UUID> activeDuty
     ) {
+        this.activeDuty = Objects.requireNonNull(activeDuty, "activeDuty");
         this.plugin = plugin;
         this.mapper = mapper;
         this.origin = origin;
@@ -74,7 +78,8 @@ public final class PrivateSafetyCheckBridge implements Listener, AutoCloseable {
     }
 
     public static PrivateSafetyCheckBridge create(
-            JavaPlugin plugin, ObjectMapper mapper, Function<String, String> env
+            JavaPlugin plugin, ObjectMapper mapper, Function<String, String> env,
+            Predicate<UUID> activeDuty
     ) {
         if (!plugin.getConfig().getBoolean(PREFIX + "enabled", false)) {
             return null;
@@ -105,7 +110,7 @@ public final class PrivateSafetyCheckBridge implements Listener, AutoCloseable {
             }
             return new PrivateSafetyCheckBridge(plugin, mapper, uri, scope,
                     new Credential(replyClient, replyToken),
-                    new Credential(alertClient, alertToken));
+                    new Credential(alertClient, alertToken), activeDuty);
         } catch (RuntimeException exception) {
             // Do not print URLs, exception messages or secret-bearing values.
             plugin.getLogger().warning("Private safety GUI disabled: invalid/incomplete configuration");
@@ -276,9 +281,16 @@ public final class PrivateSafetyCheckBridge implements Listener, AutoCloseable {
         } else if ("SAFE".equals(decision)) {
             player.sendMessage(Component.text("Thank you for letting us know.", NamedTextColor.GREEN));
         }
+        final boolean playerMayNeedHelp =
+                "NEEDS_HELP".equals(decision) || "UNSURE".equals(decision);
         request("/v1/safety-checks/" + segment(holder.check) + "/reply",
                 replyAuth, Map.of("subject_id", holder.player.toString(), "choice", decision))
                 .exceptionally(failure -> {
+                    // Best-effort local support notice when the API is
+                    // unreachable: never ACK the API outbox here.
+                    if (playerMayNeedHelp) {
+                        offerLocalFallback(holder.player);
+                    }
                     player.getScheduler().execute(plugin, () -> {
                         if (player.isOnline()) {
                             player.sendMessage(Component.text(
@@ -288,6 +300,23 @@ public final class PrivateSafetyCheckBridge implements Listener, AutoCloseable {
                     }, null, 1L);
                     return null;
                 });
+    }
+
+    private void offerLocalFallback(UUID subject) {
+        for (Player staff : Bukkit.getOnlinePlayers()) {
+            staff.getScheduler().execute(plugin, () -> {
+                if (active.get() && staff.isOnline()
+                        && staff.hasPermission(PERMISSION)
+                        && activeDuty.test(staff.getUniqueId())) {
+                    staff.sendMessage(Component.text(
+                            "[PRIVATE SAFETY ALERT] Player " + subject
+                            + " has requested help, but the safety API could not save "
+                            + "their response. Please check with them privately.",
+                            NamedTextColor.YELLOW
+                    ));
+                }
+            }, null, 1L);
+        }
     }
 
     @EventHandler public void drag(InventoryDragEvent event) {
@@ -325,7 +354,8 @@ public final class PrivateSafetyCheckBridge implements Listener, AutoCloseable {
             deliveries.add(outcome);
             boolean scheduled = staff.getScheduler().execute(plugin, () -> {
                 try {
-                    if (staff.isOnline() && staff.hasPermission(PERMISSION)) {
+                    if (staff.isOnline() && staff.hasPermission(PERMISSION)
+                            && activeDuty.test(staff.getUniqueId())) {
                         staff.sendMessage(Component.text(
                                 "[PRIVATE SAFETY ALERT] " + urgency + " - player " + subject
                                 + " on " + scope + ". Please offer support privately.",

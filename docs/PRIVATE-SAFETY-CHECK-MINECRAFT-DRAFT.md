@@ -22,9 +22,13 @@ matching check it opens a private 27-slot inventory with four options:
 Closing the inventory does not block play. No message deletion, mute, ban,
 strike, reputation penalty, public broadcast or chat-model retraining occurs.
 
-Authorized staff with permission `enthusiastaff.safety.alerts` receive a
-**private in-game notification**, with only urgency, player UUID and server
-scope. When no authorized recipient is online the adapter does not ACK and
+Authorized **on-duty** staff with permission `enthusiastaff.safety.alerts`
+receive a **private in-game notification**, with only urgency, player UUID
+and server scope. If a player explicitly asks for help while the API is
+unreachable, the Paper adapter attempts a local private staff fallback
+without falsely acknowledging an API alert. This fallback is best-effort,
+not persistent; on-duty staffing and operational monitoring are still
+required. When no authorized recipient is online the adapter does not ACK and
 the API retains the pending alert. After a successful `sendMessage` call to
 an authorized recipient on its entity scheduler, the adapter sends a
 receipt-claim ACK. Delivery is **at least once**: duplicate staff
