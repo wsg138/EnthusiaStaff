@@ -234,6 +234,7 @@ public final class StaffToolDispatcher implements Listener, CommandExecutor, Tab
             return;
         }
         action.execute(player, targetId);
+        auditToolInvocation(player, tool, targetId != null);
     }
 
     void dispatchFromMenu(Player player, StaffToolDefinition tool, UUID targetId) {
@@ -297,6 +298,7 @@ public final class StaffToolDispatcher implements Listener, CommandExecutor, Tab
         }
         player.closeInventory();
         runCommand(player, action.command(target));
+        auditToolInvocation(player, StaffToolDefinition.PLAYER_INSPECTOR, target != null && !target.isBlank());
     }
 
     void showMenuHelp(Player player) {
@@ -326,6 +328,7 @@ public final class StaffToolDispatcher implements Listener, CommandExecutor, Tab
             return;
         }
         cheatTester.showConfiguration(player);
+        auditToolInvocation(player, tool, false);
     }
 
     private void dispatchCheatRun(Player player, Player target, StaffToolDefinition tool) {
@@ -340,6 +343,19 @@ public final class StaffToolDispatcher implements Listener, CommandExecutor, Tab
             return;
         }
         cheatTester.runSelected(player, target);
+        auditToolInvocation(player, tool, true);
+    }
+
+    // This audit means an authorized tool handler was invoked, not that an
+    // asynchronous command, teleport or downstream target operation succeeded.
+    // Never include command arguments, target names/IDs or private case details.
+    private void auditToolInvocation(Player actor, StaffToolDefinition tool, boolean targetSupplied) {
+        staffMode.logStaffAction(actor, "staff-tool-invoked", toolInvocationDetail(tool, targetSupplied));
+    }
+
+    static String toolInvocationDetail(StaffToolDefinition tool, boolean targetSupplied) {
+        return "tool=" + java.util.Objects.requireNonNull(tool, "tool").name()
+                + " target=" + (targetSupplied ? "supplied" : "none");
     }
 
     private boolean hasToolAuthority(Player player, StaffToolDefinition tool) {
