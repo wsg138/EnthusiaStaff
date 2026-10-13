@@ -338,6 +338,11 @@ public final class InteractiveChatStagingArtifactProvider
      * The image worker receives only the detached value; a missing/incompatible API
      * retains the normal Minecraft tooltip background.
      */
+    static boolean isMatchingLocalSender(UUID senderId, Object resolved) {
+        return senderId != null && resolved instanceof Player player
+                && senderId.equals(player.getUniqueId());
+    }
+
     static Object captureTooltipStyle(Method getInstance, Method getStyle, ItemStack item) {
         try {
             Object wrapper = getInstance.invoke(null);
@@ -394,6 +399,8 @@ public final class InteractiveChatStagingArtifactProvider
         private final Optional<Method> renderTooltipMethod;
         private final Optional<Method> tooltipStyleInstanceMethod;
         private final Optional<Method> tooltipStyleLookupMethod;
+        private final Optional<Method> getSnapshotICPlayerMethod;
+        private final Optional<Method> getLocalICPlayerMethod;
         private final String addonLanguage;
         private final boolean detailedTooltipsEnabled;
         private final boolean itemImagesEnabled;
@@ -521,6 +528,23 @@ public final class InteractiveChatStagingArtifactProvider
             }
             tooltipStyleInstanceMethod = styleInstance;
             tooltipStyleLookupMethod = styleLookup;
+
+            // The addon falls back to Bukkit.getOnlinePlayers().iterator().next()
+            // if a detached OfflineICPlayer does not resolve to a local player.
+            // A random online entity may be owned by another Folia region thread.
+            Optional<Method> icPlayerLookup = Optional.empty();
+            Optional<Method> localPlayerLookup = Optional.empty();
+            try {
+                Class<?> icPlayer = Class.forName(
+                        "com.loohp.interactivechat.objectholders.ICPlayer",
+                        false, interactiveLoader);
+                icPlayerLookup = Optional.of(offlinePlayerClass.getMethod("getPlayer"));
+                localPlayerLookup = Optional.of(icPlayer.getMethod("getLocalPlayer"));
+            } catch (ReflectiveOperationException | LinkageError unsupportedOwnerLookup) {
+                // Icon rendering remains available; optional tooltip snapshot fails closed.
+            }
+            getSnapshotICPlayerMethod = icPlayerLookup;
+            getLocalICPlayerMethod = localPlayerLookup;
             itemTitleMethod = itemName;
             itemTooltipMethod = tooltip;
             tooltipHiddenMethod = hidden;
@@ -541,13 +565,11 @@ public final class InteractiveChatStagingArtifactProvider
                     normalizedInventorySize(player.getEnderChest().getSize())
             );
             Object detachedPlayer = newOfflinePlayer(
-                    player,
-                    inventory,
-                    enderChest
+                    player, inventory, enderChest, detachedSnapshotUuid(player.getUniqueId())
             );
 
             List<RenderJob> jobs = new ArrayList<>(3);
-            addItemJob(player, request, inventory, detachedPlayer, jobs);
+            addItemJob(player, request, inventory, enderChest, detachedPlayer, jobs);
             addInventoryJob(
                     Kind.INVENTORY,
                     useInventory,
@@ -573,6 +595,7 @@ public final class InteractiveChatStagingArtifactProvider
                 Player player,
                 RichChatArtifactRequest request,
                 Inventory inventory,
+                Inventory enderChest,
                 Object detachedPlayer,
                 List<RenderJob> jobs
         ) throws ReflectiveOperationException {
@@ -605,16 +628,29 @@ public final class InteractiveChatStagingArtifactProvider
             List<?> tooltip = List.of();
             Object tooltipStyleKey = null;
             if (itemTitleMethod.isPresent() && itemTooltipMethod.isPresent()
-                    && tooltipHiddenMethod.isPresent() && tooltipComponentsMethod.isPresent()) {
+                    && tooltipHiddenMethod.isPresent() && tooltipComponentsMethod.isPresent()
+                    && getSnapshotICPlayerMethod.isPresent()
+                    && getLocalICPlayerMethod.isPresent()) {
                 try {
-                    name = String.valueOf(invoke(itemTitleMethod.orElseThrow(), null, item,
-                            detachedPlayer, addonLanguage));
-                    Object data = invoke(itemTooltipMethod.orElseThrow(), null, item,
-                            detachedPlayer, detailedTooltipsEnabled);
-                    if (!Boolean.TRUE.equals(invoke(tooltipHiddenMethod.orElseThrow(), data))) {
-                        Object components = invoke(tooltipComponentsMethod.orElseThrow(), data);
-                        if (components instanceof List<?> list) {
-                            tooltip = List.copyOf(list);
+                    // On the player's entity scheduler, use an owner-identity wrapper only
+                    // for the addon tooltip snapshot. The image worker below receives the
+                    // separately detached synthetic-UUID player and never accesses a live player.
+                    Object ownerSnapshot = newOfflinePlayer(player, inventory, enderChest,
+                            player.getUniqueId());
+                    Object resolvedICPlayer = invoke(
+                            getSnapshotICPlayerMethod.orElseThrow(), ownerSnapshot);
+                    Object resolvedLocalPlayer = invoke(
+                            getLocalICPlayerMethod.orElseThrow(), resolvedICPlayer);
+                    if (isMatchingLocalSender(player.getUniqueId(), resolvedLocalPlayer)) {
+                        name = String.valueOf(invoke(itemTitleMethod.orElseThrow(), null, item,
+                                ownerSnapshot, addonLanguage));
+                        Object data = invoke(itemTooltipMethod.orElseThrow(), null, item,
+                                ownerSnapshot, detailedTooltipsEnabled);
+                        if (!Boolean.TRUE.equals(invoke(tooltipHiddenMethod.orElseThrow(), data))) {
+                            Object components = invoke(tooltipComponentsMethod.orElseThrow(), data);
+                            if (components instanceof List<?> list) {
+                                tooltip = List.copyOf(list);
+                            }
                         }
                     }
                 } catch (ReflectiveOperationException | RuntimeException unsupported) {
@@ -661,13 +697,14 @@ public final class InteractiveChatStagingArtifactProvider
         private Object newOfflinePlayer(
                 Player player,
                 Inventory inventory,
-                Inventory enderChest
+                Inventory enderChest,
+                UUID snapshotUuid
         ) throws ReflectiveOperationException {
             try {
                 boolean rightHanded = player.getMainHand()
                         == org.bukkit.inventory.MainHand.RIGHT;
                 return offlinePlayerConstructor.newInstance(
-                        detachedSnapshotUuid(player.getUniqueId()),
+                        snapshotUuid,
                         player.getName(),
                         player.getInventory().getHeldItemSlot(),
                         rightHanded,
