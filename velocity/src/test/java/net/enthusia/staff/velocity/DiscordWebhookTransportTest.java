@@ -42,11 +42,52 @@ final class DiscordWebhookTransportTest {
         assertEquals(Duration.ofSeconds(2), timeout.get());
         JsonNode payload = new ObjectMapper().readTree(body.get());
         assertTrue(payload.path("content").isMissingNode());
-        assertEquals("REPORT CREATED", payload.path("embeds").get(0).path("title").asText());
+        assertEquals("New Player Report", payload.path("embeds").get(0).path("title").asText());
         assertEquals("Report ID", payload.path("embeds").get(0).path("fields").get(0).path("name").asText());
         assertEquals("r-1", payload.path("embeds").get(0).path("fields").get(0).path("value").asText());
         assertTrue(payload.path("allowed_mentions").path("parse").isArray());
         assertEquals(0, payload.path("allowed_mentions").path("parse").size());
+    }
+
+    @Test
+    void privateReportEmbedsUseNamesReadableReasonStatusColorsAndNoMentions() throws Exception {
+        AtomicReference<String> sent = new AtomicReference<>();
+        DiscordWebhookTransport.Jdk transport = new DiscordWebhookTransport.Jdk(
+                Duration.ofSeconds(2), (uri, timeout, body) -> { sent.set(body); return 204; });
+        DiscordWebhookRoute route = stagingRoute();
+        assertTrue(transport.send(route,
+                "REPORT_CREATED\nreportId=report-1\ntargetName=Steve\nreporterName=Alex"
+                        + "\nreason=Combat Cheating\nserverId=SMP").success());
+        JsonNode payload = new ObjectMapper().readTree(sent.get());
+        JsonNode embed = payload.path("embeds").get(0);
+        assertEquals("New Player Report", embed.path("title").asText());
+        assertEquals(0xD69C42, embed.path("color").asInt());
+        assertTrue(embed.path("description").asText().contains("investigation lead"));
+        assertEquals("Enthusia • Staff reports", embed.path("footer").path("text").asText());
+        assertEquals("Report ID", embed.path("fields").get(0).path("name").asText());
+        assertEquals("Reported Player", embed.path("fields").get(1).path("name").asText());
+        assertEquals("Steve", embed.path("fields").get(1).path("value").asText());
+        assertTrue(embed.path("fields").get(1).path("inline").asBoolean());
+        assertEquals("Reported By", embed.path("fields").get(2).path("name").asText());
+        assertEquals("Alex", embed.path("fields").get(2).path("value").asText());
+        assertEquals("Reason", embed.path("fields").get(3).path("name").asText());
+        assertEquals("Combat Cheating", embed.path("fields").get(3).path("value").asText());
+        assertEquals("Server", embed.path("fields").get(4).path("name").asText());
+        assertTrue(payload.path("content").isMissingNode());
+        assertEquals(0, payload.path("allowed_mentions").path("parse").size());
+        assertEquals(1, payload.path("embeds").size());
+
+        assertTrue(transport.send(route, "REPORT_CLAIMED\nstate=CLAIMED").success());
+        embed = new ObjectMapper().readTree(sent.get()).path("embeds").get(0);
+        assertEquals("Player Report Claimed", embed.path("title").asText());
+        assertEquals(0x4688D5, embed.path("color").asInt());
+        assertEquals("Status", embed.path("fields").get(0).path("name").asText());
+        assertTrue(transport.send(route, "REPORT_CLOSED\nstate=CLOSED").success());
+        embed = new ObjectMapper().readTree(sent.get()).path("embeds").get(0);
+        assertEquals(0x3F9C75, embed.path("color").asInt());
+        assertTrue(transport.send(route, "REPORT_NO_VIOLATION\nstate=NO_VIOLATION").success());
+        embed = new ObjectMapper().readTree(sent.get()).path("embeds").get(0);
+        assertEquals(0x7B8796, embed.path("color").asInt());
     }
 
     @Test
