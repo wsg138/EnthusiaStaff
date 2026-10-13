@@ -153,13 +153,30 @@ final class DiscordAccountAgeGateListener extends ListenerAdapter {
             return;
         }
         try {
-            member.kick().reason(AUDIT_REASON).queue(
-                    ignored -> LOGGER.log(System.Logger.Level.INFO,
-                            "discord_account_age_gate_kicked guild={0} user={1}",
-                            guild.getId(), member.getId()),
-                    failure -> LOGGER.log(System.Logger.Level.ERROR,
-                            "discord_account_age_gate_kick_failed guild={0} user={1} error={2}",
-                            guild.getId(), member.getId(), failure.getClass().getSimpleName()));
+            long memberId = member.getIdLong();
+            Instant accountCreated = event.getUser().getTimeCreated().toInstant();
+            member.kick().reason(AUDIT_REASON)
+                    // Last-chance guard: an admin may add a bypass while REST
+                    // is waiting in the JDA queue. Never kick after that grant.
+                    .setCheck(() -> !bypass.contains(memberId)
+                            && tooNew(accountCreated, clock.instant()))
+                    .queue(
+                            ignored -> LOGGER.log(System.Logger.Level.INFO,
+                                    "discord_account_age_gate_kicked guild={0} user={1}",
+                                    guild.getId(), member.getId()),
+                            failure -> {
+                                if (bypass.contains(memberId)
+                                        || !tooNew(accountCreated, clock.instant())) {
+                                    LOGGER.log(System.Logger.Level.INFO,
+                                            "discord_account_age_gate_kick_suppressed guild={0} user={1}",
+                                            guild.getId(), member.getId());
+                                    return;
+                                }
+                                LOGGER.log(System.Logger.Level.ERROR,
+                                        "discord_account_age_gate_kick_failed guild={0} user={1} error={2}",
+                                        guild.getId(), member.getId(),
+                                        failure.getClass().getSimpleName());
+                            });
         } catch (RuntimeException failure) {
             LOGGER.log(System.Logger.Level.ERROR,
                     "discord_account_age_gate_dispatch_failed guild={0} user={1} error={2}",
