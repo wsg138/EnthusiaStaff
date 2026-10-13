@@ -131,8 +131,13 @@ interface DiscordWebhookTransport {
             appendConfiguredStaffRoleMention(body, mentions, route, allowRolePing);
             var embeds = body.putArray("embeds");
             ObjectNode embed = embeds.addObject();
-            embed.put("title", prettyTitle(lines[0]));
-            embed.put("color", color(route.destination()));
+            boolean report = "reports".equals(route.destination());
+            embed.put("title", report ? reportTitle(lines[0]) : prettyTitle(lines[0]));
+            embed.put("color", report ? reportColor(lines[0]) : color(route.destination()));
+            if (report) {
+                embed.put("description", "Private staff report • Treat the report as an investigation lead, not proof.");
+                embed.putObject("footer").put("text", "Enthusia • Staff reports");
+            }
             var fields = embed.putArray("fields");
             for (int index = 1; index < lines.length; index++) {
                 int separator = lines[index].indexOf('=');
@@ -145,9 +150,9 @@ interface DiscordWebhookTransport {
                     continue;
                 }
                 ObjectNode field = fields.addObject();
-                field.put("name", prettyTitle(name));
+                field.put("name", report ? reportFieldLabel(name) : prettyTitle(name));
                 field.put("value", value.length() > 950 ? value.substring(0, 949) + "…" : value);
-                field.put("inline", isCompact(name));
+                field.put("inline", report ? reportCompact(name) : isCompact(name));
             }
             return body;
         }
@@ -159,6 +164,46 @@ interface DiscordWebhookTransport {
                 body.put("content", "<@&" + alertRoleId + ">");
                 mentions.putArray("roles").add(alertRoleId);
             }
+        }
+
+        private static String reportTitle(String eventType) {
+            return switch (eventType) {
+                case "REPORT_CREATED" -> "New Player Report";
+                case "REPORT_CLAIMED" -> "Player Report Claimed";
+                case "REPORT_AWAITING_REVIEW" -> "Player Report Awaiting Review";
+                case "REPORT_CLOSED" -> "Player Report Closed";
+                case "REPORT_NO_VIOLATION" -> "Player Report — No Violation";
+                default -> prettyTitle(eventType);
+            };
+        }
+
+        private static int reportColor(String eventType) {
+            return switch (eventType) {
+                case "REPORT_CLAIMED" -> 0x4688D5;
+                case "REPORT_AWAITING_REVIEW" -> 0x8968C6;
+                case "REPORT_CLOSED" -> 0x3F9C75;
+                case "REPORT_NO_VIOLATION" -> 0x7B8796;
+                default -> 0xD69C42;
+            };
+        }
+
+        private static String reportFieldLabel(String name) {
+            return switch (name) {
+                case "targetName" -> "Reported Player";
+                case "reporterName" -> "Reported By";
+                case "reason" -> "Reason";
+                case "reportId" -> "Report ID";
+                case "serverId" -> "Server";
+                case "status", "state" -> "Status";
+                default -> prettyTitle(name);
+            };
+        }
+
+        private static boolean reportCompact(String name) {
+            return switch (name) {
+                case "targetName", "reporterName", "serverId", "status", "state" -> true;
+                default -> false;
+            };
         }
 
         private static String prettyTitle(String raw) {
