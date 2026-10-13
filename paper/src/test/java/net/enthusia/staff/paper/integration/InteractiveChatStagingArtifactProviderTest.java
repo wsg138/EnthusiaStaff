@@ -78,6 +78,24 @@ class InteractiveChatStagingArtifactProviderTest {
     }
 
     @Test
+    void multipleItemMarkersPreservePositionWithBoundedRendering() {
+        assertEquals(List.of(2, 14),
+                InteractiveChatStagingArtifactProvider.unescapedMatchPositions(
+                        ITEM, "a [item] then [item] and [item]", 2));
+        assertEquals(List.of(2, 14, 25),
+                InteractiveChatStagingArtifactProvider.unescapedMatchPositions(
+                        ITEM, "a [item] then [item] and [item]", 3));
+    }
+
+    @Test
+    void escapeParityHandlesThreeAndFourConsecutiveBackslashes() {
+        String odd = "x " + "\\".repeat(3) + "[item]";
+        String even = "x " + "\\".repeat(4) + "[item]";
+        assertEquals(-1, InteractiveChatStagingArtifactProvider.firstUnescapedMatch(ITEM, odd));
+        assertEquals(6, InteractiveChatStagingArtifactProvider.firstUnescapedMatch(ITEM, even));
+    }
+
+    @Test
     void detachedRendererUuidIsStableAndCannotResolveAsTheLivePlayerIdentity() {
         UUID playerId = UUID.fromString("12345678-1234-5678-9234-567812345678");
 
