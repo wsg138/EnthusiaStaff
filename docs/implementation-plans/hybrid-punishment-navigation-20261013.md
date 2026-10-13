@@ -265,3 +265,57 @@ client resource packs, shaders, external UI plugins or purchases.
   screen reader/hover text usability, Bedrock compatibility and no lore clipping.
 - No visual change may introduce a new server restart requirement beyond
   installing the updated Paper JAR at the next normal SMP restart.
+
+## 10. Follow-up: distinct category icons and useful lore (2026-10-13)
+
+Every displayed category has a distinct material:
+- Chat & Communication: WRITABLE_BOOK
+- Cheating & Gameplay: DIAMOND_SWORD
+- Safety & Privacy: SHIELD
+- Accounts & Evasion: ENDER_EYE
+- Community & Conduct: LECTERN
+- Economy & Reputation: GOLD_INGOT
+- Other (only if needed): MAP
+
+Category hover details now show the category description, a bold category-color
+count of available exact reasons, at most two representative exact examples, an
+optional count of recent related cases, and a clear yellow browse action.
+There are no decorative generic instructions or fixed example counts. Every
+hover line disables Minecraft's default italic styling; bold highlights only
+key items instead of applying a single weight/color to all information.
+The existing catalog regression asserts unique category materials.
+
+## 11. Follow-up: staff tool handling and moving-player follow
+
+**Container opening**: Holding a staff tool no longer intercepts right-click
+on a real container. Vanilla open remains subject to the rank rules: Helpers
+can view ordinary containers but cannot edit container contents; Mod and Dev
+use their existing audited container permissions. Ender chest rank restrictions
+remain unchanged.
+
+**Staff tool rearrangement**: Helpers, Mods and Developers can pick up, swap,
+and place their own **current-session** tagged tools in personal inventory slots,
+including reordering the hotbar. Only live owner/session/material/rank-matched
+items qualify. Any normal tool execution still validates those fields.
+No container, crafting/armor/offhand storage, throwing, shift-transfer or
+creative cloning is authorized. Unknown/stale tokens still fail closed. Staff
+tools in inventory storage can be moved back to the hotbar; they execute only
+when held in a hotbar slot. Default tool-slot settings remain starting layout,
+not hardcoded usage permissions. Leaving staff mode restores the original
+snapshotted inventory via the existing durable recovery pipeline.
+
+**Moving-player follow**: Staff already in Spectator mode retain the native
+setSpectatorTarget path. Staff in Creative/Survival use a 5-tick follow refresh
+on the player/entity schedulers and asynchronous teleport only when the target
+has moved more than 1.5 blocks. The follow keeps the current game mode,
+requires permission/duty for each refresh, and ends safely if the target
+disconnects, changes identity, becomes vanished/exempt, or teleport fails.
+Right-click air while holding the Follow tool stops a non-spectator follow.
+Player-target coordinates are read on that target's owning scheduler and
+teleports are invoked on the staff actor's owning scheduler.
+
+Unit regressions cover allowed personal movement, forbidden container/clone/
+offhand movements, default-hotbar reassignment, HELPER view-only container
+behavior, continued following through multiple player moves, vanish,
+disconnection and authorization loss. Live Paper gameplay and creative/Bedrock
+inventory screenshots still required before deployment.

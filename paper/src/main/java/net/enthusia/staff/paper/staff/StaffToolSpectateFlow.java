@@ -2,6 +2,8 @@ package net.enthusia.staff.paper.staff;
 
 import net.enthusia.staff.paper.presentation.StaffMessageStyle;
 import java.util.UUID;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
@@ -17,6 +19,8 @@ import org.bukkit.plugin.Plugin;
 final class StaffToolSpectateFlow {
     private static final String SPECTATE_EXEMPT_PERMISSION = "enthusiastaff.stafftools.spectate-exempt";
 
+    private static final double FOLLOW_REFRESH_DISTANCE_SQUARED = 2.25;
+    private final Map<UUID, FollowSession> follows = new ConcurrentHashMap<>();
     private final Plugin plugin;
     private final Predicate<Player> actorAuthorized;
     private final Predicate<UUID> vanished;
@@ -32,6 +36,7 @@ final class StaffToolSpectateFlow {
     }
 
     void begin(Player actor, UUID targetId) {
+        stop(actor);
         UUID actorId = actor.getUniqueId();
         onEntity(
                 targetId,
@@ -106,11 +111,7 @@ final class StaffToolSpectateFlow {
             return;
         }
         if (actor.getGameMode() != GameMode.SPECTATOR) {
-            actor.sendMessage(StaffMessageStyle.style(Component.text(
-                    "Teleported to " + target.name()
-                            + ". Direct spectating requires spectator mode; your game mode was not changed.",
-                    NamedTextColor.GREEN
-            )));
+            beginContinuousFollow(actor, target);
             return;
         }
         UUID actorId = actor.getUniqueId();
@@ -119,6 +120,97 @@ final class StaffToolSpectateFlow {
                 liveTarget -> revalidateBeforeAttachment(actorId, target, liveTarget),
                 () -> message(actorId, "Teleported to the last safe target location; direct spectating is unavailable.")
         );
+    }
+
+    /** Non-spectator Staff Mode retains its configured game mode while following. */
+    private void beginContinuousFollow(Player actor, TargetSnapshot target) {
+        FollowSession session = new FollowSession(target);
+        follows.put(actor.getUniqueId(), session);
+        try {
+            actor.getScheduler().runAtFixedRate(plugin,
+                    task -> followTick(actor, session, task::cancel),
+                    () -> follows.remove(actor.getUniqueId(), session), 5L, 5L);
+            actor.sendMessage(StaffMessageStyle.style(Component.text(
+                    "Following " + target.name() + ". Right-click air with the Follow tool to stop.",
+                    NamedTextColor.GREEN)));
+        } catch (RuntimeException exception) {
+            follows.remove(actor.getUniqueId(), session);
+            actor.sendMessage(StaffMessageStyle.style(Component.text(
+                    "Unable to keep following this player; no continuous follow was started.",
+                    NamedTextColor.RED)));
+        }
+    }
+
+    boolean stop(Player actor) {
+        return follows.remove(actor.getUniqueId()) != null;
+    }
+
+    private void followTick(Player actor, FollowSession session, Runnable cancel) {
+        if (follows.get(actor.getUniqueId()) != session) {
+            cancel.run();
+            return;
+        }
+        if (!actorAuthorized.test(actor)) {
+            stopFollow(actor.getUniqueId(), session, "Follow ended: staff authorization changed.");
+            cancel.run();
+            return;
+        }
+        if (!session.inFlight.compareAndSet(false, true)) {
+            return;
+        }
+        UUID actorId = actor.getUniqueId();
+        TargetSnapshot target = session.target;
+        onEntity(target.playerId(),
+                live -> {
+                    if (connectionChanged(target, live) || !targetEligible(live)) {
+                        stopFollow(actorId, session, "Follow ended: the target disconnected or is protected.");
+                        return;
+                    }
+                    Location where = live.getLocation().clone();
+                    onEntity(actorId, current -> followToPosition(current, session, where),
+                            () -> follows.remove(actorId, session));
+                },
+                () -> stopFollow(actorId, session, "Follow ended: the player left the server."));
+    }
+
+    private void followToPosition(Player actor, FollowSession session, Location where) {
+        if (follows.get(actor.getUniqueId()) != session
+                || !actorAuthorized.test(actor)) {
+            follows.remove(actor.getUniqueId(), session);
+            session.inFlight.set(false);
+            return;
+        }
+        Location here = actor.getLocation();
+        if (here.getWorld() != null && here.getWorld() == where.getWorld()
+                && here.distanceSquared(where) < FOLLOW_REFRESH_DISTANCE_SQUARED) {
+            session.inFlight.set(false);
+            return;
+        }
+        try {
+            actor.teleportAsync(where).whenComplete((success, failure) -> {
+                session.inFlight.set(false);
+                if (failure != null || !Boolean.TRUE.equals(success)) {
+                    stopFollow(actor.getUniqueId(), session, "Follow ended: teleport failed.");
+                }
+            });
+        } catch (RuntimeException exception) {
+            stopFollow(actor.getUniqueId(), session, "Follow ended: teleport could not be scheduled.");
+        }
+    }
+
+    private void stopFollow(UUID actorId, FollowSession session, String reason) {
+        if (follows.remove(actorId, session)) {
+            message(actorId, reason);
+        }
+        session.inFlight.set(false);
+    }
+
+    private static final class FollowSession {
+        private final TargetSnapshot target;
+        private final AtomicBoolean inFlight = new AtomicBoolean();
+        private FollowSession(TargetSnapshot target) {
+            this.target = target;
+        }
     }
 
     private void revalidateBeforeAttachment(UUID actorId, TargetSnapshot snapshot, Player liveTarget) {

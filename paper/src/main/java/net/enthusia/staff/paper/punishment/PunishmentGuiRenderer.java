@@ -175,21 +175,24 @@ final class PunishmentGuiRenderer {
     ) {
         List<Component> lore = new ArrayList<>();
         lore.add(Component.text(category.description(), NamedTextColor.GRAY));
-        lore.add(Component.text(
-                reasons.size() + " exact " + (reasons.size() == 1 ? "reason" : "reasons"),
-                NamedTextColor.WHITE
-        ));
-        categoryExamples(reasons).stream().limit(2).forEach(policy ->
-                lore.add(Component.text("  " + compact(policy.publicReason(), 42), NamedTextColor.DARK_GRAY)));
+        lore.add(Component.empty());
+        lore.add(Component.text(reasons.size() + (reasons.size() == 1 ? " specific reason" : " specific reasons"),
+                category.color()).decoration(TextDecoration.BOLD, true));
+        List<ReasonPolicy> examples = categoryExamples(reasons);
+        if (!examples.isEmpty()) {
+            lore.add(Component.text("INCLUDES", NamedTextColor.DARK_GRAY)
+                    .decoration(TextDecoration.BOLD, true));
+            examples.stream().limit(2).forEach(policy ->
+                    lore.add(Component.text(" • " + compact(policy.publicReason(), 42), NamedTextColor.WHITE)));
+        }
         int recentCases = reasons.stream().map(ReasonPolicy::family).distinct()
                 .mapToInt(overview::familyCaseCount).sum();
         if (overview.casesAvailable() && recentCases > 0) {
-            lore.add(Component.text(
-                    "Recent related cases: " + recentCases + (overview.recentCasesTruncated() ? "+" : ""),
-                    NamedTextColor.GOLD
-            ));
+            lore.add(Component.text("Recent cases in these families: " + recentCases
+                    + (overview.recentCasesTruncated() ? "+" : ""), NamedTextColor.GOLD));
         }
-        lore.add(Component.text("Click to browse", NamedTextColor.YELLOW));
+        lore.add(Component.empty());
+        lore.add(Component.text("Click to browse exact violations", NamedTextColor.YELLOW));
         return List.copyOf(lore);
     }
 

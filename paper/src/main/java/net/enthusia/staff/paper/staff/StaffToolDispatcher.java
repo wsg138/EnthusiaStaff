@@ -120,11 +120,23 @@ public final class StaffToolDispatcher implements Listener, CommandExecutor, Tab
             return;
         }
         Player player = event.getPlayer();
+        // A staff tool must not hijack a chest/barrel/shulker right-click.
+        // Normal rank-based container permissions still apply downstream.
+        if (prefersContainerOpen(event.getAction(),
+                event.getAction() == Action.RIGHT_CLICK_BLOCK
+                        && StaffModeWorldInteractionListener.isContainer(event.getClickedBlock()))) {
+            return;
+        }
         StaffToolResolution resolution = resolveHeldTool(player);
         if (!resolution.tagged()) {
             return;
         }
         event.setCancelled(true);
+        if (resolution.valid() && resolution.tool() == StaffToolDefinition.SPECTATE
+                && event.getAction() == Action.RIGHT_CLICK_AIR && spectateFlow.stop(player)) {
+            player.sendMessage(StaffMessageStyle.style(Component.text("Stopped following the player.", NamedTextColor.GREEN)));
+            return;
+        }
         if (resolution.valid()
                 && resolution.tool() == StaffToolDefinition.STAFF_TOOLS
                 && player.isSneaking()) {
@@ -138,6 +150,10 @@ public final class StaffToolDispatcher implements Listener, CommandExecutor, Tab
             return;
         }
         dispatchResolved(player, resolution, null);
+    }
+
+    static boolean prefersContainerOpen(Action action, boolean clickedContainer) {
+        return action == Action.RIGHT_CLICK_BLOCK && clickedContainer;
     }
 
     private static boolean isPrimaryToolClick(PlayerInteractEvent event) {

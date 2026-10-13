@@ -8,7 +8,7 @@ import org.junit.jupiter.api.Test;
 
 class StaffToolLayoutTest {
     private static final String SESSION = "session";
-    @Test void swapsPreserveProtectedSlotValidation() {
+    @Test void layoutDeterminesStartingPositionsButOwnersMayRearrange() {
         var config = new YamlConfiguration();
         config.set("staff-tools.slots.random-teleport", 1);
         config.set("staff-tools.slots.player-inspector", 0);
@@ -17,7 +17,7 @@ class StaffToolLayoutTest {
         var tool = StaffToolDefinition.RANDOM_TELEPORT;
         assertEquals(StaffToolSessionPolicy.Status.VALID, StaffToolSessionPolicy.validate(owner, SESSION, 1,
                 tool, new StaffToolSessionPolicy.ItemContext(tool.material(), layout.slot(tool)), owner.toString(), SESSION, StaffRank.ADMIN));
-        assertEquals(StaffToolSessionPolicy.Status.SLOT_MISMATCH, StaffToolSessionPolicy.validate(owner, SESSION, 0,
+        assertEquals(StaffToolSessionPolicy.Status.VALID, StaffToolSessionPolicy.validate(owner, SESSION, 0,
                 tool, new StaffToolSessionPolicy.ItemContext(tool.material(), layout.slot(tool)), owner.toString(), SESSION, StaffRank.ADMIN));
         assertEquals(StaffToolSessionPolicy.Status.OWNER_MISMATCH, StaffToolSessionPolicy.validate(owner, SESSION, 1,
                 tool, new StaffToolSessionPolicy.ItemContext(tool.material(), layout.slot(tool)), UUID.randomUUID().toString(), SESSION, StaffRank.ADMIN));
