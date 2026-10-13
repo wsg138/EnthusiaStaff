@@ -21,11 +21,13 @@ import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.InventoryHolder;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
+import org.bukkit.plugin.java.JavaPlugin;
 
 /** Player-owned, paginated reason picker; never trusts item names or user-written NBT. */
 final class ReportReasonMenu implements Listener {
     private static final int PAGE_SIZE = 36;
     private static final int INVENTORY_SIZE = 54;
+    private final JavaPlugin plugin;
     private final ReasonPolicyRepository policies;
     private final Selected selected;
 
@@ -33,7 +35,8 @@ final class ReportReasonMenu implements Listener {
         void accept(Player reporter, String target, String reasonId);
     }
 
-    ReportReasonMenu(ReasonPolicyRepository policies, Selected selected) {
+    ReportReasonMenu(JavaPlugin plugin, ReasonPolicyRepository policies, Selected selected) {
+        this.plugin = java.util.Objects.requireNonNull(plugin);
         this.policies = java.util.Objects.requireNonNull(policies);
         this.selected = java.util.Objects.requireNonNull(selected);
     }
@@ -115,21 +118,43 @@ final class ReportReasonMenu implements Listener {
                 || !holder.viewer.equals(reporter.getUniqueId())) return;
         int slot = event.getRawSlot();
         if (slot < 0 || slot >= INVENTORY_SIZE) return;
-        if (slot == 49) { reporter.closeInventory(); return; }
-        if (slot == 45 && holder.page > 0) { open(reporter, holder.target, holder.page - 1); return; }
+        if (slot == 49) {
+            defer(reporter, holder, reporter::closeInventory);
+            return;
+        }
+        if (slot == 45 && holder.page > 0) {
+            defer(reporter, holder, () -> open(reporter, holder.target, holder.page - 1));
+            return;
+        }
         if (slot == 53 && (holder.page + 1) * PAGE_SIZE < holder.ids.size()) {
-            open(reporter, holder.target, holder.page + 1); return;
+            defer(reporter, holder, () -> open(reporter, holder.target, holder.page + 1));
+            return;
         }
         int index = holder.page * PAGE_SIZE + slot;
         if (slot >= PAGE_SIZE || index >= holder.ids.size()) return;
         String id = holder.ids.get(index);
         if (policies.find(id).filter(ReasonPolicy::reportable).isEmpty()) {
-            reporter.closeInventory();
-            reporter.sendMessage(Component.text("That report reason is no longer available.", NamedTextColor.RED));
+            defer(reporter, holder, () -> {
+                reporter.closeInventory();
+                reporter.sendMessage(Component.text(
+                        "That report reason is no longer available.", NamedTextColor.RED));
+            });
             return;
         }
-        reporter.closeInventory();
-        selected.accept(reporter, holder.target, id);
+        defer(reporter, holder, () -> {
+            reporter.closeInventory();
+            selected.accept(reporter, holder.target, id);
+        });
+    }
+
+    private void defer(Player reporter, Holder holder, Runnable action) {
+        // InventoryClickEvent does not permit safe synchronous open/close; use
+        // the owning entity scheduler for Folia and abandon stale menu actions.
+        reporter.getScheduler().execute(plugin, () -> {
+            if (reporter.getOpenInventory().getTopInventory().getHolder(false) == holder) {
+                action.run();
+            }
+        }, null, 1L);
     }
 
     @EventHandler(priority = EventPriority.HIGHEST)

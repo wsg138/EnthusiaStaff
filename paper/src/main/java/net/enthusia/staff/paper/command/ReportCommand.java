@@ -67,7 +67,7 @@ public final class ReportCommand implements CommandExecutor, TabCompleter, Liste
         }
         this.dependencies = dependencies;
         this.workers = workers;
-        this.reasonMenu = new ReportReasonMenu(dependencies.policies(), this::chooseReason);
+        this.reasonMenu = new ReportReasonMenu(dependencies.plugin(), dependencies.policies(), this::chooseReason);
     }
 
     public Listener reasonMenu() { return reasonMenu; }
