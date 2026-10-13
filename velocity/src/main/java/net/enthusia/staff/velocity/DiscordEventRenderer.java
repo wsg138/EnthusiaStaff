@@ -18,7 +18,8 @@ final class DiscordEventRenderer {
     private static final String STATE = "state";
     private static final Map<String, List<String>> ALLOWED_FIELDS = Map.of(
             "punishments", List.of(
-                    "caseId", TARGET_ID, "subjectId", "reasonId", "family",
+                    "caseId", TARGET_ID, "targetUsername", "targetDiscordUserId",
+                    "subjectId", "reasonId", "family",
                     // Internal case notes remain in case storage, never in webhook embeds.
                     "publicReason", "issuedAt",
                     "sanctionId", "sanctionIds", "sanctionType", "sanctionTypes", "sanctionDetails",

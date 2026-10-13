@@ -50,6 +50,35 @@ final class DiscordWebhookTransportTest {
     }
 
     @Test
+    void compactPunishmentEmbedShowsLinkedIdentityWithoutTechnicalNoiseOrPing() throws Exception {
+        AtomicReference<String> sent = new AtomicReference<>();
+        DiscordWebhookTransport.Jdk transport = new DiscordWebhookTransport.Jdk(
+                Duration.ofSeconds(2), (uri, timeout, body) -> { sent.set(body); return 204; }
+        );
+        DiscordWebhookRoute route = DiscordWebhookRoute.approvedStaging(
+                "punishments", URI.create("https://" + STAGING_HOST + "/punishments"), Set.of(STAGING_HOST)
+        );
+        String discordId = "123456789" + "012345678";
+        assertTrue(transport.send(route, "PUNISHMENT_CREATED"
+                + "\ncaseId=CASE-1\ntargetUsername=ExampleMC\ntargetId=private-uuid"
+                + "\ntargetDiscordUserId=" + discordId
+                + "\npublicReason=Low-level chat spam\nsanctionTypes=WARNING"
+                + "\nsanctionDetails=WARNING (instant)\nactorName=FainNeito").success());
+        JsonNode payload = new ObjectMapper().readTree(sent.get());
+        JsonNode card = payload.path("embeds").get(0);
+        assertEquals("Warning issued", card.path("title").asText());
+        assertTrue(card.path("description").asText().contains("ExampleMC"));
+        assertTrue(card.path("description").asText().contains("<@" + discordId + ">"));
+        assertTrue(card.path("description").asText().contains("Low-level chat spam"));
+        assertFalse(card.toString().contains("private-uuid"));
+        assertFalse(card.toString().contains("Internal Explanation"));
+        assertFalse(card.toString().contains("Sanction IDs"));
+        assertEquals(3, card.path("fields").size());
+        assertEquals(0, payload.path("allowed_mentions").path("parse").size());
+        assertTrue(payload.path("allowed_mentions").path("users").isMissingNode());
+    }
+
+    @Test
     void staffActionUsesEmbedsWithMentionsDisabled() throws Exception {
         AtomicReference<String> sent = new AtomicReference<>();
         DiscordWebhookTransport.Jdk transport = new DiscordWebhookTransport.Jdk(
@@ -82,16 +111,16 @@ final class DiscordWebhookTransportTest {
         DiscordWebhookRoute punishment = DiscordWebhookRoute.approvedStaging(
                 "punishments", URI.create("https://" + STAGING_HOST + "/punishments"), Set.of(STAGING_HOST)
         );
-        transport.send(alert, "ALT_EVASION_REVIEW\\ntargetId=player");
+        transport.send(alert, "ALT_EVASION_REVIEW\ntargetId=player");
         JsonNode alertPayload = new ObjectMapper().readTree(sent.get());
         assertEquals("<@&" + role + ">", alertPayload.path("content").asText());
         assertEquals(role, alertPayload.path("allowed_mentions").path("roles").get(0).asText());
         assertEquals(0, alertPayload.path("allowed_mentions").path("parse").size());
-        transport.send(alert, "ALT_EVASION_REVIEW\\ntargetId=player", false);
+        transport.send(alert, "ALT_EVASION_REVIEW\ntargetId=player", false);
         JsonNode quietRetry = new ObjectMapper().readTree(sent.get());
         assertTrue(quietRetry.path("content").isMissingNode());
         assertTrue(quietRetry.path("allowed_mentions").path("roles").isMissingNode());
-        transport.send(punishment, "PUNISHMENT_CREATED\\ntargetId=player");
+        transport.send(punishment, "PUNISHMENT_CREATED\ntargetId=player");
         JsonNode punishmentPayload = new ObjectMapper().readTree(sent.get());
         assertTrue(punishmentPayload.path("content").isMissingNode());
         assertTrue(punishmentPayload.path("allowed_mentions").path("roles").isMissingNode());

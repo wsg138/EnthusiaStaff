@@ -133,6 +133,9 @@ interface DiscordWebhookTransport {
             ObjectNode embed = embeds.addObject();
             embed.put("title", prettyTitle(lines[0]));
             embed.put("color", color(route.destination()));
+            if (PunishmentCreatedDiscordEmbed.apply(embed, route.destination(), lines)) {
+                return body;
+            }
             var fields = embed.putArray("fields");
             for (int index = 1; index < lines.length; index++) {
                 int separator = lines[index].indexOf('=');
