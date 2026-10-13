@@ -22,6 +22,7 @@ import net.dv8tion.jda.api.entities.ApplicationInfo;
 import net.dv8tion.jda.api.entities.Guild;
 import net.dv8tion.jda.api.entities.Member;
 import net.dv8tion.jda.api.entities.Message;
+import net.dv8tion.jda.api.entities.MessageEmbed;
 import net.dv8tion.jda.api.entities.User;
 import net.dv8tion.jda.api.entities.channel.concrete.TextChannel;
 import net.dv8tion.jda.api.events.ExceptionEvent;
@@ -507,8 +508,13 @@ final class JdaDiscordGateway implements DiscordGateway, DiscordChatEgress, Disc
             return sendRenderedText(channel, content, message, mainDiscordId);
         }
         try {
+            List<MessageEmbed> embeds = DiscordRichItemEmbeds.create(
+                    artifacts, minecraftChatName(message.minecraftPlayerId(), message.displayName()));
             MessageCreateAction action = withExactSenderMention(channel.sendMessage(content), mainDiscordId)
                     .addFiles(uploads);
+            if (!embeds.isEmpty()) {
+                action.addEmbeds(embeds);
+            }
             Message published = action.complete();
             notifyChatPublished(
                     channel, message.canonicalMessageId(), message.canonicalPlainText(), published);
