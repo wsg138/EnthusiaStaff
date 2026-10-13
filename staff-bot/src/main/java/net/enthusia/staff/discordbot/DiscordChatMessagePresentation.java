@@ -43,13 +43,13 @@ final class DiscordChatMessagePresentation {
             }
         }
         String normalized = stripCodes(decoratedName == null ? "" : decoratedName)
-                .replace("**", "").trim();
-        Matcher matcher = USERNAME.matcher(normalized);
-        String fallback = "Player";
-        while (matcher.find()) {
-            fallback = matcher.group();
-        }
-        return fallback;
+                .replace("**", "")
+                .replaceAll("\\[[^\\]\\r\\n]{1,40}\\]", " ")
+                .trim();
+        int separator = normalized.indexOf(':');
+        String senderPart = separator < 0 ? normalized : normalized.substring(0, separator);
+        Matcher matcher = USERNAME.matcher(senderPart);
+        return matcher.find() ? matcher.group() : "Player";
     }
 
     static String sender(Optional<String> verifiedMainDiscordId, String minecraftName) {
