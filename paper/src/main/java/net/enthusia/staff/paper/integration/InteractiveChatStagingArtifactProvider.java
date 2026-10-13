@@ -190,18 +190,29 @@ public final class InteractiveChatStagingArtifactProvider
     }
 
     static int firstUnescapedMatch(Pattern pattern, String message) {
+        List<Integer> positions = unescapedMatchPositions(pattern, message, 1);
+        return positions.isEmpty() ? -1 : positions.getFirst();
+    }
+
+    static List<Integer> unescapedMatchPositions(Pattern pattern, String message, int maximum) {
         Objects.requireNonNull(pattern, "pattern");
         Objects.requireNonNull(message, "message");
+        if (maximum <= 0) {
+            return List.of();
+        }
+        List<Integer> positions = new ArrayList<>();
         Matcher matcher = pattern.matcher(message);
-        while (matcher.find()) {
-            int start = matcher.start();
-            if (start < 1
-                    || message.charAt(start - 1) != '\\'
-                    || (start > 1 && message.charAt(start - 2) == '\\')) {
-                return start;
+        while (matcher.find() && positions.size() < maximum) {
+            int precedingSlashes = 0;
+            for (int index = matcher.start() - 1;
+                    index >= 0 && message.charAt(index) == '\\'; index--) {
+                precedingSlashes++;
+            }
+            if (precedingSlashes % 2 == 0) {
+                positions.add(matcher.start());
             }
         }
-        return -1;
+        return List.copyOf(positions);
     }
 
     static UUID detachedSnapshotUuid(UUID playerId) {
@@ -522,6 +533,13 @@ public final class InteractiveChatStagingArtifactProvider
             if (match == null) {
                 return;
             }
+            Pattern keyword = (Pattern) invoke(getKeyword, itemPlaceholder.get(null));
+            List<Integer> positions = unescapedMatchPositions(
+                    keyword, request.canonicalPlainText(),
+                    net.enthusia.staff.protocol.ChatBridgeArtifactBundle.MAX_ARTIFACTS / 2);
+            if (positions.isEmpty()) {
+                return;
+            }
             int selectedSlot = player.getInventory().getHeldItemSlot();
             ItemStack item = inventory.getItem(selectedSlot);
             if (item == null) {
@@ -550,9 +568,11 @@ public final class InteractiveChatStagingArtifactProvider
                     }
                 }
             }
-            jobs.add(new RenderJob(
-                    Kind.ITEM, match.position(), item.clone(), null, name, tooltip
-            ));
+            for (int position : positions) {
+                jobs.add(new RenderJob(
+                        Kind.ITEM, position, item.clone(), null, name, tooltip
+                ));
+            }
         }
 
         private void addInventoryJob(
