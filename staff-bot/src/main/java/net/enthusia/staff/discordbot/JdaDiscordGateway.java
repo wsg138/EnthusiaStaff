@@ -290,7 +290,8 @@ final class JdaDiscordGateway implements DiscordGateway, DiscordChatEgress, Disc
                     configuration.interactionCapacity(),
                     configuration.previewWebConfig(),
                     discordToken,
-                    moderation
+                    moderation,
+                    configuration.accountAgeGate().enabled()
             );
             previewListener.startWeb();
             builder.addEventListeners(previewListener);

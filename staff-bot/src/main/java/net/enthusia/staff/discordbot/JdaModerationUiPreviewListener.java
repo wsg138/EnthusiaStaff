@@ -32,13 +32,13 @@ final class JdaModerationUiPreviewListener extends ListenerAdapter implements Au
     private static final String TARGET_OPTION = "player";
     private static final long NO_GUILD = 0L;
     private static final int MIN_SESSION_CAPACITY = 1;
-    private static final int EXPECTED_COMMAND_COUNT = 3;
 
     private final long guildId;
     private final InteractionReplayGuard interactions;
     private final ModerationPreviewLauncherPresentation presentation = new ModerationPreviewLauncherPresentation();
     private final Optional<ModerationPreviewHostedLaunchIssuer> hostedLaunchIssuer;
     private final Optional<StaffModerationRuntime> moderation;
+    private final boolean accountAgeGateEnabled;
     private final String discordBotToken;
     private final AtomicBoolean enabled = new AtomicBoolean();
     private final JdaDiscordGateway.CallbackFence registrationCallbacks = new JdaDiscordGateway.CallbackFence();
@@ -52,6 +52,18 @@ final class JdaModerationUiPreviewListener extends ListenerAdapter implements Au
             String discordBotToken,
             Optional<StaffModerationRuntime> moderation
     ) {
+        this(guildId, interactions, sessionCapacity, webConfig, discordBotToken, moderation, false);
+    }
+
+    JdaModerationUiPreviewListener(
+            long guildId,
+            InteractionReplayGuard interactions,
+            int sessionCapacity,
+            ModerationPreviewWebConfig webConfig,
+            String discordBotToken,
+            Optional<StaffModerationRuntime> moderation,
+            boolean accountAgeGateEnabled
+    ) {
         if (sessionCapacity < MIN_SESSION_CAPACITY) {
             throw new IllegalArgumentException("UI preview requires positive bounded capacity");
         }
@@ -59,6 +71,7 @@ final class JdaModerationUiPreviewListener extends ListenerAdapter implements Au
         this.interactions = interactions;
         this.discordBotToken = discordBotToken;
         this.moderation = moderation == null ? Optional.empty() : moderation;
+        this.accountAgeGateEnabled = accountAgeGateEnabled;
         this.hostedLaunchIssuer = webConfig.hostedExternally()
                 ? Optional.of(new ModerationPreviewHostedLaunchIssuer(
                         webConfig.publicBaseUri().orElseThrow(), discordBotToken))
@@ -102,7 +115,7 @@ final class JdaModerationUiPreviewListener extends ListenerAdapter implements Au
         if (!startReadApi(jda)) {
             return;
         }
-        guild.updateCommands().addCommands(commands()).queue(
+        guild.updateCommands().addCommands(commands(accountAgeGateEnabled)).queue(
                 registered -> registrationCallbacks.runIfCurrent(
                         generation, () -> commandsRegistered(registered)),
                 failure -> registrationCallbacks.runIfCurrent(
@@ -248,19 +261,30 @@ final class JdaModerationUiPreviewListener extends ListenerAdapter implements Au
     }
 
     static List<CommandData> commands() {
-        return List.of(
+        return commands(false);
+    }
+
+    static List<CommandData> commands(boolean includeAgeBypass) {
+        java.util.ArrayList<CommandData> commands = new java.util.ArrayList<>(List.of(
                 Commands.slash(SLASH_COMMAND, "Open the moderation workspace for this channel")
                         .addOption(OptionType.USER, TARGET_OPTION, "Optional Discord user to inspect", false)
                         .setDefaultPermissions(DefaultMemberPermissions.DISABLED),
                 Commands.user(USER_COMMAND).setDefaultPermissions(DefaultMemberPermissions.DISABLED),
                 Commands.message(MESSAGE_COMMAND).setDefaultPermissions(DefaultMemberPermissions.DISABLED)
-        );
+        ));
+        if (includeAgeBypass) {
+            commands.add(DiscordAccountAgeGateListener.command());
+        }
+        return List.copyOf(commands);
     }
 
     private void commandsRegistered(List<Command> registered) {
-        boolean complete = registered.size() == EXPECTED_COMMAND_COUNT
+        Set<String> expectedNames = accountAgeGateEnabled
+                ? Set.of(SLASH_COMMAND, USER_COMMAND, MESSAGE_COMMAND, DiscordAccountAgeGateListener.COMMAND)
+                : Set.of(SLASH_COMMAND, USER_COMMAND, MESSAGE_COMMAND);
+        boolean complete = registered.size() == expectedNames.size()
                 && registered.stream().map(Command::getName).collect(java.util.stream.Collectors.toSet())
-                .equals(java.util.Set.of(SLASH_COMMAND, USER_COMMAND, MESSAGE_COMMAND));
+                .equals(expectedNames);
         enabled.set(complete);
         if (!complete) {
             log("discord_ui_preview_command_registration_incomplete", null);

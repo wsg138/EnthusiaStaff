@@ -4,7 +4,7 @@ import java.nio.file.Path;
 import java.util.Map;
 import java.util.Objects;
 
-/** Explicit opt-in: enable only after the bot has member-join intent and kick permission. */
+/** Enabled by default; an explicit false setting disables the age gate. */
 record DiscordAccountAgeGateConfiguration(boolean enabled, Path bypassFile) {
     static final String BYPASS_FILE_KEY = "ENTHUSIA_STAFF_BOT_ACCOUNT_AGE_BYPASS_FILE";
     static final String DEFAULT_BYPASS_FILE = "account-age-bypass-ids.txt";
@@ -16,7 +16,7 @@ record DiscordAccountAgeGateConfiguration(boolean enabled, Path bypassFile) {
 
     static DiscordAccountAgeGateConfiguration fromEnvironment(Map<String, String> values) {
         Objects.requireNonNull(values, "values");
-        String raw = values.getOrDefault(ENABLED_KEY, "false").trim();
+        String raw = values.getOrDefault(ENABLED_KEY, "true").trim();
         if ("true".equalsIgnoreCase(raw)) {
             return new DiscordAccountAgeGateConfiguration(true, bypassFile(values));
         }

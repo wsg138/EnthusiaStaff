@@ -25,8 +25,8 @@ class DiscordAccountAgeGateTest {
     }
 
     @Test
-    void optInIsStrictAndDisabledByDefault() {
-        assertFalse(DiscordAccountAgeGateConfiguration.fromEnvironment(Map.of()).enabled());
+    void accountAgeGateIsEnabledByDefaultAndExplicitlyDisableable() {
+        assertTrue(DiscordAccountAgeGateConfiguration.fromEnvironment(Map.of()).enabled());
         assertTrue(DiscordAccountAgeGateConfiguration.fromEnvironment(Map.of(
                 DiscordAccountAgeGateConfiguration.ENABLED_KEY, "true")).enabled());
         assertFalse(DiscordAccountAgeGateConfiguration.fromEnvironment(Map.of(
@@ -55,6 +55,10 @@ class DiscordAccountAgeGateTest {
                 .stream().map(net.dv8tion.jda.api.interactions.commands.build.CommandData::getName).toList();
         assertFalse(defaultNames.contains(DiscordAccountAgeGateListener.COMMAND));
         assertTrue(enabledNames.contains(DiscordAccountAgeGateListener.COMMAND));
+        assertFalse(JdaModerationUiPreviewListener.commands().stream()
+                .anyMatch(c -> DiscordAccountAgeGateListener.COMMAND.equals(c.getName())));
+        assertTrue(JdaModerationUiPreviewListener.commands(true).stream()
+                .anyMatch(c -> DiscordAccountAgeGateListener.COMMAND.equals(c.getName())));
     }
 
     @org.junit.jupiter.api.Test

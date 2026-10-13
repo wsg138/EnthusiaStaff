@@ -125,6 +125,11 @@ final class DiscordAccountAgeBypassStore {
             } catch (AtomicMoveNotSupportedException failure) {
                 throw new IOException("atomic account-age bypass persistence is unsupported", failure);
             }
+            try (FileChannel directory = FileChannel.open(parent, StandardOpenOption.READ)) {
+                directory.force(true);
+            } catch (IOException | UnsupportedOperationException ignored) {
+                // Windows and some filesystems do not support directory fsync.
+            }
         } finally {
             Files.deleteIfExists(temporary);
         }
