@@ -38,6 +38,25 @@ class DiscordRichItemEmbedsTest {
     }
 
     @Test
+    void multipleItemSharesPairWithOwnTooltipAndOrphansAreNotUploaded() {
+        var artifacts = List.of(
+                imageAt(ChatBridgeArtifact.Kind.ITEM, 10, "Item-A.png", "Spear"),
+                imageAt(ChatBridgeArtifact.Kind.TOOLTIP, 40, "Tooltip-B.png", "Details B"),
+                imageAt(ChatBridgeArtifact.Kind.TOOLTIP, 10, "Tooltip-A.png", "Details A"),
+                imageAt(ChatBridgeArtifact.Kind.ITEM, 40, "Item-B.png", "Axe"),
+                imageAt(ChatBridgeArtifact.Kind.TOOLTIP, 99, "Orphan.png", "Not shown"));
+        var selected = DiscordRichItemEmbeds.referencedArtifacts(artifacts);
+        assertEquals(4, selected.size());
+        assertTrue(selected.stream().noneMatch(a -> a.filename().equals("Orphan.png")));
+        var embeds = DiscordRichItemEmbeds.create(artifacts, "Qaysoz");
+        assertEquals(2, embeds.size());
+        assertEquals("Spear", embeds.get(0).getDescription());
+        assertEquals("attachment://Tooltip-A.png", embeds.get(0).getImage().getUrl());
+        assertEquals("Axe", embeds.get(1).getDescription());
+        assertEquals("attachment://Tooltip-B.png", embeds.get(1).getImage().getUrl());
+    }
+
+    @Test
     void orphanTooltipDoesNotInventAnItemCard() {
         assertTrue(DiscordRichItemEmbeds.create(List.of(
                 image(ChatBridgeArtifact.Kind.TOOLTIP, "ToolTip.png", "Minecraft item details")),
@@ -45,6 +64,12 @@ class DiscordRichItemEmbedsTest {
     }
 
     private static ChatBridgeArtifact image(ChatBridgeArtifact.Kind kind, String filename, String altText) {
-        return new ChatBridgeArtifact(kind, 0, filename, "image/png", altText, new byte[]{1, 2, 3});
+        return imageAt(kind, 0, filename, altText);
+    }
+
+    private static ChatBridgeArtifact imageAt(
+            ChatBridgeArtifact.Kind kind, int position, String filename, String altText) {
+        return new ChatBridgeArtifact(kind, position, filename, "image/png",
+                altText, new byte[]{1, 2, 3});
     }
 }
