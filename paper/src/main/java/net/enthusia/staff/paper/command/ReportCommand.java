@@ -57,6 +57,7 @@ public final class ReportCommand implements CommandExecutor, TabCompleter, Liste
 
     private final Dependencies dependencies;
     private final ExecutorService workers;
+    private final CommandResponseDispatcher responses;
     private final ReportReasonMenu reasonMenu;
     private final Map<UUID, PendingReportSelection> pending = new ConcurrentHashMap<>();
     private static final Duration SELECTION_TTL = Duration.ofMinutes(5);
@@ -67,6 +68,7 @@ public final class ReportCommand implements CommandExecutor, TabCompleter, Liste
         }
         this.dependencies = dependencies;
         this.workers = workers;
+        this.responses = new CommandResponseDispatcher(dependencies.plugin());
         this.reasonMenu = new ReportReasonMenu(dependencies.plugin(), dependencies.policies(), this::chooseReason);
     }
 
@@ -297,11 +299,9 @@ public final class ReportCommand implements CommandExecutor, TabCompleter, Liste
     }
 
     private void send(CommandSender sender, String message) {
-        JavaPlugin plugin = dependencies.plugin();
-        plugin.getServer().getGlobalRegionScheduler().execute(
-                plugin,
-                () -> sender.sendMessage(StaffMessageStyle.style(Component.text(message)))
-        );
+        // Report submission runs on a worker. Deliver player responses on the
+        // player's Folia entity scheduler, not on the global region scheduler.
+        responses.send(sender, Component.text(message));
     }
 
     private static String description(String[] arguments) {
