@@ -67,30 +67,31 @@ final class DiscordAccountAgeBypassStore {
 
     boolean add(long id) throws IOException {
         synchronized (this) {
-        if (ids.contains(id)) {
-            return false;
-        }
-        Set<Long> next = new HashSet<>(ids);
-        if (next.size() >= MAX_IDS) {
-            throw new IOException("account-age bypass list is full");
-        }
-        next.add(id);
-        persist(next);
-        ids = Set.copyOf(next);
-        return true;
+            if (ids.contains(id)) {
+                return false;
+            }
+            Set<Long> next = new HashSet<>(ids);
+            if (next.size() >= MAX_IDS) {
+                throw new IOException("account-age bypass list is full");
+            }
+            next.add(id);
+            persist(next);
+            ids = Set.copyOf(next);
+            return true;
         }
     }
 
     boolean remove(long id) throws IOException {
         synchronized (this) {
-        if (!ids.contains(id)) {
-            return false;
+            if (!ids.contains(id)) {
+                return false;
+            }
+            Set<Long> next = new HashSet<>(ids);
+            next.remove(id);
+            persist(next);
+            ids = Set.copyOf(next);
+            return true;
         }
-        Set<Long> next = new HashSet<>(ids);
-        next.remove(id);
-        persist(next);
-        ids = Set.copyOf(next);
-        return true;
     }
 
     int size() {
