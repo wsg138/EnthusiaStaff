@@ -395,6 +395,9 @@ final class JdbcReportSubmissionStore {
             payload.put("targetId", request.targetId().toString());
             payload.put(REASON_ID_FIELD, request.reasonId());
             payload.put("serverId", request.serverId());
+            var names = ReportPlayerNames.forReport(connection, reportId);
+            payload.put("reporterName", names.reporter());
+            payload.put("targetName", names.target());
             payload.put("targetClientEvidence", request.targetClientEvidence()
                     .map(ClientEvidencePersistence::toJson)
                     .orElse(null));

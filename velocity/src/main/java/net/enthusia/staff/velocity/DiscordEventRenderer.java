@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.List;
 import java.util.Map;
 import net.enthusia.staff.domain.discord.DiscordOutboxMessage;
+import net.enthusia.staff.domain.report.ReportReasonLabel;
 
 final class DiscordEventRenderer {
     private static final int MAX_PAYLOAD_CHARACTERS = 16_384;
@@ -30,7 +31,7 @@ final class DiscordEventRenderer {
                     "reason",
                     STATE, "type", "decision", "outcome"
             ),
-            "reports", List.of("reportId", TARGET_ID, "reasonId", "serverId", "status", STATE, "actorId"),
+            "reports", List.of("reportId", "targetName", "reporterName", "reasonId", "serverId", "status", STATE),
             "logs-staffmode", List.of(
                     "eventId", "staffId", TARGET_ID, "actorId", "actor", "name", "sessionId",
                     "rank", "active", "vanished", "staffMode", "server", "serverId",
@@ -77,7 +78,11 @@ final class DiscordEventRenderer {
             JsonNode value = payload.get(field);
             String safe = safeValue(value);
             if (safe != null) {
-                appendField(rendered, field, safe);
+                if ("reports".equals(message.destination()) && "reasonId".equals(field)) {
+                    appendField(rendered, "reason", ReportReasonLabel.display(safe));
+                } else {
+                    appendField(rendered, field, safe);
+                }
             }
         }
         if ("PUNISHMENT_APPROVAL_REQUIRED".equals(message.eventType())) {

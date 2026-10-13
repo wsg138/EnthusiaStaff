@@ -3,6 +3,9 @@ package net.enthusia.staff.paper.command;
 import net.enthusia.staff.paper.presentation.StaffMessageStyle;
 import java.time.Clock;
 import java.time.Instant;
+import java.time.Duration;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
@@ -24,10 +27,16 @@ import net.enthusia.staff.domain.ports.ReportStore;
 import net.enthusia.staff.domain.ports.SanctionLookup;
 import net.enthusia.staff.domain.report.CreateReportRequest;
 import net.enthusia.staff.domain.report.ReportSubmissionResult;
+import net.enthusia.staff.domain.report.ReportReasonLabel;
 import net.enthusia.staff.domain.sanction.SanctionType;
 import net.enthusia.staff.paper.client.ClientEvidenceCollector;
 import net.enthusia.staff.paper.report.ChatContextBuffer;
 import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.event.ClickEvent;
+import net.kyori.adventure.text.format.NamedTextColor;
+import org.bukkit.event.EventHandler;
+import org.bukkit.event.Listener;
+import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.Location;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
@@ -36,7 +45,7 @@ import org.bukkit.command.TabCompleter;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
 
-public final class ReportCommand implements CommandExecutor, TabCompleter {
+public final class ReportCommand implements CommandExecutor, TabCompleter, Listener {
     private static final Set<SanctionType> REPORT_RESTRICTIONS = Set.of(SanctionType.REPORT_RESTRICTION);
     private static final int REQUIRED_ARGUMENTS = 3;
     private static final int TARGET_ARGUMENT = 0;
@@ -48,6 +57,9 @@ public final class ReportCommand implements CommandExecutor, TabCompleter {
 
     private final Dependencies dependencies;
     private final ExecutorService workers;
+    private final ReportReasonMenu reasonMenu;
+    private final Map<UUID, PendingReportSelection> pending = new ConcurrentHashMap<>();
+    private static final Duration SELECTION_TTL = Duration.ofMinutes(5);
 
     public ReportCommand(Dependencies dependencies, ExecutorService workers) {
         if (dependencies == null || workers == null) {
@@ -55,13 +67,28 @@ public final class ReportCommand implements CommandExecutor, TabCompleter {
         }
         this.dependencies = dependencies;
         this.workers = workers;
+        this.reasonMenu = new ReportReasonMenu(dependencies.policies(), this::chooseReason);
     }
+
+    public Listener reasonMenu() { return reasonMenu; }
 
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] arguments) {
         if (!(sender instanceof Player reporter)) {
             sender.sendMessage(StaffMessageStyle.style(Component.text("Only a player can submit a player report.")));
             return true;
+        }
+        if (arguments.length == 1 && !arguments[0].equalsIgnoreCase("describe")) {
+            if (dependencies.mode().get() != OperationalMode.ACTIVE) {
+                sender.sendMessage(StaffMessageStyle.style(Component.text("Reports are temporarily unavailable.")));
+            } else {
+                pending.remove(reporter.getUniqueId());
+                reasonMenu.open(reporter, arguments[0], 0);
+            }
+            return true;
+        }
+        if (arguments.length > 0 && arguments[0].equalsIgnoreCase("describe")) {
+            return submitSelectedDescription(reporter, arguments);
         }
         SubmissionContext submission = prepareSubmission(sender, reporter, arguments);
         if (submission != null) {
@@ -70,9 +97,62 @@ public final class ReportCommand implements CommandExecutor, TabCompleter {
         return true;
     }
 
+    private void chooseReason(Player reporter, String target, String reasonId) {
+        if (dependencies.mode().get() != OperationalMode.ACTIVE
+                || dependencies.policies().find(reasonId).filter(ReasonPolicy::reportable).isEmpty()) {
+            reporter.sendMessage(StaffMessageStyle.style(Component.text("This report reason is no longer available.")));
+            return;
+        }
+        pending.put(reporter.getUniqueId(), new PendingReportSelection(
+                target, reasonId, dependencies.clock().instant().plus(SELECTION_TTL)));
+        reporter.sendMessage(StaffMessageStyle.style(
+                Component.text("Reporting " + target + " for " + ReportReasonLabel.display(reasonId) + ". ",
+                        NamedTextColor.GOLD)
+                        .append(Component.text("Click to write what happened", NamedTextColor.GREEN)
+                                .clickEvent(ClickEvent.suggestCommand("/report describe "))
+                                .hoverEvent(Component.text("Type /report describe followed by your explanation")))));
+        reporter.sendMessage(StaffMessageStyle.style(Component.text(
+                "Include details that will help staff investigate. Nothing has been submitted yet.",
+                NamedTextColor.GRAY)));
+    }
+
+    private boolean submitSelectedDescription(Player reporter, String[] arguments) {
+        PendingReportSelection selected = pending.get(reporter.getUniqueId());
+        if (selected == null || !dependencies.clock().instant().isBefore(selected.expiresAt())) {
+            pending.remove(reporter.getUniqueId());
+            reporter.sendMessage(StaffMessageStyle.style(Component.text(
+                    "Your selection expired. Run /report <player> to start again.")));
+            return true;
+        }
+        if (arguments.length < 2) {
+            reporter.sendMessage(StaffMessageStyle.style(Component.text(
+                    "Use /report describe <what happened> to finish the report.")));
+            return true;
+        }
+        String description = String.join(" ", Arrays.copyOfRange(arguments, 1, arguments.length)).trim();
+        if (description.isEmpty() || description.length() > MAX_DESCRIPTION_LENGTH) {
+            reporter.sendMessage(StaffMessageStyle.style(Component.text(
+                    "Please include a description (maximum 4000 characters).")));
+            return true;
+        }
+        String[] completed = {selected.target(), selected.reasonId(), description};
+        SubmissionContext submission = prepareSubmission(reporter, reporter, completed);
+        if (submission != null && pending.remove(reporter.getUniqueId(), selected)) {
+            submit(reporter, () -> submitReport(reporter, submission));
+        }
+        return true;
+    }
+
+    @EventHandler
+    public void onQuit(PlayerQuitEvent event) {
+        pending.remove(event.getPlayer().getUniqueId());
+    }
+
+    private record PendingReportSelection(String target, String reasonId, Instant expiresAt) { }
+
     private SubmissionContext prepareSubmission(CommandSender sender, Player reporter, String[] arguments) {
         if (arguments.length < REQUIRED_ARGUMENTS) {
-            sender.sendMessage(StaffMessageStyle.style(Component.text("Usage: /report <player|uuid> <reason-id> <description>")));
+            sender.sendMessage(StaffMessageStyle.style(Component.text("Usage: /report <player> (choose reason in the menu)")));
             return null;
         }
         ReasonPolicy policy = dependencies.policies().find(arguments[REASON_ARGUMENT]).orElse(null);
@@ -234,15 +314,12 @@ public final class ReportCommand implements CommandExecutor, TabCompleter {
 
     @Override
     public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] arguments) {
-        if (arguments.length == REASON_COMPLETION_ARGUMENTS) {
-            String prefix = arguments[REASON_ARGUMENT].toLowerCase(java.util.Locale.ROOT);
-            return dependencies.policies().all().stream()
-                    .filter(ReasonPolicy::reportable)
-                    .map(ReasonPolicy::id)
-                    .filter(id -> id.startsWith(prefix))
-                    .sorted()
-                    .limit(COMPLETION_LIMIT)
-                    .toList();
+        if (arguments.length == 1) {
+            return dependencies.plugin().getServer().getOnlinePlayers().stream()
+                    .map(Player::getName)
+                    .filter(name -> name.toLowerCase(java.util.Locale.ROOT)
+                            .startsWith(arguments[0].toLowerCase(java.util.Locale.ROOT)))
+                    .limit(COMPLETION_LIMIT).toList();
         }
         return List.of();
     }

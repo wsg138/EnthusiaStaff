@@ -66,7 +66,7 @@ final class ReportGuiRenderer {
             ReportSummary summary = state.reports().get(offset + index);
             inventory.setItem(configuration.contentSlots().get(index), item(
                     stateMaterial(summary.state(), configuration),
-                    summary.reasonId().replace('-', ' ').replace('_', ' '),
+                    net.enthusia.staff.domain.report.ReportReasonLabel.display(summary.reasonId()),
                     List.of(
                             Component.text("Target: " + displayName(summary.targetId()), NamedTextColor.WHITE),
                             Component.text("Reporter: " + displayName(summary.reporterId()), NamedTextColor.GRAY),
@@ -145,7 +145,7 @@ final class ReportGuiRenderer {
                 stateMaterial(summary.state(), configuration),
                 "Report " + shortId(summary.reportId()),
                 List.of(
-                        Component.text(summary.reasonId().replace('-', ' ').replace('_', ' '), NamedTextColor.WHITE),
+                        Component.text(net.enthusia.staff.domain.report.ReportReasonLabel.display(summary.reasonId()), NamedTextColor.WHITE),
                         Component.text("Reporter: " + displayName(summary.reporterId()), NamedTextColor.GRAY),
                         Component.text("Target: " + displayName(summary.targetId()), NamedTextColor.WHITE),
                         Component.text("Report ID: " + summary.reportId(), NamedTextColor.DARK_GRAY),
@@ -168,7 +168,7 @@ final class ReportGuiRenderer {
                 configuration.message("reporter"),
                 List.of(
                         Component.text("Username: " + displayName(summary.reporterId()), NamedTextColor.WHITE),
-                        Component.text("UUID: " + summary.reporterId(), NamedTextColor.DARK_GRAY)
+                        Component.text("Private staff-only report", NamedTextColor.DARK_GRAY)
                 )
         ));
         inventory.setItem(configuration.slot("detail-target"), item(
@@ -176,7 +176,7 @@ final class ReportGuiRenderer {
                 configuration.message("target"),
                 List.of(
                         Component.text("Username: " + displayName(summary.targetId()), NamedTextColor.WHITE),
-                        Component.text("UUID: " + summary.targetId(), NamedTextColor.DARK_GRAY)
+                        Component.text("Identity verified internally", NamedTextColor.DARK_GRAY)
                 )
         ));
         inventory.setItem(configuration.slot("detail-location"), item(
@@ -285,7 +285,7 @@ final class ReportGuiRenderer {
                 stateMaterial(summary.state(), configuration),
                 "Report " + summary.reportId(),
                 List.of(
-                        Component.text(summary.reasonId(), NamedTextColor.WHITE),
+                        Component.text(net.enthusia.staff.domain.report.ReportReasonLabel.display(summary.reasonId()), NamedTextColor.WHITE),
                         Component.text("Expected revision: " + summary.revision(), NamedTextColor.YELLOW),
                         Component.text("Current state: " + summary.state(), NamedTextColor.GRAY)
                 )

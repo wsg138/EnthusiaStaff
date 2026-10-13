@@ -327,9 +327,11 @@ final class JdaStaffModerationListener extends ListenerAdapter {
                     }
                     for (var report : reports) {
                         var target = SignedComponentCodec.TargetRef.report(report.reportId(), report.revision());
-                        message.append("Report ").append(number).append(". **").append(report.reasonId())
-                                .append("** · ").append(report.state()).append(" · Target: `")
-                                .append(report.targetId()).append("` · Report: `")
+                        message.append("Report ").append(number).append(". **")
+                                .append(net.enthusia.staff.domain.report.ReportReasonLabel.display(report.reasonId()))
+                                .append("** · ").append(report.state()).append(" · Target: ")
+                                .append(report.targetName()).append(" · Reported by: ")
+                                .append(report.reporterName()).append(" · Report: `")
                                 .append(report.reportId()).append("` rev=")
                                 .append(report.revision()).append("\n");
                         if ("OPEN".equals(report.state())) {

@@ -75,7 +75,7 @@ commands:
     permission: enthusiastaff.remove
   report:
     description: Submit a private player report with recent context
-    usage: /report <player|uuid> <reason-id> <description>
+    usage: /report <player>
   reports:
     description: Open staff report management
     usage: /reports
