@@ -520,6 +520,7 @@ public final class VanishManager implements Listener {
             );
         } else if (!queuePersistSet(
                 playerId,
+                player.getName(),
                 rank,
                 false,
                 expectedSession,
@@ -560,6 +561,7 @@ public final class VanishManager implements Listener {
                     }
                     if (!queuePersistSet(
                             playerId,
+                            current.getName(),
                             liveRank,
                             true,
                             expectedSession,
@@ -581,6 +583,7 @@ public final class VanishManager implements Listener {
 
     private boolean queuePersistSet(
             UUID playerId,
+            String actorName,
             StaffRank rank,
             boolean vanished,
             UUID expectedSession,
@@ -596,6 +599,7 @@ public final class VanishManager implements Listener {
             }
             result.complete(persistSet(
                     playerId,
+                    actorName,
                     rank,
                     vanished,
                     restoreSelectedMode,
@@ -619,6 +623,7 @@ public final class VanishManager implements Listener {
 
     private boolean persistSet(
             UUID playerId,
+            String actorName,
             StaffRank rank,
             boolean vanished,
             boolean restoreSelectedMode,
@@ -653,6 +658,12 @@ public final class VanishManager implements Listener {
             Set<UUID> presenceViewers = presenceViewers(playerId);
             boolean previouslyVanished = visibility.isVanished(playerId);
             visibility.setVanished(playerId, rank, vanished);
+            // Audit from the persistence worker, not the optional online-owner
+            // callback: a disconnect after commit must not erase this record.
+            // Captured actor name/rank are from the authorized initiating player.
+            if (committedVanishAuditAction(previouslyVanished, vanished).isPresent()) {
+                staffMode.logCommittedVisibilityTransition(playerId, actorName, rank, vanished);
+            }
             if (vanished) {
                 hiddenSpectators.remove(playerId);
             }
@@ -665,8 +676,7 @@ public final class VanishManager implements Listener {
                             vanished,
                             viewerChanged,
                             restoreSelectedMode,
-                            presenceViewers,
-                            previouslyVanished
+                            presenceViewers
                     )
             );
             return true;
@@ -731,8 +741,7 @@ public final class VanishManager implements Listener {
             boolean vanished,
             boolean viewerChanged,
             boolean restoreSelectedMode,
-            Set<UUID> presenceViewers,
-            boolean previouslyVanished
+            Set<UUID> presenceViewers
     ) {
         UUID playerId = player.getUniqueId();
         if (vanished) {
@@ -751,12 +760,6 @@ public final class VanishManager implements Listener {
         }
         audiences.refreshTarget(playerId);
         publishPresenceTransition(playerId, vanished, presenceViewers);
-        // Record confirmed, changed state only after the durable persistence path.
-        // A repeated same-state write/reconciliation must not imply another toggle.
-        if (visibility.isVanished(playerId) == vanished) {
-            committedVanishAuditAction(previouslyVanished, vanished)
-                    .ifPresent(action -> staffMode.logStaffAction(player, action, "durable-visibility-transition"));
-        }
         player.sendMessage(StaffMessageStyle.style(Component.text(vanished ? "Vanish enabled." : "Vanish disabled.")));
     }
 
