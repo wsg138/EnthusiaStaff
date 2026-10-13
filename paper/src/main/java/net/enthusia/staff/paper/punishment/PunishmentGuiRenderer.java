@@ -244,9 +244,12 @@ final class PunishmentGuiRenderer {
         int offset = state.page() * CONTENT_SIZE;
         for (int index = 0; index < CONTENT_SIZE && offset + index < results.size(); index++) {
             ReasonPolicy policy = results.get(offset + index);
-            List<Component> lore = new ArrayList<>(reasonLore(policy, state.overview()));
-            lore.add(Component.text("Category: "
-                    + PunishmentGuiCategory.forFamily(policy.family()).title(), NamedTextColor.GRAY));
+            List<Component> lore = java.util.stream.Stream.concat(
+                    reasonLore(policy, state.overview()).stream(),
+                    java.util.stream.Stream.of(Component.text("Category: "
+                            + PunishmentGuiCategory.forFamily(policy.family()).title(),
+                            NamedTextColor.GRAY))
+            ).toList();
             inventory.setItem(CONTENT_START + index, item(
                     reasonMaterial(policy), policy.publicReason(), reasonNameColor(policy), lore
             ));

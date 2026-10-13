@@ -174,15 +174,7 @@ final class StaffToolSpectateFlow {
     }
 
     private void followToPosition(Player actor, FollowSession session, Location where) {
-        if (follows.get(actor.getUniqueId()) != session
-                || !actorAuthorized.test(actor)) {
-            follows.remove(actor.getUniqueId(), session);
-            session.inFlight.set(false);
-            return;
-        }
-        Location here = actor.getLocation();
-        if (here.getWorld() != null && here.getWorld() == where.getWorld()
-                && here.distanceSquared(where) < FOLLOW_REFRESH_DISTANCE_SQUARED) {
+        if (!followStillAuthorized(actor, session) || closeEnough(actor.getLocation(), where)) {
             session.inFlight.set(false);
             return;
         }
@@ -196,6 +188,19 @@ final class StaffToolSpectateFlow {
         } catch (RuntimeException exception) {
             stopFollow(actor.getUniqueId(), session, "Follow ended: teleport could not be scheduled.");
         }
+    }
+
+    private boolean followStillAuthorized(Player actor, FollowSession session) {
+        if (follows.get(actor.getUniqueId()) == session && actorAuthorized.test(actor)) {
+            return true;
+        }
+        follows.remove(actor.getUniqueId(), session);
+        return false;
+    }
+
+    private static boolean closeEnough(Location current, Location target) {
+        return current.getWorld() != null && current.getWorld() == target.getWorld()
+                && current.distanceSquared(target) < FOLLOW_REFRESH_DISTANCE_SQUARED;
     }
 
     private void stopFollow(UUID actorId, FollowSession session, String reason) {

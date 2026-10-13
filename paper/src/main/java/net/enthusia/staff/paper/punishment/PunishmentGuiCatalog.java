@@ -73,15 +73,15 @@ final class PunishmentGuiCatalog {
         if (id.contains(query) || name.contains(query)) {
             return 2;
         }
+        return matchesContext(policy, query) ? 3 : 4;
+    }
+
+    private static boolean matchesContext(ReasonPolicy policy, String query) {
         if (policy.family().toLowerCase(Locale.ROOT).contains(query)) {
-            return 3;
+            return true;
         }
-        for (String example : policy.examples()) {
-            if (example.toLowerCase(Locale.ROOT).contains(query)) {
-                return 3;
-            }
-        }
-        return 4;
+        return policy.examples().stream()
+                .anyMatch(example -> example.toLowerCase(Locale.ROOT).contains(query));
     }
 
     private record RankedResult(ReasonPolicy policy, int rank) {

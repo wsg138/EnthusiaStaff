@@ -10,28 +10,35 @@ import org.junit.jupiter.api.Test;
 
 class StaffToolSpectateContinuousFollowTest {
     @Test
-    void creativeAndSurvivalFollowMovingTargetWithoutChangingGameMode() {
-        for (GameMode mode : new GameMode[]{GameMode.CREATIVE, GameMode.SURVIVAL}) {
-            StaffToolSpectateFlowHarness harness = new StaffToolSpectateFlowHarness();
-            harness.actor.gameMode = mode;
-            harness.reachFinalTargetHandoff();
-            assertEquals(1, harness.actor.teleports);
-            assertEquals(0, harness.actor.attachments);
-            assertEquals(mode, harness.actor.gameMode);
-            harness.target.location = new Location(null, 30, 65, -5);
-            harness.actor.runRecurring();
-            harness.runOwned(harness.target);
-            harness.runOwned(harness.actor);
-            assertEquals(2, harness.actor.teleports, "Follow should track target movement for " + mode);
-            harness.target.location = new Location(null, 70, 70, 20);
-            harness.actor.runRecurring();
-            harness.runOwned(harness.target);
-            harness.runOwned(harness.actor);
-            assertEquals(3, harness.actor.teleports, "Follow must continue across multiple moves");
-            assertTrue(harness.flow.stop(harness.actor.player));
-            harness.actor.runRecurring();
-            assertEquals(3, harness.actor.teleports, "Stopped follow must not teleport again");
-        }
+    void creativeModeContinuesToTrackPlayer() {
+        assertContinuedMovement(GameMode.CREATIVE);
+    }
+
+    @Test
+    void survivalModeContinuesToTrackPlayer() {
+        assertContinuedMovement(GameMode.SURVIVAL);
+    }
+
+    private static void assertContinuedMovement(GameMode mode) {
+        StaffToolSpectateFlowHarness harness = new StaffToolSpectateFlowHarness();
+        harness.actor.gameMode = mode;
+        harness.reachFinalTargetHandoff();
+        assertEquals(1, harness.actor.teleports);
+        assertEquals(0, harness.actor.attachments);
+        assertEquals(mode, harness.actor.gameMode);
+        harness.target.location = new Location(null, 30, 65, -5);
+        harness.actor.runRecurring();
+        harness.runOwned(harness.target);
+        harness.runOwned(harness.actor);
+        assertEquals(2, harness.actor.teleports, "Follow should track target movement for " + mode);
+        harness.target.location = new Location(null, 70, 70, 20);
+        harness.actor.runRecurring();
+        harness.runOwned(harness.target);
+        harness.runOwned(harness.actor);
+        assertEquals(3, harness.actor.teleports, "Follow must continue across multiple moves");
+        assertTrue(harness.flow.stop(harness.actor.player));
+        harness.actor.runRecurring();
+        assertEquals(3, harness.actor.teleports, "Stopped follow must not teleport again");
     }
 
     @Test

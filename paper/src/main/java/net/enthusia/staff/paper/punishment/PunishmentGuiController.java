@@ -485,34 +485,48 @@ public final class PunishmentGuiController implements Listener {
 
     private void searchClick(Player viewer, Actor actor, PunishmentGuiState.Search state, int slot) {
         List<ReasonPolicy> results = catalog.search(actor, state.commandName(), state.query());
-        if (openHistoryFromControl(viewer, state, slot)) {
-            return;
-        }
-        if (slot == PunishmentGuiRenderer.SEARCH_SLOT) {
-            startSearch(viewer, state);
-            return;
-        }
-        if (slot == PunishmentGuiRenderer.CLOSE_SLOT) {
-            viewer.closeInventory();
-            return;
-        }
-        if (slot == PunishmentGuiRenderer.BACK_SLOT) {
-            openState(viewer, categoriesState(state));
-            return;
-        }
-        if (slot == PunishmentGuiRenderer.PREVIOUS_SLOT && state.page() > 0) {
-            openSearchPage(viewer, state, state.page() - 1);
-            return;
-        }
-        if (slot == PunishmentGuiRenderer.NEXT_SLOT
-                && (state.page() + 1) * PunishmentGuiRenderer.CONTENT_SIZE < results.size()) {
-            openSearchPage(viewer, state, state.page() + 1);
+        if (openHistoryFromControl(viewer, state, slot)
+                || handleSearchNavigation(viewer, state, slot, results.size())) {
             return;
         }
         int index = contentIndex(state.page(), slot);
         if (index >= 0 && index < results.size()) {
             prepare(viewer, actor, state, results.get(index));
         }
+    }
+
+    private boolean handleSearchNavigation(Player viewer, PunishmentGuiState.Search state,
+                                           int slot, int resultCount) {
+        if (slot == PunishmentGuiRenderer.SEARCH_SLOT) {
+            startSearch(viewer, state);
+            return true;
+        }
+        if (slot == PunishmentGuiRenderer.CLOSE_SLOT) {
+            viewer.closeInventory();
+            return true;
+        }
+        if (slot == PunishmentGuiRenderer.BACK_SLOT) {
+            openState(viewer, categoriesState(state));
+            return true;
+        }
+        return navigateSearchPages(viewer, state, slot, resultCount);
+    }
+
+    private boolean navigateSearchPages(Player viewer, PunishmentGuiState.Search state,
+                                        int slot, int resultCount) {
+        if (slot == PunishmentGuiRenderer.PREVIOUS_SLOT) {
+            if (state.page() > 0) {
+                openSearchPage(viewer, state, state.page() - 1);
+            }
+            return true;
+        }
+        if (slot == PunishmentGuiRenderer.NEXT_SLOT) {
+            if ((state.page() + 1) * PunishmentGuiRenderer.CONTENT_SIZE < resultCount) {
+                openSearchPage(viewer, state, state.page() + 1);
+            }
+            return true;
+        }
+        return false;
     }
 
     private void openSearchPage(Player viewer, PunishmentGuiState.Search state, int page) {
@@ -553,8 +567,7 @@ public final class PunishmentGuiController implements Listener {
             openState(viewer, origin);
             return;
         }
-        int length = normalized.codePointCount(0, normalized.length());
-        if (length < 2 || length > 64 || normalized.codePoints().anyMatch(Character::isISOControl)) {
+        if (!validSearchText(normalized)) {
             message(viewer, "Enter 2–64 search characters, or click Search to try again.");
             openState(viewer, origin);
             return;
@@ -565,6 +578,12 @@ public final class PunishmentGuiController implements Listener {
         }
         openState(viewer, new PunishmentGuiState.Search(origin.viewerId(),
                 origin.target(), origin.commandName(), origin.overview(), normalized, 0));
+    }
+
+    private static boolean validSearchText(String normalized) {
+        int length = normalized.codePointCount(0, normalized.length());
+        return length >= 2 && length <= 64
+                && normalized.codePoints().noneMatch(Character::isISOControl);
     }
 
     private void reviewClick(Player viewer, Actor actor, PunishmentGuiState.Review state, int slot) {
