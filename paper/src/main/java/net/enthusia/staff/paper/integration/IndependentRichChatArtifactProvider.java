@@ -143,7 +143,9 @@ public final class IndependentRichChatArtifactProvider
             List<MatchRule> rules = discoverRules(interactiveChat);
             return new Discovery(Optional.of(new IndependentRichChatArtifactProvider(
                     plugin, clock, workers, rules)), "");
-        } catch (ReflectiveOperationException | LinkageError failure) {
+        } catch (ReflectiveOperationException | LinkageError | RuntimeException failure) {
+            // A malformed plugin placeholder or optional API mismatch must not abort
+            // chat lifecycle setup; ordinary text relay remains available.
             return new Discovery(Optional.empty(), "Independent InteractiveChat placeholder API "
                     + failure.getClass().getSimpleName());
         }
