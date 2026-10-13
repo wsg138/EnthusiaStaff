@@ -1,7 +1,11 @@
 package net.enthusia.staff.paper.integration;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import java.util.List;
@@ -132,6 +136,36 @@ class InteractiveChatStagingArtifactProviderTest {
     }
 
     @Test
+    void tooltipOwnerMustResolveToTheExactSenderNotAnyOnlinePlayer() {
+        UUID sender = UUID.fromString("12345678-1234-5678-9234-567812345678");
+        UUID unrelated = UUID.fromString("11111111-1234-5678-9234-567812345678");
+        org.bukkit.entity.Player ownPlayer = fakePlayer(sender);
+        org.bukkit.entity.Player anotherPlayer = fakePlayer(unrelated);
+        assertTrue(InteractiveChatStagingArtifactProvider.isMatchingLocalSender(
+                sender, ownPlayer));
+        assertFalse(InteractiveChatStagingArtifactProvider.isMatchingLocalSender(
+                sender, anotherPlayer));
+        assertFalse(InteractiveChatStagingArtifactProvider.isMatchingLocalSender(
+                sender, null));
+        assertFalse(InteractiveChatStagingArtifactProvider.isMatchingLocalSender(
+                sender, "not a Bukkit player"));
+        assertFalse(InteractiveChatStagingArtifactProvider.isMatchingLocalSender(
+                null, ownPlayer));
+    }
+
+    private static org.bukkit.entity.Player fakePlayer(UUID id) {
+        return (org.bukkit.entity.Player) java.lang.reflect.Proxy.newProxyInstance(
+                org.bukkit.entity.Player.class.getClassLoader(),
+                new Class<?>[] {org.bukkit.entity.Player.class},
+                (proxy, method, arguments) -> {
+                    if (method.getName().equals("getUniqueId")) {
+                        return id;
+                    }
+                    throw new UnsupportedOperationException(method.getName());
+                });
+    }
+
+    @Test
     void detachedRendererUuidIsStableAndCannotResolveAsTheLivePlayerIdentity() {
         UUID playerId = UUID.fromString("12345678-1234-5678-9234-567812345678");
 
@@ -140,6 +174,93 @@ class InteractiveChatStagingArtifactProviderTest {
 
         assertEquals(first, second);
         assertNotEquals(playerId, first);
+    }
+
+    @Test
+    void customTooltipKeyIsCapturedAndCarriedToAsyncRenderJob() throws Exception {
+        var factory = FakeNmsAddon.class.getMethod("getInstance");
+        var lookup = FakeNmsWrapper.class.getMethod(
+                "getCustomTooltipResourceLocation", org.bukkit.inventory.ItemStack.class);
+
+        Object captured = InteractiveChatStagingArtifactProvider.captureTooltipStyle(
+                factory, lookup, null);
+        assertSame(FakeNmsWrapper.CUSTOM_KEY, captured);
+        var job = new InteractiveChatStagingArtifactProvider.RenderJob(
+                InteractiveChatStagingArtifactProvider.Kind.ITEM,
+                12, null, null, "Custom sword", List.of("tooltip"), captured);
+        assertSame(captured, job.tooltipStyleKey());
+    }
+
+    @Test
+    void detachedImageRendererReceivesCapturedCustomKey() throws Exception {
+        Object custom = FakeNmsWrapper.CUSTOM_KEY;
+        var renderMethod = FakeTooltipRenderer.class.getMethod(
+                "getToolTipImage", List.class, Object.class);
+        var components = List.of("custom lore");
+
+        var image = InteractiveChatStagingArtifactProvider.renderDetachedTooltip(
+                renderMethod, components, custom);
+        assertEquals(16, image.getWidth());
+        assertSame(custom, FakeTooltipRenderer.lastStyle);
+        assertSame(components, FakeTooltipRenderer.lastComponents);
+
+        InteractiveChatStagingArtifactProvider.renderDetachedTooltip(
+                renderMethod, List.of("default lore"), null);
+        assertNull(FakeTooltipRenderer.lastStyle);
+    }
+
+    public static final class FakeTooltipRenderer {
+        static Object lastStyle;
+        static Object lastComponents;
+
+        public static java.awt.image.BufferedImage getToolTipImage(
+                List<?> components, Object styleKey) {
+            lastComponents = components;
+            lastStyle = styleKey;
+            return new java.awt.image.BufferedImage(16, 8,
+                    java.awt.image.BufferedImage.TYPE_INT_ARGB);
+        }
+    }
+
+    @Test
+    void missingOrFailingTooltipStyleApiKeepsNormalBackground() throws Exception {
+        var lookup = FakeNmsWrapper.class.getMethod(
+                "getCustomTooltipResourceLocation", org.bukkit.inventory.ItemStack.class);
+        var unavailable = BrokenNmsAddon.class.getMethod("getInstance");
+
+        assertNull(InteractiveChatStagingArtifactProvider.captureTooltipStyle(
+                unavailable, lookup, null));
+        assertNull(InteractiveChatStagingArtifactProvider.captureTooltipStyle(
+                FakeNmsAddon.class.getMethod("getInstance"),
+                FakeNmsWrapper.class.getMethod("missingStyle",
+                        org.bukkit.inventory.ItemStack.class), null));
+        assertNull(new InteractiveChatStagingArtifactProvider.RenderJob(
+                InteractiveChatStagingArtifactProvider.Kind.ITEM,
+                0, null, null).tooltipStyleKey());
+    }
+
+    public static final class FakeNmsAddon {
+        public static FakeNmsWrapper getInstance() {
+            return new FakeNmsWrapper();
+        }
+    }
+
+    public static final class BrokenNmsAddon {
+        public static FakeNmsWrapper getInstance() {
+            throw new IllegalStateException("addon version not supported");
+        }
+    }
+
+    public static final class FakeNmsWrapper {
+        static final Object CUSTOM_KEY = new Object();
+
+        public Object getCustomTooltipResourceLocation(org.bukkit.inventory.ItemStack item) {
+            return CUSTOM_KEY;
+        }
+
+        public Object missingStyle(org.bukkit.inventory.ItemStack item) {
+            throw new IllegalStateException("missing tooltip style");
+        }
     }
 
     @Test

@@ -50,6 +50,11 @@ final class DiscordAccountAgeGateListener extends ListenerAdapter {
         return accountCreatedAt.isAfter(now.minus(MINIMUM_ACCOUNT_AGE));
     }
 
+    /** Re-evaluate at dispatch so a newly granted bypass suppresses an already queued kick. */
+    static boolean kickEligible(boolean isBot, boolean bypassed, Instant createdAt, Instant now) {
+        return !isBot && !bypassed && tooNew(createdAt, now);
+    }
+
     static CommandData command() {
         return Commands.slash(COMMAND, "Manage Discord account-age join exceptions")
                 .addOptions(
@@ -165,9 +170,9 @@ final class DiscordAccountAgeGateListener extends ListenerAdapter {
 
     private boolean requiresKick(GuildMemberJoinEvent event) {
         return event.getGuild().getIdLong() == guildId
-                && !event.getUser().isBot()
-                && !bypass.contains(event.getUser().getIdLong())
-                && tooNew(event.getUser().getTimeCreated().toInstant(), clock.instant());
+                && kickEligible(event.getUser().isBot(),
+                        bypass.contains(event.getUser().getIdLong()),
+                        event.getUser().getTimeCreated().toInstant(), clock.instant());
     }
 
     private static boolean canKick(Guild guild, Member member) {
@@ -181,8 +186,8 @@ final class DiscordAccountAgeGateListener extends ListenerAdapter {
             Instant createdAt = event.getUser().getTimeCreated().toInstant();
             member.kick().reason(AUDIT_REASON)
                     // Recheck immediately before sending: an admin may have just granted a bypass.
-                    .setCheck(() -> !bypass.contains(memberId)
-                            && tooNew(createdAt, clock.instant()))
+                    .setCheck(() -> kickEligible(false, bypass.contains(memberId),
+                            createdAt, clock.instant()))
                     .queue(
                             ignored -> logInfo("discord_account_age_gate_kicked guild={0} user={1}",
                                     guild.getId(), member.getId()),
@@ -194,7 +199,8 @@ final class DiscordAccountAgeGateListener extends ListenerAdapter {
     }
 
     private void kickFailed(Guild guild, Member member, Instant createdAt, Throwable failure) {
-        if (bypass.contains(member.getIdLong()) || !tooNew(createdAt, clock.instant())) {
+        if (!kickEligible(false, bypass.contains(member.getIdLong()),
+                createdAt, clock.instant())) {
             logInfo("discord_account_age_gate_kick_suppressed guild={0} user={1}",
                     guild.getId(), member.getId());
             return;
