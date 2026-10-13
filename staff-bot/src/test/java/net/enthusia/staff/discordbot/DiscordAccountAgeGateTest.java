@@ -25,6 +25,39 @@ class DiscordAccountAgeGateTest {
     }
 
     @Test
+    void bypassGrantedAfterJoinButBeforeKickDispatchSuppressesKick() {
+        Instant created = NOW.minus(Duration.ofDays(2));
+
+        assertTrue(DiscordAccountAgeGateListener.kickEligible(
+                false, false, created, NOW));
+        // A moderation action can add the user to the durable bypass store while JDA
+        // is preparing the REST request. The pre-dispatch predicate must re-evaluate.
+        assertFalse(DiscordAccountAgeGateListener.kickEligible(
+                false, true, created, NOW));
+        assertFalse(DiscordAccountAgeGateListener.kickEligible(
+                true, false, created, NOW));
+        assertFalse(DiscordAccountAgeGateListener.kickEligible(
+                false, false, NOW.minus(Duration.ofDays(21)), NOW));
+        assertFalse(DiscordAccountAgeGateListener.kickEligible(
+                false, false, created, NOW.plus(Duration.ofDays(21))));
+    }
+
+    @Test
+    void bypassCanBePersistedBeforeDispatchWithoutEverSendingKick(
+            @org.junit.jupiter.api.io.TempDir java.nio.file.Path folder) throws Exception {
+        long id = DiscordAccountAgeBypassStore.parseId("1410303324745371709");
+        Instant created = NOW.minus(Duration.ofDays(1));
+        var bypass = DiscordAccountAgeBypassStore.open(folder.resolve("allowed.txt"));
+        assertTrue(DiscordAccountAgeGateListener.kickEligible(
+                false, bypass.contains(id), created, NOW));
+
+        bypass.add(id);
+        var reopened = DiscordAccountAgeBypassStore.open(folder.resolve("allowed.txt"));
+        assertFalse(DiscordAccountAgeGateListener.kickEligible(
+                false, reopened.contains(id), created, NOW));
+    }
+
+    @Test
     void accountAgeGateIsProductionDefaultOnAndNeverEnforcedBySharedGuildStagingBot() {
         assertTrue(DiscordAccountAgeGateConfiguration.fromEnvironment(
                 StaffBotEnvironment.PRODUCTION, Map.of()).enabled());
