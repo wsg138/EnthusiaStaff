@@ -42,6 +42,8 @@ import org.bukkit.plugin.java.JavaPlugin;
  */
 public final class InteractiveChatStagingArtifactProvider
         implements RichChatArtifactProvider, AutoCloseable {
+    private static final System.Logger LOGGER =
+            System.getLogger(InteractiveChatStagingArtifactProvider.class.getName());
     public static final String INTERACTIVE_CHAT = "InteractiveChat";
     public static final String DISCORD_ADDON = "InteractiveChatDiscordSrvAddon";
     private static final int PLAYER_INVENTORY_SIZE = 45;
@@ -313,11 +315,11 @@ public final class InteractiveChatStagingArtifactProvider
         private final Constructor<?> offlinePlayerConstructor;
         private final Method renderItem;
         private final Method renderInventory;
-        private final Method itemTitleMethod;
-        private final Method itemTooltipMethod;
-        private final Method tooltipHiddenMethod;
-        private final Method tooltipComponentsMethod;
-        private final Method renderTooltipMethod;
+        private final Optional<Method> itemTitleMethod;
+        private final Optional<Method> itemTooltipMethod;
+        private final Optional<Method> tooltipHiddenMethod;
+        private final Optional<Method> tooltipComponentsMethod;
+        private final Optional<Method> renderTooltipMethod;
         private final String addonLanguage;
         private final boolean detailedTooltipsEnabled;
         private final boolean itemImagesEnabled;
@@ -390,11 +392,11 @@ public final class InteractiveChatStagingArtifactProvider
             );
             // Optional addon APIs: do not disable existing icon/inventory rendering
             // when older installed addon builds lack tooltip support.
-            Method itemName = null;
-            Method tooltip = null;
-            Method hidden = null;
-            Method components = null;
-            Method tooltipImage = null;
+            Optional<Method> itemName = Optional.empty();
+            Optional<Method> tooltip = Optional.empty();
+            Optional<Method> hidden = Optional.empty();
+            Optional<Method> components = Optional.empty();
+            Optional<Method> tooltipImage = Optional.empty();
             String language = "en_us";
             boolean advanced = false;
             try {
@@ -407,22 +409,22 @@ public final class InteractiveChatStagingArtifactProvider
                 Class<?> keyClass = Class.forName(
                         "com.loohp.interactivechat.libs.net.kyori.adventure.key.Key",
                         false, interactiveLoader);
-                itemName = itemUtils.getMethod(
-                        "getItemNameForDiscord", ItemStack.class, offlinePlayerClass, String.class);
-                tooltip = itemUtils.getMethod(
-                        "getToolTip", ItemStack.class, offlinePlayerClass, boolean.class);
-                hidden = tooltipClass.getMethod("isHideTooltip");
-                components = tooltipClass.getMethod("getComponents");
-                tooltipImage = imageGeneration.getMethod("getToolTipImage", List.class, keyClass);
+                itemName = Optional.of(itemUtils.getMethod(
+                        "getItemNameForDiscord", ItemStack.class, offlinePlayerClass, String.class));
+                tooltip = Optional.of(itemUtils.getMethod(
+                        "getToolTip", ItemStack.class, offlinePlayerClass, boolean.class));
+                hidden = Optional.of(tooltipClass.getMethod("isHideTooltip"));
+                components = Optional.of(tooltipClass.getMethod("getComponents"));
+                tooltipImage = Optional.of(imageGeneration.getMethod("getToolTipImage", List.class, keyClass));
                 language = String.valueOf(addonClass.getField("language").get(discordAddon));
                 advanced = addonClass.getField("showAdvanceDetails").getBoolean(discordAddon);
             } catch (ReflectiveOperationException | LinkageError unavailable) {
                 // Preserve icon-only fallback when addon APIs/config differ.
-                itemName = null;
-                tooltip = null;
-                hidden = null;
-                components = null;
-                tooltipImage = null;
+                itemName = Optional.empty();
+                tooltip = Optional.empty();
+                hidden = Optional.empty();
+                components = Optional.empty();
+                tooltipImage = Optional.empty();
             }
             itemTitleMethod = itemName;
             itemTooltipMethod = tooltip;
@@ -499,20 +501,23 @@ public final class InteractiveChatStagingArtifactProvider
             }
             String name = "";
             List<?> tooltip = List.of();
-            if (itemTitleMethod != null && itemTooltipMethod != null) {
+            if (itemTitleMethod.isPresent() && itemTooltipMethod.isPresent()
+                    && tooltipHiddenMethod.isPresent() && tooltipComponentsMethod.isPresent()) {
                 try {
-                    name = String.valueOf(invoke(itemTitleMethod, null, item,
+                    name = String.valueOf(invoke(itemTitleMethod.orElseThrow(), null, item,
                             detachedPlayer, addonLanguage));
-                    Object data = invoke(itemTooltipMethod, null, item,
+                    Object data = invoke(itemTooltipMethod.orElseThrow(), null, item,
                             detachedPlayer, detailedTooltipsEnabled);
-                    if (!Boolean.TRUE.equals(invoke(tooltipHiddenMethod, data))) {
-                        Object components = invoke(tooltipComponentsMethod, data);
+                    if (!Boolean.TRUE.equals(invoke(tooltipHiddenMethod.orElseThrow(), data))) {
+                        Object components = invoke(tooltipComponentsMethod.orElseThrow(), data);
                         if (components instanceof List<?> list) {
                             tooltip = List.copyOf(list);
                         }
                     }
                 } catch (ReflectiveOperationException | RuntimeException unsupported) {
-                    // Best-effort tooltip; keep normal item rendering.
+                    LOGGER.log(System.Logger.Level.DEBUG,
+                            "InteractiveChat tooltip snapshot unavailable: {0}",
+                            unsupported.getClass().getSimpleName());
                 }
             }
             jobs.add(new RenderJob(
@@ -656,7 +661,7 @@ public final class InteractiveChatStagingArtifactProvider
                         png
                 ));
                 if (job.kind() == Kind.ITEM && !job.tooltipComponents().isEmpty()
-                        && renderTooltipMethod != null
+                        && renderTooltipMethod.isPresent()
                         && artifacts.size() < net.enthusia.staff.protocol.ChatBridgeArtifactBundle.MAX_ARTIFACTS) {
                     renderItemTooltip(artifacts, job, suffix, ordinal++);
                 }
@@ -685,7 +690,7 @@ public final class InteractiveChatStagingArtifactProvider
                 RenderJob job, String suffix, int ordinal) {
             try {
                 BufferedImage tooltip = (BufferedImage) invoke(
-                        renderTooltipMethod, null, job.tooltipComponents(), null);
+                        renderTooltipMethod.orElseThrow(), null, job.tooltipComponents(), null);
                 if (tooltip == null) {
                     return;
                 }
@@ -702,7 +707,9 @@ public final class InteractiveChatStagingArtifactProvider
                         rendered
                 ));
             } catch (ReflectiveOperationException | RuntimeException failure) {
-                // Rendering failure cannot prevent item icon or ordinary chat.
+                LOGGER.log(System.Logger.Level.DEBUG,
+                        "InteractiveChat tooltip image unavailable: {0}",
+                        failure.getClass().getSimpleName());
             }
         }
 
