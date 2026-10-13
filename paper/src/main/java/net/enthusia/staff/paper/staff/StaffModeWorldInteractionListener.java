@@ -478,9 +478,16 @@ public final class StaffModeWorldInteractionListener implements Listener {
 
     private void auditCompletedEntityInteraction(PlayerInteractEntityEvent event, boolean precise) {
         Player player = event.getPlayer();
-        if (!onDuty(player)
-                || event.getRightClicked() instanceof ItemFrame
-                || event.getRightClicked() instanceof ArmorStand
+        if (!onDuty(player)) {
+            return;
+        }
+        if (event.getRightClicked() instanceof ItemFrame) {
+            auditCompletedItemFrameEdit(event, precise);
+            return;
+        }
+        // Armor-stand equipment edits have a dedicated final-state event owner.
+        // A generic right-click must not create a second "edit" record.
+        if (event.getRightClicked() instanceof ArmorStand
                 || !shouldAuditCompletedWorldUse(staffMode.isUnrestricted(player), staffMode.dutyTier(player))) {
             return;
         }
@@ -489,6 +496,24 @@ public final class StaffModeWorldInteractionListener implements Listener {
             staffMode.logStaffAction(player, precise ? "entity-interact-at" : "entity-interact",
                     event.getRightClicked().getType().toString());
         }
+    }
+
+    private void auditCompletedItemFrameEdit(PlayerInteractEntityEvent event, boolean precise) {
+        Player player = event.getPlayer();
+        if (!shouldAuditCompletedContainerEntityEdit(
+                staffMode.isUnrestricted(player), staffMode.dutyTier(player))) {
+            return;
+        }
+        if (pairedEntityAudit.allow(player.getUniqueId(), event.getRightClicked().getUniqueId(),
+                event.getHand(), precise, System.nanoTime())) {
+            staffMode.logStaffAction(player, "container-entity-edit",
+                    event.getRightClicked().getType().toString());
+        }
+    }
+
+    static boolean shouldAuditCompletedContainerEntityEdit(boolean unrestricted, StaffDutyTier tier) {
+        return unrestricted || (StaffModeWorldInteractionPolicy.logsContainerEdit(tier)
+                && !StaffModeWorldInteractionPolicy.blocksContainerEntityEdit(tier));
     }
 
     @EventHandler(priority = EventPriority.MONITOR)
@@ -605,7 +630,6 @@ public final class StaffModeWorldInteractionListener implements Listener {
     private void handleContainerEntity(Player player, Cancellable event, String detail,
                                        boolean auditDeniedItemFrame) {
         if (staffMode.isUnrestricted(player)) {
-            staffMode.logStaffAction(player, "container-entity-edit", detail);
             return;
         }
         StaffDutyTier tier = staffMode.dutyTier(player);
@@ -614,11 +638,9 @@ public final class StaffModeWorldInteractionListener implements Listener {
             if (auditDeniedItemFrame) {
                 staffMode.logStaffAction(player, "item-frame-edit-denied", detail);
             }
-            return;
         }
-        if (StaffModeWorldInteractionPolicy.logsContainerEdit(tier)) {
-            staffMode.logStaffAction(player, "container-entity-edit", detail);
-        }
+        // Successful frame edits belong to the cancellation-aware MONITOR handler.
+        // Armor-stand equipment edits belong to onCompletedArmorStandManipulate.
     }
 
     private boolean onDuty(Player player) {
