@@ -443,7 +443,7 @@ final class JdaDiscordGateway implements DiscordGateway, DiscordChatEgress, Disc
             return false;
         }
 
-        Optional<String> mainDiscordId = chatSenderIdentities.resolve(message.minecraftPlayerId());
+        Optional<String> mainDiscordId = chatSenderIdentities.resolveFresh(message.minecraftPlayerId());
         String content = chatContent(message, mainDiscordId,
                 minecraftChatName(message.minecraftPlayerId(), message.displayName()));
         try {
@@ -494,7 +494,7 @@ final class JdaDiscordGateway implements DiscordGateway, DiscordChatEgress, Disc
             return false;
         }
 
-        Optional<String> mainDiscordId = chatSenderIdentities.resolve(message.minecraftPlayerId());
+        Optional<String> mainDiscordId = chatSenderIdentities.resolveFresh(message.minecraftPlayerId());
         String content = renderedChatContent(message, mainDiscordId,
                 minecraftChatName(message.minecraftPlayerId(), message.displayName()));
         if (artifacts.isEmpty()
