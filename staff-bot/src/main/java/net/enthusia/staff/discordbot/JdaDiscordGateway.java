@@ -546,11 +546,7 @@ final class JdaDiscordGateway implements DiscordGateway, DiscordChatEgress, Disc
     }
 
     private static List<FileUpload> artifactUploads(List<ChatBridgeArtifact> artifacts) {
-        List<ChatBridgeArtifact> ordered = artifacts.stream()
-                .filter(Objects::nonNull)
-                .sorted(Comparator.comparingInt(ChatBridgeArtifact::position)
-                        .thenComparing(ChatBridgeArtifact::filename))
-                .toList();
+        List<ChatBridgeArtifact> ordered = DiscordRichItemEmbeds.referencedArtifacts(artifacts);
         List<FileUpload> uploads = new ArrayList<>(ordered.size());
         try {
             for (ChatBridgeArtifact artifact : ordered) {
