@@ -60,6 +60,52 @@ java -jar EnthusiaStaff-StaffBot.jar --smoke-test
 
 The smoke test connects to Discord, validates the configured application/guild identity fence, sends no test message, and exits nonzero if readiness is not achieved.
 
+## Discord account-age admission rule
+
+The StaffBot **enables its Discord account-age gate by default** during normal
+environment-based startup. Every new *human* Discord member receives an age
+check based on their Discord account creation timestamp (not Minecraft account
+age). Accounts younger than **21 complete days** are kicked *after joining*,
+unless their exact Discord user ID is bypassed. Accounts exactly 21 days old
+and older are allowed. The gate does not search or remove existing members,
+ban accounts, or alter the Minecraft punishment system.
+
+Staff members holding **Manage Server** may manage durable exceptions through
+these private slash commands, including for users who have not joined:
+
+- `/agebypass action:add user-id:123456789012345678`
+- `/agebypass action:remove user-id:123456789012345678`
+- `/agebypass action:check user-id:123456789012345678`
+
+The exception list defaults to `account-age-bypass-ids.txt` in the bot
+working directory. Set
+`ENTHUSIA_STAFF_BOT_ACCOUNT_AGE_BYPASS_FILE=/persistent/path/ids.txt`
+if the deployment uses another persistent data directory. **Do not delete
+or overwrite that file during jar updates**; exceptions must survive restarts.
+Startup rejects a corrupted/unreadable list rather than silently forgetting
+approved users.
+
+To **turn off** the gate intentionally, set
+`ENTHUSIA_STAFF_BOT_ACCOUNT_AGE_GATE_ENABLED=false`; unset or `true`
+means enforcement enabled. This setting is independent of
+`ENTHUSIA_STAFF_BOT_DISCORD_ENFORCEMENT_ENABLED` for punishment actions.
+
+**Prerequisites before installing the default-on build:** enable the
+privileged **Server Members Intent** for the *StaffBot application* in the
+Discord Developer Portal; grant the bot **Kick Members** and position its
+role above accounts it must remove. Operators using `/agebypass` require
+**Manage Server**. If permissions are missing, join-time kicks cannot
+succeed and the process logs errors; the bot does not assert that the
+member was removed. A Discord user enters the guild briefly before
+the kick can be executed. Members who join while the bot is offline
+are not automatically rescanned.
+
+The pinned STAGING and PRODUCTION StaffBot applications both reference the
+Enthusia guild. **Do not enable this gate on the existing staging application
+as a destructive test.** Use source-level tests or a separately authorized
+isolated guild/application for real join/kick acceptance. This runbook does
+not authorize a live bot deployment.
+
 ## Required configuration
 
 Always required:
