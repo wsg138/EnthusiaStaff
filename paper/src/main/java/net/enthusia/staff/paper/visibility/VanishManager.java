@@ -1036,49 +1036,50 @@ public final class VanishManager implements Listener {
         if (!stateWrites.add(playerId)) {
             return;
         }
-        if (!submit(() -> {
-            try {
-                VanishStore loaded = store.get();
-                if (loaded == null) {
-                    throw new IllegalStateException("vanish storage is not ready");
-                }
-                boolean previouslyDurableVanished = durableVanishedRanks.containsKey(playerId);
-                persistState(
-                        loaded,
-                        playerId,
-                        rank,
-                        vanished,
-                        selectedGameModes.get(playerId),
-                        VanishStore.PreferenceUpdate.KEEP
-                );
-                synchronized (stateGuard(playerId)) {
-                    advanceVisibilityRevision(playerId);
-                }
-                if (previouslyDurableVanished && !vanished) {
-                    // Rank/exit reconciliation can hide the player in memory
-                    // before its persistent write finally succeeds.
-                    staffMode.logCommittedVisibilityTransition(playerId, actorName, rank, false);
-                }
-                if (vanished) {
-                    durableVanishedRanks.put(playerId, rank);
-                } else {
-                    durableVanishedRanks.remove(playerId);
-                    pendingStaffModeExitDisables.remove(playerId);
-                }
-                reconciliationRetryAfter.remove(playerId);
-                reconciliationFailureNotified.remove(playerId);
-                message(playerId, successMessage);
-            } catch (RuntimeException exception) {
-                reconciliationFailed(playerId, exception);
-            } finally {
-                stateWrites.remove(playerId);
-            }
-        })) {
+        if (!submit(() -> runReconciliationWrite(playerId, actorName, rank, vanished, successMessage))) {
             stateWrites.remove(playerId);
             reconciliationFailed(
                     playerId,
                     new RejectedExecutionException("bounded vanish reconciliation queue is full")
             );
+        }
+    }
+
+    private void runReconciliationWrite(
+            UUID playerId, String actorName, StaffRank rank, boolean vanished, String successMessage) {
+        try {
+            persistReconciledVanish(playerId, actorName, rank, vanished);
+            reconciliationRetryAfter.remove(playerId);
+            reconciliationFailureNotified.remove(playerId);
+            message(playerId, successMessage);
+        } catch (RuntimeException exception) {
+            reconciliationFailed(playerId, exception);
+        } finally {
+            stateWrites.remove(playerId);
+        }
+    }
+
+    private void persistReconciledVanish(
+            UUID playerId, String actorName, StaffRank rank, boolean vanished) {
+        VanishStore loaded = store.get();
+        if (loaded == null) {
+            throw new IllegalStateException("vanish storage is not ready");
+        }
+        boolean previouslyDurableVanished = durableVanishedRanks.containsKey(playerId);
+        persistState(loaded, playerId, rank, vanished, selectedGameModes.get(playerId),
+                VanishStore.PreferenceUpdate.KEEP);
+        synchronized (stateGuard(playerId)) {
+            advanceVisibilityRevision(playerId);
+        }
+        if (previouslyDurableVanished && !vanished) {
+            // The in-memory fail-safe hide may predate this durable retry.
+            staffMode.logCommittedVisibilityTransition(playerId, actorName, rank, false);
+        }
+        if (vanished) {
+            durableVanishedRanks.put(playerId, rank);
+        } else {
+            durableVanishedRanks.remove(playerId);
+            pendingStaffModeExitDisables.remove(playerId);
         }
     }
 
