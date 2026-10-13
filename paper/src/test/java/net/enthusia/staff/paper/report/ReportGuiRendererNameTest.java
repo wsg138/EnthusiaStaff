@@ -9,7 +9,10 @@ class ReportGuiRendererNameTest {
     void rendersCachedNameOrExplicitUnresolvedIdentity() {
         UUID id = UUID.fromString("12345678-0000-0000-0000-000000000001");
         assertEquals("Moderator", ReportGuiRenderer.humanName(id, "Moderator"));
-        assertEquals("Unknown (12345678)", ReportGuiRenderer.humanName(id, null));
-        assertEquals("Unknown (12345678)", ReportGuiRenderer.humanName(id, " "));
+        assertEquals("Unknown player", ReportGuiRenderer.humanName(id, null));
+        assertEquals("Unknown player", ReportGuiRenderer.humanName(id, " "));
+        assertEquals("Unknown player", ReportGuiRenderer.humanName(id, "@everyone"));
+        assertEquals("Unknown player", ReportGuiRenderer.humanName(id, "untrusted`name"));
+        assertEquals("*Bedrock_Player", ReportGuiRenderer.humanName(id, "*Bedrock_Player"));
     }
 }

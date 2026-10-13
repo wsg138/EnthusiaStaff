@@ -400,8 +400,8 @@ final class ReportGuiRenderer {
         return id.toString().substring(0, 8);
     }
 
-    // Render occurs on the viewer's scheduler. Prefer locally known names and
-    // retain UUIDs for accountability when a profile has not been cached.
+    // Render on the viewer's scheduler. Never replace a missing player name with a UUID.
+    // Report IDs remain available elsewhere for precise staff audit/actions.
     private static String displayName(UUID id) {
         Player online = Bukkit.getPlayer(id);
         if (online != null) {
@@ -412,9 +412,8 @@ final class ReportGuiRenderer {
     }
 
     static String humanName(UUID id, String cachedName) {
-        return cachedName == null || cachedName.isBlank()
-                ? "Unknown (" + shortId(id) + ")"
-                : cachedName;
+        return cachedName != null && cachedName.matches("\\*?[A-Za-z0-9_]{1,32}")
+                ? cachedName : "Unknown player";
     }
 
     private static String queueKey(ReportQueue queue) {
