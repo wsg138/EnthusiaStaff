@@ -1,6 +1,8 @@
 package net.enthusia.staff.paper.integration;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
@@ -95,6 +97,36 @@ class InteractiveChatStagingArtifactProviderTest {
         String even = "x " + "\\".repeat(4) + "[item]";
         assertEquals(-1, InteractiveChatStagingArtifactProvider.firstUnescapedMatch(ITEM, odd));
         assertEquals(6, InteractiveChatStagingArtifactProvider.firstUnescapedMatch(ITEM, even));
+    }
+
+    @Test
+    void tooltipOwnerMustResolveToTheExactSenderNotAnyOnlinePlayer() {
+        UUID sender = UUID.fromString("12345678-1234-5678-9234-567812345678");
+        UUID unrelated = UUID.fromString("11111111-1234-5678-9234-567812345678");
+        org.bukkit.entity.Player ownPlayer = fakePlayer(sender);
+        org.bukkit.entity.Player anotherPlayer = fakePlayer(unrelated);
+        assertTrue(InteractiveChatStagingArtifactProvider.isMatchingLocalSender(
+                sender, ownPlayer));
+        assertFalse(InteractiveChatStagingArtifactProvider.isMatchingLocalSender(
+                sender, anotherPlayer));
+        assertFalse(InteractiveChatStagingArtifactProvider.isMatchingLocalSender(
+                sender, null));
+        assertFalse(InteractiveChatStagingArtifactProvider.isMatchingLocalSender(
+                sender, "not a Bukkit player"));
+        assertFalse(InteractiveChatStagingArtifactProvider.isMatchingLocalSender(
+                null, ownPlayer));
+    }
+
+    private static org.bukkit.entity.Player fakePlayer(UUID id) {
+        return (org.bukkit.entity.Player) java.lang.reflect.Proxy.newProxyInstance(
+                org.bukkit.entity.Player.class.getClassLoader(),
+                new Class<?>[] {org.bukkit.entity.Player.class},
+                (proxy, method, arguments) -> {
+                    if (method.getName().equals("getUniqueId")) {
+                        return id;
+                    }
+                    throw new UnsupportedOperationException(method.getName());
+                });
     }
 
     @Test
