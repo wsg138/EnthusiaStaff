@@ -32,6 +32,7 @@ import net.enthusia.staff.domain.ports.AtomicReasonPolicyRepository;
 import net.enthusia.staff.domain.ports.OperationalStateStore;
 import net.enthusia.staff.domain.runtime.OperationalStateSnapshot;
 import net.enthusia.staff.paper.aireview.AiReviewSubsystem;
+import net.enthusia.staff.paper.safetycheck.PrivateSafetyCheckBridge;
 import net.enthusia.staff.paper.alert.PunishmentRequestAlertController;
 import net.enthusia.staff.paper.alert.PunishmentRequestAlertLifecycle;
 import net.enthusia.staff.paper.alert.PunishmentRequestAlertWorkerSettings;
@@ -78,6 +79,7 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
 
     private ExecutorService workers;
     private AiReviewSubsystem aiReview;
+    private PrivateSafetyCheckBridge safetyCheckBridge;
     private AtomicReasonPolicyRepository reasonPolicies;
     private MuteEnforcementListener muteEnforcement;
     private final AtomicBoolean channelConnected = new AtomicBoolean();
@@ -164,6 +166,10 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
                 runtimeComponents.staffMode()::sessionRank
         );
         aiReview.start();
+        safetyCheckBridge = PrivateSafetyCheckBridge.create(this, json, System::getenv);
+        if (safetyCheckBridge != null) {
+            safetyCheckBridge.start();
+        }
         if (!runtimeComponents.staffMode().combat().availableWhenRequired()) {
             featureIssues.put("combatlogx", "CombatLogX is present but its combat-query API is unavailable");
         }
@@ -222,6 +228,7 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
             integrations.closeChatBridge();
         }
         resources.close("AI review subsystem", aiReview);
+        resources.close("private player safety checks", safetyCheckBridge);
         resources.close("mute enforcement", muteEnforcement);
         resources.close("inventory coordinator", runtimeComponents == null ? null : runtimeComponents.inventory());
         resources.close("staff action audit logger",

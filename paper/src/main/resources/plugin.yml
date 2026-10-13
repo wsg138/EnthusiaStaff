@@ -155,6 +155,9 @@ commands:
     description: Remove this Minecraft account's current Discord link after confirmation
     usage: /unlink CONFIRM
 permissions:
+  enthusiastaff.safety.alerts:
+    description: Authorized private player safety-support notifications
+    default: false
   enthusiastaff.investigation.view:
     description: View active player investigation flags
     default: false
