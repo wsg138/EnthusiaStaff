@@ -57,6 +57,43 @@ class DiscordRichItemEmbedsTest {
     }
 
     @Test
+    void mapAndCustomImagesArePreservedInsteadOfDiscarded() {
+        var artifacts = List.of(
+                imageAt(ChatBridgeArtifact.Kind.TOOLTIP, 7, "Orphan.png", "Details"),
+                imageAt(ChatBridgeArtifact.Kind.MAP, 10, "Map.png", "Treasure map"),
+                imageAt(ChatBridgeArtifact.Kind.OTHER, 20, "Preview.png", "Shared preview"));
+        var selected = DiscordRichItemEmbeds.referencedArtifacts(artifacts);
+        assertEquals(List.of("Map.png", "Preview.png"),
+                selected.stream().map(ChatBridgeArtifact::filename).toList());
+
+        var embeds = DiscordRichItemEmbeds.create(artifacts, "Qaysoz");
+        assertEquals(2, embeds.size());
+        assertEquals("Qaysoz's Map", embeds.get(0).getTitle());
+        assertEquals("Treasure map", embeds.get(0).getDescription());
+        assertEquals("attachment://Map.png", embeds.get(0).getImage().getUrl());
+        assertEquals("Qaysoz's Image", embeds.get(1).getTitle());
+        assertEquals("Shared preview", embeds.get(1).getDescription());
+        assertEquals("attachment://Preview.png", embeds.get(1).getImage().getUrl());
+    }
+
+    @Test
+    void mixedItemTooltipAndMapPreserveMessageOrder() {
+        var artifacts = List.of(
+                imageAt(ChatBridgeArtifact.Kind.ITEM, 30, "Sword.png", "Sword"),
+                imageAt(ChatBridgeArtifact.Kind.TOOLTIP, 30, "SwordTooltip.png", "Sword details"),
+                imageAt(ChatBridgeArtifact.Kind.MAP, 2, "Map.png", "Map"));
+        var selected = DiscordRichItemEmbeds.referencedArtifacts(artifacts);
+        assertEquals(List.of("Map.png", "Sword.png", "SwordTooltip.png"),
+                selected.stream().map(ChatBridgeArtifact::filename).toList());
+
+        var embeds = DiscordRichItemEmbeds.create(artifacts, "Qaysoz");
+        assertEquals(2, embeds.size());
+        assertEquals("Qaysoz's Map", embeds.get(0).getTitle());
+        assertEquals("Qaysoz's Item", embeds.get(1).getTitle());
+        assertEquals("attachment://SwordTooltip.png", embeds.get(1).getImage().getUrl());
+    }
+
+    @Test
     void orphanTooltipDoesNotInventAnItemCard() {
         assertTrue(DiscordRichItemEmbeds.create(List.of(
                 image(ChatBridgeArtifact.Kind.TOOLTIP, "ToolTip.png", "Minecraft item details")),
