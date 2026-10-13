@@ -1,5 +1,6 @@
 package net.enthusia.staff.paper.staff;
 
+import io.papermc.paper.event.player.PlayerItemFrameChangeEvent;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
@@ -481,13 +482,11 @@ public final class StaffModeWorldInteractionListener implements Listener {
         if (!onDuty(player)) {
             return;
         }
-        if (event.getRightClicked() instanceof ItemFrame) {
-            auditCompletedItemFrameEdit(event, precise);
-            return;
-        }
-        // Armor-stand equipment edits have a dedicated final-state event owner.
-        // A generic right-click must not create a second "edit" record.
-        if (event.getRightClicked() instanceof ArmorStand
+        // Item-frame placement, removal and rotation have a dedicated Paper
+        // change event; a generic right-click may do nothing and is not an edit.
+        // Armor-stand equipment changes have their own final-state event too.
+        if (event.getRightClicked() instanceof ItemFrame
+                || event.getRightClicked() instanceof ArmorStand
                 || !shouldAuditCompletedWorldUse(staffMode.isUnrestricted(player), staffMode.dutyTier(player))) {
             return;
         }
@@ -498,17 +497,19 @@ public final class StaffModeWorldInteractionListener implements Listener {
         }
     }
 
-    private void auditCompletedItemFrameEdit(PlayerInteractEntityEvent event, boolean precise) {
+    // Paper emits this only for a frame PLACE, REMOVE or ROTATE attempt. Unlike
+    // generic entity interactions it excludes empty/no-op frame right-clicks.
+    // MONITOR/ignoreCancelled prevents a later protection plugin's cancellation
+    // from being reported as a completed change.
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onCompletedItemFrameChange(PlayerItemFrameChangeEvent event) {
         Player player = event.getPlayer();
-        if (!shouldAuditCompletedContainerEntityEdit(
+        if (!onDuty(player) || !shouldAuditCompletedContainerEntityEdit(
                 staffMode.isUnrestricted(player), staffMode.dutyTier(player))) {
             return;
         }
-        if (pairedEntityAudit.allow(player.getUniqueId(), event.getRightClicked().getUniqueId(),
-                event.getHand(), precise, System.nanoTime())) {
-            staffMode.logStaffAction(player, "container-entity-edit",
-                    event.getRightClicked().getType().toString());
-        }
+        staffMode.logStaffAction(player, "container-entity-edit",
+                event.getItemFrame().getType() + " action=" + event.getAction());
     }
 
     static boolean shouldAuditCompletedContainerEntityEdit(boolean unrestricted, StaffDutyTier tier) {

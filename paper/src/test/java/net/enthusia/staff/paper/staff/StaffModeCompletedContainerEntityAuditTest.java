@@ -6,12 +6,11 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.lang.reflect.Method;
-import java.util.UUID;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.player.PlayerInteractAtEntityEvent;
 import org.bukkit.event.player.PlayerInteractEntityEvent;
-import org.bukkit.inventory.EquipmentSlot;
+import io.papermc.paper.event.player.PlayerItemFrameChangeEvent;
 import org.junit.jupiter.api.Test;
 
 class StaffModeCompletedContainerEntityAuditTest {
@@ -46,17 +45,15 @@ class StaffModeCompletedContainerEntityAuditTest {
     }
 
     @Test
-    void acceptedFrameVariantsShareTheBoundedCrossVariantDeduplication() {
-        var audit = new StaffModeWorldInteractionListener.PairedEntityInteractionAudit();
-        UUID actor = UUID.randomUUID();
-        UUID itemFrame = UUID.randomUUID();
-        assertTrue(audit.allow(actor, itemFrame, EquipmentSlot.HAND, false, 1_000_000L));
-        assertFalse(audit.allow(actor, itemFrame, EquipmentSlot.HAND, true, 2_000_000L));
-        assertTrue(audit.allow(actor, itemFrame, EquipmentSlot.HAND, false, 3_000_000L),
-                "A second distinct same-variant click must still log");
-        assertTrue(audit.allow(actor, itemFrame, EquipmentSlot.OFF_HAND, true, 4_000_000L),
-                "Offhand events are independent");
-        assertTrue(audit.allow(actor, itemFrame, EquipmentSlot.HAND, true, 20_000_000L),
-                "Interactions outside the coalescing window are independent");
+    void actualPaperFrameMutationOwnsSuccessInsteadOfGenericOrPreciseRightClick() throws Exception {
+        assertHandler("onCompletedItemFrameChange", PlayerItemFrameChangeEvent.class, EventPriority.MONITOR);
+        // The dedicated Paper event describes a frame mutation; generic right-click
+        // events can also happen when no item is present and the frame does not change.
+        var actions = java.util.EnumSet.allOf(
+                PlayerItemFrameChangeEvent.ItemFrameChangeAction.class);
+        assertEquals(3, actions.size());
+        assertTrue(actions.contains(PlayerItemFrameChangeEvent.ItemFrameChangeAction.PLACE));
+        assertTrue(actions.contains(PlayerItemFrameChangeEvent.ItemFrameChangeAction.ROTATE));
+        assertTrue(actions.contains(PlayerItemFrameChangeEvent.ItemFrameChangeAction.REMOVE));
     }
 }
