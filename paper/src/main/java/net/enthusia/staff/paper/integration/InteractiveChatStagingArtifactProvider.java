@@ -450,7 +450,7 @@ public final class InteractiveChatStagingArtifactProvider
             );
 
             List<RenderJob> jobs = new ArrayList<>(3);
-            addItemJob(player, request, inventory, jobs);
+            addItemJob(player, request, inventory, detachedPlayer, jobs);
             addInventoryJob(
                     Kind.INVENTORY,
                     useInventory,
@@ -476,6 +476,7 @@ public final class InteractiveChatStagingArtifactProvider
                 Player player,
                 RichChatArtifactRequest request,
                 Inventory inventory,
+                Object detachedPlayer,
                 List<RenderJob> jobs
         ) throws ReflectiveOperationException {
             if (!itemImagesEnabled) {
@@ -501,9 +502,9 @@ public final class InteractiveChatStagingArtifactProvider
             if (itemTitleMethod != null && itemTooltipMethod != null) {
                 try {
                     name = String.valueOf(invoke(itemTitleMethod, null, item,
-                            newOfflinePlayer(player, inventory, inventory), addonLanguage));
+                            detachedPlayer, addonLanguage));
                     Object data = invoke(itemTooltipMethod, null, item,
-                            newOfflinePlayer(player, inventory, inventory), detailedTooltipsEnabled);
+                            detachedPlayer, detailedTooltipsEnabled);
                     if (!Boolean.TRUE.equals(invoke(tooltipHiddenMethod, data))) {
                         Object components = invoke(tooltipComponentsMethod, data);
                         if (components instanceof List<?> list) {
@@ -660,7 +661,24 @@ public final class InteractiveChatStagingArtifactProvider
                     renderItemTooltip(artifacts, job, suffix, ordinal++);
                 }
             }
-            return artifacts;
+            return withinBundleBudget(artifacts);
+        }
+
+        static List<RichChatArtifact> withinBundleBudget(List<RichChatArtifact> candidates) {
+            List<RichChatArtifact> kept = new ArrayList<>();
+            long total = 0L;
+            for (RichChatArtifact artifact : candidates) {
+                if (kept.size() >= net.enthusia.staff.protocol.ChatBridgeArtifactBundle.MAX_ARTIFACTS) {
+                    break;
+                }
+                long size = artifact.data().length;
+                if (total + size > net.enthusia.staff.protocol.ChatBridgeArtifactBundle.MAX_TOTAL_ARTIFACT_BYTES) {
+                    continue;
+                }
+                kept.add(artifact);
+                total += size;
+            }
+            return kept;
         }
 
         private void renderItemTooltip(List<RichChatArtifact> artifacts,
