@@ -170,15 +170,13 @@ public final class ExactRetractionPlanner {
             SourceEvent current, SourceEvent previous, String verdict,
             Collection<String> related, Collection<PublicationReceipt> publications,
             Set<Destination> allowed) {
-        if (related.size() > MAX_PLAN_RECORDS || publications.size() > MAX_PLAN_RECORDS
-                || allowed.size() > MAX_PLAN_RECORDS) {
+        if (exceedsLimit(related, publications, allowed)) {
             return Refusal.INPUT_CAPACITY_EXCEEDED;
         }
         if (!BLOCK_VERDICT.equals(verdict)) {
             return Refusal.NOT_BLOCK;
         }
-        if (current.eventId().equals(previous.eventId())
-                || !related.contains(previous.eventId())) {
+        if (!hasExplicitEvidence(current, previous, related)) {
             return Refusal.EVIDENCE_NOT_EXPLICIT;
         }
         if (!isPublicOrigin(current) || !isPublicOrigin(previous)) {
@@ -187,9 +185,25 @@ public final class ExactRetractionPlanner {
         if (!sameConversation(current, previous)) {
             return Refusal.SOURCE_CONTEXT_MISMATCH;
         }
+        return withinAgeWindow(current, previous) ? Refusal.NONE : Refusal.OUTSIDE_WINDOW;
+    }
+
+    private static boolean exceedsLimit(
+            Collection<String> related, Collection<PublicationReceipt> publications,
+            Set<Destination> allowed) {
+        return related.size() > MAX_PLAN_RECORDS || publications.size() > MAX_PLAN_RECORDS
+                || allowed.size() > MAX_PLAN_RECORDS;
+    }
+
+    private static boolean hasExplicitEvidence(
+            SourceEvent current, SourceEvent previous, Collection<String> related) {
+        return !current.eventId().equals(previous.eventId())
+                && related.contains(previous.eventId());
+    }
+
+    private static boolean withinAgeWindow(SourceEvent current, SourceEvent previous) {
         Duration age = Duration.between(previous.occurredAt(), current.occurredAt());
-        return age.isNegative() || age.compareTo(MAX_AGE) > 0
-                ? Refusal.OUTSIDE_WINDOW : Refusal.NONE;
+        return !age.isNegative() && age.compareTo(MAX_AGE) <= 0;
     }
 
     private static boolean supportedPublication(PublicationReceipt receipt) {
