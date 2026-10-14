@@ -11,6 +11,7 @@ import net.enthusia.staff.domain.sanction.SanctionType;
 
 /** Calculated outcomes are bounded by real, configured policy steps and evaluated history. */
 public final class GuidedPolicyResolution {
+    private static final int SINGLE_SANCTION_COUNT = 1;
     public record Outcome(List<SanctionSpec> sanctions, String reasoning, boolean customDuration) {
         public Outcome { sanctions = List.copyOf(sanctions); }
     }
@@ -60,7 +61,7 @@ public final class GuidedPolicyResolution {
      * including when prior history already selected such a policy step.
      */
     private static void requireOrdinaryGuidedRemedy(List<SanctionSpec> sanctions) {
-        if (sanctions.size() != 1) {
+        if (sanctions.size() != SINGLE_SANCTION_COUNT) {
             throw new IllegalArgumentException("Mixed sanctions require explicit review");
         }
         SanctionSpec spec = sanctions.getFirst();

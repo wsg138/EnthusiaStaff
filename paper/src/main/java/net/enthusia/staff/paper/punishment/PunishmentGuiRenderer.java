@@ -641,13 +641,20 @@ final class PunishmentGuiRenderer {
         PunishmentDraft draft = state.draft();
         int total = policy == null ? 0 : policy.steps().size();
         List<Component> lore = new ArrayList<>();
-        lore.add(Component.text(
-                "Step " + (draft.expectation().stepOrdinal() + 1) + (total > 0 ? "/" + total : ""),
-                NamedTextColor.GOLD
-        ));
+        boolean guided = draft.internalExplanation().startsWith("Guided incident v1");
+        if (guided) {
+            lore.add(Component.text("Calculated from incident details and related history.",
+                    NamedTextColor.GRAY));
+        } else {
+            lore.add(Component.text(
+                    "Step " + (draft.expectation().stepOrdinal() + 1)
+                            + (total > 0 ? "/" + total : ""), NamedTextColor.GOLD));
+        }
         lore.add(Component.text(describe(draft.expectation().sanctions()), NamedTextColor.WHITE));
-        lore.add(Component.text("This is what confirmation will submit.", NamedTextColor.GRAY));
-        return item(Material.GOLD_INGOT, "03 | Recommended Outcome", NamedTextColor.GOLD, lore);
+        lore.add(Component.text("This is what confirmation will submit.", NamedTextColor.YELLOW));
+        return item(Material.GOLD_INGOT,
+                guided ? "03 | Calculated Type & Length" : "03 | Recommended Outcome",
+                NamedTextColor.GOLD, lore);
     }
 
     private static ItemStack safetyItem(PunishmentGuiState.Review state, String activePolicyVersion) {

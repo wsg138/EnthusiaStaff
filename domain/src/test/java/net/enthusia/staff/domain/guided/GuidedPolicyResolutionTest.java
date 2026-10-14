@@ -17,6 +17,7 @@ import net.enthusia.staff.domain.sanction.SanctionType;
 import org.junit.jupiter.api.Test;
 
 class GuidedPolicyResolutionTest {
+    private static final String SPAM_FAMILY = "spam";
     private static final String FLOOD_ID = "spam.message-flooding";
     private static SanctionSpec warn() {
         return new SanctionSpec(SanctionType.WARNING, SanctionLength.instant());
@@ -33,7 +34,7 @@ class GuidedPolicyResolutionTest {
     );
 
     private static PunishmentAssessment assessment(int historyOrdinal, String id) {
-        var policy = new ReasonPolicy(id, "spam", "Spam", 10, true, STEPS);
+        var policy = new ReasonPolicy(id, SPAM_FAMILY, "Spam", 10, true, STEPS);
         var escalation = new EscalationDecision(historyOrdinal, historyOrdinal, 0,
                 List.of(), STEPS.get(historyOrdinal));
         return new PunishmentAssessment("fixture.1", policy, escalation,
@@ -42,7 +43,7 @@ class GuidedPolicyResolutionTest {
 
     private static GuidedIncidentWizard.Finding finding(String extent, String warning) {
         return GuidedIncidentWizard.start("chat")
-                .answer("medium", "public-chat").answer("conduct", "spam")
+                .answer("medium", "public-chat").answer("conduct", SPAM_FAMILY)
                 .answer("extent", extent).answer("continued", warning).finding();
     }
 
@@ -86,7 +87,7 @@ class GuidedPolicyResolutionTest {
         List<PunishmentStep> steps = List.of(
                 new PunishmentStep(0, "Baseline warning", List.of(warn())),
                 new PunishmentStep(1, "Elevated consequence", List.of(finalSanction)));
-        ReasonPolicy policy = new ReasonPolicy(FLOOD_ID, "spam",
+        ReasonPolicy policy = new ReasonPolicy(FLOOD_ID, SPAM_FAMILY,
                 "Flooding", 15, true, steps);
         EscalationDecision decision = new EscalationDecision(0, 0, 0, List.of(), steps.getFirst());
         return new PunishmentAssessment("fixture.1", policy, decision, List.of(warn()));
@@ -113,17 +114,22 @@ class GuidedPolicyResolutionTest {
         var ban = new SanctionSpec(SanctionType.BAN,
                 SanctionLength.temporary(Duration.ofDays(7)));
         var permanentMute = new SanctionSpec(SanctionType.MUTE, SanctionLength.permanent());
-        for (SanctionSpec restricted : List.of(ban, permanentMute)) {
-            List<PunishmentStep> steps = List.of(
-                    new PunishmentStep(0, "First", List.of(warn())),
-                    new PunishmentStep(1, "Restricted", List.of(restricted)));
-            var reason = new ReasonPolicy("spam.low-level", "spam", "Minor spam", 10, true, steps);
-            var prior = new EscalationDecision(1, 1, 0, List.of(), steps.get(1));
-            var assessed = new PunishmentAssessment("test.version", reason, prior,
-                    steps.get(1).sanctions());
-            assertThrows(IllegalArgumentException.class,
-                    () -> GuidedPolicyResolution.calculate(finding, assessed, 0));
-        }
+        assertEscalatedRestrictedSanctionRequiresReview(finding, ban);
+        assertEscalatedRestrictedSanctionRequiresReview(finding, permanentMute);
+    }
+
+    private static void assertEscalatedRestrictedSanctionRequiresReview(
+            GuidedIncidentWizard.Finding finding, SanctionSpec restricted) {
+        List<PunishmentStep> steps = List.of(
+                new PunishmentStep(0, "First", List.of(warn())),
+                new PunishmentStep(1, "Restricted", List.of(restricted)));
+        ReasonPolicy policy = new ReasonPolicy("spam.low-level", SPAM_FAMILY,
+                "Minor spam", 10, true, steps);
+        EscalationDecision prior = new EscalationDecision(1, 1, 0, List.of(), steps.get(1));
+        PunishmentAssessment assessed = new PunishmentAssessment(
+                "test.version", policy, prior, steps.get(1).sanctions());
+        assertThrows(IllegalArgumentException.class,
+                () -> GuidedPolicyResolution.calculate(finding, assessed, 0));
     }
 
     @Test

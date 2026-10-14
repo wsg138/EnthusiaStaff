@@ -21,6 +21,7 @@ public final class GuidedIncidentWizard {
         public Finding { facts = List.copyOf(facts); }
     }
     private static final String CHAT = "chat";
+    private static final String SAFETY = "safety";
     private static final String MEDIUM = "medium";
     private static final String CONDUCT = "conduct";
     private static final String DETAIL = "detail";
@@ -31,7 +32,7 @@ public final class GuidedIncidentWizard {
     private static final String OTHER_UNSURE = "Other / unsure";
     private static final String OTHER = "other";
     private static final List<String> CATEGORIES =
-            List.of("chat", "gameplay", "safety", "accounts", "community", "economy", OTHER);
+            List.of(CHAT, "gameplay", SAFETY, "accounts", "community", "economy", OTHER);
     private final String category;
     private final Map<String, String> answers;
 
@@ -82,7 +83,7 @@ public final class GuidedIncidentWizard {
     }
 
     private List<Question> severityPath(List<Question> result) {
-        if (!"safety".equals(category) && !OTHER.equals(answers.get(CONDUCT))) {
+        if (!SAFETY.equals(category) && !OTHER.equals(answers.get(CONDUCT))) {
             if (appendUnanswered(result, new Question(EXTENT, "How extensive was it?",
                     List.of(c("few", "Minor / isolated"), c("sustained", "Repeated / sustained"),
                             c("large-scale", "Severe / large scale"), c(UNKNOWN, "Not sure"))))) {
@@ -172,7 +173,7 @@ public final class GuidedIncidentWizard {
         String candidate = GuidedOffenseClassifier.resolve(
                 category, medium, conduct, answers.get(DETAIL),
                 answers.get(EXTENT), answers.get(TARGETING));
-        boolean review = candidate == null || "safety".equals(category)
+        boolean review = candidate == null || SAFETY.equals(category)
                 || List.of("slur", "threat", "privacy", "hate").contains(conduct)
                 || UNKNOWN.equals(medium)
                 || UNKNOWN.equals(answers.get(DETAIL))
@@ -233,7 +234,7 @@ public final class GuidedIncidentWizard {
                     c("mechanics", "Disruptive mechanics"),
                     c("complicity", "Assisted rule breaking"),
                     c(OTHER, OTHER_UNSURE));
-            case "safety" -> List.of(c("threat", "Threat / danger"),
+            case SAFETY -> List.of(c("threat", "Threat / danger"),
                     c("privacy", "Private information"), c(OTHER, OTHER_UNSURE));
             case "accounts" -> List.of(c("access", "Account access"),
                     c("evasion", "Punishment evasion"),
