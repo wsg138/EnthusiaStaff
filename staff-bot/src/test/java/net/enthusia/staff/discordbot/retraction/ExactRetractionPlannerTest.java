@@ -110,7 +110,10 @@ class ExactRetractionPlannerTest {
         for (SourceEvent before : foreign) {
             Plan planned = plan(later(), before,
                     List.of(discord(before, "1234567890123456787")));
-            assertEquals(Refusal.SOURCE_CONTEXT_MISMATCH, planned.refusal());
+            Refusal expected = "minecraft".equals(before.platform())
+                    && "minecraft_public".equals(before.channelProfile())
+                    ? Refusal.SOURCE_CONTEXT_MISMATCH : Refusal.NONPUBLIC_SOURCE;
+            assertEquals(expected, planned.refusal());
             assertTrue(planned.targets().isEmpty());
         }
     }
@@ -123,6 +126,16 @@ class ExactRetractionPlannerTest {
                 "staff_private", null, 2);
         assertEquals(Refusal.NONPUBLIC_SOURCE, plan(current, before,
                 List.of(discord(before, "1234567890123456787"))).refusal());
+    }
+
+    @Test
+    void rejectsArbitraryOriginPlatformClaimingPublicMinecraftProfile() {
+        SourceEvent before = new SourceEvent("first", "staff_private_transport", "smp",
+                "minecraft_public", "global", null, "player-a", START);
+        SourceEvent current = new SourceEvent("second", "staff_private_transport", "smp",
+                "minecraft_public", "global", null, "player-a", START.plusSeconds(2));
+        assertEquals(Refusal.NONPUBLIC_SOURCE,
+                plan(current, before, List.of(discord(before, "1234567890123456787"))).refusal());
     }
 
     @Test

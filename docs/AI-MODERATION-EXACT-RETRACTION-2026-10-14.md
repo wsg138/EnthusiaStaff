@@ -34,3 +34,12 @@ Synthetic cases cover BLOCK/evidence gating, sender/server/channel/profile/conve
 - No actual JDA delete acceptance, Linux permissions/keys, retention decision, server deployment or production cutover.
 
 Do not merge or enable automatic chat deletion on the strength of these unit tests alone. Coordinator must review schema/transport and authorize the next claimed integration increment.
+
+
+## Paper / RoseChat capability research (read-only, not a live verification)
+
+- Current Staff Paper compile dependency is Paper API 26.2.build.122-stable with Java 25 and ProtocolLib 5.4.0. Those are build dependencies, not proof of versions installed in the running SMP.
+- Official Paper signed-chat documentation (https://docs.papermc.io/paper/dev/component-api/signed-messages/) says AsyncChatEvent exposes signedMessage() and Audience.deleteMessage(SignedMessage) or Audience.deleteMessage(SignedMessage.Signature) can request signed chat deletion. It distinguishes system/unsigned messages and does not guarantee undoing a message recipients already saw.
+- Current RoseChat documentation (https://wiki.rosewooddev.io/RoseChat/commands-%26-permissions/) exposes delete-message permissions, including separate client/self/others rights. Its historical integration documentation identifies ProtocolLib as needed for RoseChat message deletion. These features are NOT proof that our customized RoseChat outbound renderer uses the same exact signed chat handle as Paper.
+- The standalone wsg138/Enthusia-RoseChat component has a license-based source redistribution blocker in EnthusiaStaff's component metadata, and there is no verified Paper recipient-signature capture/replay contract in the current Staff integration APIs. Do not import its source into this public aggregate repository without license authorization.
+- **Practical result:** maintain a default UNSUPPORTED response for Paper removal until an integration test captures an actual signed-message object/signature and proves that the specific RoseChat-published client message accepts an exact delete request. Console/system messages must remain UNSUPPORTED. No ProtocolLib packet spoofing or guessed signatures.

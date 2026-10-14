@@ -25,8 +25,6 @@ import java.util.Set;
 public final class ExactRetractionPlanner {
     private static final Duration MAX_AGE = Duration.ofSeconds(15);
     private static final int MAX_PLAN_RECORDS = 64;
-    private static final Set<String> PUBLIC_PROFILES = Set.of(
-            "minecraft_public", "discord_public");
 
     private ExactRetractionPlanner() {}
 
@@ -150,8 +148,7 @@ public final class ExactRetractionPlanner {
                 || !explicitRelatedEventIds.contains(previous.eventId())) {
             return refused(Refusal.EVIDENCE_NOT_EXPLICIT);
         }
-        if (!PUBLIC_PROFILES.contains(current.channelProfile())
-                || !PUBLIC_PROFILES.contains(previous.channelProfile())) {
+        if (!isPublicOrigin(current) || !isPublicOrigin(previous)) {
             return refused(Refusal.NONPUBLIC_SOURCE);
         }
         if (!sameConversation(current, previous)) {
@@ -193,6 +190,13 @@ public final class ExactRetractionPlanner {
             }
         }
         return new Plan(selected, unsupported, Refusal.NONE);
+    }
+
+    private static boolean isPublicOrigin(SourceEvent source) {
+        return "minecraft".equals(source.platform())
+                && "minecraft_public".equals(source.channelProfile())
+                || "discord".equals(source.platform())
+                && "discord_public".equals(source.channelProfile());
     }
 
     private static boolean sameConversation(SourceEvent a, SourceEvent b) {
