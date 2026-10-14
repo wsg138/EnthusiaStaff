@@ -64,6 +64,7 @@ The sanitized `managed_role_shadow_summary` log now includes `sample_gate`, `lum
 - `SNAPSHOT_INCOMPLETE` means the claim ceiling was hit or a desired-state document was invalid; do not infer role parity from partial data.
 - `ROLE_DRIFT` means a mismatch or missing/ambiguous role remains. Do not adopt/delete/grant/revoke a role in shadow mode.
 - `ROLE_ID_UNBOUND` means at least one claim matched by role display name rather than a known exact legacy Discord role ID. Names are not unique, so this is insufficient parity evidence even when the holder sets happen to match.
+- `ROLE_OWNERSHIP_CONFLICT` means multiple independently managed resources claim the same exact Discord role ID. This blocks parity evidence even if the holder sets match. The sanitized summary records only `conflicting_role_ids` counts, never raw Discord role IDs.
 - `luma_claims=0` or `playtime_claims=0` requires checking whether that producer is supposed to be active; do not interpret a zero from an expected producer as success.
 
 `unlinked_minecraft` is diagnostic; many ordinary Minecraft accounts are legitimately unlinked, so a nonzero value alone does not mean managed-role drift. Check it alongside missing and extra memberships.

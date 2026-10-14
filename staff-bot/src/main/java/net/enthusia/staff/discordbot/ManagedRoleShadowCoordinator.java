@@ -2,6 +2,9 @@ package net.enthusia.staff.discordbot;
 
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Map;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
@@ -68,7 +71,8 @@ final class ManagedRoleShadowCoordinator implements AutoCloseable {
         SNAPSHOT_INCOMPLETE,
         NO_CLAIMS,
         ROLE_DRIFT,
-        ROLE_ID_UNBOUND
+        ROLE_ID_UNBOUND,
+        ROLE_OWNERSHIP_CONFLICT
     }
 
     private record Summary(
@@ -81,6 +85,7 @@ final class ManagedRoleShadowCoordinator implements AutoCloseable {
             int lumaClaims,
             int playtimeClaims,
             int unboundRoleClaims,
+            int conflictingRoleIds,
             List<ClaimResult> driftDetails
     ) {
         Summary {
@@ -217,8 +222,25 @@ final class ManagedRoleShadowCoordinator implements AutoCloseable {
                 lumaClaims,
                 playtimeClaims,
                 unboundRoleClaims,
+                conflictingRoleIds(claims),
                 driftDetails
         );
+    }
+
+    /** Count exact Discord role IDs claimed by more than one logical managed resource. */
+    static int conflictingRoleIds(List<ManagedRoleShadowService.ResolvedClaim> claims) {
+        if (claims == null) throw new IllegalArgumentException("claims required");
+        Map<String, String> owners = new HashMap<>();
+        Set<String> conflicts = new HashSet<>();
+        for (ManagedRoleShadowService.ResolvedClaim resolved : claims) {
+            var claim = resolved.claim();
+            if (claim.existingDiscordRoleId().isEmpty()) continue;
+            String id = claim.existingDiscordRoleId().orElseThrow();
+            String owner = claim.namespace() + ":" + claim.reconciliationKey();
+            String previous = owners.putIfAbsent(id, owner);
+            if (previous != null && !previous.equals(owner)) conflicts.add(id);
+        }
+        return conflicts.size();
     }
 
     /**
@@ -227,13 +249,15 @@ final class ManagedRoleShadowCoordinator implements AutoCloseable {
      * producers, legacy role mappings, and multiple windows remains required.
      */
     static SampleGate assessSample(ManagedRoleShadowService.Snapshot snapshot,
-            int processedClaims, int detectedDrifts, int unboundRoleClaims) {
+            int processedClaims, int detectedDrifts, int unboundRoleClaims, int conflictingRoleIds) {
         if (snapshot == null || processedClaims < 0 || detectedDrifts < 0
-                || unboundRoleClaims < 0 || unboundRoleClaims > processedClaims) {
+                || unboundRoleClaims < 0 || unboundRoleClaims > processedClaims
+                || conflictingRoleIds < 0 || conflictingRoleIds > processedClaims) {
             throw new IllegalArgumentException("managed-role sample inputs are invalid");
         }
         if (snapshot.incomplete()) return SampleGate.SNAPSHOT_INCOMPLETE;
         if (processedClaims == 0) return SampleGate.NO_CLAIMS;
+        if (conflictingRoleIds > 0) return SampleGate.ROLE_OWNERSHIP_CONFLICT;
         if (detectedDrifts > 0) return SampleGate.ROLE_DRIFT;
         if (unboundRoleClaims > 0) return SampleGate.ROLE_ID_UNBOUND;
         return SampleGate.ZERO_DRIFT_SAMPLE;
@@ -243,12 +267,14 @@ final class ManagedRoleShadowCoordinator implements AutoCloseable {
         if (LOGGER.isLoggable(System.Logger.Level.INFO)) {
             int invalid = snapshot.invalidResourceRefs().size();
             SampleGate gate = assessSample(
-                    snapshot, summary.claims(), summary.drifts(), summary.unboundRoleClaims());
+                    snapshot, summary.claims(), summary.drifts(),
+                    summary.unboundRoleClaims(), summary.conflictingRoleIds());
             LOGGER.log(
                     System.Logger.Level.INFO,
                     "managed_role_shadow_summary complete={0} claims={1} matches={2} drift={3} "
                             + "missing_members={4} extra_members={5} unlinked_minecraft={6} invalid_claims={7} "
-                            + "sample_gate={8} luma_claims={9} playtime_claims={10} unbound_role_claims={11}",
+                            + "sample_gate={8} luma_claims={9} playtime_claims={10} unbound_role_claims={11} "
+                            + "conflicting_role_ids={12}",
                     !snapshot.incomplete(),
                     summary.claims() + invalid,
                     summary.matches(),
@@ -260,7 +286,8 @@ final class ManagedRoleShadowCoordinator implements AutoCloseable {
                     gate,
                     summary.lumaClaims(),
                     summary.playtimeClaims(),
-                    summary.unboundRoleClaims()
+                    summary.unboundRoleClaims(),
+                    summary.conflictingRoleIds()
             );
         }
     }
