@@ -477,6 +477,8 @@ For a normal split deployment:
 
 The Discord punishment runtime has durable database-backed work/recovery, but it is opt-in. Do not enable it merely as a launch test.
 
+For no-restart Discord setup and future DiscordSRV cutover gates, see [DiscordSRV owner preflight](../docs/discordsrv-retirement-owner-preflight-20261014.md).
+
 ## Bloom / Pterodactyl requirements
 
 Use an isolated Java 25 split/container.
