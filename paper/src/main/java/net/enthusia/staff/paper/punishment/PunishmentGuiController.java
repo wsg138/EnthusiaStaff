@@ -326,9 +326,12 @@ public final class PunishmentGuiController implements Listener {
                 openState(viewer, capture.review());
                 return;
             }
-            if (note.isBlank() || note.length() > 4_000) {
+            int maxNoteLength = isGuidedDraft(capture.review().draft().internalExplanation())
+                    ? 2_000 : 4_000;
+            if (note.isBlank() || note.length() > maxNoteLength) {
                 viewer.sendMessage(StaffMessageStyle.style(Component.text(
-                        "The internal explanation must contain 1 to 4000 characters; the prior draft remains saved."
+                        "The internal explanation must contain 1 to " + maxNoteLength
+                                + " characters; the prior draft remains saved."
                 )));
                 openState(viewer, capture.review());
                 return;
@@ -592,7 +595,13 @@ public final class PunishmentGuiController implements Listener {
                 .forEach(entry -> result.append(" | ").append(entry.getKey())
                         .append('=').append(entry.getValue()));
         return result.append(" | incidentImpact=")
-                .append(finding.preliminaryImpact()).toString();
+                .append(finding.preliminaryImpact())
+                .append(" | staffPreference=")
+                .append(switch (state.durationChoice()) {
+                    case -1 -> "CONSERVATIVE";
+                    case 1 -> "STRONGER";
+                    default -> "BALANCED";
+                }).toString();
     }
 
     private void reasonClick(Player viewer, Actor actor, PunishmentGuiState.Reasons state, int slot) {
@@ -798,11 +807,18 @@ public final class PunishmentGuiController implements Listener {
             suppressedClosures.add(viewer.getUniqueId());
             viewer.closeInventory();
             viewer.sendMessage(StaffMessageStyle.style(Component.text(
-                    "Type the private internal explanation in chat, or type cancel. It will not be broadcast."
+                    isGuidedDraft(state.draft().internalExplanation())
+                            ? "Add a private staff rationale; incident facts are preserved. Type cancel to return."
+                            : "Type the private internal explanation in chat, or type cancel. It will not be broadcast."
             )));
             return;
         }
         if (slot == PunishmentGuiRenderer.CONFIRM_SLOT) {
+            if (guidedNeedsStaffRationale(state.draft().internalExplanation())) {
+                message(viewer, "You changed the suggested assessment. Add an internal note "
+                        + "explaining why before confirming.");
+                return;
+            }
             if (catalog.find(state.draft().reasonId()).isEmpty()) {
                 message(viewer, "That saved reason is no longer available. Go back and choose another reason.");
                 return;
@@ -937,6 +953,29 @@ public final class PunishmentGuiController implements Listener {
         });
     }
 
+    private static final String GUIDED_AUDIT_PREFIX = "Guided incident v1";
+    private static final String STAFF_NOTE_SEPARATOR = " | Staff note: ";
+
+    private static boolean isGuidedDraft(String explanation) {
+        return explanation.startsWith(GUIDED_AUDIT_PREFIX);
+    }
+
+    static boolean guidedNeedsStaffRationale(String explanation) {
+        return isGuidedDraft(explanation)
+                && (explanation.contains("staffPreference=CONSERVATIVE")
+                        || explanation.contains("staffPreference=STRONGER"))
+                && !explanation.contains(STAFF_NOTE_SEPARATOR);
+    }
+
+    static String guidedAuditExplanation(String previous, String replacement) {
+        if (!isGuidedDraft(previous) || isGuidedDraft(replacement)) {
+            return replacement;
+        }
+        String originalAudit = previous.split(java.util.regex.Pattern.quote(
+                STAFF_NOTE_SEPARATOR), 2)[0];
+        return originalAudit + STAFF_NOTE_SEPARATOR + replacement.trim();
+    }
+
     private void reprepare(
             Player viewer,
             Actor actor,
@@ -958,7 +997,7 @@ public final class PunishmentGuiController implements Listener {
                             state.target().playerId(),
                             actor,
                             state.draft().reasonId(),
-                            explanation,
+                            guidedAuditExplanation(state.draft().internalExplanation(), explanation),
                             visibility,
                             state.commandName(),
                             state.assessment()
