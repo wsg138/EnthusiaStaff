@@ -17,6 +17,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.function.Supplier;
 import java.util.logging.Level;
+import net.enthusia.staff.domain.guided.GuidedIncidentWizard;
 import net.enthusia.staff.domain.OperationalMode;
 import net.enthusia.staff.domain.application.PreparePunishmentDraftRequest;
 import net.enthusia.staff.domain.application.PunishmentAssessment;
@@ -252,6 +253,10 @@ public final class PunishmentGuiController implements Listener {
             categoryClick(viewer, actor, categories, slot);
             return;
         }
+        if (state instanceof PunishmentGuiState.Guided guided) {
+            guidedClick(viewer, actor, guided, slot);
+            return;
+        }
         if (state instanceof PunishmentGuiState.Reasons reasons) {
             reasonClick(viewer, actor, reasons, slot);
             return;
@@ -417,6 +422,14 @@ public final class PunishmentGuiController implements Listener {
         }
         int index = PunishmentGuiRenderer.categoryIndex(slot, categories.size());
         if (index >= 0 && index < categories.size()) {
+            if ("punish".equalsIgnoreCase(state.commandName())) {
+                String categoryId = categories.get(index).id();
+                openState(viewer, new PunishmentGuiState.Guided(
+                        state.viewerId(), state.target(), state.commandName(),
+                        state.overview(), categoryId,
+                        GuidedIncidentWizard.start(categoryId), 0));
+                return;
+            }
             openState(viewer, new PunishmentGuiState.Reasons(
                     state.viewerId(),
                     state.target(),
@@ -426,6 +439,64 @@ public final class PunishmentGuiController implements Listener {
                     0
             ));
         }
+    }
+
+    /** Interview choices are non-enforcing; actual sanctions use the existing workflow. */
+    private void guidedClick(Player viewer, Actor actor, PunishmentGuiState.Guided state, int slot) {
+        if (openHistoryFromControl(viewer, state, slot)) {
+            return;
+        }
+        if (slot == PunishmentGuiRenderer.CLOSE_SLOT) {
+            viewer.closeInventory();
+            return;
+        }
+        if (slot == PunishmentGuiRenderer.SEARCH_SLOT) {
+            if (!catalog.reasons(actor, state.commandName(), state.categoryId()).isEmpty()) {
+                openState(viewer, new PunishmentGuiState.Reasons(
+                        state.viewerId(), state.target(), state.commandName(),
+                        state.overview(), state.categoryId(), 0));
+            }
+            return;
+        }
+        if (slot == PunishmentGuiRenderer.BACK_SLOT) {
+            GuidedIncidentWizard previous = state.interview().back();
+            if (previous.answers().isEmpty()) {
+                openState(viewer, categoriesState(state));
+            } else {
+                openGuidedPage(viewer, state, previous, 0);
+            }
+            return;
+        }
+        var question = state.interview().nextQuestion();
+        if (question.isPresent()) {
+            GuidedIncidentWizard.Question prompt = question.orElseThrow();
+            for (int index = 0; index < prompt.choices().size()
+                    && index < PunishmentGuiRenderer.GUIDED_CHOICE_SLOTS.length; index++) {
+                if (slot == PunishmentGuiRenderer.GUIDED_CHOICE_SLOTS[index]) {
+                    var choice = prompt.choices().get(index);
+                    openGuidedPage(viewer, state,
+                            state.interview().answer(prompt.id(), choice.id()), 0);
+                    return;
+                }
+            }
+        } else {
+            int updated = switch (slot) {
+                case PunishmentGuiRenderer.GUIDED_SHORTER_SLOT -> -1;
+                case PunishmentGuiRenderer.GUIDED_SUGGESTED_SLOT -> 0;
+                case PunishmentGuiRenderer.GUIDED_LONGER_SLOT -> 1;
+                default -> state.durationChoice();
+            };
+            if (updated != state.durationChoice()) {
+                openGuidedPage(viewer, state, state.interview(), updated);
+            }
+        }
+    }
+
+    private void openGuidedPage(Player viewer, PunishmentGuiState.Guided state,
+                                GuidedIncidentWizard interview, int durationChoice) {
+        openState(viewer, new PunishmentGuiState.Guided(
+                state.viewerId(), state.target(), state.commandName(),
+                state.overview(), state.categoryId(), interview, durationChoice));
     }
 
     private void reasonClick(Player viewer, Actor actor, PunishmentGuiState.Reasons state, int slot) {
