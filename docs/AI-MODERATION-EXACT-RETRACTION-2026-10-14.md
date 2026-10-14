@@ -43,3 +43,22 @@ Do not merge or enable automatic chat deletion on the strength of these unit tes
 - Current RoseChat documentation (https://wiki.rosewooddev.io/RoseChat/commands-%26-permissions/) exposes delete-message permissions, including separate client/self/others rights. Its historical integration documentation identifies ProtocolLib as needed for RoseChat message deletion. These features are NOT proof that our customized RoseChat outbound renderer uses the same exact signed chat handle as Paper.
 - The standalone wsg138/Enthusia-RoseChat component has a license-based source redistribution blocker in EnthusiaStaff's component metadata, and there is no verified Paper recipient-signature capture/replay contract in the current Staff integration APIs. Do not import its source into this public aggregate repository without license authorization.
 - **Practical result:** maintain a default UNSUPPORTED response for Paper removal until an integration test captures an actual signed-message object/signature and proves that the specific RoseChat-published client message accepts an exact delete request. Console/system messages must remain UNSUPPORTED. No ProtocolLib packet spoofing or guessed signatures.
+
+## Coordinator independent review hardening
+
+The pure planner now factors its early preflight and surface capability
+decisions into separate helpers, reducing branching complexity. Deterministic
+operation IDs are versioned \`exact-retraction-v2\` and bind the **full canonical
+source** (platform, server, profile, channel, conversation, sender, time,
+event ID) as well as the destination and signed publication handle. This
+avoids deduplication collisions between independently scoped events that reuse
+the same string event ID or point at a compromised/duplicated remote receipt.
+A synthetic negative test covers cross-server, cross-sender, and changed-time
+origin identities.
+
+**Migration gate:** Because v2 operation IDs intentionally differ from v1,
+any eventual durable deletion journal must define an explicit single-version
+deployment/reconciliation strategy and must not process both v1/v2 IDs as
+separate deletion attempts. No durable journal or production transport is
+present in this PR. Independent authorized receipt provenance and fresh
+case-state checks remain mandatory before mutation.
