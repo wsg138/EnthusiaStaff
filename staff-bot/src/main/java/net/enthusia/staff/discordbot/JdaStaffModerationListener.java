@@ -267,6 +267,15 @@ final class JdaStaffModerationListener extends ListenerAdapter {
         }
     }
 
+    /** Helpers and Developers may triage reports, never punishment approvals or alt alerts. */
+    static boolean reviewQueueAllowed(net.enthusia.staff.domain.auth.StaffRank rank,
+            ReviewQueueView view) {
+        if (rank == null || view == null || rank == net.enthusia.staff.domain.auth.StaffRank.SYSTEM) {
+            return false;
+        }
+        return view == ReviewQueueView.REPORTS || rank.canApprovePunishmentRequests();
+    }
+
     /** Private interactive queue. Every button is HMAC-bound to the invoker and short-lived. */
     private void dispatchReviewQueue(SlashCommandInteractionEvent event, long actorId, String actorName) {
         ReviewQueueView view = ReviewQueueView.parse(option(event, REVIEW_VIEW_OPTION, "all"));
@@ -279,8 +288,9 @@ final class JdaStaffModerationListener extends ListenerAdapter {
                 try {
                     var actor = actors.invoker(
                             new DiscordUserId(Long.toUnsignedString(actorId)), actorName);
-                    if (!actor.rank().canApprovePunishmentRequests()) {
-                        hook.sendMessage("Current Minecraft moderator rank is required.").queue();
+                    if (!reviewQueueAllowed(actor.rank(), view)) {
+                        hook.sendMessage("Current Minecraft Mod+ rank is required for this queue. "
+                                + "Helpers and Developers may use view:reports.").queue();
                         return;
                     }
                     var pulse = moderationRuntime.reviewPulse();
@@ -296,15 +306,26 @@ final class JdaStaffModerationListener extends ListenerAdapter {
                                     view == ReviewQueueView.ALL ? 5 - reports.size() - altAlerts.size() : 5)
                             : java.util.List.<net.enthusia.staff.persistence.DiscordStaffReadRuntime.PendingReview>of();
                     StringBuilder message = new StringBuilder(512).append("**Staff review center · ")
-                            .append(view.name().toLowerCase(java.util.Locale.ROOT)).append("**\n")
-                            .append("Pending punishments: ").append(pulse.pendingPunishmentRequests())
-                            .append(" | Open reports: ").append(pulse.openReports())
-                            .append(" | Claimed reports: ").append(pulse.claimedReports())
-                            .append(" | Alt alert events (24h): ").append(pulse.altSignalsInLastDay())
-                            .append("\n");
+                            .append(view.name().toLowerCase(java.util.Locale.ROOT)).append("**\n");
+                    if (view == ReviewQueueView.REPORTS) {
+                        message.append("Open reports: ").append(pulse.openReports())
+                                .append(" | Claimed reports: ").append(pulse.claimedReports())
+                                .append("\n");
+                    } else {
+                        message.append("Pending punishments: ").append(pulse.pendingPunishmentRequests())
+                                .append(" | Open reports: ").append(pulse.openReports())
+                                .append(" | Claimed reports: ").append(pulse.claimedReports())
+                                .append(" | Alt alert events (24h): ").append(pulse.altSignalsInLastDay())
+                                .append("\n");
+                    }
                     if (reviews.isEmpty() && reports.isEmpty() && altAlerts.isEmpty()) {
-                        hook.sendMessage(message.append("No actionable items in this view. Try another /review-queue view.").toString())
-                                .queue();
+                        if (view == ReviewQueueView.REPORTS) {
+                            hook.sendMessageEmbeds(DiscordReportReviewCard.render(pulse, reports)).queue();
+                        } else {
+                            hook.sendMessage(message.append(
+                                    "No actionable items in this view. Try another /review-queue view.").toString())
+                                    .queue();
+                        }
                         return;
                     }
                     java.util.List<ActionRow> rows = new ArrayList<>();
@@ -327,9 +348,11 @@ final class JdaStaffModerationListener extends ListenerAdapter {
                     }
                     for (var report : reports) {
                         var target = SignedComponentCodec.TargetRef.report(report.reportId(), report.revision());
-                        message.append("Report ").append(number).append(". **").append(report.reasonId())
-                                .append("** · ").append(report.state()).append(" · Target: `")
-                                .append(report.targetId()).append("` · Report: `")
+                        message.append("Report ").append(number).append(". **")
+                                .append(net.enthusia.staff.domain.report.ReportReasonLabel.display(report.reasonId()))
+                                .append("** · ").append(report.state()).append(" · Target: ")
+                                .append(report.targetName()).append(" · Reported by: ")
+                                .append(report.reporterName()).append(" · Report: `")
                                 .append(report.reportId()).append("` rev=")
                                 .append(report.revision()).append("\n");
                         if ("OPEN".equals(report.state())) {
@@ -367,7 +390,12 @@ final class JdaStaffModerationListener extends ListenerAdapter {
                     }
                     message.append("Showing at most five items; select another /review-queue view for more. "
                             + "Controls expire shortly. Every action rechecks Minecraft authority and state.");
-                    hook.sendMessage(message.toString()).addComponents(rows).queue();
+                    if (view == ReviewQueueView.REPORTS) {
+                        hook.sendMessageEmbeds(DiscordReportReviewCard.render(pulse, reports))
+                                .addComponents(rows).queue();
+                    } else {
+                        hook.sendMessage(message.toString()).addComponents(rows).queue();
+                    }
                 } catch (RuntimeException exception) {
                     log("discord_review_queue_failed", exception);
                     hook.sendMessage("The private review queue could not be loaded.").queue();

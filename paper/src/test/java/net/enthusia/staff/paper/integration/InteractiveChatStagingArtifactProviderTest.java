@@ -34,6 +34,42 @@ class InteractiveChatStagingArtifactProviderTest {
     }
 
     @Test
+    void budgetRejectsOrphanTooltipIfItemIconCouldNotFit() {
+        var inventory = new net.enthusia.staff.api.chat.RichChatArtifact(
+                net.enthusia.staff.api.chat.RichChatArtifact.Kind.INVENTORY,
+                0, "inventory.png", "image/png", "Inventory", new byte[240_000]);
+        var skippedIcon = new net.enthusia.staff.api.chat.RichChatArtifact(
+                net.enthusia.staff.api.chat.RichChatArtifact.Kind.ITEM,
+                8, "icon.png", "image/png", "Item", new byte[240_000]);
+        var orphanTooltip = new net.enthusia.staff.api.chat.RichChatArtifact(
+                net.enthusia.staff.api.chat.RichChatArtifact.Kind.TOOLTIP,
+                8, "tooltip.png", "image/png", "Details", new byte[10_000]);
+        var laterPreview = new net.enthusia.staff.api.chat.RichChatArtifact(
+                net.enthusia.staff.api.chat.RichChatArtifact.Kind.MAP,
+                22, "map.png", "image/png", "Map", new byte[100_000]);
+
+        var kept = InteractiveChatStagingArtifactProvider.withinBundleBudget(
+                List.of(inventory, skippedIcon, orphanTooltip, laterPreview));
+        assertEquals(List.of(inventory, laterPreview), kept);
+    }
+
+    @Test
+    void budgetRetainsMatchedItemTooltipAndIgnoresLoneTooltip() {
+        var orphan = new net.enthusia.staff.api.chat.RichChatArtifact(
+                net.enthusia.staff.api.chat.RichChatArtifact.Kind.TOOLTIP,
+                1, "orphan.png", "image/png", "Details", new byte[] {1});
+        var icon = new net.enthusia.staff.api.chat.RichChatArtifact(
+                net.enthusia.staff.api.chat.RichChatArtifact.Kind.ITEM,
+                10, "icon.png", "image/png", "Item", new byte[] {2});
+        var tooltip = new net.enthusia.staff.api.chat.RichChatArtifact(
+                net.enthusia.staff.api.chat.RichChatArtifact.Kind.TOOLTIP,
+                10, "tooltip.png", "image/png", "Details", new byte[] {3});
+        assertEquals(List.of(icon, tooltip),
+                InteractiveChatStagingArtifactProvider.withinBundleBudget(
+                        List.of(orphan, icon, tooltip)));
+    }
+
+    @Test
     void itemCardTitleUsesCleanItemName() {
         assertEquals("Diamond Spear",
                 InteractiveChatStagingArtifactProvider.plainItemTitle("§bDiamond Spear<reset>"));
@@ -138,6 +174,38 @@ class InteractiveChatStagingArtifactProviderTest {
 
         assertEquals(first, second);
         assertNotEquals(playerId, first);
+    }
+
+    @Test
+    void earlierInventoryPlaceholderGetsPriorityOverLaterItemShares() {
+        var lateItemA = new InteractiveChatStagingArtifactProvider.RenderJob(
+                InteractiveChatStagingArtifactProvider.Kind.ITEM, 20, null, null);
+        var lateItemB = new InteractiveChatStagingArtifactProvider.RenderJob(
+                InteractiveChatStagingArtifactProvider.Kind.ITEM, 35, null, null);
+        var firstInventory = new InteractiveChatStagingArtifactProvider.RenderJob(
+                InteractiveChatStagingArtifactProvider.Kind.INVENTORY, 3, null, null);
+        var snapshot = new InteractiveChatStagingArtifactProvider.Snapshot(
+                new Object(), List.of(lateItemA, lateItemB, firstInventory));
+
+        assertEquals(List.of(firstInventory, lateItemA, lateItemB), snapshot.jobs());
+        assertEquals(List.of(3, 20, 35), snapshot.jobs().stream()
+                .map(InteractiveChatStagingArtifactProvider.RenderJob::position).toList());
+    }
+
+    @Test
+    void tiedPlaceholdersHaveStableKindOrderAndSnapshotsAreImmutable() {
+        var item = new InteractiveChatStagingArtifactProvider.RenderJob(
+                InteractiveChatStagingArtifactProvider.Kind.ITEM, 5, null, null);
+        var inventory = new InteractiveChatStagingArtifactProvider.RenderJob(
+                InteractiveChatStagingArtifactProvider.Kind.INVENTORY, 5, null, null);
+        var ender = new InteractiveChatStagingArtifactProvider.RenderJob(
+                InteractiveChatStagingArtifactProvider.Kind.ENDER_CHEST, 5, null, null);
+        var source = new java.util.ArrayList<>(List.of(ender, inventory, item));
+        var snapshot = new InteractiveChatStagingArtifactProvider.Snapshot(new Object(), source);
+        source.clear();
+
+        assertEquals(List.of(item, inventory, ender), snapshot.jobs());
+        assertThrows(UnsupportedOperationException.class, () -> snapshot.jobs().clear());
     }
 
     @Test

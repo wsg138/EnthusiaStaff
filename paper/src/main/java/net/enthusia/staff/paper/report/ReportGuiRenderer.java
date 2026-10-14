@@ -66,7 +66,7 @@ final class ReportGuiRenderer {
             ReportSummary summary = state.reports().get(offset + index);
             inventory.setItem(configuration.contentSlots().get(index), item(
                     stateMaterial(summary.state(), configuration),
-                    summary.reasonId().replace('-', ' ').replace('_', ' '),
+                    net.enthusia.staff.domain.report.ReportReasonLabel.display(summary.reasonId()),
                     List.of(
                             Component.text("Target: " + displayName(summary.targetId()), NamedTextColor.WHITE),
                             Component.text("Reporter: " + displayName(summary.reporterId()), NamedTextColor.GRAY),
@@ -145,7 +145,7 @@ final class ReportGuiRenderer {
                 stateMaterial(summary.state(), configuration),
                 "Report " + shortId(summary.reportId()),
                 List.of(
-                        Component.text(summary.reasonId().replace('-', ' ').replace('_', ' '), NamedTextColor.WHITE),
+                        Component.text(net.enthusia.staff.domain.report.ReportReasonLabel.display(summary.reasonId()), NamedTextColor.WHITE),
                         Component.text("Reporter: " + displayName(summary.reporterId()), NamedTextColor.GRAY),
                         Component.text("Target: " + displayName(summary.targetId()), NamedTextColor.WHITE),
                         Component.text("Report ID: " + summary.reportId(), NamedTextColor.DARK_GRAY),
@@ -168,7 +168,7 @@ final class ReportGuiRenderer {
                 configuration.message("reporter"),
                 List.of(
                         Component.text("Username: " + displayName(summary.reporterId()), NamedTextColor.WHITE),
-                        Component.text("UUID: " + summary.reporterId(), NamedTextColor.DARK_GRAY)
+                        Component.text("Private staff-only report", NamedTextColor.DARK_GRAY)
                 )
         ));
         inventory.setItem(configuration.slot("detail-target"), item(
@@ -176,7 +176,7 @@ final class ReportGuiRenderer {
                 configuration.message("target"),
                 List.of(
                         Component.text("Username: " + displayName(summary.targetId()), NamedTextColor.WHITE),
-                        Component.text("UUID: " + summary.targetId(), NamedTextColor.DARK_GRAY)
+                        Component.text("Identity verified internally", NamedTextColor.DARK_GRAY)
                 )
         ));
         inventory.setItem(configuration.slot("detail-location"), item(
@@ -285,7 +285,7 @@ final class ReportGuiRenderer {
                 stateMaterial(summary.state(), configuration),
                 "Report " + summary.reportId(),
                 List.of(
-                        Component.text(summary.reasonId(), NamedTextColor.WHITE),
+                        Component.text(net.enthusia.staff.domain.report.ReportReasonLabel.display(summary.reasonId()), NamedTextColor.WHITE),
                         Component.text("Expected revision: " + summary.revision(), NamedTextColor.YELLOW),
                         Component.text("Current state: " + summary.state(), NamedTextColor.GRAY)
                 )
@@ -400,8 +400,8 @@ final class ReportGuiRenderer {
         return id.toString().substring(0, 8);
     }
 
-    // Render occurs on the viewer's scheduler. Prefer locally known names and
-    // retain UUIDs for accountability when a profile has not been cached.
+    // Render on the viewer's scheduler. Never replace a missing player name with a UUID.
+    // Report IDs remain available elsewhere for precise staff audit/actions.
     private static String displayName(UUID id) {
         Player online = Bukkit.getPlayer(id);
         if (online != null) {
@@ -412,9 +412,8 @@ final class ReportGuiRenderer {
     }
 
     static String humanName(UUID id, String cachedName) {
-        return cachedName == null || cachedName.isBlank()
-                ? "Unknown (" + shortId(id) + ")"
-                : cachedName;
+        return cachedName != null && cachedName.matches("\\*?[A-Za-z0-9_]{1,32}")
+                ? cachedName : "Unknown player";
     }
 
     private static String queueKey(ReportQueue queue) {

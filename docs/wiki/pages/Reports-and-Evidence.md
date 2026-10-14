@@ -22,8 +22,16 @@ implementation status and source navigation, see [[Moderation, Punishments, and 
 ## Player report command
 
 ```text
-/report <player|uuid> <reason-id> <description>
+/report <player>
+# Choose a named reason in the inventory menu, then click the description prompt
+/report describe <what happened>
 ```
+
+Report reason names are displayed in title case with spaces (for example,
+"Combat Cheating"), while internal reason IDs stay unchanged. The reason
+selection expires after five minutes or when the reporting player disconnects.
+Choosing a reason does not submit a report until a description is provided.
+The legacy full command form remains supported for integrations.
 
 The target is not notified and is not told who submitted the report. The target
 may be offline as long as it exists in the authoritative player directory.
