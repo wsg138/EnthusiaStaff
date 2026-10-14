@@ -150,14 +150,14 @@ public final class GuidedIncidentWizard {
         return switch (conduct) {
             case "spam" -> switch (medium) {
                 case "public-chat" -> "sustained".equals(extent) || "large-scale".equals(extent)
-                        ? "chat.spam.flooding" : "chat.spam.low-level";
-                case "direct-message" -> "chat.spam.private-message";
-                case "voice" -> "chat.disruption.noise";
+                        ? "spam.message-flooding" : "spam.low-level";
+                case "direct-message" -> "spam.private-message";
+                case "voice" -> "spam.noise-pollution";
                 default -> null;
             };
             case "harassment" -> "targeted".equals(targeting)
-                    ? "abuse.targeted-harassment" : null;
-            case "slur" -> "hate.slur";
+                    ? "hate.targeted-harassment" : null;
+            case "slur" -> "hate.full-slur-targeted";
             default -> null;
         };
     }
