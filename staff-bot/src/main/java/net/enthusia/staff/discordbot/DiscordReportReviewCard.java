@@ -16,6 +16,11 @@ final class DiscordReportReviewCard {
 
     static MessageEmbed render(DiscordStaffReadRuntime.ReviewPulse pulse,
             List<DiscordStaffReadRuntime.PendingReport> reports) {
+        return render(pulse, reports, true);
+    }
+
+    static MessageEmbed render(DiscordStaffReadRuntime.ReviewPulse pulse,
+            List<DiscordStaffReadRuntime.PendingReport> reports, boolean actionsEnabled) {
         Objects.requireNonNull(pulse, "pulse");
         Objects.requireNonNull(reports, "reports");
         if (reports.size() > MAX_REPORTS) {
@@ -24,11 +29,18 @@ final class DiscordReportReviewCard {
         EmbedBuilder builder = new EmbedBuilder()
                 .setColor(COLOR)
                 .setTitle("📋 Player Reports • Staff Review")
-                .setDescription("Private report queue • Use the corresponding buttons below to claim or resolve. "
-                        + "Reports are investigation leads, not evidence of guilt.")
+                .setDescription(actionsEnabled
+                        ? "Private report queue • Use the corresponding buttons below to claim or resolve. "
+                                + "Actions also require active Minecraft Staff Mode and current authority. "
+                                + "Reports are investigation leads, not evidence of guilt."
+                        : "Private report queue • Read-only for this Minecraft rank. "
+                                + "A Moderator or above must claim or resolve reports. "
+                                + "Reports are investigation leads, not evidence of guilt.")
                 .addField("Open", Long.toString(pulse.openReports()), true)
                 .addField("Claimed", Long.toString(pulse.claimedReports()), true)
-                .setFooter("Up to five reports • Actions recheck current Minecraft authority");
+                .setFooter(actionsEnabled
+                        ? "Up to five reports • Actions recheck current Minecraft authority"
+                        : "Up to five reports • No report actions available for this rank");
         if (reports.isEmpty()) {
             builder.addField("Queue Clear", "No reports are awaiting action in this view.", false);
         }

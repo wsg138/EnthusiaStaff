@@ -276,6 +276,13 @@ final class JdaStaffModerationListener extends ListenerAdapter {
         return view == ReviewQueueView.REPORTS || rank.canApprovePunishmentRequests();
     }
 
+    /** Paper's report mutation endpoint accepts only these ranks, with live duty also required. */
+    static boolean canMutateReportInDiscord(net.enthusia.staff.domain.auth.StaffRank rank) {
+        return rank == net.enthusia.staff.domain.auth.StaffRank.MOD
+                || rank == net.enthusia.staff.domain.auth.StaffRank.ADMIN
+                || rank == net.enthusia.staff.domain.auth.StaffRank.FOUNDER;
+    }
+
     /** Private interactive queue. Every button is HMAC-bound to the invoker and short-lived. */
     private void dispatchReviewQueue(SlashCommandInteractionEvent event, long actorId, String actorName) {
         ReviewQueueView view = ReviewQueueView.parse(option(event, REVIEW_VIEW_OPTION, "all"));
@@ -293,6 +300,7 @@ final class JdaStaffModerationListener extends ListenerAdapter {
                                 + "Helpers and Developers may use view:reports.").queue();
                         return;
                     }
+                    boolean reportActionsEnabled = canMutateReportInDiscord(actor.rank());
                     var pulse = moderationRuntime.reviewPulse();
                     var altAlerts = view.showAlts()
                             ? moderationRuntime.pendingAltAlerts(view == ReviewQueueView.ALL ? 2 : 5)
@@ -320,7 +328,8 @@ final class JdaStaffModerationListener extends ListenerAdapter {
                     }
                     if (reviews.isEmpty() && reports.isEmpty() && altAlerts.isEmpty()) {
                         if (view == ReviewQueueView.REPORTS) {
-                            hook.sendMessageEmbeds(DiscordReportReviewCard.render(pulse, reports)).queue();
+                            hook.sendMessageEmbeds(
+                                    DiscordReportReviewCard.render(pulse, reports, reportActionsEnabled)).queue();
                         } else {
                             hook.sendMessage(message.append(
                                     "No actionable items in this view. Try another /review-queue view.").toString())
@@ -355,18 +364,20 @@ final class JdaStaffModerationListener extends ListenerAdapter {
                                 .append(report.reporterName()).append(" · Report: `")
                                 .append(report.reportId()).append("` rev=")
                                 .append(report.revision()).append("\n");
-                        if ("OPEN".equals(report.state())) {
-                            rows.add(ActionRow.of(Button.primary(reviewComponents.encode(
-                                    SignedComponentCodec.Action.REPORT_CLAIM, target, actorId),
-                                    "Claim report " + number)));
-                        } else {
-                            rows.add(ActionRow.of(
-                                    Button.success(reviewComponents.encode(
-                                            SignedComponentCodec.Action.REPORT_CLOSE, target, actorId),
-                                            "Close report " + number),
-                                    Button.secondary(reviewComponents.encode(
-                                            SignedComponentCodec.Action.REPORT_NO_VIOLATION, target, actorId),
-                                            "No violation " + number)));
+                        if (reportActionsEnabled) {
+                            if ("OPEN".equals(report.state())) {
+                                rows.add(ActionRow.of(Button.primary(reviewComponents.encode(
+                                        SignedComponentCodec.Action.REPORT_CLAIM, target, actorId),
+                                        "Claim report " + number)));
+                            } else {
+                                rows.add(ActionRow.of(
+                                        Button.success(reviewComponents.encode(
+                                                SignedComponentCodec.Action.REPORT_CLOSE, target, actorId),
+                                                "Close report " + number),
+                                        Button.secondary(reviewComponents.encode(
+                                                SignedComponentCodec.Action.REPORT_NO_VIOLATION, target, actorId),
+                                                "No violation " + number)));
+                            }
                         }
                         number++;
                     }
@@ -391,8 +402,13 @@ final class JdaStaffModerationListener extends ListenerAdapter {
                     message.append("Showing at most five items; select another /review-queue view for more. "
                             + "Controls expire shortly. Every action rechecks Minecraft authority and state.");
                     if (view == ReviewQueueView.REPORTS) {
-                        hook.sendMessageEmbeds(DiscordReportReviewCard.render(pulse, reports))
-                                .addComponents(rows).queue();
+                        var reply = hook.sendMessageEmbeds(
+                                DiscordReportReviewCard.render(pulse, reports, reportActionsEnabled));
+                        if (rows.isEmpty()) {
+                            reply.queue();
+                        } else {
+                            reply.addComponents(rows).queue();
+                        }
                     } else {
                         hook.sendMessage(message.toString()).addComponents(rows).queue();
                     }

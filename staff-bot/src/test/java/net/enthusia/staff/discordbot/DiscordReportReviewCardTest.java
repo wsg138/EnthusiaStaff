@@ -51,6 +51,22 @@ class DiscordReportReviewCardTest {
         assertTrue(embed.getFields().get(2).getName().contains("Awaiting Review"));
     }
 
+    @Test void helperAndDeveloperViewsExplicitlyDescribeReadOnlyReportTriage() {
+        var item = new DiscordStaffReadRuntime.PendingReport(
+                UUID.randomUUID(), UUID.randomUUID(), "Target", "Reporter",
+                "chat.spam", "OPEN", 1L);
+        var readOnly = DiscordReportReviewCard.render(PULSE, List.of(item), false);
+        assertTrue(readOnly.getDescription().contains("Read-only"));
+        assertTrue(readOnly.getDescription().contains("Moderator or above"));
+        assertTrue(readOnly.getFooter().getText().contains("No report actions"));
+        assertFalse(readOnly.getDescription().contains("Use the corresponding buttons"));
+        assertTrue(readOnly.getFields().get(2).getValue().contains("Target"));
+
+        var actionable = DiscordReportReviewCard.render(PULSE, List.of(item), true);
+        assertTrue(actionable.getDescription().contains("active Minecraft Staff Mode"));
+        assertTrue(actionable.getDescription().contains("buttons below"));
+    }
+
     @Test void invalidUnboundedQueueFailsClosed() {
         var item = new DiscordStaffReadRuntime.PendingReport(
                 UUID.randomUUID(), UUID.randomUUID(), "Steve", "Alex",
