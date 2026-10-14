@@ -42,12 +42,14 @@ class GuidedIncidentWizardTest {
         flow = flow.answer("conduct", "slur");
         assertFalse(flow.answers().containsKey("extent"));
         assertFalse(flow.answers().containsKey("continued"));
+        assertEquals("detail", flow.nextQuestion().orElseThrow().id());
+        flow = flow.answer("detail", "full");
         assertEquals("targeting", flow.nextQuestion().orElseThrow().id());
         assertThrows(IllegalStateException.class, flow::finding);
     }
 
     @Test
-    void otherCategoriesHaveDistinctRelevantChoicesButNoUnapprovedSanction() {
+    void otherCategoriesSelectConfiguredReasonOrRequireHighRiskReview() {
         for (String category : new String[]{"gameplay","safety","accounts","community","economy"}) {
             var flow = GuidedIncidentWizard.start(category).answer("medium", "in-game");
             var conduct = flow.nextQuestion().orElseThrow();
@@ -59,8 +61,12 @@ class GuidedIncidentWizardTest {
                 String answer = q.id().equals("continued") ? "not-applicable" : q.choices().get(0).id();
                 flow = flow.answer(q.id(), answer);
             }
-            assertTrue(flow.finding().needsReview(), category + " needs calibrated policy");
-            assertNull(flow.finding().candidateId());
+            if ("safety".equals(category)) {
+                assertTrue(flow.finding().needsReview());
+            } else {
+                assertFalse(flow.finding().needsReview(), category);
+            }
+            assertTrue(flow.finding().candidateId() != null, category);
         }
     }
 
