@@ -5,6 +5,8 @@ import java.time.Clock;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
+import java.util.HashMap;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.UUID;
@@ -13,6 +15,7 @@ import java.util.concurrent.RejectedExecutionException;
 import java.util.function.Supplier;
 import net.enthusia.staff.common.IdempotencyKey;
 import net.enthusia.staff.domain.ports.ReportStore;
+import net.enthusia.staff.domain.ports.PlayerDirectory;
 import net.enthusia.staff.domain.report.ReportAction;
 import net.enthusia.staff.domain.report.ReportDetails;
 import net.enthusia.staff.domain.report.ReportQueue;
@@ -47,6 +50,8 @@ public final class ReportsCommand implements CommandExecutor, TabCompleter {
     private final JavaPlugin plugin;
     private final Clock clock;
     private final Supplier<ReportStore> reports;
+    private final Supplier<PlayerDirectory> players;
+    private final CommandResponseDispatcher responses;
     private final ExecutorService workers;
     private final ReportGuiController gui;
     private final ReportEvidenceFormatter evidenceFormatter;
@@ -55,27 +60,31 @@ public final class ReportsCommand implements CommandExecutor, TabCompleter {
             JavaPlugin plugin,
             Clock clock,
             Supplier<ReportStore> reports,
+            Supplier<PlayerDirectory> players,
             ExecutorService workers,
             ReportGuiController gui
     ) {
-        this(plugin, clock, reports, workers, gui, new ReportEvidenceFormatter());
+        this(plugin, clock, reports, players, workers, gui, new ReportEvidenceFormatter());
     }
 
     ReportsCommand(
             JavaPlugin plugin,
             Clock clock,
             Supplier<ReportStore> reports,
+            Supplier<PlayerDirectory> players,
             ExecutorService workers,
             ReportGuiController gui,
             ReportEvidenceFormatter evidenceFormatter
     ) {
-        if (plugin == null || clock == null || reports == null || workers == null || gui == null
-                || evidenceFormatter == null) {
+        if (plugin == null || clock == null || reports == null || players == null
+                || workers == null || gui == null || evidenceFormatter == null) {
             throw new IllegalArgumentException("report command dependencies must be present");
         }
         this.plugin = plugin;
         this.clock = clock;
         this.reports = reports;
+        this.players = players;
+        this.responses = new CommandResponseDispatcher(plugin);
         this.workers = workers;
         this.gui = gui;
         this.evidenceFormatter = evidenceFormatter;
@@ -285,9 +294,12 @@ public final class ReportsCommand implements CommandExecutor, TabCompleter {
         }
         List<ReportSummary> summaries = store.list(queue, actorId, 50);
         send(sender, queue + " reports: " + summaries.size());
+        Map<UUID, String> names = new HashMap<>();
         for (ReportSummary summary : summaries) {
             send(sender, summary.reportId() + " rev=" + summary.revision() + " " + summary.state()
-                    + " target=" + summary.targetId() + " reason=" + net.enthusia.staff.domain.report.ReportReasonLabel.display(summary.reasonId())
+                    + " target=" + names.computeIfAbsent(summary.targetId(), this::playerName)
+                    + " reporter=" + names.computeIfAbsent(summary.reporterId(), this::playerName)
+                    + " reason=" + net.enthusia.staff.domain.report.ReportReasonLabel.display(summary.reasonId())
                     + " server=" + summary.serverId());
         }
     }
@@ -305,8 +317,9 @@ public final class ReportsCommand implements CommandExecutor, TabCompleter {
         }
         ReportSummary summary = details.summary();
         send(sender, "Report " + summary.reportId() + " rev=" + summary.revision() + " state=" + summary.state());
-        send(sender, "Reporter=" + summary.reporterId() + " target=" + summary.targetId()
-                + " assigned=" + summary.assignedTo().map(UUID::toString).orElse("none"));
+        send(sender, "Reporter=" + playerName(summary.reporterId())
+                + " target=" + playerName(summary.targetId())
+                + " assigned=" + summary.assignedTo().map(this::playerName).orElse("none"));
         send(sender, "Reason=" + net.enthusia.staff.domain.report.ReportReasonLabel.display(summary.reasonId()) + " description=" + details.description());
         sendEvidenceAware(
                 sender,
@@ -395,12 +408,28 @@ public final class ReportsCommand implements CommandExecutor, TabCompleter {
         }
     }
 
+    private String playerName(UUID playerId) {
+        try {
+            PlayerDirectory directory = players.get();
+            if (directory != null) {
+                String name = directory.find(playerId.toString())
+                        .flatMap(identity -> identity.currentUsername()).orElse(null);
+                if (name != null && name.matches("\\*?[A-Za-z0-9_]{1,32}")) {
+                    return name;
+                }
+            }
+        } catch (RuntimeException exception) {
+            plugin.getLogger().fine("A current report player name could not be resolved");
+        }
+        return "Unknown player";
+    }
+
     private void send(CommandSender sender, String message) {
-        plugin.getServer().getGlobalRegionScheduler().execute(plugin, () -> sender.sendMessage(StaffMessageStyle.style(Component.text(message))));
+        responses.send(sender, Component.text(message));
     }
 
     private void sendEvidenceAware(CommandSender sender, Supplier<String> authorizedMessage, String deniedMessage) {
-        plugin.getServer().getGlobalRegionScheduler().execute(plugin, () -> {
+        responses.execute(sender, () -> {
             String message = sender.hasPermission(EVIDENCE_PERMISSION) ? authorizedMessage.get() : deniedMessage;
             sender.sendMessage(StaffMessageStyle.style(Component.text(message)));
         });
@@ -408,9 +437,10 @@ public final class ReportsCommand implements CommandExecutor, TabCompleter {
 
     private void sendSensitive(CommandSender sender, List<String> messages) {
         List<String> output = List.copyOf(messages);
-        plugin.getServer().getGlobalRegionScheduler().execute(plugin, () -> {
+        responses.execute(sender, () -> {
             if (!sender.hasPermission(EVIDENCE_PERMISSION)) {
-                sender.sendMessage(StaffMessageStyle.style(Component.text("Sensitive report evidence access is no longer permitted.")));
+                sender.sendMessage(StaffMessageStyle.style(Component.text(
+                        "Sensitive report evidence access is no longer permitted.")));
                 return;
             }
             for (String message : output) {

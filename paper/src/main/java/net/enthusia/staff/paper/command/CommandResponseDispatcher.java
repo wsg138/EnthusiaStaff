@@ -22,7 +22,13 @@ final class CommandResponseDispatcher {
 
     void send(CommandSender sender, List<Component> messages) {
         List<Component> immutable = StaffMessageBlockStyle.style(List.copyOf(messages));
-        Runnable delivery = () -> immutable.forEach(sender::sendMessage);
+        execute(sender, () -> immutable.forEach(sender::sendMessage));
+    }
+
+    /** Execute permission-sensitive messages on the recipient's owning scheduler. */
+    void execute(CommandSender sender, Runnable delivery) {
+        Objects.requireNonNull(sender, "sender");
+        Objects.requireNonNull(delivery, "delivery");
         try {
             if (sender instanceof Player player) {
                 boolean scheduled = player.getScheduler().execute(

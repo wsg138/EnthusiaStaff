@@ -184,9 +184,13 @@ public final class ReportCommand implements CommandExecutor, TabCompleter, Liste
             String description
     ) {
         Player onlineTarget = onlineTarget(targetReference);
-        Optional<ClientEvidenceSnapshot> targetClientEvidence = onlineTarget == null
+        // On Folia, an online target can be owned by another region.
+        // Never access its live location or client fields from the reporter's region.
+        Player ownedTarget = onlineTarget != null && org.bukkit.Bukkit.isOwnedByCurrentRegion(onlineTarget)
+                ? onlineTarget : null;
+        Optional<ClientEvidenceSnapshot> targetClientEvidence = ownedTarget == null
                 ? Optional.empty()
-                : Optional.of(dependencies.clientEvidence().capture(onlineTarget));
+                : Optional.of(dependencies.clientEvidence().capture(ownedTarget));
         Instant now = dependencies.clock().instant();
         return new SubmissionContext(
                 reporter.getUniqueId(),
@@ -195,7 +199,7 @@ public final class ReportCommand implements CommandExecutor, TabCompleter, Liste
                 description,
                 reporter.getWorld().getKey().asString(),
                 coordinates(reporter.getLocation()),
-                onlineTarget == null ? null : coordinates(onlineTarget.getLocation()),
+                ownedTarget == null ? null : coordinates(ownedTarget.getLocation()),
                 now,
                 dependencies.chat().snapshot(now),
                 targetClientEvidence

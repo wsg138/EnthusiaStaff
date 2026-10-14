@@ -40,7 +40,8 @@ final class ReportWorkflowWiringTest {
         assertTrue(source.contains("bindCompleting(\"report\", report, report);"));
         assertTrue(source.contains("new ReportGuiController("));
         assertTrue(source.contains("activeReportStore,"));
-        assertTrue(source.contains("new ReportsCommand(plugin(), clock(), activeReportStore, workers(), reportGui)"));
+        assertTrue(source.contains("new ReportsCommand(plugin(), clock(), activeReportStore,"));
+        assertTrue(source.contains("storage(PaperStorageBindings::playerDirectory), workers(), reportGui)"));
         assertTrue(source.contains("bindCompleting(\"reports\", reports, reports);"));
     }
 
@@ -52,6 +53,10 @@ final class ReportWorkflowWiringTest {
         assertTrue(source.contains("submission.publicChatContext()"));
         assertTrue(source.contains("dependencies.chat().privateSnapshot("));
         assertTrue(source.contains("submission.targetClientEvidence().filter("));
+        assertTrue(source.contains("org.bukkit.Bukkit.isOwnedByCurrentRegion(onlineTarget)"));
+        assertTrue(source.contains("dependencies.clientEvidence().capture(ownedTarget)"));
+        assertTrue(source.contains("coordinates(ownedTarget.getLocation())"));
+        assertFalse(source.contains("coordinates(onlineTarget.getLocation())"));
         assertTrue(source.contains("REPORT_RESTRICTIONS"));
         assertFalse(source.contains("RoseChat"));
     }
@@ -68,6 +73,9 @@ final class ReportWorkflowWiringTest {
         assertTrue(source.contains("sendSensitive(sender, messages)"));
         assertTrue(source.contains("authorizedMessage.get() : deniedMessage"));
         assertTrue(source.contains("if (!sender.hasPermission(EVIDENCE_PERMISSION))"));
+        assertTrue(source.contains("responses.execute(sender, () -> {"));
+        assertTrue(source.contains("names.computeIfAbsent(summary.targetId(), this::playerName)"));
+        assertTrue(source.contains("names.computeIfAbsent(summary.reporterId(), this::playerName)"));
         assertFalse(source.contains("boolean evidenceAccess = sender.hasPermission(EVIDENCE_PERMISSION)"));
         assertFalse(source.contains("send(sender, details.publicChatSnapshots().toString())"));
         assertFalse(source.contains("send(sender, details.privateMessageSnapshots().toString())"));

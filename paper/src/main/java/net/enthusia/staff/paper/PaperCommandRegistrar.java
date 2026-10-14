@@ -283,7 +283,8 @@ final class PaperCommandRegistrar {
                 workers()
         );
         plugin().getServer().getPluginManager().registerEvents(reportGui, plugin());
-        ReportsCommand reports = new ReportsCommand(plugin(), clock(), activeReportStore, workers(), reportGui);
+        ReportsCommand reports = new ReportsCommand(plugin(), clock(), activeReportStore,
+                storage(PaperStorageBindings::playerDirectory), workers(), reportGui);
         bindCompleting("reports", reports, reports);
     }
 
