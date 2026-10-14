@@ -12,8 +12,6 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import net.enthusia.staff.domain.guided.GuidedIncidentWizard;
-import net.enthusia.staff.domain.guided.GuidedChatInterview;
-import net.enthusia.staff.domain.guided.GuidedRemedyPreview;
 import net.enthusia.staff.domain.application.PunishmentAssessment;
 import net.enthusia.staff.domain.application.PunishmentDraft;
 import net.enthusia.staff.domain.auth.Actor;
@@ -265,76 +263,52 @@ final class PunishmentGuiRenderer {
         inventory.setItem(CLOSE_SLOT, button(Material.BARRIER, CLOSE_LABEL, NamedTextColor.RED));
     }
 
+    /**
+     * The question screen does not manufacture sanctions. Only the
+     * authoritative policy service can calculate a proposed outcome.
+     */
     private void renderGuidedResult(Inventory inventory, PunishmentGuiState.Guided state,
                                     GuidedIncidentWizard.Finding finding) {
         inventory.setItem(13, item(Material.KNOWLEDGE_BOOK,
-                "Guided Incident Review", NamedTextColor.AQUA,
-                List.of(Component.text("Shadow preview: no punishment is applied.", NamedTextColor.RED),
-                        Component.text("Conduct: " + finding.conduct(), NamedTextColor.WHITE),
+                "Review Incident Details", NamedTextColor.AQUA,
+                List.of(Component.text("Conduct: " + finding.conduct(), NamedTextColor.WHITE),
                         Component.text("Location: " + finding.medium(), NamedTextColor.GRAY),
-                        Component.text("Preliminary impact: " + finding.preliminaryImpact(),
-                                NamedTextColor.GOLD))));
-        if (finding.candidateId() == null || finding.needsReview()
-                || !finding.candidateId().startsWith("chat.spam.")) {
-            inventory.setItem(22, item(Material.WRITABLE_BOOK, "Needs Human Review",
-                    NamedTextColor.GOLD, List.of(
-                            Component.text("No authorized variable-duration policy exists yet.",
+                        Component.text("Incident impact: " + finding.preliminaryImpact(),
+                                NamedTextColor.GOLD),
+                        Component.text("Relevant punishment history is checked automatically.",
+                                NamedTextColor.GRAY))));
+        inventory.setItem(31, item(Material.WRITABLE_BOOK, "Incident Factors", NamedTextColor.AQUA,
+                finding.facts().stream()
+                        .<Component>map(value -> Component.text(value, NamedTextColor.WHITE))
+                        .toList()));
+        if (finding.needsReview() || finding.candidateId() == null) {
+            inventory.setItem(22, item(Material.SHIELD, "Needs Staff Review", NamedTextColor.GOLD,
+                    List.of(Component.text("These answers are not sufficient for automatic classification.",
                                     NamedTextColor.GRAY),
-                            Component.text("Use Expert Reasons for a live sanction.", NamedTextColor.YELLOW))));
+                            Component.text("Use Expert Reasons for a reviewed action.", NamedTextColor.YELLOW))));
             return;
         }
-        GuidedRemedyPreview.Recommendation preview = guidedPreview(finding);
-        if (preview.type() == GuidedRemedyPreview.Action.NEEDS_REVIEW) {
-            inventory.setItem(22, item(Material.WRITABLE_BOOK, "Requires Review",
-                    NamedTextColor.GOLD, List.of(Component.text(
-                            "No complete preview for these incident facts.", NamedTextColor.GRAY))));
-            return;
-        }
-        String suggestion = preview.type() == GuidedRemedyPreview.Action.WARNING
-                ? "Warning"
-                : prettyMinutes(preview.suggestedLength());
-        inventory.setItem(13, item(Material.CLOCK, "Illustrative " + suggestion, NamedTextColor.YELLOW,
-                List.of(Component.text("NOT an approved punishment recommendation.", NamedTextColor.RED),
-                        Component.text("Historical weighting is not yet connected.", NamedTextColor.GRAY),
-                        Component.text("Staff discretion and approval remain required.", NamedTextColor.GRAY))));
-        if (preview.type() == GuidedRemedyPreview.Action.MUTE) {
-            inventory.setItem(GUIDED_SHORTER_SLOT,
-                    durationChoice("Shorter", preview.minimumLength(), state.durationChoice() == -1));
-            inventory.setItem(GUIDED_SUGGESTED_SLOT,
-                    durationChoice("Suggested", preview.suggestedLength(), state.durationChoice() == 0));
-            inventory.setItem(GUIDED_LONGER_SLOT,
-                    durationChoice("Longer", preview.maximumLength(), state.durationChoice() == 1));
-        } else {
-            inventory.setItem(22, item(Material.PAPER, "Example outcome: Warning",
-                    NamedTextColor.GREEN, List.of(Component.text(
-                            "This is a preview; it cannot be submitted.", NamedTextColor.YELLOW))));
-        }
-        inventory.setItem(31, item(Material.WRITABLE_BOOK, "Calculation Factors",
-                NamedTextColor.AQUA, finding.facts().stream()
-                        .<Component>map(text -> Component.text(text, NamedTextColor.WHITE)).toList()));
+        inventory.setItem(GUIDED_SHORTER_SLOT, guidedPreference(
+                "Conservative", -1, state.durationChoice()));
+        inventory.setItem(GUIDED_SUGGESTED_SLOT, guidedPreference(
+                "Balanced", 0, state.durationChoice()));
+        inventory.setItem(GUIDED_LONGER_SLOT, guidedPreference(
+                "Stronger", 1, state.durationChoice()));
+        inventory.setItem(CONFIRM_SLOT, item(Material.EMERALD,
+                "Calculate Punishment Type and Length", NamedTextColor.GREEN,
+                List.of(Component.text("Uses current policy and relevant player history.",
+                                NamedTextColor.WHITE),
+                        Component.text("Opens final review; no punishment is applied yet.",
+                                NamedTextColor.YELLOW))));
     }
 
-    private static ItemStack durationChoice(String label, java.time.Duration duration, boolean selected) {
-        return item(selected ? Material.LIME_CONCRETE : Material.CLOCK,
-                label + ": " + prettyMinutes(duration),
-                selected ? NamedTextColor.GREEN : NamedTextColor.WHITE,
-                List.of(Component.text(selected ? "Selected preview value" : "Click to compare",
-                        NamedTextColor.YELLOW), Component.text("Preview only - no sanction", NamedTextColor.GRAY)));
-    }
-
-    private static String prettyMinutes(java.time.Duration value) {
-        return value.toHours() > 0 && value.toMinutesPart() == 0
-                ? value.toHours() + "h mute" : value.toMinutes() + "m mute";
-    }
-
-    private static GuidedRemedyPreview.Recommendation guidedPreview(GuidedIncidentWizard.Finding finding) {
-        String candidate = finding.candidateId();
-        var bounds = new GuidedRemedyPreview.Bounds(candidate, 20, 85,
-                java.time.Duration.ofMinutes(15), java.time.Duration.ofHours(12), 8);
-        var mapped = new GuidedChatInterview.Finding(candidate, finding.preliminaryImpact(),
-                finding.facts(), finding.needsReview(),
-                finding.needsReview() ? "Needs manual review" : "");
-        return GuidedRemedyPreview.calculate(mapped, bounds, 0);
+    private static ItemStack guidedPreference(String name, int value, int selected) {
+        return item(value == selected ? Material.LIME_CONCRETE : Material.CLOCK,
+                name + " assessment", value == selected ? NamedTextColor.GREEN : NamedTextColor.WHITE,
+                List.of(Component.text(value == selected ? "Selected" : "Click to choose",
+                                NamedTextColor.YELLOW),
+                        Component.text("Outcome must remain within configured policy limits.",
+                                NamedTextColor.GRAY)));
     }
 
     private void renderReasons(Inventory inventory, PunishmentGuiState.Reasons state, Actor actor) {
