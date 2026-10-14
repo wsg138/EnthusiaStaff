@@ -946,10 +946,22 @@ public final class PunishmentGuiController implements Listener {
                             state.draft().reasonId(),
                             explanation,
                             visibility,
-                            state.commandName()
+                            state.commandName(),
+                            state.assessment()
+                                    .filter(value -> !value.sanctions().equals(
+                                            value.escalation().selectedStep().sanctions()))
+                                    .map(PunishmentAssessment::sanctions)
+                                    .orElse(List.of())
                     ),
                     mode.get()
             );
+            if (evaluation instanceof PunishmentDraftEvaluation.Prepared updated) {
+                GuidedReturn previous = guidedReturns.get(viewer.getUniqueId());
+                if (previous != null && previous.draftId().equals(state.draft().draftId())) {
+                    guidedReturns.put(viewer.getUniqueId(),
+                            new GuidedReturn(updated.draft().draftId(), previous.state()));
+                }
+            }
             showPrepared(
                     viewer,
                     state.target(),
