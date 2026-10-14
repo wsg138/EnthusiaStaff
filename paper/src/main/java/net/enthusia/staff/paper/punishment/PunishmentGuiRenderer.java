@@ -388,7 +388,9 @@ final class PunishmentGuiRenderer {
         inventory.setItem(41, historySummaryItem(state));
         inventory.setItem(43, authorityItem(actor, policy));
 
-        inventory.setItem(BACK_SLOT, button(Material.ARROW, "Back · Reasons", NamedTextColor.AQUA));
+        inventory.setItem(BACK_SLOT, button(Material.ARROW,
+                draft.internalExplanation().startsWith("Guided incident v1")
+                        ? "Back · Incident Answers" : "Back · Reasons", NamedTextColor.AQUA));
         footerHistory(inventory);
         inventory.setItem(CONFIRM_SLOT, policy == null
                 ? item(Material.GRAY_DYE, "Reason Unavailable", NamedTextColor.RED,
@@ -410,7 +412,7 @@ final class PunishmentGuiRenderer {
     /** Guided reviews emphasize factual answers and the calculated sanction, not a fixed ladder. */
     private static void renderGuidedReviewFactors(Inventory inventory, PunishmentDraft draft) {
         List<Component> answers = java.util.Arrays.stream(draft.internalExplanation()
-                        .split(" \\| "))
+                        .split(" [|] "))
                 .filter(value -> value.startsWith("medium=") || value.startsWith("conduct=")
                         || value.startsWith("detail=") || value.startsWith("extent=")
                         || value.startsWith("continued=") || value.startsWith("targeting=")
