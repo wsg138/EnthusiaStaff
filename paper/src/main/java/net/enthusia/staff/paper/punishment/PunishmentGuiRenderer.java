@@ -11,6 +11,9 @@ import java.util.Locale;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import net.enthusia.staff.domain.guided.GuidedIncidentWizard;
+import net.enthusia.staff.domain.guided.GuidedChatInterview;
+import net.enthusia.staff.domain.guided.GuidedRemedyPreview;
 import net.enthusia.staff.domain.application.PunishmentAssessment;
 import net.enthusia.staff.domain.application.PunishmentDraft;
 import net.enthusia.staff.domain.auth.Actor;
@@ -57,6 +60,10 @@ final class PunishmentGuiRenderer {
     private static final int MAX_HEADER_SANCTIONS = 4;
     private static final int MAX_LADDER_SLOTS = 18;
     private static final int MAX_HISTORY_REASON_LENGTH = 64;
+    static final int[] GUIDED_CHOICE_SLOTS = {19, 21, 23, 25, 30, 32, 40};
+    static final int GUIDED_SHORTER_SLOT = 20;
+    static final int GUIDED_SUGGESTED_SLOT = 22;
+    static final int GUIDED_LONGER_SLOT = 24;
     private static final int[] CATEGORY_GRID = {20, 22, 24, 29, 31, 33, 40};
     private static final int FIRST_HISTORY_PAGE = 1;
     private static final String CLOSE_LABEL = "Close";
@@ -86,6 +93,8 @@ final class PunishmentGuiRenderer {
         renderHeader(inventory, state);
         if (state instanceof PunishmentGuiState.Categories categories) {
             renderCategories(inventory, categories, actor);
+        } else if (state instanceof PunishmentGuiState.Guided guided) {
+            renderGuided(inventory, guided);
         } else if (state instanceof PunishmentGuiState.Reasons reasons) {
             renderReasons(inventory, reasons, actor);
         } else if (state instanceof PunishmentGuiState.Search search) {
@@ -141,7 +150,7 @@ final class PunishmentGuiRenderer {
                     NamedTextColor.AQUA,
                     List.of(
                             Component.text("Pick what happened, not the punishment.", NamedTextColor.WHITE),
-                            Component.text("Each category contains exact rule violations.", NamedTextColor.GRAY),
+                            Component.text("A guided questionnaire asks what happened.", NamedTextColor.GRAY),
                             Component.text("Or use Search below to find one directly.", NamedTextColor.GRAY)
                     )
             ));
@@ -216,6 +225,115 @@ final class PunishmentGuiRenderer {
             }
         }
         return List.copyOf(examples);
+    }
+
+    /** All outcomes on this screen are informational until approved policy cutover. */
+    private void renderGuided(Inventory inventory, PunishmentGuiState.Guided state) {
+        GuidedIncidentWizard wizard = state.interview();
+        var question = wizard.nextQuestion();
+        String categoryName = PunishmentGuiCategory.byId(state.categoryId()).title();
+        if (question.isPresent()) {
+            GuidedIncidentWizard.Question prompt = question.orElseThrow();
+            int answered = wizard.answers().size();
+            inventory.setItem(13, item(Material.OAK_SIGN, prompt.text(), NamedTextColor.AQUA,
+                    List.of(Component.text(categoryName, NamedTextColor.WHITE),
+                            Component.text("Step " + (answered + 1) + " — select one response",
+                                    NamedTextColor.YELLOW))));
+            for (int i = 0; i < prompt.choices().size() && i < GUIDED_CHOICE_SLOTS.length; i++) {
+                var choice = prompt.choices().get(i);
+                Material material = switch (i) {
+                    case 0 -> Material.LIME_DYE;
+                    case 1 -> Material.LIGHT_BLUE_DYE;
+                    case 2 -> Material.ORANGE_DYE;
+                    case 3 -> Material.PURPLE_DYE;
+                    case 4 -> Material.CYAN_DYE;
+                    case 5 -> Material.MAGENTA_DYE;
+                    default -> Material.GRAY_DYE;
+                };
+                inventory.setItem(GUIDED_CHOICE_SLOTS[i],
+                        item(material, choice.label(), NamedTextColor.WHITE,
+                                List.of(Component.text("Click to answer", NamedTextColor.YELLOW))));
+            }
+        } else {
+            renderGuidedResult(inventory, state, wizard.finding());
+        }
+        inventory.setItem(BACK_SLOT, button(Material.ARROW, "Previous Question", NamedTextColor.AQUA));
+        inventory.setItem(SEARCH_SLOT, item(Material.BOOK,
+                "Expert: Browse Exact Reasons", NamedTextColor.YELLOW,
+                List.of(Component.text("Opens the existing authorized policy workflow.", NamedTextColor.GRAY),
+                        Component.text("Guided preview never issues punishments.", NamedTextColor.RED))));
+        inventory.setItem(CLOSE_SLOT, button(Material.BARRIER, CLOSE_LABEL, NamedTextColor.RED));
+    }
+
+    private void renderGuidedResult(Inventory inventory, PunishmentGuiState.Guided state,
+                                    GuidedIncidentWizard.Finding finding) {
+        inventory.setItem(13, item(Material.KNOWLEDGE_BOOK,
+                "Guided Incident Review", NamedTextColor.AQUA,
+                List.of(Component.text("Shadow preview: no punishment is applied.", NamedTextColor.RED),
+                        Component.text("Conduct: " + finding.conduct(), NamedTextColor.WHITE),
+                        Component.text("Location: " + finding.medium(), NamedTextColor.GRAY),
+                        Component.text("Preliminary impact: " + finding.preliminaryImpact(),
+                                NamedTextColor.GOLD))));
+        if (finding.candidateId() == null || finding.needsReview()) {
+            inventory.setItem(22, item(Material.WRITABLE_BOOK, "Needs Human Review",
+                    NamedTextColor.GOLD, List.of(
+                            Component.text("No authorized variable-duration policy exists yet.",
+                                    NamedTextColor.GRAY),
+                            Component.text("Use Expert Reasons for a live sanction.", NamedTextColor.YELLOW))));
+            return;
+        }
+        GuidedRemedyPreview.Recommendation preview = guidedPreview(finding);
+        if (preview.type() == GuidedRemedyPreview.Action.NEEDS_REVIEW) {
+            inventory.setItem(22, item(Material.WRITABLE_BOOK, "Requires Review",
+                    NamedTextColor.GOLD, List.of(Component.text(
+                            "No complete preview for these incident facts.", NamedTextColor.GRAY))));
+            return;
+        }
+        String suggestion = preview.type() == GuidedRemedyPreview.Action.WARNING
+                ? "Warning"
+                : prettyMinutes(preview.suggestedLength());
+        inventory.setItem(13, item(Material.CLOCK, "Illustrative " + suggestion, NamedTextColor.YELLOW,
+                List.of(Component.text("NOT an approved punishment recommendation.", NamedTextColor.RED),
+                        Component.text("Historical weighting is not yet connected.", NamedTextColor.GRAY),
+                        Component.text("Staff discretion and approval remain required.", NamedTextColor.GRAY))));
+        if (preview.type() == GuidedRemedyPreview.Action.MUTE) {
+            inventory.setItem(GUIDED_SHORTER_SLOT,
+                    durationChoice("Shorter", preview.minimumLength(), state.durationChoice() == -1));
+            inventory.setItem(GUIDED_SUGGESTED_SLOT,
+                    durationChoice("Suggested", preview.suggestedLength(), state.durationChoice() == 0));
+            inventory.setItem(GUIDED_LONGER_SLOT,
+                    durationChoice("Longer", preview.maximumLength(), state.durationChoice() == 1));
+        } else {
+            inventory.setItem(22, item(Material.PAPER, "Example outcome: Warning",
+                    NamedTextColor.GREEN, List.of(Component.text(
+                            "This is a preview; it cannot be submitted.", NamedTextColor.YELLOW))));
+        }
+        inventory.setItem(31, item(Material.WRITABLE_BOOK, "Calculation Factors",
+                NamedTextColor.AQUA, finding.facts().stream()
+                        .map(text -> Component.text(text, NamedTextColor.WHITE)).toList()));
+    }
+
+    private static ItemStack durationChoice(String label, java.time.Duration duration, boolean selected) {
+        return item(selected ? Material.LIME_CONCRETE : Material.CLOCK,
+                label + ": " + prettyMinutes(duration),
+                selected ? NamedTextColor.GREEN : NamedTextColor.WHITE,
+                List.of(Component.text(selected ? "Selected preview value" : "Click to compare",
+                        NamedTextColor.YELLOW), Component.text("Preview only - no sanction", NamedTextColor.GRAY)));
+    }
+
+    private static String prettyMinutes(java.time.Duration value) {
+        return value.toHours() > 0 && value.toMinutesPart() == 0
+                ? value.toHours() + "h mute" : value.toMinutes() + "m mute";
+    }
+
+    private static GuidedRemedyPreview.Recommendation guidedPreview(GuidedIncidentWizard.Finding finding) {
+        String candidate = finding.candidateId();
+        var bounds = new GuidedRemedyPreview.Bounds(candidate, 20, 85,
+                java.time.Duration.ofMinutes(15), java.time.Duration.ofHours(12), 8);
+        var mapped = new GuidedChatInterview.Finding(candidate, finding.conduct(),
+                finding.medium(), finding.preliminaryImpact(), finding.facts(),
+                finding.needsReview(), finding.needsReview() ? "Needs manual review" : "");
+        return GuidedRemedyPreview.calculate(mapped, bounds, 0);
     }
 
     private void renderReasons(Inventory inventory, PunishmentGuiState.Reasons state, Actor actor) {
@@ -850,6 +968,9 @@ final class PunishmentGuiRenderer {
 
     private static Component title(PunishmentGuiState state) {
         String target = targetName(state.target());
+        if (state instanceof PunishmentGuiState.Guided guided) {
+            return Component.text("Guided · " + targetName(guided.target()), NamedTextColor.DARK_AQUA);
+        }
         if (state instanceof PunishmentGuiState.Reasons reasons) {
             PunishmentGuiCategory category = PunishmentGuiCategory.byId(reasons.categoryId());
             return Component.text("Punish · " + (category == null ? "Reasons" : category.title()),
