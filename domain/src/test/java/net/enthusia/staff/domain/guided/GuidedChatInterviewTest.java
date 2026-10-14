@@ -17,7 +17,7 @@ class GuidedChatInterviewTest {
         if ("sign".equals(medium) || "book".equals(medium)) {
             draft = draft.answer(Key.PERSISTENCE, "persistent");
         }
-        return draft.answer(Key.EVIDENCE, "verified");
+        return draft;
     }
 
     @Test
@@ -49,29 +49,34 @@ class GuidedChatInterviewTest {
         var amended = previous.answer(Key.CONDUCT, "slur");
         assertFalse(amended.answers().containsKey(Key.EXTENT));
         assertFalse(amended.answers().containsKey(Key.CONTINUED));
-        assertFalse(amended.answers().containsKey(Key.EVIDENCE));
+        assertFalse(amended.answers().containsKey(Key.PERSISTENCE));
         assertEquals(Key.TARGETING, amended.nextQuestion().orElseThrow().id());
-        amended = amended.answer(Key.TARGETING, "targeted").answer(Key.EVIDENCE, "verified");
+        amended = amended.answer(Key.TARGETING, "targeted");
         assertEquals("hate.slur", amended.finding().candidateId());
         assertTrue(amended.finding().reviewRequired());
     }
 
     @Test
-    void missingOrDisputedEvidenceRequiresReviewWithoutInflatingSeverity() {
-        var verified = spam("public-chat", "few", "no");
-        var uncertain = verified.answer(Key.EVIDENCE, "conflicting");
-        assertEquals(verified.finding().impact(), uncertain.finding().impact());
-        assertTrue(uncertain.finding().reviewRequired());
+    void noPriorWarningIsDistinctFromStoppingAfterAWarning() {
+        var noWarning = spam("public-chat", "few", "not-applicable");
+        var stopped = spam("public-chat", "few", "no");
+        var ignored = spam("public-chat", "few", "yes");
+        assertEquals("not-applicable", noWarning.answers().get(Key.CONTINUED));
+        assertEquals("no", stopped.answers().get(Key.CONTINUED));
+        assertEquals(stopped.finding().impact(), noWarning.finding().impact());
+        assertTrue(ignored.finding().impact() > noWarning.finding().impact());
+        assertFalse(noWarning.finding().reviewRequired());
+        assertEquals("chat.spam.low-level", noWarning.finding().candidateId());
     }
 
     @Test
     void uncertainAndSensitiveIncidentsDoNotForcePunishments() {
         var threat = GuidedChatInterview.start().answer(Key.MEDIUM, "public-chat")
                 .answer(Key.CONDUCT, "threat-privacy")
-                .answer(Key.THREAT, "credible").answer(Key.EVIDENCE, "verified");
+                .answer(Key.THREAT, "credible");
         assertTrue(threat.finding().reviewRequired());
         var unidentified = GuidedChatInterview.start().answer(Key.MEDIUM, "unknown")
-                .answer(Key.CONDUCT, "other").answer(Key.EVIDENCE, "unverified");
+                .answer(Key.CONDUCT, "other");
         assertNull(unidentified.finding().candidateId());
         assertTrue(unidentified.finding().reviewRequired());
     }
@@ -88,13 +93,13 @@ class GuidedChatInterviewTest {
     void untargetedAbuseAndNonCredibleThreatAreNotForcedIntoSevereReasons() {
         var general = GuidedChatInterview.start().answer(Key.MEDIUM, "public-chat")
                 .answer(Key.CONDUCT, "harassment")
-                .answer(Key.TARGETING, "general").answer(Key.EVIDENCE, "verified");
+                .answer(Key.TARGETING, "general");
         assertNull(general.finding().candidateId());
         assertTrue(general.finding().reviewRequired());
 
         var unproven = GuidedChatInterview.start().answer(Key.MEDIUM, "public-chat")
                 .answer(Key.CONDUCT, "threat-privacy")
-                .answer(Key.THREAT, "not-credible").answer(Key.EVIDENCE, "verified");
+                .answer(Key.THREAT, "not-credible");
         assertNull(unproven.finding().candidateId());
         assertTrue(unproven.finding().reviewRequired());
     }
@@ -103,7 +108,7 @@ class GuidedChatInterviewTest {
     void cannotChooseASanctionOrSkipMandatoryQuestions() {
         GuidedChatInterview draft = GuidedChatInterview.start();
         assertEquals(Key.MEDIUM, draft.nextQuestion().orElseThrow().id());
-        assertThrows(IllegalArgumentException.class, () -> draft.answer(Key.EVIDENCE, "verified"));
+        assertThrows(IllegalArgumentException.class, () -> draft.answer(Key.CONTINUED, "not-applicable"));
         assertThrows(IllegalArgumentException.class, () -> draft.answer(Key.MEDIUM, "fake-medium"));
         assertThrows(IllegalStateException.class, draft::finding);
     }

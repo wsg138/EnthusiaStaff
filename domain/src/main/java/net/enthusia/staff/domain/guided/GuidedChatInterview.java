@@ -8,7 +8,7 @@ import java.util.Optional;
 
 /** Read-only chat incident interview. Never grants sanction authority. */
 public final class GuidedChatInterview {
-    public enum Key { MEDIUM, CONDUCT, EXTENT, CONTINUED, PERSISTENCE, TARGETING, THREAT, EVIDENCE }
+    public enum Key { MEDIUM, CONDUCT, EXTENT, CONTINUED, PERSISTENCE, TARGETING, THREAT }
     public record Question(Key id, String prompt, List<String> choices) {
         public Question { choices = List.copyOf(choices); }
     }
@@ -42,7 +42,8 @@ public final class GuidedChatInterview {
             case "threat-privacy" -> questions.add(question(Key.THREAT));
             default -> { }
         }
-        questions.add(question(Key.EVIDENCE));
+        // Evidence is an optional review attachment, not a mandatory survey page.
+        // The wizard gathers facts; the remedy engine calculates type + duration.
         return List.copyOf(questions);
     }
 
@@ -111,9 +112,6 @@ public final class GuidedChatInterview {
         if (candidate == null) {
             return "No validated offense matches these incident facts";
         }
-        if (!"verified".equals(answers.get(Key.EVIDENCE))) {
-            return "Evidence missing or conflicting; needs independent review";
-        }
         if ("unknown".equals(answers.get(Key.TARGETING))
                 || "unknown".equals(answers.get(Key.THREAT))) {
             return "Targeting or threat context is unclear";
@@ -154,16 +152,14 @@ public final class GuidedChatInterview {
                     "spam", "harassment", "slur", "threat-privacy", "advertising", "other"));
             case EXTENT -> new Question(key, "How extensive was it?", List.of(
                     "few", "sustained", "large-scale", "unknown"));
-            case CONTINUED -> new Question(key, "Continued after a clear warning?", List.of(
-                    "yes", "no", "unknown"));
+            case CONTINUED -> new Question(key, "Did it continue after a clear warning?", List.of(
+                    "yes", "no", "not-applicable", "unknown"));
             case PERSISTENCE -> new Question(key, "Was placed content left up?", List.of(
                     "persistent", "removed", "unknown"));
             case TARGETING -> new Question(key, "Who was targeted?", List.of(
                     "targeted", "general", "unknown"));
             case THREAT -> new Question(key, "Is credible harm alleged?", List.of(
                     "credible", "not-credible", "unknown"));
-            case EVIDENCE -> new Question(key, "Independently documented?", List.of(
-                    "verified", "unverified", "conflicting"));
         };
     }
 }
