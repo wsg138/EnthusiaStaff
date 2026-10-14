@@ -52,25 +52,34 @@ public final class GuidedIncidentWizard {
         result.add(conductQuestion());
         if (!answers.containsKey("conduct")) { return List.copyOf(result); }
         String conduct = answers.get("conduct");
-        if (List.of("spam", "advertising", "cheating", "exploit", "griefing",
-                "evasion", "impersonation", "scam", "market", "reputation").contains(conduct)) {
+        List<Choice> detailed = GuidedOffenseClassifier.details(category, conduct);
+        if (!detailed.isEmpty()) {
+            result.add(new Question("detail", "Which behavior describes it?", detailed));
+            if (!answers.containsKey("detail")) {
+                return List.copyOf(result);
+            }
+        }
+        if (List.of("harassment", "slur", "threat", "privacy").contains(conduct)) {
+            result.add(new Question("targeting", "Was anyone specifically targeted?", List.of(
+                    c("targeted", "Yes - specific player/group"),
+                    c("general", "No - general conduct"), c("unknown", "Unclear / quoted"))));
+            if (!answers.containsKey("targeting")) {
+                return List.copyOf(result);
+            }
+        }
+        if (!"safety".equals(category) && !"other".equals(conduct)) {
             result.add(new Question("extent", "How extensive was it?", List.of(
                     c("few", "Minor / isolated"), c("sustained", "Repeated / sustained"),
                     c("large-scale", "Severe / large scale"), c("unknown", "Not sure"))));
-            if (!answers.containsKey("extent")) { return List.copyOf(result); }
-        } else if (List.of("harassment", "slur", "threat", "privacy").contains(conduct)) {
-            result.add(new Question("targeting", "Was anyone specifically targeted?", List.of(
-                    c("targeted", "Yes - specific player/group"),
-                    c("general", "No - general conduct"), c("unknown", "Unclear"))));
-            if (!answers.containsKey("targeting")) { return List.copyOf(result); }
-        }
-        if (!"safety".equals(category) && !"other".equals(conduct)) {
-            result.add(new Question("continued", "Did they continue after being warned?", List.of(
-                    c("yes", "Yes - ignored warning"),
-                    c("no", "No - stopped after warning"),
-                    c("not-applicable", "Not applicable - no warning"),
-                    c("unknown", "Not sure"))));
-            if (!answers.containsKey("continued")) { return List.copyOf(result); }
+            if (!answers.containsKey("extent")) {
+                return List.copyOf(result);
+            }
+            result.add(new Question("continued", "Did they continue after a warning?", List.of(
+                    c("yes", "Yes - ignored warning"), c("no", "No - stopped after warning"),
+                    c("not-applicable", "N/A - no warning given"), c("unknown", "Not sure"))));
+            if (!answers.containsKey("continued")) {
+                return List.copyOf(result);
+            }
         }
         if (("sign".equals(answers.get("medium")) || "book".equals(answers.get("medium")))
                 && List.of("spam", "advertising").contains(conduct)) {
@@ -136,30 +145,16 @@ public final class GuidedIncidentWizard {
         if ("persistent".equals(answers.get("persistence"))) {
             impact += 10; facts.add("Placed content was left up");
         }
-        String candidate = candidate(medium, conduct, answers.get("extent"),
-                answers.get("targeting"));
-        boolean review = candidate == null || !"chat".equals(category)
-                || List.of("slur", "threat", "privacy").contains(conduct)
-                || "unknown".equals(answers.get("extent"))
-                || "unknown".equals(answers.get("targeting"));
+        String candidate = GuidedOffenseClassifier.resolve(
+                category, medium, conduct, answers.get("detail"),
+                answers.get("extent"), answers.get("targeting"));
+        boolean review = candidate == null || "safety".equals(category)
+                || List.of("slur", "threat", "privacy", "hate").contains(conduct)
+                || answers.values().contains("unknown")
+                || "other".equals(conduct)
+                || ("chat".equals(category) && !"public-chat".equals(medium)
+                    && List.of("language", "politics").contains(conduct));
         return new Finding(category, conduct, medium, impact, candidate, review, facts);
-    }
-
-    private String candidate(String medium, String conduct, String extent, String targeting) {
-        if (!"chat".equals(category)) { return null; }
-        return switch (conduct) {
-            case "spam" -> switch (medium) {
-                case "public-chat" -> "sustained".equals(extent) || "large-scale".equals(extent)
-                        ? "spam.message-flooding" : "spam.low-level";
-                case "direct-message" -> "spam.private-message";
-                case "voice" -> "spam.noise-pollution";
-                default -> null;
-            };
-            case "harassment" -> "targeted".equals(targeting)
-                    ? "hate.targeted-harassment" : null;
-            case "slur" -> "hate.full-slur-targeted";
-            default -> null;
-        };
     }
 
     private Question mediumQuestion() {
@@ -177,24 +172,32 @@ public final class GuidedIncidentWizard {
     }
 
     private Question conductQuestion() {
-        List<Choice> choices = switch (category) {
-            case "chat" -> List.of(c("spam","Spam / repetition"),c("harassment","Harassment"),
-                    c("slur","Slur / discrimination"),c("threat","Threat / privacy"),
-                    c("advertising","Advertising"),c("other","Other / unsure"));
-            case "gameplay" -> List.of(c("cheating","Unauthorized advantage"),
-                    c("exploit","Exploit / duplication"),c("griefing","Disruption / griefing"),
-                    c("other","Other / unsure"));
-            case "safety" -> List.of(c("threat","Threat"),c("privacy","Doxxing / privacy"),
-                    c("harassment","Severe abuse"),c("other","Other / unsure"));
-            case "accounts" -> List.of(c("evasion","Punishment evasion"),
-                    c("impersonation","Impersonation"),c("other","Other / unsure"));
-            case "community" -> List.of(c("advertising","Advertising"),
-                    c("harassment","Community harassment"),c("other","Other / unsure"));
-            case "economy" -> List.of(c("scam","Scamming"),c("market","Market abuse"),
-                    c("reputation","Reputation manipulation"),c("other","Other / unsure"));
-            default -> List.of(c("other","Other / unclassified"));
+        List<Choice> options = switch (category) {
+            case "chat" -> List.of(c("spam", "Spam / repetition"),
+                    c("harassment", "Harassment"), c("slur", "Slur / discrimination"),
+                    c("hate", "Hate or extremist content"),
+                    c("politics", "Political content"), c("language", "Other language"),
+                    c("other", "Other / unsure"));
+            case "gameplay" -> List.of(c("cheating", "Cheating"),
+                    c("exploit", "Exploits / duplication"),
+                    c("mechanics", "Disruptive mechanics"),
+                    c("complicity", "Assisted rule breaking"),
+                    c("other", "Other / unsure"));
+            case "safety" -> List.of(c("threat", "Threat / danger"),
+                    c("privacy", "Private information"), c("other", "Other / unsure"));
+            case "accounts" -> List.of(c("access", "Account access"),
+                    c("evasion", "Punishment evasion"),
+                    c("identity", "Impersonation / profile"), c("other", "Other / unsure"));
+            case "community" -> List.of(c("advertising", "Advertising"),
+                    c("reports", "Report abuse"), c("content", "Inappropriate content"),
+                    c("staff", "Staff instructions"), c("dishonesty", "Dishonesty / evidence"),
+                    c("other", "Other / unsure"));
+            case "economy" -> List.of(c("market", "Market abuse"),
+                    c("reputation", "Reputation manipulation"),
+                    c("other", "Other / unsure"));
+            default -> List.of(c("other", "Other / unclassified"));
         };
-        return new Question("conduct", "What happened?", choices);
+        return new Question("conduct", "What happened?", options);
     }
 
     private static Choice c(String id, String label) {
