@@ -152,9 +152,21 @@ public final class GuidedIncidentWizard {
                 || List.of("slur", "threat", "privacy", "hate").contains(conduct)
                 || answers.values().contains("unknown")
                 || "other".equals(conduct)
-                || ("chat".equals(category) && !"public-chat".equals(medium)
-                    && List.of("language", "politics").contains(conduct));
+                || !channelCompatible(medium, conduct);
         return new Finding(category, conduct, medium, impact, candidate, review, facts);
+    }
+
+    private boolean channelCompatible(String medium, String conduct) {
+        if ("gameplay".equals(category)) {
+            return "in-game".equals(medium);
+        }
+        if ("economy".equals(category)) {
+            return "in-game".equals(medium) || "market".equals(medium);
+        }
+        if ("chat".equals(category) && List.of("language", "politics").contains(conduct)) {
+            return "public-chat".equals(medium);
+        }
+        return true;
     }
 
     private Question mediumQuestion() {
