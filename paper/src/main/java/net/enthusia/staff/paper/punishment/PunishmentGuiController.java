@@ -344,6 +344,7 @@ public final class PunishmentGuiController implements Listener {
         UUID viewerId = event.getPlayer().getUniqueId();
         noteCaptures.remove(viewerId);
         searchCaptures.remove(viewerId);
+        guidedReturns.remove(viewerId);
         suppressedClosures.remove(viewerId);
         confirmations.remove(viewerId);
     }
