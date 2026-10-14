@@ -18,6 +18,8 @@ import java.util.concurrent.RejectedExecutionException;
 import java.util.function.Supplier;
 import java.util.logging.Level;
 import net.enthusia.staff.domain.guided.GuidedIncidentWizard;
+import net.enthusia.staff.domain.guided.GuidedPolicyResolution;
+import net.enthusia.staff.domain.application.PunishmentEvaluation;
 import net.enthusia.staff.domain.OperationalMode;
 import net.enthusia.staff.domain.application.PreparePunishmentDraftRequest;
 import net.enthusia.staff.domain.application.PunishmentAssessment;
@@ -94,6 +96,7 @@ public final class PunishmentGuiController implements Listener {
     private final Set<UUID> confirmations = ConcurrentHashMap.newKeySet();
     private final Map<UUID, NoteCapture> noteCaptures = new ConcurrentHashMap<>();
     private final Map<UUID, SearchCapture> searchCaptures = new ConcurrentHashMap<>();
+    private final Map<UUID, GuidedReturn> guidedReturns = new ConcurrentHashMap<>();
 
     public PunishmentGuiController(Dependencies dependencies) {
         this(
@@ -480,6 +483,10 @@ public final class PunishmentGuiController implements Listener {
                 }
             }
         } else {
+            if (slot == PunishmentGuiRenderer.CONFIRM_SLOT) {
+                prepareGuided(viewer, actor, state);
+                return;
+            }
             int updated = switch (slot) {
                 case PunishmentGuiRenderer.GUIDED_SHORTER_SLOT -> -1;
                 case PunishmentGuiRenderer.GUIDED_SUGGESTED_SLOT -> 0;
@@ -497,6 +504,81 @@ public final class PunishmentGuiController implements Listener {
         openState(viewer, new PunishmentGuiState.Guided(
                 state.viewerId(), state.target(), state.commandName(),
                 state.overview(), state.categoryId(), interview, durationChoice));
+    }
+
+    /** An incident can only become a draft through the current policy gates. */
+    private void prepareGuided(Player viewer, Actor actor, PunishmentGuiState.Guided state) {
+        if (state.interview().nextQuestion().isPresent()) {
+            message(viewer, "Finish the incident questionnaire before calculating.");
+            return;
+        }
+        GuidedIncidentWizard.Finding finding = state.interview().finding();
+        if (finding.needsReview() || finding.candidateId() == null) {
+            message(viewer, "This incident requires individual review. Choose Expert Reasons.");
+            return;
+        }
+        submit(viewer, () -> evaluateGuided(viewer, actor, state, finding));
+    }
+
+    private void evaluateGuided(Player viewer, Actor actor, PunishmentGuiState.Guided state,
+                                GuidedIncidentWizard.Finding finding) {
+        if (!targetAllowed(viewer, actor, state.target().playerId())) {
+            return;
+        }
+        if (catalog.reasons(actor, state.commandName(), state.categoryId()).stream()
+                .noneMatch(policy -> policy.id().equals(finding.candidateId()))) {
+            message(viewer, "Your rank cannot select that configured reason.");
+            return;
+        }
+        PunishmentDraftWorkflow workflow = workflows.get();
+        if (workflow == null) {
+            message(viewer, "Punishment storage is unavailable; no action was taken.");
+            return;
+        }
+        String explanation = guidedExplanation(state, finding);
+        PreparePunishmentDraftRequest readOnly = new PreparePunishmentDraftRequest(
+                state.target().playerId(), actor, finding.candidateId(), explanation,
+                CaseVisibility.PUBLIC, state.commandName()
+        );
+        PunishmentEvaluation preview = workflow.preview(readOnly, mode.get());
+        if (preview instanceof PunishmentEvaluation.Rejected rejected) {
+            message(viewer, rejected.code() + ": " + rejected.message());
+            return;
+        }
+        PunishmentAssessment assessment = ((PunishmentEvaluation.Allowed) preview).assessment();
+        GuidedPolicyResolution.Outcome outcome;
+        try {
+            outcome = GuidedPolicyResolution.calculate(finding, assessment, state.durationChoice());
+        } catch (IllegalArgumentException invalid) {
+            message(viewer, "The calculated outcome needs manual review.");
+            return;
+        }
+        boolean defaultSanctions = assessment.escalation().selectedStep().sanctions()
+                .equals(outcome.sanctions());
+        PreparePunishmentDraftRequest proposal = new PreparePunishmentDraftRequest(
+                state.target().playerId(), actor, finding.candidateId(),
+                explanation + " | " + outcome.reasoning(), CaseVisibility.PUBLIC,
+                state.commandName(), defaultSanctions ? List.of() : outcome.sanctions()
+        );
+        PunishmentDraftEvaluation evaluated = workflow.prepare(proposal, mode.get());
+        if (evaluated instanceof PunishmentDraftEvaluation.Prepared prepared) {
+            guidedReturns.put(viewer.getUniqueId(),
+                    new GuidedReturn(prepared.draft().draftId(), state));
+        }
+        showPrepared(viewer, state.target(), state.commandName(),
+                actor, state.overview(), evaluated);
+    }
+
+    private static String guidedExplanation(PunishmentGuiState.Guided state,
+                                            GuidedIncidentWizard.Finding finding) {
+        StringBuilder result = new StringBuilder("Guided incident v1 | category=")
+                .append(state.categoryId()).append(" | target=").append(state.target().playerId());
+        state.interview().answers().entrySet().stream()
+                .sorted(Map.Entry.comparingByKey())
+                .forEach(entry -> result.append(" | ").append(entry.getKey())
+                        .append('=').append(entry.getValue()));
+        return result.append(" | incidentImpact=")
+                .append(finding.preliminaryImpact()).toString();
     }
 
     private void reasonClick(Player viewer, Actor actor, PunishmentGuiState.Reasons state, int slot) {
@@ -662,6 +744,12 @@ public final class PunishmentGuiController implements Listener {
             return;
         }
         if (slot == PunishmentGuiRenderer.BACK_SLOT) {
+            GuidedReturn origin = guidedReturns.get(viewer.getUniqueId());
+            if (origin != null && origin.draftId().equals(state.draft().draftId())
+                    && origin.state().target().playerId().equals(state.target().playerId())) {
+                openState(viewer, origin.state());
+                return;
+            }
             String categoryId = policies.find(state.draft().reasonId())
                     .map(ReasonPolicy::family)
                     .map(catalog::categoryId)
@@ -1340,6 +1428,9 @@ public final class PunishmentGuiController implements Listener {
             settings = java.util.Objects.requireNonNull(settings, "settings");
             workers = java.util.Objects.requireNonNull(workers, "workers");
         }
+    }
+
+    private record GuidedReturn(UUID draftId, PunishmentGuiState.Guided state) {
     }
 
     private record SearchCapture(PunishmentGuiState origin, Instant startedAt) {
