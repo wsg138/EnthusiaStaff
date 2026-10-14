@@ -150,10 +150,24 @@ public final class GuidedIncidentWizard {
                 answers.get("extent"), answers.get("targeting"));
         boolean review = candidate == null || "safety".equals(category)
                 || List.of("slur", "threat", "privacy", "hate").contains(conduct)
-                || answers.values().contains("unknown")
+                || "unknown".equals(medium)
+                || "unknown".equals(answers.get("detail"))
+                || "unknown".equals(answers.get("extent"))
+                || "unknown".equals(answers.get("targeting"))
                 || "other".equals(conduct)
+                || sensitiveCandidate(candidate)
                 || !channelCompatible(medium, conduct);
         return new Finding(category, conduct, medium, impact, candidate, review, facts);
+    }
+
+    private static boolean sensitiveCandidate(String candidate) {
+        if (candidate == null) {
+            return false;
+        }
+        return List.of("harassment.sexual", "advertising.malicious-link",
+                "exploit.server-crash-attempt", "account.theft",
+                "safety.credible-threat", "privacy.doxxing",
+                "dishonesty.falsifying-evidence").contains(candidate);
     }
 
     private boolean channelCompatible(String medium, String conduct) {

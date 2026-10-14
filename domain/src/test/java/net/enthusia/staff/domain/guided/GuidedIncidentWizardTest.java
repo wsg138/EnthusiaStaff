@@ -27,6 +27,14 @@ class GuidedIncidentWizardTest {
     }
 
     @Test
+    void unknownWarningDoesNotInventDefianceOrRequireReviewAlone() {
+        var unknownWarning = spam("few", "unknown").finding();
+        var noWarning = spam("few", "not-applicable").finding();
+        assertEquals(noWarning.preliminaryImpact(), unknownWarning.preliminaryImpact());
+        assertFalse(unknownWarning.needsReview());
+    }
+
+    @Test
     void noWarningDoesNotInflateImpact() {
         var notWarned = spam("few", "not-applicable").finding();
         var stopped = spam("few", "no").finding();

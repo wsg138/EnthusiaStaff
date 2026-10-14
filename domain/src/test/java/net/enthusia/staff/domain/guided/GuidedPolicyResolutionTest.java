@@ -81,6 +81,31 @@ class GuidedPolicyResolutionTest {
         assertTrue(b.compareTo(a) > 0);
     }
 
+    private static PunishmentAssessment withFinalSanction(SanctionSpec finalSanction) {
+        List<PunishmentStep> steps = List.of(
+                new PunishmentStep(0, "Baseline warning", List.of(warn())),
+                new PunishmentStep(1, "Elevated consequence", List.of(finalSanction)));
+        ReasonPolicy policy = new ReasonPolicy("spam.message-flooding", "spam",
+                "Flooding", 15, true, steps);
+        EscalationDecision decision = new EscalationDecision(0, 0, 0, List.of(), steps.getFirst());
+        return new PunishmentAssessment("fixture.1", policy, decision, List.of(warn()));
+    }
+
+    @Test
+    void severityNeverAutomaticallyEscalatesToBanOrPermanentConsequence() {
+        var incident = finding("large-scale", "yes");
+        SanctionSpec temporaryBan = new SanctionSpec(SanctionType.BAN,
+                SanctionLength.temporary(Duration.ofDays(7)));
+        SanctionSpec permanentMute = new SanctionSpec(SanctionType.MUTE,
+                SanctionLength.permanent());
+        assertThrows(IllegalArgumentException.class,
+                () -> GuidedPolicyResolution.calculate(incident,
+                        withFinalSanction(temporaryBan), 0));
+        assertThrows(IllegalArgumentException.class,
+                () -> GuidedPolicyResolution.calculate(incident,
+                        withFinalSanction(permanentMute), 0));
+    }
+
     @Test
     void unsafeOrMismatchedOffenseIsRejected() {
         var spam = finding("few", "not-applicable");

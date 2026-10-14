@@ -1335,6 +1335,7 @@ public final class PunishmentGuiController implements Listener {
 
     private void finish(Player viewer, String result) {
         onEntity(viewer, () -> {
+            guidedReturns.remove(viewer.getUniqueId());
             closeWithoutResume(viewer);
             viewer.sendMessage(StaffMessageStyle.style(Component.text(result)));
         });

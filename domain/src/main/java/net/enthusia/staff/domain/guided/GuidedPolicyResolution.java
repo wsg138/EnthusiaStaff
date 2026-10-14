@@ -7,6 +7,7 @@ import net.enthusia.staff.domain.application.PunishmentAssessment;
 import net.enthusia.staff.domain.escalation.PunishmentStep;
 import net.enthusia.staff.domain.sanction.SanctionLength;
 import net.enthusia.staff.domain.sanction.SanctionSpec;
+import net.enthusia.staff.domain.sanction.SanctionType;
 
 /** Calculated outcomes are bounded by real, configured policy steps and evaluated history. */
 public final class GuidedPolicyResolution {
@@ -30,6 +31,11 @@ public final class GuidedPolicyResolution {
                 : finding.preliminaryImpact() >= 25 ? 1 : 0;
         int selected = Math.min(ladder.size() - 1, historyStep + adjustment);
         List<SanctionSpec> originals = ladder.get(selected).sanctions();
+        if (selected > historyStep && !safeContextualTransition(
+                ladder.get(historyStep).sanctions(), originals)) {
+            throw new IllegalArgumentException(
+                    "Incident severity would change the sanction class or permanence; manual review required");
+        }
         String explanation = "Guided v1: " + finding.conduct() + " in " + finding.medium()
                 + "; impact=" + finding.preliminaryImpact()
                 + "; historyStep=" + historyStep + "; selectedStep=" + selected
@@ -58,6 +64,27 @@ public final class GuidedPolicyResolution {
         return new Outcome(List.of(new SanctionSpec(initial.type(),
                 SanctionLength.temporary(calculated))),
                 explanation + "; boundedDuration=" + minutes + "m", true);
+    }
+
+    /**
+     * Generic incident scores must not invent a ban, a permanent punishment,
+     * or a mixed/confiscation remedy. Those need an explicit reviewed route.
+     * A policy-sanctioned warning-to-mute progression is permitted.
+     */
+    private static boolean safeContextualTransition(List<SanctionSpec> baseline,
+                                                    List<SanctionSpec> candidate) {
+        if (baseline.size() != 1 || candidate.size() != 1) {
+            return false;
+        }
+        SanctionSpec before = baseline.getFirst();
+        SanctionSpec after = candidate.getFirst();
+        if (after.length().isPermanent() || before.length().isPermanent()) {
+            return false;
+        }
+        if (after.type() == before.type()) {
+            return true;
+        }
+        return before.type() == SanctionType.WARNING && after.type() == SanctionType.MUTE;
     }
 
     private static Duration nextDuration(List<PunishmentStep> steps, int selected,
