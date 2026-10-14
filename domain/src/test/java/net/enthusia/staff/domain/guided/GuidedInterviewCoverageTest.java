@@ -6,12 +6,19 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
 
 /** Walk every category/conduct/detail branch and catch unreachable GUI options. */
 class GuidedInterviewCoverageTest {
     private static final String DETAIL = "detail";
+    private static final Map<String, Set<String>> REACHABILITY_CHOICES = Map.of(
+            "continued", Set.of("not-applicable"),
+            "persistence", Set.of("removed"),
+            "extent", Set.of("few", "large-scale")
+    );
     @Test
     void everyCategorySubtypeIsReachableWithAtMostSevenOptionsPerScreen() throws Exception {
         String policies = Files.readString(
@@ -63,21 +70,20 @@ class GuidedInterviewCoverageTest {
             return;
         }
         var prompt = question.orElseThrow();
-        for (var choice : prompt.choices()) {
-            // Warning follow-up has no bearing on classification.
-            if ("continued".equals(prompt.id()) && !"not-applicable".equals(choice.id())) {
-                continue;
-            }
-            if ("persistence".equals(prompt.id()) && !"removed".equals(choice.id())) {
-                continue;
-            }
-            // Two ends of extent cover all current candidate mappings.
-            if ("extent".equals(prompt.id()) && !("few".equals(choice.id())
-                    || "large-scale".equals(choice.id()))) {
-                continue;
-            }
+        for (var choice : coverageChoices(prompt)) {
             collectReachable(interview.answer(prompt.id(), choice.id()), reachable);
         }
+    }
+
+    private static List<GuidedIncidentWizard.Choice> coverageChoices(
+            GuidedIncidentWizard.Question question) {
+        Set<String> selection = REACHABILITY_CHOICES.get(question.id());
+        if (selection == null) {
+            return question.choices();
+        }
+        return question.choices().stream()
+                .filter(choice -> selection.contains(choice.id()))
+                .toList();
     }
 
     private void verifyRoute(GuidedIncidentWizard incident, String policies) {
