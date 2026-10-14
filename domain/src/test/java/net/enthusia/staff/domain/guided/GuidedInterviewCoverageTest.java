@@ -5,6 +5,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.HashSet;
+import java.util.Set;
 import org.junit.jupiter.api.Test;
 
 /** Walk every category/conduct/detail branch and catch unreachable GUI options. */
@@ -36,6 +38,46 @@ class GuidedInterviewCoverageTest {
             }
         }
         assertTrue(count >= 300, "Expected all navigation branches");
+    }
+
+    @Test
+    void everyMappedPolicyReasonHasAReachableStaffInterview() {
+        Set<String> reachable = new HashSet<>();
+        for (String category : new String[]{"chat", "gameplay", "safety",
+                "accounts", "community", "economy"}) {
+            collectReachable(GuidedIncidentWizard.start(category), reachable);
+        }
+        Set<String> missing = new HashSet<>(GuidedOffenseClassifier.mappedReasonIds());
+        missing.removeAll(reachable);
+        assertTrue(missing.isEmpty(), "Reason mappings not accessible from the GUI: " + missing);
+    }
+
+    private static void collectReachable(GuidedIncidentWizard interview,
+                                         Set<String> reachable) {
+        var question = interview.nextQuestion();
+        if (question.isEmpty()) {
+            var finding = interview.finding();
+            if (finding.candidateId() != null) {
+                reachable.add(finding.candidateId());
+            }
+            return;
+        }
+        var prompt = question.orElseThrow();
+        for (var choice : prompt.choices()) {
+            // Warning follow-up has no bearing on classification.
+            if ("continued".equals(prompt.id()) && !"not-applicable".equals(choice.id())) {
+                continue;
+            }
+            if ("persistence".equals(prompt.id()) && !"removed".equals(choice.id())) {
+                continue;
+            }
+            // Two ends of extent cover all current candidate mappings.
+            if ("extent".equals(prompt.id()) && !("few".equals(choice.id())
+                    || "large-scale".equals(choice.id()))) {
+                continue;
+            }
+            collectReachable(interview.answer(prompt.id(), choice.id()), reachable);
+        }
     }
 
     private void verifyRoute(GuidedIncidentWizard incident, String policies) {

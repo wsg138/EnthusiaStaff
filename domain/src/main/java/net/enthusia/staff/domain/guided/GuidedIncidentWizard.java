@@ -180,6 +180,7 @@ public final class GuidedIncidentWizard {
                 || UNKNOWN.equals(answers.get(EXTENT))
                 || UNKNOWN.equals(answers.get(TARGETING))
                 || OTHER.equals(conduct)
+                || OTHER.equals(answers.get(DETAIL))
                 || sensitiveCandidate(candidate)
                 || !channelCompatible(medium, conduct);
         return new Finding(category, conduct, medium, impact, candidate, review, facts);
@@ -202,7 +203,8 @@ public final class GuidedIncidentWizard {
         if ("economy".equals(category)) {
             return "in-game".equals(medium) || "market".equals(medium);
         }
-        if (CHAT.equals(category) && List.of("language", "politics").contains(conduct)) {
+        if (CHAT.equals(category)
+                && List.of("language", "communication", "politics").contains(conduct)) {
             return "public-chat".equals(medium);
         }
         return true;
@@ -227,10 +229,11 @@ public final class GuidedIncidentWizard {
             case CHAT -> List.of(c("spam", "Spam / repetition"),
                     c("harassment", "Harassment"), c("slur", "Slur / discrimination"),
                     c("hate", "Hate or extremist content"),
-                    c("politics", "Political content"), c("language", "Other language"),
+                    c("politics", "Political content"), c("communication", "Other chat conduct"),
                     c(OTHER, OTHER_UNSURE));
             case "gameplay" -> List.of(c("cheating", "Cheating"),
                     c("exploit", "Exploits / duplication"),
+                    c("mods", "Unauthorized client modifications"),
                     c("mechanics", "Disruptive mechanics"),
                     c("complicity", "Assisted rule breaking"),
                     c(OTHER, OTHER_UNSURE));

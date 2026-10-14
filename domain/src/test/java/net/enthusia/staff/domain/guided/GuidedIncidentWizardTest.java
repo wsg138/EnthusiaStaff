@@ -87,6 +87,16 @@ class GuidedIncidentWizardTest {
     }
 
     @Test
+    void placedTextCannotSilentlyUsePublicChatOnlyRules() {
+        var placed = GuidedIncidentWizard.start(CHAT)
+                .answer(MEDIUM, "sign").answer(CONDUCT, "communication")
+                .answer("detail", "language").answer(EXTENT, FEW)
+                .answer(CONTINUED, NO_WARNING).finding();
+        assertTrue(placed.needsReview());
+        assertEquals("language.non-english-public-chat", placed.candidateId());
+    }
+
+    @Test
     void signSpamCannotBecomeAChatMuteWithoutReview() {
         var flow = GuidedIncidentWizard.start(CHAT)
                 .answer(MEDIUM, "sign").answer(CONDUCT, SPAM)
