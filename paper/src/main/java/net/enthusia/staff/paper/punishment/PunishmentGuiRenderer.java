@@ -311,7 +311,7 @@ final class PunishmentGuiRenderer {
         }
         inventory.setItem(31, item(Material.WRITABLE_BOOK, "Calculation Factors",
                 NamedTextColor.AQUA, finding.facts().stream()
-                        .map(text -> Component.text(text, NamedTextColor.WHITE)).toList()));
+                        .<Component>map(text -> Component.text(text, NamedTextColor.WHITE)).toList()));
     }
 
     private static ItemStack durationChoice(String label, java.time.Duration duration, boolean selected) {
@@ -331,9 +331,9 @@ final class PunishmentGuiRenderer {
         String candidate = finding.candidateId();
         var bounds = new GuidedRemedyPreview.Bounds(candidate, 20, 85,
                 java.time.Duration.ofMinutes(15), java.time.Duration.ofHours(12), 8);
-        var mapped = new GuidedChatInterview.Finding(candidate, finding.conduct(),
-                finding.medium(), finding.preliminaryImpact(), finding.facts(),
-                finding.needsReview(), finding.needsReview() ? "Needs manual review" : "");
+        var mapped = new GuidedChatInterview.Finding(candidate, finding.preliminaryImpact(),
+                finding.facts(), finding.needsReview(),
+                finding.needsReview() ? "Needs manual review" : "");
         return GuidedRemedyPreview.calculate(mapped, bounds, 0);
     }
 
