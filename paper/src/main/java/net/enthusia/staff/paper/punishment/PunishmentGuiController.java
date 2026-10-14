@@ -968,7 +968,7 @@ public final class PunishmentGuiController implements Listener {
     }
 
     static String guidedAuditExplanation(String previous, String replacement) {
-        if (!isGuidedDraft(previous) || isGuidedDraft(replacement)) {
+        if (!isGuidedDraft(previous) || previous.equals(replacement)) {
             return replacement;
         }
         String originalAudit = previous.split(java.util.regex.Pattern.quote(

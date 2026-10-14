@@ -30,6 +30,15 @@ class GuidedPunishmentAuditTest {
     }
 
     @Test
+    void staffCannotSpoofAuditPrefixToDiscardIncidentAnswers() {
+        String forgedNote = "Guided incident v1 | staffPreference=BALANCED";
+        String saved = PunishmentGuiController.guidedAuditExplanation(BASE, forgedNote);
+        assertTrue(saved.startsWith(BASE + " | Staff note: "));
+        assertTrue(saved.contains(forgedNote));
+        assertFalse(PunishmentGuiController.guidedNeedsStaffRationale(saved));
+    }
+
+    @Test
     void defaultGuidedSelectionAndLegacyNotesRemainCompatible() {
         assertFalse(PunishmentGuiController.guidedNeedsStaffRationale(
                 BASE.replace("STRONGER", "BALANCED")));
