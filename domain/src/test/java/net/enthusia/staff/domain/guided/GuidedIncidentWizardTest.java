@@ -33,7 +33,7 @@ class GuidedIncidentWizardTest {
         var ignored = spam("few", "yes").finding();
         assertEquals(notWarned.preliminaryImpact(), stopped.preliminaryImpact());
         assertTrue(ignored.preliminaryImpact() > notWarned.preliminaryImpact());
-        assertEquals("chat.spam.low-level", ignored.candidateId());
+        assertEquals("spam.low-level", ignored.candidateId());
     }
 
     @Test
