@@ -8,6 +8,7 @@ import java.nio.file.Path;
 import org.junit.jupiter.api.Test;
 
 class GuidedOffenseClassifierTest {
+    private static final String CHAT = "chat";
     @Test
     void internalMappingsExistInConfiguredPolicy() throws Exception {
         Path policy = Path.of("../paper/src/main/resources/reason-policies.yml");
@@ -25,13 +26,13 @@ class GuidedOffenseClassifierTest {
     @Test
     void similarConductProducesDifferentGroundedReasonIds() {
         assertEquals("spam.low-level", GuidedOffenseClassifier.resolve(
-                "chat", "public-chat", "spam", null, "few", null));
+                CHAT, "public-chat", "spam", null, "few", null));
         assertEquals("spam.message-flooding", GuidedOffenseClassifier.resolve(
-                "chat", "public-chat", "spam", null, "large-scale", null));
+                CHAT, "public-chat", "spam", null, "large-scale", null));
         assertEquals("spam.private-message", GuidedOffenseClassifier.resolve(
-                "chat", "direct-message", "spam", null, "few", null));
+                CHAT, "direct-message", "spam", null, "few", null));
         assertEquals("hate.abbreviated-slur-targeted", GuidedOffenseClassifier.resolve(
-                "chat", "public-chat", "slur", "abbreviated", "few", "targeted"));
+                CHAT, "public-chat", "slur", "abbreviated", "few", "targeted"));
         assertEquals("cheating.xray-esp", GuidedOffenseClassifier.resolve(
                 "gameplay", "in-game", "cheating", "xray", "sustained", null));
         assertEquals("reputation.alt-manipulation", GuidedOffenseClassifier.resolve(

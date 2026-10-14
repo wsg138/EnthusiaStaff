@@ -4,41 +4,48 @@ import static org.junit.jupiter.api.Assertions.*;
 import org.junit.jupiter.api.Test;
 
 class GuidedIncidentWizardTest {
+    private static final String CHAT = "chat";
+    private static final String MEDIUM = "medium";
+    private static final String CONDUCT = "conduct";
+    private static final String EXTENT = "extent";
+    private static final String CONTINUED = "continued";
+    private static final String FEW = "few";
+    private static final String NO_WARNING = "not-applicable";
     private static GuidedIncidentWizard spam(String extent, String warning) {
-        return GuidedIncidentWizard.start("chat")
-                .answer("medium", "public-chat")
-                .answer("conduct", "spam")
-                .answer("extent", extent)
-                .answer("continued", warning);
+        return GuidedIncidentWizard.start(CHAT)
+                .answer(MEDIUM, "public-chat")
+                .answer(CONDUCT, "spam")
+                .answer(EXTENT, extent)
+                .answer(CONTINUED, warning);
     }
 
     @Test
     void normalChatFlowStartsWithPlaceNotSpecificOffense() {
-        var flow = GuidedIncidentWizard.start("chat");
-        assertEquals("medium", flow.nextQuestion().orElseThrow().id());
-        flow = flow.answer("medium", "public-chat");
-        assertEquals("conduct", flow.nextQuestion().orElseThrow().id());
-        flow = flow.answer("conduct", "spam");
-        assertEquals("extent", flow.nextQuestion().orElseThrow().id());
-        flow = flow.answer("extent", "few");
-        assertEquals("continued", flow.nextQuestion().orElseThrow().id());
+        var flow = GuidedIncidentWizard.start(CHAT);
+        assertEquals(MEDIUM, flow.nextQuestion().orElseThrow().id());
+        flow = flow.answer(MEDIUM, "public-chat");
+        assertEquals(CONDUCT, flow.nextQuestion().orElseThrow().id());
+        flow = flow.answer(CONDUCT, "spam");
+        assertEquals(EXTENT, flow.nextQuestion().orElseThrow().id());
+        flow = flow.answer(EXTENT, FEW);
+        assertEquals(CONTINUED, flow.nextQuestion().orElseThrow().id());
         assertTrue(flow.nextQuestion().orElseThrow().choices().stream()
-                .anyMatch(x -> x.id().equals("not-applicable")));
+                .anyMatch(x -> x.id().equals(NO_WARNING)));
     }
 
     @Test
     void unknownWarningDoesNotInventDefianceOrRequireReviewAlone() {
-        var unknownWarning = spam("few", "unknown").finding();
-        var noWarning = spam("few", "not-applicable").finding();
+        var unknownWarning = spam(FEW, "unknown").finding();
+        var noWarning = spam(FEW, NO_WARNING).finding();
         assertEquals(noWarning.preliminaryImpact(), unknownWarning.preliminaryImpact());
         assertFalse(unknownWarning.needsReview());
     }
 
     @Test
     void noWarningDoesNotInflateImpact() {
-        var notWarned = spam("few", "not-applicable").finding();
-        var stopped = spam("few", "no").finding();
-        var ignored = spam("few", "yes").finding();
+        var notWarned = spam(FEW, NO_WARNING).finding();
+        var stopped = spam(FEW, "no").finding();
+        var ignored = spam(FEW, "yes").finding();
         assertEquals(notWarned.preliminaryImpact(), stopped.preliminaryImpact());
         assertTrue(ignored.preliminaryImpact() > notWarned.preliminaryImpact());
         assertEquals("spam.low-level", ignored.candidateId());
@@ -47,9 +54,9 @@ class GuidedIncidentWizardTest {
     @Test
     void answerChangeClearsAllDependentAnswers() {
         var flow = spam("sustained", "yes");
-        flow = flow.answer("conduct", "slur");
-        assertFalse(flow.answers().containsKey("extent"));
-        assertFalse(flow.answers().containsKey("continued"));
+        flow = flow.answer(CONDUCT, "slur");
+        assertFalse(flow.answers().containsKey(EXTENT));
+        assertFalse(flow.answers().containsKey(CONTINUED));
         assertEquals("detail", flow.nextQuestion().orElseThrow().id());
         flow = flow.answer("detail", "full");
         assertEquals("targeting", flow.nextQuestion().orElseThrow().id());
@@ -59,14 +66,14 @@ class GuidedIncidentWizardTest {
     @Test
     void otherCategoriesSelectConfiguredReasonOrRequireHighRiskReview() {
         for (String category : new String[]{"gameplay","safety","accounts","community","economy"}) {
-            var flow = GuidedIncidentWizard.start(category).answer("medium", "in-game");
+            var flow = GuidedIncidentWizard.start(category).answer(MEDIUM, "in-game");
             var conduct = flow.nextQuestion().orElseThrow();
-            assertEquals("conduct", conduct.id());
+            assertEquals(CONDUCT, conduct.id());
             String value = conduct.choices().get(0).id();
-            flow = flow.answer("conduct", value);
+            flow = flow.answer(CONDUCT, value);
             while (flow.nextQuestion().isPresent()) {
                 var q = flow.nextQuestion().orElseThrow();
-                String answer = q.id().equals("continued") ? "not-applicable" : q.choices().get(0).id();
+                String answer = q.id().equals(CONTINUED) ? NO_WARNING : q.choices().get(0).id();
                 flow = flow.answer(q.id(), answer);
             }
             if ("safety".equals(category)) {
@@ -80,9 +87,9 @@ class GuidedIncidentWizardTest {
 
     @Test
     void signSpamCannotBecomeAChatMuteWithoutReview() {
-        var flow = GuidedIncidentWizard.start("chat")
-                .answer("medium", "sign").answer("conduct", "spam")
-                .answer("extent", "sustained").answer("continued", "not-applicable")
+        var flow = GuidedIncidentWizard.start(CHAT)
+                .answer(MEDIUM, "sign").answer(CONDUCT, "spam")
+                .answer(EXTENT, "sustained").answer(CONTINUED, NO_WARNING)
                 .answer("persistence", "persistent");
         assertTrue(flow.finding().needsReview());
         assertNull(flow.finding().candidateId());
@@ -90,11 +97,11 @@ class GuidedIncidentWizardTest {
 
     @Test
     void backNavigationAndChoiceValidationAreFailClosed() {
-        var flow = GuidedIncidentWizard.start("chat");
-        assertThrows(IllegalArgumentException.class, () -> flow.answer("conduct", "spam"));
-        assertThrows(IllegalArgumentException.class, () -> flow.answer("medium", "fake"));
+        var flow = GuidedIncidentWizard.start(CHAT);
+        assertThrows(IllegalArgumentException.class, () -> flow.answer(CONDUCT, "spam"));
+        assertThrows(IllegalArgumentException.class, () -> flow.answer(MEDIUM, "fake"));
         assertEquals(flow.answers(), flow.back().answers());
-        var first = flow.answer("medium", "public-chat");
+        var first = flow.answer(MEDIUM, "public-chat");
         assertTrue(first.back().answers().isEmpty());
     }
 }

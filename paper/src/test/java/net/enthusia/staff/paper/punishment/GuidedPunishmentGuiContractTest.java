@@ -17,6 +17,8 @@ class GuidedPunishmentGuiContractTest {
         String controller = source("PunishmentGuiController.java");
         assertTrue(controller.contains("\"punish\".equalsIgnoreCase(state.commandName())"));
         assertTrue(controller.contains("GuidedIncidentWizard.start(categoryId)"));
+        assertTrue(controller.contains(
+                "plugin.getConfig().getBoolean(\"guided-punishment.enabled\", false)"));
         assertTrue(controller.contains("new PunishmentGuiState.Reasons("));
         assertTrue(controller.contains("GuidedIncidentWizard.Question prompt"));
     }

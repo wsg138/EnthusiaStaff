@@ -17,6 +17,7 @@ import net.enthusia.staff.domain.sanction.SanctionType;
 import org.junit.jupiter.api.Test;
 
 class GuidedPolicyResolutionTest {
+    private static final String FLOOD_ID = "spam.message-flooding";
     private static SanctionSpec warn() {
         return new SanctionSpec(SanctionType.WARNING, SanctionLength.instant());
     }
@@ -56,7 +57,7 @@ class GuidedPolicyResolutionTest {
     @Test
     void variableLengthRemainsBetweenConfiguredBounds() {
         var incident = finding("large-scale", "yes");
-        var a = assessment(0, "spam.message-flooding");
+        var a = assessment(0, FLOOD_ID);
         Duration low = GuidedPolicyResolution.calculate(incident, a, -1)
                 .sanctions().getFirst().length().temporary().orElseThrow();
         Duration mid = GuidedPolicyResolution.calculate(incident, a, 0)
@@ -73,9 +74,9 @@ class GuidedPolicyResolutionTest {
     void evaluatedCaseHistoryChangesDurationWithoutNewStaffQuestion() {
         var incident = finding("large-scale", "yes");
         var first = GuidedPolicyResolution.calculate(incident,
-                assessment(0, "spam.message-flooding"), 0);
+                assessment(0, FLOOD_ID), 0);
         var repeated = GuidedPolicyResolution.calculate(incident,
-                assessment(1, "spam.message-flooding"), 0);
+                assessment(1, FLOOD_ID), 0);
         Duration a = first.sanctions().getFirst().length().temporary().orElseThrow();
         Duration b = repeated.sanctions().getFirst().length().temporary().orElseThrow();
         assertTrue(b.compareTo(a) > 0);
@@ -85,7 +86,7 @@ class GuidedPolicyResolutionTest {
         List<PunishmentStep> steps = List.of(
                 new PunishmentStep(0, "Baseline warning", List.of(warn())),
                 new PunishmentStep(1, "Elevated consequence", List.of(finalSanction)));
-        ReasonPolicy policy = new ReasonPolicy("spam.message-flooding", "spam",
+        ReasonPolicy policy = new ReasonPolicy(FLOOD_ID, "spam",
                 "Flooding", 15, true, steps);
         EscalationDecision decision = new EscalationDecision(0, 0, 0, List.of(), steps.getFirst());
         return new PunishmentAssessment("fixture.1", policy, decision, List.of(warn()));
@@ -110,7 +111,7 @@ class GuidedPolicyResolutionTest {
     void unsafeOrMismatchedOffenseIsRejected() {
         var spam = finding("few", "not-applicable");
         assertThrows(IllegalArgumentException.class, () -> GuidedPolicyResolution.calculate(
-                spam, assessment(0, "spam.message-flooding"), 0));
+                spam, assessment(0, FLOOD_ID), 0));
         assertThrows(IllegalArgumentException.class, () -> GuidedPolicyResolution.calculate(
                 spam, assessment(0, "spam.low-level"), 2));
     }

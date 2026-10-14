@@ -9,6 +9,7 @@ import org.junit.jupiter.api.Test;
 
 /** Walk every category/conduct/detail branch and catch unreachable GUI options. */
 class GuidedInterviewCoverageTest {
+    private static final String DETAIL = "detail";
     @Test
     void everyCategorySubtypeIsReachableWithAtMostSevenOptionsPerScreen() throws Exception {
         String policies = Files.readString(
@@ -22,7 +23,7 @@ class GuidedInterviewCoverageTest {
                 for (var conduct : location.nextQuestion().orElseThrow().choices()) {
                     var behavior = location.answer("conduct", conduct.id());
                     if (behavior.nextQuestion().isPresent()
-                            && "detail".equals(behavior.nextQuestion().orElseThrow().id())) {
+                            && DETAIL.equals(behavior.nextQuestion().orElseThrow().id())) {
                         for (var detail : behavior.nextQuestion().orElseThrow().choices()) {
                             verifyRoute(behavior.answer("detail", detail.id()), policies);
                             count++;
@@ -38,9 +39,10 @@ class GuidedInterviewCoverageTest {
     }
 
     private void verifyRoute(GuidedIncidentWizard incident, String policies) {
-        for (int depth = 0; incident.nextQuestion().isPresent(); depth++) {
+        GuidedIncidentWizard current = incident;
+        for (int depth = 0; current.nextQuestion().isPresent(); depth++) {
             assertTrue(depth < 10, "Potential questionnaire loop");
-            var question = incident.nextQuestion().orElseThrow();
+            var question = current.nextQuestion().orElseThrow();
             assertTrue(question.choices().size() <= 7, "Too many GUI answers: " + question.id());
             String response = switch (question.id()) {
                 case "targeting" -> "targeted";
@@ -49,9 +51,9 @@ class GuidedInterviewCoverageTest {
                 case "persistence" -> "removed";
                 default -> question.choices().getFirst().id();
             };
-            incident = incident.answer(question.id(), response);
+            current = current.answer(question.id(), response);
         }
-        var finding = incident.finding();
+        var finding = current.finding();
         if (finding.candidateId() != null) {
             assertTrue(policies.contains("- id: " + finding.candidateId() + "\n")
                             || policies.contains("- id: " + finding.candidateId() + "\r\n"),
@@ -59,6 +61,6 @@ class GuidedInterviewCoverageTest {
         } else {
             assertTrue(finding.needsReview(), "Policy gap must require review");
         }
-        assertFalse(incident.nextQuestion().isPresent());
+        assertFalse(current.nextQuestion().isPresent());
     }
 }

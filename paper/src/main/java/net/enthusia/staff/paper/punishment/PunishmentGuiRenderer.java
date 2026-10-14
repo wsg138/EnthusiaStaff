@@ -225,42 +225,48 @@ final class PunishmentGuiRenderer {
         return List.copyOf(examples);
     }
 
-    /** All outcomes on this screen are informational until approved policy cutover. */
     private void renderGuided(Inventory inventory, PunishmentGuiState.Guided state) {
-        GuidedIncidentWizard wizard = state.interview();
-        var question = wizard.nextQuestion();
-        String categoryName = PunishmentGuiCategory.byId(state.categoryId()).title();
+        var question = state.interview().nextQuestion();
         if (question.isPresent()) {
-            GuidedIncidentWizard.Question prompt = question.orElseThrow();
-            int answered = wizard.answers().size();
-            inventory.setItem(13, item(Material.OAK_SIGN, prompt.text(), NamedTextColor.AQUA,
-                    List.of(Component.text(categoryName, NamedTextColor.WHITE),
-                            Component.text("Step " + (answered + 1) + " — select one response",
-                                    NamedTextColor.YELLOW))));
-            for (int i = 0; i < prompt.choices().size() && i < GUIDED_CHOICE_SLOTS.length; i++) {
-                var choice = prompt.choices().get(i);
-                Material material = switch (i) {
-                    case 0 -> Material.LIME_DYE;
-                    case 1 -> Material.LIGHT_BLUE_DYE;
-                    case 2 -> Material.ORANGE_DYE;
-                    case 3 -> Material.PURPLE_DYE;
-                    case 4 -> Material.CYAN_DYE;
-                    case 5 -> Material.MAGENTA_DYE;
-                    default -> Material.GRAY_DYE;
-                };
-                inventory.setItem(GUIDED_CHOICE_SLOTS[i],
-                        item(material, choice.label(), NamedTextColor.WHITE,
-                                List.of(Component.text("Click to answer", NamedTextColor.YELLOW))));
-            }
+            renderGuidedQuestion(inventory, state, question.orElseThrow());
         } else {
-            renderGuidedResult(inventory, state, wizard.finding());
+            renderGuidedResult(inventory, state, state.interview().finding());
         }
-        inventory.setItem(BACK_SLOT, button(Material.ARROW, "Previous Question", NamedTextColor.AQUA));
+        inventory.setItem(BACK_SLOT, button(Material.ARROW,
+                "Previous Question", NamedTextColor.AQUA));
         inventory.setItem(SEARCH_SLOT, item(Material.BOOK,
                 "Expert: Browse Exact Reasons", NamedTextColor.YELLOW,
                 List.of(Component.text("Opens the existing authorized policy workflow.", NamedTextColor.GRAY),
                         Component.text("No punishment happens until final confirmation.", NamedTextColor.RED))));
         inventory.setItem(CLOSE_SLOT, button(Material.BARRIER, CLOSE_LABEL, NamedTextColor.RED));
+    }
+
+    private void renderGuidedQuestion(Inventory inventory, PunishmentGuiState.Guided state,
+                                      GuidedIncidentWizard.Question prompt) {
+        String categoryName = PunishmentGuiCategory.byId(state.categoryId()).title();
+        int answered = state.interview().answers().size();
+        inventory.setItem(13, item(Material.OAK_SIGN, prompt.text(), NamedTextColor.AQUA,
+                List.of(Component.text(categoryName, NamedTextColor.WHITE),
+                        Component.text("Step " + (answered + 1) + " - select one response",
+                                NamedTextColor.YELLOW))));
+        for (int i = 0; i < prompt.choices().size() && i < GUIDED_CHOICE_SLOTS.length; i++) {
+            var choice = prompt.choices().get(i);
+            inventory.setItem(GUIDED_CHOICE_SLOTS[i],
+                    item(guidedAnswerMaterial(i), choice.label(), NamedTextColor.WHITE,
+                            List.of(Component.text("Click to answer", NamedTextColor.YELLOW))));
+        }
+    }
+
+    private static Material guidedAnswerMaterial(int index) {
+        return switch (index) {
+            case 0 -> Material.LIME_DYE;
+            case 1 -> Material.LIGHT_BLUE_DYE;
+            case 2 -> Material.ORANGE_DYE;
+            case 3 -> Material.PURPLE_DYE;
+            case 4 -> Material.CYAN_DYE;
+            case 5 -> Material.MAGENTA_DYE;
+            default -> Material.GRAY_DYE;
+        };
     }
 
     /**

@@ -125,39 +125,56 @@ public final class GuidedOffenseClassifier {
 
     public static Set<String> mappedReasonIds() { return Set.copyOf(REASONS.values()); }
 
+    private static final String CHAT = "chat";
+    private static final String PUBLIC_CHAT = "public-chat";
+    private static final String TARGETED = "targeted";
+    private static final String VERBAL = "verbal";
+
     public static String resolve(String category, String medium, String conduct, String detail,
                                  String extent, String targeting) {
-        if ("chat".equals(category)) {
-            if ("spam".equals(conduct)) {
-                return switch (medium) {
-                    case "public-chat" -> "sustained".equals(extent) || "large-scale".equals(extent)
-                            ? "spam.message-flooding" : "spam.low-level";
-                    case "direct-message" -> "spam.private-message";
-                    case "voice" -> "spam.noise-pollution";
-                    default -> null;
-                };
-            }
-            if ("harassment".equals(conduct) && "verbal".equals(detail)) {
-                return "targeted".equals(targeting)
-                        ? "hate.targeted-harassment" : "hate.general-toxicity";
-            }
-            if ("slur".equals(conduct)) {
-                if (detail == null) {
-                    return null;
-                }
-                return switch (detail) {
-                    case "abbreviated" -> "targeted".equals(targeting)
-                            ? "hate.abbreviated-slur-targeted" : "hate.abbreviated-slur-untargeted";
-                    case "full" -> "targeted".equals(targeting)
-                            ? "hate.full-slur-targeted" : "hate.full-slur-untargeted";
-                    default -> null;
-                };
-            }
-            if ("language".equals(conduct) && "public-chat".equals(medium)) {
-                return "language.non-english-public-chat";
-            }
+        String contextual = CHAT.equals(category)
+                ? resolveChat(medium, conduct, detail, extent, targeting) : null;
+        if (contextual != null) {
+            return contextual;
         }
         String prefix = category + "/" + conduct;
         return REASONS.get(detail == null ? prefix : prefix + "/" + detail);
+    }
+
+    private static String resolveChat(String medium, String conduct, String detail,
+                                      String extent, String targeting) {
+        return switch (conduct) {
+            case "spam" -> resolveSpam(medium, extent);
+            case "harassment" -> VERBAL.equals(detail)
+                    ? TARGETED.equals(targeting) ? "hate.targeted-harassment"
+                            : "hate.general-toxicity" : null;
+            case "slur" -> resolveSlur(detail, targeting);
+            case "language" -> PUBLIC_CHAT.equals(medium)
+                    ? "language.non-english-public-chat" : null;
+            default -> null;
+        };
+    }
+
+    private static String resolveSpam(String medium, String extent) {
+        return switch (medium) {
+            case PUBLIC_CHAT -> "sustained".equals(extent) || "large-scale".equals(extent)
+                    ? "spam.message-flooding" : "spam.low-level";
+            case "direct-message" -> "spam.private-message";
+            case "voice" -> "spam.noise-pollution";
+            default -> null;
+        };
+    }
+
+    private static String resolveSlur(String detail, String targeting) {
+        if (detail == null) {
+            return null;
+        }
+        return switch (detail) {
+            case "abbreviated" -> TARGETED.equals(targeting)
+                    ? "hate.abbreviated-slur-targeted" : "hate.abbreviated-slur-untargeted";
+            case "full" -> TARGETED.equals(targeting)
+                    ? "hate.full-slur-targeted" : "hate.full-slur-untargeted";
+            default -> null;
+        };
     }
 }

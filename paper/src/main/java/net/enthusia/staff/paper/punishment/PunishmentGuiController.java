@@ -426,7 +426,8 @@ public final class PunishmentGuiController implements Listener {
         }
         int index = PunishmentGuiRenderer.categoryIndex(slot, categories.size());
         if (index >= 0 && index < categories.size()) {
-            if ("punish".equalsIgnoreCase(state.commandName())) {
+            if ("punish".equalsIgnoreCase(state.commandName())
+                    && plugin.getConfig().getBoolean("guided-punishment.enabled", false)) {
                 String categoryId = categories.get(index).id();
                 openState(viewer, new PunishmentGuiState.Guided(
                         state.viewerId(), state.target(), state.commandName(),
@@ -445,58 +446,69 @@ public final class PunishmentGuiController implements Listener {
         }
     }
 
-    /** Interview choices are non-enforcing; actual sanctions use the existing workflow. */
+    /** Guided answers are routed to normal authorized draft preparation. */
     private void guidedClick(Player viewer, Actor actor, PunishmentGuiState.Guided state, int slot) {
         if (openHistoryFromControl(viewer, state, slot)) {
             return;
         }
         if (slot == PunishmentGuiRenderer.CLOSE_SLOT) {
             viewer.closeInventory();
-            return;
-        }
-        if (slot == PunishmentGuiRenderer.SEARCH_SLOT) {
-            if (!catalog.reasons(actor, state.commandName(), state.categoryId()).isEmpty()) {
-                openState(viewer, new PunishmentGuiState.Reasons(
-                        state.viewerId(), state.target(), state.commandName(),
-                        state.overview(), state.categoryId(), 0));
-            }
-            return;
-        }
-        if (slot == PunishmentGuiRenderer.BACK_SLOT) {
-            GuidedIncidentWizard previous = state.interview().back();
-            if (previous.answers().isEmpty()) {
-                openState(viewer, categoriesState(state));
-            } else {
-                openGuidedPage(viewer, state, previous, 0);
-            }
-            return;
-        }
-        var question = state.interview().nextQuestion();
-        if (question.isPresent()) {
-            GuidedIncidentWizard.Question prompt = question.orElseThrow();
-            for (int index = 0; index < prompt.choices().size()
-                    && index < PunishmentGuiRenderer.GUIDED_CHOICE_SLOTS.length; index++) {
-                if (slot == PunishmentGuiRenderer.GUIDED_CHOICE_SLOTS[index]) {
-                    var choice = prompt.choices().get(index);
-                    openGuidedPage(viewer, state,
-                            state.interview().answer(prompt.id(), choice.id()), 0);
-                    return;
-                }
-            }
+        } else if (slot == PunishmentGuiRenderer.SEARCH_SLOT) {
+            openGuidedExpertReasons(viewer, actor, state);
+        } else if (slot == PunishmentGuiRenderer.BACK_SLOT) {
+            backGuided(viewer, state);
+        } else if (state.interview().nextQuestion().isPresent()) {
+            chooseGuidedAnswer(viewer, state, slot);
         } else {
-            if (slot == PunishmentGuiRenderer.CONFIRM_SLOT) {
-                prepareGuided(viewer, actor, state);
+            chooseGuidedResult(viewer, actor, state, slot);
+        }
+    }
+
+    private void openGuidedExpertReasons(Player viewer, Actor actor,
+                                         PunishmentGuiState.Guided state) {
+        if (!catalog.reasons(actor, state.commandName(), state.categoryId()).isEmpty()) {
+            openState(viewer, new PunishmentGuiState.Reasons(
+                    state.viewerId(), state.target(), state.commandName(),
+                    state.overview(), state.categoryId(), 0));
+        }
+    }
+
+    private void backGuided(Player viewer, PunishmentGuiState.Guided state) {
+        GuidedIncidentWizard previous = state.interview().back();
+        if (previous.answers().isEmpty()) {
+            openState(viewer, categoriesState(state));
+        } else {
+            openGuidedPage(viewer, state, previous, 0);
+        }
+    }
+
+    private void chooseGuidedAnswer(Player viewer, PunishmentGuiState.Guided state, int slot) {
+        GuidedIncidentWizard.Question prompt = state.interview().nextQuestion().orElseThrow();
+        for (int index = 0; index < prompt.choices().size()
+                && index < PunishmentGuiRenderer.GUIDED_CHOICE_SLOTS.length; index++) {
+            if (slot == PunishmentGuiRenderer.GUIDED_CHOICE_SLOTS[index]) {
+                var choice = prompt.choices().get(index);
+                openGuidedPage(viewer, state,
+                        state.interview().answer(prompt.id(), choice.id()), 0);
                 return;
             }
-            int updated = switch (slot) {
-                case PunishmentGuiRenderer.GUIDED_SHORTER_SLOT -> -1;
-                case PunishmentGuiRenderer.GUIDED_SUGGESTED_SLOT -> 0;
-                case PunishmentGuiRenderer.GUIDED_LONGER_SLOT -> 1;
-                default -> state.durationChoice();
-            };
-            if (updated != state.durationChoice()) {
-                openGuidedPage(viewer, state, state.interview(), updated);
-            }
+        }
+    }
+
+    private void chooseGuidedResult(Player viewer, Actor actor,
+                                    PunishmentGuiState.Guided state, int slot) {
+        if (slot == PunishmentGuiRenderer.CONFIRM_SLOT) {
+            prepareGuided(viewer, actor, state);
+            return;
+        }
+        int updated = switch (slot) {
+            case PunishmentGuiRenderer.GUIDED_SHORTER_SLOT -> -1;
+            case PunishmentGuiRenderer.GUIDED_SUGGESTED_SLOT -> 0;
+            case PunishmentGuiRenderer.GUIDED_LONGER_SLOT -> 1;
+            default -> state.durationChoice();
+        };
+        if (updated != state.durationChoice()) {
+            openGuidedPage(viewer, state, state.interview(), updated);
         }
     }
 
@@ -572,7 +584,7 @@ public final class PunishmentGuiController implements Listener {
 
     private static String guidedExplanation(PunishmentGuiState.Guided state,
                                             GuidedIncidentWizard.Finding finding) {
-        StringBuilder result = new StringBuilder("Guided incident v1 | category=")
+        StringBuilder result = new StringBuilder(96).append("Guided incident v1 | category=")
                 .append(state.categoryId()).append(" | target=").append(state.target().playerId());
         state.interview().answers().entrySet().stream()
                 .sorted(Map.Entry.comparingByKey())

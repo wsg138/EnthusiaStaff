@@ -112,3 +112,41 @@ with test-injected bounds and a hypothetical history input. Those numbers
 are demonstrative, not live server punishment thresholds or approved ranges.
 The real enforcement mapper, evidence verification, history source, override
 auth and GUI still need separate implementation and acceptance.
+
+
+## Engineering review status — 2026-10-14
+
+This document originally outlined the design. The implementation in PR #597
+now contains the Paper inventory questionnaire, dynamic questions across six
+categories, live v1 reason mapping, bounded type/duration computation using
+authoritative related-history escalation, permission/approval routing through
+the existing draft workflow, staff adjustment choices, and audit explanation.
+
+**Deployment guard:** \`guided-punishment.enabled\` in the Paper \`config.yml\`
+defaults to **false**. Existing \`/punish\` category browsing remains
+authoritative if the setting is absent or disabled. The new route is activated
+only for \`/punish\` when explicitly enabled. Existing sanction commands and
+policies remain unchanged.
+
+**Safety boundaries:**
+- The questionnaire does not itself apply punishment; server-side policy
+  evaluation, permission checks, draft confirmation and approval remain.
+- Configured permanent sanctions, mixed remedies and type transitions other
+  than WARNING to MUTE cannot be reached solely from the generic severity
+  adjustment. Cases needing them use human review.
+- Unknown critical facts and high-sensitivity allegations fail closed to
+  the existing expert review flow.
+- An uncertain or absent prior warning does not count as defiance.
+- Custom duration is bounded between two configured temporary sanctions of
+  the same type and requires normal authorization/approval.
+- Updating final-review notes or visibility preserves the selected sanction
+  override. Revalidation at confirmation guards changed history or policy.
+
+**Remaining release gates:** current GitHub CI + Codacy review, Java/Bedrock
+in-game GUI acceptance, sample-policy calibration with staff cases, and a
+staged restart/rollback plan. No automatic merge or live deployment until
+those gates are satisfied.
+
+This changes the original GIW-1A-only prototype status. The two obsolete
+\`GuidedChatInterview\` and \`GuidedRemedyPreview\` prototype classes/tests
+have been retired in favor of the integrated questionnaire/resolver.

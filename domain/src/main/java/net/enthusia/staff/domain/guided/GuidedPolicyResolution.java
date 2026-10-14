@@ -19,27 +19,51 @@ public final class GuidedPolicyResolution {
 
     public static Outcome calculate(GuidedIncidentWizard.Finding finding,
                                     PunishmentAssessment assessed, int preference) {
+        validate(finding, assessed, preference);
+        List<PunishmentStep> ladder = assessed.policy().steps();
+        int historyStep = assessed.escalation().selectedStep().ordinal();
+        int selected = selectedStep(finding.preliminaryImpact(), historyStep, ladder.size());
+        List<SanctionSpec> originals = ladder.get(selected).sanctions();
+        checkTransition(ladder, historyStep, selected, originals);
+        String explanation = explanation(finding, historyStep, selected);
+        return variableDuration(originals, ladder, selected, preference, explanation);
+    }
+
+    private static void validate(GuidedIncidentWizard.Finding finding,
+                                 PunishmentAssessment assessed, int preference) {
         Objects.requireNonNull(finding);
         Objects.requireNonNull(assessed);
         if (finding.needsReview() || !assessed.policy().id().equals(finding.candidateId())
                 || preference < -1 || preference > 1) {
             throw new IllegalArgumentException("This incident requires individual review");
         }
-        List<PunishmentStep> ladder = assessed.policy().steps();
-        int historyStep = assessed.escalation().selectedStep().ordinal();
-        int adjustment = finding.preliminaryImpact() >= 45 ? 2
-                : finding.preliminaryImpact() >= 25 ? 1 : 0;
-        int selected = Math.min(ladder.size() - 1, historyStep + adjustment);
-        List<SanctionSpec> originals = ladder.get(selected).sanctions();
-        if (selected > historyStep && !safeContextualTransition(
-                ladder.get(historyStep).sanctions(), originals)) {
+    }
+
+    private static int selectedStep(int impact, int historyStep, int ladderSize) {
+        int adjustment = impact >= 45 ? 2 : impact >= 25 ? 1 : 0;
+        return Math.min(ladderSize - 1, historyStep + adjustment);
+    }
+
+    private static void checkTransition(List<PunishmentStep> ladder, int baselineStep,
+                                        int selected, List<SanctionSpec> originals) {
+        if (selected > baselineStep && !safeContextualTransition(
+                ladder.get(baselineStep).sanctions(), originals)) {
             throw new IllegalArgumentException(
-                    "Incident severity would change the sanction class or permanence; manual review required");
+                    "Incident severity would change sanction class or permanence; manual review required");
         }
-        String explanation = "Guided v1: " + finding.conduct() + " in " + finding.medium()
+    }
+
+    private static String explanation(GuidedIncidentWizard.Finding finding,
+                                      int historyStep, int selected) {
+        return "Guided v1: " + finding.conduct() + " in " + finding.medium()
                 + "; impact=" + finding.preliminaryImpact()
                 + "; historyStep=" + historyStep + "; selectedStep=" + selected
                 + "; factors=" + String.join(", ", finding.facts());
+    }
+
+    private static Outcome variableDuration(List<SanctionSpec> originals,
+                                            List<PunishmentStep> ladder, int selected,
+                                            int preference, String explanation) {
         if (originals.size() != 1 || originals.getFirst().length().temporary().isEmpty()) {
             return new Outcome(originals, explanation + "; configured remedy", false);
         }
@@ -49,7 +73,15 @@ public final class GuidedPolicyResolution {
         if (high.compareTo(low) <= 0) {
             return new Outcome(originals, explanation + "; maximum policy tier", false);
         }
-        long lowMinutes = low.toMinutes(), highMinutes = high.toMinutes();
+        return calculateWithinBounds(originals, initial, low, high, preference, explanation);
+    }
+
+    private static Outcome calculateWithinBounds(List<SanctionSpec> originals,
+                                                  SanctionSpec initial, Duration low,
+                                                  Duration high, int preference,
+                                                  String explanation) {
+        long lowMinutes = low.toMinutes();
+        long highMinutes = high.toMinutes();
         double ratio = switch (preference) {
             case -1 -> 0.25;
             case 1 -> 0.75;
