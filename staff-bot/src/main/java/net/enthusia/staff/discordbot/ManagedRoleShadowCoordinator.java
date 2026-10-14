@@ -67,7 +67,8 @@ final class ManagedRoleShadowCoordinator implements AutoCloseable {
         ZERO_DRIFT_SAMPLE,
         SNAPSHOT_INCOMPLETE,
         NO_CLAIMS,
-        ROLE_DRIFT
+        ROLE_DRIFT,
+        ROLE_ID_UNBOUND
     }
 
     private record Summary(
@@ -79,6 +80,7 @@ final class ManagedRoleShadowCoordinator implements AutoCloseable {
             int unlinkedMinecraftAccounts,
             int lumaClaims,
             int playtimeClaims,
+            int unboundRoleClaims,
             List<ClaimResult> driftDetails
     ) {
         Summary {
@@ -189,10 +191,12 @@ final class ManagedRoleShadowCoordinator implements AutoCloseable {
         int unlinked = 0;
         int lumaClaims = 0;
         int playtimeClaims = 0;
+        int unboundRoleClaims = 0;
         List<ClaimResult> driftDetails = new ArrayList<>();
         for (ManagedRoleShadowService.ResolvedClaim claim : claims) {
             if ("luma-guilds".equals(claim.claim().namespace())) lumaClaims++;
             if ("playtime-numerals".equals(claim.claim().namespace())) playtimeClaims++;
+            if (claim.claim().existingDiscordRoleId().isEmpty()) unboundRoleClaims++;
             ClaimResult result = compare(claim, members, guild);
             missingMembers += result.missingMembers();
             extraMembers += result.extraMembers();
@@ -212,6 +216,7 @@ final class ManagedRoleShadowCoordinator implements AutoCloseable {
                 unlinked,
                 lumaClaims,
                 playtimeClaims,
+                unboundRoleClaims,
                 driftDetails
         );
     }
@@ -222,25 +227,28 @@ final class ManagedRoleShadowCoordinator implements AutoCloseable {
      * producers, legacy role mappings, and multiple windows remains required.
      */
     static SampleGate assessSample(ManagedRoleShadowService.Snapshot snapshot,
-            int processedClaims, int detectedDrifts) {
-        if (snapshot == null || processedClaims < 0 || detectedDrifts < 0) {
+            int processedClaims, int detectedDrifts, int unboundRoleClaims) {
+        if (snapshot == null || processedClaims < 0 || detectedDrifts < 0
+                || unboundRoleClaims < 0 || unboundRoleClaims > processedClaims) {
             throw new IllegalArgumentException("managed-role sample inputs are invalid");
         }
         if (snapshot.incomplete()) return SampleGate.SNAPSHOT_INCOMPLETE;
         if (processedClaims == 0) return SampleGate.NO_CLAIMS;
         if (detectedDrifts > 0) return SampleGate.ROLE_DRIFT;
+        if (unboundRoleClaims > 0) return SampleGate.ROLE_ID_UNBOUND;
         return SampleGate.ZERO_DRIFT_SAMPLE;
     }
 
     private static void logTotals(Summary summary, ManagedRoleShadowService.Snapshot snapshot) {
         if (LOGGER.isLoggable(System.Logger.Level.INFO)) {
             int invalid = snapshot.invalidResourceRefs().size();
-            SampleGate gate = assessSample(snapshot, summary.claims(), summary.drifts());
+            SampleGate gate = assessSample(
+                    snapshot, summary.claims(), summary.drifts(), summary.unboundRoleClaims());
             LOGGER.log(
                     System.Logger.Level.INFO,
                     "managed_role_shadow_summary complete={0} claims={1} matches={2} drift={3} "
                             + "missing_members={4} extra_members={5} unlinked_minecraft={6} invalid_claims={7} "
-                            + "sample_gate={8} luma_claims={9} playtime_claims={10}",
+                            + "sample_gate={8} luma_claims={9} playtime_claims={10} unbound_role_claims={11}",
                     !snapshot.incomplete(),
                     summary.claims() + invalid,
                     summary.matches(),
@@ -251,7 +259,8 @@ final class ManagedRoleShadowCoordinator implements AutoCloseable {
                     invalid,
                     gate,
                     summary.lumaClaims(),
-                    summary.playtimeClaims()
+                    summary.playtimeClaims(),
+                    summary.unboundRoleClaims()
             );
         }
     }

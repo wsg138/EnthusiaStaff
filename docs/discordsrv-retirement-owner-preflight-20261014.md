@@ -57,12 +57,13 @@ Tracked under [DiscordSRV program #264](https://github.com/wsg138/EnthusiaStaff/
 
 The existing StaffBot managed-role shadow mode is optional and disabled by default. In an isolated approved environment, supply published provider-neutral role claims and compare them against existing Discord roles while the legacy writer remains active.
 
-The sanitized `managed_role_shadow_summary` log now includes `sample_gate`, `luma_claims` and `playtime_claims`, in addition to `complete`, `claims`, `drift`, `invalid_claims`, and member mismatch counts.
+The sanitized `managed_role_shadow_summary` log now includes `sample_gate`, `luma_claims`, `playtime_claims` and `unbound_role_claims`, in addition to `complete`, `claims`, `drift`, `invalid_claims`, and member mismatch counts.
 
 - `ZERO_DRIFT_SAMPLE` means **one populated complete sample with no detected drift**; it is not approval to cut over. Confirm that *every expected producer* published, and demand multiple stable complete scans.
 - `NO_CLAIMS` means there is no parity evidence, even if `complete=true` and `drift=0`.
 - `SNAPSHOT_INCOMPLETE` means the claim ceiling was hit or a desired-state document was invalid; do not infer role parity from partial data.
 - `ROLE_DRIFT` means a mismatch or missing/ambiguous role remains. Do not adopt/delete/grant/revoke a role in shadow mode.
+- `ROLE_ID_UNBOUND` means at least one claim matched by role display name rather than a known exact legacy Discord role ID. Names are not unique, so this is insufficient parity evidence even when the holder sets happen to match.
 - `luma_claims=0` or `playtime_claims=0` requires checking whether that producer is supposed to be active; do not interpret a zero from an expected producer as success.
 
 `unlinked_minecraft` is diagnostic; many ordinary Minecraft accounts are legitimately unlinked, so a nonzero value alone does not mean managed-role drift. Check it alongside missing and extra memberships.

@@ -18,23 +18,27 @@ final class ManagedRoleShadowCoordinatorTest {
     void shadowGateDoesNotTreatEmptyOrIncompleteSamplesAsParity() {
         var empty = new ManagedRoleShadowService.Snapshot(List.of(), List.of(), false);
         assertEquals(ManagedRoleShadowCoordinator.SampleGate.NO_CLAIMS,
-                ManagedRoleShadowCoordinator.assessSample(empty, 0, 0));
+                ManagedRoleShadowCoordinator.assessSample(empty, 0, 0, 0));
         assertEquals(ManagedRoleShadowCoordinator.SampleGate.ZERO_DRIFT_SAMPLE,
-                ManagedRoleShadowCoordinator.assessSample(empty, 1, 0));
+                ManagedRoleShadowCoordinator.assessSample(empty, 1, 0, 0));
         assertEquals(ManagedRoleShadowCoordinator.SampleGate.ROLE_DRIFT,
-                ManagedRoleShadowCoordinator.assessSample(empty, 1, 1));
+                ManagedRoleShadowCoordinator.assessSample(empty, 1, 1, 0));
+        assertEquals(ManagedRoleShadowCoordinator.SampleGate.ROLE_ID_UNBOUND,
+                ManagedRoleShadowCoordinator.assessSample(empty, 1, 0, 1));
         assertEquals(ManagedRoleShadowCoordinator.SampleGate.SNAPSHOT_INCOMPLETE,
                 ManagedRoleShadowCoordinator.assessSample(
-                        new ManagedRoleShadowService.Snapshot(List.of(), List.of(), true), 10, 0));
+                        new ManagedRoleShadowService.Snapshot(List.of(), List.of(), true), 10, 0, 0));
         assertEquals(ManagedRoleShadowCoordinator.SampleGate.SNAPSHOT_INCOMPLETE,
                 ManagedRoleShadowCoordinator.assessSample(
-                        new ManagedRoleShadowService.Snapshot(List.of(), List.of("hashed-resource"), false), 10, 0));
+                        new ManagedRoleShadowService.Snapshot(List.of(), List.of("hashed-resource"), false), 10, 0, 0));
         assertThrows(IllegalArgumentException.class,
-                () -> ManagedRoleShadowCoordinator.assessSample(null, 0, 0));
+                () -> ManagedRoleShadowCoordinator.assessSample(null, 0, 0, 0));
         assertThrows(IllegalArgumentException.class,
-                () -> ManagedRoleShadowCoordinator.assessSample(empty, -1, 0));
+                () -> ManagedRoleShadowCoordinator.assessSample(empty, -1, 0, 0));
         assertThrows(IllegalArgumentException.class,
-                () -> ManagedRoleShadowCoordinator.assessSample(empty, 0, -1));
+                () -> ManagedRoleShadowCoordinator.assessSample(empty, 0, -1, 0));
+        assertThrows(IllegalArgumentException.class,
+                () -> ManagedRoleShadowCoordinator.assessSample(empty, 1, 0, 2));
     }
 
     private static final String PLAYTIME_ROLE_NAME = "Playtime XII";
