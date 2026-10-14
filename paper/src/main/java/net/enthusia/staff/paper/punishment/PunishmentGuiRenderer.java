@@ -274,7 +274,8 @@ final class PunishmentGuiRenderer {
                         Component.text("Location: " + finding.medium(), NamedTextColor.GRAY),
                         Component.text("Preliminary impact: " + finding.preliminaryImpact(),
                                 NamedTextColor.GOLD))));
-        if (finding.candidateId() == null || finding.needsReview()) {
+        if (finding.candidateId() == null || finding.needsReview()
+                || !finding.candidateId().startsWith("chat.spam.")) {
             inventory.setItem(22, item(Material.WRITABLE_BOOK, "Needs Human Review",
                     NamedTextColor.GOLD, List.of(
                             Component.text("No authorized variable-duration policy exists yet.",
