@@ -15,7 +15,7 @@ class GuidedPunishmentGuiContractTest {
     @Test
     void punishUsesGuidedQuestionsButPreservesFilteredExpertFlows() throws Exception {
         String controller = source("PunishmentGuiController.java");
-        assertTrue(controller.contains("\"punish\".equalsIgnoreCase(state.commandName())"));
+        assertTrue(controller.contains("PUNISH_COMMAND.equalsIgnoreCase(state.commandName())"));
         assertTrue(controller.contains("GuidedIncidentWizard.start(categoryId)"));
         assertTrue(controller.contains(
                 "plugin.getConfig().getBoolean(\"guided-punishment.enabled\", false)"));

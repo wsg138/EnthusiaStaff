@@ -145,14 +145,26 @@ public final class GuidedOffenseClassifier {
                                       String extent, String targeting) {
         return switch (conduct) {
             case "spam" -> resolveSpam(medium, extent);
-            case "harassment" -> VERBAL.equals(detail)
-                    ? TARGETED.equals(targeting) ? "hate.targeted-harassment"
-                            : "hate.general-toxicity" : null;
+            case "harassment" -> resolveHarassment(detail, targeting);
             case "slur" -> resolveSlur(detail, targeting);
-            case "language" -> PUBLIC_CHAT.equals(medium)
-                    ? "language.non-english-public-chat" : null;
+            case "language" -> resolveLanguage(medium);
             default -> null;
         };
+    }
+
+    private static String resolveHarassment(String detail, String targeting) {
+        if (!VERBAL.equals(detail)) {
+            return null;
+        }
+        return TARGETED.equals(targeting)
+                ? "hate.targeted-harassment" : "hate.general-toxicity";
+    }
+
+    private static String resolveLanguage(String medium) {
+        if (!PUBLIC_CHAT.equals(medium)) {
+            return null;
+        }
+        return "language.non-english-public-chat";
     }
 
     private static String resolveSpam(String medium, String extent) {

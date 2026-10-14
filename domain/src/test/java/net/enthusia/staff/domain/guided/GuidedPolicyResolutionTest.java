@@ -108,6 +108,25 @@ class GuidedPolicyResolutionTest {
     }
 
     @Test
+    void alreadyEscalatedBanOrPermanentPolicyRequiresExplicitReview() {
+        var finding = finding("few", "not-applicable");
+        var ban = new SanctionSpec(SanctionType.BAN,
+                SanctionLength.temporary(Duration.ofDays(7)));
+        var permanentMute = new SanctionSpec(SanctionType.MUTE, SanctionLength.permanent());
+        for (SanctionSpec restricted : List.of(ban, permanentMute)) {
+            List<PunishmentStep> steps = List.of(
+                    new PunishmentStep(0, "First", List.of(warn())),
+                    new PunishmentStep(1, "Restricted", List.of(restricted)));
+            var reason = new ReasonPolicy("spam.low-level", "spam", "Minor spam", 10, true, steps);
+            var prior = new EscalationDecision(1, 1, 0, List.of(), steps.get(1));
+            var assessed = new PunishmentAssessment("test.version", reason, prior,
+                    steps.get(1).sanctions());
+            assertThrows(IllegalArgumentException.class,
+                    () -> GuidedPolicyResolution.calculate(finding, assessed, 0));
+        }
+    }
+
+    @Test
     void unsafeOrMismatchedOffenseIsRejected() {
         var spam = finding("few", "not-applicable");
         assertThrows(IllegalArgumentException.class, () -> GuidedPolicyResolution.calculate(

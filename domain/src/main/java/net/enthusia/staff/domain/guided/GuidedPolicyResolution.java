@@ -25,6 +25,7 @@ public final class GuidedPolicyResolution {
         int selected = selectedStep(finding.preliminaryImpact(), historyStep, ladder.size());
         List<SanctionSpec> originals = ladder.get(selected).sanctions();
         checkTransition(ladder, historyStep, selected, originals);
+        requireOrdinaryGuidedRemedy(originals);
         String explanation = explanation(finding, historyStep, selected);
         return variableDuration(originals, ladder, selected, preference, explanation);
     }
@@ -50,6 +51,25 @@ public final class GuidedPolicyResolution {
                 ladder.get(baselineStep).sanctions(), originals)) {
             throw new IllegalArgumentException(
                     "Incident severity would change sanction class or permanence; manual review required");
+        }
+    }
+
+    /**
+     * A broad factual questionnaire must never bypass the specialized review
+     * and approval path for bans, permanent outcomes, or nonstandard remedies,
+     * including when prior history already selected such a policy step.
+     */
+    private static void requireOrdinaryGuidedRemedy(List<SanctionSpec> sanctions) {
+        if (sanctions.size() != 1) {
+            throw new IllegalArgumentException("Mixed sanctions require explicit review");
+        }
+        SanctionSpec spec = sanctions.getFirst();
+        boolean warning = spec.type() == SanctionType.WARNING && spec.length().isInstant();
+        boolean temporaryMute = spec.type() == SanctionType.MUTE
+                && spec.length().temporary().isPresent();
+        if (!warning && !temporaryMute) {
+            throw new IllegalArgumentException(
+                    "This sanction type or duration requires explicit staff review");
         }
     }
 
@@ -124,9 +144,10 @@ public final class GuidedPolicyResolution {
         Duration current = initial.length().temporary().orElseThrow();
         for (int i = selected + 1; i < steps.size(); i++) {
             List<SanctionSpec> items = steps.get(i).sanctions();
+            // Never interpolate across an intervening sanction class.
             if (items.size() != 1 || items.getFirst().type() != initial.type()
                     || items.getFirst().length().temporary().isEmpty()) {
-                continue;
+                break;
             }
             Duration candidate = items.getFirst().length().temporary().orElseThrow();
             if (candidate.compareTo(current) > 0) {

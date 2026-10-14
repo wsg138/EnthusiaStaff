@@ -29,8 +29,9 @@ public final class GuidedIncidentWizard {
     private static final String CONTINUED = "continued";
     private static final String UNKNOWN = "unknown";
     private static final String OTHER_UNSURE = "Other / unsure";
+    private static final String OTHER = "other";
     private static final List<String> CATEGORIES =
-            List.of("chat", "gameplay", "safety", "accounts", "community", "economy", "other");
+            List.of("chat", "gameplay", "safety", "accounts", "community", "economy", OTHER);
     private final String category;
     private final Map<String, String> answers;
 
@@ -81,7 +82,7 @@ public final class GuidedIncidentWizard {
     }
 
     private List<Question> severityPath(List<Question> result) {
-        if (!"safety".equals(category) && !"other".equals(answers.get(CONDUCT))) {
+        if (!"safety".equals(category) && !OTHER.equals(answers.get(CONDUCT))) {
             if (appendUnanswered(result, new Question(EXTENT, "How extensive was it?",
                     List.of(c("few", "Minor / isolated"), c("sustained", "Repeated / sustained"),
                             c("large-scale", "Severe / large scale"), c(UNKNOWN, "Not sure"))))) {
@@ -177,7 +178,7 @@ public final class GuidedIncidentWizard {
                 || UNKNOWN.equals(answers.get(DETAIL))
                 || UNKNOWN.equals(answers.get(EXTENT))
                 || UNKNOWN.equals(answers.get(TARGETING))
-                || "other".equals(conduct)
+                || OTHER.equals(conduct)
                 || sensitiveCandidate(candidate)
                 || !channelCompatible(medium, conduct);
         return new Finding(category, conduct, medium, impact, candidate, review, facts);
@@ -226,25 +227,25 @@ public final class GuidedIncidentWizard {
                     c("harassment", "Harassment"), c("slur", "Slur / discrimination"),
                     c("hate", "Hate or extremist content"),
                     c("politics", "Political content"), c("language", "Other language"),
-                    c("other", OTHER_UNSURE));
+                    c(OTHER, OTHER_UNSURE));
             case "gameplay" -> List.of(c("cheating", "Cheating"),
                     c("exploit", "Exploits / duplication"),
                     c("mechanics", "Disruptive mechanics"),
                     c("complicity", "Assisted rule breaking"),
-                    c("other", OTHER_UNSURE));
+                    c(OTHER, OTHER_UNSURE));
             case "safety" -> List.of(c("threat", "Threat / danger"),
-                    c("privacy", "Private information"), c("other", OTHER_UNSURE));
+                    c("privacy", "Private information"), c(OTHER, OTHER_UNSURE));
             case "accounts" -> List.of(c("access", "Account access"),
                     c("evasion", "Punishment evasion"),
-                    c("identity", "Impersonation / profile"), c("other", OTHER_UNSURE));
+                    c("identity", "Impersonation / profile"), c(OTHER, OTHER_UNSURE));
             case "community" -> List.of(c("advertising", "Advertising"),
                     c("reports", "Report abuse"), c("content", "Inappropriate content"),
                     c("staff", "Staff instructions"), c("dishonesty", "Dishonesty / evidence"),
-                    c("other", OTHER_UNSURE));
+                    c(OTHER, OTHER_UNSURE));
             case "economy" -> List.of(c("market", "Market abuse"),
                     c("reputation", "Reputation manipulation"),
-                    c("other", OTHER_UNSURE));
-            default -> List.of(c("other", "Other / unclassified"));
+                    c(OTHER, OTHER_UNSURE));
+            default -> List.of(c(OTHER, "Other / unclassified"));
         };
         return new Question(CONDUCT, "What happened?", options);
     }

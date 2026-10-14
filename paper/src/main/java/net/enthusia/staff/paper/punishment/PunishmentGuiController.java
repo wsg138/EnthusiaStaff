@@ -96,6 +96,7 @@ public final class PunishmentGuiController implements Listener {
     private final Set<UUID> confirmations = ConcurrentHashMap.newKeySet();
     private final Map<UUID, NoteCapture> noteCaptures = new ConcurrentHashMap<>();
     private final Map<UUID, SearchCapture> searchCaptures = new ConcurrentHashMap<>();
+    private static final String PUNISH_COMMAND = "punish";
     private final Map<UUID, GuidedReturn> guidedReturns = new ConcurrentHashMap<>();
 
     public PunishmentGuiController(Dependencies dependencies) {
@@ -426,7 +427,7 @@ public final class PunishmentGuiController implements Listener {
         }
         int index = PunishmentGuiRenderer.categoryIndex(slot, categories.size());
         if (index >= 0 && index < categories.size()) {
-            if ("punish".equalsIgnoreCase(state.commandName())
+            if (PUNISH_COMMAND.equalsIgnoreCase(state.commandName())
                     && plugin.getConfig().getBoolean("guided-punishment.enabled", false)) {
                 String categoryId = categories.get(index).id();
                 openState(viewer, new PunishmentGuiState.Guided(

@@ -10,11 +10,12 @@ class GuidedIncidentWizardTest {
     private static final String EXTENT = "extent";
     private static final String CONTINUED = "continued";
     private static final String FEW = "few";
+    private static final String SPAM = "spam";
     private static final String NO_WARNING = "not-applicable";
     private static GuidedIncidentWizard spam(String extent, String warning) {
         return GuidedIncidentWizard.start(CHAT)
                 .answer(MEDIUM, "public-chat")
-                .answer(CONDUCT, "spam")
+                .answer(CONDUCT, SPAM)
                 .answer(EXTENT, extent)
                 .answer(CONTINUED, warning);
     }
@@ -25,7 +26,7 @@ class GuidedIncidentWizardTest {
         assertEquals(MEDIUM, flow.nextQuestion().orElseThrow().id());
         flow = flow.answer(MEDIUM, "public-chat");
         assertEquals(CONDUCT, flow.nextQuestion().orElseThrow().id());
-        flow = flow.answer(CONDUCT, "spam");
+        flow = flow.answer(CONDUCT, SPAM);
         assertEquals(EXTENT, flow.nextQuestion().orElseThrow().id());
         flow = flow.answer(EXTENT, FEW);
         assertEquals(CONTINUED, flow.nextQuestion().orElseThrow().id());
@@ -88,7 +89,7 @@ class GuidedIncidentWizardTest {
     @Test
     void signSpamCannotBecomeAChatMuteWithoutReview() {
         var flow = GuidedIncidentWizard.start(CHAT)
-                .answer(MEDIUM, "sign").answer(CONDUCT, "spam")
+                .answer(MEDIUM, "sign").answer(CONDUCT, SPAM)
                 .answer(EXTENT, "sustained").answer(CONTINUED, NO_WARNING)
                 .answer("persistence", "persistent");
         assertTrue(flow.finding().needsReview());
@@ -98,7 +99,7 @@ class GuidedIncidentWizardTest {
     @Test
     void backNavigationAndChoiceValidationAreFailClosed() {
         var flow = GuidedIncidentWizard.start(CHAT);
-        assertThrows(IllegalArgumentException.class, () -> flow.answer(CONDUCT, "spam"));
+        assertThrows(IllegalArgumentException.class, () -> flow.answer(CONDUCT, SPAM));
         assertThrows(IllegalArgumentException.class, () -> flow.answer(MEDIUM, "fake"));
         assertEquals(flow.answers(), flow.back().answers());
         var first = flow.answer(MEDIUM, "public-chat");
