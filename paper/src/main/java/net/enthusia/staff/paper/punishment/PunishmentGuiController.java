@@ -28,6 +28,7 @@ import net.enthusia.staff.domain.application.PunishmentDraftCleanupException;
 import net.enthusia.staff.domain.application.PunishmentDraftConfirmation;
 import net.enthusia.staff.domain.application.PunishmentDraftEvaluation;
 import net.enthusia.staff.domain.application.PunishmentDraftWorkflow;
+import net.enthusia.staff.domain.application.PunishmentDraftReprepareOverrides;
 import net.enthusia.staff.domain.application.PunishmentRequestDraftCleanupException;
 import net.enthusia.staff.domain.auth.Actor;
 import net.enthusia.staff.domain.auth.AuthorizationPolicy;
@@ -992,6 +993,13 @@ public final class PunishmentGuiController implements Listener {
                 message(viewer, "Moderation storage is not ready; the existing draft remains saved.");
                 return;
             }
+            if (isGuidedDraft(state.draft().internalExplanation())
+                    && !state.draft().expectation().configurationVersion()
+                            .equals(policies.activeVersion())) {
+                message(viewer, "The punishment policy changed. Reassess this incident "
+                        + "before editing the saved guided draft.");
+                return;
+            }
             PunishmentDraftEvaluation evaluation = workflow.prepare(
                     new PreparePunishmentDraftRequest(
                             state.target().playerId(),
@@ -1000,11 +1008,9 @@ public final class PunishmentGuiController implements Listener {
                             guidedAuditExplanation(state.draft().internalExplanation(), explanation),
                             visibility,
                             state.commandName(),
-                            state.assessment()
-                                    .filter(value -> !value.sanctions().equals(
-                                            value.escalation().selectedStep().sanctions()))
-                                    .map(PunishmentAssessment::sanctions)
-                                    .orElse(List.of())
+                            PunishmentDraftReprepareOverrides.choose(
+                                    state.draft().expectation(), state.assessment(),
+                                    policies.find(state.draft().reasonId()))
                     ),
                     mode.get()
             );
