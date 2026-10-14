@@ -1,6 +1,7 @@
 package net.enthusia.staff.discordbot;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import java.lang.reflect.Proxy;
 import java.util.List;
@@ -13,6 +14,29 @@ import net.dv8tion.jda.api.entities.Role;
 import org.junit.jupiter.api.Test;
 
 final class ManagedRoleShadowCoordinatorTest {
+    @Test
+    void shadowGateDoesNotTreatEmptyOrIncompleteSamplesAsParity() {
+        var empty = new ManagedRoleShadowService.Snapshot(List.of(), List.of(), false);
+        assertEquals(ManagedRoleShadowCoordinator.SampleGate.NO_CLAIMS,
+                ManagedRoleShadowCoordinator.assessSample(empty, 0, 0));
+        assertEquals(ManagedRoleShadowCoordinator.SampleGate.ZERO_DRIFT_SAMPLE,
+                ManagedRoleShadowCoordinator.assessSample(empty, 1, 0));
+        assertEquals(ManagedRoleShadowCoordinator.SampleGate.ROLE_DRIFT,
+                ManagedRoleShadowCoordinator.assessSample(empty, 1, 1));
+        assertEquals(ManagedRoleShadowCoordinator.SampleGate.SNAPSHOT_INCOMPLETE,
+                ManagedRoleShadowCoordinator.assessSample(
+                        new ManagedRoleShadowService.Snapshot(List.of(), List.of(), true), 10, 0));
+        assertEquals(ManagedRoleShadowCoordinator.SampleGate.SNAPSHOT_INCOMPLETE,
+                ManagedRoleShadowCoordinator.assessSample(
+                        new ManagedRoleShadowService.Snapshot(List.of(), List.of("hashed-resource"), false), 10, 0));
+        assertThrows(IllegalArgumentException.class,
+                () -> ManagedRoleShadowCoordinator.assessSample(null, 0, 0));
+        assertThrows(IllegalArgumentException.class,
+                () -> ManagedRoleShadowCoordinator.assessSample(empty, -1, 0));
+        assertThrows(IllegalArgumentException.class,
+                () -> ManagedRoleShadowCoordinator.assessSample(empty, 0, -1));
+    }
+
     private static final String PLAYTIME_ROLE_NAME = "Playtime XII";
     private static final ClassLoader PROXY_CLASS_LOADER = Thread.currentThread().getContextClassLoader();
     private static final Map<Class<?>, Object> PRIMITIVE_DEFAULTS = Map.of(

@@ -52,3 +52,19 @@ Existing detailed procedures: [Chat cutover](discord-chat-cutover.md), [Shadow a
 Live Discord command ACLs/intents/role hierarchy, live full rich-render parity, real report button/authority actions, independent role/console migrations, and durable webhook recovery are **NOT RUN**. Source/CI passing or a successful StaffBot login does not establish those facts.
 
 Tracked under [DiscordSRV program #264](https://github.com/wsg138/EnthusiaStaff/issues/264) and [chat migration #268](https://github.com/wsg138/EnthusiaStaff/issues/268).
+
+## Managed-role shadow parity interpretation (no live role writes)
+
+The existing StaffBot managed-role shadow mode is optional and disabled by default. In an isolated approved environment, supply published provider-neutral role claims and compare them against existing Discord roles while the legacy writer remains active.
+
+The sanitized `managed_role_shadow_summary` log now includes `sample_gate`, `luma_claims` and `playtime_claims`, in addition to `complete`, `claims`, `drift`, `invalid_claims`, and member mismatch counts.
+
+- `ZERO_DRIFT_SAMPLE` means **one populated complete sample with no detected drift**; it is not approval to cut over. Confirm that *every expected producer* published, and demand multiple stable complete scans.
+- `NO_CLAIMS` means there is no parity evidence, even if `complete=true` and `drift=0`.
+- `SNAPSHOT_INCOMPLETE` means the claim ceiling was hit or a desired-state document was invalid; do not infer role parity from partial data.
+- `ROLE_DRIFT` means a mismatch or missing/ambiguous role remains. Do not adopt/delete/grant/revoke a role in shadow mode.
+- `luma_claims=0` or `playtime_claims=0` requires checking whether that producer is supposed to be active; do not interpret a zero from an expected producer as success.
+
+`unlinked_minecraft` is diagnostic; many ordinary Minecraft accounts are legitimately unlinked, so a nonzero value alone does not mean managed-role drift. Check it alongside missing and extra memberships.
+
+This phase performs no Discord role mutations; full DiscordSRV retirement still depends on owner-approved generic-role enforcement, console, InteractiveChat and consumer migrations.
