@@ -259,7 +259,7 @@ final class PunishmentGuiRenderer {
         inventory.setItem(SEARCH_SLOT, item(Material.BOOK,
                 "Expert: Browse Exact Reasons", NamedTextColor.YELLOW,
                 List.of(Component.text("Opens the existing authorized policy workflow.", NamedTextColor.GRAY),
-                        Component.text("Guided preview never issues punishments.", NamedTextColor.RED))));
+                        Component.text("No punishment happens until final confirmation.", NamedTextColor.RED))));
         inventory.setItem(CLOSE_SLOT, button(Material.BARRIER, CLOSE_LABEL, NamedTextColor.RED));
     }
 
@@ -375,7 +375,9 @@ final class PunishmentGuiRenderer {
         inventory.setItem(12, escalationItem(state));
         inventory.setItem(14, recommendationItem(state, policy));
         inventory.setItem(16, safetyItem(state, catalog.activeVersion()));
-        if (assessment.isPresent()) {
+        if (draft.internalExplanation().startsWith("Guided incident v1")) {
+            renderGuidedReviewFactors(inventory, draft);
+        } else if (assessment.isPresent()) {
             renderLadder(inventory, assessment.orElseThrow());
         } else if (policy != null) {
             renderLadder(inventory, policy.steps(), draft.expectation().stepOrdinal(), true);
@@ -403,6 +405,27 @@ final class PunishmentGuiRenderer {
                 NamedTextColor.RED,
                 List.of(Component.text("The draft remains resumable for its configured lifetime.", NamedTextColor.GRAY))
         ));
+    }
+
+    /** Guided reviews emphasize factual answers and the calculated sanction, not a fixed ladder. */
+    private static void renderGuidedReviewFactors(Inventory inventory, PunishmentDraft draft) {
+        List<Component> answers = java.util.Arrays.stream(draft.internalExplanation()
+                        .split(" \\| "))
+                .filter(value -> value.startsWith("medium=") || value.startsWith("conduct=")
+                        || value.startsWith("detail=") || value.startsWith("extent=")
+                        || value.startsWith("continued=") || value.startsWith("targeting=")
+                        || value.startsWith("persistence=") || value.startsWith("incidentImpact="))
+                .limit(8)
+                .<Component>map(value -> Component.text(value.replace('=', ':'), NamedTextColor.WHITE))
+                .toList();
+        inventory.setItem(22, item(Material.WRITABLE_BOOK, "Incident Answers",
+                NamedTextColor.AQUA, answers));
+        inventory.setItem(24, item(Material.CLOCK, "Contextual Calculation",
+                NamedTextColor.GOLD, List.of(
+                        Component.text("Type and duration use the live configured policy.", NamedTextColor.WHITE),
+                        Component.text("Relevant past cases influence escalation automatically.", NamedTextColor.GRAY),
+                        Component.text("The requested outcome is shown above.", NamedTextColor.YELLOW),
+                        Component.text("Confirm only after verifying the incident details.", NamedTextColor.GRAY))));
     }
 
     private void renderHistory(Inventory inventory, PunishmentGuiState.History state) {
