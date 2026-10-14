@@ -13,7 +13,10 @@ public final class GuidedOffenseClassifier {
     }
 
     private static final Map<String, List<GuidedIncidentWizard.Choice>> DETAILS = Map.ofEntries(
-            Map.entry("chat/harassment", List.of(c("sexual", "Sexual harassment"))),
+            Map.entry("chat/slur", List.of(c("abbreviated", "Abbreviated slur"),
+                    c("full", "Full slur"), c("unknown", "Quoted or unclear"))),
+            Map.entry("chat/harassment", List.of(c("verbal", "General verbal abuse"),
+                    c("sexual", "Sexual harassment"), c("other", "Other / unclear"))),
             Map.entry("chat/hate", List.of(c("discrimination", "Discriminatory statement"), c("symbol", "Extremist symbol"), c("advocacy", "Advocating hate violence"))),
             Map.entry("chat/politics", List.of(c("casual", "Casual mention"), c("moderate", "Disruptive political discussion"), c("extreme", "Severe political content"))),
             Map.entry("gameplay/cheating", List.of(c("xray", "X-ray ESP"), c("freecam", "Freecam"), c("baritone", "Baritone pathing"), c("printer", "Easy place printer"), c("autoclick", "Combat autoclicker"), c("client", "Unauthorized client"), c("other", "Other cheating"))),
@@ -126,6 +129,9 @@ public final class GuidedOffenseClassifier {
                         ? "hate.targeted-harassment" : "hate.general-toxicity";
             }
             if ("slur".equals(conduct)) {
+                if (detail == null) {
+                    return null;
+                }
                 return switch (detail) {
                     case "abbreviated" -> "targeted".equals(targeting)
                             ? "hate.abbreviated-slur-targeted" : "hate.abbreviated-slur-untargeted";
