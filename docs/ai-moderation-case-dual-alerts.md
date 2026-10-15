@@ -181,3 +181,10 @@ staff actor. Signed/verified staff-identity attestation and actor permission
 checking, transport/key rotation and staging E2E must be solved before
 this gateway can be instantiated in production. Do not add the URI or
 the secret to committed configuration.
+
+
+## Independent staff proof relay (draft)
+
+The inactive HttpCanonicalCaseGateway requires an injected AuthorityProofSource. It receives a short-lived issued-at time, expiry and opaque signature from the independent current-role authority before preparing one HTTP request, and forwards these fields without generating any signature. A missing provider or invalid proof envelope is rejected; if the provider is unavailable, nothing is sent. Network ambiguity remains RETRYABLE with the original idempotency ID.
+
+This is the Java companion to Moderation API draft #148. Test-only proof strings are syntactically valid but deliberately NOT actual cryptographic attestations; they test transport only. No production Paper or Discord staff-role proof issuer is implemented. A real issuer must independently verify the actor, linked Discord/Paper identity, server and action, then sign the exact canonical claims defined by API #148, holding the signing key outside StaffBot. The API must verify that signature. Do not enable live commands until that authority and independent staged tests exist.
