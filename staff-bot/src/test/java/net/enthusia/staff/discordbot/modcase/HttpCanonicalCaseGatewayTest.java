@@ -7,17 +7,25 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.sun.net.httpserver.HttpServer;
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.net.InetSocketAddress;
 import java.net.URI;
 import java.net.http.HttpRequest;
+import java.net.http.HttpTimeoutException;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
-import java.util.Base64;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Base64;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.Flow;
+import java.util.concurrent.atomic.AtomicInteger;
 import net.enthusia.staff.domain.modcase.AuthorityBackedCaseActions;
 import net.enthusia.staff.domain.modcase.CaseNotice;
 import org.junit.jupiter.api.Test;
@@ -53,7 +61,7 @@ class HttpCanonicalCaseGatewayTest {
         HttpCanonicalCaseGateway gateway = new HttpCanonicalCaseGateway(
                 ENDPOINT, CLIENT_ID, SECRET, PROOF_SOURCE, request -> {
                     outgoing.add(request);
-                    return new HttpCanonicalCaseGateway.RawResponse(200, response(command, STATE_CLAIMED));
+                    return raw(200, response(command, STATE_CLAIMED));
                 });
         assertEquals(AuthorityBackedCaseActions.TransportStatus.ACCEPTED, gateway.send(command));
         assertEquals(1, outgoing.size());
@@ -90,7 +98,7 @@ class HttpCanonicalCaseGatewayTest {
         assertEquals(7, responses.size());
         responses.forEach(body -> {
             var gateway = new HttpCanonicalCaseGateway(ENDPOINT, CLIENT_ID, SECRET, PROOF_SOURCE,
-                    request -> new HttpCanonicalCaseGateway.RawResponse(200, body));
+                    request -> raw(200, body));
             assertEquals(AuthorityBackedCaseActions.TransportStatus.RETRYABLE,
                     gateway.send(command), body);
         });
@@ -109,15 +117,15 @@ class HttpCanonicalCaseGatewayTest {
         assertEquals(1, calls[0]);
         List.of(401, 403, 404, 422).forEach(code -> {
             var denied = new HttpCanonicalCaseGateway(ENDPOINT, CLIENT_ID, SECRET, PROOF_SOURCE,
-                    request -> new HttpCanonicalCaseGateway.RawResponse(code, ""));
+                    request -> raw(code, ""));
             assertEquals(AuthorityBackedCaseActions.TransportStatus.DENIED,
                     denied.send(command));
         });
         var stale = new HttpCanonicalCaseGateway(ENDPOINT, CLIENT_ID, SECRET, PROOF_SOURCE,
-                request -> new HttpCanonicalCaseGateway.RawResponse(409, ""));
+                request -> raw(409, ""));
         assertEquals(AuthorityBackedCaseActions.TransportStatus.STALE, stale.send(command));
         var accepted = new HttpCanonicalCaseGateway(ENDPOINT, CLIENT_ID, SECRET, PROOF_SOURCE,
-                request -> new HttpCanonicalCaseGateway.RawResponse(200, response(command, "CLOSED")));
+                request -> raw(200, response(command, "CLOSED")));
         assertEquals(AuthorityBackedCaseActions.TransportStatus.ACCEPTED, accepted.send(command));
     }
 
@@ -168,6 +176,177 @@ class HttpCanonicalCaseGatewayTest {
                 () -> new HttpCanonicalCaseGateway.ActorProof(4, 15, "not-a-mac"));
         assertThrows(IllegalArgumentException.class,
                 () -> new HttpCanonicalCaseGateway(ENDPOINT, CLIENT_ID, SECRET, null));
+    }
+
+    @Test
+    void exactly4096Utf8BytesAreAccepted() {
+        var command = command(CaseNotice.Action.CLAIM);
+        String reply = response(command, STATE_CLAIMED);
+        String padded = reply + " ".repeat(4096 - reply.getBytes(StandardCharsets.UTF_8).length);
+        assertEquals(4096, padded.getBytes(StandardCharsets.UTF_8).length);
+        var gateway = new HttpCanonicalCaseGateway(ENDPOINT, CLIENT_ID, SECRET, PROOF_SOURCE,
+                request -> raw(200, padded));
+        assertEquals(AuthorityBackedCaseActions.TransportStatus.ACCEPTED, gateway.send(command));
+    }
+
+    @Test
+    void oversizedAsciiAndMultibyteStreamsStopAt4097Bytes() {
+        var command = command(CaseNotice.Action.CLAIM);
+        List<String> replies = List.of(response(command, STATE_CLAIMED)
+                + " ".repeat(4097 - response(command, STATE_CLAIMED).length()),
+                response(command, STATE_CLAIMED) + "😀".repeat(1100));
+        replies.forEach(reply -> {
+            assertTrue(reply.getBytes(StandardCharsets.UTF_8).length > 4096);
+            TrackingStream stream = new TrackingStream(reply.getBytes(StandardCharsets.UTF_8), 23);
+            AtomicInteger sends = new AtomicInteger();
+            var gateway = new HttpCanonicalCaseGateway(ENDPOINT, CLIENT_ID, SECRET, PROOF_SOURCE,
+                    request -> {
+                        sends.incrementAndGet();
+                        return new HttpCanonicalCaseGateway.RawResponse(200, stream);
+                    });
+            assertEquals(AuthorityBackedCaseActions.TransportStatus.RETRYABLE, gateway.send(command));
+            assertEquals(4097, stream.bytesRead);
+            assertTrue(stream.closed);
+            assertEquals(1, sends.get());
+        });
+        assertTrue(replies.get(1).length() < 4096, "UTF-16 length misses UTF-8 overflow");
+    }
+
+    @Test
+    void malformedUtf8AndMidBodyIoErrorAreRetryable() throws IOException {
+        var command = command(CaseNotice.Action.CLAIM);
+        byte[] malformed = (response(command, STATE_CLAIMED) + " ").getBytes(StandardCharsets.UTF_8);
+        malformed[malformed.length - 1] = (byte) 0xc3;
+        TrackingStream invalid = new TrackingStream(malformed, 3);
+        var bad = new HttpCanonicalCaseGateway(ENDPOINT, CLIENT_ID, SECRET, PROOF_SOURCE,
+                request -> new HttpCanonicalCaseGateway.RawResponse(200, invalid));
+        assertEquals(AuthorityBackedCaseActions.TransportStatus.RETRYABLE, bad.send(command));
+        assertTrue(invalid.closed);
+        try (InputStream broken = new InputStream() {
+            @Override public int read() throws IOException {
+                throw new IOException("synthetic body disconnect");
+            }
+        }) {
+            var disconnected = new HttpCanonicalCaseGateway(ENDPOINT, CLIENT_ID, SECRET, PROOF_SOURCE,
+                    request -> new HttpCanonicalCaseGateway.RawResponse(200, broken));
+            assertEquals(AuthorityBackedCaseActions.TransportStatus.RETRYABLE,
+                    disconnected.send(command));
+        }
+    }
+
+    @Test
+    void timeoutsAndInterruptionDoNotCauseResends() {
+        var command = command(CaseNotice.Action.CLAIM);
+        AtomicInteger attempts = new AtomicInteger();
+        var timeout = new HttpCanonicalCaseGateway(ENDPOINT, CLIENT_ID, SECRET, PROOF_SOURCE, request -> {
+            attempts.incrementAndGet();
+            throw new HttpTimeoutException("synthetic timeout");
+        });
+        assertEquals(AuthorityBackedCaseActions.TransportStatus.RETRYABLE, timeout.send(command));
+        assertEquals(1, attempts.get());
+        var interrupted = new HttpCanonicalCaseGateway(ENDPOINT, CLIENT_ID, SECRET, PROOF_SOURCE, request -> {
+            attempts.incrementAndGet();
+            throw new InterruptedException("synthetic interruption");
+        });
+        try {
+            assertEquals(AuthorityBackedCaseActions.TransportStatus.RETRYABLE, interrupted.send(command));
+            assertTrue(Thread.currentThread().isInterrupted());
+            assertEquals(2, attempts.get());
+        } finally {
+            Thread.interrupted();
+        }
+    }
+
+    @Test
+    void nonSuccessHttpStatusesCloseBodiesWithoutReadingThem() {
+        var command = command(CaseNotice.Action.CLAIM);
+        for (int code : List.of(409, 401, 403, 404, 422, 503)) {
+            assertNonSuccessBodyClosed(code, command);
+        }
+    }
+
+    private static void assertNonSuccessBodyClosed(
+            int code, AuthorityBackedCaseActions.Command command) {
+        TrackingStream stream = new TrackingStream(new byte[100000], 128);
+        var gateway = new HttpCanonicalCaseGateway(ENDPOINT, CLIENT_ID, SECRET, PROOF_SOURCE,
+                request -> new HttpCanonicalCaseGateway.RawResponse(code, stream));
+        var expected = code == 409 ? AuthorityBackedCaseActions.TransportStatus.STALE
+                : code == 503 ? AuthorityBackedCaseActions.TransportStatus.RETRYABLE
+                : AuthorityBackedCaseActions.TransportStatus.DENIED;
+        assertEquals(expected, gateway.send(command));
+        assertEquals(0, stream.bytesRead);
+        assertTrue(stream.closed);
+    }
+
+    @Test
+    void loopbackChunkedResponseIsBoundedAndHasOnePost() throws Exception {
+        HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        AtomicInteger posts = new AtomicInteger();
+        server.createContext("/v1/staff-case-commands", exchange -> {
+            posts.incrementAndGet();
+            exchange.sendResponseHeaders(200, 0);
+            byte[] chunk = new byte[512];
+            Arrays.fill(chunk, (byte) 'x');
+            try (OutputStream output = exchange.getResponseBody()) {
+                for (int i = 0; i < 256; i++) {
+                    output.write(chunk);
+                }
+            } catch (IOException expectedAfterCancellation) {
+                // Client canceled unread chunks; release the HTTP exchange.
+                exchange.close();
+                return;
+            }
+            exchange.close();
+        });
+        server.start();
+        try {
+            URI endpoint = URI.create("http://127.0.0.1:" + server.getAddress().getPort()
+                    + "/v1/staff-case-commands");
+            var gateway = new HttpCanonicalCaseGateway(endpoint, CLIENT_ID, SECRET, PROOF_SOURCE);
+            assertEquals(AuthorityBackedCaseActions.TransportStatus.RETRYABLE,
+                    gateway.send(command(CaseNotice.Action.CLAIM)));
+            assertEquals(1, posts.get());
+        } finally {
+            server.stop(0);
+        }
+    }
+
+    private static HttpCanonicalCaseGateway.RawResponse raw(int code, String content) {
+        return new HttpCanonicalCaseGateway.RawResponse(code,
+                new ByteArrayInputStream(content.getBytes(StandardCharsets.UTF_8)));
+    }
+
+    private static final class TrackingStream extends InputStream {
+        private final byte[] bytes;
+        private final int chunkSize;
+        private int bytesRead;
+        private boolean closed;
+
+        private TrackingStream(byte[] bytes, int chunkSize) {
+            this.bytes = bytes;
+            this.chunkSize = chunkSize;
+        }
+
+        @Override
+        public int read() {
+            return bytesRead == bytes.length ? -1 : bytes[bytesRead++] & 0xff;
+        }
+
+        @Override
+        public int read(byte[] destination, int offset, int length) {
+            if (bytesRead == bytes.length) {
+                return -1;
+            }
+            int count = Math.min(Math.min(length, chunkSize), bytes.length - bytesRead);
+            System.arraycopy(bytes, bytesRead, destination, offset, count);
+            bytesRead += count;
+            return count;
+        }
+
+        @Override
+        public void close() {
+            closed = true;
+        }
     }
 
     private static String randomTestSecret() {

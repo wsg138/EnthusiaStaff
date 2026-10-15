@@ -4,10 +4,13 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.nio.ByteBuffer;
+import java.nio.charset.CodingErrorAction;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.Map;
@@ -58,9 +61,9 @@ public final class HttpCanonicalCaseGateway implements AuthorityBackedCaseAction
         RawResponse send(HttpRequest request) throws IOException, InterruptedException;
     }
 
-    record RawResponse(int status, String body) {
+    record RawResponse(int status, InputStream body) {
         RawResponse {
-            body = body == null ? "" : body;
+            Objects.requireNonNull(body, "HTTP response stream");
         }
     }
 
@@ -131,19 +134,30 @@ public final class HttpCanonicalCaseGateway implements AuthorityBackedCaseAction
     }
 
     private static AuthorityBackedCaseActions.TransportStatus status(
-            RawResponse response, AuthorityBackedCaseActions.Command command) {
-        if (response.status() == HTTP_CONFLICT) {
-            return AuthorityBackedCaseActions.TransportStatus.STALE;
+            RawResponse response, AuthorityBackedCaseActions.Command command) throws IOException {
+        try (InputStream body = response.body()) {
+            if (response.status() == HTTP_CONFLICT) {
+                return AuthorityBackedCaseActions.TransportStatus.STALE;
+            }
+            if (DENIED_STATUSES.contains(response.status())) {
+                return AuthorityBackedCaseActions.TransportStatus.DENIED;
+            }
+            if (response.status() != HTTP_OK) {
+                return AuthorityBackedCaseActions.TransportStatus.RETRYABLE;
+            }
+            // Read at most one byte beyond the cap; closing cancels the unread HTTP stream.
+            byte[] bytes = body.readNBytes(MAX_RESPONSE_BYTES + 1);
+            if (bytes.length > MAX_RESPONSE_BYTES) {
+                return AuthorityBackedCaseActions.TransportStatus.RETRYABLE;
+            }
+            String decoded = StandardCharsets.UTF_8.newDecoder()
+                    .onMalformedInput(CodingErrorAction.REPORT)
+                    .onUnmappableCharacter(CodingErrorAction.REPORT)
+                    .decode(ByteBuffer.wrap(bytes)).toString();
+            return confirmed(decoded, command)
+                    ? AuthorityBackedCaseActions.TransportStatus.ACCEPTED
+                    : AuthorityBackedCaseActions.TransportStatus.RETRYABLE;
         }
-        if (DENIED_STATUSES.contains(response.status())) {
-            return AuthorityBackedCaseActions.TransportStatus.DENIED;
-        }
-        if (response.status() != HTTP_OK || response.body().length() > MAX_RESPONSE_BYTES) {
-            return AuthorityBackedCaseActions.TransportStatus.RETRYABLE;
-        }
-        return confirmed(response.body(), command)
-                ? AuthorityBackedCaseActions.TransportStatus.ACCEPTED
-                : AuthorityBackedCaseActions.TransportStatus.RETRYABLE;
     }
 
     private static boolean confirmed(String body, AuthorityBackedCaseActions.Command command) {
@@ -197,8 +211,10 @@ public final class HttpCanonicalCaseGateway implements AuthorityBackedCaseAction
         HttpClient client = HttpClient.newBuilder().connectTimeout(TIMEOUT)
                 .followRedirects(HttpClient.Redirect.NEVER).build();
         return request -> {
-            HttpResponse<String> response = client.send(
-                    request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+            // The four-second request timeout is not a total stalled-body read deadline
+            // after ofInputStream returns headers. This opt-in gateway remains inactive.
+            HttpResponse<InputStream> response = client.send(
+                    request, HttpResponse.BodyHandlers.ofInputStream());
             return new RawResponse(response.statusCode(), response.body());
         };
     }
