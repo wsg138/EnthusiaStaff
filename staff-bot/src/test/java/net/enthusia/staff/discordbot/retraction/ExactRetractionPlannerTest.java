@@ -20,21 +20,23 @@ class ExactRetractionPlannerTest {
     private static final String EVENT_SECOND = "second";
     private static final String PLATFORM_MINECRAFT = "minecraft";
     private static final String PROFILE_PUBLIC = "minecraft_public";
+    private static final String SOURCE_SMP = "smp";
+    private static final String SENDER_A = "player-a";
     private static final String DISCORD_MESSAGE_ID = "1234567890123456787";
     private static final Destination DISCORD = new Destination(Surface.DISCORD,
             "1234567890123456789", "1234567890123456788");
     private static final Destination PAPER = new Destination(Surface.PAPER_SIGNED,
-            "smp", CHANNEL_GLOBAL);
+            SOURCE_SMP, CHANNEL_GLOBAL);
     private static final Destination SYSTEM = new Destination(Surface.MINECRAFT_SYSTEM,
-            "smp", CHANNEL_GLOBAL);
+            SOURCE_SMP, CHANNEL_GLOBAL);
     private static final Set<Destination> ALLOWED = Set.of(DISCORD, PAPER, SYSTEM);
 
     private static SourceEvent prior() {
-        return source(EVENT_FIRST, "player-a", "smp", CHANNEL_GLOBAL, PROFILE_PUBLIC, null, 0);
+        return source(EVENT_FIRST, SENDER_A, SOURCE_SMP, CHANNEL_GLOBAL, PROFILE_PUBLIC, null, 0);
     }
 
     private static SourceEvent later() {
-        return source(EVENT_SECOND, "player-a", "smp", CHANNEL_GLOBAL, PROFILE_PUBLIC, null, 2);
+        return source(EVENT_SECOND, SENDER_A, SOURCE_SMP, CHANNEL_GLOBAL, PROFILE_PUBLIC, null, 2);
     }
 
     private static SourceEvent source(String id, String sender, String scope,
@@ -94,7 +96,7 @@ class ExactRetractionPlannerTest {
 
     @Test
     void rejectsDifferentSenderEvenWhenEventIdAndMessageTextCouldLookIdentical() {
-        SourceEvent before = source(EVENT_FIRST, "player-b", "smp", CHANNEL_GLOBAL,
+        SourceEvent before = source(EVENT_FIRST, "player-b", SOURCE_SMP, CHANNEL_GLOBAL,
                 PROFILE_PUBLIC, null, 0);
         assertEquals(Refusal.SOURCE_CONTEXT_MISMATCH,
                 plan(later(), before, List.of(discord(before, DISCORD_MESSAGE_ID))).refusal());
@@ -103,16 +105,16 @@ class ExactRetractionPlannerTest {
     @Test
     void neverCrossesServersChannelsProfilesConversationsOrPlatforms() {
         List<SourceEvent> foreign = List.of(
-                source(EVENT_FIRST, "player-a", "other-server", CHANNEL_GLOBAL,
+                source(EVENT_FIRST, SENDER_A, "other-server", CHANNEL_GLOBAL,
                         PROFILE_PUBLIC, null, 0),
-                source(EVENT_FIRST, "player-a", "smp", "trade",
+                source(EVENT_FIRST, SENDER_A, SOURCE_SMP, "trade",
                         PROFILE_PUBLIC, null, 0),
-                source(EVENT_FIRST, "player-a", "smp", CHANNEL_GLOBAL,
+                source(EVENT_FIRST, SENDER_A, SOURCE_SMP, CHANNEL_GLOBAL,
                         "discord_public", null, 0),
-                source(EVENT_FIRST, "player-a", "smp", CHANNEL_GLOBAL,
+                source(EVENT_FIRST, SENDER_A, SOURCE_SMP, CHANNEL_GLOBAL,
                         PROFILE_PUBLIC, "private-thread", 0),
-                new SourceEvent(EVENT_FIRST, "discord", "smp", PROFILE_PUBLIC,
-                        CHANNEL_GLOBAL, null, "player-a", START));
+                new SourceEvent(EVENT_FIRST, "discord", SOURCE_SMP, PROFILE_PUBLIC,
+                        CHANNEL_GLOBAL, null, SENDER_A, START));
         for (SourceEvent before : foreign) {
             Plan planned = plan(later(), before,
                     List.of(discord(before, DISCORD_MESSAGE_ID)));
@@ -126,9 +128,9 @@ class ExactRetractionPlannerTest {
 
     @Test
     void rejectsPrivateAndStaffSourcesEvenIfModelReturnsBlock() {
-        SourceEvent before = source(EVENT_FIRST, "player-a", "smp", CHANNEL_GLOBAL,
+        SourceEvent before = source(EVENT_FIRST, SENDER_A, SOURCE_SMP, CHANNEL_GLOBAL,
                 "staff_private", null, 0);
-        SourceEvent current = source(EVENT_SECOND, "player-a", "smp", CHANNEL_GLOBAL,
+        SourceEvent current = source(EVENT_SECOND, SENDER_A, SOURCE_SMP, CHANNEL_GLOBAL,
                 "staff_private", null, 2);
         assertEquals(Refusal.NONPUBLIC_SOURCE, plan(current, before,
                 List.of(discord(before, DISCORD_MESSAGE_ID))).refusal());
@@ -136,10 +138,10 @@ class ExactRetractionPlannerTest {
 
     @Test
     void rejectsArbitraryOriginPlatformClaimingPublicMinecraftProfile() {
-        SourceEvent before = new SourceEvent(EVENT_FIRST, "staff_private_transport", "smp",
-                PROFILE_PUBLIC, CHANNEL_GLOBAL, null, "player-a", START);
-        SourceEvent current = new SourceEvent(EVENT_SECOND, "staff_private_transport", "smp",
-                PROFILE_PUBLIC, CHANNEL_GLOBAL, null, "player-a", START.plusSeconds(2));
+        SourceEvent before = new SourceEvent(EVENT_FIRST, "staff_private_transport", SOURCE_SMP,
+                PROFILE_PUBLIC, CHANNEL_GLOBAL, null, SENDER_A, START);
+        SourceEvent current = new SourceEvent(EVENT_SECOND, "staff_private_transport", SOURCE_SMP,
+                PROFILE_PUBLIC, CHANNEL_GLOBAL, null, SENDER_A, START.plusSeconds(2));
         assertEquals(Refusal.NONPUBLIC_SOURCE,
                 plan(current, before, List.of(discord(before, DISCORD_MESSAGE_ID))).refusal());
     }
@@ -148,11 +150,11 @@ class ExactRetractionPlannerTest {
     void requiresBoundedForwardOnlyFifteenSecondWindow() {
         SourceEvent first = prior();
         List<PublicationReceipt> receipts = List.of(discord(first, DISCORD_MESSAGE_ID));
-        assertEquals(1, plan(source(EVENT_SECOND, "player-a", "smp", CHANNEL_GLOBAL,
+        assertEquals(1, plan(source(EVENT_SECOND, SENDER_A, SOURCE_SMP, CHANNEL_GLOBAL,
                 PROFILE_PUBLIC, null, 15), first, receipts).targets().size());
-        assertEquals(Refusal.OUTSIDE_WINDOW, plan(source(EVENT_SECOND, "player-a", "smp",
+        assertEquals(Refusal.OUTSIDE_WINDOW, plan(source(EVENT_SECOND, SENDER_A, SOURCE_SMP,
                 CHANNEL_GLOBAL, PROFILE_PUBLIC, null, 16), first, receipts).refusal());
-        assertEquals(Refusal.OUTSIDE_WINDOW, plan(source(EVENT_SECOND, "player-a", "smp",
+        assertEquals(Refusal.OUTSIDE_WINDOW, plan(source(EVENT_SECOND, SENDER_A, SOURCE_SMP,
                 CHANNEL_GLOBAL, PROFILE_PUBLIC, null, -1), first, receipts).refusal());
     }
 
@@ -174,16 +176,16 @@ class ExactRetractionPlannerTest {
         PublicationReceipt matching = discord(first, DISCORD_MESSAGE_ID);
         List<PublicationReceipt> forgedMetadata = List.of(
                 new PublicationReceipt(EVENT_FIRST, PLATFORM_MINECRAFT, "different-smp",
-                        PROFILE_PUBLIC, CHANNEL_GLOBAL, null, "player-a",
+                        PROFILE_PUBLIC, CHANNEL_GLOBAL, null, SENDER_A,
                         DISCORD, DISCORD_MESSAGE_ID, null, true),
-                new PublicationReceipt(EVENT_FIRST, PLATFORM_MINECRAFT, "smp",
+                new PublicationReceipt(EVENT_FIRST, PLATFORM_MINECRAFT, SOURCE_SMP,
                         PROFILE_PUBLIC, CHANNEL_GLOBAL, null, "other-player",
                         DISCORD, DISCORD_MESSAGE_ID, null, true),
-                new PublicationReceipt(EVENT_FIRST, PLATFORM_MINECRAFT, "smp",
-                        PROFILE_PUBLIC, "other-channel", null, "player-a",
+                new PublicationReceipt(EVENT_FIRST, PLATFORM_MINECRAFT, SOURCE_SMP,
+                        PROFILE_PUBLIC, "other-channel", null, SENDER_A,
                         DISCORD, DISCORD_MESSAGE_ID, null, true),
-                new PublicationReceipt("other-event", PLATFORM_MINECRAFT, "smp",
-                        PROFILE_PUBLIC, CHANNEL_GLOBAL, null, "player-a",
+                new PublicationReceipt("other-event", PLATFORM_MINECRAFT, SOURCE_SMP,
+                        PROFILE_PUBLIC, CHANNEL_GLOBAL, null, SENDER_A,
                         DISCORD, DISCORD_MESSAGE_ID, null, true));
         assertTrue(plan(later(), first, forgedMetadata).targets().isEmpty());
         assertEquals(1, plan(later(), first, List.of(matching)).targets().size());
@@ -216,7 +218,7 @@ class ExactRetractionPlannerTest {
         PublicationReceipt publication = discord(first, DISCORD_MESSAGE_ID);
         List<PublicationReceipt> duplicated = List.of(publication, publication, publication);
         Plan firstAttempt = plan(later(), first, duplicated);
-        Plan nextContext = plan(source("third", "player-a", "smp", CHANNEL_GLOBAL,
+        Plan nextContext = plan(source("third", SENDER_A, SOURCE_SMP, CHANNEL_GLOBAL,
                 PROFILE_PUBLIC, null, 5), first, duplicated);
         assertEquals(1, firstAttempt.targets().size());
         assertEquals(1, nextContext.targets().size());
@@ -231,7 +233,7 @@ class ExactRetractionPlannerTest {
     @Test
     void operationDiffersAcrossDestinationAndSourceEvent() {
         SourceEvent first = prior();
-        SourceEvent another = source("other-first", "player-a", "smp", CHANNEL_GLOBAL,
+        SourceEvent another = source("other-first", SENDER_A, SOURCE_SMP, CHANNEL_GLOBAL,
                 PROFILE_PUBLIC, null, 0);
         String firstOperation = plan(later(), first,
                 List.of(discord(first, DISCORD_MESSAGE_ID)))
@@ -245,7 +247,7 @@ class ExactRetractionPlannerTest {
     @Test
     void sourceOrReceiptMayNotContainBlankIdentityFields() {
         assertThrows(IllegalArgumentException.class,
-                () -> source("", "player-a", "smp", CHANNEL_GLOBAL,
+                () -> source("", SENDER_A, SOURCE_SMP, CHANNEL_GLOBAL,
                         PROFILE_PUBLIC, null, 0));
         assertThrows(IllegalArgumentException.class,
                 () -> receipt(prior(), PAPER, "", "signed", true));
@@ -265,20 +267,20 @@ class ExactRetractionPlannerTest {
     @Test
     void operationIdsIncludeFullCanonicalSourceNotJustEventId() {
         SourceEvent first = prior();
-        SourceEvent differentServer = source(EVENT_FIRST, "player-a", "other-smp",
+        SourceEvent differentServer = source(EVENT_FIRST, SENDER_A, "other-smp",
                 CHANNEL_GLOBAL, PROFILE_PUBLIC, null, 0);
-        SourceEvent differentSender = source(EVENT_FIRST, "player-b", "smp",
+        SourceEvent differentSender = source(EVENT_FIRST, "player-b", SOURCE_SMP,
                 CHANNEL_GLOBAL, PROFILE_PUBLIC, null, 0);
-        SourceEvent differentTimestamp = source(EVENT_FIRST, "player-a", "smp",
+        SourceEvent differentTimestamp = source(EVENT_FIRST, SENDER_A, SOURCE_SMP,
                 CHANNEL_GLOBAL, PROFILE_PUBLIC, null, 1);
         String original = plan(later(), first,
                 List.of(discord(first, DISCORD_MESSAGE_ID))).targets()
                 .getFirst().operationId();
-        String otherServer = plan(source(EVENT_SECOND, "player-a", "other-smp",
+        String otherServer = plan(source(EVENT_SECOND, SENDER_A, "other-smp",
                 CHANNEL_GLOBAL, PROFILE_PUBLIC, null, 2), differentServer,
                 List.of(discord(differentServer, DISCORD_MESSAGE_ID))).targets()
                 .getFirst().operationId();
-        String otherSender = plan(source(EVENT_SECOND, "player-b", "smp",
+        String otherSender = plan(source(EVENT_SECOND, "player-b", SOURCE_SMP,
                 CHANNEL_GLOBAL, PROFILE_PUBLIC, null, 2), differentSender,
                 List.of(discord(differentSender, DISCORD_MESSAGE_ID))).targets()
                 .getFirst().operationId();
