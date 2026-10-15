@@ -212,7 +212,7 @@ final class ReportGuiRenderer {
         inventory.setItem(configuration.slot("detail-description"), item(
                 configuration.material("description"),
                 configuration.message("description"),
-                descriptionPreview(details.description(), summary.reportId())
+                descriptionPreview(details.description(), details.summary().reportId())
         ));
         inventory.setItem(configuration.slot("detail-public-chat"), snapshotItem(
                 configuration.material("public-chat"),
