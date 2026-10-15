@@ -15,6 +15,7 @@ import net.enthusia.staff.domain.ports.CommandBridgeExecutor;
 import org.junit.jupiter.api.Test;
 
 class BukkitConsoleCommandBridgeExecutorTest {
+    private static final String COMMAND_LIST = "list";
     private static final UUID ACTOR = UUID.fromString("33333333-3333-3333-3333-333333333333");
     @Test
     void schedulesAndDispatchesExactlyOnce() {
@@ -33,7 +34,7 @@ class BukkitConsoleCommandBridgeExecutorTest {
                 actor -> true
         );
 
-        CommandBridgeExecutor.Execution result = executor.execute(ACTOR, "list");
+        CommandBridgeExecutor.Execution result = executor.execute(ACTOR, COMMAND_LIST);
         assertEquals("ok", result.output());
         assertEquals(1, schedules.get());
         assertEquals(1, dispatches.get());
@@ -58,7 +59,7 @@ class BukkitConsoleCommandBridgeExecutorTest {
                 actor -> duty.get()
         );
         CompletableFuture<CommandBridgeExecutor.Execution> result =
-                CompletableFuture.supplyAsync(() -> executor.execute(ACTOR, "list"));
+                CompletableFuture.supplyAsync(() -> executor.execute(ACTOR, COMMAND_LIST));
         org.junit.jupiter.api.Assertions.assertTrue(ready.await(1, TimeUnit.SECONDS));
         duty.set(false);
         scheduled.get().run();
@@ -80,7 +81,7 @@ class BukkitConsoleCommandBridgeExecutorTest {
                 actor -> true
         );
 
-        assertThrows(IllegalStateException.class, () -> executor.execute(ACTOR, "list"));
+        assertThrows(IllegalStateException.class, () -> executor.execute(ACTOR, COMMAND_LIST));
         assertEquals(1, dispatches.get());
     }
 
@@ -94,7 +95,7 @@ class BukkitConsoleCommandBridgeExecutorTest {
                 actor -> true
         );
 
-        assertThrows(IllegalStateException.class, () -> executor.execute(ACTOR, "list"));
+        assertThrows(IllegalStateException.class, () -> executor.execute(ACTOR, COMMAND_LIST));
         assertEquals(1, schedules.get());
     }
 }
