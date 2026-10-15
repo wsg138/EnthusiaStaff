@@ -20,30 +20,40 @@ public final class GuidedPolicyResolution {
 
     public static Outcome calculate(GuidedIncidentWizard.Finding finding,
                                     PunishmentAssessment assessed, int preference) {
-        validate(finding, assessed, preference);
+        return calculate(finding, assessed, preference, GuidedSeverityProfile.prototype());
+    }
+
+    /** The profile must match the immutable interview version used to produce the finding. */
+    public static Outcome calculate(GuidedIncidentWizard.Finding finding,
+                                    PunishmentAssessment assessed, int preference,
+                                    GuidedSeverityProfile profile) {
+        validate(finding, assessed, preference, profile);
         List<PunishmentStep> ladder = assessed.policy().steps();
         int historyStep = assessed.escalation().selectedStep().ordinal();
-        int selected = selectedStep(finding.preliminaryImpact(), historyStep, ladder.size());
+        int selected = selectedStep(finding.preliminaryImpact(), historyStep, ladder.size(), profile);
         List<SanctionSpec> originals = ladder.get(selected).sanctions();
         checkTransition(ladder, historyStep, selected);
         requireOrdinaryGuidedRemedy(originals);
         String explanation = explanation(finding, historyStep, selected);
-        return variableDuration(originals, ladder, selected, preference, explanation);
+        return variableDuration(originals, ladder, selected, preference, explanation, profile);
     }
 
     private static void validate(GuidedIncidentWizard.Finding finding,
-                                 PunishmentAssessment assessed, int preference) {
+                                 PunishmentAssessment assessed, int preference,
+                                 GuidedSeverityProfile profile) {
         Objects.requireNonNull(finding);
         Objects.requireNonNull(assessed);
+        Objects.requireNonNull(profile);
         if (finding.needsReview() || !assessed.policy().id().equals(finding.candidateId())
+                || !profile.equals(finding.severityProfile())
                 || preference < -1 || preference > 1) {
             throw new IllegalArgumentException("This incident requires individual review");
         }
     }
 
-    private static int selectedStep(int impact, int historyStep, int ladderSize) {
-        int adjustment = impact >= 45 ? 2 : impact >= 25 ? 1 : 0;
-        return Math.min(ladderSize - 1, historyStep + adjustment);
+    private static int selectedStep(int impact, int historyStep, int ladderSize,
+                                    GuidedSeverityProfile profile) {
+        return Math.min(ladderSize - 1, historyStep + profile.stepOffset(impact));
     }
 
     private static void checkTransition(List<PunishmentStep> ladder, int baselineStep,
@@ -86,6 +96,7 @@ public final class GuidedPolicyResolution {
     private static String explanation(GuidedIncidentWizard.Finding finding,
                                       int historyStep, int selected) {
         return "Guided v1: " + finding.conduct() + " in " + finding.medium()
+                + "; severityProfile=" + finding.severityProfile().version()
                 + "; impact=" + finding.preliminaryImpact()
                 + "; historyStep=" + historyStep + "; selectedStep=" + selected
                 + "; factors=" + String.join(", ", finding.facts());
@@ -93,7 +104,8 @@ public final class GuidedPolicyResolution {
 
     private static Outcome variableDuration(List<SanctionSpec> originals,
                                             List<PunishmentStep> ladder, int selected,
-                                            int preference, String explanation) {
+                                            int preference, String explanation,
+                                            GuidedSeverityProfile profile) {
         if (originals.size() != 1 || originals.getFirst().length().temporary().isEmpty()) {
             return new Outcome(originals, explanation + "; configured remedy", false);
         }
@@ -103,22 +115,19 @@ public final class GuidedPolicyResolution {
         if (high.compareTo(low) <= 0) {
             return new Outcome(originals, explanation + "; maximum policy tier", false);
         }
-        return calculateWithinBounds(originals, initial, low, high, preference, explanation);
+        return calculateWithinBounds(originals, initial, low, high, preference, explanation,
+                profile);
     }
 
     private static Outcome calculateWithinBounds(List<SanctionSpec> originals,
                                                   SanctionSpec initial, Duration low,
                                                   Duration high, int preference,
-                                                  String explanation) {
+                                                  String explanation, GuidedSeverityProfile profile) {
         // Anchor minute-granularity choices to the exact configured lower bound.
         // Truncating low.toMinutes() can otherwise produce a sub-policy sanction
         // when a configured duration includes seconds.
         long availableMinutes = high.minus(low).toMinutes();
-        double ratio = switch (preference) {
-            case -1 -> 0.25;
-            case 1 -> 0.75;
-            default -> 0.5;
-        };
+        double ratio = profile.durationFraction(preference);
         Duration calculated = low.plus(Duration.ofMinutes(Math.round(availableMinutes * ratio)));
         if (calculated.compareTo(high) > 0) {
             calculated = high;

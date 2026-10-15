@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 
 /**
@@ -17,8 +18,12 @@ public final class GuidedIncidentWizard {
     }
     public record Finding(String categoryId, String conduct, String medium,
                           int preliminaryImpact, String candidateId,
-                          boolean needsReview, List<String> facts) {
-        public Finding { facts = List.copyOf(facts); }
+                          boolean needsReview, List<String> facts,
+                          GuidedSeverityProfile severityProfile) {
+        public Finding {
+            facts = List.copyOf(facts);
+            Objects.requireNonNull(severityProfile, "severity profile");
+        }
     }
     private static final String CHAT = "chat";
     private static final String SAFETY = "safety";
@@ -149,26 +154,31 @@ public final class GuidedIncidentWizard {
     }
 
     public Finding finding() {
+        return finding(GuidedSeverityProfile.prototype());
+    }
+
+    public Finding finding(GuidedSeverityProfile profile) {
+        Objects.requireNonNull(profile, "severity profile");
         if (nextQuestion().isPresent()) {
             throw new IllegalStateException("The interview is incomplete");
         }
         String medium = answers.get(MEDIUM);
         String conduct = answers.get(CONDUCT);
-        int impact = 10;
+        int impact = profile.baseImpact();
         List<String> facts = new ArrayList<>();
         if ("sustained".equals(answers.get(EXTENT))) {
-            impact += 15; facts.add("Sustained/repeated incident");
+            impact += profile.sustainedWeight(); facts.add("Sustained/repeated incident");
         } else if ("large-scale".equals(answers.get(EXTENT))) {
-            impact += 30; facts.add("Large-scale incident");
+            impact += profile.largeScaleWeight(); facts.add("Large-scale incident");
         }
         if ("yes".equals(answers.get(CONTINUED))) {
-            impact += 10; facts.add("Continued after a verified warning");
+            impact += profile.ignoredWarningWeight(); facts.add("Continued after a verified warning");
         }
         if ("targeted".equals(answers.get(TARGETING))) {
-            impact += 15; facts.add("Directed at a person or group");
+            impact += profile.targetedWeight(); facts.add("Directed at a person or group");
         }
         if ("persistent".equals(answers.get("persistence"))) {
-            impact += 10; facts.add("Placed content was left up");
+            impact += profile.persistenceWeight(); facts.add("Placed content was left up");
         }
         String candidate = GuidedOffenseClassifier.resolve(
                 category, medium, conduct, answers.get(DETAIL),
@@ -183,7 +193,8 @@ public final class GuidedIncidentWizard {
                 || OTHER.equals(answers.get(DETAIL))
                 || sensitiveCandidate(candidate)
                 || !channelCompatible(medium, conduct);
-        return new Finding(category, conduct, medium, impact, candidate, review, facts);
+        return new Finding(category, conduct, medium, impact, candidate, review, facts,
+                profile);
     }
 
     private static boolean sensitiveCandidate(String candidate) {
