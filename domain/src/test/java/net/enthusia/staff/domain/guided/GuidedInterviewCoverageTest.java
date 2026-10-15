@@ -1,5 +1,6 @@
 package net.enthusia.staff.domain.guided;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -70,7 +71,7 @@ class GuidedInterviewCoverageTest {
             }
         }
         configured.remove("cheating.polar.template");
-        org.junit.jupiter.api.Assertions.assertEquals(configured,
+        assertEquals(configured,
                 GuidedOffenseClassifier.mappedReasonIds(),
                 "Every manually selectable configured reason needs an audited path");
     }
