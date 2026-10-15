@@ -17,6 +17,8 @@ import org.junit.jupiter.api.Test;
 
 class GuidedSeverityProfileTest {
     private static final String FLOOD = "spam.message-flooding";
+    private static final String YES = "yes";
+    private static final String INVALID_VERSION = "bad";
 
     private static GuidedSeverityProfile trial() {
         return new GuidedSeverityProfile(
@@ -57,7 +59,7 @@ class GuidedSeverityProfileTest {
     void prototypeKeepsTheHistoricalWeightsAndOutcome() {
         var prototype = GuidedSeverityProfile.prototype();
         var ordinary = interview("not-applicable").finding();
-        var ignored = interview("yes").finding();
+        var ignored = interview(YES).finding();
         assertEquals(25, ordinary.preliminaryImpact());
         assertEquals(35, ignored.preliminaryImpact());
         assertEquals(prototype, ignored.severityProfile());
@@ -70,20 +72,20 @@ class GuidedSeverityProfileTest {
     @Test
     void unapprovedTrialProfileCanBeComparedWithoutChangingProductionDefaults() {
         var trial = trial();
-        var incident = interview("yes").finding(trial);
+        var incident = interview(YES).finding(trial);
         assertEquals("calibration-test-v1", incident.severityProfile().version());
         assertEquals(SanctionType.WARNING,
                 GuidedPolicyResolution.calculate(incident, assessment(), 0, trial)
                         .sanctions().getFirst().type());
         assertEquals(SanctionType.MUTE,
-                GuidedPolicyResolution.calculate(interview("yes").finding(),
+                GuidedPolicyResolution.calculate(interview(YES).finding(),
                         assessment(), 0).sanctions().getFirst().type());
     }
 
     @Test
     void trialDurationFractionsRemainBoundedByCurrentTemporaryMuteTier() {
         var profile = trial();
-        var incident = interview("yes").finding(profile);
+        var incident = interview(YES).finding(profile);
         var withHistory = assessment(1);
         Duration shorter = GuidedPolicyResolution.calculate(incident, withHistory, -1, profile)
                 .sanctions().getFirst().length().temporary().orElseThrow();
@@ -98,7 +100,7 @@ class GuidedSeverityProfileTest {
 
     @Test
     void changedOrWrongProfileIsRejectedEvenIfVersionWasReused() {
-        var incident = interview("yes").finding(trial());
+        var incident = interview(YES).finding(trial());
         var changed = new GuidedSeverityProfile("calibration-test-v1",
                 10, 15, 30, 11, 15, 10, 40, 60, 0.10, 0.55, 0.90);
         assertThrows(IllegalArgumentException.class,
@@ -110,17 +112,17 @@ class GuidedSeverityProfileTest {
     @Test
     void malformedWeightsThresholdsAndFractionsAreRejected() {
         assertThrows(IllegalArgumentException.class, () -> new GuidedSeverityProfile(
-                "bad", -1, 15, 30, 10, 15, 10, 25, 45, 0.25, 0.5, 0.75));
+                INVALID_VERSION, -1, 15, 30, 10, 15, 10, 25, 45, 0.25, 0.5, 0.75));
         assertThrows(IllegalArgumentException.class, () -> new GuidedSeverityProfile(
-                "bad", 10, 15, 30, 10, 15, 10, 45, 25, 0.25, 0.5, 0.75));
+                INVALID_VERSION, 10, 15, 30, 10, 15, 10, 45, 25, 0.25, 0.5, 0.75));
         assertThrows(IllegalArgumentException.class, () -> new GuidedSeverityProfile(
-                "bad", 10, 30, 15, 10, 15, 10, 25, 45, 0.25, 0.5, 0.75));
+                INVALID_VERSION, 10, 30, 15, 10, 15, 10, 25, 45, 0.25, 0.5, 0.75));
         assertThrows(IllegalArgumentException.class, () -> new GuidedSeverityProfile(
-                "bad", 10, 15, 30, 10, 15, 10, 10, 45, 0.25, 0.5, 0.75));
+                INVALID_VERSION, 10, 15, 30, 10, 15, 10, 10, 45, 0.25, 0.5, 0.75));
         assertThrows(IllegalArgumentException.class, () -> new GuidedSeverityProfile(
-                "bad", 10, 15, 30, 10, 15, 10, 25, 45, 0.80, 0.5, 0.75));
+                INVALID_VERSION, 10, 15, 30, 10, 15, 10, 25, 45, 0.80, 0.5, 0.75));
         assertThrows(IllegalArgumentException.class, () -> new GuidedSeverityProfile(
-                "bad", 10, 15, 30, 10, 15, 10, 25, 45, 0.25, Double.NaN, 0.75));
+                INVALID_VERSION, 10, 15, 30, 10, 15, 10, 25, 45, 0.25, Double.NaN, 0.75));
         assertThrows(IllegalArgumentException.class, () -> trial().durationFraction(3));
         assertTrue(trial().durationFraction(-1) < trial().durationFraction(1));
     }
