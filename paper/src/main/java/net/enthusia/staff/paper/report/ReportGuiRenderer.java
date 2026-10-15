@@ -457,12 +457,14 @@ final class ReportGuiRenderer {
         };
     }
 
+    private static final int DESCRIPTION_PREVIEW_LIMIT = 480;
+
     // A lore tooltip only previews a bounded amount of text. Make the limit
     // explicit so a staff reviewer cannot mistake the preview for the full report.
     static List<Component> descriptionPreview(String value, UUID reportId) {
         List<Component> lines = new ArrayList<>(wrap(value));
         String compact = value.replace('\r', ' ').replace('\n', ' ');
-        if (compact.length() > 480) {
+        if (compact.length() > DESCRIPTION_PREVIEW_LIMIT) {
             lines.add(Component.text("Preview truncated. Read the full description:", NamedTextColor.YELLOW));
             lines.add(Component.text("/reports view " + reportId, NamedTextColor.WHITE));
         }
