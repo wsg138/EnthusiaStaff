@@ -71,7 +71,7 @@ Run each check with exact player roles and timestamps. For every case record **O
 
 ## D. Owner acceptance and staged release decision
 
-The lead collects the above evidence and a reviewed list of *exact* included commits/PRs, rollback test logs, Cordacy/Codacy issue resolution, CodeRabbit/human reviews, scope-sensitive permission matrix, proposed policy thresholds and calibrated example punishments. The owner must explicitly approve the fixed scoring and unknown-warning behavior; no automatic policy deployment. Resolve #612's two Codacy medium findings; investigate #615 protocol matrix failure for any release containing that branch. No activation of case commands or retraction without separately authorized current-role proofs and transport verification.
+The lead collects the above evidence and a reviewed list of *exact* included commits/PRs, rollback test logs, Codacy issue resolution, CodeRabbit/human reviews, scope-sensitive permission matrix, proposed policy thresholds and calibrated example punishments. The owner must explicitly approve the fixed scoring and unknown-warning behavior; no automatic policy deployment. Resolve #612's two Codacy medium findings; investigate #615 protocol matrix failure for any release containing that branch. No activation of case commands or retraction without separately authorized current-role proofs and transport verification.
 
 If every required test passes, propose a **new, reviewed release candidate** from the intended source graph, pin its actual artifact digest and complete independent staging sign-off. Before any future production action, require a separate change window and named operator/approver; this document does not grant that approval.
 
