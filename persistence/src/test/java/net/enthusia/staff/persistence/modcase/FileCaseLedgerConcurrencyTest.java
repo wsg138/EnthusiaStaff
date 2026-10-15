@@ -3,6 +3,7 @@ package net.enthusia.staff.persistence.modcase;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import java.nio.file.Path;
 import java.time.Instant;
@@ -210,7 +211,7 @@ class FileCaseLedgerConcurrencyTest {
         ledger.accept(notice(UUID.randomUUID(), 1, CaseNotice.State.OPEN));
         java.nio.file.Files.writeString(directory.resolve("moderation-case-ledger.json"),
                 "{invalid snapshot}");
-        org.junit.jupiter.api.Assertions.assertThrows(IllegalStateException.class,
+        assertThrows(IllegalStateException.class,
                 () -> new FileCaseLedger(directory));
     }
 
