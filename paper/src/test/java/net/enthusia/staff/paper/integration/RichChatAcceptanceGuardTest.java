@@ -25,6 +25,7 @@ import org.junit.jupiter.api.Test;
 
 /** Regression guards for the public rich-artifact boundary; no addon classes required. */
 class RichChatAcceptanceGuardTest {
+    private static final String SERVER_ID = "SMP";
     private static final long NOW = 1_800_000_000_000L;
     private static final Clock CLOCK = Clock.fixed(Instant.ofEpochMilli(NOW), ZoneOffset.UTC);
 
@@ -72,15 +73,15 @@ class RichChatAcceptanceGuardTest {
     @Test
     void lookupRenderAndNullStageFailuresAreIsolated() {
         var message = RoseChatOutboundRenderBridgeIntegration.toWire(
-                "SMP", rendered(ChannelClassification.PUBLIC));
+                SERVER_ID, rendered(ChannelClassification.PUBLIC));
         assertTrue(RichChatArtifactService.forTest(
                 () -> { throw new IllegalStateException("lookup"); }, CLOCK)
-                .render("SMP", message).isEmpty());
+                .render(SERVER_ID, message).isEmpty());
         assertTrue(RichChatArtifactService.forTest(
                 () -> request -> { throw new IllegalStateException("render"); }, CLOCK)
-                .render("SMP", message).isEmpty());
+                .render(SERVER_ID, message).isEmpty());
         assertTrue(RichChatArtifactService.forTest(
-                () -> request -> null, CLOCK).render("SMP", message).isEmpty());
+                () -> request -> null, CLOCK).render(SERVER_ID, message).isEmpty());
     }
 
     @Test
@@ -93,10 +94,10 @@ class RichChatAcceptanceGuardTest {
                                 "image/png", "Shared item", new byte[] {1}))), CLOCK);
         var messages = IntStream.range(0, 12)
                 .mapToObj(index -> RoseChatOutboundRenderBridgeIntegration.toWire(
-                        "SMP", rendered(ChannelClassification.PUBLIC)))
+                        SERVER_ID, rendered(ChannelClassification.PUBLIC)))
                 .toList();
         var requests = messages.stream()
-                .map(message -> CompletableFuture.supplyAsync(() -> service.render("SMP", message)))
+                .map(message -> CompletableFuture.supplyAsync(() -> service.render(SERVER_ID, message)))
                 .toList();
 
         for (int index = 0; index < messages.size(); index++) {
@@ -132,7 +133,7 @@ class RichChatAcceptanceGuardTest {
             AtomicReference<OutboundChatRenderBridge> bridge, RichChatArtifactService artifacts
     ) {
         return new RoseChatOutboundRenderBridgeIntegration(
-                "SMP", CLOCK, installed -> {
+                SERVER_ID, CLOCK, installed -> {
                     bridge.set(installed);
                     return () -> { };
                 }, 8, artifacts);
