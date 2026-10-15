@@ -7,6 +7,7 @@ import java.util.UUID;
 import net.enthusia.staff.domain.report.CreateReportRequest;
 import net.enthusia.staff.domain.report.ReportDetails;
 import net.enthusia.staff.domain.report.ReportEvidencePurgeResult;
+import net.enthusia.staff.domain.report.ReportMessagesPage;
 import net.enthusia.staff.domain.report.ReportQueue;
 import net.enthusia.staff.domain.report.ReportStateChangeRequest;
 import net.enthusia.staff.domain.report.ReportStateChangeResult;
@@ -21,6 +22,11 @@ public interface ReportStore {
     List<ReportSummary> listActiveForTarget(UUID targetId, int limit);
 
     Optional<ReportDetails> details(UUID reportId);
+
+    /** A bounded staff-only chronological history; implementations must fail closed if unsupported. */
+    default ReportMessagesPage messages(UUID reportId, int page) {
+        throw new UnsupportedOperationException("Report message history is unavailable");
+    }
 
     ReportStateChangeResult changeState(ReportStateChangeRequest request);
 

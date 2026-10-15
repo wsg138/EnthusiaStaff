@@ -18,6 +18,8 @@ import net.enthusia.staff.domain.ports.ReportStore;
 import net.enthusia.staff.domain.ports.PlayerDirectory;
 import net.enthusia.staff.domain.report.ReportAction;
 import net.enthusia.staff.domain.report.ReportDetails;
+import net.enthusia.staff.domain.report.ReportMessage;
+import net.enthusia.staff.domain.report.ReportMessagesPage;
 import net.enthusia.staff.domain.report.ReportQueue;
 import net.enthusia.staff.domain.report.ReportStateChangeRequest;
 import net.enthusia.staff.domain.report.ReportStateChangeResult;
@@ -41,6 +43,9 @@ public final class ReportsCommand implements CommandExecutor, TabCompleter {
     private static final int SINGLE_ARGUMENT = 1;
     private static final int MIN_NOTE_ARGUMENTS = 2;
     private static final int VIEW_ARGUMENTS = 2;
+    private static final int MESSAGE_MAX_PAGE = 10_000;
+    private static final int MESSAGE_CHUNK_SIZE = 180;
+    private static final int MAX_LEGACY_BODY_CHARS = 4_000;
     private static final int MIN_EVIDENCE_ARGUMENTS = 3;
     private static final int MAX_EVIDENCE_ARGUMENTS = 5;
     private static final int STATE_CHANGE_MIN_ARGUMENTS = 3;
@@ -117,6 +122,7 @@ public final class ReportsCommand implements CommandExecutor, TabCompleter {
             case "cancel" -> cancel(sender, arguments);
             case "evidence" -> evidence(sender, arguments);
             case "view" -> view(sender, arguments);
+            case "messages" -> messages(sender, arguments);
             default -> queueOrStateChange(sender, arguments);
         };
     }
@@ -141,6 +147,33 @@ public final class ReportsCommand implements CommandExecutor, TabCompleter {
         if (Objects.nonNull(reportId)) {
             submit(sender, () -> details(sender, reportId));
         }
+        return true;
+    }
+
+    private boolean messages(CommandSender sender, String[] arguments) {
+        if (arguments.length < 2 || arguments.length > 3) {
+            send(sender, "Usage: /reports messages <report-id> [page]");
+            return true;
+        }
+        UUID reportId = uuid(sender, arguments[1]);
+        if (reportId == null) {
+            return true;
+        }
+        int page = 1;
+        if (arguments.length == 3) {
+            try {
+                page = Integer.parseInt(arguments[2]);
+            } catch (NumberFormatException exception) {
+                send(sender, "Report message page must be a positive integer.");
+                return true;
+            }
+        }
+        if (page < 1 || page > MESSAGE_MAX_PAGE) {
+            send(sender, "Report message page must be from 1 to " + MESSAGE_MAX_PAGE + '.');
+            return true;
+        }
+        int requested = page;
+        submit(sender, () -> renderMessages(sender, reportId, requested));
         return true;
     }
 
@@ -329,6 +362,8 @@ public final class ReportsCommand implements CommandExecutor, TabCompleter {
                 "Server=" + summary.serverId() + " world=" + details.worldId().orElse(UNAVAILABLE)
                         + " reporter-coordinates=restricted target-coordinates=restricted"
         );
+        send(sender, "Case history: /reports messages " + reportId
+                + " [page] (reporter follow-ups, internal actions and unverified legacy entries).");
         send(sender, "Evidence snapshots: public-chat=" + details.publicChatSnapshots().size()
                 + ", private-message=" + details.privateMessageSnapshots().size()
                 + ", client=" + details.clientEvidenceSnapshots().size());
@@ -337,6 +372,67 @@ public final class ReportsCommand implements CommandExecutor, TabCompleter {
                 () -> "Inspect retained contents with /reports evidence <report-id> <public|private|client> [snapshot] [page].",
                 "Sensitive evidence contents and exact coordinates require " + EVIDENCE_PERMISSION + '.'
         );
+    }
+
+    private void renderMessages(CommandSender sender, UUID reportId, int requestedPage) {
+        ReportStore store = reports.get();
+        if (store == null) {
+            send(sender, "Report storage is not ready.");
+            return;
+        }
+        if (store.details(reportId).isEmpty()) {
+            send(sender, "That report does not exist.");
+            return;
+        }
+        ReportMessagesPage page = store.messages(reportId, requestedPage);
+        List<String> output = new ArrayList<>();
+        output.add("Report " + reportId + " case messages, page " + requestedPage
+                + " (original description is shown in /reports view):");
+        for (ReportMessage entry : page.messages()) {
+            String kind = switch (entry.origin()) {
+                case REPORTER_FOLLOWUP -> "Reporter follow-up";
+                case STAFF_ACTION -> "Staff action note";
+                case UNKNOWN -> "Historical message (origin unverified)";
+            };
+            output.add(kind + " - " + entry.createdAt() + " - " + playerName(entry.actorId())
+                    + " (" + entry.actorId() + "):");
+            appendMessageBody(output, entry.body());
+        }
+        if (page.messages().isEmpty()) {
+            output.add("No case messages on this page.");
+        }
+        if (page.hasMore()) {
+            output.add("Next: /reports messages " + reportId + " " + (requestedPage + 1));
+        }
+        // Async IO can complete after a player's staff permission is revoked.
+        // Keep the entire staff-only message history behind a fresh, entity-owned check.
+        List<String> immutable = List.copyOf(output);
+        responses.execute(sender, () -> {
+            if (!sender.hasPermission(MANAGE_PERMISSION)) {
+                sender.sendMessage(StaffMessageStyle.style(Component.text(
+                        "Report access was revoked before the response could be delivered.")));
+                return;
+            }
+            for (String line : immutable) {
+                sender.sendMessage(StaffMessageStyle.style(Component.text(line)));
+            }
+        });
+    }
+
+    private static void appendMessageBody(List<String> output, String body) {
+        String compact = body.replace('\r', ' ').replace('\n', ' ');
+        int displayed = Math.min(compact.length(), MAX_LEGACY_BODY_CHARS);
+        for (int start = 0; start < displayed;) {
+            int end = Math.min(start + MESSAGE_CHUNK_SIZE, displayed);
+            if (end < displayed && Character.isHighSurrogate(compact.charAt(end - 1))) {
+                end--;
+            }
+            output.add(compact.substring(start, end));
+            start = end;
+        }
+        if (compact.length() > displayed) {
+            output.add("Historical message exceeds the safe chat display limit; remaining text omitted.");
+        }
     }
 
     private void renderEvidence(
@@ -516,6 +612,8 @@ public final class ReportsCommand implements CommandExecutor, TabCompleter {
         sender.sendMessage(StaffMessageStyle.style(Component.text("       /reports <open|mine|claimed|review|closed>")));
         sender.sendMessage(StaffMessageStyle.style(Component.text("       /reports view <report-id>")));
         sender.sendMessage(StaffMessageStyle.style(Component.text(
+                "       /reports messages <report-id> [page]")));
+        sender.sendMessage(StaffMessageStyle.style(Component.text(
                 "       /reports evidence <report-id> <public|private|client> [snapshot] [page]"
         )));
         sender.sendMessage(StaffMessageStyle.style(Component.text(
@@ -530,7 +628,7 @@ public final class ReportsCommand implements CommandExecutor, TabCompleter {
         }
         if (arguments.length == SINGLE_ARGUMENT) {
             List<String> suggestions = new ArrayList<>(List.of(
-                    "note", "cancel", "open", "mine", "claimed", "review", "closed", "view",
+                    "note", "cancel", "open", "mine", "claimed", "review", "closed", "view", "messages",
                     "claim", "awaitreview", "close", "noviolation"
             ));
             if (!sender.hasPermission(EVIDENCE_PERMISSION)) {

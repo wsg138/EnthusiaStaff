@@ -15,6 +15,7 @@ import static net.enthusia.staff.integration.ReportIntegrationFixtures.request;
 import static net.enthusia.staff.integration.ReportIntegrationFixtures.requestWithEvidence;
 import static net.enthusia.staff.integration.ReportIntegrationFixtures.stateChange;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -40,6 +41,8 @@ import net.enthusia.staff.domain.ports.ReportStore;
 import net.enthusia.staff.domain.report.CreateReportRequest;
 import net.enthusia.staff.domain.report.ReportAction;
 import net.enthusia.staff.domain.report.ReportDetails;
+import net.enthusia.staff.domain.report.ReportMessage;
+import net.enthusia.staff.domain.report.ReportMessagesPage;
 import net.enthusia.staff.domain.report.ReportEvidencePurgeResult;
 import net.enthusia.staff.domain.report.ReportQueue;
 import net.enthusia.staff.domain.report.ReportState;
@@ -105,7 +108,81 @@ class ReportStoreIntegrationTest {
             assertTrue(details.privateMessageSnapshots().getFirst().contains("Private evidence first"));
             assertEquals(1L, reportCount(accepted.reportId()));
             assertEquals(1L, reportMessageCount(accepted.reportId()));
+            ReportMessagesPage messages = store.messages(accepted.reportId(), 1);
+            assertEquals(1, messages.messages().size());
+            assertEquals(ReportMessage.Origin.REPORTER_FOLLOWUP, messages.messages().getFirst().origin());
+            assertEquals(reporterId, messages.messages().getFirst().actorId());
+            assertEquals("Report description second", messages.messages().getFirst().body());
+            assertFalse(messages.hasMore(), "An idempotent replay must not add duplicate messages");
             assertEquals(1L, discordCreationCount(accepted.reportId()));
+        }
+    }
+
+    @Test
+    void reporterFollowupsAndStaffActionsStayDistinctEvenForSameActor() throws SQLException {
+        UUID reporterId = UUID.randomUUID();
+        UUID targetId = UUID.randomUUID();
+        try (MariaDbRuntime runtime = MariaDb.initialize(databaseConfig(DATABASE))) {
+            seedPlayers(reporterId, targetId);
+            ReportStore store = runtime.reportStore();
+            UUID reportId = accepted(store.submit(
+                    request(reporterId, targetId, "report:message-origin-initial", NOW, "original")
+            )).reportId();
+            accepted(store.submit(request(reporterId, targetId,
+                    "report:message-origin-merged", NOW.plusSeconds(60), "follow-up")));
+            long revision = store.details(reportId).orElseThrow().summary().revision();
+            apply(store, stateChange(reportId, reporterId, ReportAction.CLAIM,
+                    revision, "report-change:same-actor"));
+
+            ReportMessagesPage page = store.messages(reportId, 1);
+            assertEquals(2, page.messages().size());
+            assertEquals(ReportMessage.Origin.STAFF_ACTION, page.messages().getFirst().origin());
+            assertEquals(ReportMessage.Origin.REPORTER_FOLLOWUP, page.messages().getLast().origin());
+            assertEquals(reporterId, page.messages().getFirst().actorId());
+            assertEquals(reporterId, page.messages().getLast().actorId());
+            assertTrue(page.messages().getFirst().body().startsWith("CLAIM:"));
+            assertEquals("Report description follow-up", page.messages().getLast().body());
+            assertFalse(page.hasMore());
+        }
+    }
+
+    @Test
+    void legacyCaseMessagesRemainUnverifiedAndPagesAreBounded() throws SQLException {
+        UUID reporterId = UUID.randomUUID();
+        UUID targetId = UUID.randomUUID();
+        try (MariaDbRuntime runtime = MariaDb.initialize(databaseConfig(DATABASE))) {
+            seedPlayers(reporterId, targetId);
+            ReportStore store = runtime.reportStore();
+            UUID reportId = accepted(store.submit(
+                    request(reporterId, targetId, "report:legacy-messages", NOW, "original")
+            )).reportId();
+            try (Connection connection = connection(DATABASE);
+                 PreparedStatement statement = connection.prepareStatement("""
+                         INSERT INTO report_messages(message_id, report_id, actor_id, body, created_at)
+                         VALUES (?, ?, ?, ?, ?)
+                         """)) {
+                for (int index = 0; index < 7; index++) {
+                    statement.setBytes(1, uuidBytes(UUID.randomUUID()));
+                    statement.setBytes(2, uuidBytes(reportId));
+                    statement.setBytes(3, uuidBytes(reporterId));
+                    statement.setString(4, "legacy-" + index);
+                    statement.setTimestamp(5, java.sql.Timestamp.from(NOW.plusSeconds(10 + index)));
+                    statement.addBatch();
+                }
+                statement.executeBatch();
+            }
+            ReportMessagesPage first = store.messages(reportId, 1);
+            ReportMessagesPage second = store.messages(reportId, 2);
+            assertEquals(5, first.messages().size());
+            assertTrue(first.hasMore());
+            assertEquals(2, second.messages().size());
+            assertFalse(second.hasMore());
+            assertEquals("legacy-0", first.messages().getFirst().body());
+            assertEquals("legacy-6", second.messages().getLast().body());
+            assertTrue(first.messages().stream().allMatch(message ->
+                    message.origin() == ReportMessage.Origin.UNKNOWN));
+            assertThrows(IllegalArgumentException.class, () -> store.messages(reportId, 0));
+            assertThrows(IllegalArgumentException.class, () -> store.messages(reportId, 10_001));
         }
     }
 
