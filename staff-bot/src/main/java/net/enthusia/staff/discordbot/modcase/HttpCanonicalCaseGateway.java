@@ -32,6 +32,26 @@ public final class HttpCanonicalCaseGateway implements AuthorityBackedCaseAction
     private final String clientId;
     private final String bearerSecret;
     private final Sender sender;
+    private final AuthorityProofSource proofSource;
+
+    /**
+     * Only the independent trusted role authority may mint this proof.
+     * StaffBot must never have the HMAC signing key.
+     */
+    @FunctionalInterface
+    public interface AuthorityProofSource {
+        ActorProof issue(AuthorityBackedCaseActions.Command command)
+                throws IOException, InterruptedException;
+    }
+
+    public record ActorProof(long issuedAt, long expiresAt, String signature) {
+        public ActorProof {
+            if (issuedAt < 1 || expiresAt <= issuedAt || expiresAt - issuedAt > 60
+                    || signature == null || !signature.matches("[a-f0-9]{64}")) {
+                throw new IllegalArgumentException("invalid independent actor proof envelope");
+            }
+        }
+    }
 
     @FunctionalInterface
     interface Sender {
@@ -44,28 +64,35 @@ public final class HttpCanonicalCaseGateway implements AuthorityBackedCaseAction
         }
     }
 
-    public HttpCanonicalCaseGateway(URI endpoint, String clientId, String bearerSecret) {
-        this(endpoint, clientId, bearerSecret, defaultSender());
+    public HttpCanonicalCaseGateway(
+            URI endpoint, String clientId, String bearerSecret, AuthorityProofSource proofSource) {
+        this(endpoint, clientId, bearerSecret, proofSource, defaultSender());
     }
 
-    HttpCanonicalCaseGateway(URI endpoint, String clientId, String bearerSecret, Sender sender) {
+    HttpCanonicalCaseGateway(
+            URI endpoint, String clientId, String bearerSecret,
+            AuthorityProofSource proofSource, Sender sender) {
         if (!safeEndpoint(endpoint) || clientId == null
                 || !clientId.matches("[A-Za-z0-9_.-]{1,96}") || bearerSecret == null
-                || bearerSecret.length() < 32 || sender == null) {
+                || bearerSecret.length() < 32 || proofSource == null || sender == null) {
             throw new IllegalArgumentException("invalid inactive case transport configuration");
         }
         this.endpoint = endpoint;
         this.clientId = clientId;
         this.bearerSecret = bearerSecret;
+        this.proofSource = proofSource;
         this.sender = sender;
     }
 
     @Override
     public AuthorityBackedCaseActions.TransportStatus send(AuthorityBackedCaseActions.Command command) {
         Objects.requireNonNull(command, "canonical staff command");
-        HttpRequest request = request(command);
         try {
-            RawResponse reply = sender.send(request);
+            ActorProof proof = proofSource.issue(command);
+            if (proof == null) {
+                return AuthorityBackedCaseActions.TransportStatus.RETRYABLE;
+            }
+            RawResponse reply = sender.send(request(command, proof));
             return status(reply, command);
         } catch (IOException exception) {
             // Connection may have applied command before acknowledgment. NEVER retry with a new id.
@@ -76,7 +103,8 @@ public final class HttpCanonicalCaseGateway implements AuthorityBackedCaseAction
         }
     }
 
-    private HttpRequest request(AuthorityBackedCaseActions.Command command) {
+    private HttpRequest request(
+            AuthorityBackedCaseActions.Command command, ActorProof proof) {
         String body;
         try {
             body = JSON.writeValueAsString(Map.of(
@@ -86,7 +114,10 @@ public final class HttpCanonicalCaseGateway implements AuthorityBackedCaseAction
                     "expected_revision", command.expectedRevision(),
                     "staff_actor_id", command.actor(),
                     "command_id", command.commandId(),
-                    "action", command.action().name()
+                    "action", command.action().name(),
+                    "actor_proof_issued_at", proof.issuedAt(),
+                    "actor_proof_expires_at", proof.expiresAt(),
+                    "actor_proof_signature", proof.signature()
             ));
         } catch (JsonProcessingException exception) {
             throw new IllegalArgumentException("case command could not be encoded", exception);

@@ -30,6 +30,10 @@ class HttpCanonicalCaseGatewayTest {
     private static final String SCOPE = "smp";
     private static final URI ENDPOINT = URI.create("http://127.0.0.1:43210/v1/staff-case-commands");
     private static final ObjectMapper JSON = new ObjectMapper();
+    private static final String SYNTHETIC_SIGNATURE = "a".repeat(64);
+    private static final HttpCanonicalCaseGateway.AuthorityProofSource PROOF_SOURCE =
+            command -> new HttpCanonicalCaseGateway.ActorProof(
+                    1791993600L, 1791993630L, SYNTHETIC_SIGNATURE);
 
     private AuthorityBackedCaseActions.Command command(CaseNotice.Action action) {
         return new AuthorityBackedCaseActions.Command(CaseNotice.Origin.MINECRAFT, SCOPE,
@@ -47,7 +51,7 @@ class HttpCanonicalCaseGatewayTest {
         AuthorityBackedCaseActions.Command command = command(CaseNotice.Action.CLAIM);
         List<HttpRequest> outgoing = new ArrayList<>();
         HttpCanonicalCaseGateway gateway = new HttpCanonicalCaseGateway(
-                ENDPOINT, CLIENT_ID, SECRET, request -> {
+                ENDPOINT, CLIENT_ID, SECRET, PROOF_SOURCE, request -> {
                     outgoing.add(request);
                     return new HttpCanonicalCaseGateway.RawResponse(200, response(command, STATE_CLAIMED));
                 });
@@ -69,6 +73,9 @@ class HttpCanonicalCaseGatewayTest {
         assertEquals("command:synthetic:0001", payload.path("command_id").asText());
         assertEquals(0, payload.path("expected_revision").asInt());
         assertEquals("CLAIM", payload.path("action").asText());
+        assertEquals(1791993600L, payload.path("actor_proof_issued_at").asLong());
+        assertEquals(1791993630L, payload.path("actor_proof_expires_at").asLong());
+        assertEquals(SYNTHETIC_SIGNATURE, payload.path("actor_proof_signature").asText());
         assertFalse(body.contains(SECRET));
     }
 
@@ -82,7 +89,7 @@ class HttpCanonicalCaseGatewayTest {
                 response(command, STATE_CLAIMED).replace("\"replay\":false", "\"replay\":\"false\""));
         assertEquals(7, responses.size());
         responses.forEach(body -> {
-            var gateway = new HttpCanonicalCaseGateway(ENDPOINT, CLIENT_ID, SECRET,
+            var gateway = new HttpCanonicalCaseGateway(ENDPOINT, CLIENT_ID, SECRET, PROOF_SOURCE,
                     request -> new HttpCanonicalCaseGateway.RawResponse(200, body));
             assertEquals(AuthorityBackedCaseActions.TransportStatus.RETRYABLE,
                     gateway.send(command), body);
@@ -94,22 +101,22 @@ class HttpCanonicalCaseGatewayTest {
         var command = command(CaseNotice.Action.RESOLVE);
         int[] calls = {0};
         HttpCanonicalCaseGateway unknown = new HttpCanonicalCaseGateway(
-                ENDPOINT, CLIENT_ID, SECRET, request -> {
+                ENDPOINT, CLIENT_ID, SECRET, PROOF_SOURCE, request -> {
                     calls[0]++;
                     throw new IOException("synthetic connection closed after uncertain send");
                 });
         assertEquals(AuthorityBackedCaseActions.TransportStatus.RETRYABLE, unknown.send(command));
         assertEquals(1, calls[0]);
         List.of(401, 403, 404, 422).forEach(code -> {
-            var denied = new HttpCanonicalCaseGateway(ENDPOINT, CLIENT_ID, SECRET,
+            var denied = new HttpCanonicalCaseGateway(ENDPOINT, CLIENT_ID, SECRET, PROOF_SOURCE,
                     request -> new HttpCanonicalCaseGateway.RawResponse(code, ""));
             assertEquals(AuthorityBackedCaseActions.TransportStatus.DENIED,
                     denied.send(command));
         });
-        var stale = new HttpCanonicalCaseGateway(ENDPOINT, CLIENT_ID, SECRET,
+        var stale = new HttpCanonicalCaseGateway(ENDPOINT, CLIENT_ID, SECRET, PROOF_SOURCE,
                 request -> new HttpCanonicalCaseGateway.RawResponse(409, ""));
         assertEquals(AuthorityBackedCaseActions.TransportStatus.STALE, stale.send(command));
-        var accepted = new HttpCanonicalCaseGateway(ENDPOINT, CLIENT_ID, SECRET,
+        var accepted = new HttpCanonicalCaseGateway(ENDPOINT, CLIENT_ID, SECRET, PROOF_SOURCE,
                 request -> new HttpCanonicalCaseGateway.RawResponse(200, response(command, "CLOSED")));
         assertEquals(AuthorityBackedCaseActions.TransportStatus.ACCEPTED, accepted.send(command));
     }
@@ -124,10 +131,43 @@ class HttpCanonicalCaseGatewayTest {
                 "file:///v1/staff-case-commands");
         badEndpoints.forEach(endpoint -> assertThrows(IllegalArgumentException.class,
                 () -> new HttpCanonicalCaseGateway(
-                        URI.create(endpoint), CLIENT_ID, SECRET)));
+                        URI.create(endpoint), CLIENT_ID, SECRET, PROOF_SOURCE)));
         assertThrows(IllegalArgumentException.class,
-                () -> new HttpCanonicalCaseGateway(ENDPOINT, CLIENT_ID, "short"));
+                () -> new HttpCanonicalCaseGateway(ENDPOINT, CLIENT_ID, "short", PROOF_SOURCE));
         assertTrue(SECRET.length() >= 32);
+    }
+
+    @Test
+    void missingOrUnavailableProofNeverMakesAnHttpRequest() {
+        var command = command(CaseNotice.Action.CLAIM);
+        int[] transmissions = {0};
+        HttpCanonicalCaseGateway.Sender sender = request -> {
+            transmissions[0]++;
+            throw new AssertionError("proof missing, request must not be sent");
+        };
+        HttpCanonicalCaseGateway missing = new HttpCanonicalCaseGateway(
+                ENDPOINT, CLIENT_ID, SECRET, ignored -> null, sender);
+        assertEquals(AuthorityBackedCaseActions.TransportStatus.RETRYABLE,
+                missing.send(command));
+        HttpCanonicalCaseGateway unavailable = new HttpCanonicalCaseGateway(
+                ENDPOINT, CLIENT_ID, SECRET, ignored -> {
+                    throw new IOException("synthetic Paper role authority unavailable");
+                }, sender);
+        assertEquals(AuthorityBackedCaseActions.TransportStatus.RETRYABLE,
+                unavailable.send(command));
+        assertEquals(0, transmissions[0]);
+    }
+
+    @Test
+    void malformedProofCannotBeCreatedAndProofSourceMustBeProvided() {
+        assertThrows(IllegalArgumentException.class,
+                () -> new HttpCanonicalCaseGateway.ActorProof(4, 3, SYNTHETIC_SIGNATURE));
+        assertThrows(IllegalArgumentException.class,
+                () -> new HttpCanonicalCaseGateway.ActorProof(4, 80, SYNTHETIC_SIGNATURE));
+        assertThrows(IllegalArgumentException.class,
+                () -> new HttpCanonicalCaseGateway.ActorProof(4, 15, "not-a-mac"));
+        assertThrows(IllegalArgumentException.class,
+                () -> new HttpCanonicalCaseGateway(ENDPOINT, CLIENT_ID, SECRET, null));
     }
 
     private static String randomTestSecret() {
