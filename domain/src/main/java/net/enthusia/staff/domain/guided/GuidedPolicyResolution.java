@@ -48,10 +48,19 @@ public final class GuidedPolicyResolution {
 
     private static void checkTransition(List<PunishmentStep> ladder, int baselineStep,
                                         int selected, List<SanctionSpec> originals) {
-        if (selected > baselineStep && !safeContextualTransition(
-                ladder.get(baselineStep).sanctions(), originals)) {
-            throw new IllegalArgumentException(
-                    "Incident severity would change sanction class or permanence; manual review required");
+        if (selected <= baselineStep) {
+            return;
+        }
+        List<SanctionSpec> previous = ladder.get(baselineStep).sanctions();
+        for (int step = baselineStep + 1; step <= selected; step++) {
+            List<SanctionSpec> next = ladder.get(step).sanctions();
+            // A large incident score must not jump over a restricted policy step.
+            requireOrdinaryGuidedRemedy(next);
+            if (!safeContextualTransition(previous, next)) {
+                throw new IllegalArgumentException(
+                        "Incident severity would cross a restricted sanction tier; manual review required");
+            }
+            previous = next;
         }
     }
 

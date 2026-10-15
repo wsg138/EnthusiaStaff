@@ -133,6 +133,26 @@ class GuidedPolicyResolutionTest {
     }
 
     @Test
+    void severityCannotSkipRestrictedIntermediatePolicyTier() {
+        var incident = finding("large-scale", "yes");
+        List<PunishmentStep> steps = List.of(
+                new PunishmentStep(0, "Warning", List.of(warn())),
+                new PunishmentStep(1, "Requires ban review", List.of(
+                        new SanctionSpec(SanctionType.BAN,
+                                SanctionLength.temporary(Duration.ofDays(1))))),
+                new PunishmentStep(2, "Temporary mute", List.of(mute(60))));
+        ReasonPolicy policy = new ReasonPolicy(FLOOD_ID, SPAM_FAMILY,
+                "Flooding", 15, true, steps);
+        EscalationDecision prior = new EscalationDecision(
+                0, 0, 0, List.of(), steps.getFirst());
+        PunishmentAssessment assessed = new PunishmentAssessment(
+                "fixture.restricted-middle", policy, prior, List.of(warn()));
+
+        assertThrows(IllegalArgumentException.class,
+                () -> GuidedPolicyResolution.calculate(incident, assessed, 0));
+    }
+
+    @Test
     void unsafeOrMismatchedOffenseIsRejected() {
         var spam = finding("few", "not-applicable");
         assertThrows(IllegalArgumentException.class, () -> GuidedPolicyResolution.calculate(
