@@ -47,7 +47,7 @@ class LuckPermsCommandBridgeAuthorityResolverTest {
 
     private static LuckPerms fakeLuckPerms(AtomicInteger lookups) {
         UserManager users = (UserManager) Proxy.newProxyInstance(
-                UserManager.class.getClassLoader(), new Class<?>[] {UserManager.class},
+                Thread.currentThread().getContextClassLoader(), new Class<?>[] {UserManager.class},
                 (proxy, method, arguments) -> {
                     if ("loadUser".equals(method.getName())) {
                         lookups.incrementAndGet();
@@ -56,7 +56,7 @@ class LuckPermsCommandBridgeAuthorityResolverTest {
                     throw new UnsupportedOperationException(method.getName());
                 });
         return (LuckPerms) Proxy.newProxyInstance(
-                LuckPerms.class.getClassLoader(), new Class<?>[] {LuckPerms.class},
+                Thread.currentThread().getContextClassLoader(), new Class<?>[] {LuckPerms.class},
                 (proxy, method, arguments) -> {
                     if ("getUserManager".equals(method.getName())) {
                         return users;
