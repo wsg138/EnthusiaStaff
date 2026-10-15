@@ -18,6 +18,7 @@ import org.junit.jupiter.api.io.TempDir;
 
 class AuthorityBackedCaseActionsTest {
     private static final Instant NOW = Instant.parse("2026-10-14T16:00:00Z");
+    private static final String STAFF_ALICE = "staff:alice";
     @TempDir Path directory;
 
     private CaseNotice notice(UUID id, long version, CaseNotice.State state, String claimant) {
@@ -47,18 +48,18 @@ class AuthorityBackedCaseActionsTest {
         AuthorityBackedCaseActions actions = actions(replica, command -> {
             sent.add(command);
             return AuthorityBackedCaseActions.TransportStatus.ACCEPTED;
-        }, (actor, event, action) -> actor.equals("staff:alice"));
+        }, (actor, event, action) -> actor.equals(STAFF_ALICE));
         assertEquals(AuthorityBackedCaseActions.Outcome.SUBMITTED_AWAITING_EVENT,
-                actions.claim(key(open), 1, "staff:alice", "command:claim:1"));
+                actions.claim(key(open), 1, STAFF_ALICE, "command:claim:1"));
         assertEquals(1, sent.size());
         assertEquals(1, sent.get(0).expectedRevision());
         assertEquals(id, sent.get(0).caseId());
         assertEquals(CaseNotice.State.OPEN, replica.find(key(open)).orElseThrow().state());
         assertEquals(1, replica.find(key(open)).orElseThrow().revision());
-        CaseNotice claimed = notice(id, 2, CaseNotice.State.CLAIMED, "staff:alice");
+        CaseNotice claimed = notice(id, 2, CaseNotice.State.CLAIMED, STAFF_ALICE);
         assertEquals(CaseLedger.Ingest.ADVANCED, replica.accept(claimed));
         assertEquals(AuthorityBackedCaseActions.Outcome.SUBMITTED_AWAITING_EVENT,
-                actions.resolve(key(claimed), 2, "staff:alice", "command:resolve:2"));
+                actions.resolve(key(claimed), 2, STAFF_ALICE, "command:resolve:2"));
         assertEquals(CaseNotice.State.CLAIMED,
                 replica.find(key(claimed)).orElseThrow().state());
         assertEquals(2, replica.find(key(claimed)).orElseThrow().revision());
@@ -68,7 +69,7 @@ class AuthorityBackedCaseActionsTest {
     void staleDeniedAndCrossActorResolveNeverReachRemoteGateway() {
         FileCaseLedger replica = new FileCaseLedger(directory);
         CaseNotice claimed = notice(UUID.randomUUID(), 5,
-                CaseNotice.State.CLAIMED, "staff:alice");
+                CaseNotice.State.CLAIMED, STAFF_ALICE);
         replica.accept(claimed);
         List<AuthorityBackedCaseActions.Command> sent = new ArrayList<>();
         AuthorityBackedCaseActions actions = actions(replica, cmd -> {
@@ -76,13 +77,13 @@ class AuthorityBackedCaseActionsTest {
             return AuthorityBackedCaseActions.TransportStatus.ACCEPTED;
         }, (actor, event, kind) -> actor.startsWith("staff:"));
         assertEquals(AuthorityBackedCaseActions.Outcome.STALE,
-                actions.resolve(key(claimed), 4, "staff:alice", "command:stale:01"));
+                actions.resolve(key(claimed), 4, STAFF_ALICE, "command:stale:01"));
         assertEquals(AuthorityBackedCaseActions.Outcome.DENIED,
                 actions.resolve(key(claimed), 5, "visitor", "command:denied:1"));
         assertEquals(AuthorityBackedCaseActions.Outcome.NOT_APPLICABLE,
                 actions.resolve(key(claimed), 5, "staff:bob", "command:other:01"));
         assertEquals(AuthorityBackedCaseActions.Outcome.NOT_APPLICABLE,
-                actions.claim(key(claimed), 5, "staff:alice", "command:claim:05"));
+                actions.claim(key(claimed), 5, STAFF_ALICE, "command:claim:05"));
         assertTrue(sent.isEmpty());
     }
 
@@ -95,13 +96,13 @@ class AuthorityBackedCaseActionsTest {
                 cmd -> AuthorityBackedCaseActions.TransportStatus.RETRYABLE,
                 (actor, event, action) -> true);
         assertEquals(AuthorityBackedCaseActions.Outcome.RETRYABLE,
-                pending.claim(key(open), 1, "staff:alice", "command:retry:1"));
+                pending.claim(key(open), 1, STAFF_ALICE, "command:retry:1"));
         assertEquals(CaseNotice.State.OPEN, replica.find(key(open)).orElseThrow().state());
         AuthorityBackedCaseActions stale = actions(replica,
                 cmd -> AuthorityBackedCaseActions.TransportStatus.STALE,
                 (actor, event, action) -> true);
         assertEquals(AuthorityBackedCaseActions.Outcome.STALE,
-                stale.claim(key(open), 1, "staff:alice", "command:stale:2"));
+                stale.claim(key(open), 1, STAFF_ALICE, "command:stale:2"));
         assertEquals(CaseNotice.State.OPEN, replica.find(key(open)).orElseThrow().state());
     }
 
@@ -116,7 +117,7 @@ class AuthorityBackedCaseActionsTest {
             return AuthorityBackedCaseActions.TransportStatus.ACCEPTED;
         }, (actor, event, action) -> true);
         assertThrows(IllegalArgumentException.class,
-                () -> actions.claim(key(open), 1, "staff:alice", "x"));
+                () -> actions.claim(key(open), 1, STAFF_ALICE, "x"));
         assertTrue(sent.isEmpty());
         assertEquals(CaseNotice.State.OPEN, replica.find(key(open)).orElseThrow().state());
     }
@@ -133,7 +134,7 @@ class AuthorityBackedCaseActionsTest {
                 cmd -> fail("Must not submit cross-scope command"),
                 (actor, event, action) -> true);
         assertEquals(AuthorityBackedCaseActions.Outcome.NOT_FOUND,
-                actions.claim(crossScope, 1, "staff:alice", "command:wrong:01"));
+                actions.claim(crossScope, 1, STAFF_ALICE, "command:wrong:01"));
     }
 
     @Test
@@ -148,16 +149,16 @@ class AuthorityBackedCaseActionsTest {
         AuthorityBackedCaseActions actions = actions(replica, command -> {
             sent.add(command);
             return AuthorityBackedCaseActions.TransportStatus.ACCEPTED;
-        }, (actor, event, action) -> actor.equals("staff:alice"));
+        }, (actor, event, action) -> actor.equals(STAFF_ALICE));
         assertEquals(AuthorityBackedCaseActions.Outcome.SUBMITTED_AWAITING_EVENT,
-                actions.claim(zero, 0, "staff:alice", "command:claim:zero"));
+                actions.claim(zero, 0, STAFF_ALICE, "command:claim:zero"));
         assertEquals(0, sent.get(0).expectedRevision());
         assertEquals(0, replica.find(zero).orElseThrow().revision());
         assertEquals(CaseNotice.State.OPEN, replica.find(zero).orElseThrow().state());
-        CaseNotice claimed = notice(id, 1, CaseNotice.State.CLAIMED, "staff:alice");
+        CaseNotice claimed = notice(id, 1, CaseNotice.State.CLAIMED, STAFF_ALICE);
         assertEquals(CaseLedger.Ingest.ADVANCED, replica.accept(claimed));
         assertEquals(AuthorityBackedCaseActions.Outcome.SUBMITTED_AWAITING_EVENT,
-                actions.resolve(key(claimed), 1, "staff:alice", "command:resolve:01"));
+                actions.resolve(key(claimed), 1, STAFF_ALICE, "command:resolve:01"));
     }
 
     @Test
@@ -170,7 +171,7 @@ class AuthorityBackedCaseActionsTest {
                         -1, CaseDelivery.Destination.DISCORD));
         assertThrows(IllegalArgumentException.class,
                 () -> new AuthorityBackedCaseActions.Command(CaseNotice.Origin.MINECRAFT,
-                        "smp", id, -1, "staff:alice",
+                        "smp", id, -1, STAFF_ALICE,
                         CaseNotice.Action.CLAIM, "command:invalid:1"));
     }
 

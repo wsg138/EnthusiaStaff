@@ -68,10 +68,16 @@ public final class AuthorityBackedCaseActions {
             return Outcome.DENIED;
         }
         CaseNotice notice = replica.find(key).orElse(null);
+        return submitKnown(notice, key.revision(), expectedRevision,
+                actor, action, commandId);
+    }
+
+    private Outcome submitKnown(CaseNotice notice, long keyRevision, long expectedRevision,
+                                String actor, CaseNotice.Action action, String commandId) {
         if (notice == null) {
             return Outcome.NOT_FOUND;
         }
-        if (key.revision() != expectedRevision || notice.revision() != expectedRevision) {
+        if (keyRevision != expectedRevision || notice.revision() != expectedRevision) {
             return Outcome.STALE;
         }
         if (!notice.expiresAt().isAfter(clock.instant())) {
