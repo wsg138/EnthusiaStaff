@@ -684,13 +684,9 @@ final class PaperIntegrationManager implements Listener {
             clearIssue(INTERACTIVE_CHAT_RENDERER);
             return;
         }
-        // Explicit opt-in allows native slot-card rendering independently of DiscordSRV.
-        // Keep this before addon discovery: the addon can load yet fail at render time.
-        if (plugin().getConfig().getBoolean(
-                "discord-chat-bridge.independent-rich-renderer-enabled", false)
-                && registerIndependentRichRenderer() == RendererFallback.READY) {
-            return;
-        }
+        // Preserve the installed addon's item thumbnails and native tooltip/lore fidelity.
+        // The opt-in independent slot-card renderer is a fallback, not a replacement
+        // while a functional addon provider is present.
         InteractiveChatStagingArtifactProvider.Discovery discovery =
                 InteractiveChatStagingArtifactProvider.discoverAndRegister(
                         plugin(), clock(), workers());
