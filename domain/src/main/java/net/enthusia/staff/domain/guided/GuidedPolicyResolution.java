@@ -25,7 +25,7 @@ public final class GuidedPolicyResolution {
         int historyStep = assessed.escalation().selectedStep().ordinal();
         int selected = selectedStep(finding.preliminaryImpact(), historyStep, ladder.size());
         List<SanctionSpec> originals = ladder.get(selected).sanctions();
-        checkTransition(ladder, historyStep, selected, originals);
+        checkTransition(ladder, historyStep, selected);
         requireOrdinaryGuidedRemedy(originals);
         String explanation = explanation(finding, historyStep, selected);
         return variableDuration(originals, ladder, selected, preference, explanation);
@@ -47,7 +47,7 @@ public final class GuidedPolicyResolution {
     }
 
     private static void checkTransition(List<PunishmentStep> ladder, int baselineStep,
-                                        int selected, List<SanctionSpec> originals) {
+                                        int selected) {
         if (selected <= baselineStep) {
             return;
         }
