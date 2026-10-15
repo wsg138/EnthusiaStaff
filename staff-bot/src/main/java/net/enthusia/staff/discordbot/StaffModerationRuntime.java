@@ -142,7 +142,8 @@ final class StaffModerationRuntime implements AutoCloseable {
                     new DiscordCommandBridgeCoordinator(
                             new DiscordCommandActorResolver(data::subjectForDiscord),
                             new HttpMinecraftCommandBridgeClient(
-                                    value.endpoints(), value.credential(), value.timeout())
+                                    value.endpoints(), value.credential(), value.timeout()),
+                            value.allowedChannelId()
                     ));
             Optional<ManagedRoleShadowService> managedRoleShadow = configuration.managedRoleShadow().map(value ->
                     new ManagedRoleShadowService(data, value, new com.fasterxml.jackson.databind.ObjectMapper()));

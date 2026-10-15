@@ -85,6 +85,22 @@ class DiscordCommandBridgeCoordinatorTest {
         );
     }
 
+    @Test
+    void consoleChannelIsAnExactAllowlistAndNotAChannelDiscoveryHint() {
+        var coordinator = new DiscordCommandBridgeCoordinator(
+                resolver(Optional.of(versionedSubject())),
+                request -> received(CommandBridgeResponse.withoutOutput(
+                        CommandBridgeOutcome.SUCCESS, "ok")),
+                Clock.fixed(NOW, ZoneOffset.UTC), () -> REQUEST_ID,
+                123456789012345678L);
+        assertTrue(coordinator.allowsChannel(123456789012345678L));
+        assertTrue(!coordinator.allowsChannel(123456789012345679L));
+        assertTrue(!coordinator.allowsChannel(0));
+        assertTrue(!coordinator(resolver(Optional.empty()), request ->
+                received(CommandBridgeResponse.withoutOutput(CommandBridgeOutcome.SUCCESS, "ok")))
+                .allowsChannel(123456789012345678L));
+    }
+
     private static DiscordCommandBridgeCoordinator coordinator(
             DiscordCommandActorResolver resolver,
             DiscordCommandBridgeCoordinator.Transport transport

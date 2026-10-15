@@ -47,6 +47,11 @@ class CommandBridgePolicyTest {
                 policy.evaluate(request(TARGET_SERVER, "list\nstop")).status());
         assertEquals(CommandBridgePolicy.Status.COMMAND_POLICY_REJECTED,
                 policy.evaluate(request(TARGET_SERVER, "list extra")).status());
+        for (String unsafe : List.of("list;stop", "list | stop", "list \"quoted\"",
+                "list 'quoted'", "list \\ stop", "list\u2028stop", "list\u202Espoof")) {
+            assertEquals(CommandBridgePolicy.Status.MALFORMED_COMMAND,
+                    policy.evaluate(request(TARGET_SERVER, unsafe)).status(), unsafe);
+        }
     }
 
     private static CommandBridgeRequest request(String server, String command) {

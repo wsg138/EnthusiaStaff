@@ -677,7 +677,8 @@ final class JdaStaffModerationListener extends ListenerAdapter {
     }
 
     private void dispatchConsole(SlashCommandInteractionEvent event, long actorId) {
-        if (commandBridge.isEmpty()) {
+        if (commandBridge.isEmpty() || !commandBridge.orElseThrow()
+                .allowsChannel(event.getChannel().getIdLong())) {
             unavailable(event);
             return;
         }

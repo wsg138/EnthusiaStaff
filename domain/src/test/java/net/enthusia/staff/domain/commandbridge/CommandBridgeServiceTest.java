@@ -45,7 +45,7 @@ class CommandBridgeServiceTest {
                 audit,
                 true,
                 authorized(StaffRank.ADMIN),
-                command -> {
+                (actor, command) -> {
                     executions.incrementAndGet();
                     return CommandBridgeExecutor.Execution.accepted("players=2 password=hunter2");
                 }
@@ -77,13 +77,32 @@ class CommandBridgeServiceTest {
     }
 
     @Test
+    void signedTransportCannotReviveStaleOrFutureDatedCommandBody() {
+        AtomicInteger executions = new AtomicInteger();
+        FakeAudit audit = new FakeAudit();
+        CommandBridgeService service = service(audit, true, authorized(StaffRank.ADMIN), (actor, cmd) -> {
+            executions.incrementAndGet();
+            return CommandBridgeExecutor.Execution.accepted("unexpected");
+        });
+        for (int offset : new int[] {-31, 31}) {
+            UUID requestId = UUID.randomUUID();
+            CommandBridgeRequest stale = new CommandBridgeRequest(
+                    requestId, new ModerationSubjectId(SUBJECT_ID), DISCORD_ID, ACTOR_ID,
+                    TARGET_SERVER, LIST_COMMAND, CLOCK.instant().plusSeconds(offset));
+            assertEquals(CommandBridgeOutcome.INVALID_REQUEST, service.handle(stale).outcome());
+            assertEquals(CommandBridgeOutcome.INVALID_REQUEST, audit.terminal(requestId));
+        }
+        assertEquals(0, executions.get());
+    }
+
+    @Test
     void revokedRankAtMinecraftExecutionIsRejected() {
         AtomicInteger executions = new AtomicInteger();
         CommandBridgeService service = service(
                 new FakeAudit(),
                 true,
                 authorized(StaffRank.HELPER),
-                command -> {
+                (actor, command) -> {
                     executions.incrementAndGet();
                     return CommandBridgeExecutor.Execution.accepted("should not run");
                 }
@@ -96,7 +115,7 @@ class CommandBridgeServiceTest {
     @Test
     void executionRejectionAndAmbiguousFailureAreNeverRetried() {
         AtomicInteger rejectedCalls = new AtomicInteger();
-        CommandBridgeService rejected = service(new FakeAudit(), true, authorized(StaffRank.MOD), command -> {
+        CommandBridgeService rejected = service(new FakeAudit(), true, authorized(StaffRank.MOD), (actor, command) -> {
             rejectedCalls.incrementAndGet();
             return CommandBridgeExecutor.Execution.rejected();
         });
@@ -104,7 +123,7 @@ class CommandBridgeServiceTest {
         assertEquals(1, rejectedCalls.get());
 
         AtomicInteger ambiguousCalls = new AtomicInteger();
-        CommandBridgeService ambiguous = service(new FakeAudit(), true, authorized(StaffRank.MOD), command -> {
+        CommandBridgeService ambiguous = service(new FakeAudit(), true, authorized(StaffRank.MOD), (actor, command) -> {
             ambiguousCalls.incrementAndGet();
             throw new IllegalStateException("post-dispatch transport state unknown");
         });
@@ -118,7 +137,7 @@ class CommandBridgeServiceTest {
         CountDownLatch entered = new CountDownLatch(1);
         CountDownLatch release = new CountDownLatch(1);
         AtomicInteger executions = new AtomicInteger();
-        CommandBridgeService service = service(audit, true, authorized(StaffRank.MOD), command -> {
+        CommandBridgeService service = service(audit, true, authorized(StaffRank.MOD), (actor, command) -> {
             executions.incrementAndGet();
             entered.countDown();
             await(release);
@@ -141,14 +160,14 @@ class CommandBridgeServiceTest {
         FakeAudit audit = new FakeAudit();
         audit.failCompletions = true;
         AtomicInteger executions = new AtomicInteger();
-        CommandBridgeService firstProcess = service(audit, true, authorized(StaffRank.MOD), command -> {
+        CommandBridgeService firstProcess = service(audit, true, authorized(StaffRank.MOD), (actor, command) -> {
             executions.incrementAndGet();
             return CommandBridgeExecutor.Execution.accepted("ok");
         });
 
         assertEquals(CommandBridgeOutcome.EXECUTION_UNKNOWN, firstProcess.handle(request(TARGET_SERVER, LIST_COMMAND)).outcome());
         audit.failCompletions = false;
-        CommandBridgeService restarted = service(audit, true, authorized(StaffRank.MOD), command -> {
+        CommandBridgeService restarted = service(audit, true, authorized(StaffRank.MOD), (actor, command) -> {
             executions.incrementAndGet();
             return CommandBridgeExecutor.Execution.accepted("should not run");
         });
@@ -201,7 +220,7 @@ class CommandBridgeServiceTest {
     }
 
     private static CommandBridgeExecutor acceptedExecutor() {
-        return command -> CommandBridgeExecutor.Execution.accepted("ok");
+        return (actor, command) -> CommandBridgeExecutor.Execution.accepted("ok");
     }
 
     private static CommandBridgeRequest request(String server, String command) {

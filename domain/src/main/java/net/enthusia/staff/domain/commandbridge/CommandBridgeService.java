@@ -4,6 +4,7 @@ import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
 import java.security.MessageDigest;
 import java.time.Clock;
+import java.time.Duration;
 import java.util.HexFormat;
 import java.util.Optional;
 import net.enthusia.staff.domain.commandbridge.CommandBridgePolicy.Decision;
@@ -15,6 +16,7 @@ import net.enthusia.staff.domain.ports.CommandBridgeLinkVerifier;
 
 /** Minecraft-side orchestration. Authority is re-read immediately before the single execution attempt. */
 public final class CommandBridgeService {
+    private static final Duration REQUEST_LIFETIME = Duration.ofSeconds(30);
     private final CommandBridgePolicy policy;
     private final CommandBridgeLinkVerifier links;
     private final CommandBridgeAuthorityResolver authority;
@@ -60,6 +62,10 @@ public final class CommandBridgeService {
         if (!decision.accepted()) {
             return finish(request, rejection(decision), false);
         }
+        if (Duration.between(request.requestedAt(), clock.instant()).abs().compareTo(REQUEST_LIFETIME) > 0) {
+            return finish(request, response(CommandBridgeOutcome.INVALID_REQUEST,
+                    "Command request is no longer fresh."), false);
+        }
         try {
             if (!links.isCurrentLink(request.subjectId(), request.discordUserId(), request.actorPlayerId())) {
                 return finish(request, response(
@@ -86,7 +92,7 @@ public final class CommandBridgeService {
     private CommandBridgeResponse execute(CommandBridgeRequest request, String normalizedCommand) {
         CommandBridgeExecutor.Execution execution;
         try {
-            execution = executor.execute(normalizedCommand);
+            execution = executor.execute(request.actorPlayerId(), normalizedCommand);
         } catch (RuntimeException failure) {
             return finish(request, response(
                     CommandBridgeOutcome.EXECUTION_UNKNOWN,

@@ -61,7 +61,7 @@ public final class CommandBridgePolicy {
     }
 
     private static ParsedCommand parse(String command) {
-        if (command == null || command.chars().anyMatch(Character::isISOControl)) {
+        if (command == null || command.chars().anyMatch(CommandBridgePolicy::unsafeCommandCharacter)) {
             return null;
         }
         String normalized = command.trim();
@@ -78,6 +78,13 @@ public final class CommandBridgePolicy {
             return null;
         }
         return new ParsedCommand(name, normalized, argumentCount(normalized));
+    }
+
+    private static boolean unsafeCommandCharacter(int character) {
+        return Character.isISOControl(character)
+                || Character.getType(character) == Character.FORMAT
+                || character == ';' || character == '|' || character == '\\'
+                || character == '\'' || character == '"';
     }
 
     private static int argumentCount(String command) {

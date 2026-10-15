@@ -5,10 +5,12 @@ import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
 import java.time.Duration;
 import java.util.Objects;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.function.Predicate;
 import net.enthusia.staff.domain.ports.CommandBridgeExecutor;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.ComponentLike;
@@ -24,31 +26,36 @@ public final class BukkitConsoleCommandBridgeExecutor implements CommandBridgeEx
     private final Scheduler scheduler;
     private final Dispatcher dispatcher;
     private final Duration timeout;
+    private final Predicate<UUID> activeDuty;
 
-    public BukkitConsoleCommandBridgeExecutor(JavaPlugin plugin) {
+    public BukkitConsoleCommandBridgeExecutor(JavaPlugin plugin, Predicate<UUID> activeDuty) {
         this(
                 operation -> plugin.getServer().getGlobalRegionScheduler().execute(plugin, operation),
                 command -> dispatch(plugin, command),
-                DEFAULT_TIMEOUT
+                DEFAULT_TIMEOUT,
+                activeDuty
         );
     }
 
-    BukkitConsoleCommandBridgeExecutor(Scheduler scheduler, Dispatcher dispatcher, Duration timeout) {
+    BukkitConsoleCommandBridgeExecutor(
+            Scheduler scheduler, Dispatcher dispatcher, Duration timeout, Predicate<UUID> activeDuty
+    ) {
         this.scheduler = Objects.requireNonNull(scheduler, "scheduler");
         this.dispatcher = Objects.requireNonNull(dispatcher, "dispatcher");
         if (timeout == null || timeout.isNegative() || timeout.isZero()) {
             throw new IllegalArgumentException("command bridge execution timeout must be positive");
         }
         this.timeout = timeout;
+        this.activeDuty = Objects.requireNonNull(activeDuty, "active duty gate");
     }
 
     @Override
-    public Execution execute(String normalizedCommand) {
-        if (normalizedCommand == null || normalizedCommand.isBlank()) {
+    public Execution execute(UUID actorPlayerId, String normalizedCommand) {
+        if (actorPlayerId == null || normalizedCommand == null || normalizedCommand.isBlank()) {
             throw new IllegalArgumentException("normalized command is required");
         }
         CompletableFuture<Execution> result = new CompletableFuture<>();
-        scheduler.schedule(() -> dispatchOnce(normalizedCommand, result));
+        scheduler.schedule(() -> dispatchOnce(actorPlayerId, normalizedCommand, result));
         try {
             return result.get(timeout.toMillis(), TimeUnit.MILLISECONDS);
         } catch (InterruptedException failure) {
@@ -59,8 +66,12 @@ public final class BukkitConsoleCommandBridgeExecutor implements CommandBridgeEx
         }
     }
 
-    private void dispatchOnce(String command, CompletableFuture<Execution> result) {
+    private void dispatchOnce(UUID actorId, String command, CompletableFuture<Execution> result) {
         try {
+            if (!activeDuty.test(actorId)) {
+                result.complete(Execution.rejected());
+                return;
+            }
             result.complete(dispatcher.dispatch(command));
         } catch (RuntimeException failure) {
             result.completeExceptionally(failure);
