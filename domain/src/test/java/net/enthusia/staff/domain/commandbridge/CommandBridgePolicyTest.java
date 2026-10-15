@@ -29,9 +29,13 @@ class CommandBridgePolicyTest {
     @Test
     void configurationCannotDelegateConsoleToHelperDeveloperOrSystem() {
         for (StaffRank disallowed : List.of(StaffRank.HELPER, StaffRank.DEVELOPER, StaffRank.SYSTEM)) {
-            assertThrows(IllegalArgumentException.class,
-                    () -> new CommandBridgeRule("list", disallowed, "enthusia.console.list", 0));
+            assertInvalidConsoleRole(disallowed);
         }
+    }
+
+    private static void assertInvalidConsoleRole(StaffRank disallowed) {
+        assertThrows(IllegalArgumentException.class,
+                () -> new CommandBridgeRule("list", disallowed, "enthusia.console.list", 0));
     }
 
     @Test
