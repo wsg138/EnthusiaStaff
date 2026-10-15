@@ -22,6 +22,7 @@ class PaperCaseActorProofIssuerTest {
     private static final String DISCORD = String.valueOf(100000000000000000L + 345678L);
     private static final String GUILD = String.valueOf(800000000000000000L + 7654321L);
     private static final String CLIENT_ID = "staffbot";
+    private static final String COMMAND_ID = "command:synthetic:0001";
     private static final long ISSUED_AT = 1791993600L;
     private static final Clock CLOCK = Clock.fixed(Instant.ofEpochSecond(ISSUED_AT), ZoneOffset.UTC);
     // Independently generated with the Python canonical_claims() implementation, synthetic key.
@@ -40,7 +41,7 @@ class PaperCaseActorProofIssuerTest {
             CaseNotice.Action action, long revision) {
         return new AuthorityBackedCaseActions.Command(
                 CaseNotice.Origin.MINECRAFT, scope, ID, revision, "minecraft:" + actor,
-                action, "command:synthetic:0001");
+                action, COMMAND_ID);
     }
 
     private static AuthorityBackedCaseActions.Command claim() {
@@ -189,15 +190,15 @@ class PaperCaseActorProofIssuerTest {
                 f.discord(command(SCOPE, ID, CaseNotice.Action.CLAIM, 1)));
         f.verified = new PaperCaseStaffAuthority.VerifiedDiscordInteraction(
                 DISCORD, "99999", ISSUED_AT, CaseNotice.Origin.MINECRAFT,
-                SCOPE, ID, 0, CaseNotice.Action.CLAIM, "command:synthetic:0001");
+                SCOPE, ID, 0, CaseNotice.Action.CLAIM, COMMAND_ID);
         assertThrows(SecurityException.class, () -> f.discord(claim()));
         f.verified = new PaperCaseStaffAuthority.VerifiedDiscordInteraction(
                 DISCORD, GUILD, ISSUED_AT - 31, CaseNotice.Origin.MINECRAFT,
-                SCOPE, ID, 0, CaseNotice.Action.CLAIM, "command:synthetic:0001");
+                SCOPE, ID, 0, CaseNotice.Action.CLAIM, COMMAND_ID);
         assertThrows(SecurityException.class, () -> f.discord(claim()));
         f.verified = new PaperCaseStaffAuthority.VerifiedDiscordInteraction(
                 DISCORD, GUILD, ISSUED_AT + 6, CaseNotice.Origin.MINECRAFT,
-                SCOPE, ID, 0, CaseNotice.Action.CLAIM, "command:synthetic:0001");
+                SCOPE, ID, 0, CaseNotice.Action.CLAIM, COMMAND_ID);
         assertThrows(SecurityException.class, () -> f.discord(claim()));
     }
 
