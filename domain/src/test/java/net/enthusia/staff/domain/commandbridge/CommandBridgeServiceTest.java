@@ -85,14 +85,19 @@ class CommandBridgeServiceTest {
             return CommandBridgeExecutor.Execution.accepted("unexpected");
         });
         for (int offset : new int[] {-31, 31}) {
-            UUID requestId = UUID.randomUUID();
-            CommandBridgeRequest stale = new CommandBridgeRequest(
-                    requestId, new ModerationSubjectId(SUBJECT_ID), DISCORD_ID, ACTOR_ID,
-                    TARGET_SERVER, LIST_COMMAND, CLOCK.instant().plusSeconds(offset));
-            assertEquals(CommandBridgeOutcome.INVALID_REQUEST, service.handle(stale).outcome());
-            assertEquals(CommandBridgeOutcome.INVALID_REQUEST, audit.terminal(requestId));
+            assertStaleCommandRejected(service, audit, UUID.randomUUID(), offset);
         }
         assertEquals(0, executions.get());
+    }
+
+    private static void assertStaleCommandRejected(
+            CommandBridgeService service, FakeAudit audit, UUID requestId, int offset
+    ) {
+        CommandBridgeRequest stale = new CommandBridgeRequest(
+                requestId, new ModerationSubjectId(SUBJECT_ID), DISCORD_ID, ACTOR_ID,
+                TARGET_SERVER, LIST_COMMAND, CLOCK.instant().plusSeconds(offset));
+        assertEquals(CommandBridgeOutcome.INVALID_REQUEST, service.handle(stale).outcome());
+        assertEquals(CommandBridgeOutcome.INVALID_REQUEST, audit.terminal(requestId));
     }
 
     @Test
