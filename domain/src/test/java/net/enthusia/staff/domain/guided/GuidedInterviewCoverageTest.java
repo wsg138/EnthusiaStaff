@@ -59,6 +59,22 @@ class GuidedInterviewCoverageTest {
         assertTrue(missing.isEmpty(), "Reason mappings not accessible from the GUI: " + missing);
     }
 
+    @Test
+    void allStaffSelectableConfiguredReasonsAreIncludedInReachabilityAudit() throws Exception {
+        Set<String> configured = new HashSet<>();
+        for (String line : Files.readAllLines(
+                Path.of("../paper/src/main/resources/reason-policies.yml"))) {
+            String prefix = "  - id: ";
+            if (line.startsWith(prefix)) {
+                configured.add(line.substring(prefix.length()).trim());
+            }
+        }
+        configured.remove("cheating.polar.template");
+        org.junit.jupiter.api.Assertions.assertEquals(configured,
+                GuidedOffenseClassifier.mappedReasonIds(),
+                "Every manually selectable configured reason needs an audited path");
+    }
+
     private static void collectReachable(GuidedIncidentWizard interview,
                                          Set<String> reachable) {
         var question = interview.nextQuestion();
