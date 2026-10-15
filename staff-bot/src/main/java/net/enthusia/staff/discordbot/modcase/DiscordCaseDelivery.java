@@ -43,30 +43,52 @@ public final class DiscordCaseDelivery implements CaseDispatchWorker.Destination
 
     @Override
     public CompletionStage<CaseDispatchWorker.Result> send(CaseNotice notice, CaseDelivery.Key key) {
-        if (!key.caseId().equals(notice.caseId()) || key.revision() != notice.revision()
-                || key.origin() != notice.origin() || !key.scope().equals(notice.scope())
-                || !allowedScope.test(notice)) {
+        if (!matchesScope(notice, key)) {
             return rejected("SCOPE_NOT_AUTHORIZED");
         }
-        JDA api = gateway.get();
-        TextChannel channel = api == null ? null : api.getTextChannelById(channelId);
-        if (channel == null || channel.getGuild().getIdLong() != guildId || !privateToStaff(channel)) {
+        TextChannel channel = verifiedChannel();
+        if (channel == null) {
             return rejected("PRIVATE_CHANNEL_UNVERIFIED");
         }
-        String content = DiscordCaseCard.content(notice);
         try {
-            String priorReceipt = ledger.previousReceipt(key).orElse(null);
-            if (priorReceipt != null) {
-                return channel.editMessageById(priorReceipt, content)
-                        .setComponents(DiscordCaseCard.controls(notice, controls))
-                        .submit().handle((message, error) -> result(message == null ? null : message.getId(), error));
-            }
-            return channel.sendMessage(content).setAllowedMentions(List.of())
-                    .addComponents(DiscordCaseCard.controls(notice, controls))
-                    .submit().handle((message, error) -> result(message == null ? null : message.getId(), error));
+            return publish(channel, notice, key);
         } catch (RuntimeException exception) {
             return CompletableFuture.completedFuture(CaseDispatchWorker.Result.possiblySent("SEND_UNCONFIRMED"));
         }
+    }
+
+    private boolean matchesScope(CaseNotice notice, CaseDelivery.Key key) {
+        return notice != null && key != null && key.caseId().equals(notice.caseId())
+                && key.revision() == notice.revision() && key.origin() == notice.origin()
+                && key.scope().equals(notice.scope()) && allowedScope.test(notice);
+    }
+
+    private TextChannel verifiedChannel() {
+        try {
+            JDA api = gateway.get();
+            TextChannel channel = api == null ? null : api.getTextChannelById(channelId);
+            if (channel == null || channel.getGuild().getIdLong() != guildId
+                    || !privateToStaff(channel)) {
+                return null;
+            }
+            return channel;
+        } catch (RuntimeException exception) {
+            return null;
+        }
+    }
+
+    private CompletionStage<CaseDispatchWorker.Result> publish(
+            TextChannel channel, CaseNotice notice, CaseDelivery.Key key) {
+        String content = DiscordCaseCard.content(notice);
+        String previous = ledger.previousReceipt(key).orElse(null);
+        if (previous != null) {
+            return channel.editMessageById(previous, content)
+                    .setComponents(DiscordCaseCard.controls(notice, controls))
+                    .submit().handle((message, error) -> result(message == null ? null : message.getId(), error));
+        }
+        return channel.sendMessage(content).setAllowedMentions(List.of())
+                .addComponents(DiscordCaseCard.controls(notice, controls))
+                .submit().handle((message, error) -> result(message == null ? null : message.getId(), error));
     }
 
     private boolean privateToStaff(TextChannel channel) {
@@ -76,22 +98,30 @@ public final class DiscordCaseDelivery implements CaseDispatchWorker.Destination
             }
             var guild = channel.getGuild();
             Role role = guild.getRoleById(staffRoleId);
-            if (role == null || guild.getPublicRole().hasPermission(channel, Permission.VIEW_CHANNEL)
-                    || !role.hasPermission(channel, Permission.VIEW_CHANNEL)) {
-                return false;
-            }
-            long botId = channel.getJDA().getSelfUser().getIdLong();
-            boolean otherRoles = guild.getRoles().stream().anyMatch(candidate ->
-                    !candidate.equals(guild.getPublicRole()) && !candidate.equals(role)
-                    && !(candidate.getTags().isBot() && candidate.getTags().getBotIdLong() == botId)
-                    && (candidate.hasPermission(Permission.ADMINISTRATOR)
-                    || candidate.hasPermission(channel, Permission.VIEW_CHANNEL)));
-            return !otherRoles && channel.getMemberPermissionOverrides().stream()
-                    .noneMatch(override -> override.getIdLong() != botId
-                            && override.getAllowed().contains(Permission.VIEW_CHANNEL));
+            return role != null && !guild.getPublicRole().hasPermission(channel, Permission.VIEW_CHANNEL)
+                    && role.hasPermission(channel, Permission.VIEW_CHANNEL)
+                    && !otherRolesCanView(channel, role)
+                    && !memberOverridesCanView(channel);
         } catch (RuntimeException error) {
             return false;
         }
+    }
+
+    private static boolean otherRolesCanView(TextChannel channel, Role role) {
+        var guild = channel.getGuild();
+        long botId = channel.getJDA().getSelfUser().getIdLong();
+        return guild.getRoles().stream().anyMatch(candidate ->
+                !candidate.equals(guild.getPublicRole()) && !candidate.equals(role)
+                && !(candidate.getTags().isBot() && candidate.getTags().getBotIdLong() == botId)
+                && (candidate.hasPermission(Permission.ADMINISTRATOR)
+                || candidate.hasPermission(channel, Permission.VIEW_CHANNEL)));
+    }
+
+    private static boolean memberOverridesCanView(TextChannel channel) {
+        long botId = channel.getJDA().getSelfUser().getIdLong();
+        return channel.getMemberPermissionOverrides().stream()
+                .anyMatch(override -> override.getIdLong() != botId
+                        && override.getAllowed().contains(Permission.VIEW_CHANNEL));
     }
 
     private static CaseDispatchWorker.Result result(String receipt, Throwable error) {
