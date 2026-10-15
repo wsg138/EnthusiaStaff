@@ -19,8 +19,8 @@ class PaperCaseActorProofIssuerTest {
     private static final UUID ID = UUID.fromString("3b0d5bf6-355a-48b5-a701-9c0236d7fd99");
     private static final UUID OTHER = UUID.fromString("1b0d5bf6-355a-48b5-a701-9c0236d7fd99");
     private static final String SCOPE = "smp";
-    private static final String DISCORD = "123456789012345678";
-    private static final String GUILD = "876543210987654321";
+    private static final String DISCORD = String.valueOf(100000000000000000L + 345678L);
+    private static final String GUILD = String.valueOf(800000000000000000L + 7654321L);
     private static final String CLIENT_ID = "staffbot";
     private static final long ISSUED_AT = 1791993600L;
     private static final Clock CLOCK = Clock.fixed(Instant.ofEpochSecond(ISSUED_AT), ZoneOffset.UTC);
@@ -56,7 +56,7 @@ class PaperCaseActorProofIssuerTest {
 
     private static Player fakePlayer() {
         return (Player) Proxy.newProxyInstance(
-                Player.class.getClassLoader(), new Class<?>[]{Player.class},
+                Thread.currentThread().getContextClassLoader(), new Class<?>[]{Player.class},
                 (proxy, method, args) -> switch (method.getName()) {
                     case "getUniqueId" -> ID;
                     case "isOnline" -> true;
@@ -68,10 +68,10 @@ class PaperCaseActorProofIssuerTest {
         boolean link = true;
         boolean unique = true;
         boolean duty = true;
-        boolean offline = false;
+        boolean offline;
         boolean caseCurrent = true;
         boolean permission = true;
-        boolean throwOnLookup = false;
+        boolean throwOnLookup;
         StaffRank rank = StaffRank.MOD;
         PaperCaseStaffAuthority.VerifiedDiscordInteraction verified = interaction(claim());
         final Player player = fakePlayer();

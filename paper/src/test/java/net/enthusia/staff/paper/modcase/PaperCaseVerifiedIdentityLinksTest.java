@@ -24,7 +24,7 @@ import org.junit.jupiter.api.Test;
 class PaperCaseVerifiedIdentityLinksTest {
     private static final UUID A = UUID.fromString("3b0d5bf6-355a-48b5-a701-9c0236d7fd99");
     private static final UUID B = UUID.fromString("1b0d5bf6-355a-48b5-a701-9c0236d7fd99");
-    private static final String DISCORD = "123456789012345678";
+    private static final String DISCORD = String.valueOf(100000000000000000L + 345678L);
     private static final DiscordUserId USER = new DiscordUserId(DISCORD);
     private final ModerationSubjectId subjectId = new ModerationSubjectId(UUID.randomUUID());
     private final Map<UUID, DiscordModerationPersistenceStore.VersionedLink> links = new HashMap<>();
@@ -32,7 +32,7 @@ class PaperCaseVerifiedIdentityLinksTest {
 
     private DiscordModerationPersistenceStore store() {
         return (DiscordModerationPersistenceStore) Proxy.newProxyInstance(
-                DiscordModerationPersistenceStore.class.getClassLoader(),
+                Thread.currentThread().getContextClassLoader(),
                 new Class<?>[]{DiscordModerationPersistenceStore.class},
                 (instance, method, args) -> switch (method.getName()) {
                     case "subjectForDiscord" -> {

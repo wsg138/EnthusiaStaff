@@ -118,33 +118,43 @@ public final class PaperCaseStaffAuthority {
     public PaperCaseActorProofIssuer.Proof issueFromDiscord(
             byte[] independentlySignedInteraction, AuthorityBackedCaseActions.Command command
     ) {
-        if (independentlySignedInteraction == null || independentlySignedInteraction.length == 0
-                || independentlySignedInteraction.length > 65536) {
-            throw denied();
-        }
-        // Copy evidence: verifier must not work with a mutable caller-owned byte buffer.
-        VerifiedDiscordInteraction interaction;
-        try {
-            interaction = discordVerifier.verify(Arrays.copyOf(
-                    independentlySignedInteraction, independentlySignedInteraction.length)).orElseThrow();
-        } catch (RuntimeException exception) {
-            throw denied();
-        }
-        long now = clock.instant().getEpochSecond();
-        if (interaction.discordUserId() == null
-                || !interaction.discordUserId().matches("[0-9]{1,20}")
-                || !expectedGuild.equals(interaction.guildId())
-                || !interaction.matches(command)
-                || interaction.authenticatedAt() < now - MAX_INTERACTION_AGE_SECONDS
-                || interaction.authenticatedAt() > now + MAX_FUTURE_SKEW_SECONDS) {
+        VerifiedDiscordInteraction interaction = verifiedDiscordInteraction(independentlySignedInteraction);
+        if (!validDiscordBinding(interaction, command)) {
             throw denied();
         }
         UUID linkedId = safelyLinked(interaction.discordUserId());
-        if (linkedId == null
-                || !safeLinkCheck(linkedId, interaction.discordUserId())) {
+        if (linkedId == null || !safeLinkCheck(linkedId, interaction.discordUserId())) {
             throw denied();
         }
         return authorizeAndSign(linkedId, interaction.discordUserId(), command);
+    }
+
+    private VerifiedDiscordInteraction verifiedDiscordInteraction(byte[] signedInteraction) {
+        if (signedInteraction == null || signedInteraction.length == 0
+                || signedInteraction.length > 65536) {
+            throw denied();
+        }
+        try {
+            return discordVerifier.verify(
+                    Arrays.copyOf(signedInteraction, signedInteraction.length)).orElseThrow();
+        } catch (RuntimeException exception) {
+            throw denied();
+        }
+    }
+
+    private boolean validDiscordBinding(
+            VerifiedDiscordInteraction interaction, AuthorityBackedCaseActions.Command command) {
+        long now = clock.instant().getEpochSecond();
+        return interaction != null && interaction.discordUserId() != null
+                && interaction.discordUserId().matches("[0-9]{1,20}")
+                && expectedGuild.equals(interaction.guildId())
+                && interaction.matches(command)
+                && currentInteractionTime(interaction.authenticatedAt(), now);
+    }
+
+    private static boolean currentInteractionTime(long authentication, long now) {
+        return authentication >= now - MAX_INTERACTION_AGE_SECONDS
+                && authentication <= now + MAX_FUTURE_SKEW_SECONDS;
     }
 
     public PaperCaseActorProofIssuer.Proof issueFromMinecraft(
@@ -181,25 +191,11 @@ public final class PaperCaseStaffAuthority {
     private PaperCaseActorProofIssuer.Proof authorizeAndSign(
             UUID authenticatedId, String discordId, AuthorityBackedCaseActions.Command command
     ) {
-        if (authenticatedId == null || command == null
-                || !expectedScope.equals(command.scope())
-                || !("minecraft:" + authenticatedId).equals(command.actor())
-                || (command.action() != CaseNotice.Action.CLAIM
-                    && command.action() != CaseNotice.Action.RESOLVE)) {
+        if (!matchesAuthenticatedActor(authenticatedId, command)) {
             throw denied();
         }
         try {
-            StaffRank rank = policy.currentRank(authenticatedId).orElseThrow();
-            if (rank != StaffRank.MOD && rank != StaffRank.ADMIN && rank != StaffRank.FOUNDER) {
-                throw denied();
-            }
-            if (!policy.currentCaseAllows(command)
-                    || !policy.currentActionPermission(authenticatedId, command.action())
-                    || (!policy.locallyAppliedStaffMode(authenticatedId)
-                        && !(discordId != null && policy.explicitlyPermittedOfflineDiscord(authenticatedId)))) {
-                throw denied();
-            }
-            // Role, case, link, duty and action are re-read for EVERY proof, never cached.
+            requireCurrentAuthority(authenticatedId, discordId, command);
             if (discordId != null && (!authenticatedId.equals(safelyLinked(discordId))
                     || !safeLinkCheck(authenticatedId, discordId))) {
                 throw denied();
@@ -208,6 +204,34 @@ public final class PaperCaseStaffAuthority {
         } catch (RuntimeException exception) {
             throw denied();
         }
+    }
+
+    private boolean matchesAuthenticatedActor(
+            UUID authenticatedId, AuthorityBackedCaseActions.Command command) {
+        return authenticatedId != null && command != null
+                && expectedScope.equals(command.scope())
+                && ("minecraft:" + authenticatedId).equals(command.actor())
+                && (command.action() == CaseNotice.Action.CLAIM
+                    || command.action() == CaseNotice.Action.RESOLVE);
+    }
+
+    private void requireCurrentAuthority(
+            UUID authenticatedId, String discordId, AuthorityBackedCaseActions.Command command) {
+        StaffRank rank = policy.currentRank(authenticatedId).orElseThrow();
+        if (!allowedRank(rank) || !policy.currentCaseAllows(command)
+                || !policy.currentActionPermission(authenticatedId, command.action())
+                || !currentDutyOrApprovedOffline(authenticatedId, discordId)) {
+            throw denied();
+        }
+    }
+
+    private static boolean allowedRank(StaffRank rank) {
+        return rank == StaffRank.MOD || rank == StaffRank.ADMIN || rank == StaffRank.FOUNDER;
+    }
+
+    private boolean currentDutyOrApprovedOffline(UUID playerId, String discordId) {
+        return policy.locallyAppliedStaffMode(playerId)
+                || discordId != null && policy.explicitlyPermittedOfflineDiscord(playerId);
     }
 
     private static SecurityException denied() {
