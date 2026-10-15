@@ -80,6 +80,7 @@ class HttpCanonicalCaseGatewayTest {
                 response(command, STATE_CLAIMED).replace(command.caseId().toString(), UUID.randomUUID().toString()),
                 response(command, STATE_CLAIMED).replace("\"revision\":1", "\"revision\":2"),
                 response(command, STATE_CLAIMED).replace("\"replay\":false", "\"replay\":\"false\""));
+        assertEquals(7, responses.size());
         responses.forEach(body -> {
             var gateway = new HttpCanonicalCaseGateway(ENDPOINT, CLIENT_ID, SECRET,
                     request -> new HttpCanonicalCaseGateway.RawResponse(200, body));

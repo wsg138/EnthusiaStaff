@@ -21,6 +21,7 @@ import net.enthusia.staff.domain.modcase.AuthorityBackedCaseActions;
  */
 public final class HttpCanonicalCaseGateway implements AuthorityBackedCaseActions.Gateway {
     private static final String PATH = "/v1/staff-case-commands";
+    private static final String SCHEME_HTTP = "http";
     private static final int MAX_RESPONSE_BYTES = 4096;
     private static final int HTTP_OK = 200;
     private static final int HTTP_CONFLICT = 409;
@@ -153,7 +154,7 @@ public final class HttpCanonicalCaseGateway implements AuthorityBackedCaseAction
     }
 
     private static boolean loopbackHttp(URI endpoint) {
-        if (!"http".equalsIgnoreCase(endpoint.getScheme())) {
+        if (!SCHEME_HTTP.equalsIgnoreCase(endpoint.getScheme())) {
             return false;
         }
         String host = endpoint.getHost();
