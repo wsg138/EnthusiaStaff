@@ -12,6 +12,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import net.enthusia.staff.domain.modcase.AuthorityBackedCaseActions;
 
 /**
@@ -21,6 +22,9 @@ import net.enthusia.staff.domain.modcase.AuthorityBackedCaseActions;
 public final class HttpCanonicalCaseGateway implements AuthorityBackedCaseActions.Gateway {
     private static final String PATH = "/v1/staff-case-commands";
     private static final int MAX_RESPONSE_BYTES = 4096;
+    private static final int HTTP_OK = 200;
+    private static final int HTTP_CONFLICT = 409;
+    private static final Set<Integer> DENIED_STATUSES = Set.of(401, 403, 404, 422);
     private static final Duration TIMEOUT = Duration.ofSeconds(4);
     private static final ObjectMapper JSON = new ObjectMapper();
     private final URI endpoint;
@@ -96,14 +100,13 @@ public final class HttpCanonicalCaseGateway implements AuthorityBackedCaseAction
 
     private static AuthorityBackedCaseActions.TransportStatus status(
             RawResponse response, AuthorityBackedCaseActions.Command command) {
-        if (response.status() == 409) {
+        if (response.status() == HTTP_CONFLICT) {
             return AuthorityBackedCaseActions.TransportStatus.STALE;
         }
-        if (response.status() == 401 || response.status() == 403
-                || response.status() == 404 || response.status() == 422) {
+        if (DENIED_STATUSES.contains(response.status())) {
             return AuthorityBackedCaseActions.TransportStatus.DENIED;
         }
-        if (response.status() != 200 || response.body().length() > MAX_RESPONSE_BYTES) {
+        if (response.status() != HTTP_OK || response.body().length() > MAX_RESPONSE_BYTES) {
             return AuthorityBackedCaseActions.TransportStatus.RETRYABLE;
         }
         return confirmed(response.body(), command)
@@ -116,30 +119,46 @@ public final class HttpCanonicalCaseGateway implements AuthorityBackedCaseAction
             JsonNode root = JSON.readTree(body);
             String state = command.action() == net.enthusia.staff.domain.modcase.CaseNotice.Action.CLAIM
                     ? "CLAIMED" : "CLOSED";
-            return root != null && root.isObject() && root.size() == 4
-                    && root.path("case_id").asText().equals(command.caseId().toString())
-                    && root.path("revision").isIntegralNumber()
-                    && root.path("revision").asLong() == command.expectedRevision() + 1
-                    && root.path("state").asText().equals(state)
-                    && root.path("replay").isBoolean();
+            return wellFormed(root)
+                    && matchesIdentity(root, command)
+                    && root.path("state").asText().equals(state);
         } catch (JsonProcessingException exception) {
             return false;
         }
     }
 
+    private static boolean wellFormed(JsonNode root) {
+        return root != null && root.isObject() && root.size() == 4
+                && root.path("replay").isBoolean()
+                && root.path("revision").isIntegralNumber();
+    }
+
+    private static boolean matchesIdentity(
+            JsonNode root, AuthorityBackedCaseActions.Command command) {
+        return root.path("case_id").asText().equals(command.caseId().toString())
+                && root.path("revision").asLong() == command.expectedRevision() + 1;
+    }
+
     private static boolean safeEndpoint(URI endpoint) {
-        if (endpoint == null || endpoint.getHost() == null || endpoint.getUserInfo() != null
-                || endpoint.getQuery() != null || endpoint.getFragment() != null
-                || !PATH.equals(endpoint.getPath())) {
+        if (!safeParts(endpoint)) {
             return false;
         }
-        if ("https".equalsIgnoreCase(endpoint.getScheme())) {
-            return true;
+        return "https".equalsIgnoreCase(endpoint.getScheme()) || loopbackHttp(endpoint);
+    }
+
+    private static boolean safeParts(URI endpoint) {
+        return endpoint != null && endpoint.getHost() != null
+                && endpoint.getUserInfo() == null && endpoint.getQuery() == null
+                && endpoint.getFragment() == null && PATH.equals(endpoint.getPath());
+    }
+
+    private static boolean loopbackHttp(URI endpoint) {
+        if (!"http".equalsIgnoreCase(endpoint.getScheme())) {
+            return false;
         }
         String host = endpoint.getHost();
-        return "http".equalsIgnoreCase(endpoint.getScheme())
-                && ("localhost".equalsIgnoreCase(host) || "127.0.0.1".equals(host)
-                    || "[::1]".equals(host) || "::1".equals(host));
+        return "localhost".equalsIgnoreCase(host) || "127.0.0.1".equals(host)
+                || "[::1]".equals(host) || "::1".equals(host);
     }
 
     private static Sender defaultSender() {

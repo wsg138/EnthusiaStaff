@@ -12,6 +12,8 @@ import java.net.URI;
 import java.net.http.HttpRequest;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
+import java.security.SecureRandom;
+import java.util.Base64;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -21,7 +23,9 @@ import net.enthusia.staff.domain.modcase.CaseNotice;
 import org.junit.jupiter.api.Test;
 
 class HttpCanonicalCaseGatewayTest {
-    private static final String SECRET = "synthetic-only-secret-32-characters-minimum";
+    private static final String SECRET = randomTestSecret();
+    private static final String CLIENT_ID = "synthetic-staffbot";
+    private static final String STATE_CLAIMED = "CLAIMED";
     private static final String ACTOR = "staff:alice";
     private static final String SCOPE = "smp";
     private static final URI ENDPOINT = URI.create("http://127.0.0.1:43210/v1/staff-case-commands");
@@ -43,16 +47,16 @@ class HttpCanonicalCaseGatewayTest {
         AuthorityBackedCaseActions.Command command = command(CaseNotice.Action.CLAIM);
         List<HttpRequest> outgoing = new ArrayList<>();
         HttpCanonicalCaseGateway gateway = new HttpCanonicalCaseGateway(
-                ENDPOINT, "synthetic-staffbot", SECRET, request -> {
+                ENDPOINT, CLIENT_ID, SECRET, request -> {
                     outgoing.add(request);
-                    return new HttpCanonicalCaseGateway.RawResponse(200, response(command, "CLAIMED"));
+                    return new HttpCanonicalCaseGateway.RawResponse(200, response(command, STATE_CLAIMED));
                 });
         assertEquals(AuthorityBackedCaseActions.TransportStatus.ACCEPTED, gateway.send(command));
         assertEquals(1, outgoing.size());
         HttpRequest request = outgoing.getFirst();
         assertEquals(ENDPOINT, request.uri());
         assertEquals("POST", request.method());
-        assertEquals("synthetic-staffbot",
+        assertEquals(CLIENT_ID,
                 request.headers().firstValue("X-Client-Id").orElseThrow());
         assertEquals("Bearer " + SECRET,
                 request.headers().firstValue("Authorization").orElseThrow());
@@ -73,15 +77,15 @@ class HttpCanonicalCaseGatewayTest {
         AuthorityBackedCaseActions.Command command = command(CaseNotice.Action.CLAIM);
         List<String> responses = List.of(
                 "", "{}", "{bad json}", response(command, "CLOSED"),
-                response(command, "CLAIMED").replace(command.caseId().toString(), UUID.randomUUID().toString()),
-                response(command, "CLAIMED").replace("\"revision\":1", "\"revision\":2"),
-                response(command, "CLAIMED").replace("\"replay\":false", "\"replay\":\"false\""));
-        for (String body : responses) {
-            var gateway = new HttpCanonicalCaseGateway(ENDPOINT, "synthetic-staffbot", SECRET,
+                response(command, STATE_CLAIMED).replace(command.caseId().toString(), UUID.randomUUID().toString()),
+                response(command, STATE_CLAIMED).replace("\"revision\":1", "\"revision\":2"),
+                response(command, STATE_CLAIMED).replace("\"replay\":false", "\"replay\":\"false\""));
+        responses.forEach(body -> {
+            var gateway = new HttpCanonicalCaseGateway(ENDPOINT, CLIENT_ID, SECRET,
                     request -> new HttpCanonicalCaseGateway.RawResponse(200, body));
             assertEquals(AuthorityBackedCaseActions.TransportStatus.RETRYABLE,
                     gateway.send(command), body);
-        }
+        });
     }
 
     @Test
@@ -89,22 +93,22 @@ class HttpCanonicalCaseGatewayTest {
         var command = command(CaseNotice.Action.RESOLVE);
         int[] calls = {0};
         HttpCanonicalCaseGateway unknown = new HttpCanonicalCaseGateway(
-                ENDPOINT, "synthetic-staffbot", SECRET, request -> {
+                ENDPOINT, CLIENT_ID, SECRET, request -> {
                     calls[0]++;
                     throw new IOException("synthetic connection closed after uncertain send");
                 });
         assertEquals(AuthorityBackedCaseActions.TransportStatus.RETRYABLE, unknown.send(command));
         assertEquals(1, calls[0]);
-        for (int code : List.of(401, 403, 404, 422)) {
-            var denied = new HttpCanonicalCaseGateway(ENDPOINT, "synthetic-staffbot", SECRET,
+        List.of(401, 403, 404, 422).forEach(code -> {
+            var denied = new HttpCanonicalCaseGateway(ENDPOINT, CLIENT_ID, SECRET,
                     request -> new HttpCanonicalCaseGateway.RawResponse(code, ""));
             assertEquals(AuthorityBackedCaseActions.TransportStatus.DENIED,
                     denied.send(command));
-        }
-        var stale = new HttpCanonicalCaseGateway(ENDPOINT, "synthetic-staffbot", SECRET,
+        });
+        var stale = new HttpCanonicalCaseGateway(ENDPOINT, CLIENT_ID, SECRET,
                 request -> new HttpCanonicalCaseGateway.RawResponse(409, ""));
         assertEquals(AuthorityBackedCaseActions.TransportStatus.STALE, stale.send(command));
-        var accepted = new HttpCanonicalCaseGateway(ENDPOINT, "synthetic-staffbot", SECRET,
+        var accepted = new HttpCanonicalCaseGateway(ENDPOINT, CLIENT_ID, SECRET,
                 request -> new HttpCanonicalCaseGateway.RawResponse(200, response(command, "CLOSED")));
         assertEquals(AuthorityBackedCaseActions.TransportStatus.ACCEPTED, accepted.send(command));
     }
@@ -117,14 +121,18 @@ class HttpCanonicalCaseGatewayTest {
                 "https://user:password@example.com/v1/staff-case-commands",
                 "http://127.0.0.1:43210/v1/staff-case-commands?redirect=true",
                 "file:///v1/staff-case-commands");
-        for (String endpoint : badEndpoints) {
-            assertThrows(IllegalArgumentException.class,
-                    () -> new HttpCanonicalCaseGateway(
-                            URI.create(endpoint), "synthetic-staffbot", SECRET));
-        }
+        badEndpoints.forEach(endpoint -> assertThrows(IllegalArgumentException.class,
+                () -> new HttpCanonicalCaseGateway(
+                        URI.create(endpoint), CLIENT_ID, SECRET)));
         assertThrows(IllegalArgumentException.class,
-                () -> new HttpCanonicalCaseGateway(ENDPOINT, "synthetic-staffbot", "short"));
+                () -> new HttpCanonicalCaseGateway(ENDPOINT, CLIENT_ID, "short"));
         assertTrue(SECRET.length() >= 32);
+    }
+
+    private static String randomTestSecret() {
+        byte[] random = new byte[32];
+        new SecureRandom().nextBytes(random);
+        return Base64.getUrlEncoder().withoutPadding().encodeToString(random);
     }
 
     private static String requestBody(HttpRequest request) throws Exception {
