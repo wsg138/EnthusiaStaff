@@ -1,0 +1,33 @@
+# Stage-2 encrypted receipt journal: independent security review (2026-10-15)
+
+**Scope:** fake-only, default-OFF Stage-2 `EncryptedReceiptJournal` on Worker 03's draft StaffBot PR #633. Worker H's isolated patch changes only that Java source, a new security JUnit class, and this review. The separate coordinator ACK-ambiguity patch #635 owns `FakeRetractionEngine`, its tests and the Stage-2 contract document, and is not changed here.
+
+## Baseline and external findings
+
+- Source baseline: `workers/exact-receipt-stage2-20261015` at `7dd95379746a55a74e8d8af249d33b2accd0958e` (PR #633).
+- GitHub Codacy PR-summary comment for **that baseline** reports **13 new findings: 2 critical Security, 8 medium Performance, 2 medium ErrorProne, 1 medium BestPractice**. The summary does not publish finding-specific paths, rule IDs or line numbers. The linked Codacy issue dashboard was not accessible from this worker session. Therefore **none of those 13 can be honestly certified as individually resolved or false positive**. Coordinator must inspect all 13 specific findings on Codacy and record their individual dispositions before any merge. Do not blanket suppress analysis rules.
+- Existing Codacy PR #633 coverage summary: 91.43% diff coverage, +0.14% variation. These numbers refer to the parent head, **not** Worker H's head. Hosted Worker H head coverage and static findings must be checked independently.
+
+## Security changes and reasons
+
+1. **Hostile filesystem types and confidentiality:** opening or writing now checks the normalized journal file and all existing ancestor directories without following symlinks. A journal must be a regular file, not directory, symlink or special device. On POSIX-capable filesystems the immediate parent directory and pre-existing journal file must have no group/other permission bits. New temp ciphertext remains mode 0600. Windows private ACL / identity requirements are **not** proven by this check.
+2. **Bounded, no-follow read:** uses `FileChannel.open(..., NOFOLLOW_LINKS)` with a strict 256 KiB envelope bound **before allocation**, an exact-length read and file-size recheck. GCM tag and `RTR2` format version still authenticate all decrypted content with the caller-supplied external AES-256 key; no key persistence, logging or runtime integration is introduced.
+3. **Untrusted decoded field framing:** rejects excessive modified-UTF encoded lengths before `DataInputStream.readUTF` allocates; retains the existing decoded 256-byte UTF-8 cap, 64-record bound, duplicate-ID prohibition, planner ID reconstruction and no-trailing-data rule. Wrong keys, invalid MAC, wrong version, truncated files, impossible count, duplicates and oversized UTF must refuse open.
+4. **Fail-closed sequential stale-writer detection:** after an authenticated open/write, retains only a SHA-256 digest of the encrypted on-disk envelope. Before and immediately prior to atomic replacement, refuses files that disappeared, changed, or appeared unexpectedly. Updating one operation ID with a different immutable receipt is prohibited. Failed encode or pre-rename persistence does not change the in-memory table or replace the previous file.
+5. **Rename durability:** temp ciphertext is forced before atomic rename; POSIX parent directory `FileChannel.force(true)` is attempted **after** rename. A post-rename persistence error poisons the journal object and rejects all later writes until a new independently authenticated open. This is not a promise of crash durability on all filesystems, nor a Windows directory-fsync/ACL acceptance claim.
+
+## Tests and local verification
+
+New `EncryptedReceiptJournalSecurityTest` checks MAC/version/truncation/wrong-key failure; authenticated hostile count, UTF framing, duplicates and trailing data; partial encoding failure preserving last good ciphertext; stale writer, unexpected removal and receipt mutation refusal; uncertain intent and attempt count after disk reopen; directory replacement; and POSIX-only symlink/permission rejection. All tests use generated keys and synthetic receipts. No real message deletions are possible.
+
+- Java 25 (Temurin `jdk-25.0.3+9`), Windows, isolated worktree: `./gradlew.bat :staff-bot:test --tests '*EncryptedReceiptJournalSecurityTest' --offline --no-daemon` **PASS**; 2 POSIX-specific tests skipped by assumptions.
+- `./gradlew.bat :staff-bot:check :domain:check :persistence:check :paper:check --offline --no-daemon` **PASS**. Existing platform-dependent StaffBot cases also skipped on Windows, including Java→Python live-contract test harnesses and POSIX storage tests. Existing synthetic hard-crash helper prints its expected exception while Gradle succeeds.
+- Exact new GitHub head, Linux/POSIX tests, hosted Codacy and coverage are **pending** until a draft PR has been pushed. This is not staging or production acceptance.
+
+## Unresolved architectural and platform gates
+
+**There is still NO cross-process lock or compare-and-swap file transaction.** A digest detects sequential stale updates but concurrent cooperating processes can race between the last check and rename. Constructor-to-write filesystem path substitution is also inherently subject to races where an untrusted actor can modify an ancestor; require a genuinely private OS-enforced directory and a single dedicated writer before future activation, or redesign with stable directory handles and cross-process locking. A malicious process with the same identity that can mutate the private directory remains outside this prototype's protection.
+
+Windows ACL ownership, Windows directory fsync, Linux actual persistence across crash/power loss, cross-JVM writer fencing, file replacement behavior across all filesystems, key rotation/recovery, and release/retention/rollback policy remain unverified. The tested behavior cannot warrant "durable deletion" or "guaranteed retained evidence" in a deployed system. Do not treat an atomic rename by itself as a guaranteed persisted directory entry.
+
+PR #635 separately fixes `SendResult.UNKNOWN` post-send ambiguous acknowledgments. That interface is **not** modified or tested as part of this journal-only work; coordinator must reconcile both stacked patches on a combined exact head and rerun regressions. Before any real transport, authoritative case and signature proof, actual post-send receipts, multi-process fencing, platform-specific permissions, recovery, and staged end-to-end deletion behavior require independent approval and tests. Policy v1 allows AI ALLOW/BLOCK visibility and staff review only; no autonomous punishment or sanctions. **No real Discord/Paper delete, deployment, secrets, player files, or production configuration was used.**
