@@ -213,7 +213,7 @@ class HttpCanonicalCaseGatewayTest {
     }
 
     @Test
-    void malformedUtf8AndMidBodyIoErrorAreRetryable() {
+    void malformedUtf8AndMidBodyIoErrorAreRetryable() throws IOException {
         var command = command(CaseNotice.Action.CLAIM);
         byte[] malformed = (response(command, STATE_CLAIMED) + " ").getBytes(StandardCharsets.UTF_8);
         malformed[malformed.length - 1] = (byte) 0xc3;
@@ -222,14 +222,16 @@ class HttpCanonicalCaseGatewayTest {
                 request -> new HttpCanonicalCaseGateway.RawResponse(200, invalid));
         assertEquals(AuthorityBackedCaseActions.TransportStatus.RETRYABLE, bad.send(command));
         assertTrue(invalid.closed);
-        InputStream broken = new InputStream() {
+        try (InputStream broken = new InputStream() {
             @Override public int read() throws IOException {
                 throw new IOException("synthetic body disconnect");
             }
-        };
-        var disconnected = new HttpCanonicalCaseGateway(ENDPOINT, CLIENT_ID, SECRET, PROOF_SOURCE,
-                request -> new HttpCanonicalCaseGateway.RawResponse(200, broken));
-        assertEquals(AuthorityBackedCaseActions.TransportStatus.RETRYABLE, disconnected.send(command));
+        }) {
+            var disconnected = new HttpCanonicalCaseGateway(ENDPOINT, CLIENT_ID, SECRET, PROOF_SOURCE,
+                    request -> new HttpCanonicalCaseGateway.RawResponse(200, broken));
+            assertEquals(AuthorityBackedCaseActions.TransportStatus.RETRYABLE,
+                    disconnected.send(command));
+        }
     }
 
     @Test
@@ -259,16 +261,21 @@ class HttpCanonicalCaseGatewayTest {
     void nonSuccessHttpStatusesCloseBodiesWithoutReadingThem() {
         var command = command(CaseNotice.Action.CLAIM);
         for (int code : List.of(409, 401, 403, 404, 422, 503)) {
-            TrackingStream stream = new TrackingStream(new byte[100000], 128);
-            var gateway = new HttpCanonicalCaseGateway(ENDPOINT, CLIENT_ID, SECRET, PROOF_SOURCE,
-                    request -> new HttpCanonicalCaseGateway.RawResponse(code, stream));
-            var expected = code == 409 ? AuthorityBackedCaseActions.TransportStatus.STALE
-                    : code == 503 ? AuthorityBackedCaseActions.TransportStatus.RETRYABLE
-                    : AuthorityBackedCaseActions.TransportStatus.DENIED;
-            assertEquals(expected, gateway.send(command));
-            assertEquals(0, stream.bytesRead);
-            assertTrue(stream.closed);
+            assertNonSuccessBodyClosed(code, command);
         }
+    }
+
+    private static void assertNonSuccessBodyClosed(
+            int code, AuthorityBackedCaseActions.Command command) {
+        TrackingStream stream = new TrackingStream(new byte[100000], 128);
+        var gateway = new HttpCanonicalCaseGateway(ENDPOINT, CLIENT_ID, SECRET, PROOF_SOURCE,
+                request -> new HttpCanonicalCaseGateway.RawResponse(code, stream));
+        var expected = code == 409 ? AuthorityBackedCaseActions.TransportStatus.STALE
+                : code == 503 ? AuthorityBackedCaseActions.TransportStatus.RETRYABLE
+                : AuthorityBackedCaseActions.TransportStatus.DENIED;
+        assertEquals(expected, gateway.send(command));
+        assertEquals(0, stream.bytesRead);
+        assertTrue(stream.closed);
     }
 
     @Test
@@ -285,10 +292,11 @@ class HttpCanonicalCaseGatewayTest {
                     output.write(chunk);
                 }
             } catch (IOException expectedAfterCancellation) {
-                // Client closes upon exceeding 4096 bytes.
-            } finally {
+                // Client canceled unread chunks; release the HTTP exchange.
                 exchange.close();
+                return;
             }
+            exchange.close();
         });
         server.start();
         try {
