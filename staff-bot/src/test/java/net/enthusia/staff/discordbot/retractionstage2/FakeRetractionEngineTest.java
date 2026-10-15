@@ -37,20 +37,25 @@ class FakeRetractionEngineTest {
     private AtomicReference<Authorization> authorization;
 
     private static final class FakeGateway implements FakeTransport {
-        DeliveryStatus next = DeliveryStatus.CONFIRMED;
+        SendResult next = SendResult.CONFIRMED;
         boolean crashAfterCommit;
+        boolean unknownAfterCommit;
         int sends;
         int probes;
         final Set<String> actuallyDeleted = new HashSet<>();
 
         @Override
-        public DeliveryStatus deleteSynthetic(ReceiptRecord record) {
+        public SendResult deleteSynthetic(ReceiptRecord record) {
             sends++;
             if (crashAfterCommit) {
                 actuallyDeleted.add(record.target().operationId());
                 throw new IllegalStateException("synthetic process crash after commit");
             }
-            if (next == DeliveryStatus.CONFIRMED) {
+            if (unknownAfterCommit) {
+                actuallyDeleted.add(record.target().operationId());
+                return SendResult.UNKNOWN;
+            }
+            if (next == SendResult.CONFIRMED) {
                 actuallyDeleted.add(record.target().operationId());
             }
             return next;
@@ -143,7 +148,7 @@ class FakeRetractionEngineTest {
 
     @Test
     void transientFailureRetriesAtDueTimeAndCapsAttempts() {
-        discord.next = DeliveryStatus.RETRYABLE;
+        discord.next = SendResult.PROVEN_NO_EFFECT;
         String id = admitted(engine(NOW, true), discordEvidence());
         assertEquals(DeliveryStatus.RETRYABLE, engine(NOW, true).tick(id));
         assertEquals(DeliveryStatus.RETRYABLE, engine(NOW.plusSeconds(4), true).tick(id));
@@ -157,13 +162,56 @@ class FakeRetractionEngineTest {
 
     @Test
     void transientThenConfirmedOnReopenNeverSendsEarly() {
-        discord.next = DeliveryStatus.RETRYABLE;
+        discord.next = SendResult.PROVEN_NO_EFFECT;
         String id = admitted(engine(NOW, true), discordEvidence());
         engine(NOW, true).tick(id);
-        discord.next = DeliveryStatus.CONFIRMED;
+        discord.next = SendResult.CONFIRMED;
         assertEquals(DeliveryStatus.RETRYABLE, engine(NOW.plusSeconds(4), true).tick(id));
         assertEquals(DeliveryStatus.CONFIRMED, engine(NOW.plusSeconds(5), true).tick(id));
         assertEquals(2, discord.sends);
+    }
+
+    @Test
+    void unknownAckAfterActualFakeDeleteMustReconcileAcrossRestart() {
+        discord.unknownAfterCommit = true;
+        String id = admitted(engine(NOW, true), discordEvidence());
+        assertEquals(DeliveryStatus.RETRYABLE, engine(NOW, true).tick(id));
+        assertEquals(1, discord.sends);
+        assertTrue(engine(NOW, true).inspect(id).uncertain());
+
+        // Independent fresh engine from persisted encrypted journal: no second delete.
+        assertEquals(DeliveryStatus.RETRYABLE, engine(NOW.plusSeconds(4), true).tick(id));
+        assertEquals(DeliveryStatus.CONFIRMED, engine(NOW.plusSeconds(5), true).tick(id));
+        assertEquals(1, discord.sends);
+        assertEquals(1, discord.probes);
+        assertEquals(1, engine(NOW.plusSeconds(5), true).inspect(id).attempts());
+    }
+
+    @Test
+    void unknownAckWithoutDeletionRemainsUnknownAndNeverResends() {
+        discord.next = SendResult.UNKNOWN;
+        String id = admitted(engine(NOW, true), discordEvidence());
+        assertEquals(DeliveryStatus.RETRYABLE, engine(NOW, true).tick(id));
+        assertTrue(engine(NOW, true).inspect(id).uncertain());
+        assertEquals(DeliveryStatus.RETRYABLE, engine(NOW.plusSeconds(5), true).tick(id));
+        assertEquals(DeliveryStatus.RETRYABLE, engine(NOW.plusSeconds(10), true).tick(id));
+        assertEquals(1, discord.sends);
+        assertEquals(2, discord.probes);
+        assertEquals(1, engine(NOW.plusSeconds(10), true).inspect(id).attempts());
+        assertEquals(DeliveryStatus.EXPIRED, engine(NOW.plusSeconds(3600), true).tick(id));
+        assertEquals(1, discord.sends);
+    }
+
+    @Test
+    void nullSendResultAfterIntentPersistsAsUncertainAndOnlyReconciles() {
+        discord.next = null;
+        String id = admitted(engine(NOW, true), discordEvidence());
+        assertThrows(NullPointerException.class, () -> engine(NOW, true).tick(id));
+        assertTrue(engine(NOW, true).inspect(id).uncertain());
+        assertEquals(1, discord.sends);
+        assertEquals(DeliveryStatus.RETRYABLE, engine(NOW.plusSeconds(5), true).tick(id));
+        assertEquals(1, discord.sends);
+        assertEquals(1, discord.probes);
     }
 
     @Test
@@ -316,8 +364,8 @@ class FakeRetractionEngineTest {
 
     @Test
     void unsupportedAndFailedFakeResponsesPersistIndependentlyBySurface() {
-        discord.next = DeliveryStatus.UNSUPPORTED;
-        paper.next = DeliveryStatus.FAILED;
+        discord.next = SendResult.UNSUPPORTED;
+        paper.next = SendResult.FAILED;
         ReceiptRecord d = discordEvidence();
         ReceiptRecord p = paperEvidence();
         FakeRetractionEngine worker = engine(NOW, true);
@@ -335,7 +383,7 @@ class FakeRetractionEngineTest {
 
     @Test
     void changedVerdictBeforeRetryRejectsWithoutSecondSend() {
-        discord.next = DeliveryStatus.RETRYABLE;
+        discord.next = SendResult.PROVEN_NO_EFFECT;
         ReceiptRecord r = discordEvidence();
         String id = admitted(engine(NOW, true), r);
         assertEquals(DeliveryStatus.RETRYABLE, engine(NOW, true).tick(id));

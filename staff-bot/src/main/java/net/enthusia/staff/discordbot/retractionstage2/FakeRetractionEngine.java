@@ -17,8 +17,13 @@ public final class FakeRetractionEngine {
     static final int MAX_ATTEMPTS = 3;
     static final int MAX_RECORDS = 64;
 
+    /** Distinguish a proven no-effect send from a possibly committed unknown ACK. */
+    public enum SendResult { CONFIRMED, PROVEN_NO_EFFECT, UNKNOWN, UNSUPPORTED, FAILED }
+
     public interface FakeTransport {
-        DeliveryStatus deleteSynthetic(ReceiptRecord record);
+        /** PROVEN_NO_EFFECT requires evidence that no delete happened, not merely a timeout. */
+        SendResult deleteSynthetic(ReceiptRecord record);
+        /** RETRYABLE here always means the prior send is still ambiguous. */
         DeliveryStatus reconcileSynthetic(ReceiptRecord record);
     }
 
@@ -131,24 +136,30 @@ public final class FakeRetractionEngine {
         Entry prepared = new Entry(row.record(), DeliveryStatus.RETRYABLE,
                 row.attempts() + 1, true, now.plus(RETRY_INTERVAL));
         journal.put(prepared); // Atomic encrypted intent BEFORE fake effect.
-        DeliveryStatus response = transport(prepared).deleteSynthetic(prepared.record());
-        return complete(prepared, response, now, false);
+        SendResult result = Objects.requireNonNull(
+                transport(prepared).deleteSynthetic(prepared.record()),
+                "synthetic send result");
+        // Only a positively proven no-effect outcome authorizes a future new attempt.
+        return switch (result) {
+            case CONFIRMED -> save(prepared, DeliveryStatus.CONFIRMED, false, now).status();
+            case PROVEN_NO_EFFECT -> save(prepared, DeliveryStatus.RETRYABLE, false,
+                    now.plus(RETRY_INTERVAL)).status();
+            case UNKNOWN -> save(prepared, DeliveryStatus.RETRYABLE, true,
+                    now.plus(RETRY_INTERVAL)).status();
+            case UNSUPPORTED -> save(prepared, DeliveryStatus.UNSUPPORTED, false, now).status();
+            case FAILED -> save(prepared, DeliveryStatus.FAILED, false, now).status();
+        };
     }
 
     private DeliveryStatus reconcile(Entry row, Instant now) {
-        DeliveryStatus response = transport(row).reconcileSynthetic(row.record());
-        // Uncertain transport outcome cannot trigger a second destructive send.
-        return complete(row, response, now, true);
-    }
-
-    private DeliveryStatus complete(Entry row, DeliveryStatus result, Instant now,
-                                    boolean wasUncertain) {
-        Objects.requireNonNull(result, "synthetic transport result");
-        if (result == DeliveryStatus.EXPIRED) {
-            result = DeliveryStatus.FAILED; // Only the journal sets expiration.
-        }
-        boolean uncertain = wasUncertain && result == DeliveryStatus.RETRYABLE;
-        return save(row, result, uncertain, now.plus(RETRY_INTERVAL)).status();
+        DeliveryStatus result = Objects.requireNonNull(
+                transport(row).reconcileSynthetic(row.record()),
+                "synthetic reconciliation result");
+        // RETRYABLE does NOT mean the first delete failed. Preserve uncertainty on restart.
+        DeliveryStatus status = result == DeliveryStatus.EXPIRED
+                ? DeliveryStatus.FAILED : result;
+        return save(row, status, status == DeliveryStatus.RETRYABLE,
+                now.plus(RETRY_INTERVAL)).status();
     }
 
     private Entry save(Entry row, DeliveryStatus status, boolean uncertain, Instant due) {
