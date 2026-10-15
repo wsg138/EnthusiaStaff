@@ -147,6 +147,48 @@ complete case-creation payload, scope permissions, canonical origin/UUID
 normalization, case-state closure projection and versioned staff command ACK.
 
 
+
+## Inert Java HTTP client for scoped Moderation API case commands
+
+A new, **unregistered** \`HttpCanonicalCaseGateway\` in the StaffBot
+module can encode the \`AuthorityBackedCaseActions.Command\` DTO expected
+by the API draft \`POST /v1/staff-case-commands\` contract.
+
+- The constructor requires a dedicated client ID, private bearer secret
+  of at least 32 characters, exact case-command URI, and HTTPS (except
+  loopback HTTP for local synthetic tests). Redirects are disabled.
+- It sends **one** POST using the same idempotency token supplied by
+  the staff command. No hidden automatic retry, player chat text or
+  punishment fields are added. Timeouts/IO ambiguity return RETRYABLE.
+- Status 409 is STALE; 401/403/404/422 are DENIED; unknown and transport
+  failure are RETRYABLE. HTTP 200 is only ACCEPTED after bounded JSON
+  validation of the expected case UUID, next revision, correct CLAIMED
+  or CLOSED state, and boolean replay marker. Any mismatch is RETRYABLE,
+  **never** an optimistic staff case mutation.
+- A successful transport response is still SUBMITTED_AWAITING_EVENT by
+  the domain adapter. It is NOT proof that a Discord or Minecraft staff
+  case is already changed in the local read-side ledger.
+
+Tests inject a fake, single-attempt HTTP sender and check exact request
+fields, credential headers, origin, response matching, failures and unsafe
+endpoint rejection. Nothing connects this gateway to real JDA buttons,
+Paper menus, server startup, production credentials or network.
+
+**Security hold:** The API counterpart PR #145 deliberately does not
+register its route. A bearer credential can authenticate StaffBot as a
+service but does not independently authenticate the claimed Discord/Paper
+staff actor. Signed/verified staff-identity attestation and actor permission
+checking, transport/key rotation and staging E2E must be solved before
+this gateway can be instantiated in production. Do not add the URI or
+the secret to committed configuration.
+
+
+## Independent staff proof relay (draft)
+
+The inactive HttpCanonicalCaseGateway requires an injected AuthorityProofSource. It receives a short-lived issued-at time, expiry and opaque signature from the independent current-role authority before preparing one HTTP request, and forwards these fields without generating any signature. A missing provider or invalid proof envelope is rejected; if the provider is unavailable, nothing is sent. Network ambiguity remains RETRYABLE with the original idempotency ID.
+
+This is the Java companion to Moderation API draft #148. Test-only proof strings are syntactically valid but deliberately NOT actual cryptographic attestations; they test transport only. No production Paper or Discord staff-role proof issuer is implemented. A real issuer must independently verify the actor, linked Discord/Paper identity, server and action, then sign the exact canonical claims defined by API #148, holding the signing key outside StaffBot. The API must verify that signature. Do not enable live commands until that authority and independent staged tests exist.
+
 ## Coordinator Discord delivery safety and initial revision fix
 
 The dormant DiscordCaseDelivery module was refactored into scoped-notice, verified-private-channel, publish and permission-override helpers. It maintains its fail-closed checks for guild, destination role, @everyone public access, other visible roles, and individual member overrides. Its ambiguous HTTP/JDA delivery remains fenced as POSSIBLY_SENT, not automatically retried with a second message. This refactor does not connect a running JDA listener.
