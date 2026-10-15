@@ -112,6 +112,7 @@ class EncryptedReceiptJournalSecurityTest {
     void authenticatedInvalidCountLengthDuplicateAndTrailingDataFailClosed() throws Exception {
         new EncryptedReceiptJournal(file, key).put(entry("a"));
         byte[] plain = plaintext();
+        assertTrue(plain.length > 4);
         byte[] count = plain.clone();
         ByteBuffer.wrap(count).putInt(65);
         corruptReopen(count);
@@ -197,6 +198,20 @@ class EncryptedReceiptJournalSecurityTest {
         Files.move(file, previous);
         Files.createSymbolicLink(file, previous);
         assertThrows(IllegalStateException.class, () -> journal.put(entry));
+    }
+
+    @Test
+    void generatedGcmSnapshotNoncesDifferAcrossRepeatedWrites() throws Exception {
+        EncryptedReceiptJournal journal = new EncryptedReceiptJournal(file, key);
+        Entry row = entry("a");
+        Set<String> nonces = new java.util.HashSet<>();
+        for (int i = 0; i < 128; i++) {
+            journal.put(row);
+            byte[] snapshot = Files.readAllBytes(file);
+            String nonce = java.util.HexFormat.of().formatHex(snapshot, 4, 16);
+            assertTrue(nonces.add(nonce), "snapshot must use a fresh 96-bit nonce");
+        }
+        assertEquals(128, nonces.size());
     }
 
     @Test

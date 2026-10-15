@@ -5,7 +5,18 @@
 ## Baseline and external findings
 
 - Source baseline: `workers/exact-receipt-stage2-20261015` at `7dd95379746a55a74e8d8af249d33b2accd0958e` (PR #633).
-- GitHub Codacy PR-summary comment for **that baseline** reports **13 new findings: 2 critical Security, 8 medium Performance, 2 medium ErrorProne, 1 medium BestPractice**. The summary does not publish finding-specific paths, rule IDs or line numbers. The linked Codacy issue dashboard was not accessible from this worker session. Therefore **none of those 13 can be honestly certified as individually resolved or false positive**. Coordinator must inspect all 13 specific findings on Codacy and record their individual dispositions before any merge. Do not blanket suppress analysis rules.
+- Hosted Codacy [exact issue API for #633](https://api.codacy.com/api/v3/analysis/organizations/gh/wsg138/repositories/EnthusiaStaff/pull-requests/633/issues) reports **13 findings**. The per-finding disposition is below; no general suppression or broad exclusion was introduced.
+
+| Parent #633 issue (file, baseline line) | Finding | Disposition |
+| --- | --- | --- |
+| `EncryptedReceiptJournal.java:62,66,70` | PMD `AvoidSynchronizedAtMethodLevel` (3 medium) | **Fixed in Worker H** using synchronized blocks plus an ordered concurrent map, backed by local PMD zero findings |
+| `EncryptedReceiptJournal.java:182,183` | Opengrep `gcm-detection` (2 critical audit alerts) | **Security review required, not ignored.** Product encrypts with fresh 96-bit `SecureRandom` nonce per snapshot and retains external AES-256 key; matching decrypt uses authenticated stored nonce. Random collisions remain probabilistically possible, so no absolute uniqueness guarantee; explicit 128-write no-duplicate regression added. No key or IV hard-coded. See nonce discussion below |
+| `FakeRetractionEngine.java:89,103,168,172` | PMD `AvoidSynchronizedAtMethodLevel` (4 medium) | **Outside Worker H scope**, coordinator #635 owner must review |
+| `FakeRetractionEngine.java:148` | PMD `AvoidReassigningParameters` (1 medium) | **Outside Worker H scope**, coordinator #635 owner must review |
+| `FakeRetractionEngineTest.java:29,86` | PMD `AvoidDuplicateLiterals` (2 medium) | **Outside Worker H scope**, coordinator #635 owner must review |
+| `FakeRetractionEngineTest.java:260` | PMD `AvoidInstantiatingObjectsInLoops` (1 medium) | **Outside Worker H scope**, coordinator #635 owner must review |
+
+The [exact issue API for Worker H draft #636](https://api.codacy.com/api/v3/analysis/organizations/gh/wsg138/repositories/EnthusiaStaff/pull-requests/636/issues) reported **3 issues at initial head `d99d8017`**: PMD `JUnitTestsShouldIncludeAssert` at security test line 112 (**fixed locally** with a direct assertion), plus Opengrep `gcm-detection` at security test lines 66 and 67 (**manual crypto audit reminders**). That test helper generates a fresh `SecureRandom` nonce for independently authenticated malicious-payload test fixtures and never reuses an encryption nonce intentionally. These two test-only alerts are **not proof of an actual vulnerability**, but remain visible security audit findings, not silently marked resolved. Re-evaluate hosted findings at the final head.
 - Existing Codacy PR #633 coverage summary: 91.43% diff coverage, +0.14% variation. These numbers refer to the parent head, **not** Worker H's head. Hosted Worker H head coverage and static findings must be checked independently.
 
 ## Security changes and reasons
@@ -18,11 +29,11 @@
 
 ## Tests and local verification
 
-New `EncryptedReceiptJournalSecurityTest` checks MAC/version/truncation/wrong-key failure; authenticated hostile count, UTF framing, duplicates and trailing data; partial encoding failure preserving last good ciphertext; stale writer, unexpected removal and receipt mutation refusal; uncertain intent and attempt count after disk reopen; directory replacement; and POSIX-only symlink/permission rejection. All tests use generated keys and synthetic receipts. No real message deletions are possible.
+New `EncryptedReceiptJournalSecurityTest` checks MAC/version/truncation/wrong-key failure; authenticated hostile count, UTF framing, duplicates and trailing data; partial encoding failure preserving last good ciphertext; stale writer, unexpected removal and receipt mutation refusal; uncertain intent and attempt count after disk reopen; 128 independent randomly generated GCM nonces; directory replacement; and POSIX-only symlink/permission rejection. All tests use generated keys and synthetic receipts. No real message deletions are possible.
 
 - Java 25 (Temurin `jdk-25.0.3+9`), Windows, isolated worktree: `./gradlew.bat :staff-bot:test --tests '*EncryptedReceiptJournalSecurityTest' --offline --no-daemon` **PASS**; 2 POSIX-specific tests skipped by assumptions.
 - `./gradlew.bat :staff-bot:check :domain:check :persistence:check :paper:check --offline --no-daemon` **PASS**. Existing platform-dependent StaffBot cases also skipped on Windows, including Java→Python live-contract test harnesses and POSIX storage tests. Existing synthetic hard-crash helper prints its expected exception while Gradle succeeds.
-- Exact new GitHub head, Linux/POSIX tests, hosted Codacy and coverage are **pending** until a draft PR has been pushed. This is not staging or production acceptance.
+- Local PMD 6.55.0 with the checked-in `ruleset.xml` against both Worker H Java files: **zero findings** after fixing four initial synchronization/concurrency warnings and the one direct-test-assertion warning.\n- Hosted final-head analysis and coverage, plus Linux/POSIX tests, remain separately required; the initial #636 head reported two Opengrep GCM audit warnings and one now-fixed PMD warning. This is not staging or production acceptance.
 
 ## Unresolved architectural and platform gates
 

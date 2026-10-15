@@ -27,6 +27,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentSkipListMap;
 import javax.crypto.Cipher;
 import javax.crypto.SecretKey;
 import javax.crypto.spec.GCMParameterSpec;
@@ -45,7 +46,7 @@ public final class EncryptedReceiptJournal {
 
     private final Path file;
     private final SecretKey key;
-    private final Map<String, Entry> entries = new LinkedHashMap<>();
+    private final Map<String, Entry> entries = new ConcurrentSkipListMap<>();
     // Detect external replacement and stale sequential writers; NOT a cross-process lock.
     private byte[] lastSnapshotDigest;
     private boolean persistenceUncertain;
@@ -67,31 +68,38 @@ public final class EncryptedReceiptJournal {
         }
     }
 
-    public synchronized Entry get(String operationId) {
-        return entries.get(operationId);
+    public Entry get(String operationId) {
+        synchronized (entries) {
+            return entries.get(operationId);
+        }
     }
 
-    public synchronized int size() {
-        return entries.size();
+    public int size() {
+        synchronized (entries) {
+            return entries.size();
+        }
     }
 
-    public synchronized void put(Entry entry) {
-        if (persistenceUncertain) {
-            throw new IllegalStateException("journal requires verified reopen after persistence failure");
+    public void put(Entry entry) {
+        synchronized (entries) {
+            if (persistenceUncertain) {
+                throw new IllegalStateException(
+                        "journal requires verified reopen after persistence failure");
+            }
+            String id = entry.record().target().operationId();
+            if (!entries.containsKey(id) && entries.size() >= MAX_RECORDS) {
+                throw new IllegalStateException("receipt capacity exceeded");
+            }
+            Entry existing = entries.get(id);
+            if (existing != null && !existing.record().equals(entry.record())) {
+                throw new IllegalStateException("operation receipt cannot be replaced");
+            }
+            Map<String, Entry> updated = new LinkedHashMap<>(entries);
+            updated.put(id, entry);
+            writeSnapshot(updated);
+            entries.clear();
+            entries.putAll(updated);
         }
-        String id = entry.record().target().operationId();
-        if (!entries.containsKey(id) && entries.size() >= MAX_RECORDS) {
-            throw new IllegalStateException("receipt capacity exceeded");
-        }
-        Entry existing = entries.get(id);
-        if (existing != null && !existing.record().equals(entry.record())) {
-            throw new IllegalStateException("operation receipt cannot be replaced");
-        }
-        Map<String, Entry> updated = new LinkedHashMap<>(entries);
-        updated.put(id, entry);
-        writeSnapshot(updated);
-        entries.clear();
-        entries.putAll(updated);
     }
 
     private void readSnapshot() {
