@@ -41,8 +41,7 @@ public final class PaperCaseActorProofIssuer {
     public PaperCaseActorProofIssuer(
             String boundServerScope, String clientId, byte[] authorityKey,
             Clock clock, CurrentRoleGate gate) {
-        if (boundServerScope == null || !SCOPE.matcher(boundServerScope).matches()
-                || clientId == null || !CLIENT.matcher(clientId).matches()
+        if (!validIdentity(boundServerScope, clientId)
                 || authorityKey == null || authorityKey.length < 32
                 || clock == null || gate == null) {
             throw new IllegalArgumentException("invalid independent case authority settings");
@@ -52,6 +51,11 @@ public final class PaperCaseActorProofIssuer {
         this.authorityKey = Arrays.copyOf(authorityKey, authorityKey.length);
         this.clock = clock;
         this.gate = gate;
+    }
+
+    private static boolean validIdentity(String scope, String clientId) {
+        return scope != null && SCOPE.matcher(scope).matches()
+                && clientId != null && CLIENT.matcher(clientId).matches();
     }
 
     public Proof issue(AuthorityBackedCaseActions.Command command) {
