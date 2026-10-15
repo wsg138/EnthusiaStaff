@@ -25,6 +25,7 @@ import java.util.Set;
 public final class ExactRetractionPlanner {
     private static final Duration MAX_AGE = Duration.ofSeconds(15);
     private static final int MAX_PLAN_RECORDS = 64;
+    private static final String BLOCK_VERDICT = "BLOCK";
 
     private ExactRetractionPlanner() {}
 
@@ -136,27 +137,10 @@ public final class ExactRetractionPlanner {
         Objects.requireNonNull(explicitRelatedEventIds, "related event IDs");
         Objects.requireNonNull(recordedPublications, "publication receipts");
         Objects.requireNonNull(allowedDestinations, "destinations");
-        if (explicitRelatedEventIds.size() > MAX_PLAN_RECORDS
-                || recordedPublications.size() > MAX_PLAN_RECORDS
-                || allowedDestinations.size() > MAX_PLAN_RECORDS) {
-            return refused(Refusal.INPUT_CAPACITY_EXCEEDED);
-        }
-        if (!"BLOCK".equals(currentVerdict)) {
-            return refused(Refusal.NOT_BLOCK);
-        }
-        if (current.eventId().equals(previous.eventId())
-                || !explicitRelatedEventIds.contains(previous.eventId())) {
-            return refused(Refusal.EVIDENCE_NOT_EXPLICIT);
-        }
-        if (!isPublicOrigin(current) || !isPublicOrigin(previous)) {
-            return refused(Refusal.NONPUBLIC_SOURCE);
-        }
-        if (!sameConversation(current, previous)) {
-            return refused(Refusal.SOURCE_CONTEXT_MISMATCH);
-        }
-        Duration age = Duration.between(previous.occurredAt(), current.occurredAt());
-        if (age.isNegative() || age.compareTo(MAX_AGE) > 0) {
-            return refused(Refusal.OUTSIDE_WINDOW);
+        Refusal refusal = preflight(current, previous, currentVerdict,
+                explicitRelatedEventIds, recordedPublications, allowedDestinations);
+        if (refusal != Refusal.NONE) {
+            return refused(refusal);
         }
 
         List<Target> selected = new ArrayList<>();
@@ -169,27 +153,68 @@ public final class ExactRetractionPlanner {
                 continue;
             }
             Destination destination = receipt.destination();
-            Surface surface = destination.surface();
-            if (surface == Surface.MINECRAFT_SYSTEM
-                    || surface == Surface.PAPER_SIGNED
-                    && receipt.signedMessageSignature() == null) {
+            if (!supportedPublication(receipt)) {
                 unsupported++;
                 continue;
             }
-            if (surface == Surface.DISCORD
-                    && (!validSnowflake(destination.scopeId())
-                    || !validSnowflake(destination.channelId())
-                    || !validSnowflake(receipt.remoteMessageId()))) {
-                unsupported++;
-                continue;
-            }
-            String operationId = operationId(previous.eventId(), receipt);
+            String operationId = operationId(previous, receipt);
             if (dedup.add(operationId)) {
                 selected.add(new Target(operationId, previous.eventId(), destination,
                         receipt.remoteMessageId(), receipt.signedMessageSignature()));
             }
         }
         return new Plan(selected, unsupported, Refusal.NONE);
+    }
+
+    private static Refusal preflight(
+            SourceEvent current, SourceEvent previous, String verdict,
+            Collection<String> related, Collection<PublicationReceipt> publications,
+            Set<Destination> allowed) {
+        if (exceedsLimit(related, publications, allowed)) {
+            return Refusal.INPUT_CAPACITY_EXCEEDED;
+        }
+        if (!BLOCK_VERDICT.equals(verdict)) {
+            return Refusal.NOT_BLOCK;
+        }
+        if (!hasExplicitEvidence(current, previous, related)) {
+            return Refusal.EVIDENCE_NOT_EXPLICIT;
+        }
+        if (!isPublicOrigin(current) || !isPublicOrigin(previous)) {
+            return Refusal.NONPUBLIC_SOURCE;
+        }
+        if (!sameConversation(current, previous)) {
+            return Refusal.SOURCE_CONTEXT_MISMATCH;
+        }
+        return withinAgeWindow(current, previous) ? Refusal.NONE : Refusal.OUTSIDE_WINDOW;
+    }
+
+    private static boolean exceedsLimit(
+            Collection<String> related, Collection<PublicationReceipt> publications,
+            Set<Destination> allowed) {
+        return related.size() > MAX_PLAN_RECORDS || publications.size() > MAX_PLAN_RECORDS
+                || allowed.size() > MAX_PLAN_RECORDS;
+    }
+
+    private static boolean hasExplicitEvidence(
+            SourceEvent current, SourceEvent previous, Collection<String> related) {
+        return !current.eventId().equals(previous.eventId())
+                && related.contains(previous.eventId());
+    }
+
+    private static boolean withinAgeWindow(SourceEvent current, SourceEvent previous) {
+        Duration age = Duration.between(previous.occurredAt(), current.occurredAt());
+        return !age.isNegative() && age.compareTo(MAX_AGE) <= 0;
+    }
+
+    private static boolean supportedPublication(PublicationReceipt receipt) {
+        Destination destination = receipt.destination();
+        return switch (destination.surface()) {
+            case MINECRAFT_SYSTEM -> false;
+            case PAPER_SIGNED -> receipt.signedMessageSignature() != null;
+            case DISCORD -> validSnowflake(destination.scopeId())
+                    && validSnowflake(destination.channelId())
+                    && validSnowflake(receipt.remoteMessageId());
+        };
     }
 
     private static boolean isPublicOrigin(SourceEvent source) {
@@ -218,11 +243,14 @@ public final class ExactRetractionPlanner {
                 && source.senderId().equals(receipt.sourceSenderId());
     }
 
-    private static String operationId(String originalEventId, PublicationReceipt receipt) {
+    private static String operationId(SourceEvent origin, PublicationReceipt receipt) {
         try {
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
-            for (String part : List.of("exact-retraction-v1", originalEventId,
-                    receipt.destination().surface().name(),
+            for (String part : List.of("exact-retraction-v2", origin.eventId(),
+                    origin.platform(), origin.serverScope(), origin.channelProfile(),
+                    origin.channelId(), origin.conversationId() == null
+                            ? "" : origin.conversationId(), origin.senderId(),
+                    origin.occurredAt().toString(), receipt.destination().surface().name(),
                     receipt.destination().scopeId(), receipt.destination().channelId(),
                     receipt.remoteMessageId(), receipt.signedMessageSignature() == null
                             ? "" : receipt.signedMessageSignature())) {
