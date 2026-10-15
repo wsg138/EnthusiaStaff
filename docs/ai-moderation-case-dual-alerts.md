@@ -145,3 +145,39 @@ This does not create a CASE_CREATED/INITIAL notice in the API or authorize
 actual StaffBot action. The eventual authenticated bridge still needs a
 complete case-creation payload, scope permissions, canonical origin/UUID
 normalization, case-state closure projection and versioned staff command ACK.
+
+
+
+## Inert Java HTTP client for scoped Moderation API case commands
+
+A new, **unregistered** \`HttpCanonicalCaseGateway\` in the StaffBot
+module can encode the \`AuthorityBackedCaseActions.Command\` DTO expected
+by the API draft \`POST /v1/staff-case-commands\` contract.
+
+- The constructor requires a dedicated client ID, private bearer secret
+  of at least 32 characters, exact case-command URI, and HTTPS (except
+  loopback HTTP for local synthetic tests). Redirects are disabled.
+- It sends **one** POST using the same idempotency token supplied by
+  the staff command. No hidden automatic retry, player chat text or
+  punishment fields are added. Timeouts/IO ambiguity return RETRYABLE.
+- Status 409 is STALE; 401/403/404/422 are DENIED; unknown and transport
+  failure are RETRYABLE. HTTP 200 is only ACCEPTED after bounded JSON
+  validation of the expected case UUID, next revision, correct CLAIMED
+  or CLOSED state, and boolean replay marker. Any mismatch is RETRYABLE,
+  **never** an optimistic staff case mutation.
+- A successful transport response is still SUBMITTED_AWAITING_EVENT by
+  the domain adapter. It is NOT proof that a Discord or Minecraft staff
+  case is already changed in the local read-side ledger.
+
+Tests inject a fake, single-attempt HTTP sender and check exact request
+fields, credential headers, origin, response matching, failures and unsafe
+endpoint rejection. Nothing connects this gateway to real JDA buttons,
+Paper menus, server startup, production credentials or network.
+
+**Security hold:** The API counterpart PR #145 deliberately does not
+register its route. A bearer credential can authenticate StaffBot as a
+service but does not independently authenticate the claimed Discord/Paper
+staff actor. Signed/verified staff-identity attestation and actor permission
+checking, transport/key rotation and staging E2E must be solved before
+this gateway can be instantiated in production. Do not add the URI or
+the secret to committed configuration.
