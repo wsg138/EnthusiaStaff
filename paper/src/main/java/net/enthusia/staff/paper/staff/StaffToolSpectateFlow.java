@@ -21,6 +21,7 @@ final class StaffToolSpectateFlow {
     private static final String SPECTATE_EXEMPT_PERMISSION = "enthusiastaff.stafftools.spectate-exempt";
 
     private static final double FOLLOW_REFRESH_DISTANCE_SQUARED = 2.25;
+    private static final int TARGET_CHECK_INTERVAL_TICKS = 20;
     private final Map<UUID, FollowSession> follows = new ConcurrentHashMap<>();
     private final Map<UUID, Object> followAttempts = new ConcurrentHashMap<>();
     private final Map<UUID, Player> ownedSpectators = new ConcurrentHashMap<>();
@@ -194,7 +195,8 @@ final class StaffToolSpectateFlow {
     }
 
     private boolean currentAttempt(UUID actorId, Object attempt) {
-        return followAttempts.get(actorId) == attempt;
+        // Attempt tokens use Object's identity-based equals implementation.
+        return attempt.equals(followAttempts.get(actorId));
     }
 
     private void endAttempt(UUID actorId, Object attempt, String reason) {
@@ -369,16 +371,28 @@ final class StaffToolSpectateFlow {
     private void monitorAttachmentTick(Player actor, Object attempt, TargetSnapshot snapshot,
                                        Runnable cancelTask, AtomicInteger ticks,
                                        AtomicBoolean targetCheckInFlight) {
+        if (cancelInactiveAttachment(actor, attempt, snapshot, cancelTask)) {
+            return;
+        }
+        // Check target safety on the target-owned scheduler every second.
+        if (ticks.incrementAndGet() % TARGET_CHECK_INTERVAL_TICKS == 0
+                && targetCheckInFlight.compareAndSet(false, true)) {
+            scheduleTargetSafetyCheck(actor.getUniqueId(), attempt, snapshot, targetCheckInFlight);
+        }
+    }
+
+    private boolean cancelInactiveAttachment(Player actor, Object attempt, TargetSnapshot snapshot,
+                                             Runnable cancelTask) {
         if (!currentAttempt(actor.getUniqueId(), attempt)) {
             cancelTask.run();
-            return;
+            return true;
         }
         if (actor.getGameMode() != GameMode.SPECTATOR
                 || !sameConnection(snapshot.connection(), actor.getSpectatorTarget())) {
             followAttempts.remove(actor.getUniqueId(), attempt);
             ownedSpectators.remove(actor.getUniqueId());
             cancelTask.run();
-            return;
+            return true;
         }
         if (!actorAuthorized.test(actor)) {
             stop(actor);
@@ -387,7 +401,7 @@ final class StaffToolSpectateFlow {
                     NamedTextColor.RED
             )));
             cancelTask.run();
-            return;
+            return true;
         }
         if (vanished.test(snapshot.playerId())) {
             stop(actor);
@@ -396,25 +410,25 @@ final class StaffToolSpectateFlow {
                     NamedTextColor.YELLOW
             )));
             cancelTask.run();
-            return;
+            return true;
         }
-        // Permission and reconnect checks must run on the target's entity scheduler.
-        // Bound cross-region checks to once per second while continuing cheap local checks.
-        if (ticks.incrementAndGet() % 20 == 0 && targetCheckInFlight.compareAndSet(false, true)) {
-            UUID actorId = actor.getUniqueId();
-            onEntity(snapshot.playerId(),
-                    target -> {
-                        boolean protectedNow = connectionChanged(snapshot, target) || !targetEligible(target);
-                        targetCheckInFlight.set(false);
-                        if (protectedNow) {
-                            onEntity(actorId, current -> stopProtectedSpectator(current, attempt, snapshot));
-                        }
-                    },
-                    () -> {
-                        targetCheckInFlight.set(false);
+        return false;
+    }
+
+    private void scheduleTargetSafetyCheck(UUID actorId, Object attempt, TargetSnapshot snapshot,
+                                           AtomicBoolean targetCheckInFlight) {
+        onEntity(snapshot.playerId(),
+                target -> {
+                    boolean protectedNow = connectionChanged(snapshot, target) || !targetEligible(target);
+                    targetCheckInFlight.set(false);
+                    if (protectedNow) {
                         onEntity(actorId, current -> stopProtectedSpectator(current, attempt, snapshot));
-                    });
-        }
+                    }
+                },
+                () -> {
+                    targetCheckInFlight.set(false);
+                    onEntity(actorId, current -> stopProtectedSpectator(current, attempt, snapshot));
+                });
     }
 
     private void stopProtectedSpectator(Player actor, Object attempt, TargetSnapshot snapshot) {
