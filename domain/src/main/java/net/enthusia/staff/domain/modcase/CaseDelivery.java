@@ -12,7 +12,7 @@ public record CaseDelivery(Key key, State state, int attempts, String attemptTok
     public record Key(CaseNotice.Origin origin, String scope, UUID caseId,
                       long revision, Destination destination) {
         public Key {
-            if (origin == null || scope == null || scope.isBlank() || caseId == null || revision < 1
+            if (origin == null || scope == null || scope.isBlank() || caseId == null || revision < 0
                     || destination == null) {
                 throw new IllegalArgumentException("invalid case delivery key");
             }

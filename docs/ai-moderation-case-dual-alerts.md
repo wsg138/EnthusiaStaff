@@ -126,3 +126,22 @@ current API prototype, the canonical case revision is maintained by
 ContextMonitor; the eventual authoritative service must also serialize
 staff commands and AI event revisions into ONE revision sequence. Neither
 repository currently has that integrated transport.
+
+
+
+## Initial canonical revision mapping
+
+The disabled Moderation API ContextMonitor.start_case() persists the initial
+case at revision 0, then claim/follow-up advance to 1, 2, and so on.
+The offline StaffBot CaseNotice, CaseDelivery.Key, and
+AuthorityBackedCaseActions.Command now accept nonnegative revisions starting
+at 0; negative revisions remain invalid. The StaffBot must not renumber
+revisions internally, since an off-by-one projection would defeat
+expected-version CAS and idempotent replay. A new isolated test validates
+initial projection at revision 0, deferred staff claim at expected version 0,
+and subsequent authoritative claim at version 1.
+
+This does not create a CASE_CREATED/INITIAL notice in the API or authorize
+actual StaffBot action. The eventual authenticated bridge still needs a
+complete case-creation payload, scope permissions, canonical origin/UUID
+normalization, case-state closure projection and versioned staff command ACK.

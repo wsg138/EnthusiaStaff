@@ -135,4 +135,43 @@ class AuthorityBackedCaseActionsTest {
         assertEquals(AuthorityBackedCaseActions.Outcome.NOT_FOUND,
                 actions.claim(crossScope, 1, "staff:alice", "command:wrong:01"));
     }
+
+    @Test
+    void canonicalRevisionZeroBootstrapAndRemoteClaimArePreserved() {
+        FileCaseLedger replica = new FileCaseLedger(directory);
+        UUID id = UUID.randomUUID();
+        CaseNotice first = notice(id, 0, CaseNotice.State.OPEN, null);
+        assertEquals(CaseLedger.Ingest.CREATED, replica.accept(first));
+        CaseDelivery.Key zero = key(first);
+        assertEquals(0, zero.revision());
+        List<AuthorityBackedCaseActions.Command> sent = new ArrayList<>();
+        AuthorityBackedCaseActions actions = actions(replica, command -> {
+            sent.add(command);
+            return AuthorityBackedCaseActions.TransportStatus.ACCEPTED;
+        }, (actor, event, action) -> actor.equals("staff:alice"));
+        assertEquals(AuthorityBackedCaseActions.Outcome.SUBMITTED_AWAITING_EVENT,
+                actions.claim(zero, 0, "staff:alice", "command:claim:zero"));
+        assertEquals(0, sent.get(0).expectedRevision());
+        assertEquals(0, replica.find(zero).orElseThrow().revision());
+        assertEquals(CaseNotice.State.OPEN, replica.find(zero).orElseThrow().state());
+        CaseNotice claimed = notice(id, 1, CaseNotice.State.CLAIMED, "staff:alice");
+        assertEquals(CaseLedger.Ingest.ADVANCED, replica.accept(claimed));
+        assertEquals(AuthorityBackedCaseActions.Outcome.SUBMITTED_AWAITING_EVENT,
+                actions.resolve(key(claimed), 1, "staff:alice", "command:resolve:01"));
+    }
+
+    @Test
+    void negativeRevisionsStillRejectedOnAllThreeBoundaries() {
+        UUID id = UUID.randomUUID();
+        assertThrows(IllegalArgumentException.class,
+                () -> notice(id, -1, CaseNotice.State.OPEN, null));
+        assertThrows(IllegalArgumentException.class,
+                () -> new CaseDelivery.Key(CaseNotice.Origin.MINECRAFT, "smp", id,
+                        -1, CaseDelivery.Destination.DISCORD));
+        assertThrows(IllegalArgumentException.class,
+                () -> new AuthorityBackedCaseActions.Command(CaseNotice.Origin.MINECRAFT,
+                        "smp", id, -1, "staff:alice",
+                        CaseNotice.Action.CLAIM, "command:invalid:1"));
+    }
+
 }

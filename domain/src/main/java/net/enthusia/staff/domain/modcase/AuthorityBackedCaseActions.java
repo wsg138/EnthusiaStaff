@@ -31,7 +31,7 @@ public final class AuthorityBackedCaseActions {
                           String commandId) {
         public Command {
             if (origin == null || scope == null || scope.isBlank() || caseId == null
-                    || expectedRevision < 1 || actor == null || actor.isBlank()
+                    || expectedRevision < 0 || actor == null || actor.isBlank()
                     || action == null || commandId == null
                     || !SAFE_VALUE.matcher(commandId).matches()) {
                 throw new IllegalArgumentException("invalid canonical staff command");
