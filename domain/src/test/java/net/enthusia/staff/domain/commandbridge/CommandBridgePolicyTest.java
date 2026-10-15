@@ -1,6 +1,7 @@
 package net.enthusia.staff.domain.commandbridge;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.time.Instant;
@@ -24,6 +25,14 @@ class CommandBridgePolicyTest {
             Set.of(TARGET_SERVER),
             List.of(new CommandBridgeRule("list", StaffRank.MOD, "enthusia.console.list", 0))
     );
+
+    @Test
+    void configurationCannotDelegateConsoleToHelperDeveloperOrSystem() {
+        for (StaffRank disallowed : List.of(StaffRank.HELPER, StaffRank.DEVELOPER, StaffRank.SYSTEM)) {
+            assertThrows(IllegalArgumentException.class,
+                    () -> new CommandBridgeRule("list", disallowed, "enthusia.console.list", 0));
+        }
+    }
 
     @Test
     void acceptsOnlyExplicitTargetAndCommand() {

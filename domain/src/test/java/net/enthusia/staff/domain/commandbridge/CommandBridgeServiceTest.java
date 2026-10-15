@@ -110,6 +110,9 @@ class CommandBridgeServiceTest {
 
         assertEquals(CommandBridgeOutcome.UNAUTHORIZED_ACTOR, service.handle(request(TARGET_SERVER, LIST_COMMAND)).outcome());
         assertEquals(0, executions.get());
+        assertEquals(CommandBridgeOutcome.UNAUTHORIZED_ACTOR,
+                service(new FakeAudit(), true, authorized(StaffRank.DEVELOPER), acceptedExecutor())
+                        .handle(request(TARGET_SERVER, LIST_COMMAND)).outcome());
     }
 
     @Test

@@ -9,7 +9,7 @@
 3. A fresh request ID, requested-at instant, HMAC-SHA256 body-bound signature, timestamp and 32–64-character random nonce are sent once to an explicitly configured Minecraft target endpoint. The client does not redirect or retry ambiguous responses.
 4. The Paper HTTP endpoint checks POST, exact path, private network peer, body size, HMAC timestamp (±30 seconds), signature and in-memory nonce replay. **A reused nonce is rejected; after restart, the durable request-ID audit is the second replay defense.**
 5. Paper's domain policy checks exact target server, explicitly configured command name/rank/permission/max argument count, and malformed separators/quotes/controls. The body `requestedAt` is also checked within ±30 seconds, independent of the HMAC header.
-6. Before attempting execution, Paper claims a durable audit request ID with a body fingerprint, rereads canonical account linking, rereads LuckPerms rank and explicit permission, and checks live Staff Mode duty **before and after** LuckPerms lookup. The Paper global scheduler rechecks duty again immediately before command dispatch. Helper/Developer are not implicitly Mod; Discord roles or Discord admin alone grant nothing.
+6. Before attempting execution, Paper claims a durable audit request ID with a body fingerprint, rereads canonical account linking, rereads LuckPerms rank and explicit permission, and checks live Staff Mode duty **before and after** LuckPerms lookup. The Paper global scheduler rechecks duty again immediately before command dispatch. Configuration rejects Helper, Developer, and SYSTEM minimum ranks: console rules may be MOD, ADMIN or FOUNDER only. Discord roles or Discord admin alone grant nothing.
 7. One console command dispatch is captured (max 8192 captured characters), sanitized (20 lines / 2000 characters, selected secret/path/evidence patterns), and a bounded, signed result is returned. StaffBot neutralizes Discord mentions and backticks.
 8. An unknown execution result, failed durable completion, timeout, in-flight duplicate, or server outage **must not** cause automatic command replay. Recovery is manual and requires inspection of server state/audit first.
 
@@ -24,7 +24,7 @@ Paper's console bridge also requires a usable `runtimeComponents.staffMode()::au
 | Case | Expected safe behavior | Source proof / remaining verification |
 | --- | --- | --- |
 | Unlinked / stale Discord subject | No dispatch | Existing coordinator + canonical Paper-link tests |
-| Helper/Developer below configured MOD minimum | No dispatch | Existing service rank test; staging ranks still needed |
+| Helper/Developer below configured MOD minimum | No dispatch | Existing and expanded rank/configuration tests; staging ranks still needed |
 | Discord administrator with no Minecraft rank | No dispatch | Paper role/permission gate; targeted staging proof outstanding |
 | MOD+ but off-duty | No dispatch | New LuckPerms duty-gate test |
 | Duty revoked during asynchronous LuckPerms lookup | No dispatch | New pre-/post-lookup test |
