@@ -1,6 +1,7 @@
 package net.enthusia.staff.paper.command;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.ArrayList;
@@ -23,6 +24,16 @@ class ReportMessagePresentationTest {
         ReportsCommand.appendMessageBody(segments, "X".repeat(4_100));
         assertTrue(segments.getLast().startsWith("Historical message exceeds"));
         assertEquals(4_000, String.join("", segments.subList(0, segments.size() - 1)).length());
+    }
+
+    @Test
+    void reporterFollowupsMayBeReadByManagersButPrivateNotesRequireEvidencePermission() {
+        assertTrue(ReportsCommand.restrictedOrigin(
+                net.enthusia.staff.domain.report.ReportMessage.Origin.STAFF_ACTION));
+        assertTrue(ReportsCommand.restrictedOrigin(
+                net.enthusia.staff.domain.report.ReportMessage.Origin.UNKNOWN));
+        assertFalse(ReportsCommand.restrictedOrigin(
+                net.enthusia.staff.domain.report.ReportMessage.Origin.REPORTER_FOLLOWUP));
     }
 
     @Test

@@ -387,15 +387,17 @@ public final class ReportsCommand implements CommandExecutor, TabCompleter {
             return;
         }
         ReportMessagesPage page = store.messages(reportId, requestedPage);
-        sendReportMessages(sender, reportMessageLines(reportId, page));
+        sendReportMessages(sender, reportMessageLines(reportId, page, false),
+                reportMessageLines(reportId, page, true));
     }
 
-    private List<String> reportMessageLines(UUID reportId, ReportMessagesPage page) {
+    private List<String> reportMessageLines(UUID reportId, ReportMessagesPage page,
+                                            boolean revealPrivateNotes) {
         List<String> output = new ArrayList<>();
         output.add("Report " + reportId + " case messages, page " + page.page()
                 + " (original description is shown in /reports view):");
         for (ReportMessage entry : page.messages()) {
-            appendCaseMessage(output, entry);
+            appendCaseMessage(output, entry, revealPrivateNotes);
         }
         if (page.messages().isEmpty()) {
             output.add("No case messages on this page.");
@@ -406,7 +408,17 @@ public final class ReportsCommand implements CommandExecutor, TabCompleter {
         return List.copyOf(output);
     }
 
-    private void appendCaseMessage(List<String> output, ReportMessage entry) {
+    static boolean restrictedOrigin(ReportMessage.Origin origin) {
+        return origin != ReportMessage.Origin.REPORTER_FOLLOWUP;
+    }
+
+    private void appendCaseMessage(List<String> output, ReportMessage entry,
+                                   boolean revealPrivateNotes) {
+        if (restrictedOrigin(entry.origin()) && !revealPrivateNotes) {
+            output.add("Restricted case note at " + entry.createdAt()
+                    + " (requires " + EVIDENCE_PERMISSION + ").");
+            return;
+        }
         String kind = switch (entry.origin()) {
             case REPORTER_FOLLOWUP -> "Reporter follow-up";
             case STAFF_ACTION -> "Staff action note";
@@ -417,7 +429,8 @@ public final class ReportsCommand implements CommandExecutor, TabCompleter {
         appendMessageBody(output, entry.body());
     }
 
-    private void sendReportMessages(CommandSender sender, List<String> output) {
+    private void sendReportMessages(CommandSender sender, List<String> normalOutput,
+                                    List<String> evidenceAuthorizedOutput) {
         // Async IO can complete after a player's staff permission is revoked.
         // Keep the entire staff-only message history behind a fresh, entity-owned check.
         responses.execute(sender, () -> {
@@ -426,6 +439,8 @@ public final class ReportsCommand implements CommandExecutor, TabCompleter {
                         "Report access was revoked before the response could be delivered.")));
                 return;
             }
+            List<String> output = sender.hasPermission(EVIDENCE_PERMISSION)
+                    ? evidenceAuthorizedOutput : normalOutput;
             for (String line : output) {
                 sender.sendMessage(StaffMessageStyle.style(Component.text(line)));
             }

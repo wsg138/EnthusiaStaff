@@ -19,14 +19,15 @@ are modified. No message text or private evidence is sent to Discord.
 
 The staff-only `/reports messages <report-id> [page]` reads five chronological rows per
 page, ordered by timestamp and immutable message UUID. It displays the origin, sender,
-timestamp, and bounded text, with next-page instructions. The final display rechecks
-`enthusiastaff.reports.manage` on the command sender's owning scheduler, protecting
-async replies if staff permissions were removed. The normal `/reports view` and GUI
+timestamp, and bounded text, with next-page instructions. The final display rechecks `enthusiastaff.reports.manage` and independently
+`enthusiastaff.reports.evidence` on the sender's owning scheduler. Reporter follow-ups
+require manage permission; internal staff action notes and unverified historical rows
+require evidence permission, including if privileges change during the async query. The normal `/reports view` and GUI
 detail both point to the command. No extra GUI click action bypasses authority.
 
 ## Historical-message behavior
 
-Historical `UNKNOWN` rows are accessible to authorized report managers, clearly labeled
+Historical `UNKNOWN` rows are accessible only to authorized evidence reviewers, clearly labeled
 as **origin unverified**. No heuristic backfill, silent rewrite, or user/staff
 misclassification is performed. New rows are classified transactionally. If a historical
 TEXT row exceeds the conservative chat display cap, the response explicitly says so.
