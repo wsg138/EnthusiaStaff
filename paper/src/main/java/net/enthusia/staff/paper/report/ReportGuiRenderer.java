@@ -212,7 +212,7 @@ final class ReportGuiRenderer {
         inventory.setItem(configuration.slot("detail-description"), item(
                 configuration.material("description"),
                 configuration.message("description"),
-                wrap(details.description())
+                descriptionPreview(details.description(), summary.reportId())
         ));
         inventory.setItem(configuration.slot("detail-public-chat"), snapshotItem(
                 configuration.material("public-chat"),
@@ -455,6 +455,18 @@ final class ReportGuiRenderer {
             case CLOSE -> CLOSE_KEY;
             case NO_VIOLATION -> "no-violation";
         };
+    }
+
+    // A lore tooltip only previews a bounded amount of text. Make the limit
+    // explicit so a staff reviewer cannot mistake the preview for the full report.
+    static List<Component> descriptionPreview(String value, UUID reportId) {
+        List<Component> lines = new ArrayList<>(wrap(value));
+        String compact = value.replace('\r', ' ').replace('\n', ' ');
+        if (compact.length() > 480) {
+            lines.add(Component.text("Preview truncated. Read the full description:", NamedTextColor.YELLOW));
+            lines.add(Component.text("/reports view " + reportId, NamedTextColor.WHITE));
+        }
+        return List.copyOf(lines);
     }
 
     private static List<Component> wrap(String value) {
