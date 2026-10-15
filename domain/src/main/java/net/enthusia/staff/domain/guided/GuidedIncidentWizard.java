@@ -27,6 +27,13 @@ public final class GuidedIncidentWizard {
     }
     private static final String CHAT = "chat";
     private static final String GAMEPLAY = "gameplay";
+    private static final String ECONOMY = "economy";
+    private static final String IN_GAME = "in-game";
+    private static final String MARKET = "market";
+    private static final String PUBLIC_CHAT = "public-chat";
+    private static final String HARASSMENT = "harassment";
+    private static final List<String> PUBLIC_ONLY_CONDUCT = List.of("language", "communication", "politics");
+    private static final List<String> HARASSMENT_CHANNELS = List.of(PUBLIC_CHAT, "direct-message");
     private static final String SAFETY = "safety";
     private static final String MEDIUM = "medium";
     private static final String CONDUCT = "conduct";
@@ -38,7 +45,7 @@ public final class GuidedIncidentWizard {
     private static final String OTHER_UNSURE = "Other / unsure";
     private static final String OTHER = "other";
     private static final List<String> CATEGORIES =
-            List.of(CHAT, GAMEPLAY, SAFETY, "accounts", "community", "economy", OTHER);
+            List.of(CHAT, GAMEPLAY, SAFETY, "accounts", "community", ECONOMY, OTHER);
     private final String category;
     private final Map<String, String> answers;
 
@@ -210,18 +217,18 @@ public final class GuidedIncidentWizard {
 
     private boolean channelCompatible(String medium, String conduct) {
         if (GAMEPLAY.equals(category)) {
-            return "in-game".equals(medium);
+            return IN_GAME.equals(medium);
         }
-        if ("economy".equals(category)) {
-            return "in-game".equals(medium) || "market".equals(medium);
+        if (ECONOMY.equals(category)) {
+            return IN_GAME.equals(medium) || MARKET.equals(medium);
         }
         if (CHAT.equals(category)
-                && List.of("language", "communication", "politics").contains(conduct)) {
-            return "public-chat".equals(medium);
+                && PUBLIC_ONLY_CONDUCT.contains(conduct)) {
+            return PUBLIC_CHAT.equals(medium);
         }
-        if (CHAT.equals(category) && "harassment".equals(conduct)) {
+        if (CHAT.equals(category) && HARASSMENT.equals(conduct)) {
             // Signs, books, profiles and voice require explicit channel-specific review.
-            return List.of("public-chat", "direct-message").contains(medium);
+            return HARASSMENT_CHANNELS.contains(medium);
         }
         return true;
     }
