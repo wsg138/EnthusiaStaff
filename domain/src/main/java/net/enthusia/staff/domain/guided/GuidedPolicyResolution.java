@@ -110,22 +110,27 @@ public final class GuidedPolicyResolution {
                                                   SanctionSpec initial, Duration low,
                                                   Duration high, int preference,
                                                   String explanation) {
-        long lowMinutes = low.toMinutes();
-        long highMinutes = high.toMinutes();
+        // Anchor minute-granularity choices to the exact configured lower bound.
+        // Truncating low.toMinutes() can otherwise produce a sub-policy sanction
+        // when a configured duration includes seconds.
+        long availableMinutes = high.minus(low).toMinutes();
         double ratio = switch (preference) {
             case -1 -> 0.25;
             case 1 -> 0.75;
             default -> 0.5;
         };
-        long minutes = Math.max(lowMinutes, Math.min(highMinutes,
-                lowMinutes + Math.round((highMinutes - lowMinutes) * ratio)));
-        Duration calculated = Duration.ofMinutes(minutes);
+        Duration calculated = low.plus(Duration.ofMinutes(Math.round(availableMinutes * ratio)));
+        if (calculated.compareTo(high) > 0) {
+            calculated = high;
+        }
         if (low.equals(calculated)) {
             return new Outcome(originals, explanation, false);
         }
+        String durationLabel = calculated.equals(Duration.ofMinutes(calculated.toMinutes()))
+                ? calculated.toMinutes() + "m" : calculated.toString();
         return new Outcome(List.of(new SanctionSpec(initial.type(),
                 SanctionLength.temporary(calculated))),
-                explanation + "; boundedDuration=" + minutes + "m", true);
+                explanation + "; boundedDuration=" + durationLabel, true);
     }
 
     /**
