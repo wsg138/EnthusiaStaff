@@ -14,7 +14,15 @@ import net.enthusia.staff.domain.modcase.CaseDelivery;
 import net.enthusia.staff.domain.modcase.CaseLedger;
 import net.enthusia.staff.domain.modcase.CaseNotice;
 
-/** Atomic local case/outbox snapshots; NOT a distributed production database adapter. */
+/**
+ * Atomic local case/outbox snapshots; NOT a distributed production database adapter.
+ *
+ * <p>Every public read-modify-write operation deliberately locks on this instance.
+ * The monitor covers revision checks, delivery leases, durable snapshot replacement,
+ * and publication of the new in-memory maps as one linearizable operation. Replacing
+ * method-level synchronization with unguarded block locks would introduce races.
+ * Only one ledger instance/process may own a journal directory at a time.
+ */
 public final class FileCaseLedger implements CaseLedger {
     private static final Pattern RECEIPT = Pattern.compile("[a-zA-Z0-9:_./-]{1,160}");
     private static final Pattern ERROR = Pattern.compile("[A-Z0-9_]{1,64}");
@@ -117,6 +125,9 @@ public final class FileCaseLedger implements CaseLedger {
 
     @Override
     public synchronized Optional<CaseDelivery> begin(CaseDelivery.Key key, Instant now) {
+        if (key == null || now == null) {
+            throw new IllegalArgumentException("delivery key and attempt time required");
+        }
         CaseDelivery previous = deliveries.get(key);
         if (previous == null || !previous.due(now) || !isCurrentAndActive(key, now)
                 || ambiguousEarlier(key)) {
@@ -236,6 +247,11 @@ public final class FileCaseLedger implements CaseLedger {
         }
         if (gate == null || !gate.permits(actor, current, action)) {
             return Change.DENIED;
+        }
+        // A custom gate may reenter the monitor and accept a newer canonical event.
+        // Never let the synthetic-only action overwrite that newer projection.
+        if (!current.equals(cases.get(identity(key)))) {
+            return Change.STALE;
         }
         CaseNotice changed;
         try {
