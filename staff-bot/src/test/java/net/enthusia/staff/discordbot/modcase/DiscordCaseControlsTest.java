@@ -48,4 +48,22 @@ class DiscordCaseControlsTest {
         assertFalse(card.contains("<@"));
         assertFalse(card.contains(snapshot.scope()));
     }
+
+    @Test
+    void initialCaseRevisionZeroCanBeClaimedWithoutRenumbering() {
+        CaseNotice initial = new CaseNotice(UUID.randomUUID(), CaseNotice.Origin.MINECRAFT,
+                "smp", 0, CaseNotice.Priority.HIGH, CaseNotice.State.OPEN,
+                List.of("event:initial"), TIME, TIME.plusSeconds(90), null);
+        byte[] key = new byte[32];
+        java.util.Arrays.fill(key, (byte) 49);
+        DiscordCaseControls signer = new DiscordCaseControls(key);
+        String control = signer.encode(initial, CaseNotice.Action.CLAIM);
+        DiscordCaseControls.Parsed parsed = signer.parse(control, initial.scope());
+        assertEquals(0, parsed.revision());
+        assertEquals(initial.caseId(), parsed.caseId());
+        assertEquals(CaseNotice.Action.CLAIM, parsed.action());
+        assertThrows(IllegalArgumentException.class,
+                () -> signer.parse(control, "other-server"));
+    }
+
 }

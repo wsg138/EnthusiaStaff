@@ -49,7 +49,7 @@ public final class DiscordCaseControls {
             CaseNotice.Origin origin = CaseNotice.Origin.valueOf(parts[1]);
             UUID id = UUID.fromString(parts[2]);
             long revision = Long.parseLong(parts[3]);
-            if (revision < 1 || !parts[2].equals(id.toString())) {
+            if (revision < 0 || !parts[2].equals(id.toString())) {
                 throw new IllegalArgumentException("noncanonical case control");
             }
             String body = body(action, origin, id, revision);

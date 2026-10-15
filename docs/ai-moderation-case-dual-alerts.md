@@ -145,3 +145,10 @@ This does not create a CASE_CREATED/INITIAL notice in the API or authorize
 actual StaffBot action. The eventual authenticated bridge still needs a
 complete case-creation payload, scope permissions, canonical origin/UUID
 normalization, case-state closure projection and versioned staff command ACK.
+
+
+## Coordinator Discord delivery safety and initial revision fix
+
+The dormant DiscordCaseDelivery module was refactored into scoped-notice, verified-private-channel, publish and permission-override helpers. It maintains its fail-closed checks for guild, destination role, @everyone public access, other visible roles, and individual member overrides. Its ambiguous HTTP/JDA delivery remains fenced as POSSIBLY_SENT, not automatically retried with a second message. This refactor does not connect a running JDA listener.
+
+DiscordCaseControls parsing now allows the canonical initial revision 0 (but still rejects negative revisions), matching the API case ledger and the revision-zero StaffBot projection. A synthetic signed-control test verifies rev0 CLAIM parsing and cross-server signature rejection. The older revision>=1 rule would have made new initial cases unclaimable through signed controls. These controls still need fresh actor-role attestation, canonical expected revision and dispatcher/resync integration before any live clicks are enabled.
