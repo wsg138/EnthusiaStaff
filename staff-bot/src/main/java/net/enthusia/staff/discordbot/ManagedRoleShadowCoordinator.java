@@ -35,6 +35,7 @@ final class ManagedRoleShadowCoordinator implements AutoCloseable {
         DRIFT,
         ROLE_MISSING,
         ROLE_AMBIGUOUS,
+        ROLE_UNMANAGEABLE,
         DELETE_MATCH,
         DELETE_DRIFT,
         DELETE_UNRESOLVED
@@ -344,6 +345,17 @@ final class ManagedRoleShadowCoordinator implements AutoCloseable {
         ManagedRoleShadowService.Claim claim = resolved.claim();
         if (claim.delete() && claim.displayName().isEmpty() && claim.existingDiscordRoleId().isEmpty()) {
             return result(resolved, State.DELETE_UNRESOLVED, Set.of(), Set.of());
+        }
+        // An exact legacy role that still exists but is Discord-managed or public is
+        // not an absent role. In particular, a deletion tombstone must not become
+        // a false DELETE_MATCH merely because this observer refuses to manage it.
+        if (claim.existingDiscordRoleId().isPresent()) {
+            Role exactRole = guild.getRoleById(claim.existingDiscordRoleId().orElseThrow());
+            if (exactRole != null && !manageable(exactRole)) {
+                State state = claim.delete() ? State.DELETE_UNRESOLVED : State.ROLE_UNMANAGEABLE;
+                return result(resolved, state,
+                        claim.delete() ? Set.of() : resolved.desiredDiscordUserIds(), Set.of());
+            }
         }
         List<Role> roles = matchingRoles(guild, claim);
         if (roles.size() > UNIQUE_ROLE_MATCH_COUNT) {

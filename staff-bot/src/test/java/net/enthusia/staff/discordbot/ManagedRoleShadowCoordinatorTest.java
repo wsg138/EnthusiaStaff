@@ -1,6 +1,7 @@
 package net.enthusia.staff.discordbot;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import java.lang.reflect.Proxy;
@@ -125,6 +126,24 @@ final class ManagedRoleShadowCoordinatorTest {
         assertEquals(ManagedRoleShadowCoordinator.State.DELETE_MATCH, result.state());
     }
 
+    @Test
+    void exactRoleStillPresentButPublicOrIntegrationManagedBlocksParity() {
+        Role publicRole = role("1552390213500928122", PLAYTIME_ROLE_NAME, true, false);
+        Role managedRole = role("1552390213500928999", PLAYTIME_ROLE_NAME, false, true);
+        for (Role existing : List.of(publicRole, managedRole)) {
+            Guild guild = guild(List.of(existing));
+            var delete = ManagedRoleShadowCoordinator.compare(
+                    resolved(Optional.of(existing.getId()), Set.of(), true), List.of(), guild);
+            assertEquals(ManagedRoleShadowCoordinator.State.DELETE_UNRESOLVED, delete.state());
+            assertFalse(delete.matches());
+
+            var active = ManagedRoleShadowCoordinator.compare(
+                    resolved(Optional.of(existing.getId()), Set.of(), false), List.of(), guild);
+            assertEquals(ManagedRoleShadowCoordinator.State.ROLE_UNMANAGEABLE, active.state());
+            assertFalse(active.matches());
+        }
+    }
+
     private static ManagedRoleShadowService.ResolvedClaim resolved(
             Optional<String> roleId,
             Set<String> desiredDiscordUsers,
@@ -159,13 +178,18 @@ final class ManagedRoleShadowCoordinatorTest {
     }
 
     private static Role role(String id, String name) {
+        return role(id, name, false, false);
+    }
+
+    private static Role role(String id, String name, boolean publicRole, boolean integrationManaged) {
         return (Role) Proxy.newProxyInstance(
                 PROXY_CLASS_LOADER,
                 new Class<?>[] {Role.class},
                 (proxy, method, args) -> switch (method.getName()) {
                     case "getId" -> id;
                     case "getName" -> name;
-                    case "isPublicRole", "isManaged" -> false;
+                    case "isPublicRole" -> publicRole;
+                    case "isManaged" -> integrationManaged;
                     default -> defaultValue(method.getReturnType());
                 }
         );
