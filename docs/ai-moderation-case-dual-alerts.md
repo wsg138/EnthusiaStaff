@@ -194,3 +194,26 @@ This is the Java companion to Moderation API draft #148. Test-only proof strings
 The dormant DiscordCaseDelivery module was refactored into scoped-notice, verified-private-channel, publish and permission-override helpers. It maintains its fail-closed checks for guild, destination role, @everyone public access, other visible roles, and individual member overrides. Its ambiguous HTTP/JDA delivery remains fenced as POSSIBLY_SENT, not automatically retried with a second message. This refactor does not connect a running JDA listener.
 
 DiscordCaseControls parsing now allows the canonical initial revision 0 (but still rejects negative revisions), matching the API case ledger and the revision-zero StaffBot projection. A synthetic signed-control test verifies rev0 CLAIM parsing and cross-server signature rejection. The older revision>=1 rule would have made new initial cases unclaimable through signed controls. These controls still need fresh actor-role attestation, canonical expected revision and dispatcher/resync integration before any live clicks are enabled.
+
+
+## Inactive Paper current-role HMAC authority, restacked after StaffBot HTTP hardening
+
+The optional Paper actor proof issuer and its policy adapter are only testable
+library code. The issuer requires a package-scoped Approval minted after
+a verified signed Discord interaction or actual authenticated Paper player,
+an exact case/action/revision/scope binding, current verified one-to-one Discord
+link, current LuckPerms MOD-or-higher rank, specific claim/resolve permission,
+an active local Staff Mode or explicit off-duty policy, and a current canonical
+case probe. Invalid identity, mismatched scope, revoked role/duty, expired
+interaction, or unavailable database fails closed; it cannot mint a token
+from a user-provided actor string. The Paper-owned 32+ byte signing secret
+is never exposed to StaffBot. Tests pin the Java/Python canonical HMAC
+format with a synthetic key, not production credentials.
+
+These classes are **not wired** to Bukkit startup, a remote endpoint,
+JDA, or the API registration. SignedDiscordInteractionVerifier and the
+live canonical-case probe remain required but unwired in production.
+The parent StaffBot HTTP gateway remains opt-in and capped to 4096
+UTF-8 response bytes; a hard total end-to-end response body deadline
+is still unimplemented. Do not enable until real actor proof,
+runtime/scheduler bounds, credential custody and staging E2E pass.
