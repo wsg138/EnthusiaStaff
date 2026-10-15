@@ -19,7 +19,7 @@ public record CaseNotice(UUID caseId, Origin origin, String scope, long revision
     public enum Action { CLAIM, RESOLVE }
 
     public CaseNotice {
-        if (caseId == null || origin == null || !valid(SCOPE, scope) || revision < 1
+        if (caseId == null || origin == null || !valid(SCOPE, scope) || revision < 0
                 || priority == null || state == null || evidenceRefs == null
                 || evidenceRefs.isEmpty() || evidenceRefs.size() > MAX_EVIDENCE
                 || evidenceRefs.stream().anyMatch(ref -> !valid(REF, ref))
