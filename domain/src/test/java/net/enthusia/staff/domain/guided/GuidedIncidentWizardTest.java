@@ -107,6 +107,23 @@ class GuidedIncidentWizardTest {
     }
 
     @Test
+    void harassmentOutsideOrdinaryChatOrDirectMessagesRequiresReview() {
+        for (String medium : new String[]{"sign", "book", "voice", "profile"}) {
+            var finding = GuidedIncidentWizard.start(CHAT)
+                    .answer(MEDIUM, medium).answer(CONDUCT, "harassment")
+                    .answer("detail", "verbal").answer("targeting", "targeted")
+                    .answer(EXTENT, FEW).answer(CONTINUED, NO_WARNING).finding();
+            assertEquals("hate.targeted-harassment", finding.candidateId());
+            assertTrue(finding.needsReview(), medium);
+        }
+        var directMessage = GuidedIncidentWizard.start(CHAT)
+                .answer(MEDIUM, "direct-message").answer(CONDUCT, "harassment")
+                .answer("detail", "verbal").answer("targeting", "targeted")
+                .answer(EXTENT, FEW).answer(CONTINUED, NO_WARNING).finding();
+        assertFalse(directMessage.needsReview());
+    }
+
+    @Test
     void backNavigationAndChoiceValidationAreFailClosed() {
         var flow = GuidedIncidentWizard.start(CHAT);
         assertThrows(IllegalArgumentException.class, () -> flow.answer(CONDUCT, SPAM));

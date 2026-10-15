@@ -1,5 +1,6 @@
 package net.enthusia.staff.domain.guided;
 
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -123,7 +124,19 @@ public final class GuidedOffenseClassifier {
         return DETAILS.getOrDefault(category + "/" + conduct, List.of());
     }
 
-    public static Set<String> mappedReasonIds() { return Set.copyOf(REASONS.values()); }
+    private static final Set<String> CONTEXTUAL_REASONS = Set.of(
+            "hate.general-toxicity", "hate.targeted-harassment",
+            "hate.abbreviated-slur-untargeted", "hate.abbreviated-slur-targeted",
+            "hate.full-slur-untargeted", "hate.full-slur-targeted",
+            "spam.low-level", "spam.message-flooding",
+            "spam.private-message", "spam.noise-pollution"
+    );
+
+    public static Set<String> mappedReasonIds() {
+        Set<String> all = new HashSet<>(REASONS.values());
+        all.addAll(CONTEXTUAL_REASONS);
+        return Set.copyOf(all);
+    }
 
     private static final String CHAT = "chat";
     private static final String PUBLIC_CHAT = "public-chat";

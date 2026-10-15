@@ -1,5 +1,6 @@
 package net.enthusia.staff.domain.guided;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -57,6 +58,22 @@ class GuidedInterviewCoverageTest {
         Set<String> missing = new HashSet<>(GuidedOffenseClassifier.mappedReasonIds());
         missing.removeAll(reachable);
         assertTrue(missing.isEmpty(), "Reason mappings not accessible from the GUI: " + missing);
+    }
+
+    @Test
+    void allStaffSelectableConfiguredReasonsAreIncludedInReachabilityAudit() throws Exception {
+        Set<String> configured = new HashSet<>();
+        for (String line : Files.readAllLines(
+                Path.of("../paper/src/main/resources/reason-policies.yml"))) {
+            String prefix = "  - id: ";
+            if (line.startsWith(prefix)) {
+                configured.add(line.substring(prefix.length()).trim());
+            }
+        }
+        configured.remove("cheating.polar.template");
+        assertEquals(configured,
+                GuidedOffenseClassifier.mappedReasonIds(),
+                "Every manually selectable configured reason needs an audited path");
     }
 
     private static void collectReachable(GuidedIncidentWizard interview,

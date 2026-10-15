@@ -25,7 +25,7 @@ public final class GuidedPolicyResolution {
         int historyStep = assessed.escalation().selectedStep().ordinal();
         int selected = selectedStep(finding.preliminaryImpact(), historyStep, ladder.size());
         List<SanctionSpec> originals = ladder.get(selected).sanctions();
-        checkTransition(ladder, historyStep, selected, originals);
+        checkTransition(ladder, historyStep, selected);
         requireOrdinaryGuidedRemedy(originals);
         String explanation = explanation(finding, historyStep, selected);
         return variableDuration(originals, ladder, selected, preference, explanation);
@@ -47,11 +47,20 @@ public final class GuidedPolicyResolution {
     }
 
     private static void checkTransition(List<PunishmentStep> ladder, int baselineStep,
-                                        int selected, List<SanctionSpec> originals) {
-        if (selected > baselineStep && !safeContextualTransition(
-                ladder.get(baselineStep).sanctions(), originals)) {
-            throw new IllegalArgumentException(
-                    "Incident severity would change sanction class or permanence; manual review required");
+                                        int selected) {
+        if (selected <= baselineStep) {
+            return;
+        }
+        List<SanctionSpec> previous = ladder.get(baselineStep).sanctions();
+        for (int step = baselineStep + 1; step <= selected; step++) {
+            List<SanctionSpec> next = ladder.get(step).sanctions();
+            // A large incident score must not jump over a restricted policy step.
+            requireOrdinaryGuidedRemedy(next);
+            if (!safeContextualTransition(previous, next)) {
+                throw new IllegalArgumentException(
+                        "Incident severity would cross a restricted sanction tier; manual review required");
+            }
+            previous = next;
         }
     }
 
@@ -101,22 +110,27 @@ public final class GuidedPolicyResolution {
                                                   SanctionSpec initial, Duration low,
                                                   Duration high, int preference,
                                                   String explanation) {
-        long lowMinutes = low.toMinutes();
-        long highMinutes = high.toMinutes();
+        // Anchor minute-granularity choices to the exact configured lower bound.
+        // Truncating low.toMinutes() can otherwise produce a sub-policy sanction
+        // when a configured duration includes seconds.
+        long availableMinutes = high.minus(low).toMinutes();
         double ratio = switch (preference) {
             case -1 -> 0.25;
             case 1 -> 0.75;
             default -> 0.5;
         };
-        long minutes = Math.max(lowMinutes, Math.min(highMinutes,
-                lowMinutes + Math.round((highMinutes - lowMinutes) * ratio)));
-        Duration calculated = Duration.ofMinutes(minutes);
+        Duration calculated = low.plus(Duration.ofMinutes(Math.round(availableMinutes * ratio)));
+        if (calculated.compareTo(high) > 0) {
+            calculated = high;
+        }
         if (low.equals(calculated)) {
             return new Outcome(originals, explanation, false);
         }
+        String durationLabel = calculated.equals(Duration.ofMinutes(calculated.toMinutes()))
+                ? calculated.toMinutes() + "m" : calculated.toString();
         return new Outcome(List.of(new SanctionSpec(initial.type(),
                 SanctionLength.temporary(calculated))),
-                explanation + "; boundedDuration=" + minutes + "m", true);
+                explanation + "; boundedDuration=" + durationLabel, true);
     }
 
     /**

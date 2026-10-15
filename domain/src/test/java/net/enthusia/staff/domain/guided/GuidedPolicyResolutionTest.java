@@ -94,6 +94,35 @@ class GuidedPolicyResolutionTest {
     }
 
     @Test
+    void boundedDurationCannotTruncateBelowSecondPrecisionPolicyMinimum() {
+        Duration minimum = Duration.ofSeconds(90);
+        Duration nextTier = Duration.ofSeconds(100);
+        SanctionSpec lower = new SanctionSpec(SanctionType.MUTE,
+                SanctionLength.temporary(minimum));
+        SanctionSpec upper = new SanctionSpec(SanctionType.MUTE,
+                SanctionLength.temporary(nextTier));
+        List<PunishmentStep> steps = List.of(
+                new PunishmentStep(0, "Warning", List.of(warn())),
+                new PunishmentStep(1, "Short mute", List.of(lower)),
+                new PunishmentStep(2, "Longer mute", List.of(upper)));
+        ReasonPolicy policy = new ReasonPolicy("spam.low-level", SPAM_FAMILY,
+                "Spam", 10, true, steps);
+        EscalationDecision history = new EscalationDecision(
+                1, 1, 0, List.of(), steps.get(1));
+        PunishmentAssessment assessed = new PunishmentAssessment(
+                "fixture.second-precision", policy, history, List.of(lower));
+        var incident = finding("few", "not-applicable");
+        for (int preference : new int[]{-1, 0, 1}) {
+            Duration result = GuidedPolicyResolution.calculate(incident, assessed, preference)
+                    .sanctions().getFirst().length().temporary().orElseThrow();
+            assertTrue(result.compareTo(minimum) >= 0,
+                    "Punishment must not fall below the exact configured minimum");
+            assertTrue(result.compareTo(nextTier) <= 0,
+                    "Punishment must not exceed the next same-type tier");
+        }
+    }
+
+    @Test
     void severityNeverAutomaticallyEscalatesToBanOrPermanentConsequence() {
         var incident = finding("large-scale", "yes");
         SanctionSpec temporaryBan = new SanctionSpec(SanctionType.BAN,
@@ -130,6 +159,26 @@ class GuidedPolicyResolutionTest {
                 "test.version", policy, prior, steps.get(1).sanctions());
         assertThrows(IllegalArgumentException.class,
                 () -> GuidedPolicyResolution.calculate(finding, assessed, 0));
+    }
+
+    @Test
+    void severityCannotSkipRestrictedIntermediatePolicyTier() {
+        var incident = finding("large-scale", "yes");
+        List<PunishmentStep> steps = List.of(
+                new PunishmentStep(0, "Warning", List.of(warn())),
+                new PunishmentStep(1, "Requires ban review", List.of(
+                        new SanctionSpec(SanctionType.BAN,
+                                SanctionLength.temporary(Duration.ofDays(1))))),
+                new PunishmentStep(2, "Temporary mute", List.of(mute(60))));
+        ReasonPolicy policy = new ReasonPolicy(FLOOD_ID, SPAM_FAMILY,
+                "Flooding", 15, true, steps);
+        EscalationDecision prior = new EscalationDecision(
+                0, 0, 0, List.of(), steps.getFirst());
+        PunishmentAssessment assessed = new PunishmentAssessment(
+                "fixture.restricted-middle", policy, prior, List.of(warn()));
+
+        assertThrows(IllegalArgumentException.class,
+                () -> GuidedPolicyResolution.calculate(incident, assessed, 0));
     }
 
     @Test
