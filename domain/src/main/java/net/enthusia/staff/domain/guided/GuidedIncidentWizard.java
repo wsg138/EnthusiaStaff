@@ -26,6 +26,7 @@ public final class GuidedIncidentWizard {
         }
     }
     private static final String CHAT = "chat";
+    private static final String GAMEPLAY = "gameplay";
     private static final String SAFETY = "safety";
     private static final String MEDIUM = "medium";
     private static final String CONDUCT = "conduct";
@@ -37,7 +38,7 @@ public final class GuidedIncidentWizard {
     private static final String OTHER_UNSURE = "Other / unsure";
     private static final String OTHER = "other";
     private static final List<String> CATEGORIES =
-            List.of(CHAT, "gameplay", SAFETY, "accounts", "community", "economy", OTHER);
+            List.of(CHAT, GAMEPLAY, SAFETY, "accounts", "community", "economy", OTHER);
     private final String category;
     private final Map<String, String> answers;
 
@@ -208,7 +209,7 @@ public final class GuidedIncidentWizard {
     }
 
     private boolean channelCompatible(String medium, String conduct) {
-        if ("gameplay".equals(category)) {
+        if (GAMEPLAY.equals(category)) {
             return "in-game".equals(medium);
         }
         if ("economy".equals(category)) {
@@ -246,7 +247,7 @@ public final class GuidedIncidentWizard {
                     c("hate", "Hate or extremist content"),
                     c("politics", "Political content"), c("communication", "Other chat conduct"),
                     c(OTHER, OTHER_UNSURE));
-            case "gameplay" -> List.of(c("cheating", "Cheating"),
+            case GAMEPLAY -> List.of(c("cheating", "Cheating"),
                     c("exploit", "Exploits / duplication"),
                     c("mods", "Unauthorized client modifications"),
                     c("mechanics", "Disruptive mechanics"),
