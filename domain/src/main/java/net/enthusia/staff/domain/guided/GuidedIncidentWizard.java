@@ -207,6 +207,10 @@ public final class GuidedIncidentWizard {
                 && List.of("language", "communication", "politics").contains(conduct)) {
             return "public-chat".equals(medium);
         }
+        if (CHAT.equals(category) && "harassment".equals(conduct)) {
+            // Signs, books, profiles and voice require explicit channel-specific review.
+            return List.of("public-chat", "direct-message").contains(medium);
+        }
         return true;
     }
 
