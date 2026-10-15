@@ -43,6 +43,8 @@ public final class ReportsCommand implements CommandExecutor, TabCompleter {
     private static final int SINGLE_ARGUMENT = 1;
     private static final int MIN_NOTE_ARGUMENTS = 2;
     private static final int VIEW_ARGUMENTS = 2;
+    private static final int MESSAGE_MIN_ARGUMENTS = 2;
+    private static final int MESSAGE_WITH_PAGE_ARGUMENTS = 3;
     private static final int MESSAGE_MAX_PAGE = 10_000;
     private static final int MESSAGE_CHUNK_SIZE = 180;
     private static final int MAX_LEGACY_BODY_CHARS = 4_000;
@@ -151,7 +153,7 @@ public final class ReportsCommand implements CommandExecutor, TabCompleter {
     }
 
     private boolean messages(CommandSender sender, String[] arguments) {
-        if (arguments.length < 2 || arguments.length > 3) {
+        if (arguments.length < MESSAGE_MIN_ARGUMENTS || arguments.length > MESSAGE_WITH_PAGE_ARGUMENTS) {
             send(sender, "Usage: /reports messages <report-id> [page]");
             return true;
         }
@@ -160,7 +162,7 @@ public final class ReportsCommand implements CommandExecutor, TabCompleter {
             return true;
         }
         int page = 1;
-        if (arguments.length == 3) {
+        if (arguments.length == MESSAGE_WITH_PAGE_ARGUMENTS) {
             try {
                 page = Integer.parseInt(arguments[2]);
             } catch (NumberFormatException exception) {
@@ -385,43 +387,57 @@ public final class ReportsCommand implements CommandExecutor, TabCompleter {
             return;
         }
         ReportMessagesPage page = store.messages(reportId, requestedPage);
+        sendReportMessages(sender, reportMessageLines(reportId, page));
+    }
+
+    private List<String> reportMessageLines(UUID reportId, ReportMessagesPage page) {
         List<String> output = new ArrayList<>();
-        output.add("Report " + reportId + " case messages, page " + requestedPage
+        output.add("Report " + reportId + " case messages, page " + page.page()
                 + " (original description is shown in /reports view):");
         for (ReportMessage entry : page.messages()) {
-            String kind = switch (entry.origin()) {
-                case REPORTER_FOLLOWUP -> "Reporter follow-up";
-                case STAFF_ACTION -> "Staff action note";
-                case UNKNOWN -> "Historical message (origin unverified)";
-            };
-            output.add(kind + " - " + entry.createdAt() + " - " + playerName(entry.actorId())
-                    + " (" + entry.actorId() + "):");
-            appendMessageBody(output, entry.body());
+            appendCaseMessage(output, entry);
         }
         if (page.messages().isEmpty()) {
             output.add("No case messages on this page.");
         }
         if (page.hasMore()) {
-            output.add("Next: /reports messages " + reportId + " " + (requestedPage + 1));
+            output.add("Next: /reports messages " + reportId + " " + (page.page() + 1));
         }
+        return List.copyOf(output);
+    }
+
+    private void appendCaseMessage(List<String> output, ReportMessage entry) {
+        String kind = switch (entry.origin()) {
+            case REPORTER_FOLLOWUP -> "Reporter follow-up";
+            case STAFF_ACTION -> "Staff action note";
+            case UNKNOWN -> "Historical message (origin unverified)";
+        };
+        output.add(kind + " - " + entry.createdAt() + " - " + playerName(entry.actorId())
+                + " (" + entry.actorId() + "):");
+        appendMessageBody(output, entry.body());
+    }
+
+    private void sendReportMessages(CommandSender sender, List<String> output) {
         // Async IO can complete after a player's staff permission is revoked.
         // Keep the entire staff-only message history behind a fresh, entity-owned check.
-        List<String> immutable = List.copyOf(output);
         responses.execute(sender, () -> {
             if (!sender.hasPermission(MANAGE_PERMISSION)) {
                 sender.sendMessage(StaffMessageStyle.style(Component.text(
                         "Report access was revoked before the response could be delivered.")));
                 return;
             }
-            for (String line : immutable) {
+            for (String line : output) {
                 sender.sendMessage(StaffMessageStyle.style(Component.text(line)));
             }
         });
     }
 
-    private static void appendMessageBody(List<String> output, String body) {
+    static void appendMessageBody(List<String> output, String body) {
         String compact = body.replace('\r', ' ').replace('\n', ' ');
         int displayed = Math.min(compact.length(), MAX_LEGACY_BODY_CHARS);
+        if (displayed < compact.length() && Character.isHighSurrogate(compact.charAt(displayed - 1))) {
+            displayed--;
+        }
         for (int start = 0; start < displayed;) {
             int end = Math.min(start + MESSAGE_CHUNK_SIZE, displayed);
             if (end < displayed && Character.isHighSurrogate(compact.charAt(end - 1))) {
