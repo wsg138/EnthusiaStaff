@@ -1,9 +1,12 @@
 package net.enthusia.staff.paper.punishment;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import net.enthusia.staff.domain.guided.GuidedIncidentWizard;
 import org.junit.jupiter.api.Test;
 
 class GuidedPunishmentGuiContractTest {
@@ -38,5 +41,32 @@ class GuidedPunishmentGuiContractTest {
         assertTrue(renderer.contains("Relevant punishment history is checked automatically."));
         assertTrue(renderer.contains("Opens final review; no punishment is applied yet."));
         assertTrue(!renderer.contains("GuidedRemedyPreview.calculate("));
+    }
+
+    @Test
+    void firstAnsweredQuestionCanBeEditedWithBackInsteadOfLeavingInterview() {
+        GuidedIncidentWizard initial = GuidedIncidentWizard.start("chat");
+        assertTrue(PunishmentGuiController.guidedBackGoesToCategories(initial));
+        GuidedIncidentWizard.Question first = initial.nextQuestion().orElseThrow();
+        GuidedIncidentWizard answered = initial.answer(first.id(), first.choices().getFirst().id());
+        assertFalse(PunishmentGuiController.guidedBackGoesToCategories(answered));
+        assertEquals(first.id(), answered.back().nextQuestion().orElseThrow().id());
+    }
+
+    @Test
+    void reviewShowsRationaleLockInsteadOfAnActionableSubmitButton() throws Exception {
+        String renderer = source("PunishmentGuiRenderer.java");
+        assertTrue(renderer.contains("Material.GRAY_CONCRETE, \"Staff Rationale Required\""));
+        assertTrue(renderer.contains("PunishmentGuiController.guidedNeedsStaffRationale("));
+        assertTrue(renderer.contains("Submission is blocked until you add a note."));
+        assertTrue(renderer.contains("Incident answers remain preserved in the audit."));
+    }
+
+    @Test
+    void categoryDirectionsDescribeBothGuidedAndLegacyModesAccurately() throws Exception {
+        String renderer = source("PunishmentGuiRenderer.java");
+        assertTrue(renderer.contains("Guided mode asks relevant questions when enabled."));
+        assertTrue(renderer.contains("Click to continue with this category"));
+        assertTrue(renderer.contains("Back · Categories"));
     }
 }

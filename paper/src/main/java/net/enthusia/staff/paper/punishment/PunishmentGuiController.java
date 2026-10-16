@@ -479,12 +479,17 @@ public final class PunishmentGuiController implements Listener {
     }
 
     private void backGuided(Player viewer, PunishmentGuiState.Guided state) {
-        GuidedIncidentWizard previous = state.interview().back();
-        if (previous.answers().isEmpty()) {
+        if (guidedBackGoesToCategories(state.interview())) {
             openState(viewer, categoriesState(state));
-        } else {
-            openGuidedPage(viewer, state, previous, 0);
+            return;
         }
+        // One answered question must return to that question, not the category picker.
+        openGuidedPage(viewer, state, state.interview().back(), 0);
+    }
+
+    /** Only an untouched interview should navigate out of the questionnaire. */
+    static boolean guidedBackGoesToCategories(GuidedIncidentWizard interview) {
+        return interview.answers().isEmpty();
     }
 
     private void chooseGuidedAnswer(Player viewer, PunishmentGuiState.Guided state, int slot) {
