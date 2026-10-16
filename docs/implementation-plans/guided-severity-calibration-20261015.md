@@ -85,3 +85,52 @@ default-off feature behavior is unchanged. No live `reason-policies.yml` is touc
 
 **Do not merge a calibrated enforcement cutover or enable guided punishment on live** based
 on this test-only profile infrastructure alone.
+
+## Experimental within-tier duration calibration (2026-10-16, NOT APPROVED)
+
+Issue #616 identified a real collision: sustained public-chat flooding with no
+prior verified warning scores 25, and the same incident after a verified ignored
+warning scores 35. Both fall inside the moderate tier [25,45), so the original
+duration interpolation based only on the staff preference produces the same
+sanction length despite distinct reported facts.
+
+The new test-only \`impactDurationWeight\` field (0.0 to 0.5) allows a
+**non-production** trial profile to blend the existing staff preference ratio
+with normalized factual impact **within the same threshold tier**. The shipped
+prototype keeps the value at **0.0**, so its exact historical behavior remains
+unchanged and no production opt-in mechanism is exposed.
+
+The experimental test fixture uses moderate/severe boundaries 25/45, Balanced
+staff preference 0.50, and impact weight 0.30. On a hypothetical
+15-minute-to-60-minute same-type mute ladder, the two same-tier examples
+interpolate to approximately:
+
+| Incident | Score | Tier | Test-only bounded duration |
+|---|---:|---|---|
+| Sustained flooding, no verified warning | 25 | Moderate | 31 minutes |
+| Sustained flooding, ignored verified warning | 35 | Moderate | 38 minutes |
+
+This is **not** an owner recommendation for 31 or 38 minute mutes and says
+nothing about the actual customized live \`reason-policies.yml\`. The resolver
+still requires a matching immutable profile, a valid configured sanction
+ladder, safe intermediate steps, ordinary warning/temporary-mute remedies,
+and exact lower/upper duration bounds. There is no general power to invent
+bans, permanent penalties, new policy tiers or unsanctioned remedies.
+
+### Remaining owner decisions
+
+- Which factual aggravators should change the **sanction tier** rather than
+  only the length within an already-approved temporary-mute tier?
+- Should any ignored-warning increase be automatic? Must the warning be
+  verified, relevant, clearly communicated and still applicable?
+- What are the approved real-world durations for sustained flooding, repeat
+  harassment, private-message/sign/voice incidents, and repeat history?
+- What absolute tolerance for staff preference and impact adjustment is
+  acceptable on each offense family?
+- Which reason/channel combinations must always require experienced
+  staff review, regardless of impact?
+- How do we sign, version, stage and audit policy changes without overwriting
+  the production-customized file?
+
+Do **not** enable guided punishments on the live server before written
+approval and separate Java/Bedrock staging acceptance.
