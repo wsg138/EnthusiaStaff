@@ -65,6 +65,7 @@ final class PunishmentGuiRenderer {
     private static final int[] CATEGORY_GRID = {20, 22, 24, 29, 31, 33, 40};
     private static final int FIRST_HISTORY_PAGE = 1;
     private static final String CLOSE_LABEL = "Close";
+    private static final String GUIDED_INCIDENT_LABEL = "Guided incident v1";
     private static final List<String> SUCCESS_STATUS_TERMS =
             List.of("active", "applied", "complete", "approved");
     private static final List<String> FAILURE_STATUS_TERMS =
@@ -391,7 +392,7 @@ final class PunishmentGuiRenderer {
         inventory.setItem(12, escalationItem(state));
         inventory.setItem(14, recommendationItem(state, policy));
         inventory.setItem(16, safetyItem(state, catalog.activeVersion()));
-        if (draft.internalExplanation().startsWith("Guided incident v1")) {
+        if (draft.internalExplanation().startsWith(GUIDED_INCIDENT_LABEL)) {
             renderGuidedReviewFactors(inventory, draft);
         } else if (assessment.isPresent()) {
             renderLadder(inventory, assessment.orElseThrow());
@@ -404,7 +405,7 @@ final class PunishmentGuiRenderer {
         inventory.setItem(41, historySummaryItem(state));
         inventory.setItem(43, authorityItem(actor, policy));
 
-        boolean guidedReview = draft.internalExplanation().startsWith("Guided incident v1");
+        boolean guidedReview = draft.internalExplanation().startsWith(GUIDED_INCIDENT_LABEL);
         inventory.setItem(BACK_SLOT, guidedReview
                 ? item(Material.ARROW, "Back · Edit or Browse", NamedTextColor.AQUA,
                         List.of(Component.text("Returns to answers while the session is active.",
@@ -675,7 +676,7 @@ final class PunishmentGuiRenderer {
         PunishmentDraft draft = state.draft();
         int total = policy == null ? 0 : policy.steps().size();
         List<Component> lore = new ArrayList<>();
-        boolean guided = draft.internalExplanation().startsWith("Guided incident v1");
+        boolean guided = draft.internalExplanation().startsWith(GUIDED_INCIDENT_LABEL);
         if (guided) {
             lore.add(Component.text("Calculated from incident details and related history.",
                     NamedTextColor.GRAY));
@@ -727,7 +728,7 @@ final class PunishmentGuiRenderer {
     private static ItemStack noteItem(PunishmentDraft draft) {
         List<Component> lore = new ArrayList<>();
         String explanation = draft.internalExplanation();
-        if (explanation.startsWith("Guided incident v1")) {
+        if (explanation.startsWith(GUIDED_INCIDENT_LABEL)) {
             if (PunishmentGuiController.guidedNeedsStaffRationale(explanation)) {
                 lore.add(Component.text("Required: justify the changed assessment.", NamedTextColor.GOLD));
             }

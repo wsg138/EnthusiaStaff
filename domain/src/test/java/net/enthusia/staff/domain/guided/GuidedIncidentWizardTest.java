@@ -10,6 +10,7 @@ class GuidedIncidentWizardTest {
     private static final String EXTENT = "extent";
     private static final String CONTINUED = "continued";
     private static final String FEW = "few";
+    private static final String DETAIL = "detail";
     private static final String SPAM = "spam";
     private static final String NO_WARNING = "not-applicable";
     private static GuidedIncidentWizard spam(String extent, String warning) {
@@ -58,8 +59,8 @@ class GuidedIncidentWizardTest {
         flow = flow.answer(CONDUCT, "slur");
         assertFalse(flow.answers().containsKey(EXTENT));
         assertFalse(flow.answers().containsKey(CONTINUED));
-        assertEquals("detail", flow.nextQuestion().orElseThrow().id());
-        flow = flow.answer("detail", "full");
+        assertEquals(DETAIL, flow.nextQuestion().orElseThrow().id());
+        flow = flow.answer(DETAIL, "full");
         assertEquals("targeting", flow.nextQuestion().orElseThrow().id());
         assertThrows(IllegalStateException.class, flow::finding);
     }
@@ -90,7 +91,7 @@ class GuidedIncidentWizardTest {
     void placedTextCannotSilentlyUsePublicChatOnlyRules() {
         var placed = GuidedIncidentWizard.start(CHAT)
                 .answer(MEDIUM, "sign").answer(CONDUCT, "communication")
-                .answer("detail", "language").answer(EXTENT, FEW)
+                .answer(DETAIL, "language").answer(EXTENT, FEW)
                 .answer(CONTINUED, NO_WARNING).finding();
         assertTrue(placed.needsReview());
         assertEquals("language.non-english-public-chat", placed.candidateId());
@@ -111,14 +112,14 @@ class GuidedIncidentWizardTest {
         for (String medium : new String[]{"sign", "book", "voice", "profile"}) {
             var finding = GuidedIncidentWizard.start(CHAT)
                     .answer(MEDIUM, medium).answer(CONDUCT, "harassment")
-                    .answer("detail", "verbal").answer("targeting", "targeted")
+                    .answer(DETAIL, "verbal").answer("targeting", "targeted")
                     .answer(EXTENT, FEW).answer(CONTINUED, NO_WARNING).finding();
             assertEquals("hate.targeted-harassment", finding.candidateId());
             assertTrue(finding.needsReview(), medium);
         }
         var directMessage = GuidedIncidentWizard.start(CHAT)
                 .answer(MEDIUM, "direct-message").answer(CONDUCT, "harassment")
-                .answer("detail", "verbal").answer("targeting", "targeted")
+                .answer(DETAIL, "verbal").answer("targeting", "targeted")
                 .answer(EXTENT, FEW).answer(CONTINUED, NO_WARNING).finding();
         assertFalse(directMessage.needsReview());
     }
