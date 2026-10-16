@@ -12,8 +12,8 @@ Comparison against `bloom-smp` read-only configuration (actual Discord snowflake
 |---|---|
 | DiscordSRV `Channels` (global and staff) | **Exactly equal to production** |
 | DiscordSRV `DiscordConsoleChannelId` | **Exactly equal to production** |
-| DiscordSRV chat↔Minecraft forwarding flags | Enabled on test1; same settings as production |
-| DiscordSRV chat-command execution | Enabled on test1 and production; shared command prefix |
+| DiscordSRV chat↔Minecraft forwarding flags | As of 2026-10-16 both disabled in test1's on-disk config; live SMP still enabled. Effective runtime remains separately unverified. |
+| DiscordSRV chat-command execution | As of 2026-10-16 disabled on test1; enabled on SMP. Test1 still has a shared legacy console destination configured. |
 | Staff database JDBC URL and username | Different between test1 and production; credentials intentionally not inspected |
 | StaffBot Discord guild/application routing | Source pins STAGING and PRODUCTION to the same Enthusia guild but different Discord application IDs; actual running bot credentials and permissions **not yet verified** |
 | LumaGuilds code / version parity | **Not equal**: test1 uses a different unmerged build; SMP has `LumaGuilds-3.0.23.jar` |
@@ -21,6 +21,13 @@ Comparison against `bloom-smp` read-only configuration (actual Discord snowflake
 | Actual Discord role holder inventory | **Not retrieved**, so no parity asserted |
 
 **Consequences:** The Minecraft test process and Staff database may be different, but **Discord destinations are currently shared**. Never mistake "testing on bloom-test1" for "testing in a separate Discord environment."
+
+## Follow-up read-only runtime/config findings (2026-10-16)
+
+- Current test1 startup log reports DiscordSRV rejecting an **invalid bot token** and disabling itself. Do **not** fix or borrow a production token for this test: failed legacy login is temporary containment, not proof that the shared Discord routes are permanently isolated.
+- Test1 Paper config has `channel.enabled: true` and `server-id: TEST`, but **no `discord-chat-bridge` section**. The existing StaffBot SHADOW chat-only file `c` targets the pinned private channel but has an `SMP/global` route, which **does not match `TEST/global`**. Runtime connectivity remains unverified.
+- The owner approved private-channel testing in the existing Enthusia Discord guild; `#in-game-chat` is a comparison-only baseline. The chat-only application's effective identity, permissions and `public_chat_ready` have not been independently confirmed.
+- A [read-only configuration preflight](../tools/staffbot-chat-preflight/README.md) checks source/backend routing, legacy console exposure and private-channel collisions without printing secret material. Synthetic tests are included. Passing does **not** authorize runtime activation.
 
 ## Zero-change default rules
 

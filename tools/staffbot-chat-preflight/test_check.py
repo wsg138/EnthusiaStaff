@@ -1,0 +1,120 @@
+"""Offline regression checks for private-channel staging preflight.
+
+All inputs are synthetic; no production Discord IDs or credentials are used.
+"""
+import importlib.util
+import sys
+import unittest
+from pathlib import Path
+
+SOURCE = Path(__file__).with_name("check.py")
+SPEC = importlib.util.spec_from_file_location("staffbot_staging_check", SOURCE)
+CHECK = importlib.util.module_from_spec(SPEC)
+sys.modules[SPEC.name] = CHECK
+SPEC.loader.exec_module(CHECK)
+
+PIN = "1541286004298752091"
+GLOBAL = "1650000000000000001"
+STAFF = "1650000000000000002"
+CONSOLE = "1650000000000000003"
+SOURCE_JAVA = (
+    'STAGING("staging", 1541279616881397772L, 1410303324745371709L, '
+    + PIN + 'L), PRODUCTION("production", 1541279426233376818L, '
+    '1410303324745371709L, null);'
+)
+PAPER = """operational-mode: BOOTSTRAP
+network:
+  server-id: TEST
+discord-chat-bridge:
+  mode: SHADOW
+channel:
+  enabled: true
+"""
+LEGACY = (
+    f'Channels: {{"global": "{GLOBAL}", "staff": "{STAFF}"}}\n'
+    'DiscordConsoleChannelId: ""\n'
+    'DiscordChatChannelMinecraftToDiscord: false\n'
+    'DiscordChatChannelDiscordToMinecraft: false\n'
+    'DiscordChatChannelConsoleCommandEnabled: false\n'
+)
+LIVE = (
+    f'Channels: {{"global": "{GLOBAL}", "staff": "{STAFF}"}}\n'
+    f'DiscordConsoleChannelId: "{CONSOLE}"\n'
+)
+CHAT = (
+    "ENTHUSIA_STAFF_BOT_CHAT_BRIDGE_MODE=SHADOW\n"
+    f"ENTHUSIA_STAFF_BOT_CHAT_BRIDGE_ROUTES=TEST/global={PIN}\n"
+    "ENTHUSIA_STAFF_BOT_PUBLIC_CHAT_APPLICATION_ID=1650000000000000008\n"
+    "ENTHUSIA_STAFF_BOT_PUBLIC_CHAT_TOKEN=SYNTHETIC_NONSECRET\n"
+)
+
+
+class PreflightTest(unittest.TestCase):
+    def checks(self, paper=PAPER, legacy=LEGACY, live=LIVE, chat=CHAT):
+        return dict(CHECK.evaluate(paper, legacy, live, chat, SOURCE_JAVA))
+
+    def test_valid_private_staging_configuration(self):
+        self.assertTrue(all(self.checks().values()))
+
+    def test_actual_smp_route_cannot_serve_test_backend(self):
+        mismatched = CHAT.replace("TEST/global", "SMP/global")
+        self.assertFalse(self.checks(chat=mismatched)[
+            "StaffBot outbound routes match only this test backend"
+        ])
+
+    def test_extra_production_route_fails(self):
+        invalid = CHAT.replace(
+            f"TEST/global={PIN}", f"TEST/global={PIN};SMP/global={PIN}"
+        )
+        self.assertFalse(self.checks(chat=invalid)[
+            "StaffBot outbound routes match only this test backend"
+        ])
+
+    def test_private_channel_must_not_overlap_live_destinations(self):
+        live = LIVE.replace(GLOBAL, PIN)
+        self.assertFalse(self.checks(live=live)[
+            "private channel distinct from legacy chat and console"
+        ])
+
+    def test_private_channel_must_not_overlap_test_console(self):
+        legacy = LEGACY.replace('DiscordConsoleChannelId: ""',
+                                f'DiscordConsoleChannelId: "{PIN}"')
+        self.assertFalse(self.checks(legacy=legacy)[
+            "private channel distinct from legacy chat and console"
+        ])
+
+    def test_legacy_console_requires_disabled_destination(self):
+        legacy = LEGACY.replace('DiscordConsoleChannelId: ""',
+                                f'DiscordConsoleChannelId: "{CONSOLE}"')
+        self.assertFalse(self.checks(legacy=legacy)[
+            "Test legacy console Discord destination absent"
+        ])
+
+    def test_legacy_chat_requires_both_directions_disabled(self):
+        legacy = LEGACY.replace("DiscordChatChannelMinecraftToDiscord: false",
+                                "DiscordChatChannelMinecraftToDiscord: true")
+        self.assertFalse(self.checks(legacy=legacy)[
+            "Test legacy Minecraft-to-Discord forwarding disabled"
+        ])
+
+    def test_paper_chat_defaults_off(self):
+        paper = PAPER.replace("discord-chat-bridge:\n  mode: SHADOW\n", "")
+        self.assertFalse(self.checks(paper=paper)[
+            "Paper chat mode explicitly SHADOW"
+        ])
+
+    def test_no_ingress_route_during_outbound_only_stage(self):
+        chat = CHAT + f"ENTHUSIA_STAFF_BOT_CHAT_BRIDGE_INGRESS_ROUTES={PIN}=TEST/global\n"
+        self.assertFalse(self.checks(chat=chat)[
+            "StaffBot inbound chat remains disabled"
+        ])
+
+    def test_missing_or_duplicate_config_fails_closed(self):
+        with self.assertRaises(ValueError):
+            CHECK.properties(CHAT + "ENTHUSIA_STAFF_BOT_CHAT_BRIDGE_MODE=AUTHORITATIVE\n")
+        with self.assertRaises(ValueError):
+            CHECK.private_channel("enum StaffBotEnvironment { }")
+
+
+if __name__ == "__main__":
+    unittest.main()
