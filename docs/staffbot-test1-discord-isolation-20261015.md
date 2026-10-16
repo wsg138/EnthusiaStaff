@@ -1,6 +1,6 @@
 # StaffBot replacement — bloom-test1 Discord isolation preflight
 
-**Recorded 2026-10-15.** Applies to approved **nonproduction** `bloom-test1` only. This document records read-only observations and prescribes safety gates; it does **not** mean staging deployment, slash-command invocation, Discord changes, or server restart has happened.
+**Recorded 2026-10-15; amended 2026-10-16 for owner-approved private-channel testing in the existing Enthusia Discord guild.** Applies to approved **nonproduction** `bloom-test1` only. This document records read-only observations and prescribes safety gates; it does **not** mean staging deployment, slash-command invocation, Discord changes, or server restart has happened.
 
 ## Verified inventory and exposure
 
@@ -15,7 +15,7 @@ Comparison against `bloom-smp` read-only configuration (actual Discord snowflake
 | DiscordSRV chat↔Minecraft forwarding flags | Enabled on test1; same settings as production |
 | DiscordSRV chat-command execution | Enabled on test1 and production; shared command prefix |
 | Staff database JDBC URL and username | Different between test1 and production; credentials intentionally not inspected |
-| Discord bot tokens / guild separation | **Not proven** (secret values are redacted; never infer isolation) |
+| StaffBot Discord guild/application routing | Source pins STAGING and PRODUCTION to the same Enthusia guild but different Discord application IDs; actual running bot credentials and permissions **not yet verified** |
 | LumaGuilds code / version parity | **Not equal**: test1 uses a different unmerged build; SMP has `LumaGuilds-3.0.23.jar` |
 | Production LumaGuilds role writer | Present in deployed JAR; absent from Luma `main` |
 | Actual Discord role holder inventory | **Not retrieved**, so no parity asserted |
@@ -24,7 +24,7 @@ Comparison against `bloom-smp` read-only configuration (actual Discord snowflake
 
 ## Zero-change default rules
 
-Until a dedicated nonproduction Discord route and safe server configuration are verified:
+Until the pinned private test-channel route and safe test-server configuration are verified:
 
 - Do not run any test which posts in a Discord channel, issues `/console` or legacy `!c`, mutates/reconciles a real Discord role, sends Discord webhook content, invokes the real JDA gateway with production credentials, or triggers legacy join/leave/restart notifications to the shared channels.
 - Do not disable/replace DiscordSRV on Bloom SMP, modify its linked-account or role databases, or deploy/cut over production JARs.
@@ -34,11 +34,11 @@ Until a dedicated nonproduction Discord route and safe server configuration are 
 ## Required preflight before active testing on test1
 
 1. **Pin baseline:** record current test1 plugin filenames, source/test SHA-256, existing configs, LumaGuilds build provenance and restore procedure. Determine which other teams are using this shared test server.
-2. **Isolate Discord:** use a dedicated *test Discord guild and channels* with a distinct test bot identity/credentials, or a separately approved no-egress/mock Discord service. Prove its channel/guild IDs do not match production. Config validation alone is insufficient: verify effective runtime after restart without sending a test to production.
-3. **Disable legacy remote command exposure in test1 test policy:** no active DiscordSRV console bridge or role writer should share the production guild while testing the new console or managed-role bridge. Confirm the test bot cannot affect production roles/channels.
+2. **Isolate Discord messages within the existing Enthusia guild (owner-approved):** use the separate STAGING StaffBot application identity already defined by `StaffBotEnvironment`, and the pinned private `#staff-bot-testing` text channel from `docs/staffbot-chat-shadow-acceptance.md`. `#in-game-chat` is the **read-only visual baseline**, never a staging output target. Check actual IDs/permissions internally without committing them. Verify the pinned test channel differs from production `global`, `staff`, and `DiscordConsoleChannelId`, and that the staging bot can post **only** to the private test channel. Confirm its Discord identity/permissions from runtime, not merely its source enum; ordinary source configuration does not prove effective permissions. Staging `SHADOW` must have no production chat route and no default ingress route.
+3. **Contain existing legacy test-server DiscordSRV:** its `global`, `staff`, and console destinations currently equal production. Before an active `bloom-test1` chat test, ensure legacy DiscordSRV test-server outbound chat/console/restart announcements cannot post into live Enthusia channels; stage any test1-only config adjustment with a rollback and check other projects using test1. Never change SMP DiscordSRV or its `#in-game-chat` output. **Console tests** may only dispatch to the isolated Minecraft test backend with fail-closed Staff Mode and a specific allowlisted private channel; no production command target.
 4. **Isolate data and endpoints:** independently verify all StaffBot/MariaDB, Luma SQLite, LuckPerms, Velocity, HTTP command bridge, role namespaces and proxy secrets target nonproduction instances. Distinct Staff JDBC URLs are useful evidence, **not sufficient** proof.
 5. **Preserve rollback:** make a test1-only file/DB snapshot before any activation; write down exact JARs/configs and rollback; avoid touching SMP and persistent Discord account roles.
-6. **Run acceptance:** first wrong-guild/channel and off-duty/unlinked/stale actor negative tests, body/HMAC/nonce freshness, command allowlist and no-retry, then safe `list` console read, bounded output, and synthetic managed-role changes only in test guild. For chat, test public/staff/private boundaries, duplicate/echo loops, textual outage fallback, and actual addon thumbnail + tooltip screenshots (IC-01..IC-14). Collect the three complete authorized D13 real SHADOW snapshots using the read-only `tools/d13-parity/` harness.
+6. **Run acceptance:** begin with chat-only SHADOW (private `#staff-bot-testing` output; normal `#in-game-chat` as reference) and prove wrong-channel rejection, public/staff/private boundaries, duplicate/echo isolation, textual outage fallback, and addon thumbnail + tooltip visual comparisons (S01–S18, IC-01–IC-14). Inbound testing remains disabled until explicitly scoped to `bloom-test1`. For console, run off-duty/unlinked/stale-actor, wrong-channel, body/HMAC/nonce freshness, allowlist/no-retry rejection tests first; only then, if nonproduction Paper endpoints and command permissions are confirmed, try a harmless `list` on test1. **Do not test real role mutations or destructive Discord join/kick actions in the main Enthusia guild.** Role parity remains read-only/synthetic; collect three complete D13 SHADOW windows via `tools/d13-parity/` without Discord writes.
 7. **Restore and inspect:** disable test toggles, restore baseline, compare plugin inventory/hashes, inspect errors and verify no Discord production channel or role saw any change.
 
 ## Linked work
@@ -49,4 +49,4 @@ Until a dedicated nonproduction Discord route and safe server configuration are 
 - Chat acceptance: [EnthusiaStaff #268](https://github.com/wsg138/EnthusiaStaff/issues/268) and PR #568 (opt-in independent renderer; real staging unaccepted)
 - Luma role eligibility: [LumaGuilds #13](https://github.com/wsg138/LumaGuilds/pull/13), merged to integration only
 
-**Release gate remains CLOSED.** Production DiscordSRV retirement requires real nonproduction parity, reviewed configuration and explicit owner authorization; approving the use of `bloom-test1` is **not** approval to alter production Discord.
+**Release gate remains CLOSED.** The owner approved use of the **main Enthusia Discord guild's private testing channel**, not production chat output, role mutation, server-wide moderation, slash-command execution against production, or DiscordSRV retirement. Runtime configuration and permissions must be checked before the first private-channel test post.
