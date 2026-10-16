@@ -76,6 +76,12 @@ class PreflightTest(unittest.TestCase):
             "private channel distinct from legacy chat and console"
         ])
 
+    def test_missing_legacy_channel_map_fails_closed(self):
+        legacy = LEGACY.replace(f'Channels: {{"global": "{GLOBAL}", "staff": "{STAFF}"}}\n', '')
+        self.assertFalse(self.checks(legacy=legacy)[
+            'private channel distinct from legacy chat and console'
+        ])
+
     def test_private_channel_must_not_overlap_test_console(self):
         legacy = LEGACY.replace('DiscordConsoleChannelId: ""',
                                 f'DiscordConsoleChannelId: "{PIN}"')

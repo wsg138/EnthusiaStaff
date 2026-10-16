@@ -75,15 +75,18 @@ def evaluate(
     routes_raw = prop.get("ENTHUSIA_STAFF_BOT_CHAT_BRIDGE_ROUTES", "")
     routes = [item.strip() for item in routes_raw.split(";") if item.strip()]
     outbound_values = []
+    channel_maps_verified = True
     for config in (legacy_test, legacy_live):
-        for key in ("Channels", "DiscordConsoleChannelId"):
-            outbound_values.extend(
-                re.findall(r"\b\d{16,22}\b", legacy_setting(config, key))
-            )
+        channels = re.findall(r"\b\d{16,22}\b", legacy_setting(config, "Channels"))
+        channel_maps_verified = channel_maps_verified and bool(channels)
+        outbound_values.extend(channels)
+        outbound_values.extend(re.findall(
+            r"\b\d{16,22}\b", legacy_setting(config, "DiscordConsoleChannelId")
+        ))
     public_app = prop.get("ENTHUSIA_STAFF_BOT_PUBLIC_CHAT_APPLICATION_ID", "")
     core_apps = re.findall(r'(?:STAGING|PRODUCTION)\(\s*"(?:staging|production)"\s*,\s*(\d+)L', java_source)
     return [
-        ("private channel distinct from legacy chat and console", pin not in outbound_values),
+        ("private channel distinct from legacy chat and console", channel_maps_verified and pin not in outbound_values),
         ("Paper reports a non-empty backend ID", bool(server_id)),
         ("Paper chat mode explicitly SHADOW", enabled),
         ("Paper authenticated channel configured", yaml_scalar(yaml_section(paper, "channel"), "enabled").lower() == "true"),
