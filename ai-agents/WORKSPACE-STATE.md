@@ -1,3 +1,5 @@
+2026-10-11 owner assignment: `OWNER-TAB-VANISH-CACHE` supersedes general routing for this worker only. Source fix/regressions and TEST TAB isolation are in progress; isolated live TEST proxy acceptance is pending. No production activation or merge authorization. Existing package assignments are preserved.
+
 # Workspace state
 
 2026-10-05 owner extension: continue the same PR #322 with automatic fresh-entry vanish and player-name completion (IT-09..10). Current main `ba6dcabc9a731e7e3e21c8405778764abdc626f4` includes merged cross-server PR #321 and is normally incorporated as `ebff2f09`; previous assumptions that #321 is unmerged are historical. Preserve transfer/recovery visibility and existing exit policy. No new migration/provider API; validation remains pending for the new product head.
