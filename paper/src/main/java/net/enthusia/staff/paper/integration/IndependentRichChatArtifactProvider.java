@@ -41,7 +41,9 @@ import org.bukkit.plugin.java.JavaPlugin;
  *
  * <p>This deliberately does NOT promise upstream pixel/texture fidelity. Item material names,
  * counts and inventory positions are represented visibly without redistributing game assets.
- * Opt-in, with original addon rendering still preferred whenever available.</p>
+ * Opt-in, with original addon rendering still preferred whenever available. Player inventory
+ * is captured on the later Folia entity callback, so exact send-time state is not guaranteed;
+ * late capture fails closed to text-only rather than rendering a long-stale inventory.</p>
  */
 public final class IndependentRichChatArtifactProvider
         implements RichChatArtifactProvider, AutoCloseable {
@@ -50,6 +52,9 @@ public final class IndependentRichChatArtifactProvider
     private static final int CELL_HEIGHT = 62;
     private static final int TOP = 55;
     private static final int MAX_SLOTS = 54;
+    // The entity callback may be delayed after a chat event. Prefer missing an optional
+    // image over showing a player's unrelated later inventory.
+    private static final long MAX_SNAPSHOT_AGE_MILLIS = 2_000L;
     private static final Color BACKGROUND = new Color(32, 35, 42);
     private static final Color CELL = new Color(51, 55, 66);
     private static final Color OUTLINE = new Color(98, 105, 120);
@@ -216,14 +221,19 @@ public final class IndependentRichChatArtifactProvider
     }
 
     private boolean expired(RichChatArtifactRequest request) {
-        return closed || clock.millis() >= request.expiresAtEpochMillis();
+        return closed || snapshotWindowExpired(request, clock.millis());
+    }
+
+    static boolean snapshotWindowExpired(RichChatArtifactRequest request, long nowMillis) {
+        return nowMillis >= request.expiresAtEpochMillis()
+                || nowMillis - request.createdAtEpochMillis() >= MAX_SNAPSHOT_AGE_MILLIS;
     }
 
     private void snapshot(
             Player player, RichChatArtifactRequest request,
             CompletableFuture<List<RichChatArtifact>> result
     ) {
-        if (expired(request) || result.isDone()) {
+        if (expired(request) || result.isDone() || !player.isOnline()) {
             result.complete(List.of());
             return;
         }
@@ -247,7 +257,7 @@ public final class IndependentRichChatArtifactProvider
         }
     }
 
-    private static Optional<Job> captureJob(
+    static Optional<Job> captureJob(
             MatchRule rule, Player player, RichChatArtifactRequest request
     ) {
         if (!rule.enabled() || !player.hasPermission(rule.kind().permission)) {
