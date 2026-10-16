@@ -21,6 +21,8 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.RejectedExecutionException;
+import java.util.function.BooleanSupplier;
+import java.util.function.Supplier;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import javax.imageio.ImageIO;
@@ -257,22 +259,33 @@ public final class IndependentRichChatArtifactProvider
         }
     }
 
-    static Optional<Job> captureJob(
+    private static Optional<Job> captureJob(
             MatchRule rule, Player player, RichChatArtifactRequest request
     ) {
-        if (!rule.enabled() || !player.isOnline() || !player.hasPermission(rule.kind().permission)) {
+        return captureJob(rule, player::isOnline,
+                () -> player.hasPermission(rule.kind().permission),
+                request.canonicalPlainText(), () -> switch (rule.kind()) {
+                    case ITEM -> List.of(slot(player.getInventory().getItemInMainHand()));
+                    case INVENTORY -> copySlots(player.getInventory(), MAX_SLOTS);
+                    case ENDER_CHEST -> copySlots(player.getEnderChest(), MAX_SLOTS);
+                });
+    }
+
+    // Called from the Folia entity-owned callback. The pure supplier seam also
+    // verifies that denied/quit players never trigger inventory reads and that
+    // the captured Job remains immutable before worker rendering.
+    static Optional<Job> captureJob(
+            MatchRule rule, BooleanSupplier online, BooleanSupplier permitted,
+            String message, Supplier<List<Slot>> snapshot
+    ) {
+        if (!rule.enabled() || !online.getAsBoolean() || !permitted.getAsBoolean()) {
             return Optional.empty();
         }
-        int position = firstUnescapedMatch(rule.expression(), request.canonicalPlainText());
+        int position = firstUnescapedMatch(rule.expression(), message);
         if (position < 0) {
             return Optional.empty();
         }
-        List<Slot> slots = switch (rule.kind()) {
-            case ITEM -> List.of(slot(player.getInventory().getItemInMainHand()));
-            case INVENTORY -> copySlots(player.getInventory(), MAX_SLOTS);
-            case ENDER_CHEST -> copySlots(player.getEnderChest(), MAX_SLOTS);
-        };
-        return Optional.of(new Job(rule.kind(), position, slots));
+        return Optional.of(new Job(rule.kind(), position, snapshot.get()));
     }
 
     private void renderSnapshots(
