@@ -9,6 +9,8 @@ from pathlib import Path
 
 SOURCE = Path(__file__).with_name("check.py")
 SPEC = importlib.util.spec_from_file_location("staffbot_staging_check", SOURCE)
+if SPEC is None or SPEC.loader is None:
+    raise ImportError("Preflight checker module unavailable")
 CHECK = importlib.util.module_from_spec(SPEC)
 sys.modules[SPEC.name] = CHECK
 SPEC.loader.exec_module(CHECK)
