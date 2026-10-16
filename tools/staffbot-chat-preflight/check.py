@@ -58,37 +58,48 @@ def properties(content: str) -> dict[str, str]:
     return result
 
 
+def paper_shadow_enabled(paper: str) -> bool:
+    section = yaml_section(paper, "discord-chat-bridge")
+    mode = yaml_scalar(section, "mode").upper()
+    shadow_enabled = yaml_scalar(section, "shadow-enabled").lower() == "true"
+    return mode == "SHADOW" or (not mode and shadow_enabled)
+
+
+def legacy_destinations(test: str, live: str) -> tuple[bool, list[str]]:
+    ids: list[str] = []
+    maps_present = True
+    for config in (test, live):
+        channels = re.findall(r"\\b\\d{16,22}\\b", legacy_setting(config, "Channels"))
+        maps_present = maps_present and bool(channels)
+        ids.extend(channels)
+        ids.extend(re.findall(
+            r"\\b\\d{16,22}\\b", legacy_setting(config, "DiscordConsoleChannelId")
+        ))
+    return maps_present, ids
+
+
+def distinct_chat_app(prop: dict[str, str], java_source: str) -> bool:
+    public_app = prop.get("ENTHUSIA_STAFF_BOT_PUBLIC_CHAT_APPLICATION_ID", "")
+    staff_apps = re.findall(
+        r'(?:STAGING|PRODUCTION)\\(\\s*"(?:staging|production)"\\s*,\\s*(\\d+)L',
+        java_source,
+    )
+    return bool(public_app) and public_app.isdigit() and len(staff_apps) == 2 and public_app not in staff_apps
+
+
 def evaluate(
     paper: str, legacy_test: str, legacy_live: str, chat: str, java_source: str
 ) -> list[tuple[str, bool]]:
     pin = private_channel(java_source)
     prop = properties(chat)
     server_id = yaml_scalar(paper, "server-id")
-    paper_chat = yaml_section(paper, "discord-chat-bridge")
-    enabled = (
-        yaml_scalar(paper_chat, "mode").upper() == "SHADOW"
-        or (
-            not yaml_scalar(paper_chat, "mode")
-            and yaml_scalar(paper_chat, "shadow-enabled").lower() == "true"
-        )
-    )
     routes_raw = prop.get("ENTHUSIA_STAFF_BOT_CHAT_BRIDGE_ROUTES", "")
     routes = [item.strip() for item in routes_raw.split(";") if item.strip()]
-    outbound_values = []
-    channel_maps_verified = True
-    for config in (legacy_test, legacy_live):
-        channels = re.findall(r"\b\d{16,22}\b", legacy_setting(config, "Channels"))
-        channel_maps_verified = channel_maps_verified and bool(channels)
-        outbound_values.extend(channels)
-        outbound_values.extend(re.findall(
-            r"\b\d{16,22}\b", legacy_setting(config, "DiscordConsoleChannelId")
-        ))
-    public_app = prop.get("ENTHUSIA_STAFF_BOT_PUBLIC_CHAT_APPLICATION_ID", "")
-    core_apps = re.findall(r'(?:STAGING|PRODUCTION)\(\s*"(?:staging|production)"\s*,\s*(\d+)L', java_source)
+    maps_present, outbound_values = legacy_destinations(legacy_test, legacy_live)
     return [
-        ("private channel distinct from legacy chat and console", channel_maps_verified and pin not in outbound_values),
+        ("private channel distinct from legacy chat and console", maps_present and pin not in outbound_values),
         ("Paper reports a non-empty backend ID", bool(server_id)),
-        ("Paper chat mode explicitly SHADOW", enabled),
+        ("Paper chat mode explicitly SHADOW", paper_shadow_enabled(paper)),
         ("Paper authenticated channel configured", yaml_scalar(yaml_section(paper, "channel"), "enabled").lower() == "true"),
         ("StaffBot chat mode SHADOW", prop.get("ENTHUSIA_STAFF_BOT_CHAT_BRIDGE_MODE", "").upper() == "SHADOW"),
         ("StaffBot outbound routes match only this test backend",
@@ -96,7 +107,7 @@ def evaluate(
         ("StaffBot inbound chat remains disabled",
          not prop.get("ENTHUSIA_STAFF_BOT_CHAT_BRIDGE_INGRESS_ROUTES", "").strip()),
         ("Chat-only application distinct from staff application",
-         bool(public_app) and public_app.isdigit() and len(core_apps) == 2 and public_app not in core_apps),
+         distinct_chat_app(prop, java_source)),
         ("Chat-only application credential configured",
          bool(prop.get("ENTHUSIA_STAFF_BOT_PUBLIC_CHAT_TOKEN", "").strip())),
         ("Test legacy Minecraft-to-Discord forwarding disabled",
