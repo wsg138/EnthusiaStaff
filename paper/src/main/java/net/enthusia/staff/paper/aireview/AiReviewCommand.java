@@ -67,6 +67,10 @@ final class AiReviewCommand implements CommandExecutor, TabCompleter {
                 list(sender);
                 yield true;
             }
+            case "history" -> {
+                history(sender, arguments);
+                yield true;
+            }
             case "refresh" -> {
                 refresh(sender);
                 yield true;
@@ -107,6 +111,66 @@ final class AiReviewCommand implements CommandExecutor, TabCompleter {
         if (!fresh) {
             subsystem.refreshQueue(false, null);
         }
+    }
+
+    private void history(CommandSender sender, String[] arguments) {
+        if (arguments.length > 2) {
+            usage(sender);
+            return;
+        }
+        String cursor = arguments.length == 2 ? arguments[1] : null;
+        if (cursor != null && (cursor.isBlank() || cursor.length() > 64)) {
+            send(sender, "Invalid history cursor.", NamedTextColor.RED);
+            return;
+        }
+        send(sender, "Loading the central AI decision history…", NamedTextColor.GRAY);
+        subsystem.loadDecisions(
+                10, cursor,
+                page -> showHistory(sender, page),
+                issue -> send(sender, "AI history unavailable: " + issue, NamedTextColor.YELLOW)
+        );
+    }
+
+    private void showHistory(
+            CommandSender sender,
+            AiReviewModels.DecisionHistoryPage page
+    ) {
+        if (!AiReviewPermissions.queue(sender)
+                || sender instanceof Player player && !subsystem.activeDuty(player)) {
+            return;
+        }
+        sendHistoryLine(sender, "AI decisions · " + page.items().size()
+                + " finalized records (not just flags)", NamedTextColor.GOLD);
+        page.items().forEach(item -> sendHistoryLine(
+                sender,
+                AiReviewPresentation.bounded(item.eventId(), 64) + " "
+                        + item.messageAction() + " "
+                        + AiReviewPresentation.bounded(item.semanticLabel(), 35)
+                        + (item.degraded() ? " [fail-open]" : "")
+                        + (item.corrected() ? " [corrected]" : ""),
+                item.messageAction() == MessageAction.BLOCK
+                        ? NamedTextColor.YELLOW : NamedTextColor.GRAY
+        ));
+        if (page.nextCursor() != null) {
+            sendHistoryLine(sender, "Next: /aireview history " + page.nextCursor(), NamedTextColor.GRAY);
+        }
+        sendHistoryLine(sender, "Inspect: /aireview view <event-id> (authorized in-game only).",
+                NamedTextColor.GRAY);
+    }
+
+    private void sendHistoryLine(CommandSender sender, String line, NamedTextColor color) {
+        if (sender instanceof Player player) {
+            // Check access on the same player scheduler task as delivery.
+            onPlayer(player, () -> {
+                if (player.isOnline() && AiReviewPermissions.queue(player)
+                        && subsystem.activeDuty(player)) {
+                    player.sendMessage(StaffMessageStyle.style(Component.text(line, color)));
+                }
+            });
+            return;
+        }
+        // Console still receives only minimized summaries on the global scheduler.
+        send(sender, line, color);
     }
 
     private void refresh(CommandSender sender) {
@@ -367,7 +431,7 @@ final class AiReviewCommand implements CommandExecutor, TabCompleter {
     }
 
     private void usage(CommandSender sender) {
-        send(sender, "Usage: /aireview [list|refresh|view <event-id>]", NamedTextColor.GRAY);
+        send(sender, "Usage: /aireview [list|refresh|view <event-id>|history [cursor]]", NamedTextColor.GRAY);
         send(sender, "       /aireview <allow|block|review> <event-id> [CONFIRM]", NamedTextColor.GRAY);
         send(sender, "       /aireview label <event-id> <SEMANTIC_LABEL> [CONFIRM]", NamedTextColor.GRAY);
         send(sender, "       /aireview <approve|reject> <event-id> <proposal-id> [CONFIRM]", NamedTextColor.GRAY);
@@ -403,7 +467,7 @@ final class AiReviewCommand implements CommandExecutor, TabCompleter {
         }
         if (arguments.length == 1) {
             List<String> values = new ArrayList<>(List.of(
-                    "list", "refresh", "view", "allow", "block", "review", "label", "approve", "reject"
+                    "list", "refresh", "view", "history", "allow", "block", "review", "label", "approve", "reject"
             ));
             if (AiReviewPermissions.admin(sender, subsystem.configuration())) {
                 values.add("adminapprove");
