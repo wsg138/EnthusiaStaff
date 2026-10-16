@@ -67,6 +67,11 @@ public final class JdbcReportStore implements ReportStore {
     }
 
     @Override
+    public boolean exists(UUID reportId) {
+        return queries.exists(reportId);
+    }
+
+    @Override
     public ReportMessagesPage messages(UUID reportId, int page) {
         return queries.messages(reportId, page);
     }

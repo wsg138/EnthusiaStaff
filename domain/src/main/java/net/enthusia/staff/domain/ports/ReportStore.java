@@ -23,6 +23,11 @@ public interface ReportStore {
 
     Optional<ReportDetails> details(UUID reportId);
 
+    /** Lightweight existence check; never load confidential snapshots just to check an ID. */
+    default boolean exists(UUID reportId) {
+        throw new UnsupportedOperationException("Report existence lookup is unavailable");
+    }
+
     /** A bounded staff-only chronological history; implementations must fail closed if unsupported. */
     default ReportMessagesPage messages(UUID reportId, int page) {
         throw new UnsupportedOperationException("Report message history is unavailable");

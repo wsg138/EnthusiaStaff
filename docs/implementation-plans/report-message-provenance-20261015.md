@@ -17,6 +17,8 @@ transaction. Historical messages stay `UNKNOWN` rather than being falsely attrib
 Neither the original description nor the existing submission/event idempotency contracts
 are modified. No message text or private evidence is sent to Discord.
 
+A narrow `ReportStore.exists(reportId)` query checks the report ID without loading retained chat, private-message, or client-evidence snapshots.
+
 The staff-only `/reports messages <report-id> [page]` reads five chronological rows per
 page, ordered by timestamp and immutable message UUID. It displays the origin, sender,
 timestamp, and bounded text, with next-page instructions. The final display rechecks `enthusiastaff.reports.manage` and independently

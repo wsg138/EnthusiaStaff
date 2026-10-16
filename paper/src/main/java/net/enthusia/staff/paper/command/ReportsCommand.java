@@ -382,7 +382,7 @@ public final class ReportsCommand implements CommandExecutor, TabCompleter {
             send(sender, "Report storage is not ready.");
             return;
         }
-        if (store.details(reportId).isEmpty()) {
+        if (!store.exists(reportId)) {
             send(sender, "That report does not exist.");
             return;
         }

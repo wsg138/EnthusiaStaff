@@ -108,6 +108,8 @@ class ReportStoreIntegrationTest {
             assertTrue(details.privateMessageSnapshots().getFirst().contains("Private evidence first"));
             assertEquals(1L, reportCount(accepted.reportId()));
             assertEquals(1L, reportMessageCount(accepted.reportId()));
+            assertTrue(store.exists(accepted.reportId()));
+            assertFalse(store.exists(UUID.randomUUID()));
             ReportMessagesPage messages = store.messages(accepted.reportId(), 1);
             assertEquals(1, messages.messages().size());
             assertEquals(ReportMessage.Origin.REPORTER_FOLLOWUP, messages.messages().getFirst().origin());

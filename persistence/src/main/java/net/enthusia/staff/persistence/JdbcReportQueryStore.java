@@ -26,6 +26,7 @@ final class JdbcReportQueryStore {
     private static final int ABSOLUTE_QUERY_LIMIT = 100;
     private static final int MESSAGE_PAGE_SIZE = 5;
     private static final int MAX_MESSAGE_PAGE = 10_000;
+    private static final String REPORT_EXISTS_SQL = "SELECT 1 FROM reports WHERE report_id = ? LIMIT 1";
     private static final String MESSAGE_PAGE_SQL = """
             SELECT message_id, actor_id, body, created_at, origin
             FROM report_messages
@@ -145,6 +146,21 @@ final class JdbcReportQueryStore {
             ));
         } catch (SQLException | IllegalArgumentException exception) {
             throw new ModerationPersistenceException("Unable to read report details", exception);
+        }
+    }
+
+    boolean exists(UUID reportId) {
+        if (reportId == null) {
+            throw new IllegalArgumentException("Report identifier is required");
+        }
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement(REPORT_EXISTS_SQL)) {
+            statement.setBytes(1, UuidBytes.toBytes(reportId));
+            try (ResultSet result = statement.executeQuery()) {
+                return result.next();
+            }
+        } catch (SQLException exception) {
+            throw new ModerationPersistenceException("Unable to check report existence", exception);
         }
     }
 
