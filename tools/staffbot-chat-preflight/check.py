@@ -69,11 +69,11 @@ def legacy_destinations(test: str, live: str) -> tuple[bool, list[str]]:
     ids: list[str] = []
     maps_present = True
     for config in (test, live):
-        channels = re.findall(r"\\b\\d{16,22}\\b", legacy_setting(config, "Channels"))
+        channels = re.findall(r"\b\d{16,22}\b", legacy_setting(config, "Channels"))
         maps_present = maps_present and bool(channels)
         ids.extend(channels)
         ids.extend(re.findall(
-            r"\\b\\d{16,22}\\b", legacy_setting(config, "DiscordConsoleChannelId")
+            r"\b\d{16,22}\b", legacy_setting(config, "DiscordConsoleChannelId")
         ))
     return maps_present, ids
 
@@ -81,7 +81,7 @@ def legacy_destinations(test: str, live: str) -> tuple[bool, list[str]]:
 def distinct_chat_app(prop: dict[str, str], java_source: str) -> bool:
     public_app = prop.get("ENTHUSIA_STAFF_BOT_PUBLIC_CHAT_APPLICATION_ID", "")
     staff_apps = re.findall(
-        r'(?:STAGING|PRODUCTION)\\(\\s*"(?:staging|production)"\\s*,\\s*(\\d+)L',
+        r'(?:STAGING|PRODUCTION)\(\s*"(?:staging|production)"\s*,\s*(\d+)L',
         java_source,
     )
     return bool(public_app) and public_app.isdigit() and len(staff_apps) == 2 and public_app not in staff_apps
