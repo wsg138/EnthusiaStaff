@@ -105,9 +105,11 @@ final class AiMirrorDurableRecoverySession
             throw new IllegalStateException("durable staging mirror storage unavailable");
         }
         try {
-            chat.resume();
+            // Arm receipt capture before chat.resume() can emit a post-send callback.
+            // Recovery can start afterward because a new receipt is already durable.
             immediate.resume();
             ingress.resume();
+            chat.resume();
             resumeRecovery();
         } catch (RuntimeException failure) {
             ingress.pause();
