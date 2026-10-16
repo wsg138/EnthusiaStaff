@@ -204,6 +204,11 @@ final class StaffModerationRuntime implements AutoCloseable {
         return data.pendingReports(limit);
     }
 
+    java.util.List<net.enthusia.staff.persistence.DiscordStaffReadRuntime.PendingReport> pendingReports(
+            int limit, boolean includeDescription) {
+        return data.pendingReports(limit, includeDescription);
+    }
+
     java.util.List<net.enthusia.staff.persistence.DiscordStaffReadRuntime.PendingAltAlert> pendingAltAlerts(int limit) {
         if (investigations.isEmpty()) {
             return java.util.List.of();
