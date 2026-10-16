@@ -88,9 +88,7 @@ class DiscordReportReviewCardTest {
     @Test void sensitiveCategoriesRemainInGameOnly() {
         for (String reason : List.of("safety.threat", "privacy.dox", "account.compromise",
                 "personal.information", "harassment.sexual")) {
-            var item = new DiscordStaffReadRuntime.PendingReport(
-                    UUID.randomUUID(), UUID.randomUUID(), "Target", "Reporter",
-                    reason, "OPEN", 1L, "private-secret-do-not-echo");
+            var item = sensitiveReport(reason);
             var card = DiscordReportReviewCard.render(PULSE, List.of(item), true);
             String body = card.getFields().get(2).getValue();
             assertTrue(body.contains("Sensitive report"));
@@ -107,6 +105,12 @@ class DiscordReportReviewCardTest {
         assertTrue(body.length() <= 1024);
         assertTrue(body.contains("…"));
         assertFalse(body.contains("@here"));
+    }
+
+    private static DiscordStaffReadRuntime.PendingReport sensitiveReport(String reason) {
+        return new DiscordStaffReadRuntime.PendingReport(
+                UUID.randomUUID(), UUID.randomUUID(), "Target", "Reporter",
+                reason, "OPEN", 1L, "private-secret-do-not-echo");
     }
 
     @Test void invalidUnboundedQueueFailsClosed() {

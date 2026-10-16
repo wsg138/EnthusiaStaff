@@ -15,7 +15,9 @@ final class DiscordReportReviewCard {
     private static final int COLOR = 0xD69C42;
     private static final int MAX_REPORTS = 5;
     private static final int MAX_DESCRIPTION_CODEPOINTS = 240;
-    private static final char FULLWIDTH_AT = '\uFF20';
+    private static final char FULLWIDTH_AT = '＠';
+    private static final int ASCII_AT = '@';
+    private static final String MARKUP_CHARS = "<>*_|~" + (char) 96;
 
     private DiscordReportReviewCard() { }
 
@@ -53,21 +55,26 @@ final class DiscordReportReviewCard {
         for (var report : reports) {
             String reason = ReportReasonLabel.display(report.reasonId());
             String state = safeState(report.state());
-            StringBuilder details = new StringBuilder()
-                    .append("**Reported player:** ").append(safeName(report.targetName()))
-                    .append("\n**Reported by:** ").append(safeName(report.reporterName()))
-                    .append("\n**Reference:** ").append(report.reportId().toString(), 0, 8);
-            if (actionsEnabled && !report.description().isBlank()) {
-                details.append("\n**Report text:** ")
-                        .append(restrictedReason(report.reasonId())
-                                ? "Sensitive report — view full text in-game."
-                                : safeDescription(report.description()));
-            }
             builder.addField("Report " + index + " • " + reason + " • " + state,
-                    details.toString(), false);
+                    reportField(report, actionsEnabled), false);
             index++;
         }
         return builder.build();
+    }
+
+    private static String reportField(DiscordStaffReadRuntime.PendingReport report,
+                                      boolean actionsEnabled) {
+        StringBuilder details = new StringBuilder(256)
+                .append("**Reported player:** ").append(safeName(report.targetName()))
+                .append("\n**Reported by:** ").append(safeName(report.reporterName()))
+                .append("\n**Reference:** ").append(report.reportId().toString(), 0, 8);
+        if (actionsEnabled && !report.description().isBlank()) {
+            details.append("\n**Report text:** ")
+                    .append(restrictedReason(report.reasonId())
+                            ? "Sensitive report — view full text in-game."
+                            : safeDescription(report.description()));
+        }
+        return details.toString();
     }
 
     static boolean restrictedReason(String reasonId) {
@@ -91,22 +98,23 @@ final class DiscordReportReviewCard {
             int codePoint = description.codePointAt(offset);
             offset += Character.charCount(codePoint);
             count++;
-            if (Character.isISOControl(codePoint)
-                    || Character.isWhitespace(codePoint)
-                    || Character.getType(codePoint) == Character.FORMAT) {
-                cleaned.append(' ');
-            } else if (codePoint == '@') {
-                cleaned.append(FULLWIDTH_AT);
-            } else if (codePoint == '<' || codePoint == '>'
-                    || codePoint == '*' || codePoint == '_' || codePoint == '|'
-                    || codePoint == '~' || codePoint == 96) {
-                cleaned.append(' ');
-            } else {
-                cleaned.appendCodePoint(codePoint);
-            }
+            appendNeutralized(cleaned, codePoint);
         }
         String safe = cleaned.toString().trim().replaceAll("\\s+", " ");
         return offset < description.length() ? safe + "…" : safe;
+    }
+
+    private static void appendNeutralized(StringBuilder result, int codePoint) {
+        if (Character.isISOControl(codePoint) || Character.isWhitespace(codePoint)
+                || Character.getType(codePoint) == Character.FORMAT) {
+            result.append(' ');
+        } else if (codePoint == ASCII_AT) {
+            result.append(FULLWIDTH_AT);
+        } else if (MARKUP_CHARS.indexOf(codePoint) >= 0) {
+            result.append(' ');
+        } else {
+            result.appendCodePoint(codePoint);
+        }
     }
 
     private static String safeName(String name) {
