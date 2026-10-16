@@ -53,7 +53,7 @@ subprojects {
     }
 }
 
-val productionProjects = subprojects.filterNot { it.name == "integration-tests" }
+val productionProjects = subprojects.filterNot { it.name == "integration-tests" || it.name == "punishment-simulator" }
 
 /**
  * Combines unit-test and Testcontainers execution data into repository-wide

@@ -1,0 +1,192 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Enthusia | Punishment Simulator</title>
+<style>
+:root{color-scheme:dark;font-family:"Segoe UI",system-ui,sans-serif;background:#0d1019;color:#e9edf8;font-size:14px}
+*{box-sizing:border-box}body{margin:0;min-height:100vh;background:radial-gradient(900px 450px at 90% -100px,#34406d66,transparent),#0d1019}
+main{max-width:1270px;margin:0 auto;padding:32px 22px 90px}.header{display:flex;gap:18px;justify-content:space-between;align-items:center;margin-bottom:26px;flex-wrap:wrap}
+.eyebrow{text-transform:uppercase;letter-spacing:2.4px;font-size:11px;font-weight:800;color:#82b9ff}.header h1{font-size:31px;margin:6px 0}.muted{color:#a5b0c5}
+.pill{border:1px solid #364360;background:#161f31;padding:9px 14px;border-radius:99px;font-size:12px;color:#acbbd6}
+.grid{display:grid;grid-template-columns:minmax(350px,1fr) minmax(380px,1.08fr);gap:18px}
+.panel{background:#171e2c;border:1px solid #2b364e;border-radius:18px;padding:22px;box-shadow:0 12px 34px #03040a35}
+h2{font-size:17px;margin:0 0 14px}h3{font-size:14px;margin:18px 0 10px;color:#c2cde2}
+label{display:block;font-weight:600;color:#b8c6dd;font-size:12px;margin-bottom:7px}input,select,button{font:inherit}
+select,input{min-width:0;width:100%;height:40px;padding:0 11px;border:1px solid #3a4660;color:#eaf1ff;background:#0e1422;border-radius:9px}
+select:focus,input:focus{outline:2px solid #588bfa80}input[type=checkbox]{width:17px;height:17px;accent-color:#81aaff}
+.form-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:13px}.single{margin-bottom:13px}
+button{cursor:pointer;border-radius:9px;border:1px solid #455371;color:#e9efff;background:#233049;padding:10px 12px;font-weight:650}
+button:hover{background:#344567}button.primary{background:#3969e5;border-color:#3969e5;color:white}
+.actions{display:flex;flex-wrap:wrap;gap:8px}.rule{border-left:3px solid #6a87db;padding:8px 14px;background:#1b2740;margin:16px 0}
+.warning{background:#3e3020;border:1px solid #745b30;color:#ebd5aa;padding:12px 14px;border-radius:10px;margin-bottom:20px;line-height:1.5}
+.stat-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:15px 0}
+.stat{background:#101725;border:1px solid #2d3750;border-radius:12px;padding:12px;min-height:80px}
+.stat .big{font-size:25px;font-weight:800;margin-top:8px}.stat .hint{font-size:11px;color:#aab5c9}
+.highlight{border-color:#6686e8;background:#162742}.result{font-size:24px;font-weight:800;margin:4px 0 10px}
+.meta{display:flex;gap:7px;flex-wrap:wrap}.tag{display:inline-block;font-size:11px;background:#27324a;color:#bac9e8;border-radius:7px;padding:5px 8px}
+.history{display:flex;flex-direction:column;gap:10px;margin:12px 0}
+.history-row{display:grid;grid-template-columns:minmax(0,1fr) 88px 58px 58px 38px;align-items:end;gap:7px;background:#111827;border:1px solid #2d364a;padding:10px;border-radius:11px}
+.history-row .check{display:flex;align-items:center;flex-direction:column;gap:5px;font-size:10px;margin:0}.history-row .delete{height:40px;padding:0;background:#492d35}
+.num{text-align:center}.split{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
+table{border-collapse:collapse;width:100%;font-size:12px}th{text-align:left;color:#a7b5d0;font-size:11px}
+th,td{padding:11px 8px;border-bottom:1px solid #30384c;vertical-align:top}
+tr.chosen{background:#243c64}tr.chosen td:first-child{box-shadow:inset 3px 0 #8fb3fa}
+.table-wrap{overflow-x:auto}.mini{font-size:12px;color:#9dacbf;line-height:1.6}
+.subtle{font-size:11px;color:#7787a6;margin-top:7px}.rule-id{font:11px Consolas,monospace;color:#93b4f6;overflow-wrap:anywhere}
+.bottom{margin-top:18px}.footer{color:#8290ae;margin-top:25px;font-size:12px;line-height:1.7}
+@media(max-width:860px){.grid{grid-template-columns:1fr}.panel{padding:16px}.history-row{grid-template-columns:minmax(0,1fr) 72px 47px 47px 32px;gap:5px}.history-row select{font-size:11px}}
+</style></head>
+<body><main>
+<div class="header"><div><div class="eyebrow">ENTHUSIA / OFFLINE TOOLS</div><h1>Punishment Escalation Simulator</h1>
+<div class="muted">Experiment with real rules, prior violations, repeat offenses and decay, outside Minecraft.</div></div>
+<span class="pill" id="version">Loading policy...</span></div>
+<div class="warning"><strong>Read-only simulation.</strong> No real accounts, cases, punishments, Discord messages or database writes. Results use a saved policy snapshot. Changes here never change live rules.</div>
+<div class="grid"><div class="panel">
+<h2>1. Choose an offense</h2>
+<div class="form-row"><div><label for="family">Family</label><select id="family"></select></div>
+<div><label for="asof">Simulation date</label><input type="date" id="asof"></div></div>
+<div class="single"><label for="reason">Exact reason</label><select id="reason"></select></div>
+<div class="rule"><div id="reasonName">Select a policy</div><div class="rule-id" id="reasonId"></div><div class="mini" id="reasonMeta"></div></div>
+<div class="split"><h2>2. Prior punishment history</h2><button class="primary" id="add">+ Add offense</button></div>
+<p class="mini">When did each prior punishment <strong>end</strong>? Related offenses in the same family count. Overturned or excluded ones do not.</p>
+<div class="history" id="history"></div>
+<h3>Quick scenarios</h3><div class="actions" id="presets">
+<button data-preset="clean">First offense</button><button data-preset="recent">One recent repeat</button>
+<button data-preset="multiple">Three repeats</button><button data-preset="severe">More serious related</button>
+<button data-preset="old">Old offense (180d)</button><button data-preset="overturned">Overturned offense</button></div>
+<p class="subtle" id="source"></p></div>
+<div class="panel"><h2>3. Calculated result</h2>
+<div class="mini" id="resultContext">Select a reason to calculate.</div>
+<div class="result" id="outcome">—</div><div class="meta" id="sanctions"></div>
+<div class="stat-grid"><div class="stat highlight"><div class="hint">Recommended step</div><div class="big" id="step">—</div></div>
+<div class="stat"><div class="hint">Raw escalation</div><div class="big" id="raw">—</div></div>
+<div class="stat"><div class="hint">30-day bonus</div><div class="big" id="recency">—</div></div></div>
+<h3>Full configured ladder</h3><div class="table-wrap"><table><thead><tr><th>Step</th><th>Outcome</th><th>Sanctions</th></tr></thead><tbody id="ladder"></tbody></table></div>
+<h3>Why this result?</h3><div class="table-wrap"><table><thead><tr><th>Prior violation</th><th>Ended</th><th>Base</th><th>Decay</th><th>Effective</th></tr></thead><tbody id="contrib"></tbody></table></div>
+<p class="mini" id="explanation"></p></div></div>
+<div class="panel bottom"><div class="split"><div><h2>Repeat-offense scaling table</h2>
+<div class="mini">Same reason repeated 0–8 times; all prior offenses ended 7 days ago.</div></div>
+<button id="refresh">Recalculate</button></div>
+<div class="table-wrap"><table><thead><tr><th>Previous offenses</th><th>Step</th><th>Recommended outcome</th><th>Recency</th></tr></thead><tbody id="matrix"></tbody></table></div></div>
+<div class="footer">Runs the real EnthusiaStaff EscalationEngine and ReasonPolicyConfigurationLoader. This tool does not simulate permission approvals, account hierarchy, inventory actions, enforcement, or Policy v2. Outcomes may differ if the production policy changes.</div>
+</main><script>
+const $=id=>document.getElementById(id);
+let catalog=[],hist=[],version="",generation=0,matrixGeneration=0;
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const opt=(value,label,selected)=>'<option value="'+esc(value)+'"'+(selected?' selected':'')+'>'+esc(label)+'</option>';
+const rule=id=>catalog.find(p=>p.id===id);
+const active=()=>rule($('reason').value);
+async function api(path,data){
+ const res=await fetch(path,data?{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)}:{});
+ const value=await res.json();
+ if(!res.ok)throw Error(value.error||'Request failed');
+ return value;
+}
+function fillReasons(preferred){
+ const family=$('family').value,list=catalog.filter(x=>x.family===family);
+ $('reason').innerHTML=list.map(x=>opt(x.id,x.name+' ('+x.id+')',x.id===preferred)).join('');
+ if(preferred&&list.some(x=>x.id===preferred))$('reason').value=preferred;
+ changedReason();
+}
+function changedReason(){
+ const p=active();if(!p)return;
+ $('reasonName').textContent=p.name;
+ $('reasonId').textContent=p.id;
+ $('reasonMeta').textContent='Severity '+p.severity+' | Required rank: '+p.requiredRank+
+ ' | Prior offenses of this reason '+(p.decayEnabled?'are decay-eligible':'do not decay')+
+ ' | '+p.steps.length+' ladder steps';
+ renderHistory();update();updateMatrix();
+}
+function renderHistory(){
+ const container=$('history');container.replaceChildren();
+ if(hist.length===0){container.innerHTML='<div class="mini">No previous offenses. This is the first violation.</div>';return;}
+ hist.forEach((row,i)=>{
+  const div=document.createElement('div');div.className='history-row';
+  div.innerHTML='<div><label>Previous reason</label><select class="prior">'+catalog.map(x=>opt(x.id,x.name,row.reasonId)).join('')+'</select></div>'+
+   '<div><label>Days ago</label><input class="days num" type="number" min="0" max="36500" value="'+Number(row.daysAgo)+'"></div>'+
+   '<label class="check">Counts<input class="count" type="checkbox" '+(row.contributes?'checked':'')+'></label>'+
+   '<label class="check">Overturned<input class="overturn" type="checkbox" '+(row.overturned?'checked':'')+'></label>'+
+   '<button class="delete" title="Remove offense" aria-label="Remove offense">×</button>';
+  div.querySelector('.prior').addEventListener('change',e=>{row.reasonId=e.target.value;update()});
+  div.querySelector('.days').addEventListener('input',e=>{row.daysAgo=Number(e.target.value);update()});
+  div.querySelector('.count').addEventListener('change',e=>{row.contributes=e.target.checked;update()});
+  div.querySelector('.overturn').addEventListener('change',e=>{row.overturned=e.target.checked;update()});
+  div.querySelector('.delete').addEventListener('click',()=>{hist.splice(i,1);renderHistory();update()});
+  container.appendChild(div);
+ });
+}
+const prior=(id,daysAgo,overturned=false)=>({reasonId:id,daysAgo,contributes:true,overturned});
+function applyPreset(value){
+ const p=active();if(!p)return;
+ const severe=catalog.filter(x=>x.family===p.family).sort((a,b)=>b.severity-a.severity)[0];
+ hist= value==='recent'?[prior(p.id,7)]:
+ value==='multiple'?[prior(p.id,28),prior(p.id,14),prior(p.id,7)]:
+ value==='severe'?[prior(severe.id,7)]:
+ value==='old'?[prior(p.id,180)]:
+ value==='overturned'?[prior(p.id,7,true)]:[];
+ renderHistory();update();
+}
+function sanctions(step){
+ return step.sanctions.map(x=>esc(x.type.replaceAll('_',' '))+' · '+esc(x.duration)).join(', ');
+}
+function renderResult(r){
+ const p=r.reason;
+ $('resultContext').textContent=p.name+' | as of '+r.asOf+' | '+r.historyCount+' history records';
+ $('outcome').textContent=r.selected.label;
+ $('sanctions').innerHTML=r.selected.sanctions.map(s=>'<span class="tag">'+esc(s.type.replaceAll('_',' '))+' · '+esc(s.duration)+'</span>').join('');
+ $('step').textContent=(r.selected.ordinal+1)+' / '+p.steps.length;
+ $('raw').textContent=r.rawOrdinal;
+ $('recency').textContent='+'+r.recencyBonus;
+ $('ladder').innerHTML=p.steps.map(x=>'<tr class="'+(x.ordinal===r.selected.ordinal?'chosen':'')+'"><td>'+
+ (x.ordinal+1)+(x.ordinal===r.selected.ordinal?' ◀':'')+'</td><td>'+esc(x.label)+'</td><td>'+sanctions(x)+'</td></tr>').join('');
+ $('contrib').innerHTML=r.contributions.length?r.contributions.map(x=>'<tr><td>'+esc(x.reason)+'</td><td>'+
+ x.daysAgo+' days ago</td><td>+'+x.base+'</td><td>−'+x.decayedBy+
+ '</td><td>+'+x.effective+'</td></tr>').join(''):
+ '<tr><td colspan="5" class="mini">No related, contributing, non-overturned prior offenses.</td></tr>';
+ $('explanation').textContent=r.contributions.length+' related prior offenses contribute; '+r.ignoredCount+
+ ' ignored. Each prior violation adds 1 step (or 2 if more severe), plus 1 if a related punishment ended within 30 days. Decay reduces eligible contributions by 1 each 90 clean days since the latest related ending. The final step caps escalation.';
+}
+function payload(history){return {reasonId:$('reason').value,asOf:$('asof').value,history};}
+async function update(){
+ if(!active())return;
+ const n=++generation;
+ try{
+  const r=await api('/api/evaluate',payload(hist));
+  if(n===generation)renderResult(r);
+ }catch(e){if(n===generation){$('resultContext').textContent=e.message;$('outcome').textContent='Invalid scenario';}}
+}
+async function updateMatrix(){
+ if(!active())return;
+ const n=++matrixGeneration,id=$('reason').value;
+ $('matrix').innerHTML='<tr><td colspan="4" class="mini">Calculating with the real engine…</td></tr>';
+ try{
+  const requests=Array.from({length:9},(_,count)=>api('/api/evaluate',{
+   reasonId:id,asOf:$('asof').value,
+   history:Array.from({length:count},()=>prior(id,7))
+  }));
+  const results=await Promise.all(requests);
+  if(n!==matrixGeneration)return;
+  $('matrix').innerHTML=results.map((r,count)=>'<tr><td>'+count+'</td><td>'+
+   (r.selected.ordinal+1)+' / '+r.reason.steps.length+' (ordinal '+r.effectiveOrdinal+')</td><td>'+
+   esc(r.selected.label)+'</td><td>+'+r.recencyBonus+'</td></tr>').join('');
+ }catch(e){if(n===matrixGeneration)$('matrix').textContent='Unable to calculate: '+e.message;}
+}
+$('family').addEventListener('change',()=>fillReasons());
+$('reason').addEventListener('change',changedReason);
+$('asof').addEventListener('change',()=>{update();updateMatrix()});
+$('add').addEventListener('click',()=>{if(hist.length>=150)return;hist.push(prior($('reason').value,7));renderHistory();update()});
+$('presets').addEventListener('click',e=>{const btn=e.target.closest('button[data-preset]');if(btn)applyPreset(btn.dataset.preset)});
+$('refresh').addEventListener('click',updateMatrix);
+(async()=>{
+ try{
+  const data=await api('/api/catalog');
+  catalog=data.reasons;version=data.version;
+  $('version').textContent='Policy version '+version+' · '+data.count+' reasons';
+  $('source').textContent='Snapshot: '+data.source+' (not live-linked)';
+  $('asof').value=new Date().toISOString().slice(0,10);
+  const families=[...new Set(catalog.map(p=>p.family))].sort();
+  $('family').innerHTML=families.map(x=>opt(x,x,false)).join('');
+  const preferred=rule('spam.low-level')||catalog[0];
+  $('family').value=preferred.family;
+  fillReasons(preferred.id);
+ }catch(e){$('version').textContent='Failed to load snapshot';$('outcome').textContent=e.message;}
+})();
+</script></body></html>
