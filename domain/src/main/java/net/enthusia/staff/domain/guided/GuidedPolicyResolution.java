@@ -35,7 +35,8 @@ public final class GuidedPolicyResolution {
         checkTransition(ladder, historyStep, selected);
         requireOrdinaryGuidedRemedy(originals);
         String explanation = explanation(finding, historyStep, selected);
-        return variableDuration(originals, ladder, selected, preference, explanation, profile);
+        return variableDuration(originals, ladder, selected, preference, explanation,
+                profile, finding.preliminaryImpact());
     }
 
     private static void validate(GuidedIncidentWizard.Finding finding,
@@ -105,7 +106,7 @@ public final class GuidedPolicyResolution {
     private static Outcome variableDuration(List<SanctionSpec> originals,
                                             List<PunishmentStep> ladder, int selected,
                                             int preference, String explanation,
-                                            GuidedSeverityProfile profile) {
+                                            GuidedSeverityProfile profile, int incidentImpact) {
         if (originals.size() != 1 || originals.getFirst().length().temporary().isEmpty()) {
             return new Outcome(originals, explanation + "; configured remedy", false);
         }
@@ -116,18 +117,19 @@ public final class GuidedPolicyResolution {
             return new Outcome(originals, explanation + "; maximum policy tier", false);
         }
         return calculateWithinBounds(originals, initial, low, high, preference, explanation,
-                profile);
+                profile, incidentImpact);
     }
 
     private static Outcome calculateWithinBounds(List<SanctionSpec> originals,
                                                   SanctionSpec initial, Duration low,
                                                   Duration high, int preference,
-                                                  String explanation, GuidedSeverityProfile profile) {
+                                                  String explanation, GuidedSeverityProfile profile,
+                                                  int incidentImpact) {
         // Anchor minute-granularity choices to the exact configured lower bound.
         // Truncating low.toMinutes() can otherwise produce a sub-policy sanction
         // when a configured duration includes seconds.
         long availableMinutes = high.minus(low).toMinutes();
-        double ratio = profile.durationFraction(preference);
+        double ratio = profile.durationFraction(preference, incidentImpact);
         Duration calculated = low.plus(Duration.ofMinutes(Math.round(availableMinutes * ratio)));
         if (calculated.compareTo(high) > 0) {
             calculated = high;

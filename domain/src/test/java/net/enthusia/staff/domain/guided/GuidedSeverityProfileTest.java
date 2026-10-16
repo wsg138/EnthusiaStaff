@@ -98,6 +98,63 @@ class GuidedSeverityProfileTest {
         assertEquals(Duration.ofMinutes(56), longer);
     }
 
+    private static GuidedSeverityProfile impactTrial() {
+        return new GuidedSeverityProfile(
+                "impact-interpolation-trial-not-approved", 10, 15, 30, 10, 15, 10,
+                25, 45, 0.25, 0.50, 0.75, 0.30);
+    }
+
+    @Test
+    void sameTierIgnoredWarningMayAffectBoundedDurationOnlyWithOptInTrial() {
+        var profile = impactTrial();
+        var baseline = interview("not-applicable").finding(profile);
+        var ignored = interview(YES).finding(profile);
+        assertEquals(25, baseline.preliminaryImpact());
+        assertEquals(35, ignored.preliminaryImpact());
+        assertEquals(1, profile.stepOffset(baseline.preliminaryImpact()));
+        assertEquals(1, profile.stepOffset(ignored.preliminaryImpact()));
+        var baselineResult = GuidedPolicyResolution.calculate(baseline, assessment(), 0, profile);
+        var ignoredResult = GuidedPolicyResolution.calculate(ignored, assessment(), 0, profile);
+        assertEquals(SanctionType.MUTE, baselineResult.sanctions().getFirst().type());
+        assertEquals(SanctionType.MUTE, ignoredResult.sanctions().getFirst().type());
+        Duration withoutWarning = baselineResult.sanctions().getFirst().length()
+                .temporary().orElseThrow();
+        Duration withIgnoredWarning = ignoredResult.sanctions().getFirst().length()
+                .temporary().orElseThrow();
+        assertTrue(withIgnoredWarning.compareTo(withoutWarning) > 0);
+        assertTrue(withoutWarning.compareTo(Duration.ofMinutes(15)) >= 0);
+        assertTrue(withIgnoredWarning.compareTo(Duration.ofMinutes(60)) <= 0);
+
+        var baselinePrototype = interview("not-applicable").finding();
+        var ignoredPrototype = interview(YES).finding();
+        assertEquals(GuidedPolicyResolution.calculate(baselinePrototype, assessment(), 0)
+                        .sanctions(),
+                GuidedPolicyResolution.calculate(ignoredPrototype, assessment(), 0).sanctions());
+    }
+
+    @Test
+    void optInTrialStillPreservesStaffPreferenceAndSafetyBounds() {
+        var profile = impactTrial();
+        var incident = interview(YES).finding(profile);
+        Duration lower = GuidedPolicyResolution.calculate(incident, assessment(), -1, profile)
+                .sanctions().getFirst().length().temporary().orElseThrow();
+        Duration middle = GuidedPolicyResolution.calculate(incident, assessment(), 0, profile)
+                .sanctions().getFirst().length().temporary().orElseThrow();
+        Duration upper = GuidedPolicyResolution.calculate(incident, assessment(), 1, profile)
+                .sanctions().getFirst().length().temporary().orElseThrow();
+        assertTrue(lower.compareTo(middle) < 0);
+        assertTrue(middle.compareTo(upper) < 0);
+        assertTrue(lower.compareTo(Duration.ofMinutes(15)) >= 0);
+        assertTrue(upper.compareTo(Duration.ofMinutes(60)) <= 0);
+        assertThrows(IllegalArgumentException.class, () -> new GuidedSeverityProfile(
+                INVALID_VERSION, 10, 15, 30, 10, 15, 10,
+                25, 45, 0.25, 0.5, 0.75, Double.NaN));
+        assertThrows(IllegalArgumentException.class, () -> new GuidedSeverityProfile(
+                INVALID_VERSION, 10, 15, 30, 10, 15, 10,
+                25, 45, 0.25, 0.5, 0.75, 0.51));
+        assertEquals(0.50, GuidedSeverityProfile.prototype().durationFraction(0, 25));
+    }
+
     @Test
     void changedOrWrongProfileIsRejectedEvenIfVersionWasReused() {
         var incident = interview(YES).finding(trial());
