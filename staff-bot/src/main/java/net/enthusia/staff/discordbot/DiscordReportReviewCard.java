@@ -7,10 +7,15 @@ import net.dv8tion.jda.api.entities.MessageEmbed;
 import net.enthusia.staff.domain.report.ReportReasonLabel;
 import net.enthusia.staff.persistence.DiscordStaffReadRuntime;
 
-/** Report-only private review card. Report actions and authorization live elsewhere. */
+/**
+ * Ephemeral report-only review card. Free-form previews are Mod+ only and
+ * intentionally never flow through Velocity's public report webhook.
+ */
 final class DiscordReportReviewCard {
     private static final int COLOR = 0xD69C42;
     private static final int MAX_REPORTS = 5;
+    private static final int MAX_DESCRIPTION_CODEPOINTS = 240;
+    private static final char FULLWIDTH_AT = '\uFF20';
 
     private DiscordReportReviewCard() { }
 
@@ -48,14 +53,60 @@ final class DiscordReportReviewCard {
         for (var report : reports) {
             String reason = ReportReasonLabel.display(report.reasonId());
             String state = safeState(report.state());
+            StringBuilder details = new StringBuilder()
+                    .append("**Reported player:** ").append(safeName(report.targetName()))
+                    .append("\n**Reported by:** ").append(safeName(report.reporterName()))
+                    .append("\n**Reference:** ").append(report.reportId().toString(), 0, 8);
+            if (actionsEnabled && !report.description().isBlank()) {
+                details.append("\n**Report text:** ")
+                        .append(restrictedReason(report.reasonId())
+                                ? "Sensitive report — view full text in-game."
+                                : safeDescription(report.description()));
+            }
             builder.addField("Report " + index + " • " + reason + " • " + state,
-                    "**Reported player:** " + safeName(report.targetName())
-                            + "\n**Reported by:** " + safeName(report.reporterName())
-                            + "\n**Reference:** `" + report.reportId().toString().substring(0, 8) + "`",
-                    false);
+                    details.toString(), false);
             index++;
         }
         return builder.build();
+    }
+
+    static boolean restrictedReason(String reasonId) {
+        if (reasonId == null) {
+            return true;
+        }
+        return reasonId.startsWith("safety.") || reasonId.startsWith("privacy.")
+                || reasonId.startsWith("account.") || reasonId.startsWith("personal.")
+                || reasonId.startsWith("harassment.sexual");
+    }
+
+    /** Bounded plain text; never emit runnable Discord mentions or Markdown. */
+    static String safeDescription(String description) {
+        if (description == null || description.isBlank()) {
+            return "(No report text)";
+        }
+        StringBuilder cleaned = new StringBuilder();
+        int count = 0;
+        int offset = 0;
+        while (offset < description.length() && count < MAX_DESCRIPTION_CODEPOINTS) {
+            int codePoint = description.codePointAt(offset);
+            offset += Character.charCount(codePoint);
+            count++;
+            if (Character.isISOControl(codePoint)
+                    || Character.isWhitespace(codePoint)
+                    || Character.getType(codePoint) == Character.FORMAT) {
+                cleaned.append(' ');
+            } else if (codePoint == '@') {
+                cleaned.append(FULLWIDTH_AT);
+            } else if (codePoint == '<' || codePoint == '>'
+                    || codePoint == '*' || codePoint == '_' || codePoint == '|'
+                    || codePoint == '~' || codePoint == 96) {
+                cleaned.append(' ');
+            } else {
+                cleaned.appendCodePoint(codePoint);
+            }
+        }
+        String safe = cleaned.toString().trim().replaceAll("\\s+", " ");
+        return offset < description.length() ? safe + "…" : safe;
     }
 
     private static String safeName(String name) {

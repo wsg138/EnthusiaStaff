@@ -307,7 +307,8 @@ final class JdaStaffModerationListener extends ListenerAdapter {
                             : java.util.List.<net.enthusia.staff.persistence.DiscordStaffReadRuntime.PendingAltAlert>of();
                     var reports = view.showReports()
                             ? moderationRuntime.pendingReports(
-                                    view == ReviewQueueView.ALL ? (altAlerts.isEmpty() ? 2 : 1) : 5)
+                                    view == ReviewQueueView.ALL ? (altAlerts.isEmpty() ? 2 : 1) : 5,
+                                    view == ReviewQueueView.REPORTS && reportActionsEnabled)
                             : java.util.List.<net.enthusia.staff.persistence.DiscordStaffReadRuntime.PendingReport>of();
                     var reviews = view.showPunishments()
                             ? moderationRuntime.pendingReviews(
