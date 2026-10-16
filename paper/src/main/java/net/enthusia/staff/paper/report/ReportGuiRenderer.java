@@ -209,12 +209,8 @@ final class ReportGuiRenderer {
                         Component.text(configuration.message("sensitive-evidence"), NamedTextColor.DARK_GRAY)
                 )
         ));
-        List<Component> descriptionLore = new ArrayList<>(descriptionPreview(
-                details.description(), details.summary().reportId()));
-        descriptionLore.add(Component.text("Original report text is above.", NamedTextColor.DARK_GRAY));
-        descriptionLore.add(Component.text("View reporter follow-ups and staff action history:", NamedTextColor.YELLOW));
-        descriptionLore.add(Component.text("/reports messages " + details.summary().reportId(),
-                NamedTextColor.WHITE));
+        List<Component> descriptionLore = descriptionWithHistory(
+                details.description(), details.summary().reportId());
         inventory.setItem(configuration.slot("detail-description"), item(
                 configuration.material("description"),
                 configuration.message("description"),
@@ -461,6 +457,15 @@ final class ReportGuiRenderer {
             case CLOSE -> CLOSE_KEY;
             case NO_VIOLATION -> "no-violation";
         };
+    }
+
+    static List<Component> descriptionWithHistory(String description, UUID reportId) {
+        List<Component> lore = new ArrayList<>(descriptionPreview(description, reportId));
+        lore.add(Component.text("Original report text is above.", NamedTextColor.DARK_GRAY));
+        lore.add(Component.text("View reporter follow-ups and staff action history:",
+                NamedTextColor.YELLOW));
+        lore.add(Component.text("/reports messages " + reportId, NamedTextColor.WHITE));
+        return List.copyOf(lore);
     }
 
     private static final int DESCRIPTION_PREVIEW_LIMIT = 480;

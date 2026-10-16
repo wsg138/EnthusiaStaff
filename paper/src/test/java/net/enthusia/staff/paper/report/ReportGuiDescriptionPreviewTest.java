@@ -26,6 +26,17 @@ final class ReportGuiDescriptionPreviewTest {
     }
 
     @Test
+    void mergedReportHistoryLinkSurvivesShortAndTruncatedDescriptionPreviews() {
+        var shortLore = ReportGuiRenderer.descriptionWithHistory("original", REPORT_ID);
+        var longLore = ReportGuiRenderer.descriptionWithHistory("x".repeat(481), REPORT_ID);
+        Component history = Component.text("/reports messages " + REPORT_ID, NamedTextColor.WHITE);
+        Component full = Component.text("/reports view " + REPORT_ID, NamedTextColor.WHITE);
+        assertEquals(history, shortLore.getLast());
+        assertEquals(history, longLore.getLast());
+        assertEquals(full, longLore.get(longLore.size() - 4));
+    }
+
+    @Test
     void longerDescriptionsPointToTheFullPrivateReportText() {
         var lines = ReportGuiRenderer.descriptionPreview("b".repeat(481), REPORT_ID);
         assertEquals(12, lines.size());
