@@ -18,6 +18,9 @@ import net.enthusia.staff.api.chat.RichChatArtifact;
 import org.junit.jupiter.api.Test;
 
 class IndependentRichChatArtifactProviderTest {
+    private static final String STONE_MATERIAL = "STONE";
+    private static final String ITEM_PLACEHOLDER = "[item]";
+
     @Test
     void placeholderUsesConfiguredRegexWithoutAllowingEscapedMatches() {
         Pattern item = Pattern.compile("\\[item\\]", Pattern.CASE_INSENSITIVE);
@@ -70,7 +73,7 @@ class IndependentRichChatArtifactProviderTest {
                 () -> new IndependentRichChatArtifactProvider.Job(
                         IndependentRichChatArtifactProvider.Kind.ITEM, -1, List.of()));
         assertThrows(IllegalArgumentException.class,
-                () -> new IndependentRichChatArtifactProvider.Slot("STONE", 200));
+                () -> new IndependentRichChatArtifactProvider.Slot(STONE_MATERIAL, 200));
         assertThrows(IllegalArgumentException.class,
                 () -> IndependentRichChatArtifactProvider.renderCard(
                         IndependentRichChatArtifactProvider.Kind.INVENTORY, List.of()));
@@ -84,7 +87,7 @@ class IndependentRichChatArtifactProviderTest {
 
     @Test
     void refusesDelayedSnapshotsBeforeRenderingAnyPlayerState() {
-        RichChatArtifactRequest request = request("[item]");
+        RichChatArtifactRequest request = request(ITEM_PLACEHOLDER);
         assertFalse(IndependentRichChatArtifactProvider.snapshotWindowExpired(request, 11_999L));
         assertTrue(IndependentRichChatArtifactProvider.snapshotWindowExpired(request, 12_000L));
         assertTrue(IndependentRichChatArtifactProvider.snapshotWindowExpired(request, 50_000L));
@@ -96,13 +99,13 @@ class IndependentRichChatArtifactProviderTest {
         var rule = itemRule();
         var snapshot = (java.util.function.Supplier<List<IndependentRichChatArtifactProvider.Slot>>) () -> {
             reads.incrementAndGet();
-            return List.of(new IndependentRichChatArtifactProvider.Slot("STONE", 1));
+            return List.of(new IndependentRichChatArtifactProvider.Slot(STONE_MATERIAL, 1));
         };
 
         assertTrue(IndependentRichChatArtifactProvider.captureJob(
-                rule, () -> false, () -> true, "[item]", snapshot).isEmpty());
+                rule, () -> false, () -> true, ITEM_PLACEHOLDER, snapshot).isEmpty());
         assertTrue(IndependentRichChatArtifactProvider.captureJob(
-                rule, () -> true, () -> false, "[item]", snapshot).isEmpty());
+                rule, () -> true, () -> false, ITEM_PLACEHOLDER, snapshot).isEmpty());
         assertTrue(IndependentRichChatArtifactProvider.captureJob(
                 rule, () -> true, () -> true, "ordinary chat", snapshot).isEmpty());
         assertEquals(0, reads.get());
@@ -112,15 +115,15 @@ class IndependentRichChatArtifactProviderTest {
     void entityOwnedCaptureFreezesSlotSnapshotBeforeWorkerRendering() {
         AtomicInteger reads = new AtomicInteger();
         List<IndependentRichChatArtifactProvider.Slot> hand = new ArrayList<>(
-                List.of(new IndependentRichChatArtifactProvider.Slot("STONE", 3)));
+                List.of(new IndependentRichChatArtifactProvider.Slot(STONE_MATERIAL, 3)));
         var captured = IndependentRichChatArtifactProvider.captureJob(
-                itemRule(), () -> true, () -> true, "[item]", () -> {
+                itemRule(), () -> true, () -> true, ITEM_PLACEHOLDER, () -> {
                     reads.incrementAndGet();
                     return hand;
                 }).orElseThrow();
         assertEquals(1, reads.get());
         hand.set(0, new IndependentRichChatArtifactProvider.Slot("DIAMOND", 5));
-        assertEquals(List.of(new IndependentRichChatArtifactProvider.Slot("STONE", 3)),
+        assertEquals(List.of(new IndependentRichChatArtifactProvider.Slot(STONE_MATERIAL, 3)),
                 captured.slots());
         assertEquals(1, reads.get());
     }
