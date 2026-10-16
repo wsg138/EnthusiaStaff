@@ -8,16 +8,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayOutputStream;
 import java.util.ArrayList;
-import java.lang.reflect.Method;
-import java.lang.reflect.Proxy;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicReference;
 import net.enthusia.staff.api.chat.RichChatArtifactRequest;
-import org.bukkit.Material;
-import org.bukkit.entity.Player;
-import org.bukkit.inventory.ItemStack;
-import org.bukkit.inventory.PlayerInventory;
 import java.util.List;
 import java.util.regex.Pattern;
 import javax.imageio.ImageIO;
@@ -100,27 +93,33 @@ class IndependentRichChatArtifactProviderTest {
     @Test
     void neverReadsInventoryForDeniedPermissionsOrQuitPlayer() {
         AtomicInteger reads = new AtomicInteger();
-        AtomicReference<ItemStack> hand = new AtomicReference<>(new ItemStack(Material.STONE, 1));
         var rule = itemRule();
+        var snapshot = (java.util.function.Supplier<List<IndependentRichChatArtifactProvider.Slot>>) () -> {
+            reads.incrementAndGet();
+            return List.of(new IndependentRichChatArtifactProvider.Slot("STONE", 1));
+        };
 
         assertTrue(IndependentRichChatArtifactProvider.captureJob(
-                rule, fakePlayer(false, true, hand, reads), request("[item]")).isEmpty());
+                rule, () -> false, () -> true, "[item]", snapshot).isEmpty());
         assertTrue(IndependentRichChatArtifactProvider.captureJob(
-                rule, fakePlayer(true, false, hand, reads), request("[item]")).isEmpty());
+                rule, () -> true, () -> false, "[item]", snapshot).isEmpty());
         assertTrue(IndependentRichChatArtifactProvider.captureJob(
-                rule, fakePlayer(true, true, hand, reads), request("ordinary chat")).isEmpty());
+                rule, () -> true, () -> true, "ordinary chat", snapshot).isEmpty());
         assertEquals(0, reads.get());
     }
 
     @Test
     void entityOwnedCaptureFreezesSlotSnapshotBeforeWorkerRendering() {
         AtomicInteger reads = new AtomicInteger();
-        AtomicReference<ItemStack> hand = new AtomicReference<>(new ItemStack(Material.STONE, 3));
-        var player = fakePlayer(true, true, hand, reads);
+        List<IndependentRichChatArtifactProvider.Slot> hand = new ArrayList<>(
+                List.of(new IndependentRichChatArtifactProvider.Slot("STONE", 3)));
         var captured = IndependentRichChatArtifactProvider.captureJob(
-                itemRule(), player, request("[item]")).orElseThrow();
+                itemRule(), () -> true, () -> true, "[item]", () -> {
+                    reads.incrementAndGet();
+                    return hand;
+                }).orElseThrow();
         assertEquals(1, reads.get());
-        hand.set(new ItemStack(Material.DIAMOND, 5));
+        hand.set(0, new IndependentRichChatArtifactProvider.Slot("DIAMOND", 5));
         assertEquals(List.of(new IndependentRichChatArtifactProvider.Slot("STONE", 3)),
                 captured.slots());
         assertEquals(1, reads.get());
@@ -139,29 +138,5 @@ class IndependentRichChatArtifactProviderTest {
                 "Tester", "global", text, 10_000L, 50_000L);
     }
 
-    private static Player fakePlayer(
-            boolean allowed, boolean online, AtomicReference<ItemStack> hand, AtomicInteger reads
-    ) {
-        PlayerInventory inventory = (PlayerInventory) Proxy.newProxyInstance(
-                PlayerInventory.class.getClassLoader(), new Class<?>[]{PlayerInventory.class},
-                (proxy, method, arguments) -> {
-                    if (method.getName().equals("getItemInMainHand")) {
-                        reads.incrementAndGet();
-                        return hand.get();
-                    }
-                    throw unexpected(method);
-                });
-        return (Player) Proxy.newProxyInstance(
-                Player.class.getClassLoader(), new Class<?>[]{Player.class},
-                (proxy, method, arguments) -> switch (method.getName()) {
-                    case "isOnline" -> online;
-                    case "hasPermission" -> allowed;
-                    case "getInventory" -> inventory;
-                    default -> throw unexpected(method);
-                });
-    }
 
-    private static AssertionError unexpected(Method method) {
-        return new AssertionError("Unexpected method: " + method.getName());
-    }
 }
