@@ -260,7 +260,7 @@ public final class IndependentRichChatArtifactProvider
     static Optional<Job> captureJob(
             MatchRule rule, Player player, RichChatArtifactRequest request
     ) {
-        if (!rule.enabled() || !player.hasPermission(rule.kind().permission)) {
+        if (!rule.enabled() || !player.isOnline() || !player.hasPermission(rule.kind().permission)) {
             return Optional.empty();
         }
         int position = firstUnescapedMatch(rule.expression(), request.canonicalPlainText());
