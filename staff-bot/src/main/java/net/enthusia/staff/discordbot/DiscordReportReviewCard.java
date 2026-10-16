@@ -17,7 +17,9 @@ final class DiscordReportReviewCard {
     private static final int MAX_DESCRIPTION_CODEPOINTS = 240;
     private static final char FULLWIDTH_AT = '＠';
     private static final int ASCII_AT = '@';
-    private static final String MARKUP_CHARS = "<>*_|~" + (char) 96;
+    private static final String MARKUP_CHARS = "<>[]()*_|~" + (char) 96;
+    private static final String LINK_PUNCTUATION = ".:/";
+    private static final String FULLWIDTH_LINK_PUNCTUATION = "．：∕";
 
     private DiscordReportReviewCard() { }
 
@@ -115,6 +117,9 @@ final class DiscordReportReviewCard {
             result.append(FULLWIDTH_AT);
         } else if (MARKUP_CHARS.indexOf(codePoint) >= 0) {
             result.append(' ');
+        } else if (LINK_PUNCTUATION.indexOf(codePoint) >= 0) {
+            result.append(FULLWIDTH_LINK_PUNCTUATION.charAt(
+                    LINK_PUNCTUATION.indexOf(codePoint)));
         } else {
             result.appendCodePoint(codePoint);
         }

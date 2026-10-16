@@ -115,6 +115,16 @@ class DiscordReportReviewCardTest {
                 reason, "OPEN", 1L, "private-secret-do-not-echo");
     }
 
+    @Test void reportTextCannotRenderMaskedLinksOrRawClickableUrls() {
+        String safe = DiscordReportReviewCard.safeDescription(
+                "[staff notice](https://example.invalid) http://other.invalid @everyone");
+        assertFalse(safe.contains("]("));
+        assertFalse(safe.contains("https://"));
+        assertFalse(safe.contains("http://"));
+        assertFalse(safe.contains("@everyone"));
+        assertTrue(safe.contains("https：∕∕example．invalid"));
+    }
+
     @Test void invalidUnboundedQueueFailsClosed() {
         var item = new DiscordStaffReadRuntime.PendingReport(
                 UUID.randomUUID(), UUID.randomUUID(), "Steve", "Alex",
