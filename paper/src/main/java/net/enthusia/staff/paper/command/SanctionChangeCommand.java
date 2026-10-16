@@ -276,7 +276,9 @@ public final class SanctionChangeCommand implements CommandExecutor, TabComplete
     }
 
     private void send(CommandSender sender, String message) {
-        plugin.getServer().getGlobalRegionScheduler().execute(plugin, () -> sender.sendMessage(StaffMessageStyle.style(Component.text(message))));
+        // Async storage results must reach Players through their entity scheduler.
+        // The shared dispatcher uses the global scheduler only for console senders.
+        new CommandResponseDispatcher(plugin).send(sender, Component.text(message));
     }
 
     @Override
