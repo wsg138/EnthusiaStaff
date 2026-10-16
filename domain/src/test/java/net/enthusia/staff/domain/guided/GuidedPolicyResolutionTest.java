@@ -1,0 +1,197 @@
+package net.enthusia.staff.domain.guided;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import java.time.Duration;
+import java.util.List;
+import net.enthusia.staff.domain.application.PunishmentAssessment;
+import net.enthusia.staff.domain.escalation.EscalationDecision;
+import net.enthusia.staff.domain.escalation.PunishmentStep;
+import net.enthusia.staff.domain.escalation.ReasonPolicy;
+import net.enthusia.staff.domain.sanction.SanctionLength;
+import net.enthusia.staff.domain.sanction.SanctionSpec;
+import net.enthusia.staff.domain.sanction.SanctionType;
+import org.junit.jupiter.api.Test;
+
+class GuidedPolicyResolutionTest {
+    private static final String SPAM_FAMILY = "spam";
+    private static final String FLOOD_ID = "spam.message-flooding";
+    private static final String FEW = "few";
+    private static final String LOW_LEVEL = "spam.low-level";
+    private static final String NO_WARNING = "not-applicable";
+    private static final String YES = "yes";
+    private static final String LARGE_SCALE = "large-scale";
+    private static SanctionSpec warn() {
+        return new SanctionSpec(SanctionType.WARNING, SanctionLength.instant());
+    }
+    private static SanctionSpec mute(long minutes) {
+        return new SanctionSpec(SanctionType.MUTE, SanctionLength.temporary(Duration.ofMinutes(minutes)));
+    }
+    private static final List<PunishmentStep> STEPS = List.of(
+            new PunishmentStep(0, "Warning", List.of(warn())),
+            new PunishmentStep(1, "Second warning", List.of(warn())),
+            new PunishmentStep(2, "Short mute", List.of(mute(15))),
+            new PunishmentStep(3, "Longer mute", List.of(mute(360))),
+            new PunishmentStep(4, "Day mute", List.of(mute(1440)))
+    );
+
+    private static PunishmentAssessment assessment(int historyOrdinal, String id) {
+        var policy = new ReasonPolicy(id, SPAM_FAMILY, "Spam", 10, true, STEPS);
+        var escalation = new EscalationDecision(historyOrdinal, historyOrdinal, 0,
+                List.of(), STEPS.get(historyOrdinal));
+        return new PunishmentAssessment("fixture.1", policy, escalation,
+                STEPS.get(historyOrdinal).sanctions());
+    }
+
+    private static GuidedIncidentWizard.Finding finding(String extent, String warning) {
+        return GuidedIncidentWizard.start("chat")
+                .answer("medium", "public-chat").answer("conduct", SPAM_FAMILY)
+                .answer("extent", extent).answer("continued", warning).finding();
+    }
+
+    @Test
+    void noWarningMeansNoDefaultPenalty() {
+        var outcome = GuidedPolicyResolution.calculate(finding(FEW, NO_WARNING),
+                assessment(0, LOW_LEVEL), 0);
+        assertEquals(List.of(warn()), outcome.sanctions());
+        assertFalse(outcome.customDuration());
+    }
+
+    @Test
+    void variableLengthRemainsBetweenConfiguredBounds() {
+        var incident = finding(LARGE_SCALE, YES);
+        var a = assessment(0, FLOOD_ID);
+        Duration low = GuidedPolicyResolution.calculate(incident, a, -1)
+                .sanctions().getFirst().length().temporary().orElseThrow();
+        Duration mid = GuidedPolicyResolution.calculate(incident, a, 0)
+                .sanctions().getFirst().length().temporary().orElseThrow();
+        Duration high = GuidedPolicyResolution.calculate(incident, a, 1)
+                .sanctions().getFirst().length().temporary().orElseThrow();
+        assertTrue(low.compareTo(mid) < 0);
+        assertTrue(mid.compareTo(high) < 0);
+        assertTrue(low.compareTo(Duration.ofMinutes(15)) >= 0);
+        assertTrue(high.compareTo(Duration.ofHours(6)) <= 0);
+    }
+
+    @Test
+    void evaluatedCaseHistoryChangesDurationWithoutNewStaffQuestion() {
+        var incident = finding(LARGE_SCALE, YES);
+        var first = GuidedPolicyResolution.calculate(incident,
+                assessment(0, FLOOD_ID), 0);
+        var repeated = GuidedPolicyResolution.calculate(incident,
+                assessment(1, FLOOD_ID), 0);
+        Duration a = first.sanctions().getFirst().length().temporary().orElseThrow();
+        Duration b = repeated.sanctions().getFirst().length().temporary().orElseThrow();
+        assertTrue(b.compareTo(a) > 0);
+    }
+
+    private static PunishmentAssessment withFinalSanction(SanctionSpec finalSanction) {
+        List<PunishmentStep> steps = List.of(
+                new PunishmentStep(0, "Baseline warning", List.of(warn())),
+                new PunishmentStep(1, "Elevated consequence", List.of(finalSanction)));
+        ReasonPolicy policy = new ReasonPolicy(FLOOD_ID, SPAM_FAMILY,
+                "Flooding", 15, true, steps);
+        EscalationDecision decision = new EscalationDecision(0, 0, 0, List.of(), steps.getFirst());
+        return new PunishmentAssessment("fixture.1", policy, decision, List.of(warn()));
+    }
+
+    @Test
+    void boundedDurationCannotTruncateBelowSecondPrecisionPolicyMinimum() {
+        Duration minimum = Duration.ofSeconds(90);
+        Duration nextTier = Duration.ofSeconds(100);
+        SanctionSpec lower = new SanctionSpec(SanctionType.MUTE,
+                SanctionLength.temporary(minimum));
+        SanctionSpec upper = new SanctionSpec(SanctionType.MUTE,
+                SanctionLength.temporary(nextTier));
+        List<PunishmentStep> steps = List.of(
+                new PunishmentStep(0, "Warning", List.of(warn())),
+                new PunishmentStep(1, "Short mute", List.of(lower)),
+                new PunishmentStep(2, "Longer mute", List.of(upper)));
+        ReasonPolicy policy = new ReasonPolicy(LOW_LEVEL, SPAM_FAMILY,
+                "Spam", 10, true, steps);
+        EscalationDecision history = new EscalationDecision(
+                1, 1, 0, List.of(), steps.get(1));
+        PunishmentAssessment assessed = new PunishmentAssessment(
+                "fixture.second-precision", policy, history, List.of(lower));
+        var incident = finding(FEW, NO_WARNING);
+        for (int preference : new int[]{-1, 0, 1}) {
+            Duration result = GuidedPolicyResolution.calculate(incident, assessed, preference)
+                    .sanctions().getFirst().length().temporary().orElseThrow();
+            assertTrue(result.compareTo(minimum) >= 0,
+                    "Punishment must not fall below the exact configured minimum");
+            assertTrue(result.compareTo(nextTier) <= 0,
+                    "Punishment must not exceed the next same-type tier");
+        }
+    }
+
+    @Test
+    void severityNeverAutomaticallyEscalatesToBanOrPermanentConsequence() {
+        var incident = finding(LARGE_SCALE, YES);
+        SanctionSpec temporaryBan = new SanctionSpec(SanctionType.BAN,
+                SanctionLength.temporary(Duration.ofDays(7)));
+        SanctionSpec permanentMute = new SanctionSpec(SanctionType.MUTE,
+                SanctionLength.permanent());
+        assertThrows(IllegalArgumentException.class,
+                () -> GuidedPolicyResolution.calculate(incident,
+                        withFinalSanction(temporaryBan), 0));
+        assertThrows(IllegalArgumentException.class,
+                () -> GuidedPolicyResolution.calculate(incident,
+                        withFinalSanction(permanentMute), 0));
+    }
+
+    @Test
+    void alreadyEscalatedBanOrPermanentPolicyRequiresExplicitReview() {
+        var finding = finding(FEW, NO_WARNING);
+        var ban = new SanctionSpec(SanctionType.BAN,
+                SanctionLength.temporary(Duration.ofDays(7)));
+        var permanentMute = new SanctionSpec(SanctionType.MUTE, SanctionLength.permanent());
+        assertEscalatedRestrictedSanctionRequiresReview(finding, ban);
+        assertEscalatedRestrictedSanctionRequiresReview(finding, permanentMute);
+    }
+
+    private static void assertEscalatedRestrictedSanctionRequiresReview(
+            GuidedIncidentWizard.Finding finding, SanctionSpec restricted) {
+        List<PunishmentStep> steps = List.of(
+                new PunishmentStep(0, "First", List.of(warn())),
+                new PunishmentStep(1, "Restricted", List.of(restricted)));
+        ReasonPolicy policy = new ReasonPolicy(LOW_LEVEL, SPAM_FAMILY,
+                "Minor spam", 10, true, steps);
+        EscalationDecision prior = new EscalationDecision(1, 1, 0, List.of(), steps.get(1));
+        PunishmentAssessment assessed = new PunishmentAssessment(
+                "test.version", policy, prior, steps.get(1).sanctions());
+        assertThrows(IllegalArgumentException.class,
+                () -> GuidedPolicyResolution.calculate(finding, assessed, 0));
+    }
+
+    @Test
+    void severityCannotSkipRestrictedIntermediatePolicyTier() {
+        var incident = finding(LARGE_SCALE, YES);
+        List<PunishmentStep> steps = List.of(
+                new PunishmentStep(0, "Warning", List.of(warn())),
+                new PunishmentStep(1, "Requires ban review", List.of(
+                        new SanctionSpec(SanctionType.BAN,
+                                SanctionLength.temporary(Duration.ofDays(1))))),
+                new PunishmentStep(2, "Temporary mute", List.of(mute(60))));
+        ReasonPolicy policy = new ReasonPolicy(FLOOD_ID, SPAM_FAMILY,
+                "Flooding", 15, true, steps);
+        EscalationDecision prior = new EscalationDecision(
+                0, 0, 0, List.of(), steps.getFirst());
+        PunishmentAssessment assessed = new PunishmentAssessment(
+                "fixture.restricted-middle", policy, prior, List.of(warn()));
+
+        assertThrows(IllegalArgumentException.class,
+                () -> GuidedPolicyResolution.calculate(incident, assessed, 0));
+    }
+
+    @Test
+    void unsafeOrMismatchedOffenseIsRejected() {
+        var spam = finding(FEW, NO_WARNING);
+        assertThrows(IllegalArgumentException.class, () -> GuidedPolicyResolution.calculate(
+                spam, assessment(0, FLOOD_ID), 0));
+        assertThrows(IllegalArgumentException.class, () -> GuidedPolicyResolution.calculate(
+                spam, assessment(0, LOW_LEVEL), 2));
+    }
+}
