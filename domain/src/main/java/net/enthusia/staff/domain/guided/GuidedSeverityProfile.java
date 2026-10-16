@@ -22,17 +22,7 @@ public record GuidedSeverityProfile(
 ) {
     private static final GuidedSeverityProfile PROTOTYPE = new GuidedSeverityProfile(
             "prototype-20261013-unapproved", 10, 15, 30, 10, 15, 10,
-            25, 45, 0.25, 0.50, 0.75);
-
-    /** Existing prototype and historical fixtures use only staff preference for duration. */
-    public GuidedSeverityProfile(String version, int baseImpact, int sustainedWeight,
-            int largeScaleWeight, int ignoredWarningWeight, int targetedWeight,
-            int persistenceWeight, int moderateThreshold, int severeThreshold,
-            double conservativeFraction, double balancedFraction, double strongerFraction) {
-        this(version, baseImpact, sustainedWeight, largeScaleWeight, ignoredWarningWeight,
-                targetedWeight, persistenceWeight, moderateThreshold, severeThreshold,
-                conservativeFraction, balancedFraction, strongerFraction, 0.0);
-    }
+            25, 45, 0.25, 0.50, 0.75, 0.0);
 
     public GuidedSeverityProfile {
         if (version == null || !version.matches("[a-z][a-z0-9.-]{0,63}")) {

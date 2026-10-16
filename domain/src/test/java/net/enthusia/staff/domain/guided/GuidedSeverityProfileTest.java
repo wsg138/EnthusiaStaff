@@ -23,7 +23,7 @@ class GuidedSeverityProfileTest {
     private static GuidedSeverityProfile trial() {
         return new GuidedSeverityProfile(
                 "calibration-test-v1", 10, 15, 30, 10, 15, 10,
-                40, 60, 0.10, 0.55, 0.90);
+                40, 60, 0.10, 0.55, 0.90, 0.0);
     }
 
     private static GuidedIncidentWizard interview(String warning) {
@@ -159,7 +159,7 @@ class GuidedSeverityProfileTest {
     void changedOrWrongProfileIsRejectedEvenIfVersionWasReused() {
         var incident = interview(YES).finding(trial());
         var changed = new GuidedSeverityProfile("calibration-test-v1",
-                10, 15, 30, 11, 15, 10, 40, 60, 0.10, 0.55, 0.90);
+                10, 15, 30, 11, 15, 10, 40, 60, 0.10, 0.55, 0.90, 0.0);
         assertThrows(IllegalArgumentException.class,
                 () -> GuidedPolicyResolution.calculate(incident, assessment(), 0, changed));
         assertThrows(IllegalArgumentException.class,
@@ -169,17 +169,17 @@ class GuidedSeverityProfileTest {
     @Test
     void malformedWeightsThresholdsAndFractionsAreRejected() {
         assertThrows(IllegalArgumentException.class, () -> new GuidedSeverityProfile(
-                INVALID_VERSION, -1, 15, 30, 10, 15, 10, 25, 45, 0.25, 0.5, 0.75));
+                INVALID_VERSION, -1, 15, 30, 10, 15, 10, 25, 45, 0.25, 0.5, 0.75, 0.0));
         assertThrows(IllegalArgumentException.class, () -> new GuidedSeverityProfile(
-                INVALID_VERSION, 10, 15, 30, 10, 15, 10, 45, 25, 0.25, 0.5, 0.75));
+                INVALID_VERSION, 10, 15, 30, 10, 15, 10, 45, 25, 0.25, 0.5, 0.75, 0.0));
         assertThrows(IllegalArgumentException.class, () -> new GuidedSeverityProfile(
-                INVALID_VERSION, 10, 30, 15, 10, 15, 10, 25, 45, 0.25, 0.5, 0.75));
+                INVALID_VERSION, 10, 30, 15, 10, 15, 10, 25, 45, 0.25, 0.5, 0.75, 0.0));
         assertThrows(IllegalArgumentException.class, () -> new GuidedSeverityProfile(
-                INVALID_VERSION, 10, 15, 30, 10, 15, 10, 10, 45, 0.25, 0.5, 0.75));
+                INVALID_VERSION, 10, 15, 30, 10, 15, 10, 10, 45, 0.25, 0.5, 0.75, 0.0));
         assertThrows(IllegalArgumentException.class, () -> new GuidedSeverityProfile(
-                INVALID_VERSION, 10, 15, 30, 10, 15, 10, 25, 45, 0.80, 0.5, 0.75));
+                INVALID_VERSION, 10, 15, 30, 10, 15, 10, 25, 45, 0.80, 0.5, 0.75, 0.0));
         assertThrows(IllegalArgumentException.class, () -> new GuidedSeverityProfile(
-                INVALID_VERSION, 10, 15, 30, 10, 15, 10, 25, 45, 0.25, Double.NaN, 0.75));
+                INVALID_VERSION, 10, 15, 30, 10, 15, 10, 25, 45, 0.25, Double.NaN, 0.75, 0.0));
         assertThrows(IllegalArgumentException.class, () -> trial().durationFraction(3));
         assertTrue(trial().durationFraction(-1) < trial().durationFraction(1));
     }
