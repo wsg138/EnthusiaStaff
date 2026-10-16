@@ -23,7 +23,7 @@ class PaperCommandBridgeConfigurationTest {
         values.put(PaperCommandBridgeConfiguration.ENABLED_ENV, "true");
         values.put(PaperCommandBridgeConfiguration.CREDENTIAL_ENV, SECRET);
         values.put(PaperCommandBridgeConfiguration.RULES_ENV,
-                "list|HELPER|minecraft.command.list|0;kick|MOD|minecraft.command.kick|2");
+                "list|MOD|minecraft.command.list|0;kick|MOD|minecraft.command.kick|2");
 
         PaperCommandBridgeConfiguration configuration =
                 PaperCommandBridgeConfiguration.fromEnvironment(values).orElseThrow();
@@ -32,6 +32,19 @@ class PaperCommandBridgeConfigurationTest {
         assertEquals(8772, configuration.port());
         assertEquals(2, configuration.rules().size());
         assertFalse(configuration.toString().contains(SECRET));
+    }
+
+    @Test
+    void helperAndDeveloperRuleConfigurationCannotEnableConsole() {
+        for (String rank : new String[] {"HELPER", "DEVELOPER"}) {
+            assertThrows(IllegalArgumentException.class, () ->
+                    PaperCommandBridgeConfiguration.fromEnvironment(Map.of(
+                            PaperCommandBridgeConfiguration.ENABLED_ENV, "true",
+                            PaperCommandBridgeConfiguration.CREDENTIAL_ENV, SECRET,
+                            PaperCommandBridgeConfiguration.RULES_ENV,
+                            "list|" + rank + "|minecraft.command.list|0"
+                    )));
+        }
     }
 
     @Test
@@ -45,7 +58,7 @@ class PaperCommandBridgeConfigurationTest {
                         PaperCommandBridgeConfiguration.ENABLED_ENV, "true",
                         PaperCommandBridgeConfiguration.CREDENTIAL_ENV, "weak",
                         PaperCommandBridgeConfiguration.RULES_ENV,
-                        "list|HELPER|minecraft.command.list|0"
+                        "list|MOD|minecraft.command.list|0"
                 )));
         assertThrows(IllegalArgumentException.class, () ->
                 PaperCommandBridgeConfiguration.fromEnvironment(Map.of(

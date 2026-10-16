@@ -1,11 +1,13 @@
 package net.enthusia.staff.paper.commandbridge;
 
 import java.time.Duration;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.function.Predicate;
 import net.enthusia.staff.domain.auth.StaffRank;
 import net.enthusia.staff.domain.ports.CommandBridgeAuthorityResolver;
 import net.enthusia.staff.paper.auth.PaperStaffRankResolver;
@@ -18,12 +20,11 @@ public final class LuckPermsCommandBridgeAuthorityResolver implements CommandBri
     private static final Duration LOOKUP_TIMEOUT = Duration.ofSeconds(3);
 
     private final LuckPerms luckPerms;
+    private final Predicate<UUID> activeDuty;
 
-    public LuckPermsCommandBridgeAuthorityResolver(LuckPerms luckPerms) {
-        if (luckPerms == null) {
-            throw new IllegalArgumentException("LuckPerms is required");
-        }
-        this.luckPerms = luckPerms;
+    public LuckPermsCommandBridgeAuthorityResolver(LuckPerms luckPerms, Predicate<UUID> activeDuty) {
+        this.luckPerms = Objects.requireNonNull(luckPerms, "LuckPerms is required");
+        this.activeDuty = Objects.requireNonNull(activeDuty, "active Staff Mode gate is required");
     }
 
     @Override
@@ -32,9 +33,12 @@ public final class LuckPermsCommandBridgeAuthorityResolver implements CommandBri
             throw new IllegalArgumentException("current command authority lookup is invalid");
         }
         try {
+            if (!activeDuty.test(actorPlayerId)) {
+                return Optional.empty();
+            }
             User user = luckPerms.getUserManager().loadUser(actorPlayerId)
                     .get(LOOKUP_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS);
-            return snapshot(user, requiredPermission);
+            return activeDuty.test(actorPlayerId) ? snapshot(user, requiredPermission) : Optional.empty();
         } catch (InterruptedException failure) {
             Thread.currentThread().interrupt();
             throw new IllegalStateException("command authority lookup interrupted", failure);

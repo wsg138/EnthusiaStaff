@@ -26,7 +26,9 @@ public final class JdbcDiscordOutboxStore implements DiscordOutboxStore {
     private static final int MAX_MANUAL_RETRY = 500;
     private static final int MAX_OWNER_LENGTH = 128;
     // Only retry a claim transaction: no Discord request has been sent at this point.
-    private static final int MAX_CLAIM_ATTEMPTS = 3;
+    private static final int MAX_CLAIM_ATTEMPTS = 6;
+    private static final long FIRST_CLAIM_BACKOFF_MILLIS = 4L;
+    private static final long MAX_CLAIM_BACKOFF_MILLIS = 64L;
     private static final String SERIALIZATION_CONFLICT_SQL_STATE = "40001";
     private static final Pattern DESTINATION_PATTERN = Pattern.compile("[a-z-]{1,32}");
 
@@ -61,9 +63,22 @@ public final class JdbcDiscordOutboxStore implements DiscordOutboxStore {
                 if (attempt == MAX_CLAIM_ATTEMPTS || !retryableClaimConflict(failure)) {
                     throw failure;
                 }
+                pauseForClaimConflict(attempt, failure);
             }
         }
         throw new IllegalStateException("Unreachable Discord claim retry state");
+    }
+
+    private static void pauseForClaimConflict(int attempt, ModerationPersistenceException failure) {
+        // MariaDB 1020 can recur during a hot write window. Avoid spinning
+        // through all retries in that same window. Maximum total pause: 124ms.
+        long delayMillis = Math.min(MAX_CLAIM_BACKOFF_MILLIS, FIRST_CLAIM_BACKOFF_MILLIS << (attempt - 1));
+        try {
+            Thread.sleep(delayMillis);
+        } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
+            throw failure;
+        }
     }
 
     static boolean retryableClaimConflict(Throwable failure) {

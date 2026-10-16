@@ -1,6 +1,7 @@
 package net.enthusia.staff.discordbot;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.ConnectException;
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -24,6 +25,7 @@ import net.enthusia.staff.protocol.CommandBridgeWireCodec;
 public final class HttpMinecraftCommandBridgeClient {
     public static final String ENDPOINT_PATH = CommandBridgeHttpSigning.REQUEST_PATH;
     private static final SecureRandom RANDOM = new SecureRandom();
+    private static final int MAX_RESPONSE_BYTES = 8_192;
 
     private final Map<String, URI> endpoints;
     private final String credential;
@@ -155,14 +157,20 @@ public final class HttpMinecraftCommandBridgeClient {
                 .followRedirects(HttpClient.Redirect.NEVER)
                 .build();
         return request -> {
-            HttpResponse<String> response = client.send(
-                    request,
-                    HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8)
-            );
+            HttpResponse<InputStream> response = client.send(
+                    request, HttpResponse.BodyHandlers.ofInputStream());
+            String body;
+            try (InputStream stream = response.body()) {
+                byte[] limited = stream.readNBytes(MAX_RESPONSE_BYTES + 1);
+                if (limited.length > MAX_RESPONSE_BYTES) {
+                    return new RawResponse(response.statusCode(), "", "");
+                }
+                body = new String(limited, StandardCharsets.UTF_8);
+            }
             String signature = response.headers()
                     .firstValue(CommandBridgeHttpSigning.RESPONSE_SIGNATURE_HEADER)
                     .orElse("");
-            return new RawResponse(response.statusCode(), response.body(), signature);
+            return new RawResponse(response.statusCode(), body, signature);
         };
     }
 

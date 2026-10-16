@@ -24,6 +24,7 @@ class DiscordCommandBridgeConfigurationTest {
         values.put(DiscordCommandBridgeConfiguration.ENDPOINTS_ENV,
                 "SMP=http://10.0.0.5:8772/v1/discord-command;HUB=https://hub.internal/v1/discord-command");
         values.put(DiscordCommandBridgeConfiguration.CREDENTIAL_ENV, SECRET);
+        values.put(DiscordCommandBridgeConfiguration.CHANNEL_ENV, "123456789012345678");
         values.put(DiscordCommandBridgeConfiguration.TIMEOUT_MILLIS_ENV, "2500");
 
         DiscordCommandBridgeConfiguration configuration =
@@ -31,7 +32,24 @@ class DiscordCommandBridgeConfigurationTest {
 
         assertEquals(java.util.Set.of("SMP", "HUB"), configuration.endpoints().keySet());
         assertEquals(Duration.ofMillis(2500), configuration.timeout());
+        assertEquals(123456789012345678L, configuration.allowedChannelId());
         assertFalse(configuration.toString().contains(SECRET));
+    }
+
+    @Test
+    void missingOrInvalidChannelFailsClosed() {
+        Map<String, String> values = new HashMap<>();
+        values.put(DiscordCommandBridgeConfiguration.ENDPOINTS_ENV,
+                "SMP=http://127.0.0.1:8772/v1/discord-command");
+        values.put(DiscordCommandBridgeConfiguration.CREDENTIAL_ENV, SECRET);
+        assertThrows(IllegalArgumentException.class,
+                () -> DiscordCommandBridgeConfiguration.fromEnvironment(values));
+        values.put(DiscordCommandBridgeConfiguration.CHANNEL_ENV, "not-a-channel");
+        assertThrows(IllegalArgumentException.class,
+                () -> DiscordCommandBridgeConfiguration.fromEnvironment(values));
+        values.put(DiscordCommandBridgeConfiguration.CHANNEL_ENV, "99999999999999999999");
+        assertThrows(IllegalArgumentException.class,
+                () -> DiscordCommandBridgeConfiguration.fromEnvironment(values));
     }
 
     @Test

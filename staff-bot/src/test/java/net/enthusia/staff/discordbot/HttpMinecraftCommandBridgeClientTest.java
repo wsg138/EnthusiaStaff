@@ -81,6 +81,18 @@ class HttpMinecraftCommandBridgeClientTest {
     }
 
     @Test
+    void signedOversizeResponseNeverReachesDiscord() {
+        HttpMinecraftCommandBridgeClient client = client(request -> {
+            String oversized = "x".repeat(9_000);
+            String signature = CommandBridgeHttpSigning.signResponse(
+                    CREDENTIAL, NONCE, 200, oversized);
+            return new HttpMinecraftCommandBridgeClient.RawResponse(200, oversized, signature);
+        });
+        assertEquals(HttpMinecraftCommandBridgeClient.Status.INVALID_RESPONSE,
+                client.dispatch(request(TARGET_SERVER)).status());
+    }
+
+    @Test
     void badOrTamperedResponseSignatureIsRejected() {
         HttpMinecraftCommandBridgeClient client = client(request -> {
             String body = CODEC.encodeResponse(CommandBridgeResponse.withoutOutput(

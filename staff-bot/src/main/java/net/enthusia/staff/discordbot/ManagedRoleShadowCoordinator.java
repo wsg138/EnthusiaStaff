@@ -2,6 +2,9 @@ package net.enthusia.staff.discordbot;
 
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Map;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
@@ -32,6 +35,7 @@ final class ManagedRoleShadowCoordinator implements AutoCloseable {
         DRIFT,
         ROLE_MISSING,
         ROLE_AMBIGUOUS,
+        ROLE_UNMANAGEABLE,
         DELETE_MATCH,
         DELETE_DRIFT,
         DELETE_UNRESOLVED
@@ -63,6 +67,15 @@ final class ManagedRoleShadowCoordinator implements AutoCloseable {
         }
     }
 
+    enum SampleGate {
+        ZERO_DRIFT_SAMPLE,
+        SNAPSHOT_INCOMPLETE,
+        NO_CLAIMS,
+        ROLE_DRIFT,
+        ROLE_ID_UNBOUND,
+        ROLE_OWNERSHIP_CONFLICT
+    }
+
     private record Summary(
             int claims,
             int matches,
@@ -70,6 +83,10 @@ final class ManagedRoleShadowCoordinator implements AutoCloseable {
             int missingMembers,
             int extraMembers,
             int unlinkedMinecraftAccounts,
+            int lumaClaims,
+            int playtimeClaims,
+            int unboundRoleClaims,
+            int conflictingRoleIds,
             List<ClaimResult> driftDetails
     ) {
         Summary {
@@ -178,8 +195,14 @@ final class ManagedRoleShadowCoordinator implements AutoCloseable {
         int missingMembers = 0;
         int extraMembers = 0;
         int unlinked = 0;
+        int lumaClaims = 0;
+        int playtimeClaims = 0;
+        int unboundRoleClaims = 0;
         List<ClaimResult> driftDetails = new ArrayList<>();
         for (ManagedRoleShadowService.ResolvedClaim claim : claims) {
+            if ("luma-guilds".equals(claim.claim().namespace())) lumaClaims++;
+            if ("playtime-numerals".equals(claim.claim().namespace())) playtimeClaims++;
+            if (claim.claim().existingDiscordRoleId().isEmpty()) unboundRoleClaims++;
             ClaimResult result = compare(claim, members, guild);
             missingMembers += result.missingMembers();
             extraMembers += result.extraMembers();
@@ -197,17 +220,62 @@ final class ManagedRoleShadowCoordinator implements AutoCloseable {
                 missingMembers,
                 extraMembers,
                 unlinked,
+                lumaClaims,
+                playtimeClaims,
+                unboundRoleClaims,
+                conflictingRoleIds(claims),
                 driftDetails
         );
+    }
+
+    /** Count exact Discord role IDs claimed by more than one logical managed resource. */
+    static int conflictingRoleIds(List<ManagedRoleShadowService.ResolvedClaim> claims) {
+        if (claims == null) throw new IllegalArgumentException("claims required");
+        Map<String, String> owners = new HashMap<>();
+        Set<String> conflicts = new HashSet<>();
+        for (ManagedRoleShadowService.ResolvedClaim resolved : claims) {
+            var claim = resolved.claim();
+            if (claim.existingDiscordRoleId().isEmpty()) continue;
+            String id = claim.existingDiscordRoleId().orElseThrow();
+            String owner = claim.namespace() + ":" + claim.reconciliationKey();
+            String previous = owners.putIfAbsent(id, owner);
+            if (previous != null && !previous.equals(owner)) conflicts.add(id);
+        }
+        return conflicts.size();
+    }
+
+    /**
+     * Only a populated, complete, zero-drift snapshot is a usable parity sample.
+     * This is never cutover approval: operator validation of all expected
+     * producers, legacy role mappings, and multiple windows remains required.
+     */
+    static SampleGate assessSample(ManagedRoleShadowService.Snapshot snapshot,
+            int processedClaims, int detectedDrifts, int unboundRoleClaims, int conflictingRoleIds) {
+        if (snapshot == null || processedClaims < 0 || detectedDrifts < 0
+                || unboundRoleClaims < 0 || unboundRoleClaims > processedClaims
+                || conflictingRoleIds < 0 || conflictingRoleIds > processedClaims) {
+            throw new IllegalArgumentException("managed-role sample inputs are invalid");
+        }
+        if (snapshot.incomplete()) return SampleGate.SNAPSHOT_INCOMPLETE;
+        if (processedClaims == 0) return SampleGate.NO_CLAIMS;
+        if (conflictingRoleIds > 0) return SampleGate.ROLE_OWNERSHIP_CONFLICT;
+        if (detectedDrifts > 0) return SampleGate.ROLE_DRIFT;
+        if (unboundRoleClaims > 0) return SampleGate.ROLE_ID_UNBOUND;
+        return SampleGate.ZERO_DRIFT_SAMPLE;
     }
 
     private static void logTotals(Summary summary, ManagedRoleShadowService.Snapshot snapshot) {
         if (LOGGER.isLoggable(System.Logger.Level.INFO)) {
             int invalid = snapshot.invalidResourceRefs().size();
+            SampleGate gate = assessSample(
+                    snapshot, summary.claims(), summary.drifts(),
+                    summary.unboundRoleClaims(), summary.conflictingRoleIds());
             LOGGER.log(
                     System.Logger.Level.INFO,
                     "managed_role_shadow_summary complete={0} claims={1} matches={2} drift={3} "
-                            + "missing_members={4} extra_members={5} unlinked_minecraft={6} invalid_claims={7}",
+                            + "missing_members={4} extra_members={5} unlinked_minecraft={6} invalid_claims={7} "
+                            + "sample_gate={8} luma_claims={9} playtime_claims={10} unbound_role_claims={11} "
+                            + "conflicting_role_ids={12}",
                     !snapshot.incomplete(),
                     summary.claims() + invalid,
                     summary.matches(),
@@ -215,7 +283,12 @@ final class ManagedRoleShadowCoordinator implements AutoCloseable {
                     summary.missingMembers(),
                     summary.extraMembers(),
                     summary.unlinkedMinecraftAccounts(),
-                    invalid
+                    invalid,
+                    gate,
+                    summary.lumaClaims(),
+                    summary.playtimeClaims(),
+                    summary.unboundRoleClaims(),
+                    summary.conflictingRoleIds()
             );
         }
     }
@@ -272,6 +345,17 @@ final class ManagedRoleShadowCoordinator implements AutoCloseable {
         ManagedRoleShadowService.Claim claim = resolved.claim();
         if (claim.delete() && claim.displayName().isEmpty() && claim.existingDiscordRoleId().isEmpty()) {
             return result(resolved, State.DELETE_UNRESOLVED, Set.of(), Set.of());
+        }
+        // An exact legacy role that still exists but is Discord-managed or public is
+        // not an absent role. In particular, a deletion tombstone must not become
+        // a false DELETE_MATCH merely because this observer refuses to manage it.
+        if (claim.existingDiscordRoleId().isPresent()) {
+            Role exactRole = guild.getRoleById(claim.existingDiscordRoleId().orElseThrow());
+            if (exactRole != null && !manageable(exactRole)) {
+                State state = claim.delete() ? State.DELETE_UNRESOLVED : State.ROLE_UNMANAGEABLE;
+                return result(resolved, state,
+                        claim.delete() ? Set.of() : resolved.desiredDiscordUserIds(), Set.of());
+            }
         }
         List<Role> roles = matchingRoles(guild, claim);
         if (roles.size() > UNIQUE_ROLE_MATCH_COUNT) {

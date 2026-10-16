@@ -90,6 +90,27 @@ class AiMirrorDurableRecoverySessionTest {
     }
 
     @Test
+    void postSendDuringGatewayResumeIsDurablyCaptured() throws Exception {
+        FakeChat chat = new FakeChat();
+        try (AiMirrorEncryptedOutbox journal = openStore();
+                AiMirrorDurableRecoverySession session = new AiMirrorDurableRecoverySession(
+                        chat, journal, config(), request ->
+                        new AiMirrorRegistrationPublisher.PostResult(503, "storage_unavailable"))) {
+            chat.onResume = () -> session.published(receipt());
+            session.start();
+            session.resume();
+            long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(TIMEOUT_SECONDS);
+            while (session.ingressStats().persisted() == 0 && System.nanoTime() < deadline) {
+                Thread.sleep(10);
+            }
+            assertEquals(1, session.ingressStats().persisted());
+            assertEquals(1, session.ingressStats().eligiblePostSend());
+            assertEquals(1, journal.recover().size());
+            assertEquals(1, chat.resumed.get());
+        }
+    }
+
+    @Test
     void pausedChatCannotAcceptNewPostSendReceipts() throws Exception {
         FakeChat chat = new FakeChat();
         try (AiMirrorEncryptedOutbox journal = openStore();
@@ -191,6 +212,7 @@ class AiMirrorDurableRecoverySessionTest {
         private final AtomicInteger resumed = new AtomicInteger();
         private final AtomicInteger paused = new AtomicInteger();
         private final AtomicInteger closed = new AtomicInteger();
+        private Runnable onResume = () -> { };
         @Override
         public void start() {
             started.incrementAndGet();
@@ -198,6 +220,7 @@ class AiMirrorDurableRecoverySessionTest {
         @Override
         public void resume() {
             resumed.incrementAndGet();
+            onResume.run();
         }
         @Override
         public void pause() {
