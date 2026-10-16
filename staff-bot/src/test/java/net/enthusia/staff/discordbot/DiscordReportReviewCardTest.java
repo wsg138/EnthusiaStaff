@@ -79,10 +79,12 @@ class DiscordReportReviewCardTest {
         assertFalse(value.contains("<@&123>"));
         assertFalse(value.contains("**oops**"));
         assertTrue(value.contains("＠everyone"));
+        assertTrue(value.contains("/reports view " + item.reportId()));
 
         var helper = DiscordReportReviewCard.render(PULSE, List.of(item), false);
         assertFalse(helper.getFields().get(2).getValue().contains("Harassment by"));
         assertFalse(helper.getFields().get(2).getValue().contains("Report text"));
+        assertFalse(helper.getFields().get(2).getValue().contains("/reports view"));
     }
 
     @Test void sensitiveCategoriesRemainInGameOnly() {

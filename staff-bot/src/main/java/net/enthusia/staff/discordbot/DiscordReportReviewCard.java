@@ -74,6 +74,9 @@ final class DiscordReportReviewCard {
                             ? "Sensitive report — view full text in-game."
                             : safeDescription(report.description()));
         }
+        if (actionsEnabled) {
+            details.append("\n**Full description:** /reports view ").append(report.reportId());
+        }
         return details.toString();
     }
 

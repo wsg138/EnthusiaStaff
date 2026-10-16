@@ -15,6 +15,8 @@ metadata-only and do not select description from MariaDB.
 The preview is limited to 240 Unicode code points per report, neutralizes
 Discord mentions and Markdown, flattens line breaks, and leaves sensitive
 safety/privacy/account/personal/sexual harassment categories redacted.
+Mod+ ephemeral cards also include the exact case ID and /reports view command
+for permission-gated full-description access; lower-rank cards do not.
 It does not fetch message snapshots, merged reporter follow-ups or internal
 staff case action notes. The real Minecraft reports permission remains the
 route for full details.
