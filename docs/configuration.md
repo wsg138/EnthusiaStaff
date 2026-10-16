@@ -12,7 +12,8 @@ The Paper runtime currently validates these configuration families:
 | --- | --- | --- |
 | `config.yml` | `config-version` | Core Paper/runtime settings, including reloadable and restart-owned sections |
 | `reason-policies.yml` | `version` | Current punishment reason-policy definitions |
-| `messages.yml` | `schema-version` | Player/staff-facing message catalog; C1 initially covers `/estaff` operator responses |
+| `messages.yml` | `schema-version` | Player/staff-facing messages (C1/C1.1: `/estaff` and `/vanish`) |
+| `ranks.yml` | `schema-version` | **C2 candidate only**: strict rank-capability preview; not active permission enforcement |
 | `reports.yml` | `version` | Report policy |
 | `gui/reports.yml` | `version` | Report GUI presentation |
 | `policy-v2.yml` | `schema-version` plus versioned policy snapshots | Policy v2 publication/shadow configuration |
@@ -69,6 +70,16 @@ If rolling the plugin JAR back to a version that supports only schema 1, restore
 Available vanish placeholders: `{label}` and `{choices}` in `vanish.usage`; `{mode}` in `vanish.mode-disabled`. Placeholders are escaped and may not add clickable actions. The command's rank/vanish permissions are not controlled by message text.
 
 Internal audit/security log messages and raw runtime diagnostic details are not automatically operator-editable merely because ordinary chat responses become configurable.
+
+## Rank capability configuration preview (C2-B)
+
+The plugin ships `ranks.yml` schema 1 and creates it if missing without overwriting your existing file. **This is a validation-only candidate; changing its grants, inheritance or setting names does not change anyone's actual abilities.** The running permission checks, duty/session rules, punishment policy, hierarchy protections, and vanish reconciliation still use their existing authoritative code. Neither `/estaff reload` nor a server restart activates preview capabilities.
+
+`/estaff config validate` checks the schema, complete rank table, recognized typed capability IDs, exact key spelling, duplicate YAML keys/array entries, rank inheritance constraints, and separation of the Developer technical branch and non-player SYSTEM identity. An invalid candidate is reported but cannot apply a partial permission change. Shipped defaults represent the current **rank dimension** for selected Staff Mode capabilities, not a complete authorization decision (direct permissions and session/context rules still apply).
+
+Allowed v1 rank names: HELPER, MOD, DEVELOPER, ADMIN, FOUNDER, SYSTEM. A rank may inherit only from a strictly lower rank on the moderation chain. Developer and SYSTEM cannot inherit; SYSTEM cannot receive grants. The canonical typed capability identifiers are defined in `StaffCapability.java`. This early schema models only the limited rank decisions audited in [the C2 authority audit](configurability-c2-rank-capability-audit.md); it does not offer configurable punishment approval or arbitrary command permission overrides.
+
+Later C2-C work must compare preview decisions against live legacy decisions in shadow mode before any C2-D enforcement migration. C2-D needs separate review, cross-subsystem tests, revocation/reconciliation, and rollback, including coordinating with #271. Editing this file now is useful for future policy design, not a production permission change.
 
 ## Restart-owned settings
 
