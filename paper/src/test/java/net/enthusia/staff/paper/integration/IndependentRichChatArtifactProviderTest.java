@@ -8,6 +8,16 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayOutputStream;
 import java.util.ArrayList;
+import java.lang.reflect.Method;
+import java.lang.reflect.Proxy;
+import java.util.UUID;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
+import net.enthusia.staff.api.chat.RichChatArtifactRequest;
+import org.bukkit.Material;
+import org.bukkit.entity.Player;
+import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.PlayerInventory;
 import java.util.List;
 import java.util.regex.Pattern;
 import javax.imageio.ImageIO;
@@ -77,5 +87,81 @@ class IndependentRichChatArtifactProviderTest {
         assertThrows(IllegalArgumentException.class,
                 () -> IndependentRichChatArtifactProvider.renderCard(
                         IndependentRichChatArtifactProvider.Kind.INVENTORY, excessive));
+    }
+
+    @Test
+    void refusesDelayedSnapshotsBeforeRenderingAnyPlayerState() {
+        RichChatArtifactRequest request = request("[item]");
+        assertFalse(IndependentRichChatArtifactProvider.snapshotWindowExpired(request, 11_999L));
+        assertTrue(IndependentRichChatArtifactProvider.snapshotWindowExpired(request, 12_000L));
+        assertTrue(IndependentRichChatArtifactProvider.snapshotWindowExpired(request, 50_000L));
+    }
+
+    @Test
+    void neverReadsInventoryForDeniedPermissionsOrQuitPlayer() {
+        AtomicInteger reads = new AtomicInteger();
+        AtomicReference<ItemStack> hand = new AtomicReference<>(new ItemStack(Material.STONE, 1));
+        var rule = itemRule();
+
+        assertTrue(IndependentRichChatArtifactProvider.captureJob(
+                rule, fakePlayer(false, true, hand, reads), request("[item]")).isEmpty());
+        assertTrue(IndependentRichChatArtifactProvider.captureJob(
+                rule, fakePlayer(true, false, hand, reads), request("[item]")).isEmpty());
+        assertTrue(IndependentRichChatArtifactProvider.captureJob(
+                rule, fakePlayer(true, true, hand, reads), request("ordinary chat")).isEmpty());
+        assertEquals(0, reads.get());
+    }
+
+    @Test
+    void entityOwnedCaptureFreezesSlotSnapshotBeforeWorkerRendering() {
+        AtomicInteger reads = new AtomicInteger();
+        AtomicReference<ItemStack> hand = new AtomicReference<>(new ItemStack(Material.STONE, 3));
+        var player = fakePlayer(true, true, hand, reads);
+        var captured = IndependentRichChatArtifactProvider.captureJob(
+                itemRule(), player, request("[item]")).orElseThrow();
+        assertEquals(1, reads.get());
+        hand.set(new ItemStack(Material.DIAMOND, 5));
+        assertEquals(List.of(new IndependentRichChatArtifactProvider.Slot("STONE", 3)),
+                captured.slots());
+        assertEquals(1, reads.get());
+    }
+
+    private static IndependentRichChatArtifactProvider.MatchRule itemRule() {
+        return new IndependentRichChatArtifactProvider.MatchRule(
+                IndependentRichChatArtifactProvider.Kind.ITEM,
+                Pattern.compile("\\[item\\]"), true);
+    }
+
+    private static RichChatArtifactRequest request(String text) {
+        return new RichChatArtifactRequest(
+                UUID.fromString("10000000-0000-0000-0000-000000000001"),
+                UUID.fromString("20000000-0000-0000-0000-000000000001"),
+                "Tester", "global", text, 10_000L, 50_000L);
+    }
+
+    private static Player fakePlayer(
+            boolean allowed, boolean online, AtomicReference<ItemStack> hand, AtomicInteger reads
+    ) {
+        PlayerInventory inventory = (PlayerInventory) Proxy.newProxyInstance(
+                PlayerInventory.class.getClassLoader(), new Class<?>[]{PlayerInventory.class},
+                (proxy, method, arguments) -> {
+                    if (method.getName().equals("getItemInMainHand")) {
+                        reads.incrementAndGet();
+                        return hand.get();
+                    }
+                    throw unexpected(method);
+                });
+        return (Player) Proxy.newProxyInstance(
+                Player.class.getClassLoader(), new Class<?>[]{Player.class},
+                (proxy, method, arguments) -> switch (method.getName()) {
+                    case "isOnline" -> online;
+                    case "hasPermission" -> allowed;
+                    case "getInventory" -> inventory;
+                    default -> throw unexpected(method);
+                });
+    }
+
+    private static AssertionError unexpected(Method method) {
+        return new AssertionError("Unexpected method: " + method.getName());
     }
 }
