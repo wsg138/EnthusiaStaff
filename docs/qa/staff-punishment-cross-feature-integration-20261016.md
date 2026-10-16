@@ -41,3 +41,14 @@ Added `ReportGuiDescriptionPreviewTest` cross-feature assertion covering both sh
 7. Validate exact JAR hash/artifact, rollback procedure and owner acceptance before any production release. Never merge this test branch merely because static CI is green.
 
 No production JAR, live Discord channel, credential, database or configuration has been modified for this validation.
+
+## Follow-up integration (2026-10-16)
+
+The cross-feature branch also incorporates a newer \`origin/main\` snapshot at
+\`c945b92e0\` and the lead severity-profile PR #621 update
+\`aa2763b3d\`. The new within-tier severity-duration weight is an **unapproved
+test-only** option with the default value **0.0**, which preserves the
+historical guided prototype. Local Domain/Paper/StaffBot/Velocity tests and
+shaded Paper JAR build PASS after this additional merge. Any nonzero weight
+requires owner-calibrated documented sanction outcomes and exact-head hosted
+verification. Guided production flag remains OFF.

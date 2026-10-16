@@ -21,6 +21,8 @@ class GuidedPolicyResolutionTest {
     private static final String FLOOD_ID = "spam.message-flooding";
     private static final String FEW = "few";
     private static final String LOW_LEVEL = "spam.low-level";
+    private static final String NO_WARNING = "not-applicable";
+    private static final String YES = "yes";
     private static final String LARGE_SCALE = "large-scale";
     private static SanctionSpec warn() {
         return new SanctionSpec(SanctionType.WARNING, SanctionLength.instant());
@@ -52,7 +54,7 @@ class GuidedPolicyResolutionTest {
 
     @Test
     void noWarningMeansNoDefaultPenalty() {
-        var outcome = GuidedPolicyResolution.calculate(finding(FEW, "not-applicable"),
+        var outcome = GuidedPolicyResolution.calculate(finding(FEW, NO_WARNING),
                 assessment(0, LOW_LEVEL), 0);
         assertEquals(List.of(warn()), outcome.sanctions());
         assertFalse(outcome.customDuration());
@@ -60,7 +62,7 @@ class GuidedPolicyResolutionTest {
 
     @Test
     void variableLengthRemainsBetweenConfiguredBounds() {
-        var incident = finding(LARGE_SCALE, "yes");
+        var incident = finding(LARGE_SCALE, YES);
         var a = assessment(0, FLOOD_ID);
         Duration low = GuidedPolicyResolution.calculate(incident, a, -1)
                 .sanctions().getFirst().length().temporary().orElseThrow();
@@ -76,7 +78,7 @@ class GuidedPolicyResolutionTest {
 
     @Test
     void evaluatedCaseHistoryChangesDurationWithoutNewStaffQuestion() {
-        var incident = finding(LARGE_SCALE, "yes");
+        var incident = finding(LARGE_SCALE, YES);
         var first = GuidedPolicyResolution.calculate(incident,
                 assessment(0, FLOOD_ID), 0);
         var repeated = GuidedPolicyResolution.calculate(incident,
@@ -114,7 +116,7 @@ class GuidedPolicyResolutionTest {
                 1, 1, 0, List.of(), steps.get(1));
         PunishmentAssessment assessed = new PunishmentAssessment(
                 "fixture.second-precision", policy, history, List.of(lower));
-        var incident = finding(FEW, "not-applicable");
+        var incident = finding(FEW, NO_WARNING);
         for (int preference : new int[]{-1, 0, 1}) {
             Duration result = GuidedPolicyResolution.calculate(incident, assessed, preference)
                     .sanctions().getFirst().length().temporary().orElseThrow();
@@ -127,7 +129,7 @@ class GuidedPolicyResolutionTest {
 
     @Test
     void severityNeverAutomaticallyEscalatesToBanOrPermanentConsequence() {
-        var incident = finding(LARGE_SCALE, "yes");
+        var incident = finding(LARGE_SCALE, YES);
         SanctionSpec temporaryBan = new SanctionSpec(SanctionType.BAN,
                 SanctionLength.temporary(Duration.ofDays(7)));
         SanctionSpec permanentMute = new SanctionSpec(SanctionType.MUTE,
@@ -142,7 +144,7 @@ class GuidedPolicyResolutionTest {
 
     @Test
     void alreadyEscalatedBanOrPermanentPolicyRequiresExplicitReview() {
-        var finding = finding(FEW, "not-applicable");
+        var finding = finding(FEW, NO_WARNING);
         var ban = new SanctionSpec(SanctionType.BAN,
                 SanctionLength.temporary(Duration.ofDays(7)));
         var permanentMute = new SanctionSpec(SanctionType.MUTE, SanctionLength.permanent());
@@ -166,7 +168,7 @@ class GuidedPolicyResolutionTest {
 
     @Test
     void severityCannotSkipRestrictedIntermediatePolicyTier() {
-        var incident = finding(LARGE_SCALE, "yes");
+        var incident = finding(LARGE_SCALE, YES);
         List<PunishmentStep> steps = List.of(
                 new PunishmentStep(0, "Warning", List.of(warn())),
                 new PunishmentStep(1, "Requires ban review", List.of(
@@ -186,7 +188,7 @@ class GuidedPolicyResolutionTest {
 
     @Test
     void unsafeOrMismatchedOffenseIsRejected() {
-        var spam = finding(FEW, "not-applicable");
+        var spam = finding(FEW, NO_WARNING);
         assertThrows(IllegalArgumentException.class, () -> GuidedPolicyResolution.calculate(
                 spam, assessment(0, FLOOD_ID), 0));
         assertThrows(IllegalArgumentException.class, () -> GuidedPolicyResolution.calculate(
