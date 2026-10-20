@@ -52,11 +52,12 @@ class DiscordReviewQueueReadIntegrationTest {
                 ReportIntegrationFixtures.NOW);
         MariaDbIntegrationSupport.insertPlayer(DATABASE, target, "PreviewTarget",
                 ReportIntegrationFixtures.NOW);
+        UUID reportId;
         try (var write = MariaDb.initialize(MariaDbIntegrationSupport.databaseConfig(DATABASE))) {
-            ReportIntegrationFixtures.accepted(write.reportStore().submit(
+            reportId = ReportIntegrationFixtures.accepted(write.reportStore().submit(
                     ReportIntegrationFixtures.request(reporter, target,
                             "report:private-preview-" + reporter,
-                            ReportIntegrationFixtures.NOW, "private test body")));
+                            ReportIntegrationFixtures.NOW, "private test body"))).reportId();
         }
         try (DiscordStaffReadRuntime read = DiscordStaffReadRuntime.open(
                 MariaDbIntegrationSupport.databaseConfig(DATABASE), Clock.systemUTC())) {
@@ -68,6 +69,12 @@ class DiscordReviewQueueReadIntegrationTest {
             assertEquals("Report description private test body", ephemeral.getFirst().description());
             assertEquals("PreviewReporter", ephemeral.getFirst().reporterName());
             assertEquals("PreviewTarget", ephemeral.getFirst().targetName());
+            var exact = read.reportForPrivateNotification(reportId).orElseThrow();
+            assertEquals(reportId, exact.reportId());
+            assertEquals("Report description private test body", exact.description());
+            assertEquals("PreviewReporter", exact.reporterName());
+            assertEquals("PreviewTarget", exact.targetName());
+            assertTrue(read.reportForPrivateNotification(UUID.randomUUID()).isEmpty());
         }
     }
 }
