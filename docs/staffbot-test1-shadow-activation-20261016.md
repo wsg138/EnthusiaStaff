@@ -30,6 +30,8 @@ The merged `tools/staffbot-chat-preflight/check.py` from [#642](https://github.c
 - **Sanitized candidate only (never deployed):** **13 PASS, 0 BLOCKED**, exit 0 after exactly those three corrections. The candidate's bot-token field is a fixed *presence marker*, **not the real credential**; its PASS cannot verify any token, online bot, JDA intent, effective guild permission, TLS/HMAC peer or application session.
 - Source suite: 11/11 synthetic regression cases pass; #642 merged to `main` with green hosted CI and zero new Codacy findings.
 
+**Revalidation requirement (2026-10-20):** [#650](https://github.com/wsg138/EnthusiaStaff/pull/650) is now merged. It adds two checks absent from the 2026-10-16 audit: the runtime's declared environment and exact **production SHADOW migration acknowledgement**, and a backend ID located specifically at `network.server-id`. Thus the historical **13/13 candidate PASS is not a current full-preflight PASS**. Any renewed test must pass `--staffbot-environment=production` for a production primary StaffBot or `staging` only for a separately identified staging instance, using freshly captured real private configs; compare the declared flag with the **actual running process**. The preflight now has a dedicated hosted Python regression workflow. Do not infer the current live StaffBot has accepted the migration acknowledgement or that secondary JDA is ready.
+
 These local sanitized candidate files reside in an ignored Windows build/audit directory; they are not server configs, not deployable, and not committed.
 
 ## Three exact candidate changes — TEST only
