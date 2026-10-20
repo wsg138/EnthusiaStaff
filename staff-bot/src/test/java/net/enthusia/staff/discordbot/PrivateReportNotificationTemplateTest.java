@@ -9,6 +9,8 @@ import org.junit.jupiter.api.Test;
 
 final class PrivateReportNotificationTemplateTest {
     private static final String GUILD = "123456789012345678";
+    private static final String CHAT_SPAM = "chat.spam";
+    private static final String MASS_MENTION = "@everyone";
     private static final UUID REPORT_ID =
             UUID.fromString("12345678-1234-1234-1234-123456789abc");
 
@@ -28,7 +30,7 @@ final class PrivateReportNotificationTemplateTest {
 
     @Test
     void optInIsMandatoryEvenForAValidPrivateStaffChannel() {
-        assertFalse(PrivateReportNotificationTemplate.compose(report("chat.spam", "text"),
+        assertFalse(PrivateReportNotificationTemplate.compose(report(CHAT_SPAM, "text"),
                 route(false, false, true, false, false)).isPresent());
     }
 
@@ -44,13 +46,13 @@ final class PrivateReportNotificationTemplateTest {
         assertTrue(valid.eligible());
         assertFalse(mismatch.eligible());
         assertFalse(absent.eligible());
-        assertFalse(PrivateReportNotificationTemplate.compose(report("chat.spam", "text"),
+        assertFalse(PrivateReportNotificationTemplate.compose(report(CHAT_SPAM, "text"),
                 mismatch).isPresent());
     }
 
     @Test
     void publicRoleAndUnexpectedViewersCannotReceiveReportText() {
-        var incident = report("chat.spam", "sensitive body");
+        var incident = report(CHAT_SPAM, "sensitive body");
         assertFalse(PrivateReportNotificationTemplate.compose(incident,
                 route(true, true, true, false, false)).isPresent());
         assertFalse(PrivateReportNotificationTemplate.compose(incident,
@@ -63,7 +65,7 @@ final class PrivateReportNotificationTemplateTest {
 
     @Test
     void approvedPrivateDestinationGetsReadableSafeReportTextAndFullReference() {
-        var incident = report("chat.spam", "[click](https://example.invalid) @everyone 😀");
+        var incident = report(CHAT_SPAM, "[click](https://example.invalid) @everyone 😀");
         String message = PrivateReportNotificationTemplate.compose(incident,
                 route(true, false, true, false, false)).orElseThrow();
         assertTrue(message.contains("Reported player: Target"));
@@ -72,7 +74,7 @@ final class PrivateReportNotificationTemplateTest {
         assertTrue(message.contains("Reference: " + REPORT_ID));
         assertTrue(message.contains("/reports view " + REPORT_ID));
         assertTrue(message.contains("😀"));
-        assertFalse(message.contains("@everyone"));
+        assertFalse(message.contains(MASS_MENTION));
         assertFalse(message.contains("https://"));
         assertFalse(message.contains("]("));
         assertTrue(message.length() < 1200);
@@ -94,11 +96,11 @@ final class PrivateReportNotificationTemplateTest {
     @Test
     void unusualNamesAndStateDoNotBecomeUserMentions() {
         var incident = new DiscordStaffReadRuntime.PendingReport(
-                REPORT_ID, UUID.randomUUID(), "@everyone", "<@&123>",
-                "chat.spam", "@everyone", 1, "report");
+                REPORT_ID, UUID.randomUUID(), MASS_MENTION, "<@&123>",
+                CHAT_SPAM, MASS_MENTION, 1, "report");
         String message = PrivateReportNotificationTemplate.compose(incident,
                 route(true, false, true, false, false)).orElseThrow();
-        assertFalse(message.contains("@everyone"));
+        assertFalse(message.contains(MASS_MENTION));
         assertFalse(message.contains("<@&123>"));
         assertTrue(message.contains("Unknown player"));
         assertTrue(message.contains("Case state: Review"));
