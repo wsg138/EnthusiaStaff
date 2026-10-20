@@ -117,6 +117,10 @@ class ReportStoreIntegrationTest {
             assertEquals("Report description second", messages.messages().getFirst().body());
             assertFalse(messages.hasMore(), "An idempotent replay must not add duplicate messages");
             assertEquals(1L, discordCreationCount(accepted.reportId()));
+            assertEquals(1L, staffBotIntentCount(accepted.reportId(), "REPORT_CREATED"));
+            assertEquals(1L, staffBotIntentCount(accepted.reportId(), "REPORT_MERGED"));
+            assertEquals(2L, inertStaffBotIntentCount(accepted.reportId()));
+            assertEquals(0L, armedStaffBotIntentCount(accepted.reportId()));
         }
     }
 
@@ -569,6 +573,44 @@ class ReportStoreIntegrationTest {
         try (ResultSet result = statement.executeQuery()) {
             requireRow(result, "The count query returned no row");
             return result.getLong(1);
+        }
+    }
+
+    private static long staffBotIntentCount(UUID reportId, String eventType) throws SQLException {
+        try (Connection connection = connection(DATABASE);
+             PreparedStatement statement = connection.prepareStatement("""
+                     SELECT COUNT(*) FROM staffbot_report_notification_intents
+                     WHERE report_id = ? AND event_type = ?
+                     """)) {
+            statement.setBytes(1, uuidBytes(reportId));
+            statement.setString(2, eventType);
+            try (ResultSet result = statement.executeQuery()) {
+                requireRow(result, "The StaffBot event count query returned no row");
+                return result.getLong(1);
+            }
+        }
+    }
+
+    private static long inertStaffBotIntentCount(UUID reportId) throws SQLException {
+        return staffBotStateCount(reportId, "INERT");
+    }
+
+    private static long armedStaffBotIntentCount(UUID reportId) throws SQLException {
+        return staffBotStateCount(reportId, "ARMED");
+    }
+
+    private static long staffBotStateCount(UUID reportId, String state) throws SQLException {
+        try (Connection connection = connection(DATABASE);
+             PreparedStatement statement = connection.prepareStatement("""
+                     SELECT COUNT(*) FROM staffbot_report_notification_intents
+                     WHERE report_id = ? AND state = ?
+                     """)) {
+            statement.setBytes(1, uuidBytes(reportId));
+            statement.setString(2, state);
+            try (ResultSet result = statement.executeQuery()) {
+                requireRow(result, "The StaffBot state count query returned no row");
+                return result.getLong(1);
+            }
         }
     }
 
