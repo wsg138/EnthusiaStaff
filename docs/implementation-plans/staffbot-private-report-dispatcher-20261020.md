@@ -11,7 +11,7 @@ This stacked branch combines:
   report descriptions, and sensitive-category redaction.
 - A package-private `PrivateReportNotificationDispatcher` that demonstrates
   their intended integration behind `Journal`, `ReportReader`, `DestinationVerifier`
-  and `Transport` interfaces. The transport has no JDA implementation.
+  and `Transport` interfaces. A private JDA adapter now implements both interfaces, but remains unregistered and has no production caller.
 
 ## Execution safety
 
@@ -28,12 +28,12 @@ This stacked branch combines:
    uncertain send, lost report, permission change or exception leads to
    `REVIEW_REQUIRED`. Neither the dispatcher nor the ledger auto-retries
    ambiguous messages.
-6. A real future `Transport` MUST perform independent, current JDA permission
-   checks against the owner-approved guild/channel/role, set **zero allowed
-   mentions**, enforce destination/cache completeness, obtain a confirmed
-   Discord message ID, and keep it in a durable audit before acknowledging.
-   The boolean `DestinationProof` in the current template is not authority
-   on its own and is only an injectable test representation.
+6. The unregistered JDA adapter already validates guild/channel/role
+   permissions, enforces member-override cache coverage and sets zero allowed
+   mentions. Before production registration, any confirmed Discord message ID
+   still must be persisted in a durable audit before acknowledging delivery.
+   The boolean destination proof alone is not authority: a live send requires
+   fresh JDA verification against an explicitly owner-approved destination.
 
 ## Tests
 
@@ -43,8 +43,7 @@ single acknowledged send, no retry after uncertainty, permission revocation
 between preflight and send, missing cases and exceptions.
 
 Hosted exact-head StaffBot, MariaDB, static-analysis, coverage and protocol
-checks remain mandatory. The Windows Blackboard host has been temporarily
-unavailable, so no local Windows build is claimed for this change.
+checks remain mandatory. The Windows development host subsequently recovered; local unit tests, integration compilation and the Paper shaded build passed, but hosted Linux/MariaDB validation remains required.
 
 ## Additional isolated delivery transport and read model
 
@@ -72,7 +71,7 @@ Their presence on a branch does **not** activate a notification feature.
 ## Release blockers
 
 Issue #625 is **not closed**: there is no scheduler, configured destination,
-trusted JDA transport, report-by-ID reader wired to StaffBotRuntime, genuine
+approved and registered JDA transport, report-by-ID reader wired to StaffBotRuntime, genuine
 test-channel send, or permission-revocation drill yet. Owner must approve the
 exact private Discord destination and allowed staff roles. Migration V33 must
 be rehearsed on a disposable clone before *any* live database rollout.

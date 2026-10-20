@@ -146,6 +146,24 @@ final class PrivateReportNotificationDispatcherTest {
     }
 
     @Test
+    void rejectedAckAfterConfirmedDiscordSendQuarantinesWithoutRetrying() {
+        var journal = new FakeJournal();
+        journal.acknowledge = false;
+        AtomicInteger sent = new AtomicInteger();
+        var execution = dispatcher(journal, true, () -> destination(true),
+                id -> Optional.of(report()), body -> {
+                    sent.incrementAndGet();
+                    return PrivateReportNotificationDispatcher.Outcome.CONFIRMED;
+                });
+        assertEquals(1, execution.runOnce());
+        assertEquals(1, sent.get());
+        assertEquals(1, journal.acknowledgements);
+        assertEquals(1, journal.quarantines);
+        assertEquals(0, execution.runOnce());
+        assertEquals(1, sent.get());
+    }
+
+    @Test
     void permissionRevocationBetweenPreflightAndSendFailsClosed() {
         var journal = new FakeJournal();
         AtomicInteger checks = new AtomicInteger();
