@@ -61,6 +61,10 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 @Testcontainers
 class ReportStoreIntegrationTest {
     private static final int CONCURRENT_OPERATION_COUNT = 2;
+    private static final String STAFFBOT_WORKER_A = "worker-a";
+    private static final String STAFFBOT_WORKER_B = "worker-b";
+    private static final String STAFFBOT_CREATED = "REPORT_CREATED";
+    private static final String STAFFBOT_TEST_BODY = "synthetic";
 
     @Container
     private static final MariaDBContainer<?> DATABASE = new MariaDBContainer<>("mariadb:11.8.3")
@@ -118,7 +122,7 @@ class ReportStoreIntegrationTest {
             assertEquals("Report description second", messages.messages().getFirst().body());
             assertFalse(messages.hasMore(), "An idempotent replay must not add duplicate messages");
             assertEquals(1L, discordCreationCount(accepted.reportId()));
-            assertEquals(1L, staffBotIntentCount(accepted.reportId(), "REPORT_CREATED"));
+            assertEquals(1L, staffBotIntentCount(accepted.reportId(), STAFFBOT_CREATED));
             assertEquals(1L, staffBotIntentCount(accepted.reportId(), "REPORT_MERGED"));
             assertEquals(2L, inertStaffBotIntentCount(accepted.reportId()));
             assertEquals(0L, armedStaffBotIntentCount(accepted.reportId()));
@@ -134,26 +138,26 @@ class ReportStoreIntegrationTest {
             seedPlayers(reporterId, targetId);
             reportId = accepted(runtime.reportStore().submit(
                     request(reporterId, targetId, "report:intent-lease-" + reporterId,
-                            NOW, "synthetic"))).reportId();
+                            NOW, STAFFBOT_TEST_BODY))).reportId();
         }
         try (HikariDataSource pool = MariaDb.open(databaseConfig(DATABASE))) {
             var intents = new JdbcStaffBotReportIntentStore(pool);
-            assertTrue(intents.claimArmed("worker-a", 2, Duration.ofSeconds(30), NOW).isEmpty());
+            assertTrue(intents.claimArmed(STAFFBOT_WORKER_A, 2, Duration.ofSeconds(30), NOW).isEmpty());
             assertEquals(1L, inertStaffBotIntentCount(reportId));
             armSyntheticIntent(reportId, NOW);
 
-            var claimed = intents.claimArmed("worker-a", 2, Duration.ofSeconds(30), NOW);
+            var claimed = intents.claimArmed(STAFFBOT_WORKER_A, 2, Duration.ofSeconds(30), NOW);
             assertEquals(1, claimed.size());
             assertEquals(reportId, claimed.getFirst().reportId());
-            assertEquals("REPORT_CREATED", claimed.getFirst().eventType());
+            assertEquals(STAFFBOT_CREATED, claimed.getFirst().eventType());
             assertEquals(1, claimed.getFirst().attemptCount());
-            assertFalse(intents.delivered(claimed.getFirst().intentId(), "worker-b",
+            assertFalse(intents.delivered(claimed.getFirst().intentId(), STAFFBOT_WORKER_B,
                     NOW.plusSeconds(2)), "Only the lease owner can acknowledge delivery");
-            assertFalse(intents.delivered(claimed.getFirst().intentId(), "worker-a",
+            assertFalse(intents.delivered(claimed.getFirst().intentId(), STAFFBOT_WORKER_A,
                     NOW.plusSeconds(31)), "An expired lease cannot acknowledge a send");
             assertEquals(1, intents.quarantineExpired(NOW.plusSeconds(31)));
             assertEquals(0, intents.quarantineExpired(NOW.plusSeconds(35)));
-            assertTrue(intents.claimArmed("worker-b", 2, Duration.ofSeconds(30),
+            assertTrue(intents.claimArmed(STAFFBOT_WORKER_B, 2, Duration.ofSeconds(30),
                     NOW.plusSeconds(40)).isEmpty(), "Ambiguous sends must not auto-retry");
             assertEquals(1L, staffBotStateCount(reportId, "REVIEW_REQUIRED"));
         }
@@ -168,16 +172,16 @@ class ReportStoreIntegrationTest {
             seedPlayers(reporterId, targetId);
             reportId = accepted(runtime.reportStore().submit(
                     request(reporterId, targetId, "report:intent-delivered-" + reporterId,
-                            NOW, "synthetic"))).reportId();
+                            NOW, STAFFBOT_TEST_BODY))).reportId();
         }
         try (HikariDataSource pool = MariaDb.open(databaseConfig(DATABASE))) {
             var intents = new JdbcStaffBotReportIntentStore(pool);
             armSyntheticIntent(reportId, NOW);
-            var claim = intents.claimArmed("worker-a", 1, Duration.ofMinutes(1), NOW)
+            var claim = intents.claimArmed(STAFFBOT_WORKER_A, 1, Duration.ofMinutes(1), NOW)
                     .getFirst();
-            assertTrue(intents.delivered(claim.intentId(), "worker-a", NOW.plusSeconds(1)));
-            assertFalse(intents.delivered(claim.intentId(), "worker-a", NOW.plusSeconds(2)));
-            assertFalse(intents.reviewRequired(claim.intentId(), "worker-a"));
+            assertTrue(intents.delivered(claim.intentId(), STAFFBOT_WORKER_A, NOW.plusSeconds(1)));
+            assertFalse(intents.delivered(claim.intentId(), STAFFBOT_WORKER_A, NOW.plusSeconds(2)));
+            assertFalse(intents.reviewRequired(claim.intentId(), STAFFBOT_WORKER_A));
             assertEquals(0, intents.quarantineExpired(NOW.plusSeconds(120)));
             assertEquals(1L, staffBotStateCount(reportId, "DELIVERED"));
         }
