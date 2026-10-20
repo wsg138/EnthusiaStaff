@@ -16,6 +16,7 @@ Use copies of these **existing** configuration sources in an authorized, secure 
 - `--discordsrv-test`: test backend `plugins/DiscordSRV/config.yml`;
 - `--discordsrv-live`: *read-only* SMP DiscordSRV config, used only to detect collisions;
 - `--chat`: the **candidate** chat-only StaffBot properties file (may contain credentials; do not share it);
+- `--staffbot-environment`: **required** running StaffBot environment, `production` or `staging`; this must match the actual process, not merely a filename;
 - `--staffbot-environment-source`: checked-out `staff-bot/src/main/java/net/enthusia/staff/discordbot/StaffBotEnvironment.java`.
 
 Run from the repository root after gathering authorized local config copies:
@@ -26,6 +27,7 @@ python tools/staffbot-chat-preflight/check.py \
   --discordsrv-test PRIVATE_TEST_DISCORDSRV.yml \
   --discordsrv-live PRIVATE_READONLY_SMP_DISCORDSRV.yml \
   --chat PRIVATE_CHAT_BRIDGE.properties \
+  --staffbot-environment production \
   --staffbot-environment-source staff-bot/src/main/java/net/enthusia/staff/discordbot/StaffBotEnvironment.java
 ```
 
@@ -35,7 +37,7 @@ python tools/staffbot-chat-preflight/check.py \
 
 1. The pinned private channel doesn't equal the global, staff or console DiscordSRV destination on test or production.
 2. Paper identifies its backend and has `discord-chat-bridge.mode: SHADOW` (or backward-compatible explicit shadow flag), with the authenticated channel configured.
-3. StaffBot's candidate is **SHADOW**, has **exactly one route** from that Paper backend's `<server-id>/global` to the pinned private channel, has no ingress, and has a distinct chat-only application identity/credential.
+3. StaffBot's candidate is **SHADOW**, has the exact production migration acknowledgement when the running StaffBot environment is `production`, and has **exactly one route** from that Paper backend's `<server-id>/global` to the pinned private channel, has no ingress, and has a distinct chat-only application identity/credential.
 4. Test-server legacy DiscordSRV has Minecraft↔Discord chat forwarding OFF, chat-command execution OFF, and **no console Discord destination**. A disconnected/invalid bot token is **not** an acceptable substitute for this durable containment.
 
 ### Discovered on 2026-10-16
@@ -44,7 +46,7 @@ Read-only inspection showed the current `bloom-test1` Paper server ID is `TEST`,
 
 ### Gates this tool cannot verify
 
-It does not verify connected bot applications, effective Discord channel permissions, readiness messages, live Paper/Velocity peer registration, current running config vs on-disk files, Minecraft Staff Mode, player/privacy boundaries, real item tooltip fidelity, database isolation, or rollback proof. Do not run any private-channel message, real command or role mutation until those independent gates are resolved and the shared test server's users are coordinated.
+It cannot independently prove that `--staffbot-environment` matches the running process or that a live process accepted the migration acknowledgement. It does not verify connected bot applications, effective Discord channel permissions, readiness messages, live Paper/Velocity peer registration, current running config vs on-disk files, Minecraft Staff Mode, player/privacy boundaries, real item tooltip fidelity, database isolation, or rollback proof. Do not run any private-channel message, real command or role mutation until those independent gates are resolved and the shared test server's users are coordinated.
 
 To run the **offline tests** (which use synthetic IDs/credentials only):
 
