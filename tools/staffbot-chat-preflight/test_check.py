@@ -137,6 +137,15 @@ class PreflightTest(unittest.TestCase):
             "Test legacy Minecraft-to-Discord forwarding disabled"
         ])
 
+    def test_unrelated_backend_id_does_not_pass_network_check(self):
+        paper = PAPER.replace(
+            "network:\n  server-id: TEST\n",
+            "some-other-section:\n  server-id: TEST\n",
+        )
+        checks = self.checks(paper=paper)
+        self.assertFalse(checks["Paper reports a non-empty backend ID"])
+        self.assertFalse(checks["StaffBot outbound routes match only this test backend"])
+
     def test_paper_chat_defaults_off(self):
         paper = PAPER.replace("discord-chat-bridge:\n  mode: SHADOW\n", "")
         self.assertFalse(self.checks(paper=paper)[
