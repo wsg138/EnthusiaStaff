@@ -62,7 +62,7 @@ class PreflightTest(unittest.TestCase):
     def test_production_shadow_needs_exact_acknowledgement(self):
         field = (
             "ENTHUSIA_STAFF_BOT_CHAT_BRIDGE_MIGRATION_ACK="
-            "I_ACKNOWLEDGE_PRODUCTION_SHADOW_MIGRATION\\n"
+            "I_ACKNOWLEDGE_PRODUCTION_SHADOW_MIGRATION\n"
         )
         missing = CHAT.replace(field, "")
         self.assertFalse(self.checks(chat=missing)[
@@ -79,7 +79,7 @@ class PreflightTest(unittest.TestCase):
     def test_staging_mode_does_not_require_production_ack(self):
         chat = CHAT.replace(
             "ENTHUSIA_STAFF_BOT_CHAT_BRIDGE_MIGRATION_ACK="
-            "I_ACKNOWLEDGE_PRODUCTION_SHADOW_MIGRATION\\n",
+            "I_ACKNOWLEDGE_PRODUCTION_SHADOW_MIGRATION\n",
             "",
         )
         self.assertTrue(all(self.checks(chat=chat, environment="staging").values()))
