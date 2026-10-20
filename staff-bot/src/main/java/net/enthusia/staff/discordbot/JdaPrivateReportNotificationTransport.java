@@ -11,6 +11,7 @@ import net.dv8tion.jda.api.Permission;
 import net.dv8tion.jda.api.entities.Message;
 import net.dv8tion.jda.api.entities.Role;
 import net.dv8tion.jda.api.entities.channel.concrete.TextChannel;
+import net.dv8tion.jda.api.requests.restaction.MessageCreateAction;
 import net.dv8tion.jda.api.utils.cache.CacheFlag;
 
 /**
@@ -100,12 +101,16 @@ final class JdaPrivateReportNotificationTransport
             TextChannel channel, String message
     ) throws InterruptedException, ExecutionException, TimeoutException {
         // User-created report text must never ping users, roles or @everyone.
-        Message delivered = channel.sendMessage(message)
-                .setAllowedMentions(List.of())
+        Message delivered = privateMessageAction(channel, message)
                 .submit().get(SEND_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS);
         return delivered == null
                 ? PrivateReportNotificationDispatcher.Outcome.UNCERTAIN
                 : PrivateReportNotificationDispatcher.Outcome.CONFIRMED;
+    }
+
+    /** This separate seam permits proof that untrusted descriptions never ping. */
+    static MessageCreateAction privateMessageAction(TextChannel channel, String message) {
+        return channel.sendMessage(message).setAllowedMentions(List.of());
     }
 
     private PrivateReportNotificationTemplate.DestinationProof denied() {
