@@ -98,6 +98,7 @@ public final class JdbcStaffBotReportIntentStore {
     private static void leaseSelected(
             Connection connection, List<ClaimedIntent> selected, String owner, Instant until
     ) throws SQLException {
+        Timestamp leaseExpiration = Timestamp.from(until);
         try (PreparedStatement update = connection.prepareStatement("""
                 UPDATE staffbot_report_notification_intents
                 SET state = 'LEASED', lease_owner = ?, lease_expires_at = ?,
@@ -106,7 +107,7 @@ public final class JdbcStaffBotReportIntentStore {
                 """)) {
             for (ClaimedIntent intent : selected) {
                 update.setString(1, owner);
-                update.setTimestamp(2, Timestamp.from(until));
+                update.setTimestamp(2, leaseExpiration);
                 update.setBytes(3, UuidBytes.toBytes(intent.intentId()));
                 JdbcTransactionSupport.requireSingleUpdate(update.executeUpdate(),
                         "StaffBot intent claim changed concurrently");
