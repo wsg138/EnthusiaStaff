@@ -9,7 +9,10 @@ import java.awt.image.BufferedImage;
 import java.io.ByteArrayOutputStream;
 import java.util.ArrayList;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 import net.enthusia.staff.api.chat.RichChatArtifactRequest;
 import java.util.List;
 import java.util.regex.Pattern;
@@ -126,6 +129,48 @@ class IndependentRichChatArtifactProviderTest {
         assertEquals(List.of(new IndependentRichChatArtifactProvider.Slot(STONE_MATERIAL, 3)),
                 captured.slots());
         assertEquals(1, reads.get());
+    }
+
+    @Test
+    void capturedSnapshotCanRenderAfterFreshnessWindowButBeforeHardExpiry() {
+        RichChatArtifactRequest request = request(ITEM_PLACEHOLDER);
+        assertTrue(IndependentRichChatArtifactProvider.snapshotWindowExpired(request, 12_001L));
+        assertFalse(IndependentRichChatArtifactProvider.shouldDrop(false, request, 12_001L));
+        assertTrue(IndependentRichChatArtifactProvider.shouldDrop(true, request, 11_000L));
+        assertTrue(IndependentRichChatArtifactProvider.shouldDrop(false, request, 50_000L));
+    }
+
+    @Test
+    void closedRendererOrRejectedWorkerCannotRenderOptionalArtifact() {
+        var request = request(ITEM_PLACEHOLDER);
+        assertTrue(IndependentRichChatArtifactProvider.shouldDrop(true, request, 10_100L));
+        CompletableFuture<List<RichChatArtifact>> result = new CompletableFuture<>();
+        AtomicInteger executed = new AtomicInteger();
+        IndependentRichChatArtifactProvider.enqueueSnapshot(
+                command -> {
+                    throw new RejectedExecutionException("queue full");
+                },
+                executed::incrementAndGet,
+                result);
+        assertTrue(result.isDone());
+        assertEquals(List.of(), result.join());
+        assertEquals(0, executed.get());
+    }
+
+    @Test
+    void acceptedWorkerKeepsImmutableSnapshotUntilItsSingleExecution() {
+        AtomicReference<Runnable> queued = new AtomicReference<>();
+        CompletableFuture<List<RichChatArtifact>> result = new CompletableFuture<>();
+        AtomicInteger executed = new AtomicInteger();
+        IndependentRichChatArtifactProvider.enqueueSnapshot(
+                queued::set, () -> {
+                    executed.incrementAndGet();
+                    result.complete(List.of());
+                }, result);
+        assertFalse(result.isDone());
+        queued.get().run();
+        assertEquals(1, executed.get());
+        assertEquals(List.of(), result.join());
     }
 
     private static IndependentRichChatArtifactProvider.MatchRule itemRule() {
