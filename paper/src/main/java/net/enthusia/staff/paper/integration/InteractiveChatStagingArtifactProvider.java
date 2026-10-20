@@ -19,7 +19,6 @@ import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.RejectedExecutionException;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import javax.imageio.ImageIO;
@@ -249,14 +248,14 @@ public final class InteractiveChatStagingArtifactProvider
     public CompletionStage<List<RichChatArtifact>> render(RichChatArtifactRequest request) {
         Objects.requireNonNull(request, "request");
         CompletableFuture<List<RichChatArtifact>> result = new CompletableFuture<>();
-        if (closed || clock.millis() > request.expiresAtEpochMillis()) {
+        if (shouldDrop(closed, clock.millis(), request)) {
             result.complete(List.of());
             return result;
         }
 
         try {
             plugin.getServer().getGlobalRegionScheduler().execute(plugin, () -> {
-                if (closed || clock.millis() > request.expiresAtEpochMillis()) {
+                if (shouldDrop(closed, clock.millis(), request)) {
                     result.complete(List.of());
                     return;
                 }
@@ -286,7 +285,8 @@ public final class InteractiveChatStagingArtifactProvider
             RichChatArtifactRequest request,
             CompletableFuture<List<RichChatArtifact>> result
     ) {
-        if (closed || result.isDone() || clock.millis() > request.expiresAtEpochMillis()) {
+        if (shouldDrop(closed, clock.millis(), request)
+                || result.isDone() || !player.isOnline()) {
             result.complete(List.of());
             return;
         }
@@ -305,19 +305,36 @@ public final class InteractiveChatStagingArtifactProvider
 
         try {
             workers.execute(() -> {
-                if (closed || result.isDone() || clock.millis() > request.expiresAtEpochMillis()) {
+                if (shouldDrop(closed, clock.millis(), request) || result.isDone()) {
                     result.complete(List.of());
                     return;
                 }
                 try {
-                    result.complete(access.render(request.eventId(), snapshot));
+                    List<RichChatArtifact> rendered = access.render(request.eventId(), snapshot);
+                    completeIfActive(closed, clock.millis(), request, result, rendered);
                 } catch (ReflectiveOperationException | RuntimeException failure) {
                     result.complete(List.of());
                 }
             });
-        } catch (RejectedExecutionException failure) {
+        } catch (RuntimeException failure) {
+            // Rendering is optional. Unexpected worker shutdown must not break public text.
             result.complete(List.of());
         }
+    }
+
+    static boolean shouldDrop(boolean closed, long nowMillis, RichChatArtifactRequest request) {
+        return closed || nowMillis >= request.expiresAtEpochMillis();
+    }
+
+    static void completeIfActive(
+            boolean closed,
+            long nowMillis,
+            RichChatArtifactRequest request,
+            CompletableFuture<List<RichChatArtifact>> result,
+            List<RichChatArtifact> rendered
+    ) {
+        result.complete(shouldDrop(closed, nowMillis, request)
+                ? List.of() : List.copyOf(rendered));
     }
 
     @Override
