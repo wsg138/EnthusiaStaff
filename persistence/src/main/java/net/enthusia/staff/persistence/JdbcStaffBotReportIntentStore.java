@@ -78,15 +78,19 @@ public final class JdbcStaffBotReportIntentStore {
             query.setInt(2, limit);
             try (ResultSet rows = query.executeQuery()) {
                 while (rows.next()) {
-                    chosen.add(new ClaimedIntent(
-                            UuidBytes.fromBytes(rows.getBytes("intent_id")),
-                            UuidBytes.fromBytes(rows.getBytes("report_id")),
-                            rows.getString("event_type"),
-                            rows.getInt("attempts") + 1));
+                    chosen.add(readClaimedIntent(rows));
                 }
             }
         }
         return chosen;
+    }
+
+    private static ClaimedIntent readClaimedIntent(ResultSet row) throws SQLException {
+        return new ClaimedIntent(
+                UuidBytes.fromBytes(row.getBytes("intent_id")),
+                UuidBytes.fromBytes(row.getBytes("report_id")),
+                row.getString("event_type"),
+                row.getInt("attempts") + 1);
     }
 
     private static void leaseSelected(
