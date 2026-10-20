@@ -19,6 +19,7 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
+import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.function.BooleanSupplier;
@@ -195,12 +196,12 @@ public final class IndependentRichChatArtifactProvider
     public CompletionStage<List<RichChatArtifact>> render(RichChatArtifactRequest request) {
         Objects.requireNonNull(request, "request");
         CompletableFuture<List<RichChatArtifact>> result = new CompletableFuture<>();
-        if (expired(request)) {
+        if (captureExpired(request)) {
             return CompletableFuture.completedFuture(List.of());
         }
         try {
             plugin.getServer().getGlobalRegionScheduler().execute(plugin, () -> {
-                if (expired(request)) {
+                if (captureExpired(request)) {
                     result.complete(List.of());
                     return;
                 }
@@ -223,7 +224,15 @@ public final class IndependentRichChatArtifactProvider
     }
 
     private boolean expired(RichChatArtifactRequest request) {
-        return closed || snapshotWindowExpired(request, clock.millis());
+        return shouldDrop(closed, request, clock.millis());
+    }
+
+    private boolean captureExpired(RichChatArtifactRequest request) {
+        return expired(request) || snapshotWindowExpired(request, clock.millis());
+    }
+
+    static boolean shouldDrop(boolean closed, RichChatArtifactRequest request, long nowMillis) {
+        return closed || nowMillis >= request.expiresAtEpochMillis();
     }
 
     static boolean snapshotWindowExpired(RichChatArtifactRequest request, long nowMillis) {
@@ -235,7 +244,7 @@ public final class IndependentRichChatArtifactProvider
             Player player, RichChatArtifactRequest request,
             CompletableFuture<List<RichChatArtifact>> result
     ) {
-        if (expired(request) || result.isDone() || !player.isOnline()) {
+        if (captureExpired(request) || result.isDone() || !player.isOnline()) {
             result.complete(List.of());
             return;
         }
@@ -252,8 +261,14 @@ public final class IndependentRichChatArtifactProvider
             result.complete(List.of());
             return;
         }
+        enqueueSnapshot(workers, () -> renderSnapshots(request, jobs, result), result);
+    }
+
+    static void enqueueSnapshot(
+            Executor executor, Runnable render, CompletableFuture<List<RichChatArtifact>> result
+    ) {
         try {
-            workers.execute(() -> renderSnapshots(request, jobs, result));
+            executor.execute(render);
         } catch (RejectedExecutionException failure) {
             result.complete(List.of());
         }
