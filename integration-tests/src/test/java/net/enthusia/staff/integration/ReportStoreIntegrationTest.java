@@ -155,9 +155,14 @@ class ReportStoreIntegrationTest {
                     NOW.plusSeconds(2)), "Only the lease owner can acknowledge delivery");
             assertFalse(intents.delivered(claimed.getFirst().intentId(), STAFFBOT_WORKER_A,
                     NOW.plusSeconds(31)), "An expired lease cannot acknowledge a send");
-            assertEquals(1, intents.quarantineExpired(NOW.plusSeconds(31)));
-            assertEquals(0, intents.quarantineExpired(NOW.plusSeconds(35)));
-            assertTrue(intents.claimArmed(STAFFBOT_WORKER_B, 2, Duration.ofSeconds(30),
+        }
+        // The original worker has stopped. Reopen a fresh connection pool to
+        // prove an abandoned lease cannot send twice after a real restart.
+        try (HikariDataSource restartedPool = MariaDb.open(databaseConfig(DATABASE))) {
+            var restarted = new JdbcStaffBotReportIntentStore(restartedPool);
+            assertEquals(1, restarted.quarantineExpired(NOW.plusSeconds(31)));
+            assertEquals(0, restarted.quarantineExpired(NOW.plusSeconds(35)));
+            assertTrue(restarted.claimArmed(STAFFBOT_WORKER_B, 2, Duration.ofSeconds(30),
                     NOW.plusSeconds(40)).isEmpty(), "Ambiguous sends must not auto-retry");
             assertEquals(1L, staffBotStateCount(reportId, "REVIEW_REQUIRED"));
         }
