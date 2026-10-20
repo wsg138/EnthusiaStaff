@@ -46,6 +46,29 @@ Hosted exact-head StaffBot, MariaDB, static-analysis, coverage and protocol
 checks remain mandatory. The Windows Blackboard host has been temporarily
 unavailable, so no local Windows build is claimed for this change.
 
+## Additional isolated delivery transport and read model
+
+The draft now also includes `JdaPrivateReportNotificationTransport`. It is a
+package-private, **unregistered** JDA adapter using the configured guild,
+private channel and staff role IDs. When explicitly approved by a future
+caller, it fetches current channel/role permission data, refuses missing or
+wrong-guild destinations, requires member-override cache coverage, excludes
+everyone/extra role/member viewers, and rechecks just before send. Any send
+uses `setAllowedMentions(List.of())` (zero pings) and treats timeout, REST
+errors and unknown outcomes as **UNCERTAIN** for journal quarantine.
+Synthetic tests prove disabled and unresolved destinations cannot contact
+Discord. No actual Discord messages are sent by these tests.
+
+An opt-in `reportForPrivateNotification(reportId)` read-only lookup now
+loads only a bounded 256-character excerpt of the original description
+for a committed OPEN/CLAIMED/AWAITING_REVIEW case, by exact UUID. It does
+not load merged reporter evidence, staff action notes, closed cases, or
+any extra snapshots. Hosted MariaDB integration exercises this path.
+The dispatcher must check the private destination before calling it.
+
+All these classes remain disconnected from the running StaffBot process.
+Their presence on a branch does **not** activate a notification feature.
+
 ## Release blockers
 
 Issue #625 is **not closed**: there is no scheduler, configured destination,
