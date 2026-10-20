@@ -332,7 +332,9 @@ public final class IndependentRichChatArtifactProvider
                 }
             }
         } finally {
-            result.complete(List.copyOf(artifacts));
+            // A provider shutdown or hard message expiry invalidates even images
+            // that a worker finished rendering during the same shutdown window.
+            result.complete(expired(request) ? List.of() : List.copyOf(artifacts));
         }
     }
 
