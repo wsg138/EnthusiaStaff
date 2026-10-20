@@ -1,0 +1,31 @@
+name: StaffBot Chat Preflight
+
+on:
+  pull_request:
+    paths:
+      - 'tools/staffbot-chat-preflight/**'
+      - '.github/workflows/staffbot-chat-preflight.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'tools/staffbot-chat-preflight/**'
+      - '.github/workflows/staffbot-chat-preflight.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  python-preflight:
+    name: Private chat configuration regression checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Compile preflight
+        run: python -m compileall -q tools/staffbot-chat-preflight
+      - name: Run isolated synthetic tests
+        run: python -m unittest discover -s tools/staffbot-chat-preflight -p 'test_*.py' -v
