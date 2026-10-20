@@ -11,6 +11,8 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import java.util.List;
 import java.util.ArrayList;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.atomic.AtomicInteger;
 import net.enthusia.staff.api.chat.RichChatArtifact;
 import net.enthusia.staff.api.chat.RichChatArtifactRequest;
 import java.util.UUID;
@@ -58,6 +60,43 @@ class InteractiveChatStagingArtifactProviderTest {
         produced.clear();
         assertEquals(List.of(preview), completed.join());
         assertThrows(UnsupportedOperationException.class, () -> completed.join().clear());
+    }
+
+    @Test
+    void workerRejectionOrShutdownFailsToTextOnlyWithoutRendering() {
+        CompletableFuture<List<RichChatArtifact>> rejected = new CompletableFuture<>();
+        AtomicInteger renders = new AtomicInteger();
+        InteractiveChatStagingArtifactProvider.enqueueSnapshot(
+                task -> { throw new RejectedExecutionException("queue full"); },
+                renders::incrementAndGet, rejected);
+        assertEquals(List.of(), rejected.join());
+        assertEquals(0, renders.get());
+
+        CompletableFuture<List<RichChatArtifact>> terminated = new CompletableFuture<>();
+        InteractiveChatStagingArtifactProvider.enqueueSnapshot(
+                task -> { throw new IllegalStateException("worker terminated"); },
+                renders::incrementAndGet, terminated);
+        assertEquals(List.of(), terminated.join());
+        assertEquals(0, renders.get());
+    }
+
+    @Test
+    void queuedWorkerDoesNotRenderUntilAcceptedActionRuns() {
+        java.util.concurrent.atomic.AtomicReference<Runnable> queued =
+                new java.util.concurrent.atomic.AtomicReference<>();
+        CompletableFuture<List<RichChatArtifact>> pending = new CompletableFuture<>();
+        AtomicInteger executions = new AtomicInteger();
+        InteractiveChatStagingArtifactProvider.enqueueSnapshot(
+                queued::set,
+                () -> {
+                    executions.incrementAndGet();
+                    pending.complete(List.of());
+                },
+                pending);
+        assertFalse(pending.isDone());
+        queued.get().run();
+        assertEquals(1, executions.get());
+        assertEquals(List.of(), pending.join());
     }
 
     private static RichChatArtifactRequest syntheticRequest() {
