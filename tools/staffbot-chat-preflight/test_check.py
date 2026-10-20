@@ -45,6 +45,7 @@ LIVE = (
 )
 CHAT = (
     "ENTHUSIA_STAFF_BOT_CHAT_BRIDGE_MODE=SHADOW\n"
+    "ENTHUSIA_STAFF_BOT_CHAT_BRIDGE_MIGRATION_ACK=I_ACKNOWLEDGE_PRODUCTION_SHADOW_MIGRATION\n"
     f"ENTHUSIA_STAFF_BOT_CHAT_BRIDGE_ROUTES=TEST/global={PIN}\n"
     "ENTHUSIA_STAFF_BOT_PUBLIC_CHAT_APPLICATION_ID=1650000000000000008\n"
     "ENTHUSIA_STAFF_BOT_PUBLIC_CHAT_TOKEN=SYNTHETIC_NONSECRET\n"
@@ -52,11 +53,42 @@ CHAT = (
 
 
 class PreflightTest(unittest.TestCase):
-    def checks(self, paper=PAPER, legacy=LEGACY, live=LIVE, chat=CHAT):
-        return dict(CHECK.evaluate(paper, legacy, live, chat, SOURCE_JAVA))
+    def checks(self, paper=PAPER, legacy=LEGACY, live=LIVE, chat=CHAT, environment="production"):
+        return dict(CHECK.evaluate(paper, legacy, live, chat, SOURCE_JAVA, environment))
 
     def test_valid_private_staging_configuration(self):
         self.assertTrue(all(self.checks().values()))
+
+    def test_production_shadow_needs_exact_acknowledgement(self):
+        field = (
+            "ENTHUSIA_STAFF_BOT_CHAT_BRIDGE_MIGRATION_ACK="
+            "I_ACKNOWLEDGE_PRODUCTION_SHADOW_MIGRATION\\n"
+        )
+        missing = CHAT.replace(field, "")
+        self.assertFalse(self.checks(chat=missing)[
+            "Production SHADOW migration acknowledged when required"
+        ])
+        invalid = CHAT.replace(
+            "I_ACKNOWLEDGE_PRODUCTION_SHADOW_MIGRATION",
+            "I_ACKNOWLEDGE_DISCORDSRV_CHAT_CUTOVER",
+        )
+        self.assertFalse(self.checks(chat=invalid)[
+            "Production SHADOW migration acknowledged when required"
+        ])
+
+    def test_staging_mode_does_not_require_production_ack(self):
+        chat = CHAT.replace(
+            "ENTHUSIA_STAFF_BOT_CHAT_BRIDGE_MIGRATION_ACK="
+            "I_ACKNOWLEDGE_PRODUCTION_SHADOW_MIGRATION\\n",
+            "",
+        )
+        self.assertTrue(all(self.checks(chat=chat, environment="staging").values()))
+
+    def test_environment_must_be_explicitly_recognized(self):
+        with self.assertRaises(ValueError):
+            self.checks(environment="")
+        with self.assertRaises(ValueError):
+            self.checks(environment="PRODUCTION")
 
     def test_actual_smp_route_cannot_serve_test_backend(self):
         mismatched = CHAT.replace("TEST/global", "SMP/global")
