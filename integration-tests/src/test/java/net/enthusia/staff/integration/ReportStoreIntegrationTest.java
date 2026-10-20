@@ -52,6 +52,7 @@ import net.enthusia.staff.domain.report.ReportSubmissionResult;
 import net.enthusia.staff.persistence.MariaDb;
 import net.enthusia.staff.persistence.MariaDbRuntime;
 import net.enthusia.staff.persistence.JdbcReportStore;
+import net.enthusia.staff.persistence.JdbcStaffBotReportIntentStore;
 import org.junit.jupiter.api.Test;
 import org.testcontainers.containers.MariaDBContainer;
 import org.testcontainers.junit.jupiter.Container;
@@ -121,6 +122,64 @@ class ReportStoreIntegrationTest {
             assertEquals(1L, staffBotIntentCount(accepted.reportId(), "REPORT_MERGED"));
             assertEquals(2L, inertStaffBotIntentCount(accepted.reportId()));
             assertEquals(0L, armedStaffBotIntentCount(accepted.reportId()));
+        }
+    }
+
+    @Test
+    void staffBotIntentDeliveryIsInertByDefaultAndLeaseRecoveryRequiresReview() throws SQLException {
+        UUID reporterId = UUID.randomUUID();
+        UUID targetId = UUID.randomUUID();
+        UUID reportId;
+        try (MariaDbRuntime runtime = MariaDb.initialize(databaseConfig(DATABASE))) {
+            seedPlayers(reporterId, targetId);
+            reportId = accepted(runtime.reportStore().submit(
+                    request(reporterId, targetId, "report:intent-lease-" + reporterId,
+                            NOW, "synthetic"))).reportId();
+        }
+        try (HikariDataSource pool = MariaDb.open(databaseConfig(DATABASE))) {
+            var intents = new JdbcStaffBotReportIntentStore(pool);
+            assertTrue(intents.claimArmed("worker-a", 2, Duration.ofSeconds(30), NOW).isEmpty());
+            assertEquals(1L, inertStaffBotIntentCount(reportId));
+            armSyntheticIntent(reportId, NOW);
+
+            var claimed = intents.claimArmed("worker-a", 2, Duration.ofSeconds(30), NOW);
+            assertEquals(1, claimed.size());
+            assertEquals(reportId, claimed.getFirst().reportId());
+            assertEquals("REPORT_CREATED", claimed.getFirst().eventType());
+            assertEquals(1, claimed.getFirst().attemptCount());
+            assertFalse(intents.delivered(claimed.getFirst().intentId(), "worker-b",
+                    NOW.plusSeconds(2)), "Only the lease owner can acknowledge delivery");
+            assertFalse(intents.delivered(claimed.getFirst().intentId(), "worker-a",
+                    NOW.plusSeconds(31)), "An expired lease cannot acknowledge a send");
+            assertEquals(1, intents.quarantineExpired(NOW.plusSeconds(31)));
+            assertEquals(0, intents.quarantineExpired(NOW.plusSeconds(35)));
+            assertTrue(intents.claimArmed("worker-b", 2, Duration.ofSeconds(30),
+                    NOW.plusSeconds(40)).isEmpty(), "Ambiguous sends must not auto-retry");
+            assertEquals(1L, staffBotStateCount(reportId, "REVIEW_REQUIRED"));
+        }
+    }
+
+    @Test
+    void staffBotIntentAcknowledgementIsLeaseBoundAndTerminal() throws SQLException {
+        UUID reporterId = UUID.randomUUID();
+        UUID targetId = UUID.randomUUID();
+        UUID reportId;
+        try (MariaDbRuntime runtime = MariaDb.initialize(databaseConfig(DATABASE))) {
+            seedPlayers(reporterId, targetId);
+            reportId = accepted(runtime.reportStore().submit(
+                    request(reporterId, targetId, "report:intent-delivered-" + reporterId,
+                            NOW, "synthetic"))).reportId();
+        }
+        try (HikariDataSource pool = MariaDb.open(databaseConfig(DATABASE))) {
+            var intents = new JdbcStaffBotReportIntentStore(pool);
+            armSyntheticIntent(reportId, NOW);
+            var claim = intents.claimArmed("worker-a", 1, Duration.ofMinutes(1), NOW)
+                    .getFirst();
+            assertTrue(intents.delivered(claim.intentId(), "worker-a", NOW.plusSeconds(1)));
+            assertFalse(intents.delivered(claim.intentId(), "worker-a", NOW.plusSeconds(2)));
+            assertFalse(intents.reviewRequired(claim.intentId(), "worker-a"));
+            assertEquals(0, intents.quarantineExpired(NOW.plusSeconds(120)));
+            assertEquals(1L, staffBotStateCount(reportId, "DELIVERED"));
         }
     }
 
@@ -573,6 +632,20 @@ class ReportStoreIntegrationTest {
         try (ResultSet result = statement.executeQuery()) {
             requireRow(result, "The count query returned no row");
             return result.getLong(1);
+        }
+    }
+
+    /** Test-only synthetic activation; production exposes NO activation API. */
+    private static void armSyntheticIntent(UUID reportId, Instant when) throws SQLException {
+        try (Connection connection = connection(DATABASE);
+             PreparedStatement update = connection.prepareStatement("""
+                     UPDATE staffbot_report_notification_intents
+                     SET state = 'ARMED', available_at = ?
+                     WHERE report_id = ? AND state = 'INERT'
+                     """)) {
+            update.setTimestamp(1, java.sql.Timestamp.from(when));
+            update.setBytes(2, uuidBytes(reportId));
+            assertEquals(1, update.executeUpdate());
         }
     }
 

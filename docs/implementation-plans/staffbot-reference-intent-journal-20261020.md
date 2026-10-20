@@ -10,13 +10,26 @@ No report description, staff note, snapshots, personal information or other evid
 
 ## Deliberate safety gate
 
-Every new record defaults to `INERT`. This PR implements **no claim loop, promotion, sender, JDA permission checks, or Discord call**. Neither restarting StaffBot nor changing an unrelated config can cause delivery or retroactive backfill. The existence of an intent must never be treated as operator approval.
+Every new record defaults to `INERT`. This PR implements **no scheduled claim loop, promotion, sender, JDA permission checks, or Discord call**. It contains only explicit storage methods for future approved callers. Neither restarting StaffBot nor changing an unrelated config can cause delivery or retroactive backfill. The existence of an intent must never be treated as operator approval.
 
 Future work must deliberately distinguish old `INERT` records from newly authorized intents. A future `ARMED` state requires explicit owner-approved destination and policy, a trusted permission check, an audited activation decision, and a safe policy for ambiguous sends/restart recovery. Expired `LEASED` attempts should enter `REVIEW_REQUIRED`, not silently resend potentially successful Discord messages. This table's state model is preparation, not an implemented delivery machine.
 
 ## Verification and rollout gates
 
 - Hosted exact-head MariaDB integration must exercise new report, merged report, repeated merge submission and verify exactly two intents, both `INERT`, neither `ARMED`.
+- A new `JdbcStaffBotReportIntentStore` implements reference-only `claimArmed`,
+  owner-bound `delivered`, `reviewRequired`, and `quarantineExpired`.
+  **It has no activation method or Discord sender.** The claim function only
+  selects explicitly `ARMED` records; existing `INERT` records remain hidden.
+- Claim uses a bounded READ COMMITTED database transaction with row locks and
+  `SKIP LOCKED`; acknowledgement requires the **same owner** and unexpired
+  lease. Ambiguous/expired leases transition to `REVIEW_REQUIRED` and are
+  never auto-claimed again. This prioritizes avoiding duplicate reports over
+  automatic retries; a future human-authorized reconciliation design is needed.
+- MariaDB integration tests synthesize an ARMED row **only inside disposable
+  Testcontainers** and verify zero default claims, owner mismatch rejection,
+  lease expiry quarantine, no auto-retry, terminal delivery and no re-delivery.
+
 - Hosted baseline tests, static analysis, StaffBot JAR and protocol compatibility must pass. Local Windows development computer access was unavailable (429); no local tests are claimed.
 - Migration V33 must be rehearsed on an isolated database snapshot with backup and rollback steps; it is **not** approved for live MariaDB.
 - Owner selects exact private guild, channel, allowed roles, restricted-category handling, repeat follow-up behavior and staff revocation. Then add runtime claim/dedupe, effective JDA permission validation and synthetic Discord staging tests.
