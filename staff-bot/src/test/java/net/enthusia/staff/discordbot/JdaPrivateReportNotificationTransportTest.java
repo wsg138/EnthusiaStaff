@@ -92,81 +92,93 @@ final class JdaPrivateReportNotificationTransportTest {
 
     @Test
     void authorizedPrivateChannelSendsOnlySyntheticTextWithNoMentions() {
-        ClassLoader loader = Thread.currentThread().getContextClassLoader();
         AtomicReference<Object> mentions = new AtomicReference<>();
-        var delivered = (Message) Proxy.newProxyInstance(
-                loader, new Class<?>[]{Message.class},
-                (proxy, method, args) -> { throw new AssertionError(method.getName()); });
-        var action = (MessageCreateAction) Proxy.newProxyInstance(
-                loader, new Class<?>[]{MessageCreateAction.class},
-                (proxy, method, args) -> {
-                    return switch (method.getName()) {
-                        case "setAllowedMentions" -> {
-                            mentions.set(args[0]);
-                            yield proxy;
-                        }
-                        case "submit" -> CompletableFuture.completedFuture(delivered);
-                        default -> throw new AssertionError(method.getName());
-                    };
-                });
-        var publicRole = (Role) Proxy.newProxyInstance(
-                loader, new Class<?>[]{Role.class},
-                (proxy, method, args) -> {
-                    if ("hasPermission".equals(method.getName())) {
-                        return false;
-                    }
-                    throw new AssertionError(method.getName());
-                });
-        var staffRole = (Role) Proxy.newProxyInstance(
-                loader, new Class<?>[]{Role.class},
-                (proxy, method, args) -> {
-                    if ("hasPermission".equals(method.getName())) {
-                        return true;
-                    }
-                    throw new AssertionError(method.getName());
-                });
-        var guild = (Guild) Proxy.newProxyInstance(
-                loader, new Class<?>[]{Guild.class},
-                (proxy, method, args) -> switch (method.getName()) {
-                    case "getId" -> GUILD;
-                    case "getRoleById" -> staffRole;
-                    case "getPublicRole" -> publicRole;
-                    case "getRoles", "getMemberPermissionOverrides" -> List.of();
-                    default -> throw new AssertionError(method.getName());
-                });
-        var channel = (TextChannel) Proxy.newProxyInstance(
-                loader, new Class<?>[]{TextChannel.class},
-                (proxy, method, args) -> switch (method.getName()) {
-                    case "getGuild" -> guild;
-                    case "getMemberPermissionOverrides" -> List.of();
-                    case "sendMessage" -> {
-                        assertEquals("Synthetic test report", args[0]);
-                        yield action;
-                    }
-                    default -> throw new AssertionError(method.getName());
-                });
-        var self = (SelfUser) Proxy.newProxyInstance(
-                loader, new Class<?>[]{SelfUser.class},
-                (proxy, method, args) -> {
-                    if ("getIdLong".equals(method.getName())) {
-                        return 99L;
-                    }
-                    throw new AssertionError(method.getName());
-                });
-        var api = (JDA) Proxy.newProxyInstance(
-                loader, new Class<?>[]{JDA.class},
-                (proxy, method, args) -> switch (method.getName()) {
-                    case "getTextChannelById" -> channel;
-                    case "getCacheFlags" -> EnumSet.of(CacheFlag.MEMBER_OVERRIDES);
-                    case "getSelfUser" -> self;
-                    default -> throw new AssertionError(method.getName());
-                });
+        var delivered = proxy(Message.class,
+                (instance, method, args) -> { throw new AssertionError(method.getName()); });
+        var action = syntheticAction(mentions, delivered);
+        var guild = syntheticGuild(syntheticRole(false), syntheticRole(true));
+        var channel = syntheticChannel(guild, action);
+        var api = syntheticApi(channel, syntheticSelfUser());
         var sender = new JdaPrivateReportNotificationTransport(
                 api, GUILD, CHANNEL, STAFF_ROLE, true);
+
         assertTrue(sender.verify().eligible());
         assertEquals(PrivateReportNotificationDispatcher.Outcome.CONFIRMED,
                 sender.send("Synthetic test report"));
         assertTrue(((java.util.Collection<?>) mentions.get()).isEmpty());
+    }
+
+    @SuppressWarnings("unchecked")
+    private static <T> T proxy(Class<T> type, java.lang.reflect.InvocationHandler handler) {
+        return (T) Proxy.newProxyInstance(Thread.currentThread().getContextClassLoader(),
+                new Class<?>[]{type}, handler);
+    }
+
+    private static MessageCreateAction syntheticAction(
+            AtomicReference<Object> mentions, Message delivered) {
+        return proxy(MessageCreateAction.class, (instance, method, args) -> {
+            if ("setAllowedMentions".equals(method.getName())) {
+                mentions.set(args[0]);
+                return instance;
+            }
+            if ("submit".equals(method.getName())) {
+                return CompletableFuture.completedFuture(delivered);
+            }
+            throw new AssertionError(method.getName());
+        });
+    }
+
+    private static Role syntheticRole(boolean mayView) {
+        return proxy(Role.class, (instance, method, args) -> {
+            if ("hasPermission".equals(method.getName())) {
+                return mayView;
+            }
+            throw new AssertionError(method.getName());
+        });
+    }
+
+    private static Guild syntheticGuild(Role publicRole, Role staffRole) {
+        return proxy(Guild.class, (instance, method, args) -> switch (method.getName()) {
+            case "getId" -> GUILD;
+            case "getRoleById" -> staffRole;
+            case "getPublicRole" -> publicRole;
+            case "getRoles" -> List.of();
+            default -> throw new AssertionError(method.getName());
+        });
+    }
+
+    private static TextChannel syntheticChannel(Guild guild, MessageCreateAction action) {
+        return proxy(TextChannel.class, (instance, method, args) -> {
+            if ("getGuild".equals(method.getName())) {
+                return guild;
+            }
+            if ("getMemberPermissionOverrides".equals(method.getName())) {
+                return List.of();
+            }
+            if ("sendMessage".equals(method.getName())) {
+                assertEquals("Synthetic test report", args[0]);
+                return action;
+            }
+            throw new AssertionError(method.getName());
+        });
+    }
+
+    private static SelfUser syntheticSelfUser() {
+        return proxy(SelfUser.class, (instance, method, args) -> {
+            if ("getIdLong".equals(method.getName())) {
+                return 99L;
+            }
+            throw new AssertionError(method.getName());
+        });
+    }
+
+    private static JDA syntheticApi(TextChannel channel, SelfUser selfUser) {
+        return proxy(JDA.class, (instance, method, args) -> switch (method.getName()) {
+            case "getTextChannelById" -> channel;
+            case "getCacheFlags" -> EnumSet.of(CacheFlag.MEMBER_OVERRIDES);
+            case "getSelfUser" -> selfUser;
+            default -> throw new AssertionError(method.getName());
+        });
     }
 
     @Test
