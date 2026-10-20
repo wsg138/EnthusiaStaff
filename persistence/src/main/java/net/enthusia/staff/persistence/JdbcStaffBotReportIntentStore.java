@@ -43,52 +43,69 @@ public final class JdbcStaffBotReportIntentStore {
      * never reclaimed automatically: Discord may already have accepted them.
      */
     public List<ClaimedIntent> claimArmed(String owner, int limit, Duration lease, Instant now) {
-        validOwner(owner);
-        if (limit < 1 || limit > MAX_BATCH || lease == null || lease.isZero()
-                || lease.isNegative() || now == null) {
-            throw new IllegalArgumentException("Invalid StaffBot claim arguments");
-        }
+        validateClaim(owner, limit, lease, now);
         Instant until = now.plus(lease);
         return JdbcTransactionSupport.execute(
                 dataSource, "Unable to lease private StaffBot report notifications",
                 Connection.TRANSACTION_READ_COMMITTED,
                 connection -> {
-                    List<ClaimedIntent> chosen = new ArrayList<>();
-                    try (PreparedStatement query = connection.prepareStatement("""
-                            SELECT intent_id, report_id, event_type, attempts
-                            FROM staffbot_report_notification_intents
-                            WHERE state = 'ARMED' AND available_at <= ?
-                            ORDER BY available_at, created_at, intent_id
-                            LIMIT ? FOR UPDATE SKIP LOCKED
-                            """)) {
-                        query.setTimestamp(1, Timestamp.from(now));
-                        query.setInt(2, limit);
-                        try (ResultSet rows = query.executeQuery()) {
-                            while (rows.next()) {
-                                chosen.add(new ClaimedIntent(
-                                        UuidBytes.fromBytes(rows.getBytes("intent_id")),
-                                        UuidBytes.fromBytes(rows.getBytes("report_id")),
-                                        rows.getString("event_type"),
-                                        rows.getInt("attempts") + 1));
-                            }
-                        }
-                    }
-                    try (PreparedStatement update = connection.prepareStatement("""
-                            UPDATE staffbot_report_notification_intents
-                            SET state = 'LEASED', lease_owner = ?, lease_expires_at = ?,
-                                attempts = attempts + 1
-                            WHERE intent_id = ? AND state = 'ARMED'
-                            """)) {
-                        for (ClaimedIntent intent : chosen) {
-                            update.setString(1, owner);
-                            update.setTimestamp(2, Timestamp.from(until));
-                            update.setBytes(3, UuidBytes.toBytes(intent.intentId()));
-                            JdbcTransactionSupport.requireSingleUpdate(update.executeUpdate(),
-                                    "StaffBot intent claim changed concurrently");
-                        }
-                    }
+                    List<ClaimedIntent> chosen = selectArmed(connection, limit, now);
+                    leaseSelected(connection, chosen, owner, until);
                     return List.copyOf(chosen);
                 });
+    }
+
+    private static void validateClaim(String owner, int limit, Duration lease, Instant now) {
+        validOwner(owner);
+        Objects.requireNonNull(now, "now");
+        if (limit < 1 || limit > MAX_BATCH || lease == null || lease.isZero() || lease.isNegative()) {
+            throw new IllegalArgumentException("Invalid StaffBot claim arguments");
+        }
+    }
+
+    private static List<ClaimedIntent> selectArmed(
+            Connection connection, int limit, Instant now
+    ) throws SQLException {
+        List<ClaimedIntent> chosen = new ArrayList<>();
+        try (PreparedStatement query = connection.prepareStatement("""
+                SELECT intent_id, report_id, event_type, attempts
+                FROM staffbot_report_notification_intents
+                WHERE state = 'ARMED' AND available_at <= ?
+                ORDER BY available_at, created_at, intent_id
+                LIMIT ? FOR UPDATE SKIP LOCKED
+                """)) {
+            query.setTimestamp(1, Timestamp.from(now));
+            query.setInt(2, limit);
+            try (ResultSet rows = query.executeQuery()) {
+                while (rows.next()) {
+                    chosen.add(new ClaimedIntent(
+                            UuidBytes.fromBytes(rows.getBytes("intent_id")),
+                            UuidBytes.fromBytes(rows.getBytes("report_id")),
+                            rows.getString("event_type"),
+                            rows.getInt("attempts") + 1));
+                }
+            }
+        }
+        return chosen;
+    }
+
+    private static void leaseSelected(
+            Connection connection, List<ClaimedIntent> selected, String owner, Instant until
+    ) throws SQLException {
+        try (PreparedStatement update = connection.prepareStatement("""
+                UPDATE staffbot_report_notification_intents
+                SET state = 'LEASED', lease_owner = ?, lease_expires_at = ?,
+                    attempts = attempts + 1
+                WHERE intent_id = ? AND state = 'ARMED'
+                """)) {
+            for (ClaimedIntent intent : selected) {
+                update.setString(1, owner);
+                update.setTimestamp(2, Timestamp.from(until));
+                update.setBytes(3, UuidBytes.toBytes(intent.intentId()));
+                JdbcTransactionSupport.requireSingleUpdate(update.executeUpdate(),
+                        "StaffBot intent claim changed concurrently");
+            }
+        }
     }
 
     /**
