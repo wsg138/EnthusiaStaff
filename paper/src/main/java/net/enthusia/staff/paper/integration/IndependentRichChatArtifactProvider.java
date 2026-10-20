@@ -21,7 +21,6 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.RejectedExecutionException;
 import java.util.function.BooleanSupplier;
 import java.util.function.Supplier;
 import java.util.regex.Matcher;
@@ -269,7 +268,8 @@ public final class IndependentRichChatArtifactProvider
     ) {
         try {
             executor.execute(render);
-        } catch (RejectedExecutionException failure) {
+        } catch (RuntimeException failure) {
+            // Fail closed for any executor startup failure, not just a full queue.
             result.complete(List.of());
         }
     }
