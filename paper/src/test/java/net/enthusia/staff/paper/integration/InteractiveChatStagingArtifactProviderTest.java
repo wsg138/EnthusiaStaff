@@ -9,6 +9,10 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import java.util.List;
+import java.util.ArrayList;
+import java.util.concurrent.CompletableFuture;
+import net.enthusia.staff.api.chat.RichChatArtifact;
+import net.enthusia.staff.api.chat.RichChatArtifactRequest;
 import java.util.UUID;
 import java.util.regex.Pattern;
 import org.junit.jupiter.api.Test;
@@ -16,6 +20,54 @@ import org.junit.jupiter.api.Test;
 class InteractiveChatStagingArtifactProviderTest {
 
     private static final Pattern ITEM = Pattern.compile("\\[item\\]");
+
+    @Test
+    void addonRenderBoundaryDropsExpiredOrShutdownPreviews() {
+        RichChatArtifactRequest request = syntheticRequest();
+        assertFalse(InteractiveChatStagingArtifactProvider.shouldDrop(false, 10_999L, request));
+        assertTrue(InteractiveChatStagingArtifactProvider.shouldDrop(false, 11_000L, request));
+        assertTrue(InteractiveChatStagingArtifactProvider.shouldDrop(true, 10_000L, request));
+
+        RichChatArtifact preview = new RichChatArtifact(
+                RichChatArtifact.Kind.ITEM, 0, "icon.png", "image/png", "Item", new byte[]{1});
+        CompletableFuture<List<RichChatArtifact>> inTime = new CompletableFuture<>();
+        InteractiveChatStagingArtifactProvider.completeIfActive(
+                false, 10_999L, request, inTime, List.of(preview));
+        assertEquals(List.of(preview), inTime.join());
+
+        CompletableFuture<List<RichChatArtifact>> late = new CompletableFuture<>();
+        InteractiveChatStagingArtifactProvider.completeIfActive(
+                false, 11_000L, request, late, List.of(preview));
+        assertEquals(List.of(), late.join());
+
+        CompletableFuture<List<RichChatArtifact>> shutDown = new CompletableFuture<>();
+        InteractiveChatStagingArtifactProvider.completeIfActive(
+                true, 10_999L, request, shutDown, List.of(preview));
+        assertEquals(List.of(), shutDown.join());
+    }
+
+    @Test
+    void addonRenderCompletionFreezesReturnedListForWorkerHandoff() {
+        RichChatArtifactRequest request = syntheticRequest();
+        RichChatArtifact preview = new RichChatArtifact(
+                RichChatArtifact.Kind.ITEM, 0, "icon.png", "image/png", "Item", new byte[]{1});
+        var produced = new ArrayList<>(List.of(preview));
+        CompletableFuture<List<RichChatArtifact>> completed = new CompletableFuture<>();
+        InteractiveChatStagingArtifactProvider.completeIfActive(
+                false, 10_999L, request, completed, produced);
+        produced.clear();
+        assertEquals(List.of(preview), completed.join());
+        assertThrows(UnsupportedOperationException.class, () -> completed.join().clear());
+    }
+
+    private static RichChatArtifactRequest syntheticRequest() {
+        return new RichChatArtifactRequest(
+                UUID.fromString("10000000-0000-0000-0000-000000000001"),
+                UUID.fromString("20000000-0000-0000-0000-000000000001"),
+                "Tester", "global", "[item]", 10_000L, 11_000L);
+    }
+
+
 
     @Test
     void tooltipAndIconBundleStayWithinAggregateSizeAndMaximumCount() {
