@@ -11,6 +11,7 @@ import java.util.ArrayList;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import net.enthusia.staff.api.chat.RichChatArtifactRequest;
@@ -155,6 +156,34 @@ class IndependentRichChatArtifactProviderTest {
         assertTrue(result.isDone());
         assertEquals(List.of(), result.join());
         assertEquals(0, executed.get());
+    }
+
+    @Test
+    void workerStartupFailureCompletesTextOnlyWithoutRendering() {
+        CompletableFuture<List<RichChatArtifact>> result = new CompletableFuture<>();
+        AtomicInteger executed = new AtomicInteger();
+        IndependentRichChatArtifactProvider.enqueueSnapshot(
+                command -> {
+                    throw new IllegalStateException("worker already stopped");
+                },
+                executed::incrementAndGet,
+                result);
+        assertEquals(List.of(), result.join());
+        assertEquals(0, executed.get());
+    }
+
+    @Test
+    void quitBetweenChatAndDelayedCaptureDoesNotReadInventory() {
+        AtomicBoolean online = new AtomicBoolean(true);
+        AtomicInteger reads = new AtomicInteger();
+        var inventory = (java.util.function.Supplier<List<IndependentRichChatArtifactProvider.Slot>>) () -> {
+            reads.incrementAndGet();
+            return List.of(new IndependentRichChatArtifactProvider.Slot(STONE_MATERIAL, 1));
+        };
+        online.set(false); // The player quit while an entity-owned callback was queued.
+        assertTrue(IndependentRichChatArtifactProvider.captureJob(
+                itemRule(), online::get, () -> true, ITEM_PLACEHOLDER, inventory).isEmpty());
+        assertEquals(0, reads.get());
     }
 
     @Test
