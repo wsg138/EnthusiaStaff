@@ -45,7 +45,18 @@ final class JdaPrivateReportNotificationTransport
             return denied();
         }
         try {
-            TextChannel channel = jda.getTextChannelById(channelId);
+            return verifyChannel(jda.getTextChannelById(channelId));
+        } catch (RuntimeException unavailable) {
+            return denied();
+        }
+    }
+
+    /** Verify the exact channel instance that will receive the message. */
+    private PrivateReportNotificationTemplate.DestinationProof verifyChannel(TextChannel channel) {
+        if (!ownerApproved) {
+            return denied();
+        }
+        try {
             if (channel == null || !channel.getGuild().getId().equals(guildId)
                     || !jda.getCacheFlags().contains(CacheFlag.MEMBER_OVERRIDES)) {
                 return denied();
@@ -67,13 +78,13 @@ final class JdaPrivateReportNotificationTransport
 
     @Override
     public PrivateReportNotificationDispatcher.Outcome send(String message) {
-        if (message == null || message.isBlank() || message.length() > MAX_MESSAGE_LENGTH
-                || !verify().eligible()) {
+        if (!ownerApproved || message == null || message.isBlank()
+                || message.length() > MAX_MESSAGE_LENGTH) {
             return PrivateReportNotificationDispatcher.Outcome.UNCERTAIN;
         }
         try {
             TextChannel channel = jda.getTextChannelById(channelId);
-            if (channel == null || !verify().eligible()) {
+            if (!verifyChannel(channel).eligible()) {
                 return PrivateReportNotificationDispatcher.Outcome.UNCERTAIN;
             }
             // User-created report text must never ping users, roles or @everyone.
