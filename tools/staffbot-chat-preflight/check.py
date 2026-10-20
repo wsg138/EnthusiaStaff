@@ -102,7 +102,7 @@ def evaluate(
 ) -> list[tuple[str, bool]]:
     pin = private_channel(java_source)
     prop = properties(chat)
-    server_id = yaml_scalar(paper, "server-id")
+    server_id = yaml_scalar(yaml_section(paper, "network"), "server-id")
     routes_raw = prop.get("ENTHUSIA_STAFF_BOT_CHAT_BRIDGE_ROUTES", "")
     routes = [item.strip() for item in routes_raw.split(";") if item.strip()]
     maps_present, outbound_values = legacy_destinations(legacy_test, legacy_live)
