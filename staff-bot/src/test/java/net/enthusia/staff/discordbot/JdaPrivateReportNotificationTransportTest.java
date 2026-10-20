@@ -15,7 +15,7 @@ final class JdaPrivateReportNotificationTransportTest {
 
     private static JDA unavailableDiscord() {
         return (JDA) Proxy.newProxyInstance(
-                JDA.class.getClassLoader(),
+                Thread.currentThread().getContextClassLoader(),
                 new Class<?>[]{JDA.class},
                 (proxy, method, args) -> {
                     if ("getTextChannelById".equals(method.getName())) {

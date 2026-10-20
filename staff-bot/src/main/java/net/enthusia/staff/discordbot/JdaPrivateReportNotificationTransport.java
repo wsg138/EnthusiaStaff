@@ -87,19 +87,25 @@ final class JdaPrivateReportNotificationTransport
             if (!verifyChannel(channel).eligible()) {
                 return PrivateReportNotificationDispatcher.Outcome.UNCERTAIN;
             }
-            // User-created report text must never ping users, roles or @everyone.
-            Message delivered = channel.sendMessage(message)
-                    .setAllowedMentions(List.of())
-                    .submit().get(SEND_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS);
-            return delivered == null
-                    ? PrivateReportNotificationDispatcher.Outcome.UNCERTAIN
-                    : PrivateReportNotificationDispatcher.Outcome.CONFIRMED;
+            return sendConfirmed(channel, message);
         } catch (InterruptedException interrupted) {
             Thread.currentThread().interrupt();
             return PrivateReportNotificationDispatcher.Outcome.UNCERTAIN;
         } catch (ExecutionException | TimeoutException | RuntimeException ambiguous) {
             return PrivateReportNotificationDispatcher.Outcome.UNCERTAIN;
         }
+    }
+
+    private static PrivateReportNotificationDispatcher.Outcome sendConfirmed(
+            TextChannel channel, String message
+    ) throws InterruptedException, ExecutionException, TimeoutException {
+        // User-created report text must never ping users, roles or @everyone.
+        Message delivered = channel.sendMessage(message)
+                .setAllowedMentions(List.of())
+                .submit().get(SEND_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS);
+        return delivered == null
+                ? PrivateReportNotificationDispatcher.Outcome.UNCERTAIN
+                : PrivateReportNotificationDispatcher.Outcome.CONFIRMED;
     }
 
     private PrivateReportNotificationTemplate.DestinationProof denied() {
