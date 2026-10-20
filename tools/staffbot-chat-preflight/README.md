@@ -36,7 +36,7 @@ python tools/staffbot-chat-preflight/check.py \
 ## Rules checked
 
 1. The pinned private channel doesn't equal the global, staff or console DiscordSRV destination on test or production.
-2. Paper identifies its backend and has `discord-chat-bridge.mode: SHADOW` (or backward-compatible explicit shadow flag), with the authenticated channel configured.
+2. Paper identifies its backend in `network.server-id` (not an unrelated YAML key) and has `discord-chat-bridge.mode: SHADOW` (or backward-compatible explicit shadow flag), with the authenticated channel configured.
 3. StaffBot's candidate is **SHADOW**, has the exact production migration acknowledgement when the running StaffBot environment is `production`, and has **exactly one route** from that Paper backend's `<server-id>/global` to the pinned private channel, has no ingress, and has a distinct chat-only application identity/credential.
 4. Test-server legacy DiscordSRV has Minecraft↔Discord chat forwarding OFF, chat-command execution OFF, and **no console Discord destination**. A disconnected/invalid bot token is **not** an acceptable substitute for this durable containment.
 
