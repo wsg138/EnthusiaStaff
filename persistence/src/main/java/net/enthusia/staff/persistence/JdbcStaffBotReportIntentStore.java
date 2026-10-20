@@ -20,6 +20,8 @@ import javax.sql.DataSource;
  */
 public final class JdbcStaffBotReportIntentStore {
     private static final int MAX_BATCH = 10;
+    private static final int MIN_BATCH = 1;
+    private static final int MIN_ATTEMPTS = 1;
     private static final int MAX_OWNER_LENGTH = 128;
     private static final String INTENT_ID_ARGUMENT = "intentId";
     private static final String NOW_ARGUMENT = "now";
@@ -30,7 +32,7 @@ public final class JdbcStaffBotReportIntentStore {
             Objects.requireNonNull(intentId, INTENT_ID_ARGUMENT);
             Objects.requireNonNull(reportId, "reportId");
             Objects.requireNonNull(eventType, "eventType");
-            if (attemptCount < 1) {
+            if (attemptCount < MIN_ATTEMPTS) {
                 throw new IllegalArgumentException("Claim count must be positive");
             }
         }
@@ -60,7 +62,7 @@ public final class JdbcStaffBotReportIntentStore {
     private static void validateClaim(String owner, int limit, Duration lease, Instant now) {
         validOwner(owner);
         Objects.requireNonNull(now, NOW_ARGUMENT);
-        if (limit < 1 || limit > MAX_BATCH || lease == null || lease.isZero() || lease.isNegative()) {
+        if (limit < MIN_BATCH || limit > MAX_BATCH || lease == null || lease.isZero() || lease.isNegative()) {
             throw new IllegalArgumentException("Invalid StaffBot claim arguments");
         }
     }
