@@ -21,11 +21,13 @@ import javax.sql.DataSource;
 public final class JdbcStaffBotReportIntentStore {
     private static final int MAX_BATCH = 10;
     private static final int MAX_OWNER_LENGTH = 128;
+    private static final String INTENT_ID_ARGUMENT = "intentId";
+    private static final String NOW_ARGUMENT = "now";
     private final DataSource dataSource;
 
     public record ClaimedIntent(UUID intentId, UUID reportId, String eventType, int attemptCount) {
         public ClaimedIntent {
-            Objects.requireNonNull(intentId, "intentId");
+            Objects.requireNonNull(intentId, INTENT_ID_ARGUMENT);
             Objects.requireNonNull(reportId, "reportId");
             Objects.requireNonNull(eventType, "eventType");
             if (attemptCount < 1) {
@@ -57,7 +59,7 @@ public final class JdbcStaffBotReportIntentStore {
 
     private static void validateClaim(String owner, int limit, Duration lease, Instant now) {
         validOwner(owner);
-        Objects.requireNonNull(now, "now");
+        Objects.requireNonNull(now, NOW_ARGUMENT);
         if (limit < 1 || limit > MAX_BATCH || lease == null || lease.isZero() || lease.isNegative()) {
             throw new IllegalArgumentException("Invalid StaffBot claim arguments");
         }
@@ -117,9 +119,9 @@ public final class JdbcStaffBotReportIntentStore {
      * Discord's ambiguous timeouts must not call this method.
      */
     public boolean delivered(UUID intentId, String owner, Instant now) {
-        Objects.requireNonNull(intentId, "intentId");
+        Objects.requireNonNull(intentId, INTENT_ID_ARGUMENT);
         validOwner(owner);
-        Objects.requireNonNull(now, "now");
+        Objects.requireNonNull(now, NOW_ARGUMENT);
         return JdbcTransactionSupport.execute(dataSource,
                 "Unable to mark private StaffBot report notification delivered",
                 connection -> {
@@ -141,7 +143,7 @@ public final class JdbcStaffBotReportIntentStore {
 
     /** Quarantine ambiguous/expired leases instead of duplicating Discord sends. */
     public int quarantineExpired(Instant now) {
-        Objects.requireNonNull(now, "now");
+        Objects.requireNonNull(now, NOW_ARGUMENT);
         return JdbcTransactionSupport.execute(dataSource,
                 "Unable to quarantine ambiguous StaffBot report notifications",
                 connection -> {
@@ -159,7 +161,7 @@ public final class JdbcStaffBotReportIntentStore {
 
     /** Explicit quarantine after an uncertain send outcome; never retry blindly. */
     public boolean reviewRequired(UUID intentId, String owner) {
-        Objects.requireNonNull(intentId, "intentId");
+        Objects.requireNonNull(intentId, INTENT_ID_ARGUMENT);
         validOwner(owner);
         return JdbcTransactionSupport.execute(dataSource,
                 "Unable to quarantine private StaffBot report notification",
