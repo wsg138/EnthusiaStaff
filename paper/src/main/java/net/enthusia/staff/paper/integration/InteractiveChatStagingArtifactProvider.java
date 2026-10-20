@@ -303,21 +303,29 @@ public final class InteractiveChatStagingArtifactProvider
             return;
         }
 
+        enqueueSnapshot(workers, () -> {
+            if (shouldDrop(closed, clock.millis(), request) || result.isDone()) {
+                result.complete(List.of());
+                return;
+            }
+            try {
+                List<RichChatArtifact> rendered = access.render(request.eventId(), snapshot);
+                completeIfActive(closed, clock.millis(), request, result, rendered);
+            } catch (ReflectiveOperationException | RuntimeException failure) {
+                result.complete(List.of());
+            }
+        }, result);
+    }
+
+    static void enqueueSnapshot(
+            java.util.concurrent.Executor executor,
+            Runnable render,
+            CompletableFuture<List<RichChatArtifact>> result
+    ) {
         try {
-            workers.execute(() -> {
-                if (shouldDrop(closed, clock.millis(), request) || result.isDone()) {
-                    result.complete(List.of());
-                    return;
-                }
-                try {
-                    List<RichChatArtifact> rendered = access.render(request.eventId(), snapshot);
-                    completeIfActive(closed, clock.millis(), request, result, rendered);
-                } catch (ReflectiveOperationException | RuntimeException failure) {
-                    result.complete(List.of());
-                }
-            });
+            executor.execute(render);
         } catch (RuntimeException failure) {
-            // Rendering is optional. Unexpected worker shutdown must not break public text.
+            // Optional preview failure never prevents delivery of the text message.
             result.complete(List.of());
         }
     }
