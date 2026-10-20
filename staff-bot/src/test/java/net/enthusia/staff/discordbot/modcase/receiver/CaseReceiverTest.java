@@ -153,6 +153,31 @@ class CaseReceiverTest {
     }
 
     @Test
+    void claimedCaseCannotRegressToOpenEvenWithHigherRevision() throws Exception {
+        ReceiverJournal store = journal();
+        CaseReceiver service = receiver(store);
+        assertEquals("ACCEPTED", accept(service, birth()));
+        CaseEvent claim = event("b", "CASE_STATE", CASE, 1, "smp", "CLAIMED");
+        assertEquals("ACCEPTED", accept(service, claim));
+        CaseEvent regress = event("c", "CASE_REVISION", CASE, 2, "smp", "OPEN");
+        assertEquals("REJECTED", accept(service, regress));
+        assertEquals(1, store.cursor(CASE).revision());
+        assertEquals("CLAIMED", store.cursor(CASE).caseState());
+        assertFalse(store.cursor(CASE).needsResync());
+        assertEquals(2, journal().ready("minecraft", "smp", 10, NOW).size());
+        assertEquals("ACCEPTED", accept(service,
+                event("d", "CASE_STATE", CASE, 2, "smp", "CLOSED")));
+        assertEquals("CLOSED", store.cursor(CASE).caseState());
+    }
+
+    @Test
+    void revisionEventCannotForgeAClosureState() {
+        assertThrows(IllegalArgumentException.class,
+                () -> event("c", "CASE_REVISION", CASE, 2, "smp", "CLOSED"));
+        assertDoesNotThrow(() -> event("c", "CASE_STATE", CASE, 2, "smp", "CLOSED"));
+    }
+
+    @Test
     void missedBirthAndOutOfOrderNeedAuthenticatedCurrentSnapshot() throws Exception {
         ReceiverJournal store = journal();
         CaseReceiver service = receiver(store);
