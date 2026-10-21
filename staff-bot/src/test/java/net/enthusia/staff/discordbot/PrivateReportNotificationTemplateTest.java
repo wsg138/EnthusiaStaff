@@ -94,15 +94,29 @@ final class PrivateReportNotificationTemplateTest {
     }
 
     @Test
+    void onlyPendingCaseStatesMayContainOriginalDescriptions() {
+        var destination = route(true, false, true, false, false);
+        for (String state : new String[]{"CLOSED", "RESOLVED", "DISMISSED", "", MASS_MENTION}) {
+            var report = new DiscordStaffReadRuntime.PendingReport(
+                    REPORT_ID, UUID.randomUUID(), "Target", "Reporter",
+                    CHAT_SPAM, state, 1, "HIGHLY-PRIVATE-CASE-TEXT");
+            assertFalse(PrivateReportNotificationTemplate.compose(report, destination).isPresent());
+        }
+        for (String state : new String[]{"OPEN", "CLAIMED", "AWAITING_REVIEW"}) {
+            var report = new DiscordStaffReadRuntime.PendingReport(
+                    REPORT_ID, UUID.randomUUID(), "Target", "Reporter",
+                    CHAT_SPAM, state, 1, "Synthetic original description");
+            assertTrue(PrivateReportNotificationTemplate.compose(report, destination).isPresent());
+        }
+    }
+
+    @Test
     void unusualNamesAndStateDoNotBecomeUserMentions() {
         var incident = new DiscordStaffReadRuntime.PendingReport(
                 REPORT_ID, UUID.randomUUID(), MASS_MENTION, "<@&123>",
                 CHAT_SPAM, MASS_MENTION, 1, "report");
-        String message = PrivateReportNotificationTemplate.compose(incident,
-                route(true, false, true, false, false)).orElseThrow();
-        assertFalse(message.contains(MASS_MENTION));
-        assertFalse(message.contains("<@&123>"));
-        assertTrue(message.contains("Unknown player"));
-        assertTrue(message.contains("Case state: Review"));
+        assertFalse(PrivateReportNotificationTemplate.compose(incident,
+                route(true, false, true, false, false)).isPresent(),
+                "Unknown case states must not send even a sanitized report");
     }
 }

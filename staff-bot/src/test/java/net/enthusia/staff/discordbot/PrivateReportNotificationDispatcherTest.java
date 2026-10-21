@@ -195,6 +195,20 @@ final class PrivateReportNotificationDispatcherTest {
     }
 
     @Test
+    void closedCaseCannotBeDispatchedFromStaleReadModel() {
+        var journal = new FakeJournal();
+        var closedReport = new PendingReport(REPORT_ID, UUID.randomUUID(),
+                "Target", "Reporter", "chat.spam", "CLOSED", 1,
+                "Private closed-case description");
+        var execution = dispatcher(journal, true, () -> destination(true),
+                id -> Optional.of(closedReport),
+                text -> { throw new AssertionError("Closed case must never notify"); });
+        assertEquals(1, execution.runOnce());
+        assertEquals(0, journal.acknowledgements);
+        assertEquals(1, journal.quarantines);
+    }
+
+    @Test
     void wrongReportIdentityNeverLeaksDescriptionIntoDiscord() {
         var journal = new FakeJournal();
         var wrongReport = new PendingReport(UUID.randomUUID(), UUID.randomUUID(),

@@ -131,3 +131,27 @@ test1 operator resolves the legacy shared routes under rollback, chooses
 the approved dedicated private StaffBot test channel/rank, and completes
 the current-role/membership/permission checks. Tests using mock JDA and
 disposable MariaDB are still allowed.
+
+## 2026-10-21 read-only SFTP verification and case-state guard
+
+Read-only pinned-SFTP reads of the currently configured bloom-test1 and
+bloom-smp DiscordSRV settings confirmed all three destination classes
+(global, staff, console) are still identical. Test1's legacy
+Minecraft-to-Discord, Discord-to-Minecraft and console command forwarding
+flags are currently disabled, but its console destination remains present
+and points at the same production destination. The test1 Paper
+EnthusiaStaff configuration has backend TEST, yet still has no
+discord-chat-bridge SHADOW section. No secret value, actual destination ID,
+or credential is recorded here. These are configuration observations only;
+they do not establish runtime or current JDA permission state.
+
+The private report template is independently restricted to report states
+OPEN, CLAIMED and AWAITING_REVIEW; CLOSED, DISMISSED, RESOLVED, blank or
+unrecognized states result in no content rather than a generic
+Review label and stale original report text. Negative tests also show
+that the unregistered dispatcher quarantines a case closed between initial
+intent creation and the eventual read. These checks do not remove the
+requirement for fresh destination/role verification immediately before send.
+
+STOP: Do not use the shared test server for private Discord sends while
+the documented channel collision and SHADOW activation gates remain open.
