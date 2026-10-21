@@ -54,7 +54,8 @@ public final class ReceiverJournal {
 
     private static State validateLoaded(State loaded) throws IOException {
         if (!validHeader(loaded) || !validOperations(loaded)
-                || !validCursors(loaded) || !validJobs(loaded)) {
+                || !validOperationOwners(loaded) || !validCursors(loaded)
+                || !validJobs(loaded)) {
             throw new IOException("corrupt receiver journal");
         }
         return new State(Map.copyOf(loaded.operations()), Map.copyOf(loaded.cases()),
@@ -75,6 +76,14 @@ public final class ReceiverJournal {
         return validKeys && loaded.operations().values().stream()
                 .map(event -> event.caseId() + "/" + event.revision())
                 .distinct().count() == loaded.operations().size();
+    }
+
+    private static boolean validOperationOwners(State loaded) {
+        return loaded.operations().values().stream().allMatch(event -> {
+            Cursor owner = loaded.cases().get(event.caseId());
+            return owner != null && Objects.equals(owner.origin(), event.originPlatform())
+                    && Objects.equals(owner.scope(), event.scopeId());
+        });
     }
 
     private static boolean validCursors(State loaded) {
