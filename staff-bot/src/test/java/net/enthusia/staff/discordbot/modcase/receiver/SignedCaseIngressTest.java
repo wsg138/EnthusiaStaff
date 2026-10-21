@@ -10,6 +10,7 @@ import java.nio.file.Path;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -62,73 +63,95 @@ class SignedCaseIngressTest {
                 GOLDEN, wire()).orElseThrow().status(), "one event cannot be created twice");
     }
 
-    @Test
-    void modifiedBodyIsRejected() throws Exception {
-        String tampered = wire().replace("\"scope_id\":\"smp\"",
-                "\"scope_id\":\"foreign\"");
-        assertTrue(ingress(key(), ISSUED)
-                .receive(ORIGIN, SCOPE, ISSUED, GOLDEN, tampered).isEmpty(),
-                "authenticated body bytes are immutable");
+    @Nested
+    class CallerAndDestinationBinding {
+        @Test
+        void modifiedBodyIsRejected() throws Exception {
+            String tampered = wire().replace("\"scope_id\":\"smp\"",
+                    "\"scope_id\":\"foreign\"");
+            assertTrue(ingress(key(), ISSUED)
+                    .receive(ORIGIN, SCOPE, ISSUED, GOLDEN, tampered).isEmpty(),
+                    "authenticated body bytes are immutable");
+        }
+
+        @Test
+        void wrongClaimedScopeIsRejected() throws Exception {
+            assertTrue(ingress(key(), ISSUED)
+                    .receive(ORIGIN, "foreign", ISSUED, GOLDEN, wire()).isEmpty(),
+                    "a foreign scope is not the receiver's binding");
+        }
+
+        @Test
+        void wrongClaimedOriginIsRejected() throws Exception {
+            assertTrue(ingress(key(), ISSUED)
+                    .receive("discord", SCOPE, ISSUED, GOLDEN, wire()).isEmpty(),
+                    "a foreign platform cannot impersonate this binding");
+        }
+
+        @Test
+        void sameKeyCannotAuthenticateAnotherPrivateGuild() throws Exception {
+            SignedCaseIngress foreignGuild = new SignedCaseIngress(
+                    new ReceiverJournal(directory.resolve("other-guild.json")),
+                    ORIGIN, SCOPE, 888L, key(),
+                    Clock.fixed(Instant.ofEpochSecond(ISSUED), ZoneOffset.UTC));
+            assertTrue(foreignGuild.receive(ORIGIN, SCOPE, ISSUED, GOLDEN, wire()).isEmpty(),
+                    "the exact private guild is part of the signed claims");
+        }
+
+        @Test
+        void wrongKeyIsRejected() throws Exception {
+            byte[] wrong = key();
+            wrong[0] ^= 1;
+            assertTrue(ingress(wrong, ISSUED)
+                    .receive(ORIGIN, SCOPE, ISSUED, GOLDEN, wire()).isEmpty(),
+                    "a different service cannot authenticate");
+        }
     }
 
-    @Test
-    void wrongClaimedScopeIsRejected() throws Exception {
-        assertTrue(ingress(key(), ISSUED)
-                .receive(ORIGIN, "foreign", ISSUED, GOLDEN, wire()).isEmpty(),
-                "a foreign scope is not the receiver's binding");
+    @Nested
+    class SignatureAndClockValidation {
+        @Test
+        void expiredProofIsRejected() throws Exception {
+            assertTrue(ingress(key(), ISSUED + 31)
+                    .receive(ORIGIN, SCOPE, ISSUED, GOLDEN, wire()).isEmpty(),
+                    "old signatures expire");
+        }
+
+        @Test
+        void futureProofIsRejected() throws Exception {
+            assertTrue(ingress(key(), ISSUED - 31)
+                    .receive(ORIGIN, SCOPE, ISSUED, GOLDEN, wire()).isEmpty(),
+                    "future signatures cannot preauthorize an event");
+        }
+
+        @Test
+        void wrongSignatureIsRejected() throws Exception {
+            assertTrue(ingress(key(), ISSUED)
+                    .receive(ORIGIN, SCOPE, ISSUED, "0".repeat(64), wire()).isEmpty(),
+                    "a well-shaped invalid MAC is not authentication");
+        }
+
+        @Test
+        void shortKeyCannotConstructAReceiver() throws Exception {
+            assertThrows(IllegalArgumentException.class,
+                    () -> ingress(new byte[16], ISSUED),
+                    "caller must provision a strong ingress secret");
+        }
+
+        @Test
+        void aDifferentTimestampInsideWindowCannotReuseMac() throws Exception {
+            assertTrue(ingress(key(), ISSUED)
+                    .receive(ORIGIN, SCOPE, ISSUED + 1, GOLDEN, wire()).isEmpty(),
+                    "MAC must bind issued-at, not only enforce freshness");
+        }
+
+        @Test
+        void uppercaseMacIsRejectedBeforeVerification() throws Exception {
+            assertTrue(ingress(key(), ISSUED)
+                    .receive(ORIGIN, SCOPE, ISSUED, GOLDEN.toUpperCase(
+                            java.util.Locale.ROOT), wire()).isEmpty(),
+                    "only strict lowercase hexadecimal MACs are accepted");
+        }
     }
 
-    @Test
-    void wrongClaimedOriginIsRejected() throws Exception {
-        assertTrue(ingress(key(), ISSUED)
-                .receive("discord", SCOPE, ISSUED, GOLDEN, wire()).isEmpty(),
-                "a foreign platform cannot impersonate this binding");
-    }
-
-    @Test
-    void sameKeyCannotAuthenticateAnotherPrivateGuild() throws Exception {
-        SignedCaseIngress foreignGuild = new SignedCaseIngress(
-                new ReceiverJournal(directory.resolve("other-guild.json")),
-                ORIGIN, SCOPE, 888L, key(),
-                Clock.fixed(Instant.ofEpochSecond(ISSUED), ZoneOffset.UTC));
-        assertTrue(foreignGuild.receive(ORIGIN, SCOPE, ISSUED, GOLDEN, wire()).isEmpty(),
-                "the exact private guild is part of the signed claims");
-    }
-
-    @Test
-    void wrongKeyIsRejected() throws Exception {
-        byte[] wrong = key();
-        wrong[0] ^= 1;
-        assertTrue(ingress(wrong, ISSUED)
-                .receive(ORIGIN, SCOPE, ISSUED, GOLDEN, wire()).isEmpty(),
-                "a different service cannot authenticate");
-    }
-
-    @Test
-    void expiredProofIsRejected() throws Exception {
-        assertTrue(ingress(key(), ISSUED + 31)
-                .receive(ORIGIN, SCOPE, ISSUED, GOLDEN, wire()).isEmpty(),
-                "old signatures expire");
-    }
-
-    @Test
-    void futureProofIsRejected() throws Exception {
-        assertTrue(ingress(key(), ISSUED - 31)
-                .receive(ORIGIN, SCOPE, ISSUED, GOLDEN, wire()).isEmpty(),
-                "future signatures cannot preauthorize an event");
-    }
-
-    @Test
-    void wrongSignatureIsRejected() throws Exception {
-        assertTrue(ingress(key(), ISSUED)
-                .receive(ORIGIN, SCOPE, ISSUED, "0".repeat(64), wire()).isEmpty(),
-                "a well-shaped invalid MAC is not authentication");
-    }
-
-    @Test
-    void shortKeyCannotConstructAReceiver() throws Exception {
-        assertThrows(IllegalArgumentException.class,
-                () -> ingress(new byte[16], ISSUED),
-                "caller must provision a strong ingress secret");
-    }
 }
