@@ -56,7 +56,9 @@ public record CaseEvent(int contractVersion, String operationId, String eventTyp
         if ("CASE_CREATED".equals(type)) {
             return revision == 0 && "OPEN".equals(state);
         }
-        return revision > 0 && (!"CASE_STATE".equals(type) || !"OPEN".equals(state));
+        return revision > 0
+                && (!"CASE_STATE".equals(type) || !"OPEN".equals(state))
+                && (!"CASE_REVISION".equals(type) || !"CLOSED".equals(state));
     }
 
     private static boolean validEvidence(List<String> refs) {

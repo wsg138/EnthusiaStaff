@@ -105,6 +105,8 @@ public final class ReceiverJournal {
                 && cursor.scope().equals(event.scopeId())
                 && event.revision() > cursor.revision()
                 && !"CLOSED".equals(cursor.caseState())
+                && !("CLAIMED".equals(cursor.caseState())
+                     && "OPEN".equals(event.caseState()))
                 && (cursor.sawBirth() || !"CASE_CREATED".equals(event.eventType()));
     }
 
