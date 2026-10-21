@@ -1,5 +1,8 @@
 package net.enthusia.staff.discordbot.modcase.receiver;
 
+import java.nio.ByteBuffer;
+import java.nio.charset.CharacterCodingException;
+import java.nio.charset.CodingErrorAction;
 import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
 import java.security.MessageDigest;
@@ -43,6 +46,30 @@ public final class SignedCaseIngress {
         this.guildId = guildId;
         this.secret = Arrays.copyOf(secret, secret.length);
         this.clock = Objects.requireNonNull(clock);
+    }
+
+    /**
+     * Inactive HTTP boundary: verify exact method, route, and strict UTF-8 bytes
+     * before forwarding to the cryptographic envelope validator.
+     * No HTTP handler or route registers this class.
+     */
+    public Optional<CaseAck> receiveRaw(String method, String endpoint,
+                                        String claimedOrigin, String claimedScope,
+                                        long issuedAtSeconds, String signatureHex,
+                                        byte[] rawBody) {
+        if (!METHOD.equals(method) || !ENDPOINT.equals(endpoint)
+                || rawBody == null || rawBody.length > MAX_WIRE_BYTES) {
+            return Optional.empty();
+        }
+        try {
+            String wire = StandardCharsets.UTF_8.newDecoder()
+                    .onMalformedInput(CodingErrorAction.REPORT)
+                    .onUnmappableCharacter(CodingErrorAction.REPORT)
+                    .decode(ByteBuffer.wrap(rawBody)).toString();
+            return receive(claimedOrigin, claimedScope, issuedAtSeconds, signatureHex, wire);
+        } catch (CharacterCodingException exception) {
+            return Optional.empty();
+        }
     }
 
     /**

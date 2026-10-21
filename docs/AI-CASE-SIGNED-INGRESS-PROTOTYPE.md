@@ -15,6 +15,8 @@ HMAC-SHA256 uses the UTF-8 encoding of these eight newline-separated components,
 7. Unix epoch issue time, decimal seconds
 8. Lowercase hex SHA-256 digest of the exact UTF-8 event-body bytes
 
+The optional receiveRaw entry point first checks the exact POST method and fixed route, rejects raw request bodies over 8192 bytes, and uses a strict UTF-8 decoder that rejects malformed sequences rather than silently replacing them. This remains an unregistered API, not a live HTTP endpoint.
+
 The signature is lowercase hex of the 32-byte HMAC output. The verifier uses a constant-time byte comparison, at least 32-byte per-destination secret, immutable receiver origin/scope/guild binding, 30-second absolute clock window and 8192-byte event cap before calling strict canonical CaseEvent.parse and the journal. An invalid proof receives no ACK. A matching authenticated retry with the same canonical event returns DUPLICATE, never a second case.
 
 Unit tests use a synthetic event from the real offline Python API projector and an independently generated deterministic Python hashlib/hmac golden signature. Never reuse that fixture key outside tests.
