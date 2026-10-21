@@ -6,6 +6,8 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.Set;
+import java.util.Map;
+import javax.crypto.spec.SecretKeySpec;
 import org.junit.jupiter.api.Test;
 
 class VelocityStaffBotPeerRouteTest {
@@ -29,6 +31,27 @@ class VelocityStaffBotPeerRouteTest {
         assertThrows(IllegalArgumentException.class,
                 () -> VelocityChannelPeerPolicy.requiredPaperBackends(
                         Set.of(PEER, VelocityStaffBotChatSink.PEER_ID)));
+    }
+
+    @Test
+    void isolatedPeerKeyMustDifferFromProductionStaffBotKey() {
+        byte[] primary = new byte[32];
+        byte[] separate = new byte[32];
+        separate[0] = 1;
+        var production = new SecretKeySpec(primary, "HmacSHA256");
+        var isolated = new SecretKeySpec(separate, "HmacSHA256");
+        VelocityChannelPeerPolicy.validateIndependentStaffBotSecrets(
+                Map.of(VelocityStaffBotChatSink.PEER_ID, production));
+        VelocityChannelPeerPolicy.validateIndependentStaffBotSecrets(
+                Map.of(VelocityStaffBotPeerRoute.TEST_PEER, isolated));
+        VelocityChannelPeerPolicy.validateIndependentStaffBotSecrets(Map.of(
+                VelocityStaffBotChatSink.PEER_ID, production,
+                VelocityStaffBotPeerRoute.TEST_PEER, isolated));
+        assertThrows(IllegalArgumentException.class,
+                () -> VelocityChannelPeerPolicy.validateIndependentStaffBotSecrets(Map.of(
+                        VelocityStaffBotChatSink.PEER_ID, production,
+                        VelocityStaffBotPeerRoute.TEST_PEER,
+                        new SecretKeySpec(primary.clone(), "HmacSHA256"))));
     }
 
     @Test
