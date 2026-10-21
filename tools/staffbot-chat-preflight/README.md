@@ -41,7 +41,7 @@ For the **separate TEST-only** runner, use the same inputs but also include thes
 --velocity-config PRIVATE_READONLY_VELOCITY.properties
 ```
 
-The isolated checks require `channel.enabled=true`, the existing `STAFFBOT` and `TEST` peer mappings, and a separate `STAFFBOT_TEST` mapping using a distinct secret **environment-variable name**. They deliberately do not inspect the secret values or prove that HMAC material differs. Velocity must reject shared key material at startup; bot identity, TLS connectivity, and runtime permissions still need separate proof.
+The isolated checks require `channel.enabled=true`, the existing `STAFFBOT` and `TEST` peer mappings, and a separate `STAFFBOT_TEST` mapping using a secret **environment-variable name distinct from every other configured peer**. They deliberately do not inspect the secret values or prove that HMAC material differs. Velocity must reject shared key material at startup; bot identity, TLS connectivity, and runtime permissions still need separate proof.
 
 **Exit status:** `0` means all config checks passed, `2` means blocked or unreadable. Neither result establishes that a bot is connected or ready.
 
