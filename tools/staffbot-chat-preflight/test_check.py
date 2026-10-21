@@ -92,6 +92,14 @@ class PreflightTest(unittest.TestCase):
             "Velocity distinct STAFFBOT_TEST peer secret identifier configured"
         ])
 
+    def test_isolated_peer_identifier_cannot_match_another_authenticated_backend(self):
+        extra_backend = VELOCITY + (
+            "channel.backend.HUB.secret-environment=ES_CHANNEL_STAFFBOT_TEST_SECRET\n"
+        )
+        self.assertFalse(self.isolated_checks(velocity=extra_backend)[
+            "Velocity distinct STAFFBOT_TEST peer secret identifier configured"
+        ])
+
     def test_isolated_peer_requires_auth_channel_and_main_peers(self):
         disabled = VELOCITY.replace("channel.enabled=true", "channel.enabled=false")
         self.assertFalse(self.isolated_checks(velocity=disabled)[
