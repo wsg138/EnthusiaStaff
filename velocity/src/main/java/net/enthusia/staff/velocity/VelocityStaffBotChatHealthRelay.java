@@ -74,7 +74,13 @@ final class VelocityStaffBotChatHealthRelay {
             return false;
         }
         Set<String> targets = isolatedTest
-                ? Set.of(VelocityStaffBotPeerRoute.TEST_BACKEND) : paperBackendIds;
+                ? Set.of(VelocityStaffBotPeerRoute.TEST_BACKEND)
+                : paperBackendIds.stream()
+                        .filter(id -> !VelocityStaffBotPeerRoute.TEST_BACKEND.equals(id))
+                        .collect(java.util.stream.Collectors.toUnmodifiableSet());
+        if (targets.isEmpty()) {
+            return false;
+        }
         for (String backendId : targets) {
             current.send(
                     backendId,
