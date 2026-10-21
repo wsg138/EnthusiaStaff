@@ -106,6 +106,19 @@ class CaseReceiverTest {
     }
 
     @Test
+    void strictSchemaRejectsWrongTextAndEvidenceShape() throws Exception {
+        CaseReceiver service = receiver(journal());
+        String valid = wire(birth());
+        assertTrue(service.receive(PEER, valid.replace("\"scope_id\":\"smp\"",
+                "\"scope_id\":12")).isEmpty());
+        assertTrue(service.receive(PEER, valid.replace("\"evidence_refs\":[",
+                "\"evidence_refs\":\"not-an-array\"")).isEmpty());
+        assertTrue(service.receive(PEER, valid.replace("\"evidence_refs\":[",
+                "\"evidence_refs\":[false,")).isEmpty());
+        assertNull(journal().cursor(CASE));
+    }
+
+    @Test
     void canonicalCaseUuidIsRequiredInStrictWireParser() throws Exception {
         CaseReceiver service = receiver(journal());
         String valid = wire(birth());
