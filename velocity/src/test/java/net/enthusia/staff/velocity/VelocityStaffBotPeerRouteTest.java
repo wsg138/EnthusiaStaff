@@ -55,6 +55,16 @@ class VelocityStaffBotPeerRouteTest {
     }
 
     @Test
+    void isolatedPeerCannotReusePaperBackendSecret() {
+        byte[] sharedBytes = new byte[32];
+        var shared = new SecretKeySpec(sharedBytes, "HmacSHA256");
+        assertThrows(IllegalArgumentException.class,
+                () -> VelocityChannelPeerPolicy.validateIndependentStaffBotSecrets(
+                        Map.of("TEST", shared, VelocityStaffBotPeerRoute.TEST_PEER,
+                                new SecretKeySpec(sharedBytes.clone(), "HmacSHA256"))));
+    }
+
+    @Test
     void testPeerMustUseTrustedProxyIdentity() {
         assertTrue(VelocityStaffBotPeerRoute.isStaffBotPeer(PEER));
         assertThrows(IllegalArgumentException.class,
