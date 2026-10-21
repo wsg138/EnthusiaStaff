@@ -45,14 +45,24 @@ final class VelocityChannelPeerPolicy {
         if (isolated == null) {
             return;
         }
-        SecretKey production = keys.get(VelocityStaffBotChatSink.PEER_ID);
-        if (production == null) {
-            return;
-        }
         byte[] isolatedBytes = Objects.requireNonNull(isolated.getEncoded(), "isolated key bytes");
-        byte[] productionBytes = Objects.requireNonNull(production.getEncoded(), "production key bytes");
-        if (MessageDigest.isEqual(isolatedBytes, productionBytes)) {
-            throw new IllegalArgumentException("isolated TEST StaffBot peer must have its own secret");
+        try {
+            for (Map.Entry<String, SecretKey> entry : keys.entrySet()) {
+                if (VelocityStaffBotPeerRoute.TEST_PEER.equals(entry.getKey())) {
+                    continue;
+                }
+                byte[] other = Objects.requireNonNull(entry.getValue().getEncoded(), "peer key bytes");
+                try {
+                    if (MessageDigest.isEqual(isolatedBytes, other)) {
+                        throw new IllegalArgumentException(
+                                "isolated TEST StaffBot peer must have a unique secret");
+                    }
+                } finally {
+                    java.util.Arrays.fill(other, (byte) 0);
+                }
+            }
+        } finally {
+            java.util.Arrays.fill(isolatedBytes, (byte) 0);
         }
     }
 
