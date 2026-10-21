@@ -28,6 +28,11 @@ public final class SignedCaseIngress {
     private static final long SKEW_SECONDS = 30;
     private static final Pattern MAC_PATTERN = Pattern.compile("[0-9a-f]{64}");
 
+    /** Untrusted request claims, authenticated only when the MAC matches. */
+    public record Proof(String claimedOrigin, String claimedScope,
+                        long issuedAtSeconds, String signatureHex) {
+    }
+
     private final CaseReceiver receiver;
     private final String origin;
     private final String scope;
@@ -54,9 +59,7 @@ public final class SignedCaseIngress {
      * No HTTP handler or route registers this class.
      */
     public Optional<CaseAck> receiveRaw(String method, String endpoint,
-                                        String claimedOrigin, String claimedScope,
-                                        long issuedAtSeconds, String signatureHex,
-                                        byte[] rawBody) {
+                                        Proof proof, byte[] rawBody) {
         if (!METHOD.equals(method) || !ENDPOINT.equals(endpoint)
                 || rawBody == null || rawBody.length > MAX_WIRE_BYTES) {
             return Optional.empty();
@@ -66,7 +69,7 @@ public final class SignedCaseIngress {
                     .onMalformedInput(CodingErrorAction.REPORT)
                     .onUnmappableCharacter(CodingErrorAction.REPORT)
                     .decode(ByteBuffer.wrap(rawBody)).toString();
-            return receive(claimedOrigin, claimedScope, issuedAtSeconds, signatureHex, wire);
+            return receive(proof, wire);
         } catch (CharacterCodingException exception) {
             return Optional.empty();
         }
@@ -78,23 +81,26 @@ public final class SignedCaseIngress {
      *
      * @return empty on any invalid proof, malformed body or failed journal write
      */
-    public Optional<CaseAck> receive(String claimedOrigin, String claimedScope,
-                                     long issuedAtSeconds, String signatureHex,
-                                     String canonicalWire) {
-        if (!origin.equals(claimedOrigin) || !scope.equals(claimedScope)
-                || signatureHex == null || !MAC_PATTERN.matcher(signatureHex).matches()
-                || canonicalWire == null) {
+    public Optional<CaseAck> receive(Proof proof, String canonicalWire) {
+        if (!validProof(proof) || canonicalWire == null) {
             return Optional.empty();
         }
         byte[] body = canonicalWire.getBytes(StandardCharsets.UTF_8);
-        if (body.length > MAX_WIRE_BYTES || !fresh(issuedAtSeconds)) {
+        if (body.length > MAX_WIRE_BYTES || !fresh(proof.issuedAtSeconds())) {
             return Optional.empty();
         }
-        if (!validMac(issuedAtSeconds, body, signatureHex)) {
+        if (!validMac(proof.issuedAtSeconds(), body, proof.signatureHex())) {
             return Optional.empty();
         }
         return receiver.receive(new CaseReceiver.Peer(true, origin, scope, guildId),
                 canonicalWire);
+    }
+
+    private boolean validProof(Proof proof) {
+        return proof != null && origin.equals(proof.claimedOrigin())
+                && scope.equals(proof.claimedScope())
+                && proof.signatureHex() != null
+                && MAC_PATTERN.matcher(proof.signatureHex()).matches();
     }
 
     private boolean validMac(long issuedAtSeconds, byte[] body, String signatureHex) {

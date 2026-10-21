@@ -47,40 +47,40 @@ class SignedCaseIngressRawWireTest {
 
     @Test
     void exactSignedBytesAreAccepted() throws Exception {
-        CaseAck ack = verifier().receiveRaw(POST, PATH, ORIGIN, SCOPE,
-                ISSUED, SIGNATURE, apiWire()).orElseThrow();
+        CaseAck ack = verifier().receiveRaw(POST, PATH, new SignedCaseIngress.Proof(ORIGIN, SCOPE, ISSUED, SIGNATURE), apiWire()).orElseThrow();
         assertEquals("ACCEPTED", ack.status(), "exact bytes authorize one durable case");
     }
 
     @Test
     void wrongMethodIsRejected() throws Exception {
-        assertTrue(verifier().receiveRaw("GET", PATH, ORIGIN, SCOPE,
-                ISSUED, SIGNATURE, apiWire()).isEmpty(), "signed method is POST");
+        assertTrue(verifier().receiveRaw("GET", PATH, new SignedCaseIngress.Proof(ORIGIN, SCOPE, ISSUED, SIGNATURE), apiWire()).isEmpty(), "signed method is POST");
     }
 
     @Test
     void wrongRouteIsRejected() throws Exception {
-        assertTrue(verifier().receiveRaw(POST, "/v1/other", ORIGIN, SCOPE,
-                ISSUED, SIGNATURE, apiWire()).isEmpty(), "signed route is exact");
+        assertTrue(verifier().receiveRaw(POST, "/v1/other", new SignedCaseIngress.Proof(ORIGIN, SCOPE, ISSUED, SIGNATURE), apiWire()).isEmpty(), "signed route is exact");
     }
 
     @Test
     void malformedUtf8IsRejectedBeforeProcessing() throws Exception {
         byte[] broken = {(byte) 0xc3, (byte) 0x28};
-        assertTrue(verifier().receiveRaw(POST, PATH, ORIGIN, SCOPE,
-                ISSUED, SIGNATURE, broken).isEmpty(), "no replacement-character decoding");
+        assertTrue(verifier().receiveRaw(POST, PATH, new SignedCaseIngress.Proof(ORIGIN, SCOPE, ISSUED, SIGNATURE), broken).isEmpty(), "no replacement-character decoding");
     }
 
     @Test
     void oversizedRawBodyIsRejectedBeforeProcessing() throws Exception {
         byte[] large = new byte[8193];
-        assertTrue(verifier().receiveRaw(POST, PATH, ORIGIN, SCOPE,
-                ISSUED, SIGNATURE, large).isEmpty(), "raw body byte cap is strict");
+        assertTrue(verifier().receiveRaw(POST, PATH, new SignedCaseIngress.Proof(ORIGIN, SCOPE, ISSUED, SIGNATURE), large).isEmpty(), "raw body byte cap is strict");
+    }
+
+    @Test
+    void nullProofCannotBypassAuthentication() throws Exception {
+        assertTrue(verifier().receiveRaw(POST, PATH, null, apiWire()).isEmpty(),
+                "an omitted proof must never create an authenticated case");
     }
 
     @Test
     void nullRawBodyIsRejected() throws Exception {
-        assertTrue(verifier().receiveRaw(POST, PATH, ORIGIN, SCOPE,
-                ISSUED, SIGNATURE, null).isEmpty(), "missing request has no ACK");
+        assertTrue(verifier().receiveRaw(POST, PATH, new SignedCaseIngress.Proof(ORIGIN, SCOPE, ISSUED, SIGNATURE), null).isEmpty(), "missing request has no ACK");
     }
 }

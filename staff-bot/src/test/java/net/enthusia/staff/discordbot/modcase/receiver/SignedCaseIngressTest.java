@@ -51,16 +51,15 @@ class SignedCaseIngressTest {
     @Test
     void pythonGoldenSignatureAuthenticatesActualSyntheticApiEvent() throws Exception {
         CaseAck ack = ingress(key(), ISSUED)
-                .receive(ORIGIN, SCOPE, ISSUED, GOLDEN, wire()).orElseThrow();
+                .receive(new SignedCaseIngress.Proof(ORIGIN, SCOPE, ISSUED, GOLDEN), wire()).orElseThrow();
         assertEquals("ACCEPTED", ack.status(), "the signed case is durably accepted");
     }
 
     @Test
     void exactRetransmissionIsIdempotent() throws Exception {
         SignedCaseIngress service = ingress(key(), ISSUED);
-        service.receive(ORIGIN, SCOPE, ISSUED, GOLDEN, wire()).orElseThrow();
-        assertEquals("DUPLICATE", service.receive(ORIGIN, SCOPE, ISSUED,
-                GOLDEN, wire()).orElseThrow().status(), "one event cannot be created twice");
+        service.receive(new SignedCaseIngress.Proof(ORIGIN, SCOPE, ISSUED, GOLDEN), wire()).orElseThrow();
+        assertEquals("DUPLICATE", service.receive(new SignedCaseIngress.Proof(ORIGIN, SCOPE, ISSUED, GOLDEN), wire()).orElseThrow().status(), "one event cannot be created twice");
     }
 
     @Nested
@@ -70,21 +69,21 @@ class SignedCaseIngressTest {
             String tampered = wire().replace("\"scope_id\":\"smp\"",
                     "\"scope_id\":\"foreign\"");
             assertTrue(ingress(key(), ISSUED)
-                    .receive(ORIGIN, SCOPE, ISSUED, GOLDEN, tampered).isEmpty(),
+                    .receive(new SignedCaseIngress.Proof(ORIGIN, SCOPE, ISSUED, GOLDEN), tampered).isEmpty(),
                     "authenticated body bytes are immutable");
         }
 
         @Test
         void wrongClaimedScopeIsRejected() throws Exception {
             assertTrue(ingress(key(), ISSUED)
-                    .receive(ORIGIN, "foreign", ISSUED, GOLDEN, wire()).isEmpty(),
+                    .receive(new SignedCaseIngress.Proof(ORIGIN, "foreign", ISSUED, GOLDEN), wire()).isEmpty(),
                     "a foreign scope is not the receiver's binding");
         }
 
         @Test
         void wrongClaimedOriginIsRejected() throws Exception {
             assertTrue(ingress(key(), ISSUED)
-                    .receive("discord", SCOPE, ISSUED, GOLDEN, wire()).isEmpty(),
+                    .receive(new SignedCaseIngress.Proof("discord", SCOPE, ISSUED, GOLDEN), wire()).isEmpty(),
                     "a foreign platform cannot impersonate this binding");
         }
 
@@ -94,7 +93,7 @@ class SignedCaseIngressTest {
                     new ReceiverJournal(directory.resolve("other-guild.json")),
                     ORIGIN, SCOPE, 888L, key(),
                     Clock.fixed(Instant.ofEpochSecond(ISSUED), ZoneOffset.UTC));
-            assertTrue(foreignGuild.receive(ORIGIN, SCOPE, ISSUED, GOLDEN, wire()).isEmpty(),
+            assertTrue(foreignGuild.receive(new SignedCaseIngress.Proof(ORIGIN, SCOPE, ISSUED, GOLDEN), wire()).isEmpty(),
                     "the exact private guild is part of the signed claims");
         }
 
@@ -103,7 +102,7 @@ class SignedCaseIngressTest {
             byte[] wrong = key();
             wrong[0] ^= 1;
             assertTrue(ingress(wrong, ISSUED)
-                    .receive(ORIGIN, SCOPE, ISSUED, GOLDEN, wire()).isEmpty(),
+                    .receive(new SignedCaseIngress.Proof(ORIGIN, SCOPE, ISSUED, GOLDEN), wire()).isEmpty(),
                     "a different service cannot authenticate");
         }
     }
@@ -113,21 +112,21 @@ class SignedCaseIngressTest {
         @Test
         void expiredProofIsRejected() throws Exception {
             assertTrue(ingress(key(), ISSUED + 31)
-                    .receive(ORIGIN, SCOPE, ISSUED, GOLDEN, wire()).isEmpty(),
+                    .receive(new SignedCaseIngress.Proof(ORIGIN, SCOPE, ISSUED, GOLDEN), wire()).isEmpty(),
                     "old signatures expire");
         }
 
         @Test
         void futureProofIsRejected() throws Exception {
             assertTrue(ingress(key(), ISSUED - 31)
-                    .receive(ORIGIN, SCOPE, ISSUED, GOLDEN, wire()).isEmpty(),
+                    .receive(new SignedCaseIngress.Proof(ORIGIN, SCOPE, ISSUED, GOLDEN), wire()).isEmpty(),
                     "future signatures cannot preauthorize an event");
         }
 
         @Test
         void wrongSignatureIsRejected() throws Exception {
             assertTrue(ingress(key(), ISSUED)
-                    .receive(ORIGIN, SCOPE, ISSUED, "0".repeat(64), wire()).isEmpty(),
+                    .receive(new SignedCaseIngress.Proof(ORIGIN, SCOPE, ISSUED, "0".repeat(64)), wire()).isEmpty(),
                     "a well-shaped invalid MAC is not authentication");
         }
 
@@ -141,15 +140,15 @@ class SignedCaseIngressTest {
         @Test
         void aDifferentTimestampInsideWindowCannotReuseMac() throws Exception {
             assertTrue(ingress(key(), ISSUED)
-                    .receive(ORIGIN, SCOPE, ISSUED + 1, GOLDEN, wire()).isEmpty(),
+                    .receive(new SignedCaseIngress.Proof(ORIGIN, SCOPE, ISSUED + 1, GOLDEN), wire()).isEmpty(),
                     "MAC must bind issued-at, not only enforce freshness");
         }
 
         @Test
         void uppercaseMacIsRejectedBeforeVerification() throws Exception {
             assertTrue(ingress(key(), ISSUED)
-                    .receive(ORIGIN, SCOPE, ISSUED, GOLDEN.toUpperCase(
-                            java.util.Locale.ROOT), wire()).isEmpty(),
+                    .receive(new SignedCaseIngress.Proof(ORIGIN, SCOPE, ISSUED, GOLDEN.toUpperCase(
+                            java.util.Locale.ROOT)), wire()).isEmpty(),
                     "only strict lowercase hexadecimal MACs are accepted");
         }
     }
