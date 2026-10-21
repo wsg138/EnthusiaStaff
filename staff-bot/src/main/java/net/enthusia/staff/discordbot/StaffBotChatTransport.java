@@ -121,23 +121,8 @@ final class StaffBotChatTransport implements StaffBotChatLifecycle, DiscordChatI
                 artifactStore
         );
         try {
-            SSLContext tls = tlsContext(configuration);
-            PersistentChannelClient client = new PersistentChannelClient(
-                    new PersistentChannelClient.Configuration(
-                            peerId,
-                            configuration.host(),
-                            configuration.port(),
-                            configuration.clientKey(),
-                            StaffBotChatBridgeConfiguration.PROXY_ID,
-                            configuration.proxyKey(),
-                            tls
-                    ),
-                    clock,
-                    envelope -> artifactIngress.accept(envelope)
-                            || ingress.accept(envelope)
-                            || renderedIngress.accept(envelope),
-                    StaffBotChatTransport::connectionState
-            );
+            PersistentChannelClient client = createChannelClient(
+                    configuration, peerId, clock, ingress, artifactIngress, renderedIngress);
             StaffBotChatReadinessPublisher readinessPublisher =
                     new StaffBotChatReadinessPublisher(
                             clock,
@@ -159,6 +144,31 @@ final class StaffBotChatTransport implements StaffBotChatLifecycle, DiscordChatI
             ingress.close();
             throw failure;
         }
+    }
+
+    private static PersistentChannelClient createChannelClient(
+            StaffBotChatBridgeConfiguration configuration,
+            String peerId,
+            Clock clock,
+            StaffBotChatIngress ingress,
+            StaffBotChatArtifactIngress artifactIngress,
+            StaffBotRenderedChatIngress renderedIngress
+    ) {
+        SSLContext tls = tlsContext(configuration);
+        return new PersistentChannelClient(
+                new PersistentChannelClient.Configuration(
+                        peerId,
+                        configuration.host(),
+                        configuration.port(),
+                        configuration.clientKey(),
+                        StaffBotChatBridgeConfiguration.PROXY_ID,
+                        configuration.proxyKey(),
+                        tls),
+                clock,
+                envelope -> artifactIngress.accept(envelope)
+                        || ingress.accept(envelope)
+                        || renderedIngress.accept(envelope),
+                StaffBotChatTransport::connectionState);
     }
 
     boolean connected() {
