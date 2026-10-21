@@ -157,6 +157,12 @@ class VelocityChannelMessageRouterTest {
                     UUID.randomUUID(), ChatBridgeMessages.HEALTH,
                     ChatBridgeMessages.encodeHealth(signal))));
             assertEquals(Set.of(ISOLATED_BACKEND), delivered);
+            delivered.clear();
+            assertTrue(router.handle(envelope(
+                    STAFF_BOT_PEER,
+                    UUID.randomUUID(), ChatBridgeMessages.HEALTH,
+                    ChatBridgeMessages.encodeHealth(signal))));
+            assertEquals(Set.of(PAPER_SERVER), delivered);
             assertFalse(router.handle(envelope(
                     VelocityStaffBotPeerRoute.TEST_PEER,
                     UUID.randomUUID(), "UNAUTHORIZED_FRAME", "{}")));
