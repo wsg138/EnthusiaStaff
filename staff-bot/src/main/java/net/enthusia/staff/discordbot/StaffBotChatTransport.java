@@ -103,23 +103,12 @@ final class StaffBotChatTransport implements StaffBotChatLifecycle, DiscordChatI
         Objects.requireNonNull(renderedEgress, "renderedEgress");
 
         Clock clock = Clock.systemUTC();
-        StaffBotChatIngress ingress = new StaffBotChatIngress(
-                configuration,
-                clock,
-                egress
-        );
+        StaffBotChatIngress ingress = new StaffBotChatIngress(configuration, clock, egress);
         StaffBotChatArtifactStore artifactStore = new StaffBotChatArtifactStore();
         StaffBotChatArtifactIngress artifactIngress = new StaffBotChatArtifactIngress(
-                configuration,
-                clock,
-                artifactStore
-        );
+                configuration, clock, artifactStore);
         StaffBotRenderedChatIngress renderedIngress = new StaffBotRenderedChatIngress(
-                configuration,
-                clock,
-                renderedEgress,
-                artifactStore
-        );
+                configuration, clock, renderedEgress, artifactStore);
         try {
             PersistentChannelClient client = createChannelClient(
                     configuration, peerId, clock, ingress, artifactIngress, renderedIngress);
