@@ -132,6 +132,13 @@ final class PrivateReportNotificationDispatcher {
 
     private void handleClaim(ClaimedIntent intent) {
         try {
+            // A merge intent means there was a new reporter follow-up. The
+            // original description is NOT that follow-up. Do not send stale
+            // body text until owner-approved follow-up sourcing is implemented.
+            if (!"REPORT_CREATED".equals(intent.eventType())) {
+                journal.reviewRequired(intent.intentId(), owner);
+                return;
+            }
             Optional<String> content = prepareMessage(intent.reportId());
             if (content.isEmpty()) {
                 journal.reviewRequired(intent.intentId(), owner);
@@ -156,6 +163,7 @@ final class PrivateReportNotificationDispatcher {
             return Optional.empty();
         }
         return reader.read(reportId)
+                .filter(report -> reportId.equals(report.reportId()))
                 .flatMap(report -> PrivateReportNotificationTemplate.compose(report, destination));
     }
 }

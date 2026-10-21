@@ -36,3 +36,17 @@ permissions, staff roles, and safe test-server isolation are approved.
 recording its ID is still ambiguous. Such a lease must remain
 REVIEW_REQUIRED. Do not automatically resend; a human-authorized
 reconciliation workflow will be required before production activation.
+
+## Additional report provenance gates
+
+V33 journals both original reports and merged reporter follow-ups, but
+the read-only private StaffBot lookup exposes the original description,
+not the new follow-up message. Until an approved and authenticated
+follow-up lookup exists, the unregistered dispatcher rejects and
+quarantines all event types other than REPORT_CREATED. It never
+presents an old original body as a new merged report update.
+
+The fetched report must also have the exact UUID named in the claimed
+intent; a mismatched ID fails closed with no Discord send. Synthetic
+negative tests cover both paths and confirm no text reaches the sender.
+These are deliberate no-send states requiring review, not retries.

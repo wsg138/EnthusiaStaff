@@ -33,7 +33,7 @@ final class PrivateReportNotificationDispatcherTest {
         boolean available = true;
         boolean acknowledge = true;
         String storedMessageId;
-        final ClaimedIntent intent =
+        ClaimedIntent intent =
                 new ClaimedIntent(UUID.randomUUID(), REPORT_ID, "REPORT_CREATED", 1);
 
         @Override
@@ -180,6 +180,32 @@ final class PrivateReportNotificationDispatcherTest {
         assertEquals(1, journal.quarantines);
         assertEquals(0, execution.runOnce());
         assertEquals(1, sent.get());
+    }
+
+    @Test
+    void mergedFollowupCannotBeMisrepresentedAsOriginalReportBody() {
+        var journal = new FakeJournal();
+        journal.intent = new ClaimedIntent(UUID.randomUUID(), REPORT_ID, "REPORT_MERGED", 1);
+        var execution = dispatcher(journal, true, () -> destination(true),
+                id -> { throw new AssertionError("Merged body should not be read"); },
+                text -> { throw new AssertionError("No stale original-body notification"); });
+        assertEquals(1, execution.runOnce());
+        assertEquals(0, journal.acknowledgements);
+        assertEquals(1, journal.quarantines);
+    }
+
+    @Test
+    void wrongReportIdentityNeverLeaksDescriptionIntoDiscord() {
+        var journal = new FakeJournal();
+        var wrongReport = new PendingReport(UUID.randomUUID(), UUID.randomUUID(),
+                "Target", "Reporter", "chat.spam", "OPEN", 1,
+                "Private description from another case");
+        var execution = dispatcher(journal, true, () -> destination(true),
+                id -> Optional.of(wrongReport),
+                text -> { throw new AssertionError("Mismatched report data must not be sent"); });
+        assertEquals(1, execution.runOnce());
+        assertEquals(0, journal.acknowledgements);
+        assertEquals(1, journal.quarantines);
     }
 
     @Test
