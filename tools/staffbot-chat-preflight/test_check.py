@@ -72,7 +72,7 @@ class PreflightTest(unittest.TestCase):
     def test_isolated_peer_only_passes_when_explicitly_configured(self):
         self.assertTrue(all(self.isolated_checks().values()))
         missing = VELOCITY.replace(
-            "channel.backend.STAFFBOT_TEST.secret-environment=ES_CHANNEL_STAFFBOT_TEST_SECRET\\n", ""
+            "channel.backend.STAFFBOT_TEST.secret-environment=ES_CHANNEL_STAFFBOT_TEST_SECRET\n", ""
         )
         self.assertFalse(self.isolated_checks(velocity=missing)[
             "Velocity distinct STAFFBOT_TEST peer secret identifier configured"
@@ -98,7 +98,7 @@ class PreflightTest(unittest.TestCase):
             "Velocity authenticated channel enabled"
         ])
         without_primary = VELOCITY.replace(
-            "channel.backend.STAFFBOT.secret-environment=ES_CHANNEL_STAFFBOT_SECRET\\n", ""
+            "channel.backend.STAFFBOT.secret-environment=ES_CHANNEL_STAFFBOT_SECRET\n", ""
         )
         self.assertFalse(self.isolated_checks(velocity=without_primary)[
             "Velocity retains STAFFBOT and TEST peer mappings"
