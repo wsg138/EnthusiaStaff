@@ -95,19 +95,30 @@ final class PrivateReportNotificationTemplateTest {
 
     @Test
     void onlyPendingCaseStatesMayContainOriginalDescriptions() {
-        var destination = route(true, false, true, false, false);
-        for (String state : new String[]{"CLOSED", "RESOLVED", "DISMISSED", "", MASS_MENTION}) {
-            var report = new DiscordStaffReadRuntime.PendingReport(
-                    REPORT_ID, UUID.randomUUID(), "Target", "Reporter",
-                    CHAT_SPAM, state, 1, "HIGHLY-PRIVATE-CASE-TEXT");
-            assertFalse(PrivateReportNotificationTemplate.compose(report, destination).isPresent());
-        }
-        for (String state : new String[]{"OPEN", "CLAIMED", "AWAITING_REVIEW"}) {
-            var report = new DiscordStaffReadRuntime.PendingReport(
-                    REPORT_ID, UUID.randomUUID(), "Target", "Reporter",
-                    CHAT_SPAM, state, 1, "Synthetic original description");
-            assertTrue(PrivateReportNotificationTemplate.compose(report, destination).isPresent());
-        }
+        assertNoPrivatePreviewForState("CLOSED");
+        assertNoPrivatePreviewForState("RESOLVED");
+        assertNoPrivatePreviewForState("DISMISSED");
+        assertNoPrivatePreviewForState("");
+        assertNoPrivatePreviewForState(MASS_MENTION);
+        assertPrivatePreviewForState("OPEN");
+        assertPrivatePreviewForState("CLAIMED");
+        assertPrivatePreviewForState("AWAITING_REVIEW");
+    }
+
+    private static void assertNoPrivatePreviewForState(String state) {
+        var report = new DiscordStaffReadRuntime.PendingReport(
+                REPORT_ID, UUID.randomUUID(), "Target", "Reporter",
+                CHAT_SPAM, state, 1, "HIGHLY-PRIVATE-CASE-TEXT");
+        assertFalse(PrivateReportNotificationTemplate.compose(report,
+                route(true, false, true, false, false)).isPresent());
+    }
+
+    private static void assertPrivatePreviewForState(String state) {
+        var report = new DiscordStaffReadRuntime.PendingReport(
+                REPORT_ID, UUID.randomUUID(), "Target", "Reporter",
+                CHAT_SPAM, state, 1, "Synthetic original description");
+        assertTrue(PrivateReportNotificationTemplate.compose(report,
+                route(true, false, true, false, false)).isPresent());
     }
 
     @Test
