@@ -824,6 +824,7 @@ public final class EnthusiaStaffVelocityPlugin {
                 peerKeys.put(serverId, secretFromEnvironment(environment)));
         final Set<String> requiredBackends;
         try {
+            VelocityChannelPeerPolicy.validateIndependentStaffBotSecrets(peerKeys);
             requiredBackends = VelocityChannelPeerPolicy.requiredPaperBackends(peerKeys.keySet());
             VelocityChannelPeerPolicy.validateProxyIdentity(loaded.channelProxyId(), peerKeys.keySet());
         } catch (IllegalArgumentException exception) {
