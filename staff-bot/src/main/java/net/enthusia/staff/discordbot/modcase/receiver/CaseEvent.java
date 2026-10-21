@@ -84,8 +84,11 @@ public record CaseEvent(int contractVersion, String operationId, String eventTyp
         if (wire == null || wire.getBytes(java.nio.charset.StandardCharsets.UTF_8).length > 8192) {
             throw new IllegalArgumentException("bounded event required");
         }
-        try {
-            JsonNode node = JSON.readTree(wire);
+        try (JsonParser parser = JSON.createParser(wire)) {
+            JsonNode node = JSON.readTree(parser);
+            if (parser.nextToken() != null) {
+                throw new IllegalArgumentException("trailing canonical event data");
+            }
             validateSchema(node);
             return decode(node);
         } catch (IOException exception) {
