@@ -140,7 +140,7 @@ public final class StaffBotIsolatedChatApplication {
         private final DiscordGateway gateway;
         private final StaffBotChatTransport chat;
         private final long expectedApplicationId;
-        private final CountDownLatch identityReady = new CountDownLatch(1);
+        private final AtomicBoolean discordReady = new AtomicBoolean();
         private final CountDownLatch terminated = new CountDownLatch(1);
         private final AtomicBoolean failed = new AtomicBoolean();
         private final AtomicBoolean closed = new AtomicBoolean();
@@ -189,7 +189,7 @@ public final class StaffBotIsolatedChatApplication {
                     }
                     try {
                         chat.resume();
-                        identityReady.countDown();
+                        discordReady.set(true);
                         LOGGER.log(System.Logger.Level.INFO, "isolated_chat_discord_ready");
                     } catch (RuntimeException failure) {
                         fail("isolated_chat_resume_failed");
@@ -198,6 +198,7 @@ public final class StaffBotIsolatedChatApplication {
 
                 @Override
                 public void onDisconnected() {
+                    discordReady.set(false);
                     chat.pause();
                     LOGGER.log(System.Logger.Level.WARNING, "isolated_chat_disconnected");
                 }
@@ -209,6 +210,7 @@ public final class StaffBotIsolatedChatApplication {
 
                 @Override
                 public void onShutdown() {
+                    discordReady.set(false);
                     if (!closed.get()) {
                         fail("isolated_chat_gateway_stopped");
                     }
@@ -219,6 +221,7 @@ public final class StaffBotIsolatedChatApplication {
 
         private void fail(String reason) {
             if (failed.compareAndSet(false, true)) {
+                discordReady.set(false);
                 chat.pause();
                 gateway.shutdownNow();
                 terminated.countDown();
@@ -229,12 +232,19 @@ public final class StaffBotIsolatedChatApplication {
         boolean awaitReady(Duration timeout) throws InterruptedException {
             long deadline = System.nanoTime() + timeout.toNanos();
             while (System.nanoTime() < deadline && !failed.get() && !closed.get()) {
-                if (identityReady.getCount() == 0 && chat.connected()) {
+                if (readyForSmoke(discordReady.get(), chat.connected(), failed.get(), closed.get())) {
                     return true;
                 }
                 TimeUnit.MILLISECONDS.sleep(100);
             }
             return false;
+        }
+
+        static boolean readyForSmoke(
+                boolean discordReady, boolean transportConnected,
+                boolean failed, boolean closed
+        ) {
+            return discordReady && transportConnected && !failed && !closed;
         }
 
         boolean failed() {
@@ -248,6 +258,7 @@ public final class StaffBotIsolatedChatApplication {
         @Override
         public void close() {
             if (closed.compareAndSet(false, true)) {
+                discordReady.set(false);
                 chat.pause();
                 gateway.shutdownNow();
                 chat.close();

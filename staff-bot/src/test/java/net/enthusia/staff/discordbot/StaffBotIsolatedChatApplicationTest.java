@@ -49,6 +49,20 @@ class StaffBotIsolatedChatApplicationTest {
     }
 
     @Test
+    void smokeReadinessRevokesImmediatelyWhenDiscordDisconnects() {
+        assertTrue(StaffBotIsolatedChatApplication.IsolatedRuntime.readyForSmoke(
+                true, true, false, false));
+        assertFalse(StaffBotIsolatedChatApplication.IsolatedRuntime.readyForSmoke(
+                false, true, false, false));
+        assertFalse(StaffBotIsolatedChatApplication.IsolatedRuntime.readyForSmoke(
+                true, false, false, false));
+        assertFalse(StaffBotIsolatedChatApplication.IsolatedRuntime.readyForSmoke(
+                true, true, true, false));
+        assertFalse(StaffBotIsolatedChatApplication.IsolatedRuntime.readyForSmoke(
+                true, true, false, true));
+    }
+
+    @Test
     void onlyOutboundTestGlobalToPinnedPrivateChannelIsAccepted() {
         var selected = StaffBotIsolatedChatApplication.select(validValues());
         assertEquals(StaffBotChatBridgeConfiguration.Mode.SHADOW, selected.bridge().mode());
