@@ -27,6 +27,7 @@ import org.junit.jupiter.api.Test;
 class VelocityChannelMessageRouterTest {
     private static final long NOW = 1_800_000_000_000L;
     private static final String PAPER_SERVER = "SMP";
+    private static final String ISOLATED_BACKEND = "TEST";
     private static final String STAFF_BOT_PEER = "STAFFBOT";
     private static final String LOGICAL_CHANNEL = "global";
     private static final Clock CLOCK = Clock.fixed(Instant.ofEpochMilli(NOW), ZoneOffset.UTC);
@@ -134,7 +135,7 @@ class VelocityChannelMessageRouterTest {
     void isolatedStaffBotHealthOnlyTargetsTestBackend() {
         java.util.Set<String> delivered = new java.util.HashSet<>();
         VelocityStaffBotChatHealthRelay healthRelay = new VelocityStaffBotChatHealthRelay(
-                Set.of("TEST", PAPER_SERVER), CLOCK,
+                Set.of(ISOLATED_BACKEND, PAPER_SERVER), CLOCK,
                 (peerId, id, type, body, timeout) -> {
                     delivered.add(peerId);
                     return java.util.concurrent.CompletableFuture.completedFuture(
@@ -145,9 +146,9 @@ class VelocityChannelMessageRouterTest {
         VelocityRenderedChatBridgeRelay rendered =
                 new VelocityRenderedChatBridgeRelay(CLOCK, 8, 32);
         VelocityDiscordChatIngressRelay inbound =
-                new VelocityDiscordChatIngressRelay(Set.of("TEST", PAPER_SERVER), CLOCK, 8, 32);
+                new VelocityDiscordChatIngressRelay(Set.of(ISOLATED_BACKEND, PAPER_SERVER), CLOCK, 8, 32);
         VelocityChannelMessageRouter router = new VelocityChannelMessageRouter(
-                Set.of("TEST", PAPER_SERVER), relay, artifacts, rendered, inbound,
+                Set.of(ISOLATED_BACKEND, PAPER_SERVER), relay, artifacts, rendered, inbound,
                 healthRelay, message -> true);
         try {
             var signal = new ChatBridgeHealthMessage(true, NOW, NOW + 15_000L);
@@ -155,7 +156,7 @@ class VelocityChannelMessageRouterTest {
                     VelocityStaffBotPeerRoute.TEST_PEER,
                     UUID.randomUUID(), ChatBridgeMessages.HEALTH,
                     ChatBridgeMessages.encodeHealth(signal))));
-            assertEquals(Set.of("TEST"), delivered);
+            assertEquals(Set.of(ISOLATED_BACKEND), delivered);
             assertFalse(router.handle(envelope(
                     VelocityStaffBotPeerRoute.TEST_PEER,
                     UUID.randomUUID(), "UNAUTHORIZED_FRAME", "{}")));
