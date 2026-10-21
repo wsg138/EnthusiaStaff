@@ -3,7 +3,9 @@ package net.enthusia.staff.discordbot.modcase.receiver;
 import static org.junit.jupiter.api.Assertions.*;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
 import java.util.LinkedHashMap;
@@ -16,13 +18,16 @@ class CaseReceiverTest {
     @TempDir Path dir;
     private static final String CASE = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee";
     private static final String OTHER = "bbbbbbbb-bbbb-4ccc-8ddd-eeeeeeeeeeee";
+    private static final String JOURNAL_NAME = "synthetic-receiver.json";
+    private static final String REVISION_FIELD = "revision";
+    private static final String CASES_FIELD = "cases";
     private static final Instant NOW = Instant.parse("2026-10-15T01:01:00Z");
     private static final CaseReceiver.Peer PEER =
             new CaseReceiver.Peer(true, "minecraft", "smp", 12345L);
     private final ObjectMapper json = new ObjectMapper();
 
     private ReceiverJournal journal() throws IOException {
-        return new ReceiverJournal(dir.resolve("synthetic-receiver.json"));
+        return new ReceiverJournal(dir.resolve(JOURNAL_NAME));
     }
 
     private CaseReceiver receiver(ReceiverJournal journal) {
@@ -43,7 +48,7 @@ class CaseReceiverTest {
         fields.put("operation_id", e.operationId());
         fields.put("event_type", e.eventType());
         fields.put("case_id", e.caseId());
-        fields.put("revision", e.revision());
+        fields.put(REVISION_FIELD, e.revision());
         fields.put("origin_platform", e.originPlatform());
         fields.put("scope_id", e.scopeId());
         fields.put("case_state", e.caseState());
@@ -283,8 +288,8 @@ class CaseReceiverTest {
     void acknowledgementHasExactPublicWireAllowlist() throws Exception {
         CaseAck ack = receiver(journal()).receive(PEER, wire(birth())).orElseThrow();
         assertEquals(java.util.Set.of("status", "operation_id", "event_type", "case_id",
-                "revision", "origin_platform", "scope_id"), ack.toWire().keySet());
-        assertEquals(0L, ack.toWire().get("revision"));
+                REVISION_FIELD, "origin_platform", "scope_id"), ack.toWire().keySet());
+        assertEquals(0L, ack.toWire().get(REVISION_FIELD));
         assertFalse(ack.toWire().containsKey("evidence_refs"));
     }
 
@@ -312,6 +317,107 @@ class CaseReceiverTest {
             assertTrue(b.get());
             assertFalse(store.confirm(job.id(), job.operationId(), "mock:2"));
         }
+    }
+
+    private ObjectNode savedJournal() throws IOException {
+        return (ObjectNode) json.readTree(Files.readString(
+                dir.resolve(JOURNAL_NAME)));
+    }
+
+    private void replaceSavedJournal(ObjectNode value) throws IOException {
+        Files.writeString(dir.resolve(JOURNAL_NAME),
+                json.writeValueAsString(value));
+    }
+
+    @Test
+    void restartRejectsOperationKeyThatDoesNotMatchPersistedEvent() throws Exception {
+        accept(receiver(journal()), birth());
+        ObjectNode state = savedJournal();
+        ObjectNode operations = (ObjectNode) state.path("operations");
+        operations.set("f".repeat(64), operations.remove(birth().operationId()));
+        replaceSavedJournal(state);
+        assertThrows(IOException.class, this::journal);
+    }
+
+    @Test
+    void restartRejectsDifferentOperationAtAnExistingRevision() throws Exception {
+        accept(receiver(journal()), birth());
+        ObjectNode state = savedJournal();
+        ObjectNode operations = (ObjectNode) state.path("operations");
+        ObjectNode duplicate = ((ObjectNode) operations.path(birth().operationId())).deepCopy();
+        duplicate.put("operationId", "f".repeat(64));
+        operations.set("f".repeat(64), duplicate);
+        replaceSavedJournal(state);
+        assertThrows(IOException.class, this::journal);
+    }
+
+    @Test
+    void restartRejectsCursorWithFalseCurrentRevision() throws Exception {
+        accept(receiver(journal()), birth());
+        ObjectNode state = savedJournal();
+        ((ObjectNode) state.path(CASES_FIELD).path(CASE)).put(REVISION_FIELD, 99);
+        replaceSavedJournal(state);
+        assertThrows(IOException.class, this::journal);
+    }
+
+    @Test
+    void restartRejectsCursorRollbackAfterAClosedCase() throws Exception {
+        ReceiverJournal store = journal();
+        CaseReceiver service = receiver(store);
+        assertEquals("ACCEPTED", accept(service, birth()));
+        assertEquals("ACCEPTED", accept(service,
+                event("b", "CASE_STATE", CASE, 1, "smp", "CLAIMED")));
+        assertEquals("ACCEPTED", accept(service,
+                event("c", "CASE_STATE", CASE, 2, "smp", "CLOSED")));
+
+        ObjectNode state = savedJournal();
+        ObjectNode cursor = (ObjectNode) state.path(CASES_FIELD).path(CASE);
+        cursor.put("operationId", birth().operationId());
+        cursor.put(REVISION_FIELD, 0);
+        cursor.put("caseState", "OPEN");
+        replaceSavedJournal(state);
+        assertThrows(IOException.class, this::journal);
+    }
+
+    @Test
+    void restartRejectsOrphanedEventWithMissingCaseCursor() throws Exception {
+        accept(receiver(journal()), birth());
+        ObjectNode state = savedJournal();
+        ((ObjectNode) state.path(CASES_FIELD)).remove(CASE);
+        replaceSavedJournal(state);
+        assertThrows(IOException.class, this::journal);
+    }
+
+    @Test
+    void restartRejectsJobWithUnownedOperation() throws Exception {
+        accept(receiver(journal()), birth());
+        ObjectNode state = savedJournal();
+        ObjectNode jobs = (ObjectNode) state.path("jobs");
+        ObjectNode job = (ObjectNode) jobs.elements().next();
+        job.put("operationId", "f".repeat(64));
+        replaceSavedJournal(state);
+        assertThrows(IOException.class, this::journal);
+    }
+
+    @Test
+    void restartRejectsDuplicatePersistedMapKeys() throws Exception {
+        accept(receiver(journal()), birth());
+        Path file = dir.resolve(JOURNAL_NAME);
+        String original = Files.readString(file);
+        String duplicate = original.replace("\"operations\":{",
+                "\"operations\":{},\"operations\":{");
+        assertNotEquals(original, duplicate);
+        Files.writeString(file, duplicate);
+        assertThrows(IOException.class, this::journal);
+    }
+
+    @Test
+    void restartRejectsNullCursorInsteadOfCrashingLater() throws Exception {
+        accept(receiver(journal()), birth());
+        ObjectNode state = savedJournal();
+        ((ObjectNode) state.path(CASES_FIELD)).putNull(CASE);
+        replaceSavedJournal(state);
+        assertThrows(IOException.class, this::journal);
     }
 
     @Test
