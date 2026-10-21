@@ -860,7 +860,7 @@ public final class EnthusiaStaffVelocityPlugin {
             inboundRelay.bind(server);
             healthRelay.bind(server);
             channelServer = server;
-            if (peerKeys.containsKey(VelocityStaffBotChatSink.PEER_ID)) {
+            if (peerKeys.keySet().stream().anyMatch(VelocityStaffBotPeerRoute::isStaffBotPeer)) {
                 chatBridgeSinkRegistration = relay.installSink(new VelocityStaffBotChatSink(server));
                 chatArtifactSinkRegistration = artifactRelay.installSink(
                         new VelocityStaffBotChatArtifactSink(server));

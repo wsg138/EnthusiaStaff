@@ -65,11 +65,39 @@ final class StaffBotChatTransport implements StaffBotChatLifecycle, DiscordChatI
         );
     }
 
+    // This peer ID cannot collide with the live StaffBot's STAFFBOT connection.
+    // Velocity must explicitly authorize its own separate HMAC peer before any
+    // isolated staging run can connect; an unconfigured peer fails closed.
+    static final String ISOLATED_TEST_PEER_ID = "STAFFBOT_TEST";
+
     static StaffBotChatTransport create(
             StaffBotChatBridgeConfiguration configuration,
             DiscordChatEgress egress,
             DiscordRenderedChatEgress renderedEgress
     ) {
+        return createForPeer(
+                configuration, egress, renderedEgress, StaffBotChatBridgeConfiguration.PEER_ID);
+    }
+
+    static StaffBotChatTransport createIsolatedTest(
+            StaffBotChatBridgeConfiguration configuration,
+            DiscordChatEgress egress,
+            DiscordRenderedChatEgress renderedEgress
+    ) {
+        if (configuration.mode() != StaffBotChatBridgeConfiguration.Mode.SHADOW
+                || !configuration.ingressRoutes().isEmpty()) {
+            throw new IllegalArgumentException("isolated chat transport requires outbound-only SHADOW");
+        }
+        return createForPeer(configuration, egress, renderedEgress, ISOLATED_TEST_PEER_ID);
+    }
+
+    private static StaffBotChatTransport createForPeer(
+            StaffBotChatBridgeConfiguration configuration,
+            DiscordChatEgress egress,
+            DiscordRenderedChatEgress renderedEgress,
+            String peerId
+    ) {
+        Objects.requireNonNull(peerId, "peerId");
         Objects.requireNonNull(configuration, "configuration");
         Objects.requireNonNull(egress, "egress");
         Objects.requireNonNull(renderedEgress, "renderedEgress");
@@ -96,7 +124,7 @@ final class StaffBotChatTransport implements StaffBotChatLifecycle, DiscordChatI
             SSLContext tls = tlsContext(configuration);
             PersistentChannelClient client = new PersistentChannelClient(
                     new PersistentChannelClient.Configuration(
-                            StaffBotChatBridgeConfiguration.PEER_ID,
+                            peerId,
                             configuration.host(),
                             configuration.port(),
                             configuration.clientKey(),
@@ -131,6 +159,10 @@ final class StaffBotChatTransport implements StaffBotChatLifecycle, DiscordChatI
             ingress.close();
             throw failure;
         }
+    }
+
+    boolean connected() {
+        return started.get() && !closed.get() && client.connected();
     }
 
     @Override

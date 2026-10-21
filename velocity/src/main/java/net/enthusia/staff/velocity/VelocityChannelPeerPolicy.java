@@ -15,6 +15,7 @@ final class VelocityChannelPeerPolicy {
         Objects.requireNonNull(authenticatedPeerIds, "authenticatedPeerIds");
         Set<String> paperBackends = new LinkedHashSet<>(authenticatedPeerIds);
         paperBackends.remove(VelocityStaffBotChatSink.PEER_ID);
+        paperBackends.remove(VelocityStaffBotPeerRoute.TEST_PEER);
         return Set.copyOf(paperBackends);
     }
 
@@ -38,7 +39,7 @@ final class VelocityChannelPeerPolicy {
     static void validateProxyIdentity(String proxyId, Set<String> authenticatedPeerIds) {
         Objects.requireNonNull(proxyId, "proxyId");
         Objects.requireNonNull(authenticatedPeerIds, "authenticatedPeerIds");
-        if (authenticatedPeerIds.contains(VelocityStaffBotChatSink.PEER_ID)
+        if (authenticatedPeerIds.stream().anyMatch(VelocityStaffBotPeerRoute::isStaffBotPeer)
                 && !STAFF_BOT_PROXY_ID.equals(proxyId)) {
             throw new IllegalArgumentException("StaffBot peer requires proxy id VELOCITY");
         }

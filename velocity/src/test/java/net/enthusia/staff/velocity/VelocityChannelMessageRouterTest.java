@@ -131,6 +131,43 @@ class VelocityChannelMessageRouterTest {
     }
 
     @Test
+    void isolatedStaffBotHealthOnlyTargetsTestBackend() {
+        java.util.Set<String> delivered = new java.util.HashSet<>();
+        VelocityStaffBotChatHealthRelay healthRelay = new VelocityStaffBotChatHealthRelay(
+                Set.of("TEST", PAPER_SERVER), CLOCK,
+                (peerId, id, type, body, timeout) -> {
+                    delivered.add(peerId);
+                    return java.util.concurrent.CompletableFuture.completedFuture(
+                            net.enthusia.staff.protocol.PersistentChannelServer.DeliveryStatus.ACKNOWLEDGED);
+                });
+        VelocityChatBridgeRelay relay = new VelocityChatBridgeRelay(CLOCK, 8, 32);
+        VelocityChatArtifactRelay artifacts = new VelocityChatArtifactRelay(CLOCK, 32);
+        VelocityRenderedChatBridgeRelay rendered =
+                new VelocityRenderedChatBridgeRelay(CLOCK, 8, 32);
+        VelocityDiscordChatIngressRelay inbound =
+                new VelocityDiscordChatIngressRelay(Set.of("TEST", PAPER_SERVER), CLOCK, 8, 32);
+        VelocityChannelMessageRouter router = new VelocityChannelMessageRouter(
+                Set.of("TEST", PAPER_SERVER), relay, artifacts, rendered, inbound,
+                healthRelay, message -> true);
+        try {
+            var signal = new ChatBridgeHealthMessage(true, NOW, NOW + 15_000L);
+            assertTrue(router.handle(envelope(
+                    VelocityStaffBotPeerRoute.TEST_PEER,
+                    UUID.randomUUID(), ChatBridgeMessages.HEALTH,
+                    ChatBridgeMessages.encodeHealth(signal))));
+            assertEquals(Set.of("TEST"), delivered);
+            assertFalse(router.handle(envelope(
+                    VelocityStaffBotPeerRoute.TEST_PEER,
+                    UUID.randomUUID(), "UNAUTHORIZED_FRAME", "{}")));
+        } finally {
+            relay.close();
+            artifacts.close();
+            rendered.close();
+            inbound.close();
+        }
+    }
+
+    @Test
     void staffBotCannotInjectChatFrameEvenWhenRelaySinkExists() {
         AtomicInteger deliveries = new AtomicInteger();
         VelocityChatBridgeRelay relay = new VelocityChatBridgeRelay(CLOCK, 8, 32);

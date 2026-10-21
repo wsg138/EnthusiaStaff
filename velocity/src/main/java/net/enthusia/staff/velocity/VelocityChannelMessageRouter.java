@@ -44,11 +44,15 @@ final class VelocityChannelMessageRouter implements ChannelMessageHandler {
     @Override
     public boolean handle(ProtocolEnvelope envelope) {
         Objects.requireNonNull(envelope, "envelope");
-        if (VelocityStaffBotChatSink.PEER_ID.equals(envelope.serverId())) {
+        if (VelocityStaffBotPeerRoute.isStaffBotPeer(envelope.serverId())) {
             if (chatHealthRelay.handles(envelope)) {
                 return chatHealthRelay.accept(envelope);
             }
-            return discordIngressRelay.handles(envelope) && discordIngressRelay.accept(envelope);
+            // Only the original STAFFBOT is eligible for explicitly configured
+            // Discord-to-Minecraft ingress. The TEST peer is outbound-only.
+            return VelocityStaffBotChatSink.PEER_ID.equals(envelope.serverId())
+                    && discordIngressRelay.handles(envelope)
+                    && discordIngressRelay.accept(envelope);
         }
         if (!paperBackendIds.contains(envelope.serverId())) {
             return false;
