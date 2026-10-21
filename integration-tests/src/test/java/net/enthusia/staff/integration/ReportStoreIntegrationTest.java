@@ -62,7 +62,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 class ReportStoreIntegrationTest {
     private static final int CONCURRENT_OPERATION_COUNT = 2;
     private static final String STAFFBOT_WORKER_A = "worker-a";
-    private static final String STAFFBOT_DISCORD_MESSAGE_ID = "423456789012345678";
+    private static final String STAFFBOT_DISCORD_MESSAGE_ID = "4".repeat(18);
     private static final String STAFFBOT_WORKER_B = "worker-b";
     private static final String STAFFBOT_CREATED = "REPORT_CREATED";
     private static final String STAFFBOT_TEST_BODY = "synthetic";
