@@ -57,3 +57,16 @@ Until the pinned private test-channel route and safe test-server configuration a
 - Luma role eligibility: [LumaGuilds #13](https://github.com/wsg138/LumaGuilds/pull/13), merged to integration only
 
 **Release gate remains CLOSED.** The owner approved use of the **main Enthusia Discord guild's private testing channel**, not production chat output, role mutation, server-wide moderation, slash-command execution against production, or DiscordSRV retirement. Runtime configuration and permissions must be checked before the first private-channel test post.
+
+## Read-only recheck on 2026-10-21
+
+Fresh SFTP comparison reconfirmed that test1 and SMP legacy DiscordSRV
+global/staff channel maps and console destinations are **still identical**.
+On-disk test1 forwarding in both directions and console-command execution
+remain disabled, but test1's legacy console destination is still populated.
+Test1 EnthusiaStaff config has an explicit backend ID and channel section,
+but still no `discord-chat-bridge` SHADOW section. Runtime loaded state
+and actual Discord JDA permissions were not inspected. The private
+report-notification safety tests added in #657 are offline mocks only.
+No active chat/console/role test, server restart, SFTP mutation, or live
+Discord message was performed. **Staging gate remains BLOCKED.**

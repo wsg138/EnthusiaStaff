@@ -2,6 +2,7 @@ package net.enthusia.staff.discordbot;
 
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import net.enthusia.staff.domain.report.ReportReasonLabel;
 import net.enthusia.staff.persistence.DiscordStaffReadRuntime;
@@ -12,6 +13,8 @@ import net.enthusia.staff.persistence.DiscordStaffReadRuntime;
  */
 final class PrivateReportNotificationTemplate {
     private static final int MAX_REASON_CODEPOINTS = 80;
+    private static final Set<String> NOTIFIABLE_STATES =
+            Set.of("OPEN", "CLAIMED", "AWAITING_REVIEW");
     private static final String NO_DESCRIPTION = "(No report description provided)";
 
     private PrivateReportNotificationTemplate() { }
@@ -51,7 +54,9 @@ final class PrivateReportNotificationTemplate {
                                     DestinationProof destination) {
         Objects.requireNonNull(report, "report");
         Objects.requireNonNull(destination, "destination");
-        if (!destination.eligible()) {
+        if (!destination.eligible() || !NOTIFIABLE_STATES.contains(report.state())) {
+            // A case closed or changed while an intent was queued must never
+            // send its original reporter description into Discord.
             return Optional.empty();
         }
         UUID reportId = Objects.requireNonNull(report.reportId(), "reportId");

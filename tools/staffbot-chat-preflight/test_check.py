@@ -19,6 +19,8 @@ PIN = "1555555555555555555"
 GLOBAL = "1650000000000000001"
 STAFF = "1650000000000000002"
 CONSOLE = "1650000000000000003"
+TEST_GLOBAL = "1750000000000000001"
+TEST_STAFF = "1750000000000000002"
 SOURCE_JAVA = (
     'STAGING("staging", 1111111111111111111L, 3333333333333333333L, '
     + PIN + 'L), PRODUCTION("production", 2222222222222222222L, '
@@ -33,7 +35,7 @@ channel:
   enabled: true
 """
 LEGACY = (
-    f'Channels: {{"global": "{GLOBAL}", "staff": "{STAFF}"}}\n'
+    f'Channels: {{"global": "{TEST_GLOBAL}", "staff": "{TEST_STAFF}"}}\n'
     'DiscordConsoleChannelId: ""\n'
     'DiscordChatChannelMinecraftToDiscord: false\n'
     'DiscordChatChannelDiscordToMinecraft: false\n'
@@ -79,7 +81,7 @@ class PreflightTest(unittest.TestCase):
         ])
 
     def test_missing_legacy_channel_map_fails_closed(self):
-        legacy = LEGACY.replace(f'Channels: {{"global": "{GLOBAL}", "staff": "{STAFF}"}}\n', '')
+        legacy = LEGACY.replace(f'Channels: {{"global": "{TEST_GLOBAL}", "staff": "{TEST_STAFF}"}}\n', '')
         self.assertFalse(self.checks(legacy=legacy)[
             'private channel distinct from legacy chat and console'
         ])
@@ -89,6 +91,45 @@ class PreflightTest(unittest.TestCase):
                                 f'DiscordConsoleChannelId: "{PIN}"')
         self.assertFalse(self.checks(legacy=legacy)[
             "private channel distinct from legacy chat and console"
+        ])
+
+    def test_legacy_test_and_production_channel_collision_is_blocked(self):
+        colliding = LEGACY.replace(TEST_GLOBAL, GLOBAL)
+        self.assertFalse(self.checks(legacy=colliding)[
+            "test legacy Discord destinations do not overlap production"
+        ])
+
+    def test_legacy_test_and_production_staff_channel_collision_is_blocked(self):
+        colliding = LEGACY.replace(TEST_STAFF, STAFF)
+        self.assertFalse(self.checks(legacy=colliding)[
+            "test legacy Discord destinations do not overlap production"
+        ])
+
+    def test_duplicate_legacy_routes_fail_closed(self):
+        with self.assertRaises(ValueError):
+            self.checks(legacy=LEGACY + f'Channels: {{"staff": "{STAFF}"}}\n')
+
+    def test_duplicate_paper_shadow_section_fails_closed(self):
+        duplicate = PAPER + "discord-chat-bridge:\n  mode: AUTHORITATIVE\n"
+        with self.assertRaises(ValueError):
+            self.checks(paper=duplicate)
+
+    def test_duplicate_nested_mode_key_fails_closed(self):
+        duplicate = PAPER.replace("  mode: SHADOW\n", "  mode: SHADOW\n  mode: AUTHORITATIVE\n")
+        with self.assertRaises(ValueError):
+            self.checks(paper=duplicate)
+
+    def test_old_shadow_enabled_switch_cannot_bypass_explicit_mode(self):
+        no_mode = PAPER.replace("  mode: SHADOW\n", "  shadow-enabled: true\n")
+        self.assertFalse(self.checks(paper=no_mode)[
+            "Paper chat mode explicitly SHADOW"
+        ])
+
+    def test_nested_false_server_id_cannot_pass_without_network_id(self):
+        no_id = PAPER.replace("  server-id: TEST\n", "")
+        inserted = no_id + "diagnostics:\n  server-id: TEST\n"
+        self.assertFalse(self.checks(paper=inserted)[
+            "Paper reports a non-empty backend ID"
         ])
 
     def test_legacy_console_requires_disabled_destination(self):

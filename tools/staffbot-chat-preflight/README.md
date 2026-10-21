@@ -33,14 +33,16 @@ python tools/staffbot-chat-preflight/check.py \
 
 ## Rules checked
 
-1. The pinned private channel doesn't equal the global, staff or console DiscordSRV destination on test or production.
-2. Paper identifies its backend and has `discord-chat-bridge.mode: SHADOW` (or backward-compatible explicit shadow flag), with the authenticated channel configured.
+1. The pinned private channel differs from every global, staff or console DiscordSRV destination on test and production. No test-server legacy destination may equal a production legacy destination, even if test-server forwarding is currently disabled.
+2. Paper identifies its backend and has `discord-chat-bridge.mode: SHADOW` (legacy boolean fallback is NOT accepted), with the authenticated channel configured.
 3. StaffBot's candidate is **SHADOW**, has **exactly one route** from that Paper backend's `<server-id>/global` to the pinned private channel, has no ingress, and has a distinct chat-only application identity/credential.
 4. Test-server legacy DiscordSRV has Minecraft↔Discord chat forwarding OFF, chat-command execution OFF, and **no console Discord destination**. A disconnected/invalid bot token is **not** an acceptable substitute for this durable containment.
 
+The checker also rejects duplicate YAML sections or keys, duplicate legacy DiscordSRV routes, and backend IDs outside the expected network section. These checks inspect **local file contents**, not the configuration of a running JVM or Discord bot.
+
 ### Discovered on 2026-10-16
 
-Read-only inspection showed the current `bloom-test1` Paper server ID is `TEST`, its chat-bridge section is absent (therefore disabled), and the existing chat-only StaffBot file `c` routes `SMP/global` to the private channel. This route cannot carry `TEST/global` traffic. The test server also had a configured legacy console destination, although its chat forwarding and chat command execution were disabled. Its latest startup log reports DiscordSRV disabled because its bot token is invalid. These are **observations, not an instruction to modify or repair credentials**.
+Read-only inspection showed the current `bloom-test1` Paper server ID is `TEST`, its chat-bridge section is absent (therefore disabled), and the existing chat-only StaffBot file `c` routes `SMP/global` to the private channel. This route cannot carry `TEST/global` traffic. The test server also had a configured legacy console destination, although its chat forwarding and chat command execution were disabled. Its legacy global/staff channels overlapped production, so the stricter test/live separation check will fail until a coordinated, verified test-only isolation change. Its latest startup log reports DiscordSRV disabled because its bot token is invalid. These are **observations, not an instruction to modify or repair credentials**.
 
 ### Gates this tool cannot verify
 
