@@ -3,7 +3,9 @@ package net.enthusia.staff.discordbot.modcase.receiver;
 import static org.junit.jupiter.api.Assertions.*;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
 import java.util.LinkedHashMap;
@@ -291,6 +293,67 @@ class CaseReceiverTest {
         } finally {
             pool.shutdownNow();
         }
+    }
+
+    private ObjectNode savedJournal() throws IOException {
+        return (ObjectNode) json.readTree(Files.readString(
+                dir.resolve("synthetic-receiver.json")));
+    }
+
+    private void replaceSavedJournal(ObjectNode value) throws IOException {
+        Files.writeString(dir.resolve("synthetic-receiver.json"),
+                json.writeValueAsString(value));
+    }
+
+    @Test
+    void restartRejectsOperationKeyThatDoesNotMatchPersistedEvent() throws Exception {
+        accept(receiver(journal()), birth());
+        ObjectNode state = savedJournal();
+        ObjectNode operations = (ObjectNode) state.path("operations");
+        operations.set("f".repeat(64), operations.remove(birth().operationId()));
+        replaceSavedJournal(state);
+        assertThrows(IOException.class, this::journal);
+    }
+
+    @Test
+    void restartRejectsCursorWithFalseCurrentRevision() throws Exception {
+        accept(receiver(journal()), birth());
+        ObjectNode state = savedJournal();
+        ((ObjectNode) state.path("cases").path(CASE)).put("revision", 99);
+        replaceSavedJournal(state);
+        assertThrows(IOException.class, this::journal);
+    }
+
+    @Test
+    void restartRejectsJobWithUnownedOperation() throws Exception {
+        accept(receiver(journal()), birth());
+        ObjectNode state = savedJournal();
+        ObjectNode jobs = (ObjectNode) state.path("jobs");
+        ObjectNode job = (ObjectNode) jobs.elements().next();
+        job.put("operationId", "f".repeat(64));
+        replaceSavedJournal(state);
+        assertThrows(IOException.class, this::journal);
+    }
+
+    @Test
+    void restartRejectsDuplicatePersistedMapKeys() throws Exception {
+        accept(receiver(journal()), birth());
+        Path file = dir.resolve("synthetic-receiver.json");
+        String original = Files.readString(file);
+        String duplicate = original.replace("\"operations\":{",
+                "\"operations\":{},\"operations\":{");
+        assertNotEquals(original, duplicate);
+        Files.writeString(file, duplicate);
+        assertThrows(IOException.class, this::journal);
+    }
+
+    @Test
+    void restartRejectsNullCursorInsteadOfCrashingLater() throws Exception {
+        accept(receiver(journal()), birth());
+        ObjectNode state = savedJournal();
+        ((ObjectNode) state.path("cases")).putNull(CASE);
+        replaceSavedJournal(state);
+        assertThrows(IOException.class, this::journal);
     }
 
     @Test

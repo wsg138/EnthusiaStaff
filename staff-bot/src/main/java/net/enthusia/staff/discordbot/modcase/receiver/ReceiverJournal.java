@@ -1,5 +1,6 @@
 package net.enthusia.staff.discordbot.modcase.receiver;
 
+import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -13,13 +14,16 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.regex.Pattern;
 
 /** One-process, synthetic, durable-by-atomic-replace projection and two independent outboxes. */
 public final class ReceiverJournal {
-    private static final ObjectMapper JSON = new ObjectMapper();
+    private static final ObjectMapper JSON = new ObjectMapper()
+            .enable(JsonParser.Feature.STRICT_DUPLICATE_DETECTION);
     private static final int MAX_EVENTS = 4096;
     private static final int MAX_JOBS = 8192;
     private static final int MAX_FILE_BYTES = 3_000_000;
+    private static final Pattern RECEIPT = Pattern.compile("[A-Za-z0-9_:/.-]{1,160}");
     private final Path file;
     private State state;
 
@@ -44,12 +48,85 @@ public final class ReceiverJournal {
             if (Files.size(file) > MAX_FILE_BYTES) {
                 throw new IOException("receiver journal exceeds size cap");
             }
-            state = JSON.readValue(Files.readAllBytes(file), State.class);
-            if (state == null || state.operations() == null || state.cases() == null
-                    || state.jobs() == null) {
-                throw new IOException("corrupt receiver journal");
+            state = validateLoaded(JSON.readValue(Files.readAllBytes(file), State.class));
+        }
+    }
+
+    private static State validateLoaded(State loaded) throws IOException {
+        if (!validHeader(loaded) || !validOperations(loaded)
+                || !validCursors(loaded) || !validJobs(loaded)) {
+            throw new IOException("corrupt receiver journal");
+        }
+        return new State(Map.copyOf(loaded.operations()), Map.copyOf(loaded.cases()),
+                Map.copyOf(loaded.jobs()));
+    }
+
+    private static boolean validHeader(State loaded) {
+        return loaded != null && loaded.operations() != null && loaded.cases() != null
+                && loaded.jobs() != null && loaded.operations().size() <= MAX_EVENTS
+                && loaded.jobs().size() <= MAX_JOBS
+                && loaded.cases().size() <= loaded.operations().size();
+    }
+
+    private static boolean validOperations(State loaded) {
+        for (Map.Entry<String, CaseEvent> entry : loaded.operations().entrySet()) {
+            if (entry.getValue() == null || !Objects.equals(entry.getValue().operationId(), entry.getKey())) {
+                return false;
             }
         }
+        return true;
+    }
+
+    private static boolean validCursors(State loaded) {
+        for (Map.Entry<String, Cursor> entry : loaded.cases().entrySet()) {
+            Cursor cursor = entry.getValue();
+            if (cursor == null || !Objects.equals(cursor.caseId(), entry.getKey())) {
+                return false;
+            }
+            CaseEvent event = loaded.operations().get(cursor.operationId());
+            if (event == null || !matchesCursor(cursor, event)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static boolean matchesCursor(Cursor cursor, CaseEvent event) {
+        return Objects.equals(cursor.caseId(), event.caseId())
+                && Objects.equals(cursor.origin(), event.originPlatform())
+                && Objects.equals(cursor.scope(), event.scopeId())
+                && cursor.revision() == event.revision()
+                && Objects.equals(cursor.caseState(), event.caseState());
+    }
+
+    private static boolean validJobs(State loaded) {
+        for (Map.Entry<String, Job> entry : loaded.jobs().entrySet()) {
+            Job job = entry.getValue();
+            if (job == null || !Objects.equals(entry.getKey(), job.id())) {
+                return false;
+            }
+            CaseEvent event = loaded.operations().get(job.operationId());
+            if (event == null || !matchesJob(job, event, loaded.cases())) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static boolean matchesJob(Job job, CaseEvent event, Map<String, Cursor> cases) {
+        return Objects.equals(job.caseId(), event.caseId())
+                && job.revision() == event.revision()
+                && cases.containsKey(job.caseId())
+                && validJobDelivery(job)
+                && job.id().equals(event.identity() + "/" + event.revision() + "/" + job.surface());
+    }
+
+    private static boolean validJobDelivery(Job job) {
+        return job.surface() != null && job.delivery() != null && job.attempts() >= 0
+                && job.nextAtMillis() >= 0
+                && (job.delivery() != Delivery.CONFIRMED
+                    || (job.receipt() != null
+                        && RECEIPT.matcher(job.receipt()).matches()));
     }
 
     public synchronized Outcome accept(CaseEvent event) throws IOException {
