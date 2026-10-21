@@ -1,6 +1,6 @@
 # InteractiveChat independent renderer: acceptance and rollback
 
-Status: **review gate only; no production approval**. Companion to #268 and draft #568 (reviewed at `64c1146f12a3a46cd8e61bfa479a9b888e0d1c85`). This document is deliberately separable from the renderer implementation and contains no production settings or secrets.
+Status: **review gate only; no production approval**. Companion to #268 and draft #568 (source reviewed through 2026-10-20; staging screenshots and lifecycle acceptance still pending). This document is deliberately separable from the renderer implementation and contains no production settings or secrets.
 
 ## Architecture and decision
 
@@ -21,11 +21,11 @@ This is **functional placeholder coverage**, not visual equivalence. A successfu
 
 ## Risk findings in draft #568
 
-1. **Provider precedence differs from its class comment.** The manager's `refreshInteractiveChatRenderer()` attempts the native provider *before* addon discovery whenever the opt-in flag is true, but the provider Javadoc says the original addon remains preferred. This must be made an explicit design choice and tested; otherwise the toggle silently changes visual quality while the addon is still installed.
+1. **Addon preference is fixed in draft source, not integration-accepted.** Draft #568 now discovers and registers the installed addon before considering the independent fallback, matching the provider Javadoc. IC-01/IC-03 still require addon-present/absent tests, including runtime re-registration, to prove there is no quality downgrade or duplicate service.
 2. **The lifecycle paths need integration tests.** `refreshInteractiveChatRenderer()` closes and re-registers services; disabling InteractiveChat closes both; disabling the addon closes both and tries native registration. Tests must prove there is never an orphan or duplicate service registration and that service routing works after enable/disable/quit/shutdown.
-3. **Snapshot freshness is not send-time fidelity.** The player inventory is read when the entity scheduler executes, potentially after the original chat event and intervening inventory changes. Tests must define whether this late snapshot is acceptable; expiry prevents stale work but does not guarantee a historical snapshot.
-4. **Reflection/permission correctness is unproven against real plugin binaries.** `getKeyword()` patterns, the module flags, and the permission nodes must be verified on the pinned InteractiveChat build. The four renderer unit tests in #568 do not instantiate a Bukkit service or exercise a real player scheduler.
-5. **Missing plugin/worker failures must be observable without disrupting text.** The native provider returns no image for absence, expiry, rejection, or errors; acceptance must verify diagnostics and text delivery, not just the renderer's empty result.
+3. **Snapshot freshness is not send-time fidelity.** Inventory is read on the later Folia entity callback, after which the snapshot is immutable. Draft #568 now drops captures at/after 2 seconds from the event (or hard expiry), and rechecks online status and permissions. A snapshot captured promptly can finish rendering until hard message expiry, but changes within that 2-second window may affect content. IC-08/IC-09 still require live testing.
+4. **Reflection/permission correctness is unproven against real plugin binaries.** `getKeyword()` patterns, module flags and permission nodes must be verified on the pinned InteractiveChat build. Expanded draft regression tests cover immutable capture, permissions, quit, expiration and worker failures, but do not instantiate a real Bukkit service or exercise a live Folia player scheduler.
+5. **Missing plugin/worker failures must be observable without disrupting text.** Draft tests exercise provider close, late capture, hard expiry, queue rejection, generic worker failure and single queued execution; acceptance still must verify operator diagnostics and real text-only delivery.
 
 ## Synthetic acceptance matrix
 

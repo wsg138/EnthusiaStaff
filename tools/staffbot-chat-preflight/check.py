@@ -87,12 +87,22 @@ def distinct_chat_app(prop: dict[str, str], java_source: str) -> bool:
     return bool(public_app) and public_app.isdigit() and len(staff_apps) == 2 and public_app not in staff_apps
 
 
+def migration_acknowledged(prop: dict[str, str], environment: str) -> bool:
+    if environment not in ("production", "staging"):
+        raise ValueError("StaffBot environment must be explicitly production or staging")
+    return environment == "staging" or (
+        prop.get("ENTHUSIA_STAFF_BOT_CHAT_BRIDGE_MIGRATION_ACK")
+        == "I_ACKNOWLEDGE_PRODUCTION_SHADOW_MIGRATION"
+    )
+
+
 def evaluate(
-    paper: str, legacy_test: str, legacy_live: str, chat: str, java_source: str
+    paper: str, legacy_test: str, legacy_live: str, chat: str,
+    java_source: str, staffbot_environment: str
 ) -> list[tuple[str, bool]]:
     pin = private_channel(java_source)
     prop = properties(chat)
-    server_id = yaml_scalar(paper, "server-id")
+    server_id = yaml_scalar(yaml_section(paper, "network"), "server-id")
     routes_raw = prop.get("ENTHUSIA_STAFF_BOT_CHAT_BRIDGE_ROUTES", "")
     routes = [item.strip() for item in routes_raw.split(";") if item.strip()]
     maps_present, outbound_values = legacy_destinations(legacy_test, legacy_live)
@@ -102,6 +112,8 @@ def evaluate(
         ("Paper chat mode explicitly SHADOW", paper_shadow_enabled(paper)),
         ("Paper authenticated channel configured", yaml_scalar(yaml_section(paper, "channel"), "enabled").lower() == "true"),
         ("StaffBot chat mode SHADOW", prop.get("ENTHUSIA_STAFF_BOT_CHAT_BRIDGE_MODE", "").upper() == "SHADOW"),
+        ("Production SHADOW migration acknowledged when required",
+         migration_acknowledged(prop, staffbot_environment)),
         ("StaffBot outbound routes match only this test backend",
          bool(server_id) and routes == [f"{server_id}/global={pin}"]),
         ("StaffBot inbound chat remains disabled",
@@ -127,6 +139,7 @@ def main() -> int:
     parser.add_argument("--discordsrv-test", required=True, type=Path)
     parser.add_argument("--discordsrv-live", required=True, type=Path)
     parser.add_argument("--chat", required=True, type=Path)
+    parser.add_argument("--staffbot-environment", required=True, choices=("production", "staging"))
     parser.add_argument("--staffbot-environment-source", required=True, type=Path)
     args = parser.parse_args()
     try:
@@ -136,6 +149,7 @@ def main() -> int:
             args.discordsrv_live.read_text(encoding="utf-8"),
             args.chat.read_text(encoding="utf-8"),
             args.staffbot_environment_source.read_text(encoding="utf-8"),
+            args.staffbot_environment,
         )
     except (OSError, UnicodeError, ValueError) as error:
         print(f"BLOCKED: configuration cannot be validated ({type(error).__name__})")
