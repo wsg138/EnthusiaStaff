@@ -12,26 +12,32 @@ from pathlib import Path
 
 
 def yaml_scalar(content: str, name: str) -> str:
-    match = re.search(r"(?m)^\s*" + re.escape(name) + r"\s*:\s*([^#\r\n]*)", content)
-    return match.group(1).strip().strip("'\"") if match else ""
+    matches = re.findall(r"(?m)^\s*" + re.escape(name) + r"\s*:\s*([^#\r\n]*)", content)
+    if len(matches) > 1:
+        raise ValueError("Duplicate YAML configuration key")
+    return matches[0].strip().strip("'\"") if matches else ""
 
 
 def yaml_section(content: str, name: str) -> str:
     lines = content.splitlines()
-    for i, line in enumerate(lines):
-        if line == name + ":":
-            block = []
-            for next_line in lines[i + 1 :]:
-                if next_line and not next_line[0].isspace() and not next_line.startswith("#"):
-                    break
-                block.append(next_line)
-            return "\n".join(block)
+    sections = [i for i, line in enumerate(lines) if line == name + ":"]
+    if len(sections) > 1:
+        raise ValueError("Duplicate YAML section")
+    for i in sections:
+        block = []
+        for next_line in lines[i + 1 :]:
+            if next_line and not next_line[0].isspace() and not next_line.startswith("#"):
+                break
+            block.append(next_line)
+        return "\n".join(block)
     return ""
 
 
 def legacy_setting(content: str, name: str) -> str:
-    match = re.search(r"(?m)^" + re.escape(name) + r":\s*([^#\r\n]*)", content)
-    return match.group(1).strip() if match else ""
+    matches = re.findall(r"(?m)^" + re.escape(name) + r":\s*([^#\r\n]*)", content)
+    if len(matches) > 1:
+        raise ValueError("Duplicate legacy routing key")
+    return matches[0].strip() if matches else ""
 
 
 def private_channel(source: str) -> str:
@@ -60,9 +66,8 @@ def properties(content: str) -> dict[str, str]:
 
 def paper_shadow_enabled(paper: str) -> bool:
     section = yaml_section(paper, "discord-chat-bridge")
-    mode = yaml_scalar(section, "mode").upper()
-    shadow_enabled = yaml_scalar(section, "shadow-enabled").lower() == "true"
-    return mode == "SHADOW" or (not mode and shadow_enabled)
+    # Legacy boolean-only fallback does not prove the explicit SHADOW mode.
+    return yaml_scalar(section, "mode").upper() == "SHADOW"
 
 
 def legacy_destinations(test: str, live: str) -> tuple[bool, list[str]]:
@@ -76,6 +81,16 @@ def legacy_destinations(test: str, live: str) -> tuple[bool, list[str]]:
             r"\b\d{16,22}\b", legacy_setting(config, "DiscordConsoleChannelId")
         ))
     return maps_present, ids
+
+
+def legacy_route_isolation(test: str, live: str) -> bool:
+    """Block test chat/console destinations also used by production."""
+    maps_present, _ = legacy_destinations(test, live)
+    if not maps_present:
+        return False
+    test_values = legacy_destinations(test, "")[1]
+    live_values = legacy_destinations("", live)[1]
+    return bool(test_values) and bool(live_values) and set(test_values).isdisjoint(live_values)
 
 
 def distinct_chat_app(prop: dict[str, str], java_source: str) -> bool:
@@ -92,12 +107,13 @@ def evaluate(
 ) -> list[tuple[str, bool]]:
     pin = private_channel(java_source)
     prop = properties(chat)
-    server_id = yaml_scalar(paper, "server-id")
+    server_id = yaml_scalar(yaml_section(paper, "network"), "server-id")
     routes_raw = prop.get("ENTHUSIA_STAFF_BOT_CHAT_BRIDGE_ROUTES", "")
     routes = [item.strip() for item in routes_raw.split(";") if item.strip()]
     maps_present, outbound_values = legacy_destinations(legacy_test, legacy_live)
     return [
         ("private channel distinct from legacy chat and console", maps_present and pin not in outbound_values),
+        ("test legacy Discord destinations do not overlap production", legacy_route_isolation(legacy_test, legacy_live)),
         ("Paper reports a non-empty backend ID", bool(server_id)),
         ("Paper chat mode explicitly SHADOW", paper_shadow_enabled(paper)),
         ("Paper authenticated channel configured", yaml_scalar(yaml_section(paper, "channel"), "enabled").lower() == "true"),
