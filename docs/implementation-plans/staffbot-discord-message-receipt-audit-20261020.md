@@ -50,3 +50,33 @@ The fetched report must also have the exact UUID named in the claimed
 intent; a mismatched ID fails closed with no Discord send. Synthetic
 negative tests cover both paths and confirm no text reaches the sender.
 These are deliberate no-send states requiring review, not retries.
+
+## V34 migration review resolution (2026-10-20)
+
+The independent review identified historical V33 DELIVERED rows without any
+Discord receipt and a PCRE SQL end-anchor mismatch. V34 now explicitly
+handles both instead of fabricating message IDs:
+
+1. Add nullable discord_message_id and legacy_delivered_at columns.
+2. For any existing V33 DELIVERED row with no receipt, archive its original
+   delivered_at into legacy_delivered_at, clear delivered_at/lease state and
+   move it to REVIEW_REQUIRED. This **never rearms or resends** the intent
+   and preserves the original timestamp for a human reconciliation decision.
+3. Add uniqueness and a strict SQL CHECK. Its regex uses MariaDB PCRE
+   absolute end-of-subject \z, escaped for the SQL string as \\z.
+   Unlike $, this does not match before a final newline.
+4. All newly DELIVERED rows require a validated unique Discord message ID.
+   The read-only record of historical delivery is intentionally not
+   equated with a verified current receipt.
+
+The isolated StaffBotReceiptV34MigrationIntegrationTest explicitly migrates
+a synthetic V33 DELIVERED row to V34 and asserts the quarantine and archived
+timestamp, then attempts to use a newline-suffixed receipt via direct SQL.
+The latter must violate the SQL CHECK, matching Java's whole-string
+validation. Windows compiles this integration test but its local
+Testcontainers Docker engine is unavailable; require hosted MariaDB
+integration before proceeding.
+
+The migration comprises multiple MariaDB DDL/DML statements; do not assume
+all-or-nothing DDL rollback. Rehearse V33->V34 backup, interrupted migration
+recovery and restoration against a disposable snapshot before any deployment.
