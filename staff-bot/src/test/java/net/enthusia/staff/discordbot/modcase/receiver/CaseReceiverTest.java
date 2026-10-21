@@ -104,6 +104,17 @@ class CaseReceiverTest {
     }
 
     @Test
+    void canonicalCaseUuidIsRequiredInStrictWireParser() throws Exception {
+        CaseReceiver service = receiver(journal());
+        String valid = wire(birth());
+        assertTrue(service.receive(PEER, valid.replace(CASE, CASE.toUpperCase(
+                java.util.Locale.ROOT))).isEmpty());
+        assertTrue(service.receive(PEER,
+                valid.replace("\"case_id\":\"" + CASE + "\"", "\"case_id\":null")).isEmpty());
+        assertNull(journal().cursor(CASE));
+    }
+
+    @Test
     void scopeGuildAndPeerAuthenticationFailClosed() throws Exception {
         CaseReceiver service = receiver(journal());
         assertTrue(service.receive(null, wire(birth())).isEmpty());
