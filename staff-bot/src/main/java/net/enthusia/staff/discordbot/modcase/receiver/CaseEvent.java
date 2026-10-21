@@ -102,16 +102,27 @@ public record CaseEvent(int contractVersion, String operationId, String eventTyp
                 throw new IllegalArgumentException("unknown event field");
             }
         });
-        if (!node.path(CONTRACT_VERSION_KEY).isIntegralNumber()
-                || !node.path(CONTRACT_VERSION_KEY).canConvertToInt()
-                || !node.path(REVISION_KEY).isIntegralNumber()
-                || !node.path(REVISION_KEY).canConvertToLong()) {
+        validateNumericFields(node);
+        validateTextFields(node);
+        validateEvidenceShape(node.path("evidence_refs"));
+    }
+
+    private static void validateNumericFields(JsonNode node) {
+        JsonNode version = node.path(CONTRACT_VERSION_KEY);
+        JsonNode revision = node.path(REVISION_KEY);
+        if (!version.isIntegralNumber() || !version.canConvertToInt()
+                || !revision.isIntegralNumber() || !revision.canConvertToLong()) {
             throw new IllegalArgumentException("invalid numeric field");
         }
+    }
+
+    private static void validateTextFields(JsonNode node) {
         if (TEXT_KEYS.stream().anyMatch(key -> !node.path(key).isTextual())) {
             throw new IllegalArgumentException("invalid text field");
         }
-        JsonNode refs = node.path("evidence_refs");
+    }
+
+    private static void validateEvidenceShape(JsonNode refs) {
         if (!refs.isArray() || refs.isEmpty() || refs.size() > 24) {
             throw new IllegalArgumentException("invalid evidence list");
         }
