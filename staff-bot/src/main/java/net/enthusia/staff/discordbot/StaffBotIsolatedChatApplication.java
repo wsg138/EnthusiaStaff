@@ -22,6 +22,7 @@ public final class StaffBotIsolatedChatApplication {
     private static final System.Logger LOGGER =
             System.getLogger(StaffBotIsolatedChatApplication.class.getName());
     private static final Duration READY_TIMEOUT = Duration.ofSeconds(45);
+    private static final String SMOKE_FLAG = "--smoke-test";
     private static final int CONFIG_ERROR = 2;
     private static final int RUNTIME_ERROR = 3;
     private static final StaffBotEnvironment ENVIRONMENT = StaffBotEnvironment.STAGING;
@@ -92,7 +93,7 @@ public final class StaffBotIsolatedChatApplication {
             if (arg != null && arg.startsWith("--chat=") && file == null
                     && arg.length() > "--chat=".length()) {
                 file = Path.of(arg.substring("--chat=".length()));
-            } else if ("--smoke-test".equals(arg) && !smoke) {
+            } else if (SMOKE_FLAG.equals(arg) && !smoke) {
                 smoke = true;
             } else {
                 throw new IllegalArgumentException("unsupported chat-only option");
