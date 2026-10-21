@@ -39,82 +39,89 @@ class StaffBotReceiptV34MigrationIntegrationTest {
         UUID target = UUID.randomUUID();
         UUID report = UUID.randomUUID();
         UUID intent = UUID.randomUUID();
-
         try (HikariDataSource data = MariaDb.open(MariaDbIntegrationSupport.databaseConfig(DATABASE))) {
             migrate(data, "33");
-            MariaDbIntegrationSupport.insertPlayer(DATABASE, reporter, "UpgradeReporter", NOW);
-            MariaDbIntegrationSupport.insertPlayer(DATABASE, target, "UpgradeTarget", NOW);
-            try (Connection connection = data.getConnection()) {
-                try (PreparedStatement insert = connection.prepareStatement("""
-                        INSERT INTO reports
-                            (report_id, idempotency_key, reporter_id, target_id, reason_id,
-                             description, state, server_id, created_at, updated_at)
-                        VALUES (?, ?, ?, ?, 'chat.spam', 'Synthetic V33 report',
-                                'OPEN', 'TEST', ?, ?)
-                        """)) {
-                    insert.setBytes(1, MariaDbIntegrationSupport.uuidBytes(report));
-                    insert.setString(2, "receipt-v34-legacy-" + report);
-                    insert.setBytes(3, MariaDbIntegrationSupport.uuidBytes(reporter));
-                    insert.setBytes(4, MariaDbIntegrationSupport.uuidBytes(target));
-                    insert.setTimestamp(5, Timestamp.from(NOW));
-                    insert.setTimestamp(6, Timestamp.from(NOW));
-                    assertEquals(1, insert.executeUpdate());
-                }
-                try (PreparedStatement insert = connection.prepareStatement("""
-                        INSERT INTO staffbot_report_notification_intents
-                            (intent_id, idempotency_key, report_id, event_type, state,
-                             created_at, delivered_at)
-                        VALUES (?, ?, ?, 'REPORT_CREATED', 'DELIVERED', ?, ?)
-                        """)) {
-                    insert.setBytes(1, MariaDbIntegrationSupport.uuidBytes(intent));
-                    insert.setString(2, "v34:synthetic:legacy:" + intent);
-                    insert.setBytes(3, MariaDbIntegrationSupport.uuidBytes(report));
-                    insert.setTimestamp(4, Timestamp.from(NOW));
-                    insert.setTimestamp(5, Timestamp.from(NOW.plusSeconds(5)));
-                    assertEquals(1, insert.executeUpdate());
-                }
-            }
+            insertLegacyDelivery(data, reporter, target, report, intent);
             migrate(data, null);
-            try (Connection connection = data.getConnection()) {
-                try (PreparedStatement select = connection.prepareStatement("""
-                        SELECT state, delivered_at, legacy_delivered_at, discord_message_id
-                        FROM staffbot_report_notification_intents WHERE intent_id = ?
-                        """)) {
-                    select.setBytes(1, MariaDbIntegrationSupport.uuidBytes(intent));
-                    try (ResultSet row = select.executeQuery()) {
-                        assertTrue(row.next());
-                        assertEquals("REVIEW_REQUIRED", row.getString("state"));
-                        assertNull(row.getTimestamp("delivered_at"));
-                        assertEquals(NOW.plusSeconds(5),
-                                row.getTimestamp("legacy_delivered_at").toInstant());
-                        assertNull(row.getString("discord_message_id"));
-                        assertFalse(row.next());
-                    }
-                }
-                try (PreparedStatement invalid = connection.prepareStatement("""
-                        UPDATE staffbot_report_notification_intents
-                        SET state = 'DELIVERED', delivered_at = ?, discord_message_id = ?
-                        WHERE intent_id = ?
-                        """)) {
-                    invalid.setTimestamp(1, Timestamp.from(NOW.plusSeconds(7)));
-                    invalid.setString(2, RECEIPT + "\n");
-                    invalid.setBytes(3, MariaDbIntegrationSupport.uuidBytes(intent));
-                    assertThrows(SQLException.class, invalid::executeUpdate,
-                            "SQL receipt check must reject a trailing newline");
-                }
-                try (PreparedStatement check = connection.prepareStatement("""
-                        SELECT state, discord_message_id
-                        FROM staffbot_report_notification_intents WHERE intent_id = ?
-                        """)) {
-                    check.setBytes(1, MariaDbIntegrationSupport.uuidBytes(intent));
-                    try (ResultSet row = check.executeQuery()) {
-                        assertTrue(row.next());
-                        assertEquals("REVIEW_REQUIRED", row.getString(1));
-                        assertNull(row.getString(2));
-                    }
-                }
+            assertLegacyQuarantined(data, intent);
+            assertTrailingNewlineReceiptRejected(data, intent);
+        }
+    }
+
+    private static void insertLegacyDelivery(
+            HikariDataSource data, UUID reporter, UUID target, UUID report, UUID intent
+    ) throws SQLException {
+        MariaDbIntegrationSupport.insertPlayer(DATABASE, reporter, "UpgradeReporter", NOW);
+        MariaDbIntegrationSupport.insertPlayer(DATABASE, target, "UpgradeTarget", NOW);
+        try (Connection connection = data.getConnection()) {
+            try (PreparedStatement insert = connection.prepareStatement("""
+                    INSERT INTO reports
+                        (report_id, idempotency_key, reporter_id, target_id, reason_id,
+                         description, state, server_id, created_at, updated_at)
+                    VALUES (?, ?, ?, ?, 'chat.spam', 'Synthetic V33 report',
+                            'OPEN', 'TEST', ?, ?)
+                    """)) {
+                insert.setBytes(1, MariaDbIntegrationSupport.uuidBytes(report));
+                insert.setString(2, "receipt-v34-legacy-" + report);
+                insert.setBytes(3, MariaDbIntegrationSupport.uuidBytes(reporter));
+                insert.setBytes(4, MariaDbIntegrationSupport.uuidBytes(target));
+                insert.setTimestamp(5, Timestamp.from(NOW));
+                insert.setTimestamp(6, Timestamp.from(NOW));
+                assertEquals(1, insert.executeUpdate());
+            }
+            try (PreparedStatement insert = connection.prepareStatement("""
+                    INSERT INTO staffbot_report_notification_intents
+                        (intent_id, idempotency_key, report_id, event_type, state,
+                         created_at, delivered_at)
+                    VALUES (?, ?, ?, 'REPORT_CREATED', 'DELIVERED', ?, ?)
+                    """)) {
+                insert.setBytes(1, MariaDbIntegrationSupport.uuidBytes(intent));
+                insert.setString(2, "v34:synthetic:legacy:" + intent);
+                insert.setBytes(3, MariaDbIntegrationSupport.uuidBytes(report));
+                insert.setTimestamp(4, Timestamp.from(NOW));
+                insert.setTimestamp(5, Timestamp.from(NOW.plusSeconds(5)));
+                assertEquals(1, insert.executeUpdate());
             }
         }
+    }
+
+    private static void assertLegacyQuarantined(HikariDataSource data, UUID intent)
+            throws SQLException {
+        try (Connection connection = data.getConnection();
+             PreparedStatement select = connection.prepareStatement("""
+                     SELECT state, delivered_at, legacy_delivered_at, discord_message_id
+                     FROM staffbot_report_notification_intents WHERE intent_id = ?
+                     """)) {
+            select.setBytes(1, MariaDbIntegrationSupport.uuidBytes(intent));
+            try (ResultSet row = select.executeQuery()) {
+                assertTrue(row.next());
+                assertEquals("REVIEW_REQUIRED", row.getString("state"));
+                assertNull(row.getTimestamp("delivered_at"));
+                assertEquals(NOW.plusSeconds(5),
+                        row.getTimestamp("legacy_delivered_at").toInstant());
+                assertNull(row.getString("discord_message_id"));
+                assertFalse(row.next());
+            }
+        }
+    }
+
+    private static void assertTrailingNewlineReceiptRejected(
+            HikariDataSource data, UUID intent
+    ) throws SQLException {
+        try (Connection connection = data.getConnection()) {
+            try (PreparedStatement invalid = connection.prepareStatement("""
+                    UPDATE staffbot_report_notification_intents
+                    SET state = 'DELIVERED', delivered_at = ?, discord_message_id = ?
+                    WHERE intent_id = ?
+                    """)) {
+                invalid.setTimestamp(1, Timestamp.from(NOW.plusSeconds(7)));
+                invalid.setString(2, RECEIPT + "\n");
+                invalid.setBytes(3, MariaDbIntegrationSupport.uuidBytes(intent));
+                assertThrows(SQLException.class, invalid::executeUpdate,
+                        "SQL receipt check must reject a trailing newline");
+            }
+        }
+        assertLegacyQuarantined(data, intent);
     }
 
     private static void migrate(HikariDataSource data, String target) {
