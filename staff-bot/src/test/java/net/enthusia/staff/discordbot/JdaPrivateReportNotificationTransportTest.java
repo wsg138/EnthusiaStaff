@@ -195,16 +195,17 @@ final class JdaPrivateReportNotificationTransportTest {
 
     @Test
     void publicViewOrMissingStaffAccessNeverSendsReportContent() {
-        var publicGuild = syntheticGuild(syntheticRole(true), syntheticRole(true));
-        var missingStaffGuild = syntheticGuild(syntheticRole(false), syntheticRole(false));
-        for (var guild : List.of(publicGuild, missingStaffGuild)) {
-            var api = syntheticApi(neverSendChannel(guild, List.of()), syntheticSelfUser());
-            var sender = new JdaPrivateReportNotificationTransport(
-                    api, GUILD, CHANNEL, STAFF_ROLE, true);
-            assertFalse(sender.verify().eligible());
-            assertEquals(PrivateReportNotificationDispatcher.DeliveryReceipt.uncertain(),
-                    sender.send("Synthetic private report text"));
-        }
+        assertPrivateSendBlocked(syntheticGuild(syntheticRole(true), syntheticRole(true)));
+        assertPrivateSendBlocked(syntheticGuild(syntheticRole(false), syntheticRole(false)));
+    }
+
+    private static void assertPrivateSendBlocked(Guild guild) {
+        var api = syntheticApi(neverSendChannel(guild, List.of()), syntheticSelfUser());
+        var sender = new JdaPrivateReportNotificationTransport(
+                api, GUILD, CHANNEL, STAFF_ROLE, true);
+        assertFalse(sender.verify().eligible());
+        assertEquals(PrivateReportNotificationDispatcher.DeliveryReceipt.uncertain(),
+                sender.send("Synthetic private report text"));
     }
 
     @Test
