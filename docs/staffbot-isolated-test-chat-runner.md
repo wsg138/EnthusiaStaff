@@ -13,7 +13,7 @@ The runner pins the STAGING environment to the existing Enthusia Discord guild a
 ## Required hold points before starting
 
 1. Obtain a separately controlled staging JVM/container, not the production StaffBot service, and record the candidate source SHA and shaded JAR SHA-256. Do not modify production StaffBot startup or its current chat configuration file c.
-2. Verify the chat-only Discord application has view/send/attachment/embed access only to the approved private channel. Do not grant staff command, kick, guild role, or production messaging permissions.
+2. Verify the chat-only Discord application has view/send/attachment/embed access only to the approved private channel. **Verify the selected chat application token is not simultaneously used by any already-running production or staging StaffBot JDA session**; if it is in use, stop the candidate rather than launch a duplicate gateway. Do not grant staff command, kick, guild role, or production messaging permissions.
 3. Verify private Velocity TLS trust-store and the **dedicated STAFFBOT_TEST authenticated peer**, with a separate HMAC secret-environment entry, then verify network reachability without logging secrets. This peer must be explicitly registered by the proxy operator in a separately approved, reversible maintenance window. Do not reuse production STAFFBOT peer identity or HMAC key, and do not change or restart live Velocity just to make the trial work. Without a separate proxy peer this isolated runner intentionally **cannot connect**.
 4. Coordinate TEST Paper maintenance and rollback. Disable test DiscordSRV's configured legacy console destination, chat forwarding, command execution, other announcements, and any unrelated guild writer before enabling Paper SHADOW. A currently invalid legacy token is not durable containment.
 5. Run tools/staffbot-chat-preflight/check.py against *real protected* candidate file copies, selecting --staffbot-environment staging for this separate process. Require every check PASS; that alone does not prove JDA permissions or Velocity/Paper readiness.
@@ -29,7 +29,7 @@ Build exact-head shaded StaffBot JAR with Java 25, then perform a **nonposting**
 java -cp EnthusiaStaff-StaffBot.jar net.enthusia.staff.discordbot.StaffBotIsolatedChatApplication --chat=private-chat.properties --smoke-test
 ~~~
 
-The smoke test exits successfully only if the separate Discord chat application identity, pinned guild/private channel, and authenticated Velocity transport become ready. It sends no chat message, does not start the primary moderation bot, and does not turn on TEST Paper SHADOW. It cannot establish that TEST Paper is actually publishing.
+The smoke test exits successfully only if the separate Discord chat application identity, pinned guild/private channel, and authenticated Velocity transport become ready. A JDA disconnect revokes readiness; do not treat an earlier ready log line as proof that the gateway is still connected. It sends no chat message, does not start the primary moderation bot, and does not turn on TEST Paper SHADOW. It cannot establish that TEST Paper is actually publishing.
 
 After smoke success, start one supervised instance in the isolated service without the smoke argument:
 
