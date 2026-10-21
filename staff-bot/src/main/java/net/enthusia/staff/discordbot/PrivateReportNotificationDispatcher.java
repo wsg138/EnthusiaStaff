@@ -18,6 +18,7 @@ import net.enthusia.staff.persistence.JdbcStaffBotReportIntentStore.ClaimedInten
 final class PrivateReportNotificationDispatcher {
     private static final Duration LEASE = Duration.ofSeconds(45);
     private static final int CLAIM_LIMIT = 1;
+    private static final String CREATED_EVENT_TYPE = "REPORT_CREATED";
 
     interface Journal {
         List<ClaimedIntent> claimArmed(String owner, int limit, Duration lease, java.time.Instant now);
@@ -135,7 +136,7 @@ final class PrivateReportNotificationDispatcher {
             // A merge intent means there was a new reporter follow-up. The
             // original description is NOT that follow-up. Do not send stale
             // body text until owner-approved follow-up sourcing is implemented.
-            if (!"REPORT_CREATED".equals(intent.eventType())) {
+            if (!CREATED_EVENT_TYPE.equals(intent.eventType())) {
                 journal.reviewRequired(intent.intentId(), owner);
                 return;
             }
