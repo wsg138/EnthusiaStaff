@@ -102,6 +102,12 @@ def isolated_peer_checks(config: str) -> list[tuple[str, bool]]:
     primary = prop.get("channel.backend.STAFFBOT.secret-environment", "")
     paper = prop.get("channel.backend.TEST.secret-environment", "")
     isolated = prop.get("channel.backend.STAFFBOT_TEST.secret-environment", "")
+    other_secret_names = [
+        value for key, value in prop.items()
+        if key.startswith("channel.backend.")
+        and key.endswith(".secret-environment")
+        and key != "channel.backend.STAFFBOT_TEST.secret-environment"
+    ]
     return [
         ("Velocity authenticated channel enabled",
          prop.get("channel.enabled", "").lower() == "true"),
@@ -109,7 +115,7 @@ def isolated_peer_checks(config: str) -> list[tuple[str, bool]]:
          bool(primary) and bool(paper)),
         ("Velocity distinct STAFFBOT_TEST peer secret identifier configured",
          bool(re.fullmatch(r"[A-Z][A-Z0-9_]{0,127}", isolated))
-         and isolated not in (primary, paper)),
+         and isolated not in other_secret_names),
     ]
 
 
