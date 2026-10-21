@@ -16,6 +16,7 @@ import org.junit.jupiter.api.Test;
 
 class VelocityStaffBotIsolatedDeliveryTest {
     private static final long NOW = 1_800_000_000_000L;
+    private static final String TEXT_BODY = "test";
 
     @Test
     void allTestChatKindsUseIsolatedPeerWhileSmpUsesPrimaryPeer() {
@@ -51,7 +52,7 @@ class VelocityStaffBotIsolatedDeliveryTest {
     private static ChatBridgeOutboundMessage plain(String server) {
         UUID id = UUID.randomUUID();
         return new ChatBridgeOutboundMessage(id, "mc-" + id, "canonical-" + id,
-                NOW, NOW + 30_000L, server, "global", UUID.randomUUID(), "Player", "test");
+                NOW, NOW + 30_000L, server, "global", UUID.randomUUID(), "Player", TEXT_BODY);
     }
 
     private static ChatBridgeArtifactBundle artifact(String server) {
@@ -65,6 +66,6 @@ class VelocityStaffBotIsolatedDeliveryTest {
         UUID id = UUID.randomUUID();
         return new ChatBridgeRenderedMessage(id, "mc-" + id, "canonical-" + id,
                 NOW, NOW + 30_000L, server, "global", UUID.randomUUID(),
-                "Player", "test", "test", "test", "{}", "test", "test", "{}");
+                "Player", TEXT_BODY, TEXT_BODY, TEXT_BODY, "{}", TEXT_BODY, TEXT_BODY, "{}");
     }
 }
