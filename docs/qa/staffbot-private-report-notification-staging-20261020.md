@@ -10,8 +10,8 @@ dispatcher/JDA adapter (#654) exist as draft components, but there is no
 owner-approved runtime activation, production sender registration,
 or automatic channel delivery. Do not treat passing CI as consent.
 
-Use a disposable MariaDB clone with backup/snapshot, and migrate V32 before
-V33. Existing live `reason-policies.yml` is customized: never silently
+Use a disposable MariaDB clone with backup/snapshot, and migrate in order: V32 for message provenance, V33 for inert intents,
+and V34 for verified Discord receipt IDs. Existing live `reason-policies.yml` is customized: never silently
 replace it. Keep `guided-punishment.enabled=false`. Use only generated,
 synthetic report bodies and identities in the authorized private test
 Discord channel; never copy a real player's report into that channel.
@@ -77,3 +77,26 @@ registration cannot be approved until durable external-message audit and
 a reviewed retry/reconciliation policy exist. CI unit mocks are not the
 same as proving an end-to-end Discord permission boundary. The approval
 decision must remain explicitly owned by the server operator.
+
+## Current V34 and isolation release gates
+
+The V34 schema records a validated, unique Discord message ID atomically
+with DELIVERED. A null, malformed, duplicate or uncertain receipt must
+not complete an intent. Synthetic tests must verify this and ensure no
+notification is retried automatically after an ambiguous REST outcome.
+
+The dispatcher currently quarantines REPORT_MERGED intents without
+delivery because the exact-id read model can access the original report
+description but not the merged follow-up body. It also rejects results
+whose case ID differs from the claimed intent UUID, with no text sent.
+
+The earlier read-only bloom-test1 audit observed production-identical
+legacy DiscordSRV global, staff and console destinations. Its current
+on-disk candidate was blocked in 3 configuration preflight checks:
+Paper SHADOW disabled, TEST/global route mismatch, and populated legacy
+console destination. Source synthetic preflight tests pass 11/11, but do
+not prove the running test server is isolated. Do not send real staging
+reports into Discord until the production-colliding routes are corrected
+in a coordinated test-only change, current JDA permissions are verified,
+and the owner-approved private test destination is independently proven
+isolated from public/chat/console/role writers.
