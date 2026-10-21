@@ -96,10 +96,32 @@ def migration_acknowledged(prop: dict[str, str], environment: str) -> bool:
     )
 
 
+def isolated_peer_checks(config: str) -> list[tuple[str, bool]]:
+    """Read-only config check. Never reads or exposes secret values."""
+    prop = properties(config)
+    primary = prop.get("channel.backend.STAFFBOT.secret-environment", "")
+    paper = prop.get("channel.backend.TEST.secret-environment", "")
+    isolated = prop.get("channel.backend.STAFFBOT_TEST.secret-environment", "")
+    return [
+        ("Velocity authenticated channel enabled",
+         prop.get("channel.enabled", "").lower() == "true"),
+        ("Velocity retains STAFFBOT and TEST peer mappings",
+         bool(primary) and bool(paper)),
+        ("Velocity distinct STAFFBOT_TEST peer secret identifier configured",
+         bool(re.fullmatch(r"[A-Z][A-Z0-9_]{0,127}", isolated))
+         and isolated not in (primary, paper)),
+    ]
+
+
 def evaluate(
     paper: str, legacy_test: str, legacy_live: str, chat: str,
-    java_source: str, staffbot_environment: str
+    java_source: str, staffbot_environment: str,
+    velocity_config: str | None = None, isolated_test: bool = False
 ) -> list[tuple[str, bool]]:
+    if isolated_test and staffbot_environment != "staging":
+        raise ValueError("isolated TEST runner requires staging environment")
+    if isolated_test and velocity_config is None:
+        raise ValueError("isolated TEST runner requires Velocity config")
     pin = private_channel(java_source)
     prop = properties(chat)
     server_id = yaml_scalar(yaml_section(paper, "network"), "server-id")
@@ -130,7 +152,7 @@ def evaluate(
          legacy_setting(legacy_test, "DiscordChatChannelConsoleCommandEnabled").lower() == "false"),
         ("Test legacy console Discord destination absent",
          legacy_setting(legacy_test, "DiscordConsoleChannelId").strip("'\" ") in ("", "0")),
-    ]
+    ] + (isolated_peer_checks(velocity_config) if isolated_test else [])
 
 
 def main() -> int:
@@ -141,6 +163,10 @@ def main() -> int:
     parser.add_argument("--chat", required=True, type=Path)
     parser.add_argument("--staffbot-environment", required=True, choices=("production", "staging"))
     parser.add_argument("--staffbot-environment-source", required=True, type=Path)
+    parser.add_argument("--isolated-test", action="store_true",
+                        help="Check the separate STAFFBOT_TEST peer, not the live STAFFBOT connection")
+    parser.add_argument("--velocity-config", type=Path,
+                        help="Read-only Velocity properties, required for --isolated-test")
     args = parser.parse_args()
     try:
         results = evaluate(
@@ -150,6 +176,9 @@ def main() -> int:
             args.chat.read_text(encoding="utf-8"),
             args.staffbot_environment_source.read_text(encoding="utf-8"),
             args.staffbot_environment,
+            args.velocity_config.read_text(encoding="utf-8")
+            if args.velocity_config is not None else None,
+            args.isolated_test,
         )
     except (OSError, UnicodeError, ValueError) as error:
         print(f"BLOCKED: configuration cannot be validated ({type(error).__name__})")
@@ -159,6 +188,8 @@ def main() -> int:
     count = sum(not result for _, result in results)
     print(f"CONFIGURATION PREFLIGHT: {len(results)-count} PASS, {count} BLOCKED")
     print("Runtime identity, channel permissions, TLS peers, bot readiness, and rollback are NOT VERIFIED.")
+    if args.isolated_test:
+        print("Actual HMAC secret values and their uniqueness are NOT VERIFIED by this read-only check.")
     return 2 if count else 0
 
 
