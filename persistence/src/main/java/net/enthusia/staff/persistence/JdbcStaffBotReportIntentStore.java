@@ -25,6 +25,7 @@ public final class JdbcStaffBotReportIntentStore {
     private static final int MAX_OWNER_LENGTH = 128;
     private static final String INTENT_ID_ARGUMENT = "intentId";
     private static final String NOW_ARGUMENT = "now";
+    private static final String DISCORD_SNOWFLAKE = "[1-9][0-9]{5,19}";
     private final DataSource dataSource;
 
     public record ClaimedIntent(UUID intentId, UUID reportId, String eventType, int attemptCount) {
@@ -121,24 +122,29 @@ public final class JdbcStaffBotReportIntentStore {
      * Acknowledgements must match a current unexpired lease and its exact owner.
      * Discord's ambiguous timeouts must not call this method.
      */
-    public boolean delivered(UUID intentId, String owner, Instant now) {
+    public boolean delivered(UUID intentId, String owner, Instant now, String messageId) {
         Objects.requireNonNull(intentId, INTENT_ID_ARGUMENT);
         validOwner(owner);
         Objects.requireNonNull(now, NOW_ARGUMENT);
+        if (messageId == null || !messageId.matches(DISCORD_SNOWFLAKE)) {
+            throw new IllegalArgumentException("A confirmed Discord message ID is required");
+        }
         return JdbcTransactionSupport.execute(dataSource,
                 "Unable to mark private StaffBot report notification delivered",
                 connection -> {
                     try (PreparedStatement update = connection.prepareStatement("""
                             UPDATE staffbot_report_notification_intents
                             SET state = 'DELIVERED', delivered_at = ?,
+                                discord_message_id = ?,
                                 lease_owner = NULL, lease_expires_at = NULL
                             WHERE intent_id = ? AND state = 'LEASED'
                               AND lease_owner = ? AND lease_expires_at > ?
                             """)) {
                         update.setTimestamp(1, Timestamp.from(now));
-                        update.setBytes(2, UuidBytes.toBytes(intentId));
-                        update.setString(3, owner);
-                        update.setTimestamp(4, Timestamp.from(now));
+                        update.setString(2, messageId);
+                        update.setBytes(3, UuidBytes.toBytes(intentId));
+                        update.setString(4, owner);
+                        update.setTimestamp(5, Timestamp.from(now));
                         return JdbcTransactionSupport.updatedOne(update.executeUpdate());
                     }
                 });

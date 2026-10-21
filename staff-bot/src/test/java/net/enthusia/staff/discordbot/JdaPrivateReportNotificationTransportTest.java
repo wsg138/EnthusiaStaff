@@ -20,9 +20,9 @@ import net.dv8tion.jda.api.entities.channel.concrete.TextChannel;
 import net.dv8tion.jda.api.requests.restaction.MessageCreateAction;
 import net.dv8tion.jda.api.utils.cache.CacheFlag;
 import java.util.Collection;
-import java.util.concurrent.atomic.AtomicReference;
-import net.dv8tion.jda.api.entities.channel.concrete.TextChannel;
-import net.dv8tion.jda.api.requests.restaction.MessageCreateAction;
+
+
+
 import net.dv8tion.jda.api.JDA;
 import org.junit.jupiter.api.Test;
 
@@ -30,6 +30,7 @@ final class JdaPrivateReportNotificationTransportTest {
     private static final String GUILD = "123456789012345678";
     private static final String CHANNEL = "223456789012345678";
     private static final String STAFF_ROLE = "323456789012345678";
+    private static final String MESSAGE_ID = "423456789012345678";
 
     private static JDA unavailableDiscord() {
         return (JDA) Proxy.newProxyInstance(
@@ -49,7 +50,7 @@ final class JdaPrivateReportNotificationTransportTest {
         var transport = new JdaPrivateReportNotificationTransport(
                 jda, GUILD, CHANNEL, STAFF_ROLE, false);
         assertFalse(transport.verify().eligible());
-        assertEquals(PrivateReportNotificationDispatcher.Outcome.UNCERTAIN,
+        assertEquals(PrivateReportNotificationDispatcher.DeliveryReceipt.uncertain(),
                 transport.send("Private text @everyone"));
     }
 
@@ -58,7 +59,7 @@ final class JdaPrivateReportNotificationTransportTest {
         var transport = new JdaPrivateReportNotificationTransport(
                 unavailableDiscord(), GUILD, CHANNEL, STAFF_ROLE, true);
         assertFalse(transport.verify().eligible());
-        assertEquals(PrivateReportNotificationDispatcher.Outcome.UNCERTAIN,
+        assertEquals(PrivateReportNotificationDispatcher.DeliveryReceipt.uncertain(),
                 transport.send("Report description"));
     }
 
@@ -94,7 +95,12 @@ final class JdaPrivateReportNotificationTransportTest {
     void authorizedPrivateChannelSendsOnlySyntheticTextWithNoMentions() {
         AtomicReference<Object> mentions = new AtomicReference<>();
         var delivered = proxy(Message.class,
-                (instance, method, args) -> { throw new AssertionError(method.getName()); });
+                (instance, method, args) -> {
+                    if ("getId".equals(method.getName())) {
+                        return MESSAGE_ID;
+                    }
+                    throw new AssertionError(method.getName());
+                });
         var action = syntheticAction(mentions, delivered);
         var guild = syntheticGuild(syntheticRole(false), syntheticRole(true));
         var channel = syntheticChannel(guild, action);
@@ -103,7 +109,7 @@ final class JdaPrivateReportNotificationTransportTest {
                 api, GUILD, CHANNEL, STAFF_ROLE, true);
 
         assertTrue(sender.verify().eligible());
-        assertEquals(PrivateReportNotificationDispatcher.Outcome.CONFIRMED,
+        assertEquals(PrivateReportNotificationDispatcher.DeliveryReceipt.confirmed(MESSAGE_ID),
                 sender.send("Synthetic test report"));
         assertTrue(((java.util.Collection<?>) mentions.get()).isEmpty());
     }

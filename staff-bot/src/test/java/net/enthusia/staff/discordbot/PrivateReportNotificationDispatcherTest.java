@@ -3,6 +3,7 @@ package net.enthusia.staff.discordbot;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import java.time.Clock;
 import java.time.Duration;
@@ -21,6 +22,7 @@ final class PrivateReportNotificationDispatcherTest {
     private static final Clock CLOCK = Clock.fixed(NOW, ZoneOffset.UTC);
     private static final String WORKER = "staging-private-report-worker";
     private static final String GUILD = "123456789012345678";
+    private static final String MESSAGE_ID = "423456789012345678";
     private static final UUID REPORT_ID =
             UUID.fromString("12345678-1234-1234-1234-123456789abc");
 
@@ -30,6 +32,7 @@ final class PrivateReportNotificationDispatcherTest {
         int quarantines;
         boolean available = true;
         boolean acknowledge = true;
+        String storedMessageId;
         final ClaimedIntent intent =
                 new ClaimedIntent(UUID.randomUUID(), REPORT_ID, "REPORT_CREATED", 1);
 
@@ -50,10 +53,12 @@ final class PrivateReportNotificationDispatcherTest {
         }
 
         @Override
-        public boolean delivered(UUID intentId, String owner, Instant now) {
+        public boolean delivered(UUID intentId, String owner, Instant now, String messageId) {
             acknowledgements++;
             assertEquals(intent.intentId(), intentId);
             assertEquals(WORKER, owner);
+            assertEquals(MESSAGE_ID, messageId);
+            storedMessageId = messageId;
             return acknowledge;
         }
 
@@ -89,6 +94,19 @@ final class PrivateReportNotificationDispatcherTest {
     }
 
     @Test
+    void onlyValidatedDiscordMessageIdsCanBecomeConfirmedReceipts() {
+        assertThrows(IllegalArgumentException.class,
+                () -> PrivateReportNotificationDispatcher.DeliveryReceipt.confirmed("bad"));
+        assertThrows(IllegalArgumentException.class,
+                () -> PrivateReportNotificationDispatcher.DeliveryReceipt.confirmed(""));
+        assertThrows(NullPointerException.class,
+                () -> PrivateReportNotificationDispatcher.DeliveryReceipt.confirmed(null));
+        assertFalse(PrivateReportNotificationDispatcher.DeliveryReceipt.uncertain().isConfirmed());
+        assertTrue(PrivateReportNotificationDispatcher.DeliveryReceipt
+                .confirmed(MESSAGE_ID).isConfirmed());
+    }
+
+    @Test
     void defaultOffNeverTouchesDestinationDatabaseOrTransport() {
         var journal = new FakeJournal();
         var execution = dispatcher(journal, false,
@@ -119,11 +137,12 @@ final class PrivateReportNotificationDispatcherTest {
                     assertFalse(body.contains("@everyone"));
                     assertFalse(body.contains("https://"));
                     sent.incrementAndGet();
-                    return PrivateReportNotificationDispatcher.Outcome.CONFIRMED;
+                    return PrivateReportNotificationDispatcher.DeliveryReceipt.confirmed(MESSAGE_ID);
                 });
         assertEquals(1, execution.runOnce());
         assertEquals(1, sent.get());
         assertEquals(1, journal.acknowledgements);
+        assertEquals(MESSAGE_ID, journal.storedMessageId);
         assertEquals(0, journal.quarantines);
         assertEquals(0, execution.runOnce());
         assertEquals(1, sent.get());
@@ -136,7 +155,7 @@ final class PrivateReportNotificationDispatcherTest {
         var execution = dispatcher(journal, true, () -> destination(true),
                 id -> Optional.of(report()), text -> {
                     sends.incrementAndGet();
-                    return PrivateReportNotificationDispatcher.Outcome.UNCERTAIN;
+                    return PrivateReportNotificationDispatcher.DeliveryReceipt.uncertain();
                 });
         assertEquals(1, execution.runOnce());
         assertEquals(0, journal.acknowledgements);
@@ -153,7 +172,7 @@ final class PrivateReportNotificationDispatcherTest {
         var execution = dispatcher(journal, true, () -> destination(true),
                 id -> Optional.of(report()), body -> {
                     sent.incrementAndGet();
-                    return PrivateReportNotificationDispatcher.Outcome.CONFIRMED;
+                    return PrivateReportNotificationDispatcher.DeliveryReceipt.confirmed(MESSAGE_ID);
                 });
         assertEquals(1, execution.runOnce());
         assertEquals(1, sent.get());

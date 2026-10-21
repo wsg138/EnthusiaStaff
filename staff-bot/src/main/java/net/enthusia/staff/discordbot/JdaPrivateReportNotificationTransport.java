@@ -78,34 +78,34 @@ final class JdaPrivateReportNotificationTransport
     }
 
     @Override
-    public PrivateReportNotificationDispatcher.Outcome send(String message) {
+    public PrivateReportNotificationDispatcher.DeliveryReceipt send(String message) {
         if (!ownerApproved || message == null || message.isBlank()
                 || message.length() > MAX_MESSAGE_LENGTH) {
-            return PrivateReportNotificationDispatcher.Outcome.UNCERTAIN;
+            return PrivateReportNotificationDispatcher.DeliveryReceipt.uncertain();
         }
         try {
             TextChannel channel = jda.getTextChannelById(channelId);
             if (!verifyChannel(channel).eligible()) {
-                return PrivateReportNotificationDispatcher.Outcome.UNCERTAIN;
+                return PrivateReportNotificationDispatcher.DeliveryReceipt.uncertain();
             }
             return sendConfirmed(channel, message);
         } catch (InterruptedException interrupted) {
             Thread.currentThread().interrupt();
-            return PrivateReportNotificationDispatcher.Outcome.UNCERTAIN;
+            return PrivateReportNotificationDispatcher.DeliveryReceipt.uncertain();
         } catch (ExecutionException | TimeoutException | RuntimeException ambiguous) {
-            return PrivateReportNotificationDispatcher.Outcome.UNCERTAIN;
+            return PrivateReportNotificationDispatcher.DeliveryReceipt.uncertain();
         }
     }
 
-    private static PrivateReportNotificationDispatcher.Outcome sendConfirmed(
+    private static PrivateReportNotificationDispatcher.DeliveryReceipt sendConfirmed(
             TextChannel channel, String message
     ) throws InterruptedException, ExecutionException, TimeoutException {
         // User-created report text must never ping users, roles or @everyone.
         Message delivered = privateMessageAction(channel, message)
                 .submit().get(SEND_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS);
         return delivered == null
-                ? PrivateReportNotificationDispatcher.Outcome.UNCERTAIN
-                : PrivateReportNotificationDispatcher.Outcome.CONFIRMED;
+                ? PrivateReportNotificationDispatcher.DeliveryReceipt.uncertain()
+                : PrivateReportNotificationDispatcher.DeliveryReceipt.confirmed(delivered.getId());
     }
 
     /** This separate seam permits proof that untrusted descriptions never ping. */

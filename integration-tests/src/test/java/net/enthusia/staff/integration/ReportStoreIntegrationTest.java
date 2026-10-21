@@ -62,6 +62,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 class ReportStoreIntegrationTest {
     private static final int CONCURRENT_OPERATION_COUNT = 2;
     private static final String STAFFBOT_WORKER_A = "worker-a";
+    private static final String STAFFBOT_DISCORD_MESSAGE_ID = "423456789012345678";
     private static final String STAFFBOT_WORKER_B = "worker-b";
     private static final String STAFFBOT_CREATED = "REPORT_CREATED";
     private static final String STAFFBOT_TEST_BODY = "synthetic";
@@ -152,9 +153,9 @@ class ReportStoreIntegrationTest {
             assertEquals(STAFFBOT_CREATED, claimed.getFirst().eventType());
             assertEquals(1, claimed.getFirst().attemptCount());
             assertFalse(intents.delivered(claimed.getFirst().intentId(), STAFFBOT_WORKER_B,
-                    NOW.plusSeconds(2)), "Only the lease owner can acknowledge delivery");
+                    NOW.plusSeconds(2), STAFFBOT_DISCORD_MESSAGE_ID), "Only the lease owner can acknowledge delivery");
             assertFalse(intents.delivered(claimed.getFirst().intentId(), STAFFBOT_WORKER_A,
-                    NOW.plusSeconds(31)), "An expired lease cannot acknowledge a send");
+                    NOW.plusSeconds(31), STAFFBOT_DISCORD_MESSAGE_ID), "An expired lease cannot acknowledge a send");
         }
         // The original worker has stopped. Reopen a fresh connection pool to
         // prove an abandoned lease cannot send twice after a real restart.
@@ -184,11 +185,17 @@ class ReportStoreIntegrationTest {
             armSyntheticIntent(reportId, NOW);
             var claim = intents.claimArmed(STAFFBOT_WORKER_A, 1, Duration.ofMinutes(1), NOW)
                     .getFirst();
-            assertTrue(intents.delivered(claim.intentId(), STAFFBOT_WORKER_A, NOW.plusSeconds(1)));
-            assertFalse(intents.delivered(claim.intentId(), STAFFBOT_WORKER_A, NOW.plusSeconds(2)));
+            assertThrows(IllegalArgumentException.class, () ->
+                    intents.delivered(claim.intentId(), STAFFBOT_WORKER_A,
+                            NOW.plusSeconds(1), "not-a-message-id"));
+            assertTrue(intents.delivered(claim.intentId(), STAFFBOT_WORKER_A,
+                    NOW.plusSeconds(1), STAFFBOT_DISCORD_MESSAGE_ID));
+            assertFalse(intents.delivered(claim.intentId(), STAFFBOT_WORKER_A,
+                    NOW.plusSeconds(2), STAFFBOT_DISCORD_MESSAGE_ID));
             assertFalse(intents.reviewRequired(claim.intentId(), STAFFBOT_WORKER_A));
             assertEquals(0, intents.quarantineExpired(NOW.plusSeconds(120)));
             assertEquals(1L, staffBotStateCount(reportId, "DELIVERED"));
+            assertEquals(STAFFBOT_DISCORD_MESSAGE_ID, staffBotDeliveredMessageId(reportId));
         }
     }
 
@@ -655,6 +662,21 @@ class ReportStoreIntegrationTest {
             update.setTimestamp(1, java.sql.Timestamp.from(when));
             update.setBytes(2, uuidBytes(reportId));
             assertEquals(1, update.executeUpdate());
+        }
+    }
+
+    private static String staffBotDeliveredMessageId(UUID reportId) throws SQLException {
+        try (Connection connection = connection(DATABASE);
+             PreparedStatement query = connection.prepareStatement("""
+                     SELECT discord_message_id
+                       FROM staffbot_report_notification_intents
+                      WHERE report_id = ? AND state = 'DELIVERED'
+                     """)) {
+            query.setBytes(1, uuidBytes(reportId));
+            try (ResultSet rows = query.executeQuery()) {
+                requireRow(rows, "No confirmed StaffBot Discord receipt was recorded");
+                return rows.getString(1);
+            }
         }
     }
 
