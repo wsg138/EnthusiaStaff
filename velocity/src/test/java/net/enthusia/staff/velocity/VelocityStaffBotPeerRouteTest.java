@@ -12,6 +12,7 @@ import org.junit.jupiter.api.Test;
 
 class VelocityStaffBotPeerRouteTest {
     private static final String TEST = "TEST";
+    private static final String HMAC_SHA_256 = "HmacSHA256";
     private static final String PEER = VelocityStaffBotPeerRoute.TEST_PEER;
 
     @Test
@@ -38,8 +39,8 @@ class VelocityStaffBotPeerRouteTest {
         byte[] primary = new byte[32];
         byte[] separate = new byte[32];
         separate[0] = 1;
-        var production = new SecretKeySpec(primary, "HmacSHA256");
-        var isolated = new SecretKeySpec(separate, "HmacSHA256");
+        var production = new SecretKeySpec(primary, HMAC_SHA_256);
+        var isolated = new SecretKeySpec(separate, HMAC_SHA_256);
         VelocityChannelPeerPolicy.validateIndependentStaffBotSecrets(
                 Map.of(VelocityStaffBotChatSink.PEER_ID, production));
         VelocityChannelPeerPolicy.validateIndependentStaffBotSecrets(
@@ -51,17 +52,17 @@ class VelocityStaffBotPeerRouteTest {
                 () -> VelocityChannelPeerPolicy.validateIndependentStaffBotSecrets(Map.of(
                         VelocityStaffBotChatSink.PEER_ID, production,
                         VelocityStaffBotPeerRoute.TEST_PEER,
-                        new SecretKeySpec(primary.clone(), "HmacSHA256"))));
+                        new SecretKeySpec(primary.clone(), HMAC_SHA_256))));
     }
 
     @Test
     void isolatedPeerCannotReusePaperBackendSecret() {
         byte[] sharedBytes = new byte[32];
-        var shared = new SecretKeySpec(sharedBytes, "HmacSHA256");
+        var shared = new SecretKeySpec(sharedBytes, HMAC_SHA_256);
         assertThrows(IllegalArgumentException.class,
                 () -> VelocityChannelPeerPolicy.validateIndependentStaffBotSecrets(
                         Map.of("TEST", shared, VelocityStaffBotPeerRoute.TEST_PEER,
-                                new SecretKeySpec(sharedBytes.clone(), "HmacSHA256"))));
+                                new SecretKeySpec(sharedBytes.clone(), HMAC_SHA_256))));
     }
 
     @Test
