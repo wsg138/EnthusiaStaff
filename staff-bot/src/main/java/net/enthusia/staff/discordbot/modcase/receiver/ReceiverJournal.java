@@ -11,11 +11,9 @@ import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
 import java.time.Instant;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Set;
 import java.util.regex.Pattern;
 
 /** One-process, synthetic, durable-by-atomic-replace projection and two independent outboxes. */
@@ -71,15 +69,12 @@ public final class ReceiverJournal {
     }
 
     private static boolean validOperations(State loaded) {
-        Set<String> revisions = new HashSet<>();
-        for (Map.Entry<String, CaseEvent> entry : loaded.operations().entrySet()) {
-            CaseEvent event = entry.getValue();
-            if (event == null || !Objects.equals(event.operationId(), entry.getKey())
-                    || !revisions.add(event.caseId() + "/" + event.revision())) {
-                return false;
-            }
-        }
-        return true;
+        boolean validKeys = loaded.operations().entrySet().stream()
+                .allMatch(entry -> entry.getValue() != null
+                        && Objects.equals(entry.getValue().operationId(), entry.getKey()));
+        return validKeys && loaded.operations().values().stream()
+                .map(event -> event.caseId() + "/" + event.revision())
+                .distinct().count() == loaded.operations().size();
     }
 
     private static boolean validCursors(State loaded) {
