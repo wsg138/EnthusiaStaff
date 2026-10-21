@@ -18,13 +18,16 @@ class CaseReceiverTest {
     @TempDir Path dir;
     private static final String CASE = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee";
     private static final String OTHER = "bbbbbbbb-bbbb-4ccc-8ddd-eeeeeeeeeeee";
+    private static final String JOURNAL_NAME = "synthetic-receiver.json";
+    private static final String REVISION_FIELD = "revision";
+    private static final String CASES_FIELD = "cases";
     private static final Instant NOW = Instant.parse("2026-10-15T01:01:00Z");
     private static final CaseReceiver.Peer PEER =
             new CaseReceiver.Peer(true, "minecraft", "smp", 12345L);
     private final ObjectMapper json = new ObjectMapper();
 
     private ReceiverJournal journal() throws IOException {
-        return new ReceiverJournal(dir.resolve("synthetic-receiver.json"));
+        return new ReceiverJournal(dir.resolve(JOURNAL_NAME));
     }
 
     private CaseReceiver receiver(ReceiverJournal journal) {
@@ -45,7 +48,7 @@ class CaseReceiverTest {
         fields.put("operation_id", e.operationId());
         fields.put("event_type", e.eventType());
         fields.put("case_id", e.caseId());
-        fields.put("revision", e.revision());
+        fields.put(REVISION_FIELD, e.revision());
         fields.put("origin_platform", e.originPlatform());
         fields.put("scope_id", e.scopeId());
         fields.put("case_state", e.caseState());
@@ -285,8 +288,8 @@ class CaseReceiverTest {
     void acknowledgementHasExactPublicWireAllowlist() throws Exception {
         CaseAck ack = receiver(journal()).receive(PEER, wire(birth())).orElseThrow();
         assertEquals(java.util.Set.of("status", "operation_id", "event_type", "case_id",
-                "revision", "origin_platform", "scope_id"), ack.toWire().keySet());
-        assertEquals(0L, ack.toWire().get("revision"));
+                REVISION_FIELD, "origin_platform", "scope_id"), ack.toWire().keySet());
+        assertEquals(0L, ack.toWire().get(REVISION_FIELD));
         assertFalse(ack.toWire().containsKey("evidence_refs"));
     }
 
@@ -318,11 +321,11 @@ class CaseReceiverTest {
 
     private ObjectNode savedJournal() throws IOException {
         return (ObjectNode) json.readTree(Files.readString(
-                dir.resolve("synthetic-receiver.json")));
+                dir.resolve(JOURNAL_NAME)));
     }
 
     private void replaceSavedJournal(ObjectNode value) throws IOException {
-        Files.writeString(dir.resolve("synthetic-receiver.json"),
+        Files.writeString(dir.resolve(JOURNAL_NAME),
                 json.writeValueAsString(value));
     }
 
@@ -352,7 +355,7 @@ class CaseReceiverTest {
     void restartRejectsCursorWithFalseCurrentRevision() throws Exception {
         accept(receiver(journal()), birth());
         ObjectNode state = savedJournal();
-        ((ObjectNode) state.path("cases").path(CASE)).put("revision", 99);
+        ((ObjectNode) state.path(CASES_FIELD).path(CASE)).put(REVISION_FIELD, 99);
         replaceSavedJournal(state);
         assertThrows(IOException.class, this::journal);
     }
@@ -368,9 +371,9 @@ class CaseReceiverTest {
                 event("c", "CASE_STATE", CASE, 2, "smp", "CLOSED")));
 
         ObjectNode state = savedJournal();
-        ObjectNode cursor = (ObjectNode) state.path("cases").path(CASE);
+        ObjectNode cursor = (ObjectNode) state.path(CASES_FIELD).path(CASE);
         cursor.put("operationId", birth().operationId());
-        cursor.put("revision", 0);
+        cursor.put(REVISION_FIELD, 0);
         cursor.put("caseState", "OPEN");
         replaceSavedJournal(state);
         assertThrows(IOException.class, this::journal);
@@ -380,7 +383,7 @@ class CaseReceiverTest {
     void restartRejectsOrphanedEventWithMissingCaseCursor() throws Exception {
         accept(receiver(journal()), birth());
         ObjectNode state = savedJournal();
-        ((ObjectNode) state.path("cases")).remove(CASE);
+        ((ObjectNode) state.path(CASES_FIELD)).remove(CASE);
         replaceSavedJournal(state);
         assertThrows(IOException.class, this::journal);
     }
@@ -399,7 +402,7 @@ class CaseReceiverTest {
     @Test
     void restartRejectsDuplicatePersistedMapKeys() throws Exception {
         accept(receiver(journal()), birth());
-        Path file = dir.resolve("synthetic-receiver.json");
+        Path file = dir.resolve(JOURNAL_NAME);
         String original = Files.readString(file);
         String duplicate = original.replace("\"operations\":{",
                 "\"operations\":{},\"operations\":{");
@@ -412,7 +415,7 @@ class CaseReceiverTest {
     void restartRejectsNullCursorInsteadOfCrashingLater() throws Exception {
         accept(receiver(journal()), birth());
         ObjectNode state = savedJournal();
-        ((ObjectNode) state.path("cases")).putNull(CASE);
+        ((ObjectNode) state.path(CASES_FIELD)).putNull(CASE);
         replaceSavedJournal(state);
         assertThrows(IOException.class, this::journal);
     }
