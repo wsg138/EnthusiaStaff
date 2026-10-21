@@ -106,6 +106,17 @@ class CaseReceiverTest {
     }
 
     @Test
+    void canonicalCaseUuidIsRequiredInStrictWireParser() throws Exception {
+        CaseReceiver service = receiver(journal());
+        String valid = wire(birth());
+        assertTrue(service.receive(PEER, valid.replace(CASE, CASE.toUpperCase(
+                java.util.Locale.ROOT))).isEmpty());
+        assertTrue(service.receive(PEER,
+                valid.replace("\"case_id\":\"" + CASE + "\"", "\"case_id\":null")).isEmpty());
+        assertNull(journal().cursor(CASE));
+    }
+
+    @Test
     void scopeGuildAndPeerAuthenticationFailClosed() throws Exception {
         CaseReceiver service = receiver(journal());
         assertTrue(service.receive(null, wire(birth())).isEmpty());
@@ -270,9 +281,8 @@ class CaseReceiverTest {
     void concurrentIngressAndExactDestinationAckAreIdempotent() throws Exception {
         ReceiverJournal store = journal();
         CaseReceiver service = receiver(store);
-        java.util.concurrent.ExecutorService pool =
-                java.util.concurrent.Executors.newFixedThreadPool(2);
-        try {
+        try (java.util.concurrent.ExecutorService pool =
+                java.util.concurrent.Executors.newFixedThreadPool(2)) {
             java.util.concurrent.CountDownLatch go = new java.util.concurrent.CountDownLatch(1);
             java.util.concurrent.Callable<String> submit = () -> {
                 go.await();
@@ -290,8 +300,6 @@ class CaseReceiverTest {
             assertTrue(a.get());
             assertTrue(b.get());
             assertFalse(store.confirm(job.id(), job.operationId(), "mock:2"));
-        } finally {
-            pool.shutdownNow();
         }
     }
 

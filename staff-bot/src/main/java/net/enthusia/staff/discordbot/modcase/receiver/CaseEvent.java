@@ -19,8 +19,10 @@ public record CaseEvent(int contractVersion, String operationId, String eventTyp
                         String expiresAt, List<String> evidenceRefs) {
     private static final ObjectMapper JSON = new ObjectMapper()
             .enable(JsonParser.Feature.STRICT_DUPLICATE_DETECTION);
-    private static final Set<String> KEYS = Set.of("contract_version", "operation_id",
-            "event_type", "case_id", "revision", "origin_platform", "scope_id",
+    private static final String CONTRACT_VERSION_KEY = "contract_version";
+    private static final String REVISION_KEY = "revision";
+    private static final Set<String> KEYS = Set.of(CONTRACT_VERSION_KEY, "operation_id",
+            "event_type", "case_id", REVISION_KEY, "origin_platform", "scope_id",
             "case_state", "review_priority", "created_at", "expires_at", "evidence_refs");
     private static final Set<String> TEXT_KEYS = Set.of("operation_id", "event_type", "case_id",
             "origin_platform", "scope_id", "case_state", "review_priority", "created_at", "expires_at");
@@ -100,10 +102,10 @@ public record CaseEvent(int contractVersion, String operationId, String eventTyp
                 throw new IllegalArgumentException("unknown event field");
             }
         });
-        if (!node.path("contract_version").isIntegralNumber()
-                || !node.path("contract_version").canConvertToInt()
-                || !node.path("revision").isIntegralNumber()
-                || !node.path("revision").canConvertToLong()) {
+        if (!node.path(CONTRACT_VERSION_KEY).isIntegralNumber()
+                || !node.path(CONTRACT_VERSION_KEY).canConvertToInt()
+                || !node.path(REVISION_KEY).isIntegralNumber()
+                || !node.path(REVISION_KEY).canConvertToLong()) {
             throw new IllegalArgumentException("invalid numeric field");
         }
         if (TEXT_KEYS.stream().anyMatch(key -> !node.path(key).isTextual())) {
@@ -121,9 +123,9 @@ public record CaseEvent(int contractVersion, String operationId, String eventTyp
     }
 
     private static CaseEvent decode(JsonNode node) {
-        return new CaseEvent(node.path("contract_version").intValue(),
+        return new CaseEvent(node.path(CONTRACT_VERSION_KEY).intValue(),
                 node.path("operation_id").textValue(), node.path("event_type").textValue(),
-                node.path("case_id").textValue(), node.path("revision").longValue(),
+                node.path("case_id").textValue(), node.path(REVISION_KEY).longValue(),
                 node.path("origin_platform").textValue(), node.path("scope_id").textValue(),
                 node.path("case_state").textValue(), node.path("review_priority").textValue(),
                 node.path("created_at").textValue(), node.path("expires_at").textValue(),
@@ -140,8 +142,11 @@ public record CaseEvent(int contractVersion, String operationId, String eventTyp
     }
 
     private static boolean canonicalUuid(String value) {
+        if (value == null) {
+            return false;
+        }
         try {
-            return value != null && UUID.fromString(value).toString().equals(value);
+            return UUID.fromString(value).toString().equals(value);
         } catch (IllegalArgumentException exception) {
             return false;
         }
