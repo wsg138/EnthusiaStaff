@@ -14,6 +14,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import net.dv8tion.jda.api.Permission;
 import net.dv8tion.jda.api.entities.Guild;
 import net.dv8tion.jda.api.entities.Message;
+import net.dv8tion.jda.api.entities.PermissionOverride;
 import net.dv8tion.jda.api.entities.Role;
 import net.dv8tion.jda.api.entities.SelfUser;
 import net.dv8tion.jda.api.entities.channel.concrete.TextChannel;
@@ -179,11 +180,73 @@ final class JdaPrivateReportNotificationTransportTest {
     }
 
     private static JDA syntheticApi(TextChannel channel, SelfUser selfUser) {
+        return syntheticApi(channel, selfUser, EnumSet.of(CacheFlag.MEMBER_OVERRIDES));
+    }
+
+    private static JDA syntheticApi(
+            TextChannel channel, SelfUser selfUser, EnumSet<CacheFlag> cacheFlags) {
         return proxy(JDA.class, (instance, method, args) -> switch (method.getName()) {
             case "getTextChannelById" -> channel;
-            case "getCacheFlags" -> EnumSet.of(CacheFlag.MEMBER_OVERRIDES);
+            case "getCacheFlags" -> cacheFlags;
             case "getSelfUser" -> selfUser;
             default -> throw new AssertionError(method.getName());
+        });
+    }
+
+    @Test
+    void publicViewOrMissingStaffAccessNeverSendsReportContent() {
+        var publicGuild = syntheticGuild(syntheticRole(true), syntheticRole(true));
+        var missingStaffGuild = syntheticGuild(syntheticRole(false), syntheticRole(false));
+        for (var guild : List.of(publicGuild, missingStaffGuild)) {
+            var api = syntheticApi(neverSendChannel(guild, List.of()), syntheticSelfUser());
+            var sender = new JdaPrivateReportNotificationTransport(
+                    api, GUILD, CHANNEL, STAFF_ROLE, true);
+            assertFalse(sender.verify().eligible());
+            assertEquals(PrivateReportNotificationDispatcher.DeliveryReceipt.uncertain(),
+                    sender.send("Synthetic private report text"));
+        }
+    }
+
+    @Test
+    void missingOverrideCacheOrUnexpectedMemberViewCannotSendReportContent() {
+        var guild = syntheticGuild(syntheticRole(false), syntheticRole(true));
+        var channel = neverSendChannel(guild, List.of());
+        var noCache = syntheticApi(channel, syntheticSelfUser(),
+                EnumSet.noneOf(CacheFlag.class));
+        var noCacheSender = new JdaPrivateReportNotificationTransport(
+                noCache, GUILD, CHANNEL, STAFF_ROLE, true);
+        assertFalse(noCacheSender.verify().eligible());
+        assertEquals(PrivateReportNotificationDispatcher.DeliveryReceipt.uncertain(),
+                noCacheSender.send("Never send"));
+
+        var extraViewer = proxy(PermissionOverride.class, (instance, method, args) -> {
+            if ("getIdLong".equals(method.getName())) {
+                return 123L;
+            }
+            if ("getAllowed".equals(method.getName())) {
+                return EnumSet.of(Permission.VIEW_CHANNEL);
+            }
+            throw new AssertionError(method.getName());
+        });
+        var extraChannel = neverSendChannel(guild, List.of(extraViewer));
+        var extraSender = new JdaPrivateReportNotificationTransport(
+                syntheticApi(extraChannel, syntheticSelfUser()),
+                GUILD, CHANNEL, STAFF_ROLE, true);
+        assertFalse(extraSender.verify().eligible());
+        assertEquals(PrivateReportNotificationDispatcher.DeliveryReceipt.uncertain(),
+                extraSender.send("Never send"));
+    }
+
+    private static TextChannel neverSendChannel(
+            Guild guild, List<PermissionOverride> overrides) {
+        return proxy(TextChannel.class, (instance, method, args) -> {
+            if ("getGuild".equals(method.getName())) {
+                return guild;
+            }
+            if ("getMemberPermissionOverrides".equals(method.getName())) {
+                return overrides;
+            }
+            throw new AssertionError("Private channel must not be used: " + method.getName());
         });
     }
 

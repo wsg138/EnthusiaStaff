@@ -100,3 +100,34 @@ reports into Discord until the production-colliding routes are corrected
 in a coordinated test-only change, current JDA permissions are verified,
 and the owner-approved private test destination is independently proven
 isolated from public/chat/console/role writers.
+
+## Updated read-only test1/SMP exposure inspection (2026-10-21)
+
+A fresh pinned-key, read-only SFTP comparison of
+`bloom-test1/plugins/DiscordSRV/config.yml` and
+`bloom-smp/plugins/DiscordSRV/config.yml` confirms:
+
+| Safety observation | Current result |
+|---|---|
+| Legacy global and staff channel maps are identical | **YES - BLOCKED** |
+| Legacy console destination identical | **YES - BLOCKED** |
+| Test1 console destination still populated | **YES - BLOCKED** |
+| Test1 Minecraft to Discord forwarding | disabled in on-disk config |
+| Test1 Discord to Minecraft forwarding | disabled in on-disk config |
+| Test1 console-command execution | disabled in on-disk config |
+| Test1 Paper backend identifier present | yes |
+| Test1 Paper `discord-chat-bridge` SHADOW section present | **NO - BLOCKED** |
+
+These observations were derived without logging token or channel values,
+reading Discord member data, sending Discord messages, running console
+commands, or editing remote files. They represent **on-disk configuration**,
+not proof that the running process has reloaded it. A prior test1 DiscordSRV
+invalid-token error is not an acceptable substitute for channel isolation.
+The independent real JDA bot identity, effective permissions, runtime
+endpoints and safe rollback status also remain unverified.
+
+Do not proceed to even a synthetic *network* message until the authorized
+test1 operator resolves the legacy shared routes under rollback, chooses
+the approved dedicated private StaffBot test channel/rank, and completes
+the current-role/membership/permission checks. Tests using mock JDA and
+disposable MariaDB are still allowed.
