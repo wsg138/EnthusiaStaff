@@ -11,9 +11,11 @@ import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
 import java.time.Instant;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.regex.Pattern;
 
 /** One-process, synthetic, durable-by-atomic-replace projection and two independent outboxes. */
@@ -69,8 +71,11 @@ public final class ReceiverJournal {
     }
 
     private static boolean validOperations(State loaded) {
+        Set<String> revisions = new HashSet<>();
         for (Map.Entry<String, CaseEvent> entry : loaded.operations().entrySet()) {
-            if (entry.getValue() == null || !Objects.equals(entry.getValue().operationId(), entry.getKey())) {
+            CaseEvent event = entry.getValue();
+            if (event == null || !Objects.equals(event.operationId(), entry.getKey())
+                    || !revisions.add(event.caseId() + "/" + event.revision())) {
                 return false;
             }
         }
@@ -78,13 +83,21 @@ public final class ReceiverJournal {
     }
 
     private static boolean validCursors(State loaded) {
+        Map<String, Long> latest = new HashMap<>();
+        for (CaseEvent event : loaded.operations().values()) {
+            latest.merge(event.caseId(), event.revision(), Math::max);
+        }
+        if (!latest.keySet().equals(loaded.cases().keySet())) {
+            return false;
+        }
         for (Map.Entry<String, Cursor> entry : loaded.cases().entrySet()) {
             Cursor cursor = entry.getValue();
             if (cursor == null || !Objects.equals(cursor.caseId(), entry.getKey())) {
                 return false;
             }
             CaseEvent event = loaded.operations().get(cursor.operationId());
-            if (event == null || !matchesCursor(cursor, event)) {
+            if (event == null || !matchesCursor(cursor, event)
+                    || cursor.revision() != latest.get(cursor.caseId())) {
                 return false;
             }
         }

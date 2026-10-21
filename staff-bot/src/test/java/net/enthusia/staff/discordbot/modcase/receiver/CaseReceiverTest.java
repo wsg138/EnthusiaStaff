@@ -316,10 +316,50 @@ class CaseReceiverTest {
     }
 
     @Test
+    void restartRejectsDifferentOperationAtAnExistingRevision() throws Exception {
+        accept(receiver(journal()), birth());
+        ObjectNode state = savedJournal();
+        ObjectNode operations = (ObjectNode) state.path("operations");
+        ObjectNode duplicate = ((ObjectNode) operations.path(birth().operationId())).deepCopy();
+        duplicate.put("operationId", "f".repeat(64));
+        operations.set("f".repeat(64), duplicate);
+        replaceSavedJournal(state);
+        assertThrows(IOException.class, this::journal);
+    }
+
+    @Test
     void restartRejectsCursorWithFalseCurrentRevision() throws Exception {
         accept(receiver(journal()), birth());
         ObjectNode state = savedJournal();
         ((ObjectNode) state.path("cases").path(CASE)).put("revision", 99);
+        replaceSavedJournal(state);
+        assertThrows(IOException.class, this::journal);
+    }
+
+    @Test
+    void restartRejectsCursorRollbackAfterAClosedCase() throws Exception {
+        ReceiverJournal store = journal();
+        CaseReceiver service = receiver(store);
+        assertEquals("ACCEPTED", accept(service, birth()));
+        assertEquals("ACCEPTED", accept(service,
+                event("b", "CASE_STATE", CASE, 1, "smp", "CLAIMED")));
+        assertEquals("ACCEPTED", accept(service,
+                event("c", "CASE_STATE", CASE, 2, "smp", "CLOSED")));
+
+        ObjectNode state = savedJournal();
+        ObjectNode cursor = (ObjectNode) state.path("cases").path(CASE);
+        cursor.put("operationId", birth().operationId());
+        cursor.put("revision", 0);
+        cursor.put("caseState", "OPEN");
+        replaceSavedJournal(state);
+        assertThrows(IOException.class, this::journal);
+    }
+
+    @Test
+    void restartRejectsOrphanedEventWithMissingCaseCursor() throws Exception {
+        accept(receiver(journal()), birth());
+        ObjectNode state = savedJournal();
+        ((ObjectNode) state.path("cases")).remove(CASE);
         replaceSavedJournal(state);
         assertThrows(IOException.class, this::journal);
     }
