@@ -289,14 +289,21 @@ final class PunishmentGuiRenderer {
                 "Review Incident Details", NamedTextColor.AQUA,
                 List.of(Component.text("Conduct: " + humanize(finding.conduct()), NamedTextColor.WHITE),
                         Component.text("Location: " + humanize(finding.medium()), NamedTextColor.GRAY),
-                        Component.text("Preliminary incident impact: " + finding.preliminaryImpact(),
+                        Component.text("Incident answers recorded for assessment.",
                                 NamedTextColor.GOLD),
                         Component.text("Relevant punishment history is checked automatically.",
-                                NamedTextColor.GRAY))));
+                                NamedTextColor.GRAY),
+                        Component.text(finding.needsReview() || finding.candidateId() == null
+                                        ? "Uncertain incidents require individual staff review."
+                                        : "Exact sanction and duration appear in final review.",
+                                NamedTextColor.YELLOW))));
         inventory.setItem(31, item(Material.WRITABLE_BOOK, "Incident Factors", NamedTextColor.AQUA,
-                finding.facts().stream()
-                        .<Component>map(value -> Component.text(value, NamedTextColor.WHITE))
-                        .toList()));
+                finding.facts().isEmpty()
+                        ? List.of(Component.text("No additional factors selected.",
+                                NamedTextColor.GRAY))
+                        : finding.facts().stream()
+                                .<Component>map(value -> Component.text(value, NamedTextColor.WHITE))
+                                .toList()));
         if (finding.needsReview() || finding.candidateId() == null) {
             inventory.setItem(22, item(Material.SHIELD, "Needs Staff Review", NamedTextColor.GOLD,
                     List.of(Component.text("These answers are not sufficient for automatic classification.",

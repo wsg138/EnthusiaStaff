@@ -69,4 +69,16 @@ class GuidedPunishmentGuiContractTest {
         assertTrue(renderer.contains("Click to continue with this category"));
         assertTrue(renderer.contains("Back · Categories"));
     }
+
+    @Test
+    void guidedResultShowsFactsAndFinalReviewRatherThanUnapprovedScore() throws Exception {
+        String renderer = source("PunishmentGuiRenderer.java");
+        assertFalse(renderer.contains("Preliminary incident impact:"));
+        assertTrue(renderer.contains("Incident answers recorded for assessment."));
+        assertTrue(renderer.contains("Exact sanction and duration appear in final review."));
+        assertTrue(renderer.contains("Uncertain incidents require individual staff review."));
+        assertTrue(renderer.contains("finding.needsReview() || finding.candidateId() == null"));
+        assertTrue(renderer.contains("No additional factors selected."));
+        assertTrue(renderer.contains("Relevant punishment history is checked automatically."));
+    }
 }
