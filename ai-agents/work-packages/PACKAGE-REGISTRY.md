@@ -1,3 +1,5 @@
+2026-10-11 owner assignment: `OWNER-TAB-VANISH-CACHE` is `PARTIAL` / `ACTIONABLE_CONTINUATION` on `package/owner-tab-vanish-cache`, based on canonical main `fc813a535a23eabfcb695b5e12a7e9d55c9fb676`. Scope: stale-cache public-player visibility repair and TEST-only TAB ownership isolation; production changes forbidden. Contract: [OWNER-TAB-VANISH-CACHE](packages/OWNER-TAB-VANISH-CACHE.md). Existing package work remains preserved.
+
 # Package registry
 
 2026-10-05 owner routing extension: `OWNER-INVESTIGATION-TOOLS` / PR #322 remains the selected partial package. Add automatic fresh-entry vanish and permission/visibility-aware player argument completion, explicitly `/alts` and both `/alt` targets. Refetched current main `ba6dcabc9a731e7e3e21c8405778764abdc626f4` (merged #321) is normally incorporated. Other packages remain untouched; new exact-head gates must supersede prior GUI-only head results.
