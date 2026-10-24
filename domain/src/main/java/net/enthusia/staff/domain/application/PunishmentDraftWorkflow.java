@@ -137,6 +137,11 @@ public final class PunishmentDraftWorkflow {
         if (draft == null) {
             return draftNotFound();
         }
+        PunishmentResult.Accepted committed = committedDraftCase(draft);
+        if (committed != null) {
+            deleteAppliedDraft(draft, actor, committed);
+            return committed;
+        }
         if (!punishments.currentPolicyMatches(
                 draft.reasonId(), draft.expectation().configurationVersion())) {
             return staleDraft();
@@ -155,6 +160,11 @@ public final class PunishmentDraftWorkflow {
         if (draft == null) {
             PunishmentResult.Rejected rejected = draftNotFound();
             return new PunishmentDraftConfirmation.Rejected(rejected.code(), rejected.message());
+        }
+        PunishmentResult.Accepted committed = committedDraftCase(draft);
+        if (committed != null) {
+            deleteAppliedDraft(draft, actor, committed);
+            return new PunishmentDraftConfirmation.Applied(committed);
         }
         if (!punishments.currentPolicyMatches(
                 draft.reasonId(), draft.expectation().configurationVersion())) {
@@ -209,6 +219,14 @@ public final class PunishmentDraftWorkflow {
         }
         PunishmentRequestResult.Rejected rejected = (PunishmentRequestResult.Rejected) result;
         return new PunishmentDraftConfirmation.Rejected(rejected.code(), rejected.message());
+    }
+
+    private PunishmentResult.Accepted committedDraftCase(PunishmentDraft draft) {
+        // Ownership and expiry were checked by drafts.find before this lookup.
+        // Only recover the exact persisted draft key; do not re-evaluate or
+        // create a second case after a previous transaction already committed.
+        return punishments.committedDraftCase(
+                new IdempotencyKey("punishment-draft:" + draft.draftId())).orElse(null);
     }
 
     private void deleteAppliedDraft(

@@ -6,10 +6,12 @@ import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.function.Consumer;
+import net.enthusia.staff.common.IdempotencyKey;
 import net.enthusia.staff.common.SecureIdentifiers;
 import net.enthusia.staff.domain.OperationalMode;
 import net.enthusia.staff.domain.auth.Actor;
@@ -102,6 +104,12 @@ public final class PunishmentService {
 
     public PunishmentResult create(CreatePunishmentRequest request, OperationalMode mode) {
         return createConfirmed(request, mode, (PunishmentExpectation) null);
+    }
+
+    /** Returns only a prior durable result; never applies a new punishment. */
+    Optional<PunishmentResult.Accepted> committedDraftCase(IdempotencyKey key) {
+        return store.committedCase(Objects.requireNonNull(key))
+                .map(caseId -> new PunishmentResult.Accepted(caseId, true));
     }
 
     public PunishmentResult createConfirmed(

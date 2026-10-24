@@ -207,6 +207,49 @@ class PunishmentDraftWorkflowTest {
         assertTrue(fixture.workflow.find(DRAFT_ID, ACTOR_ID).isPresent());
     }
 
+    @Test
+    void committedDraftCanRecoverAfterCleanupFailureAndPolicyReloadWithoutAnotherCase() {
+        Fixture fixture = fixture();
+        fixture.workflow.prepare(request(StaffRank.MOD), OperationalMode.ACTIVE);
+        fixture.drafts.failDelete = true;
+        assertThrows(PunishmentDraftCleanupException.class,
+                () -> fixture.workflow.confirm(DRAFT_ID, actor(StaffRank.MOD),
+                        OperationalMode.ACTIVE));
+        assertEquals(1, fixture.moderation.plans.size());
+
+        // The first case is durable, but the saved draft was not cleaned up.
+        // A policy reload must not hide that committed case or apply it twice.
+        fixture.policies.replace("v2", List.of(policy(Duration.ofDays(7))));
+        fixture.drafts.failDelete = false;
+        PunishmentResult.Accepted replay = assertInstanceOf(PunishmentResult.Accepted.class,
+                fixture.workflow.confirm(DRAFT_ID, actor(StaffRank.MOD),
+                        OperationalMode.ACTIVE));
+        assertTrue(replay.replayed());
+        assertEquals(new CaseId("TESTCASE00000001"), replay.caseId());
+        assertEquals(1, fixture.moderation.plans.size());
+        assertTrue(fixture.workflow.find(DRAFT_ID, ACTOR_ID).isEmpty());
+    }
+
+    @Test
+    void routedCommittedDraftRecoversAfterCleanupFailureAndPolicyReload() {
+        Fixture fixture = fixture();
+        fixture.workflow.prepare(request(StaffRank.MOD), OperationalMode.ACTIVE);
+        fixture.drafts.failDelete = true;
+        assertThrows(PunishmentDraftCleanupException.class,
+                () -> fixture.workflow.confirmRouted(DRAFT_ID, actor(StaffRank.MOD),
+                        OperationalMode.ACTIVE));
+        fixture.policies.replace("v2", List.of(policy(Duration.ofDays(7))));
+        fixture.drafts.failDelete = false;
+        PunishmentDraftConfirmation.Applied replay = assertInstanceOf(
+                PunishmentDraftConfirmation.Applied.class,
+                fixture.workflow.confirmRouted(DRAFT_ID, actor(StaffRank.MOD),
+                        OperationalMode.ACTIVE));
+        assertTrue(replay.accepted().replayed());
+        assertEquals(new CaseId("TESTCASE00000001"), replay.accepted().caseId());
+        assertEquals(1, fixture.moderation.plans.size());
+        assertTrue(fixture.workflow.find(DRAFT_ID, ACTOR_ID).isEmpty());
+    }
+
     private static Fixture fixture() {
         AtomicReasonPolicyRepository policies = new AtomicReasonPolicyRepository(
                 "v1", List.of(policy(Duration.ofDays(1)))
@@ -280,6 +323,14 @@ class PunishmentDraftWorkflowTest {
         @Override
         public List<PriorOffense> relatedHistory(UUID targetId, String family) {
             return List.of();
+        }
+
+        @Override
+        public Optional<CaseId> committedCase(net.enthusia.staff.common.IdempotencyKey key) {
+            return plans.stream()
+                    .filter(plan -> plan.idempotencyKey().equals(key))
+                    .findFirst()
+                    .map(ignored -> new CaseId("TESTCASE00000001"));
         }
 
         @Override

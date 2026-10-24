@@ -2,8 +2,11 @@ package net.enthusia.staff.persistence;
 
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.function.IntConsumer;
+import net.enthusia.staff.common.CaseId;
+import net.enthusia.staff.common.IdempotencyKey;
 import net.enthusia.staff.domain.application.PunishmentPlan;
 import net.enthusia.staff.domain.application.PunishmentResult;
 import net.enthusia.staff.domain.escalation.PriorOffense;
@@ -29,6 +32,11 @@ final class RetryingModerationStore implements ModerationStore {
     @Override
     public List<PriorOffense> relatedHistory(UUID targetId, String family) {
         return delegate.relatedHistory(targetId, family);
+    }
+
+    @Override
+    public Optional<CaseId> committedCase(IdempotencyKey key) {
+        return delegate.committedCase(key);
     }
 
     @Override
