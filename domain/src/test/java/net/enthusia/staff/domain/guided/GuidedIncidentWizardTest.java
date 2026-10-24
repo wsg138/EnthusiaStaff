@@ -149,6 +149,31 @@ class GuidedIncidentWizardTest {
     }
 
     @Test
+    void discordCommunityIncidentRequiresChannelSpecificReview() {
+        var discordAdvertising = GuidedIncidentWizard.start("community")
+                .answer(MEDIUM, "discord").answer(CONDUCT, "advertising")
+                .answer("detail", "self").answer(EXTENT, "sustained")
+                .answer(CONTINUED, NO_WARNING).finding();
+        assertEquals("advertising.unrelated-self-promotion", discordAdvertising.candidateId());
+        assertTrue(discordAdvertising.needsReview(),
+                "A Minecraft chat mute does not automatically enforce Discord-only conduct");
+
+        var discordReport = GuidedIncidentWizard.start("community")
+                .answer(MEDIUM, "discord").answer(CONDUCT, "reports")
+                .answer("detail", "abusive").answer(EXTENT, "sustained")
+                .answer(CONTINUED, NO_WARNING).finding();
+        assertEquals("reports.abusive-content", discordReport.candidateId());
+        assertTrue(discordReport.needsReview());
+
+        var inGameAdvertising = GuidedIncidentWizard.start("community")
+                .answer(MEDIUM, "in-game").answer(CONDUCT, "advertising")
+                .answer("detail", "self").answer(EXTENT, "sustained")
+                .answer(CONTINUED, NO_WARNING).finding();
+        assertFalse(inGameAdvertising.needsReview(),
+                "The channel guard must not disable supported in-game incidents");
+    }
+
+    @Test
     void unknownLocationStopsAtConductForManualReview() {
         var incident = GuidedIncidentWizard.start(CHAT)
                 .answer(MEDIUM, "unknown").answer(CONDUCT, SPAM);
