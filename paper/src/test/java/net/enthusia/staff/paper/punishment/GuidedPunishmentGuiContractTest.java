@@ -85,6 +85,36 @@ class GuidedPunishmentGuiContractTest {
     }
 
     @Test
+    void changedPolicyHidesSubmissionAndBlocksStaleDraftClick() throws Exception {
+        assertTrue(PunishmentGuiRenderer.reviewPolicyCurrent("policy-1", "policy-1"));
+        assertFalse(PunishmentGuiRenderer.reviewPolicyCurrent("policy-1", "policy-2"));
+        assertFalse(PunishmentGuiRenderer.reviewPolicyCurrent(null, "policy-2"));
+        String renderer = source("PunishmentGuiRenderer.java");
+        assertTrue(renderer.contains("Reassessment Required"));
+        assertTrue(renderer.contains("Rules changed since this draft was prepared."));
+        assertTrue(renderer.contains("Go back and assess against the current policy."));
+        assertTrue(renderer.contains("Rules changed; reassessment required before submission"));
+        String controller = source("PunishmentGuiController.java");
+        String handler = controller.substring(controller.indexOf("private void reviewClick("),
+                controller.indexOf("private void historyClick("));
+        assertTrue(handler.contains("PunishmentGuiRenderer.reviewPolicyCurrent("));
+        assertTrue(handler.contains("Go back and reassess before submitting."));
+        assertTrue(handler.indexOf("PunishmentGuiRenderer.reviewPolicyCurrent(")
+                < handler.indexOf("confirm(viewer, actor, state)"));
+    }
+
+    @Test
+    void finalGuidedReviewShowsFactsWithoutUnapprovedImpactScore() throws Exception {
+        String renderer = source("PunishmentGuiRenderer.java");
+        String review = renderer.substring(renderer.indexOf("renderGuidedReviewFactors("),
+                renderer.indexOf("private void renderHistory("));
+        assertFalse(review.contains("value.startsWith(" + '"' + "incidentImpact=" + '"' + ")"));
+        assertTrue(review.contains("value.startsWith(" + '"' + "continued=" + '"' + ")"));
+        String controller = source("PunishmentGuiController.java");
+        assertTrue(controller.contains(" | incidentImpact="));
+    }
+
+    @Test
     void warningAndSeverityChoicesUseMeaningfulMaterials() {
         assertEquals(Material.RED_DYE, PunishmentGuiRenderer.guidedAnswerMaterial(
                 "continued", "yes", 0));

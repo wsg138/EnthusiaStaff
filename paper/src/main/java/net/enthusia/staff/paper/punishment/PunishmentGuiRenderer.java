@@ -533,9 +533,17 @@ final class PunishmentGuiRenderer {
         footerHistory(inventory);
         boolean rationaleRequired = PunishmentGuiController.guidedNeedsStaffRationale(
                 draft.internalExplanation());
+        boolean stalePolicy = !reviewPolicyCurrent(
+                draft.expectation().configurationVersion(), catalog.activeVersion());
         inventory.setItem(CONFIRM_SLOT, policy == null
                 ? item(Material.GRAY_DYE, "Reason Unavailable", NamedTextColor.RED,
                         List.of(Component.text("Go back and choose a current reason.", NamedTextColor.YELLOW)))
+                : stalePolicy
+                        ? item(Material.GRAY_CONCRETE, "Reassessment Required", NamedTextColor.RED,
+                                List.of(Component.text("Rules changed since this draft was prepared.",
+                                                NamedTextColor.GRAY),
+                                        Component.text("Go back and assess against the current policy.",
+                                                NamedTextColor.YELLOW)))
                 : rationaleRequired
                         ? item(Material.GRAY_CONCRETE, "Staff Rationale Required", NamedTextColor.YELLOW,
                                 List.of(
@@ -566,7 +574,7 @@ final class PunishmentGuiRenderer {
                 .filter(value -> value.startsWith("medium=") || value.startsWith("conduct=")
                         || value.startsWith("detail=") || value.startsWith("extent=")
                         || value.startsWith("continued=") || value.startsWith("targeting=")
-                        || value.startsWith("persistence=") || value.startsWith("incidentImpact="))
+                        || value.startsWith("persistence="))
                 .limit(8)
                 .<Component>map(PunishmentGuiRenderer::guidedAnswerLine)
                 .toList();
@@ -810,8 +818,14 @@ final class PunishmentGuiRenderer {
                 NamedTextColor.GOLD, lore);
     }
 
+    /** GUI affordance only; the domain confirmation revalidates the version atomically. */
+    static boolean reviewPolicyCurrent(String draftVersion, String activeVersion) {
+        return draftVersion != null && draftVersion.equals(activeVersion);
+    }
+
     private static ItemStack safetyItem(PunishmentGuiState.Review state, String activePolicyVersion) {
-        boolean currentVersion = state.draft().expectation().configurationVersion().equals(activePolicyVersion);
+        boolean currentVersion = reviewPolicyCurrent(
+                state.draft().expectation().configurationVersion(), activePolicyVersion);
         return item(
                 Material.CLOCK,
                 "04 | Draft & Policy",
@@ -820,7 +834,7 @@ final class PunishmentGuiRenderer {
                         Component.text("Expires: " + formatInstant(state.draft().expiresAt(), state.overview()),
                                 NamedTextColor.GRAY),
                         Component.text(currentVersion ? "Matches the current rules"
-                                        : "Rules changed; confirm will recheck this draft",
+                                        : "Rules changed; reassessment required before submission",
                                 currentVersion ? NamedTextColor.GREEN : NamedTextColor.YELLOW),
                         Component.text("You can resume this draft after leaving.", NamedTextColor.GRAY)
                 )

@@ -820,6 +820,12 @@ public final class PunishmentGuiController implements Listener {
             return;
         }
         if (slot == PunishmentGuiRenderer.CONFIRM_SLOT) {
+            if (!PunishmentGuiRenderer.reviewPolicyCurrent(
+                    state.draft().expectation().configurationVersion(), policies.activeVersion())) {
+                message(viewer, "Punishment rules changed since this draft was prepared. "
+                        + "Go back and reassess before submitting.");
+                return;
+            }
             if (guidedNeedsStaffRationale(state.draft().internalExplanation())) {
                 message(viewer, "You changed the suggested assessment. Add an internal note "
                         + "explaining why before confirming.");
