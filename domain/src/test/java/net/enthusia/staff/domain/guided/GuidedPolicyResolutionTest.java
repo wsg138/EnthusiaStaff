@@ -191,6 +191,18 @@ class GuidedPolicyResolutionTest {
     }
 
     @Test
+    void discordCommunityReportCannotBeAutoConvertedToAMinecraftMute() {
+        var discord = GuidedIncidentWizard.start("community")
+                .answer("medium", "discord").answer("conduct", "reports")
+                .answer("detail", "abusive").answer("extent", "sustained")
+                .answer("continued", "not-applicable").finding();
+        assertEquals("reports.abusive-content", discord.candidateId());
+        assertThrows(IllegalArgumentException.class,
+                () -> GuidedPolicyResolution.calculate(
+                        discord, assessment(0, "reports.abusive-content"), 0));
+    }
+
+    @Test
     void voiceNoiseCannotBeAutoConvertedToAMinecraftMute() {
         var voice = GuidedIncidentWizard.start("chat")
                 .answer("medium", "voice").answer("conduct", "spam")
