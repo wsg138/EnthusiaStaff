@@ -7,6 +7,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import net.enthusia.staff.domain.guided.GuidedIncidentWizard;
+import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
+import org.bukkit.Material;
 import org.junit.jupiter.api.Test;
 
 class GuidedPunishmentGuiContractTest {
@@ -80,5 +82,38 @@ class GuidedPunishmentGuiContractTest {
         assertTrue(renderer.contains("finding.needsReview() || finding.candidateId() == null"));
         assertTrue(renderer.contains("No additional factors selected."));
         assertTrue(renderer.contains("Relevant punishment history is checked automatically."));
+    }
+
+    @Test
+    void warningAndSeverityChoicesUseMeaningfulMaterials() {
+        assertEquals(Material.RED_DYE, PunishmentGuiRenderer.guidedAnswerMaterial(
+                "continued", "yes", 0));
+        assertEquals(Material.LIME_DYE, PunishmentGuiRenderer.guidedAnswerMaterial(
+                "continued", "no", 1));
+        assertEquals(Material.LIGHT_GRAY_DYE, PunishmentGuiRenderer.guidedAnswerMaterial(
+                "continued", "not-applicable", 2));
+        assertEquals(Material.YELLOW_DYE, PunishmentGuiRenderer.guidedAnswerMaterial(
+                "continued", "unknown", 3));
+        assertEquals(Material.LIME_DYE, PunishmentGuiRenderer.guidedAnswerMaterial(
+                "extent", "few", 0));
+        assertEquals(Material.ORANGE_DYE, PunishmentGuiRenderer.guidedAnswerMaterial(
+                "extent", "sustained", 1));
+        assertEquals(Material.RED_DYE, PunishmentGuiRenderer.guidedAnswerMaterial(
+                "extent", "large-scale", 2));
+        assertEquals(Material.YELLOW_DYE, PunishmentGuiRenderer.guidedAnswerMaterial(
+                "targeting", "unknown", 2));
+    }
+
+    @Test
+    void warningChoicesExplainDefianceWithoutAssumingIt() {
+        var plain = PlainTextComponentSerializer.plainText();
+        assertEquals("A verified warning was ignored.", plain.serialize(
+                PunishmentGuiRenderer.guidedAnswerLore("continued", "yes").getFirst()));
+        assertEquals("They stopped after a warning; not defiance.", plain.serialize(
+                PunishmentGuiRenderer.guidedAnswerLore("continued", "no").getFirst()));
+        assertEquals("No warning was given; not defiance.", plain.serialize(
+                PunishmentGuiRenderer.guidedAnswerLore("continued", "not-applicable").getFirst()));
+        assertEquals("Warning status uncertain; do not assume defiance.", plain.serialize(
+                PunishmentGuiRenderer.guidedAnswerLore("continued", "unknown").getFirst()));
     }
 }
