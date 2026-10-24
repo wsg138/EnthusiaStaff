@@ -203,6 +203,25 @@ class GuidedPolicyResolutionTest {
     }
 
     @Test
+    void discordIncidentCannotAutoIssueMinecraftMute() {
+        var discord = GuidedIncidentWizard.start("community")
+                .answer("medium", "discord").answer("conduct", "staff")
+                .answer("detail", "argument").finding();
+        List<PunishmentStep> steps = List.of(
+                new PunishmentStep(0, "Warning", List.of(warn())),
+                new PunishmentStep(1, "Half-hour mute", List.of(mute(30))),
+                new PunishmentStep(2, "Hour mute", List.of(mute(60))));
+        var policy = new ReasonPolicy("staff.public-punishment-argument",
+                "staff", "Public punishment argument", 15, true, steps);
+        var history = new EscalationDecision(0, 0, 0, List.of(), steps.getFirst());
+        var assessed = new PunishmentAssessment("test.discord-channel",
+                policy, history, steps.getFirst().sanctions());
+        assertThrows(IllegalArgumentException.class,
+                () -> GuidedPolicyResolution.calculate(discord, assessed, 0),
+                "Discord conduct must use explicit review until channel enforcement is verified");
+    }
+
+    @Test
     void descendingMuteLadderNeedsManualReviewInsteadOfSeverityDowngrade() {
         var incident = finding("large-scale", "yes");
         List<PunishmentStep> steps = List.of(
