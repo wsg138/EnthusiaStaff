@@ -1,5 +1,6 @@
 package net.enthusia.staff.paper.visibility;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -40,7 +41,7 @@ class VanishStaffModeRestorationWiringTest {
 
     @Test
     void manualVanishDoesNotForceSpectatorDuringStaffRebind() throws IOException {
-        String method = method("private void finishSet(", "private Set<UUID> presenceViewers");
+        String method = method("private void finishSet(", "private Map<UUID, Boolean> presenceViewers");
 
         assertTrue(method.contains("!staffMode.transitioning(playerId)"));
         assertTrue(method.indexOf("!staffMode.transitioning(playerId)")
@@ -48,14 +49,28 @@ class VanishStaffModeRestorationWiringTest {
     }
 
     @Test
-    void vanishPresenceTargetsEveryOtherOnlinePlayerRegardlessOfVisibility() throws IOException {
-        String method = method(
-                "private Set<UUID> presenceViewers",
+    void vanishPresenceTargetsOnlyViewersWithActualVisibilityChanges() throws IOException {
+        String selection = method(
+                "private Map<UUID, Boolean> presenceViewers",
                 "private void publishPresenceTransition"
         );
 
-        assertTrue(method.contains("!viewerId.equals(subjectId)"));
-        assertFalse(method.contains("visibility.canSee"));
+        assertTrue(selection.contains("PresenceTransitionAudience.capture("));
+        assertTrue(selection.contains("audiences.playerIds()"));
+        assertTrue(selection.contains("visibility::canSee"));
+
+        String publication = method(
+                "private void publishPresenceTransition",
+                "private boolean shouldPublishPresence"
+        );
+        assertEquals(2, publication.split(java.util.regex.Pattern.quote("if (!shouldPublishPresence"), -1).length - 1);
+        assertTrue(publication.contains("audiences.onOwner(viewerId"));
+        assertTrue(publication.contains("sink.publish(subjectId, viewerId, vanished)"));
+        assertTrue(publication.contains("entry.getValue(), revision"));
+        assertTrue(method("private void finishSet(", "private Map<UUID, Boolean> presenceViewers")
+                .contains("presenceRevisions.isCurrent(playerId, revision)"));
+        assertTrue(method("public void onQuit(", "private void")
+                .contains("presenceRevisions.retire(playerId)"));
     }
 
     @Test
