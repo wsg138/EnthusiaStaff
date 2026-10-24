@@ -66,6 +66,23 @@ The new trial profile exists **only inside tests**. It is not loaded from produc
 not selectable by staff, not owner-approved and not registered in Paper startup. Existing
 default-off feature behavior is unchanged. No live `reason-policies.yml` is touched.
 
+## Current offline regression snapshot (2026-10-23; NOT OWNER APPROVAL)
+
+The new GuidedPolicyCalibrationMatrixTest runs **14 representative fact/history scenarios**
+against the actual repository default reason-policies.yml version 2026-10-10.1.
+It checks warning/no-warning/ignored cases, spam intensity, existing history,
+targeted harassment, voice-chat and cheating manual-review boundaries. These are
+historical prototype parity tests; they deliberately fail if the bundled policy
+version changes until the scenario expectations have been reviewed.
+
+GuidedPolicyResolutionTest also rejects automatic transitions across a decreasing
+temporary-mute ladder or from an unsupported baseline. This is a fail-closed
+guard, not a new severity calibration.
+
+These tests do NOT read the customized live server policy, establish voice enforcement,
+prove actual rank/approval/runtime behavior, or approve any punishment length.
+Production guided mode must remain disabled pending signoff.
+
 ## Remaining gates (issue #616)
 
 1. Owner reviews each scenario and records acceptable sanction **type and exact range**

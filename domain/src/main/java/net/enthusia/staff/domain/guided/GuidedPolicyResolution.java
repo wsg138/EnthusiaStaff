@@ -63,6 +63,8 @@ public final class GuidedPolicyResolution {
             return;
         }
         List<SanctionSpec> previous = ladder.get(baselineStep).sanctions();
+        // A severity jump must not escape an unsupported baseline remedy.
+        requireOrdinaryGuidedRemedy(previous);
         for (int step = baselineStep + 1; step <= selected; step++) {
             List<SanctionSpec> next = ladder.get(step).sanctions();
             // A large incident score must not jump over a restricted policy step.
@@ -160,6 +162,13 @@ public final class GuidedPolicyResolution {
             return false;
         }
         if (after.type() == before.type()) {
+            if (after.type() == SanctionType.MUTE) {
+                var current = before.length().temporary();
+                var next = after.length().temporary();
+                // Misordered custom ladders must not turn increased severity into a shorter mute.
+                return current.isPresent() && next.isPresent()
+                        && next.orElseThrow().compareTo(current.orElseThrow()) >= 0;
+            }
             return true;
         }
         return before.type() == SanctionType.WARNING && after.type() == SanctionType.MUTE;
