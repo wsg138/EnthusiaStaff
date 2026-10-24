@@ -797,10 +797,9 @@ public final class PunishmentGuiController implements Listener {
             return;
         }
         if (slot == PunishmentGuiRenderer.BACK_SLOT) {
-            GuidedReturn origin = guidedReturns.get(viewer.getUniqueId());
-            if (origin != null && origin.draftId().equals(state.draft().draftId())
-                    && origin.state().target().playerId().equals(state.target().playerId())) {
-                openState(viewer, origin.state());
+            PunishmentGuiState.Guided previous = matchingGuidedReturn(viewer, state);
+            if (previous != null && guidedModeEnabled()) {
+                openState(viewer, previous);
                 return;
             }
             String categoryId = policies.find(state.draft().reasonId())
@@ -1219,6 +1218,16 @@ public final class PunishmentGuiController implements Listener {
         handleRejected(viewer, actor, state, (PunishmentDraftConfirmation.Rejected) result);
     }
 
+    /** Reopen only the questionnaire that created this exact target's draft. */
+    private PunishmentGuiState.Guided matchingGuidedReturn(
+            Player viewer, PunishmentGuiState.Review state) {
+        GuidedReturn origin = guidedReturns.get(viewer.getUniqueId());
+        return origin != null
+                && origin.draftId().equals(state.draft().draftId())
+                && origin.state().target().playerId().equals(state.target().playerId())
+                ? origin.state() : null;
+    }
+
     private void handleRejected(
             Player viewer,
             Actor actor,
@@ -1226,6 +1235,16 @@ public final class PunishmentGuiController implements Listener {
             PunishmentDraftConfirmation.Rejected rejected
     ) {
         if ("RECOMMENDATION_CHANGED".equals(rejected.code())) {
+            if (isGuidedDraft(state.draft().internalExplanation())) {
+                // Never reuse a stale guided duration/step without rerunning its
+                // facts against the current policy and actual punishment history.
+                message(viewer, "The guided recommendation changed. No punishment or "
+                        + "request was created. Recalculate this incident before submitting.");
+                PunishmentGuiState.Guided previous = matchingGuidedReturn(viewer, state);
+                openState(viewer, previous != null && guidedModeEnabled()
+                        ? previous : categoriesState(state));
+                return;
+            }
             message(viewer, "The recommendation changed. A fresh review is being opened; "
                     + "no punishment or request was created.");
             reprepare(

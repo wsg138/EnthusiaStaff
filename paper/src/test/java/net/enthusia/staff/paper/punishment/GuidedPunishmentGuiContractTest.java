@@ -167,6 +167,26 @@ class GuidedPunishmentGuiContractTest {
     }
 
     @Test
+    void changedGuidedRecommendationReopensQuestionnaireInsteadOfOldSanctions() throws Exception {
+        String controller = source("PunishmentGuiController.java");
+        String handler = controller.substring(controller.indexOf("private void handleRejected("),
+                controller.indexOf("private PunishmentGuiOverview loadOverview("));
+        String guidedBranch = handler.substring(handler.indexOf("if (isGuidedDraft("),
+                handler.indexOf("message(viewer, \"The recommendation changed. A fresh review"));
+        assertTrue(guidedBranch.contains("matchingGuidedReturn(viewer, state)"));
+        assertTrue(guidedBranch.contains("previous != null && guidedModeEnabled()"));
+        assertTrue(guidedBranch.contains("categoriesState(state)"));
+        assertTrue(guidedBranch.contains("Recalculate this incident before submitting."));
+        assertFalse(guidedBranch.contains("reprepare("));
+        String match = controller.substring(controller.indexOf("private PunishmentGuiState.Guided matchingGuidedReturn("),
+                controller.indexOf("private void handleRejected("));
+        assertTrue(match.contains("origin.draftId().equals(state.draft().draftId())"));
+        assertTrue(match.contains("origin.state().target().playerId().equals(state.target().playerId())"));
+        assertTrue(handler.contains("reprepare("),
+                "Ordinary expert-mode recommendations retain the existing fresh-review workflow");
+    }
+
+    @Test
     void warningAndSeverityChoicesUseMeaningfulMaterials() {
         assertEquals(Material.RED_DYE, PunishmentGuiRenderer.guidedAnswerMaterial(
                 "continued", "yes", 0));
