@@ -306,6 +306,99 @@ class PunishmentRequestControllerSchedulingIntegrationTest {
     }
 
     @Test
+    void adminOnlyPendingRequestIsNotPresentedAfterReviewerDemotesToMod() {
+        Fixture fixture = fixture(pending(StaffRank.ADMIN), SchedulerMode.HOLD);
+        fixture.player().rank = StaffRank.ADMIN;
+        assertTrue(fixture.controller().openReview(fixture.player().proxy(), REQUEST_ID));
+        assertEquals(1, fixture.store().acquireCalls);
+        assertEquals(1, fixture.scheduler().heldActions.size());
+
+        fixture.player().rank = StaffRank.MOD; // Still has review permission, not required rank.
+        fixture.scheduler().heldActions.removeFirst().run();
+
+        assertEquals(0, fixture.player().openInventories.get());
+        assertEquals(1, fixture.player().closedInventories.get());
+        assertEquals(1, fixture.store().abandonCalls);
+    }
+
+    @Test
+    void adminOnlyResolvedDetailsAreNotPresentedAfterReviewerDemotesToMod() {
+        var adminRequest = pending(StaffRank.ADMIN);
+        var resolved = new PunishmentApprovalRequest(
+                adminRequest.requestId(), adminRequest.submissionKey(),
+                adminRequest.proposal(), adminRequest.createdAt(), adminRequest.expiresAt(),
+                PunishmentRequestStatus.DENIED, 1, REVIEWER_ID, "Test denial", null,
+                PunishmentRequestControllerHarness.NOW.plusSeconds(1));
+        Fixture fixture = fixture(resolved, SchedulerMode.HOLD);
+        fixture.player().rank = StaffRank.ADMIN;
+        assertTrue(fixture.controller().openReview(fixture.player().proxy(), REQUEST_ID));
+        assertEquals(1, fixture.scheduler().heldActions.size());
+
+        fixture.player().rank = StaffRank.MOD;
+        fixture.scheduler().heldActions.removeFirst().run();
+
+        assertEquals(0, fixture.player().openInventories.get());
+        assertEquals(1, fixture.player().closedInventories.get());
+    }
+
+    @Test
+    void queueSnapshotIsFilteredAgainstCurrentRankBeforePresentation() {
+        PunishmentApprovalRequest adminOnly = pending(StaffRank.ADMIN);
+        Fixture fixture = fixture(adminOnly, SchedulerMode.HOLD);
+        var loaded = java.util.List.of(
+                new PunishmentRequestGuiState.RequestView(adminOnly, "Target"));
+        var admin = new net.enthusia.staff.domain.auth.Actor(REVIEWER_ID, "Reviewer", StaffRank.ADMIN);
+        var mod = new net.enthusia.staff.domain.auth.Actor(REVIEWER_ID, "Reviewer", StaffRank.MOD);
+
+        assertEquals(1, PunishmentRequestGuiController.visibleRequestsForActor(
+                loaded, admin, fixture.service()).size());
+        assertEquals(0, PunishmentRequestGuiController.visibleRequestsForActor(
+                loaded, mod, fixture.service()).size());
+    }
+
+    @Test
+    void alreadyOpenAdminOnlyReviewCannotBeDecidedAfterDemotionToMod() {
+        Fixture fixture = fixture(pending(StaffRank.ADMIN), SchedulerMode.RUN);
+        fixture.player().rank = StaffRank.ADMIN;
+        var admin = new net.enthusia.staff.domain.auth.Actor(REVIEWER_ID, "Reviewer", StaffRank.ADMIN);
+        PunishmentApprovalLease lease = org.junit.jupiter.api.Assertions.assertInstanceOf(
+                net.enthusia.staff.domain.application.PunishmentRequestResult.Leased.class,
+                fixture.service().acquire(REQUEST_ID, admin)).lease();
+        fixture.player().rank = StaffRank.MOD;
+
+        fixture.controller().onInventoryClick(click(
+                fixture.player().proxy(), review(lease), PunishmentRequestGuiRenderer.APPROVE_SLOT));
+
+        assertEquals(0, fixture.store().approveTransitions);
+        assertEquals(0, fixture.store().denyTransitions);
+        assertEquals(1, fixture.player().closedInventories.get());
+        assertEquals(0, fixture.scheduler().scheduled.get(),
+                "A revoked rank must not enqueue an approval decision worker");
+    }
+
+    @Test
+    void approvedAdminOnlyDecisionAcknowledgesCommitWithoutDetailsAfterDemotion() {
+        Fixture fixture = fixture(pending(StaffRank.ADMIN), SchedulerMode.HOLD);
+        fixture.player().rank = StaffRank.ADMIN;
+        var admin = new net.enthusia.staff.domain.auth.Actor(REVIEWER_ID, "Reviewer", StaffRank.ADMIN);
+        PunishmentApprovalLease lease = org.junit.jupiter.api.Assertions.assertInstanceOf(
+                net.enthusia.staff.domain.application.PunishmentRequestResult.Leased.class,
+                fixture.service().acquire(REQUEST_ID, admin)).lease();
+
+        fixture.controller().onInventoryClick(click(
+                fixture.player().proxy(), review(lease), PunishmentRequestGuiRenderer.APPROVE_SLOT));
+        assertEquals(1, fixture.store().approveTransitions);
+        assertEquals(1, fixture.scheduler().heldActions.size());
+
+        fixture.player().rank = StaffRank.MOD;
+        fixture.scheduler().heldActions.removeFirst().run();
+
+        assertEquals(1, fixture.store().approveTransitions);
+        assertEquals(0, fixture.player().openInventories.get());
+        assertTrue(fixture.player().messages.get() >= 1);
+    }
+
+    @Test
     void workerAdmissionRejectionStartsNoStorageWork() {
         Fixture fixture = fixture(pending(StaffRank.MOD), SchedulerMode.RUN);
         fixture.executor().reject = true;

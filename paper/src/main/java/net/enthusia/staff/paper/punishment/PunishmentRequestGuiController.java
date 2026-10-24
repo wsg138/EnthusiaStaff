@@ -117,8 +117,10 @@ public final class PunishmentRequestGuiController implements Listener {
             return;
         }
         event.setCancelled(true);
-        // Open approval inventories must not outlive the reviewer's permission.
-        if (authorizedActor(context.player()) == null) {
+        // A reviewer can retain generic permission after demotion while losing
+        // the rank needed to see a specific request already open in the GUI.
+        Actor current = authorizedActor(context.player());
+        if (current == null || !mayUseCurrentInventory(context.state(), current)) {
             context.player().closeInventory();
             return;
         }
@@ -144,6 +146,23 @@ public final class PunishmentRequestGuiController implements Listener {
             return null;
         }
         return new ClickContext(player, holder.state(), slot);
+    }
+
+    private boolean mayUseCurrentInventory(PunishmentRequestGuiState state, Actor current) {
+        PunishmentRequestService service = services.get();
+        if (service == null) {
+            return false;
+        }
+        return switch (state) {
+            case PunishmentRequestGuiState.Queue queue ->
+                    queue.requests().stream().allMatch(view -> service.mayReview(current, view.request()));
+            case PunishmentRequestGuiState.Review review ->
+                    service.mayReview(current, review.lease().request());
+            case PunishmentRequestGuiState.Denial denial ->
+                    service.mayReview(current, denial.lease().request());
+            case PunishmentRequestGuiState.Details details ->
+                    service.mayReview(current, details.view().request());
+        };
     }
 
     private void dispatchClick(ClickContext context) {
@@ -172,12 +191,16 @@ public final class PunishmentRequestGuiController implements Listener {
         List<PunishmentRequestGuiState.RequestView> views = service.reviewable(actor, MAXIMUM_REQUESTS).stream()
                 .map(this::view)
                 .toList();
-        PunishmentRequestGuiState.Queue state = PunishmentRequestGuiState.Queue.page(
-                views,
-                page,
-                PunishmentRequestGuiRenderer.QUEUE_CONTENT_SIZE
-        );
-        onAuthorizedEntity(player, () -> player.openInventory(PunishmentRequestGuiRenderer.renderQueue(state)));
+        // Rank can change while the async query is loading; only render entries
+        // the reviewer may still inspect at the moment of presentation.
+        onAuthorizedEntity(player, current -> true, current -> {
+            PunishmentRequestGuiState.Queue state = PunishmentRequestGuiState.Queue.page(
+                    visibleRequestsForActor(views, current, service),
+                    page,
+                    PunishmentRequestGuiRenderer.QUEUE_CONTENT_SIZE
+            );
+            player.openInventory(PunishmentRequestGuiRenderer.renderQueue(state));
+        }, () -> { });
     }
 
     private void openRequest(Player player, Actor actor, UUID requestId, int returnPage) {
@@ -217,7 +240,10 @@ public final class PunishmentRequestGuiController implements Listener {
                     new PunishmentRequestGuiState.RequestView(request, resolvedTargetName),
                     returnPage
             );
-            onAuthorizedEntity(player, () -> player.openInventory(detailsRenderer.apply(state)));
+            onAuthorizedEntity(player,
+                    current -> service.mayReview(current, request),
+                    current -> player.openInventory(detailsRenderer.apply(state)),
+                    () -> { });
             return;
         }
         acquireAndOpen(player, actor, request.requestId(), resolvedTargetName, returnPage, service);
@@ -239,14 +265,18 @@ public final class PunishmentRequestGuiController implements Listener {
                     returnPage
             );
             onAuthorizedEntity(player,
-                    () -> player.openInventory(PunishmentRequestGuiRenderer.renderReview(state)),
+                    current -> service.mayReview(current, leased.lease().request()),
+                    current -> player.openInventory(PunishmentRequestGuiRenderer.renderReview(state)),
                     () -> abandonLeaseAsync(service, leased.lease()));
             return;
         }
         PunishmentApprovalRequest current = service.find(requestId).orElse(null);
         if (current != null && current.status() != PunishmentRequestStatus.PENDING && service.mayReview(actor, current)) {
             PunishmentRequestGuiState.Details state = new PunishmentRequestGuiState.Details(view(current), returnPage);
-            onAuthorizedEntity(player, () -> player.openInventory(detailsRenderer.apply(state)));
+            onAuthorizedEntity(player,
+                    fresh -> service.mayReview(fresh, current),
+                    fresh -> player.openInventory(detailsRenderer.apply(state)),
+                    () -> { });
             return;
         }
         PunishmentRequestResult.Rejected rejected = (PunishmentRequestResult.Rejected) result;
@@ -403,7 +433,7 @@ public final class PunishmentRequestGuiController implements Listener {
                 : result instanceof PunishmentRequestResult.Denied denied
                 ? view(denied.request())
                 : resolvedView(service, actor, lease, result);
-        onEntity(player, () -> presentDecision(player, result, resolvedView, returnPage));
+        onEntity(player, () -> presentDecision(player, service, result, resolvedView, returnPage));
     }
 
     private PunishmentRequestGuiState.RequestView resolvedView(
@@ -424,6 +454,7 @@ public final class PunishmentRequestGuiController implements Listener {
 
     private void presentDecision(
             Player player,
+            PunishmentRequestService service,
             PunishmentRequestResult result,
             PunishmentRequestGuiState.RequestView resolvedView,
             int returnPage
@@ -431,7 +462,8 @@ public final class PunishmentRequestGuiController implements Listener {
         // The decision may already have committed, so acknowledge it even if
         // the reviewer has lost access. Do not show private details afterward.
         decisionMessage(player, result, resolvedView);
-        if (authorizedActor(player) == null) {
+        Actor current = authorizedActor(player);
+        if (current == null || (resolvedView != null && !service.mayReview(current, resolvedView.request()))) {
             player.closeInventory();
             return;
         }
@@ -511,12 +543,21 @@ public final class PunishmentRequestGuiController implements Listener {
         );
     }
 
-    /** Recheck current permission on the player's entity thread before exposing request data. */
+    /** Recheck current permission and request-specific rank on the player's entity thread. */
     private void onAuthorizedEntity(Player player, Runnable action) {
-        onAuthorizedEntity(player, action, () -> { });
+        onAuthorizedEntity(player, current -> true, current -> action.run(), () -> { });
     }
 
     private void onAuthorizedEntity(Player player, Runnable action, Runnable onUnavailable) {
+        onAuthorizedEntity(player, current -> true, current -> action.run(), onUnavailable);
+    }
+
+    private void onAuthorizedEntity(
+            Player player,
+            java.util.function.Predicate<Actor> mayView,
+            java.util.function.Consumer<Actor> action,
+            Runnable onUnavailable
+    ) {
         java.util.concurrent.atomic.AtomicBoolean cleanupOnce = new java.util.concurrent.atomic.AtomicBoolean();
         Runnable cleanup = () -> {
             if (cleanupOnce.compareAndSet(false, true)) {
@@ -527,18 +568,29 @@ public final class PunishmentRequestGuiController implements Listener {
                 plugin,
                 player,
                 () -> {
-                    if (authorizedActor(player) == null) {
+                    Actor current = authorizedActor(player);
+                    if (current == null || !mayView.test(current)) {
                         player.closeInventory();
                         cleanup.run();
                         return;
                     }
-                    action.run();
+                    action.accept(current);
                 },
                 () -> {
                     plugin.getLogger().fine("Skipped punishment request GUI callback for a retired player session");
                     cleanup.run();
                 }
         );
+    }
+
+    static List<PunishmentRequestGuiState.RequestView> visibleRequestsForActor(
+            List<PunishmentRequestGuiState.RequestView> loaded,
+            Actor current,
+            PunishmentRequestService service
+    ) {
+        return loaded.stream()
+                .filter(view -> service.mayReview(current, view.request()))
+                .toList();
     }
 
     /** Best effort: a revoked or retired reviewer should not retain a pending lease. */
