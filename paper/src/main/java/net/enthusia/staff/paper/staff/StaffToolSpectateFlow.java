@@ -5,6 +5,7 @@ import java.util.UUID;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
 import net.kyori.adventure.text.Component;
@@ -20,7 +21,10 @@ final class StaffToolSpectateFlow {
     private static final String SPECTATE_EXEMPT_PERMISSION = "enthusiastaff.stafftools.spectate-exempt";
 
     private static final double FOLLOW_REFRESH_DISTANCE_SQUARED = 2.25;
+    private static final int TARGET_CHECK_INTERVAL_TICKS = 20;
     private final Map<UUID, FollowSession> follows = new ConcurrentHashMap<>();
+    private final Map<UUID, Object> followAttempts = new ConcurrentHashMap<>();
+    private final Map<UUID, Player> ownedSpectators = new ConcurrentHashMap<>();
     private final Plugin plugin;
     private final Predicate<Player> actorAuthorized;
     private final Predicate<UUID> vanished;
@@ -38,16 +42,21 @@ final class StaffToolSpectateFlow {
     void begin(Player actor, UUID targetId) {
         stop(actor);
         UUID actorId = actor.getUniqueId();
+        Object attempt = new Object();
+        followAttempts.put(actorId, attempt);
         onEntity(
                 targetId,
-                target -> inspectTarget(actorId, target),
-                () -> message(actorId, "That player is no longer online.")
+                target -> inspectTarget(actorId, attempt, target),
+                () -> endAttempt(actorId, attempt, "That player is no longer online.")
         );
     }
 
-    private void inspectTarget(UUID actorId, Player target) {
+    private void inspectTarget(UUID actorId, Object attempt, Player target) {
+        if (!currentAttempt(actorId, attempt)) {
+            return;
+        }
         if (!targetEligible(target)) {
-            message(actorId, "That target is protected from staff follow/spectate tools.");
+            endAttempt(actorId, attempt, "That target is protected from staff follow/spectate tools.");
             return;
         }
         TargetSnapshot snapshot = new TargetSnapshot(
@@ -56,85 +65,111 @@ final class StaffToolSpectateFlow {
                 target.getLocation().clone(),
                 target
         );
-        onEntity(actorId, actor -> followSnapshot(actor, snapshot));
+        onEntity(actorId, actor -> followSnapshot(actor, attempt, snapshot),
+                () -> followAttempts.remove(actorId, attempt));
     }
 
-    private void followSnapshot(Player actor, TargetSnapshot target) {
+    private void followSnapshot(Player actor, Object attempt, TargetSnapshot target) {
+        if (!currentAttempt(actor.getUniqueId(), attempt)) {
+            return;
+        }
         if (!canContinue(actor)) {
+            followAttempts.remove(actor.getUniqueId(), attempt);
             return;
         }
         UUID actorId = actor.getUniqueId();
         onEntity(
                 target.playerId(),
-                liveTarget -> revalidateBeforeTeleport(actorId, target, liveTarget),
-                () -> message(actorId, "Follow/Spectate was cancelled because that target is no longer online.")
+                liveTarget -> revalidateBeforeTeleport(actorId, attempt, target, liveTarget),
+                () -> endAttempt(actorId, attempt, "Follow/Spectate was cancelled because that target is no longer online.")
         );
     }
 
-    private void revalidateBeforeTeleport(UUID actorId, TargetSnapshot snapshot, Player liveTarget) {
+    private void revalidateBeforeTeleport(UUID actorId, Object attempt, TargetSnapshot snapshot, Player liveTarget) {
+        if (!currentAttempt(actorId, attempt)) {
+            return;
+        }
         if (connectionChanged(snapshot, liveTarget)) {
-            message(actorId, "Follow/Spectate was cancelled because the target connection changed.");
+            endAttempt(actorId, attempt, "Follow/Spectate was cancelled because the target connection changed.");
             return;
         }
         if (!targetEligible(liveTarget)) {
-            message(actorId, "Follow/Spectate was cancelled because that target became protected.");
+            endAttempt(actorId, attempt, "Follow/Spectate was cancelled because that target became protected.");
             return;
         }
         TargetSnapshot current = snapshot.withLocation(liveTarget.getLocation().clone());
-        onEntity(actorId, actor -> beginTeleport(actor, current));
+        onEntity(actorId, actor -> beginTeleport(actor, attempt, current),
+                () -> followAttempts.remove(actorId, attempt));
     }
 
-    private void beginTeleport(Player actor, TargetSnapshot target) {
+    private void beginTeleport(Player actor, Object attempt, TargetSnapshot target) {
+        if (!currentAttempt(actor.getUniqueId(), attempt)) {
+            return;
+        }
         if (!canContinue(actor)) {
+            followAttempts.remove(actor.getUniqueId(), attempt);
             return;
         }
         UUID actorId = actor.getUniqueId();
         try {
             actor.teleportAsync(target.location()).whenComplete(
-                    (success, failure) -> finishTeleport(actorId, target, success, failure)
+                    (success, failure) -> finishTeleport(actorId, attempt, target, success, failure)
             );
         } catch (RuntimeException exception) {
-            actor.sendMessage(StaffMessageStyle.style(Component.text("Follow/Spectate teleport failed safely.", NamedTextColor.RED)));
+            endAttempt(actorId, attempt, "Follow/Spectate teleport failed safely.");
         }
     }
 
-    private void finishTeleport(UUID actorId, TargetSnapshot target, Boolean success, Throwable failure) {
-        if (failure != null || !Boolean.TRUE.equals(success)) {
-            message(actorId, "Follow/Spectate teleport failed safely.");
+    private void finishTeleport(UUID actorId, Object attempt, TargetSnapshot target,
+                                Boolean success, Throwable failure) {
+        if (!currentAttempt(actorId, attempt)) {
             return;
         }
-        onEntity(actorId, actor -> prepareAttachment(actor, target));
+        if (failure != null || !Boolean.TRUE.equals(success)) {
+            endAttempt(actorId, attempt, "Follow/Spectate teleport failed safely.");
+            return;
+        }
+        onEntity(actorId, actor -> prepareAttachment(actor, attempt, target),
+                () -> followAttempts.remove(actorId, attempt));
     }
 
-    private void prepareAttachment(Player actor, TargetSnapshot target) {
+    private void prepareAttachment(Player actor, Object attempt, TargetSnapshot target) {
+        if (!currentAttempt(actor.getUniqueId(), attempt)) {
+            return;
+        }
         if (!canContinue(actor)) {
+            followAttempts.remove(actor.getUniqueId(), attempt);
             return;
         }
         if (actor.getGameMode() != GameMode.SPECTATOR) {
-            beginContinuousFollow(actor, target);
+            beginContinuousFollow(actor, attempt, target);
             return;
         }
         UUID actorId = actor.getUniqueId();
         onEntity(
                 target.playerId(),
-                liveTarget -> revalidateBeforeAttachment(actorId, target, liveTarget),
-                () -> message(actorId, "Teleported to the last safe target location; direct spectating is unavailable.")
+                liveTarget -> revalidateBeforeAttachment(actorId, attempt, target, liveTarget),
+                () -> endAttempt(actorId, attempt, "Teleported to the last safe target location; direct spectating is unavailable.")
         );
     }
 
     /** Non-spectator Staff Mode retains its configured game mode while following. */
-    private void beginContinuousFollow(Player actor, TargetSnapshot target) {
-        FollowSession session = new FollowSession(target);
+    private void beginContinuousFollow(Player actor, Object attempt, TargetSnapshot target) {
+        if (!currentAttempt(actor.getUniqueId(), attempt)) {
+            return;
+        }
+        FollowSession session = new FollowSession(attempt, target);
         follows.put(actor.getUniqueId(), session);
         try {
             actor.getScheduler().runAtFixedRate(plugin,
                     task -> followTick(actor, session, task::cancel),
-                    () -> follows.remove(actor.getUniqueId(), session), 5L, 5L);
+                    () -> stopFollow(actor.getUniqueId(), session, "Follow ended: staff player disconnected."), 5L, 5L);
             actor.sendMessage(StaffMessageStyle.style(Component.text(
                     "Following " + target.name() + ". Right-click air with the Follow tool to stop.",
                     NamedTextColor.GREEN)));
         } catch (RuntimeException exception) {
             follows.remove(actor.getUniqueId(), session);
+            followAttempts.remove(actor.getUniqueId(), attempt);
             actor.sendMessage(StaffMessageStyle.style(Component.text(
                     "Unable to keep following this player; no continuous follow was started.",
                     NamedTextColor.RED)));
@@ -142,11 +177,37 @@ final class StaffToolSpectateFlow {
     }
 
     boolean stop(Player actor) {
-        return follows.remove(actor.getUniqueId()) != null;
+        UUID actorId = actor.getUniqueId();
+        boolean pendingOrAttached = followAttempts.remove(actorId) != null;
+        boolean following = follows.remove(actorId) != null;
+        Player attachment = ownedSpectators.remove(actorId);
+        if (attachment != null) {
+            try {
+                if (sameConnection(attachment, actor.getSpectatorTarget())) {
+                    detach(actor);
+                }
+            } catch (IllegalArgumentException | IllegalStateException ignored) {
+                // A disconnecting actor may already have retired the attachment.
+                // The logical attempt and follow session have still been invalidated.
+            }
+        }
+        return pendingOrAttached || following;
+    }
+
+    private boolean currentAttempt(UUID actorId, Object attempt) {
+        // Attempt tokens use Object's identity-based equals implementation.
+        return attempt.equals(followAttempts.get(actorId));
+    }
+
+    private void endAttempt(UUID actorId, Object attempt, String reason) {
+        if (followAttempts.remove(actorId, attempt)) {
+            message(actorId, reason);
+        }
     }
 
     private void followTick(Player actor, FollowSession session, Runnable cancel) {
-        if (follows.get(actor.getUniqueId()) != session) {
+        if (follows.get(actor.getUniqueId()) != session
+                || !currentAttempt(actor.getUniqueId(), session.attempt)) {
             cancel.run();
             return;
         }
@@ -168,7 +229,7 @@ final class StaffToolSpectateFlow {
                     }
                     Location where = live.getLocation().clone();
                     onEntity(actorId, current -> followToPosition(current, session, where),
-                            () -> follows.remove(actorId, session));
+                            () -> stopFollow(actorId, session, "Follow ended: staff player disconnected."));
                 },
                 () -> stopFollow(actorId, session, "Follow ended: the player left the server."));
     }
@@ -191,10 +252,12 @@ final class StaffToolSpectateFlow {
     }
 
     private boolean followStillAuthorized(Player actor, FollowSession session) {
-        if (follows.get(actor.getUniqueId()) == session && actorAuthorized.test(actor)) {
+        if (follows.get(actor.getUniqueId()) == session
+                && currentAttempt(actor.getUniqueId(), session.attempt) && actorAuthorized.test(actor)) {
             return true;
         }
         follows.remove(actor.getUniqueId(), session);
+        followAttempts.remove(actor.getUniqueId(), session.attempt);
         return false;
     }
 
@@ -205,37 +268,49 @@ final class StaffToolSpectateFlow {
 
     private void stopFollow(UUID actorId, FollowSession session, String reason) {
         if (follows.remove(actorId, session)) {
+            followAttempts.remove(actorId, session.attempt);
             message(actorId, reason);
         }
         session.inFlight.set(false);
     }
 
     private static final class FollowSession {
+        private final Object attempt;
         private final TargetSnapshot target;
         private final AtomicBoolean inFlight = new AtomicBoolean();
-        private FollowSession(TargetSnapshot target) {
+        private FollowSession(Object attempt, TargetSnapshot target) {
+            this.attempt = attempt;
             this.target = target;
         }
     }
 
-    private void revalidateBeforeAttachment(UUID actorId, TargetSnapshot snapshot, Player liveTarget) {
+    private void revalidateBeforeAttachment(UUID actorId, Object attempt, TargetSnapshot snapshot, Player liveTarget) {
+        if (!currentAttempt(actorId, attempt)) {
+            return;
+        }
         if (connectionChanged(snapshot, liveTarget)) {
-            message(actorId, "Teleported safely; direct spectating was cancelled because the target connection changed.");
+            endAttempt(actorId, attempt, "Teleported safely; direct spectating was cancelled because the target connection changed.");
             return;
         }
         if (!targetEligible(liveTarget)) {
-            message(actorId, "Teleported to the last safe target location; direct spectating is no longer available.");
+            endAttempt(actorId, attempt, "Teleported to the last safe target location; direct spectating is no longer available.");
             return;
         }
-        onEntity(actorId, actor -> attach(actor, snapshot));
+        onEntity(actorId, actor -> attach(actor, attempt, snapshot),
+                () -> followAttempts.remove(actorId, attempt));
     }
 
-    private void attach(Player actor, TargetSnapshot snapshot) {
+    private void attach(Player actor, Object attempt, TargetSnapshot snapshot) {
+        if (!currentAttempt(actor.getUniqueId(), attempt)) {
+            return;
+        }
         if (!canContinue(actor)) {
+            followAttempts.remove(actor.getUniqueId(), attempt);
             return;
         }
         Player currentTarget = plugin.getServer().getPlayer(snapshot.playerId());
         if (currentTarget == null || connectionChanged(snapshot, currentTarget)) {
+            followAttempts.remove(actor.getUniqueId(), attempt);
             actor.sendMessage(StaffMessageStyle.style(Component.text(
                     "Direct spectating was cancelled because the target connection changed.",
                     NamedTextColor.YELLOW
@@ -243,6 +318,7 @@ final class StaffToolSpectateFlow {
             return;
         }
         if (vanished.test(snapshot.playerId())) {
+            followAttempts.remove(actor.getUniqueId(), attempt);
             actor.sendMessage(StaffMessageStyle.style(Component.text(
                     "Direct spectating was cancelled because that target entered vanish.",
                     NamedTextColor.YELLOW
@@ -251,11 +327,14 @@ final class StaffToolSpectateFlow {
         }
         try {
             actor.setSpectatorTarget(currentTarget);
-            if (!monitorAttachment(actor, snapshot)) {
+            ownedSpectators.put(actor.getUniqueId(), currentTarget);
+            if (!monitorAttachment(actor, attempt, snapshot)) {
                 return;
             }
             actor.sendMessage(StaffMessageStyle.style(Component.text("Now spectating " + snapshot.name() + '.', NamedTextColor.GREEN)));
         } catch (IllegalArgumentException | IllegalStateException exception) {
+            followAttempts.remove(actor.getUniqueId(), attempt);
+            ownedSpectators.remove(actor.getUniqueId());
             actor.sendMessage(StaffMessageStyle.style(Component.text(
                     "Teleported to " + snapshot.name() + "; direct spectator attachment was unavailable.",
                     NamedTextColor.YELLOW
@@ -263,11 +342,14 @@ final class StaffToolSpectateFlow {
         }
     }
 
-    private boolean monitorAttachment(Player actor, TargetSnapshot snapshot) {
+    private boolean monitorAttachment(Player actor, Object attempt, TargetSnapshot snapshot) {
+        AtomicInteger ticks = new AtomicInteger();
+        AtomicBoolean targetCheckInFlight = new AtomicBoolean();
         try {
             actor.getScheduler().runAtFixedRate(
                     plugin,
-                    task -> monitorAttachmentTick(actor, snapshot, task::cancel),
+                    task -> monitorAttachmentTick(actor, attempt, snapshot, task::cancel,
+                            ticks, targetCheckInFlight),
                     () -> {
                     },
                     1L,
@@ -276,6 +358,8 @@ final class StaffToolSpectateFlow {
             return true;
         } catch (RuntimeException exception) {
             detach(actor);
+            followAttempts.remove(actor.getUniqueId(), attempt);
+            ownedSpectators.remove(actor.getUniqueId());
             actor.sendMessage(StaffMessageStyle.style(Component.text(
                     "Direct spectating was cancelled because its safety monitor could not start.",
                     NamedTextColor.RED
@@ -284,28 +368,79 @@ final class StaffToolSpectateFlow {
         }
     }
 
-    private void monitorAttachmentTick(Player actor, TargetSnapshot snapshot, Runnable cancelTask) {
-        if (actor.getGameMode() != GameMode.SPECTATOR
-                || !sameConnection(snapshot.connection(), actor.getSpectatorTarget())) {
-            cancelTask.run();
+    private void monitorAttachmentTick(Player actor, Object attempt, TargetSnapshot snapshot,
+                                       Runnable cancelTask, AtomicInteger ticks,
+                                       AtomicBoolean targetCheckInFlight) {
+        if (cancelInactiveAttachment(actor, attempt, snapshot, cancelTask)) {
             return;
         }
+        // Check target safety on the target-owned scheduler every second.
+        if (ticks.incrementAndGet() % TARGET_CHECK_INTERVAL_TICKS == 0
+                && targetCheckInFlight.compareAndSet(false, true)) {
+            scheduleTargetSafetyCheck(actor.getUniqueId(), attempt, snapshot, targetCheckInFlight);
+        }
+    }
+
+    private boolean cancelInactiveAttachment(Player actor, Object attempt, TargetSnapshot snapshot,
+                                             Runnable cancelTask) {
+        if (!currentAttempt(actor.getUniqueId(), attempt)) {
+            cancelTask.run();
+            return true;
+        }
+        if (actor.getGameMode() != GameMode.SPECTATOR
+                || !sameConnection(snapshot.connection(), actor.getSpectatorTarget())) {
+            followAttempts.remove(actor.getUniqueId(), attempt);
+            ownedSpectators.remove(actor.getUniqueId());
+            cancelTask.run();
+            return true;
+        }
         if (!actorAuthorized.test(actor)) {
-            detach(actor);
+            stop(actor);
             actor.sendMessage(StaffMessageStyle.style(Component.text(
                     "Follow/Spectate was cancelled because your staff session or permission changed.",
                     NamedTextColor.RED
             )));
             cancelTask.run();
-            return;
+            return true;
         }
         if (vanished.test(snapshot.playerId())) {
-            detach(actor);
+            stop(actor);
             actor.sendMessage(StaffMessageStyle.style(Component.text(
                     "Spectating stopped because that target entered vanish.",
                     NamedTextColor.YELLOW
             )));
             cancelTask.run();
+            return true;
+        }
+        return false;
+    }
+
+    private void scheduleTargetSafetyCheck(UUID actorId, Object attempt, TargetSnapshot snapshot,
+                                           AtomicBoolean targetCheckInFlight) {
+        onEntity(snapshot.playerId(),
+                target -> {
+                    boolean protectedNow = connectionChanged(snapshot, target) || !targetEligible(target);
+                    targetCheckInFlight.set(false);
+                    if (protectedNow) {
+                        onEntity(actorId, current -> stopProtectedSpectator(current, attempt, snapshot));
+                    }
+                },
+                () -> {
+                    targetCheckInFlight.set(false);
+                    onEntity(actorId, current -> stopProtectedSpectator(current, attempt, snapshot));
+                });
+    }
+
+    private void stopProtectedSpectator(Player actor, Object attempt, TargetSnapshot snapshot) {
+        if (!currentAttempt(actor.getUniqueId(), attempt)) {
+            return;
+        }
+        if (actor.getGameMode() == GameMode.SPECTATOR
+                && sameConnection(snapshot.connection(), actor.getSpectatorTarget())) {
+            stop(actor);
+            actor.sendMessage(StaffMessageStyle.style(Component.text(
+                    "Spectating stopped because that target disconnected or became protected.",
+                    NamedTextColor.YELLOW)));
         }
     }
 
