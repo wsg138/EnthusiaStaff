@@ -90,6 +90,23 @@ public final class PunishmentDraftWorkflow {
             PreparePunishmentDraftRequest request,
             OperationalMode mode
     ) {
+        return prepare(request, mode, null);
+    }
+
+    /**
+     * Guided preparation must use the same policy and escalation facts as its
+     * earlier read-only preview. The proposed sanctions may intentionally
+     * differ (staff selected a configured tier), so compare the baseline
+     * decision rather than the resulting sanction list.
+     *
+     * Reject drift before saving any draft; confirmation independently
+     * rechecks the recommendation before applying or requesting approval.
+     */
+    public PunishmentDraftEvaluation prepare(
+            PreparePunishmentDraftRequest request,
+            OperationalMode mode,
+            PunishmentAssessment expectedPreview
+    ) {
         Objects.requireNonNull(request);
         UUID draftId = Objects.requireNonNull(identifiers.get(), "generated draft identifier");
         CreatePunishmentRequest punishmentRequest = punishmentRequest(
@@ -106,6 +123,15 @@ public final class PunishmentDraftWorkflow {
             return new PunishmentDraftEvaluation.Rejected(rejected.code(), rejected.message());
         }
         PunishmentAssessment assessment = ((PunishmentEvaluation.Allowed) evaluation).assessment();
+        if (expectedPreview != null
+                && (!expectedPreview.configurationVersion().equals(assessment.configurationVersion())
+                || !expectedPreview.policy().equals(assessment.policy())
+                || !expectedPreview.escalation().equals(assessment.escalation()))) {
+            return new PunishmentDraftEvaluation.Rejected(
+                    "RECOMMENDATION_CHANGED",
+                    "The policy or punishment history changed during guided calculation; recalculate before saving"
+            );
+        }
         Instant createdAt = clock.instant();
         PunishmentDraft draft = new PunishmentDraft(
                 draftId,

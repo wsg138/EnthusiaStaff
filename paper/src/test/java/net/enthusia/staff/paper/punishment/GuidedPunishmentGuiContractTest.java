@@ -37,7 +37,7 @@ class GuidedPunishmentGuiContractTest {
         assertTrue(guided.contains("state.interview().back()"));
         assertTrue(guided.contains("workflow.preview(readOnly, mode.get())"));
         assertTrue(guided.contains("GuidedPolicyResolution.calculate("));
-        assertTrue(guided.contains("workflow.prepare(proposal, mode.get())"));
+        assertTrue(guided.contains("workflow.prepare(proposal, mode.get(), assessment)"));
         assertTrue(!guided.contains("confirmRouted("));
         String renderer = source("PunishmentGuiRenderer.java");
         assertTrue(renderer.contains("Relevant punishment history is checked automatically."));
@@ -130,7 +130,7 @@ class GuidedPunishmentGuiContractTest {
         assertTrue(preparation.contains("if (!guidedModeEnabled())"));
         assertTrue(preparation.contains("Guided punishment mode was disabled during calculation."));
         assertTrue(preparation.lastIndexOf("if (!guidedModeEnabled())")
-                < preparation.indexOf("workflow.prepare(proposal, mode.get())"));
+                < preparation.indexOf("workflow.prepare(proposal, mode.get(), assessment)"));
         assertTrue(preparation.lastIndexOf("if (!guidedModeEnabled())")
                 > preparation.indexOf("GuidedPolicyResolution.calculate("));
     }
@@ -164,6 +164,17 @@ class GuidedPunishmentGuiContractTest {
         assertTrue(renderer.contains("boolean guidedDisabled = guidedReview && !guidedModeEnabled"));
         assertTrue(renderer.contains("This saved draft cannot be submitted."));
         assertTrue(controller.contains("new PunishmentGuiState.Reasons("));
+    }
+
+    @Test
+    void guidedDraftCannotPersistAgainstDifferentPolicyOrHistoryThanPreview() throws Exception {
+        String controller = source("PunishmentGuiController.java");
+        String guided = controller.substring(controller.indexOf("private void evaluateGuided("),
+                controller.indexOf("private static String guidedExplanation("));
+        assertTrue(guided.contains("workflow.preview(readOnly, mode.get())"));
+        assertTrue(guided.contains("GuidedPolicyResolution.calculate(finding, assessment, state.durationChoice())"));
+        assertTrue(guided.contains("workflow.prepare(proposal, mode.get(), assessment)"),
+                "The saved draft must be validated against the exact read-only baseline");
     }
 
     @Test
