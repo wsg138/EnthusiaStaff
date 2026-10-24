@@ -112,6 +112,38 @@ class PreflightTest(unittest.TestCase):
             "Velocity retains STAFFBOT and TEST peer mappings"
         ])
 
+    def test_isolated_peer_missing_test_backend_mapping_fails(self):
+        without_test = VELOCITY.replace(
+            "channel.backend.TEST.secret-environment=ES_CHANNEL_TEST_SECRET\n", ""
+        )
+        self.assertFalse(self.isolated_checks(velocity=without_test)[
+            "Velocity retains STAFFBOT and TEST peer mappings"
+        ])
+
+    def test_commented_isolated_peer_does_not_count_as_configured(self):
+        commented = VELOCITY.replace(
+            "channel.backend.STAFFBOT_TEST.secret-environment=",
+            "# channel.backend.STAFFBOT_TEST.secret-environment=",
+        )
+        self.assertFalse(self.isolated_checks(velocity=commented)[
+            "Velocity distinct STAFFBOT_TEST peer secret identifier configured"
+        ])
+
+    def test_duplicate_active_velocity_key_fails_closed(self):
+        duplicate = VELOCITY + (
+            "channel.backend.STAFFBOT_TEST.secret-environment=ES_OTHER_TEST_SECRET\n"
+        )
+        with self.assertRaises(ValueError):
+            self.isolated_checks(velocity=duplicate)
+
+    def test_isolated_peer_identifier_must_be_valid_environment_name(self):
+        malformed = VELOCITY.replace(
+            "ES_CHANNEL_STAFFBOT_TEST_SECRET", "not-a-valid-env-name"
+        )
+        self.assertFalse(self.isolated_checks(velocity=malformed)[
+            "Velocity distinct STAFFBOT_TEST peer secret identifier configured"
+        ])
+
     def test_isolated_mode_cannot_use_production_environment_or_missing_proxy(self):
         with self.assertRaises(ValueError):
             self.isolated_checks(environment="production")
