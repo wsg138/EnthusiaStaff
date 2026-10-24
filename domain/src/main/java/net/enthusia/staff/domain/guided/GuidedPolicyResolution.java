@@ -185,6 +185,12 @@ public final class GuidedPolicyResolution {
                 break;
             }
             Duration candidate = items.getFirst().length().temporary().orElseThrow();
+            if (candidate.compareTo(current) < 0) {
+                // A later longer mute does not license interpolation across an
+                // intervening shorter tier in a misordered custom policy.
+                throw new IllegalArgumentException(
+                        "Configured mute ladder decreases; manual review required");
+            }
             if (candidate.compareTo(current) > 0) {
                 return candidate;
             }

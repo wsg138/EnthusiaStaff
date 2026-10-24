@@ -218,6 +218,24 @@ class GuidedPolicyResolutionTest {
     }
 
     @Test
+    void malformedFutureMuteTierCannotBeSkippedDuringDurationInterpolation() {
+        var incident = finding("few", "not-applicable");
+        List<PunishmentStep> steps = List.of(
+                new PunishmentStep(0, "Warning", List.of(warn())),
+                new PunishmentStep(1, "One hour", List.of(mute(60))),
+                new PunishmentStep(2, "Misordered fifteen minutes", List.of(mute(15))),
+                new PunishmentStep(3, "Three hours", List.of(mute(180))));
+        var policy = new ReasonPolicy("spam.low-level", SPAM_FAMILY,
+                "Spam", 10, true, steps);
+        var history = new EscalationDecision(1, 1, 0, List.of(), steps.get(1));
+        var assessed = new PunishmentAssessment("test.future-descending", policy,
+                history, steps.get(1).sanctions());
+        assertThrows(IllegalArgumentException.class,
+                () -> GuidedPolicyResolution.calculate(incident, assessed, 0),
+                "Do not interpolate one-hour mutes toward three hours across a shorter intervening tier");
+    }
+
+    @Test
     void severityCannotJumpFromPermanentMuteBaselineToOrdinaryMute() {
         var incident = finding("large-scale", "yes");
         var restricted = new SanctionSpec(SanctionType.MUTE, SanctionLength.permanent());
