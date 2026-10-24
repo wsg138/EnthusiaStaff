@@ -767,13 +767,24 @@ public final class PunishmentRequestGuiController implements Listener {
                         cleanup.run();
                         return;
                     }
-                    Actor current = authorizedActor(player);
-                    if (current == null || !mayView.test(current)) {
-                        player.closeInventory();
+                    try {
+                        Actor current = authorizedActor(player);
+                        if (current == null || !mayView.test(current)) {
+                            player.closeInventory();
+                            cleanup.run();
+                            return;
+                        }
+                        action.accept(current);
+                    } catch (RuntimeException exception) {
+                        // An acquired lease may not have been shown if Bukkit
+                        // inventory construction or opening fails on the owner thread.
+                        // Release the fence instead of waiting for its full timeout.
                         cleanup.run();
-                        return;
+                        plugin.getLogger().log(Level.SEVERE,
+                                "Punishment request GUI owner-thread presentation failed", exception);
+                        message(player, "Could not display the punishment request. "
+                                + "Please reopen the review.");
                     }
-                    action.accept(current);
                 },
                 () -> {
                     plugin.getLogger().fine("Skipped punishment request GUI callback for a retired player session");

@@ -748,6 +748,34 @@ class PunishmentRequestControllerSchedulingIntegrationTest {
     }
 
     @Test
+    void failedReviewRenderingReleasesAcquiredLeaseInsteadOfHoldingItUntilTimeout() {
+        Fixture fixture = fixture(pending(StaffRank.MOD), SchedulerMode.RUN,
+                review -> { throw new IllegalStateException("render failed"); });
+
+        assertTrue(fixture.controller().openReview(fixture.player().proxy(), REQUEST_ID));
+
+        assertEquals(1, fixture.store().acquireCalls);
+        assertEquals(1, fixture.store().abandonCalls,
+                "A failed owner-thread renderer must release the unpresented fenced lease");
+        assertEquals(0, fixture.player().openInventories.get());
+    }
+
+    @Test
+    void failedInventoryOpeningReleasesAcquiredReviewLease() {
+        Fixture fixture = fixture(pending(StaffRank.MOD), SchedulerMode.RUN);
+        fixture.player().onOpenInventory = () -> {
+            throw new IllegalStateException("inventory view could not open");
+        };
+
+        assertTrue(fixture.controller().openReview(fixture.player().proxy(), REQUEST_ID));
+
+        assertEquals(1, fixture.store().acquireCalls);
+        assertEquals(1, fixture.store().abandonCalls,
+                "A Bukkit inventory-opening exception must not strand an acquired review fence");
+        assertEquals(1, fixture.logger().severe.get());
+    }
+
+    @Test
     void workerAdmissionRejectionStartsNoStorageWork() {
         Fixture fixture = fixture(pending(StaffRank.MOD), SchedulerMode.RUN);
         fixture.executor().reject = true;
