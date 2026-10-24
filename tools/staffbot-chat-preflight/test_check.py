@@ -2,6 +2,7 @@
 
 All inputs are synthetic; no production Discord IDs or credentials are used.
 """
+import base64
 import importlib.util
 import sys
 import unittest
@@ -52,6 +53,9 @@ CHAT = (
 )
 
 
+PRODUCTION_CHAT = "ENTHUSIA_STAFF_BOT_PUBLIC_CHAT_APPLICATION_ID=1650000000000000009\n"
+
+
 VELOCITY = """channel.enabled=true
 channel.backend.STAFFBOT.secret-environment=ES_CHANNEL_STAFFBOT_SECRET
 channel.backend.TEST.secret-environment=ES_CHANNEL_TEST_SECRET
@@ -59,14 +63,30 @@ channel.backend.STAFFBOT_TEST.secret-environment=ES_CHANNEL_STAFFBOT_TEST_SECRET
 """
 
 
+SHARED_PRIMARY = base64.b64encode(bytes([17]) * 32).decode("ascii")
+SHARED_TEST = base64.b64encode(bytes([21]) * 32).decode("ascii")
+SHARED_CHAT = (
+    CHAT.replace(f"TEST/global={PIN}", f"SMP/global={PIN}")
+    + "ENTHUSIA_STAFF_BOT_TEST_CHAT_ENABLED=true\n"
+    + "ENTHUSIA_STAFF_BOT_CHAT_BRIDGE_CLIENT_SECRET=" + SHARED_PRIMARY + "\n"
+    + "ENTHUSIA_STAFF_BOT_TEST_CHAT_CLIENT_SECRET=" + SHARED_TEST + "\n"
+)
+SHARED_PROXY_SECRETS = (
+    "ES_CHANNEL_STAFFBOT_SECRET=" + SHARED_PRIMARY + "\n"
+    + "ES_CHANNEL_STAFFBOT_TEST_SECRET=" + SHARED_TEST + "\n"
+)
+
+
 class PreflightTest(unittest.TestCase):
     def checks(self, paper=PAPER, legacy=LEGACY, live=LIVE, chat=CHAT, environment="production"):
         return dict(CHECK.evaluate(paper, legacy, live, chat, SOURCE_JAVA, environment))
 
-    def isolated_checks(self, velocity=VELOCITY, environment="staging"):
+    def isolated_checks(self, velocity=VELOCITY, environment="staging",
+                        production_chat=PRODUCTION_CHAT):
         return dict(CHECK.evaluate(
             PAPER, LEGACY, LIVE, CHAT, SOURCE_JAVA, environment,
             velocity_config=velocity, isolated_test=True,
+            production_chat=production_chat,
         ))
 
     def test_isolated_peer_only_passes_when_explicitly_configured(self):
@@ -144,12 +164,78 @@ class PreflightTest(unittest.TestCase):
             "Velocity distinct STAFFBOT_TEST peer secret identifier configured"
         ])
 
+    def test_isolated_chat_app_differs_from_production_chat_app(self):
+        check = "Isolated chat application differs from current production public-chat application"
+        self.assertTrue(self.isolated_checks()[check])
+        same_app = PRODUCTION_CHAT.replace("1650000000000000009", "1650000000000000008")
+        self.assertFalse(self.isolated_checks(production_chat=same_app)[check])
+        self.assertFalse(self.isolated_checks(production_chat="")[check])
+        self.assertFalse(self.isolated_checks(production_chat=
+            "ENTHUSIA_STAFF_BOT_PUBLIC_CHAT_APPLICATION_ID=invalid\\n")[check])
+
+    def test_duplicate_production_chat_app_property_fails_closed(self):
+        with self.assertRaises(ValueError):
+            self.isolated_checks(production_chat=PRODUCTION_CHAT + PRODUCTION_CHAT)
+
+    def test_isolated_mode_requires_read_only_production_chat_input(self):
+        with self.assertRaises(ValueError):
+            CHECK.evaluate(PAPER, LEGACY, LIVE, CHAT, SOURCE_JAVA,
+                           "staging", velocity_config=VELOCITY, isolated_test=True)
+
     def test_isolated_mode_cannot_use_production_environment_or_missing_proxy(self):
         with self.assertRaises(ValueError):
             self.isolated_checks(environment="production")
         with self.assertRaises(ValueError):
             CHECK.evaluate(PAPER, LEGACY, LIVE, CHAT, SOURCE_JAVA,
                            "staging", isolated_test=True)
+
+    def shared_checks(self, chat=SHARED_CHAT, velocity=VELOCITY,
+                      secret_file=SHARED_PROXY_SECRETS, env="production"):
+        return dict(CHECK.evaluate(
+            PAPER, LEGACY, LIVE, chat, SOURCE_JAVA, env,
+            velocity_config=velocity, shared_jda_test=True, velocity_secrets=secret_file
+        ))
+
+    def test_shared_jda_candidate_proves_distinct_keys_without_another_bot(self):
+        result = self.shared_checks()
+        self.assertTrue(all(result.values()))
+        self.assertEqual(19, len(result))
+
+    def test_shared_jda_missing_or_reused_hmac_fails_closed(self):
+        self.assertFalse(self.shared_checks(secret_file="")[
+            "Shared TEST peer secret material is valid, distinct and matches local Velocity file"])
+        same = SHARED_CHAT.replace(SHARED_TEST, SHARED_PRIMARY)
+        self.assertFalse(self.shared_checks(chat=same)[
+            "Shared TEST peer secret material is valid, distinct and matches local Velocity file"])
+        wrong = SHARED_PROXY_SECRETS.replace(SHARED_TEST, SHARED_PRIMARY)
+        self.assertFalse(self.shared_checks(secret_file=wrong)[
+            "Shared TEST peer secret material is valid, distinct and matches local Velocity file"])
+
+    def test_shared_jda_requires_primary_smp_route_and_exact_opt_in(self):
+        self.assertFalse(self.shared_checks(chat=SHARED_CHAT.replace(
+            f"SMP/global={PIN}", f"TEST/global={PIN}"))[
+            "StaffBot outbound routes match only this test backend"])
+        self.assertFalse(self.shared_checks(chat=SHARED_CHAT.replace(
+            "ENTHUSIA_STAFF_BOT_TEST_CHAT_ENABLED=true",
+            "ENTHUSIA_STAFF_BOT_TEST_CHAT_ENABLED=false"))[
+            "One existing JDA session with default-off TEST transport explicitly enabled"])
+
+    def test_shared_jda_refuses_wrong_context_and_missing_sources(self):
+        with self.assertRaises(ValueError):
+            self.shared_checks(env="staging")
+        with self.assertRaises(ValueError):
+            CHECK.evaluate(PAPER, LEGACY, LIVE, SHARED_CHAT, SOURCE_JAVA, "production",
+                           velocity_config=VELOCITY, shared_jda_test=True)
+        with self.assertRaises(ValueError):
+            CHECK.evaluate(PAPER, LEGACY, LIVE, SHARED_CHAT, SOURCE_JAVA, "production",
+                           velocity_config=VELOCITY, velocity_secrets=SHARED_PROXY_SECRETS,
+                           isolated_test=True, shared_jda_test=True)
+
+    def test_shared_jda_requires_same_peer_mapping_safety_as_isolated(self):
+        missing = VELOCITY.replace(
+            "channel.backend.STAFFBOT_TEST.secret-environment=ES_CHANNEL_STAFFBOT_TEST_SECRET\n", "")
+        self.assertFalse(self.shared_checks(velocity=missing)[
+            "Velocity distinct STAFFBOT_TEST peer secret identifier configured"])
 
     def test_existing_production_preflight_does_not_require_isolated_peer(self):
         self.assertTrue(all(self.checks().values()))

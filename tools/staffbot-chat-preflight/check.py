@@ -7,6 +7,8 @@ connected peers, or runtime readiness. It never prints raw input values.
 from __future__ import annotations
 
 import argparse
+import base64
+import hmac
 import re
 from pathlib import Path
 
@@ -119,21 +121,66 @@ def isolated_peer_checks(config: str) -> list[tuple[str, bool]]:
     ]
 
 
+def _hmac_key(raw: str) -> bytes:
+    try:
+        value = base64.b64decode(raw, validate=True)
+    except (ValueError, base64.binascii.Error):
+        return b""
+    return value if len(value) == 32 else b""
+
+
+def shared_jda_checks(chat: str, velocity: str, secret_file: str) -> list[tuple[str, bool]]:
+    """Compare in memory; neither raw nor encoded secret material is printed."""
+    current = properties(chat)
+    proxy = properties(velocity)
+    secrets = properties(secret_file)
+    primary_name = proxy.get("channel.backend.STAFFBOT.secret-environment", "")
+    test_name = proxy.get("channel.backend.STAFFBOT_TEST.secret-environment", "")
+    primary_client = _hmac_key(current.get("ENTHUSIA_STAFF_BOT_CHAT_BRIDGE_CLIENT_SECRET", ""))
+    test_client = _hmac_key(current.get("ENTHUSIA_STAFF_BOT_TEST_CHAT_CLIENT_SECRET", ""))
+    primary_proxy = _hmac_key(secrets.get(primary_name, ""))
+    test_proxy = _hmac_key(secrets.get(test_name, ""))
+    material_present = all((primary_client, test_client, primary_proxy, test_proxy))
+    material_matches = material_present and (
+        hmac.compare_digest(primary_client, primary_proxy)
+        and hmac.compare_digest(test_client, test_proxy)
+        and not hmac.compare_digest(primary_client, test_client)
+    )
+    return [
+        ("One existing JDA session with default-off TEST transport explicitly enabled",
+         current.get("ENTHUSIA_STAFF_BOT_TEST_CHAT_ENABLED", "").lower() == "true"),
+        ("Shared TEST peer secret material is valid, distinct and matches local Velocity file",
+         material_matches),
+    ]
+
+
 def evaluate(
     paper: str, legacy_test: str, legacy_live: str, chat: str,
     java_source: str, staffbot_environment: str,
-    velocity_config: str | None = None, isolated_test: bool = False
+    velocity_config: str | None = None, isolated_test: bool = False,
+    production_chat: str | None = None,
+    shared_jda_test: bool = False, velocity_secrets: str | None = None
 ) -> list[tuple[str, bool]]:
+    if shared_jda_test and isolated_test:
+        raise ValueError("shared JDA and separate JDA modes are mutually exclusive")
+    if shared_jda_test and staffbot_environment != "production":
+        raise ValueError("shared JDA TEST must run in the existing production StaffBot")
+    if shared_jda_test and (velocity_config is None or velocity_secrets is None):
+        raise ValueError("shared JDA TEST requires Velocity config and private secrets file")
     if isolated_test and staffbot_environment != "staging":
         raise ValueError("isolated TEST runner requires staging environment")
     if isolated_test and velocity_config is None:
         raise ValueError("isolated TEST runner requires Velocity config")
+    if isolated_test and production_chat is None:
+        raise ValueError("isolated TEST runner requires production public-chat config")
     pin = private_channel(java_source)
     prop = properties(chat)
+    live_chat = properties(production_chat) if isolated_test else {}
     server_id = yaml_scalar(yaml_section(paper, "network"), "server-id")
     routes_raw = prop.get("ENTHUSIA_STAFF_BOT_CHAT_BRIDGE_ROUTES", "")
     routes = [item.strip() for item in routes_raw.split(";") if item.strip()]
     maps_present, outbound_values = legacy_destinations(legacy_test, legacy_live)
+    expected_chat_backend = "SMP" if shared_jda_test else server_id
     return [
         ("private channel distinct from legacy chat and console", maps_present and pin not in outbound_values),
         ("Paper reports a non-empty backend ID", bool(server_id)),
@@ -143,7 +190,7 @@ def evaluate(
         ("Production SHADOW migration acknowledged when required",
          migration_acknowledged(prop, staffbot_environment)),
         ("StaffBot outbound routes match only this test backend",
-         bool(server_id) and routes == [f"{server_id}/global={pin}"]),
+         bool(server_id) and routes == [f"{expected_chat_backend}/global={pin}"]),
         ("StaffBot inbound chat remains disabled",
          not prop.get("ENTHUSIA_STAFF_BOT_CHAT_BRIDGE_INGRESS_ROUTES", "").strip()),
         ("Chat-only application distinct from staff application",
@@ -158,7 +205,14 @@ def evaluate(
          legacy_setting(legacy_test, "DiscordChatChannelConsoleCommandEnabled").lower() == "false"),
         ("Test legacy console Discord destination absent",
          legacy_setting(legacy_test, "DiscordConsoleChannelId").strip("'\" ") in ("", "0")),
-    ] + (isolated_peer_checks(velocity_config) if isolated_test else [])
+    ] + (isolated_peer_checks(velocity_config) + [
+        ("Isolated chat application differs from current production public-chat application",
+         bool(re.fullmatch(r"\d{16,22}", live_chat.get("ENTHUSIA_STAFF_BOT_PUBLIC_CHAT_APPLICATION_ID", "")))
+         and prop.get("ENTHUSIA_STAFF_BOT_PUBLIC_CHAT_APPLICATION_ID", "")
+         != live_chat["ENTHUSIA_STAFF_BOT_PUBLIC_CHAT_APPLICATION_ID"])
+    ] if isolated_test else []) + (isolated_peer_checks(velocity_config)
+        + shared_jda_checks(chat, velocity_config, velocity_secrets)
+        if shared_jda_test else [])
 
 
 def main() -> int:
@@ -169,10 +223,16 @@ def main() -> int:
     parser.add_argument("--chat", required=True, type=Path)
     parser.add_argument("--staffbot-environment", required=True, choices=("production", "staging"))
     parser.add_argument("--staffbot-environment-source", required=True, type=Path)
+    parser.add_argument("--shared-jda-test", action="store_true",
+                        help="Same StaffBot JDA, separate authenticated TEST peer (no new bot login)")
+    parser.add_argument("--velocity-secrets", type=Path,
+                        help="Private read-only Velocity secrets.properties for shared-JDA HMAC equality checks")
     parser.add_argument("--isolated-test", action="store_true",
                         help="Check the separate STAFFBOT_TEST peer, not the live STAFFBOT connection")
     parser.add_argument("--velocity-config", type=Path,
                         help="Read-only Velocity properties, required for --isolated-test")
+    parser.add_argument("--production-chat", type=Path,
+                        help="Read-only existing production public-chat settings, required for --isolated-test")
     args = parser.parse_args()
     try:
         results = evaluate(
@@ -185,6 +245,11 @@ def main() -> int:
             args.velocity_config.read_text(encoding="utf-8")
             if args.velocity_config is not None else None,
             args.isolated_test,
+            args.production_chat.read_text(encoding="utf-8")
+            if args.production_chat is not None else None,
+            args.shared_jda_test,
+            args.velocity_secrets.read_text(encoding="utf-8")
+            if args.velocity_secrets is not None else None,
         )
     except (OSError, UnicodeError, ValueError) as error:
         print(f"BLOCKED: configuration cannot be validated ({type(error).__name__})")
@@ -195,7 +260,9 @@ def main() -> int:
     print(f"CONFIGURATION PREFLIGHT: {len(results)-count} PASS, {count} BLOCKED")
     print("Runtime identity, channel permissions, TLS peers, bot readiness, and rollback are NOT VERIFIED.")
     if args.isolated_test:
-        print("Actual HMAC secret values and their uniqueness are NOT VERIFIED by this read-only check.")
+        print("Actual HMAC secret values, bot tokens, active sessions and their uniqueness are NOT VERIFIED.")
+    if args.shared_jda_test:
+        print("Runtime environment overrides, active JDA session, authenticated peer readiness and Discord permissions are NOT VERIFIED.")
     return 2 if count else 0
 
 
