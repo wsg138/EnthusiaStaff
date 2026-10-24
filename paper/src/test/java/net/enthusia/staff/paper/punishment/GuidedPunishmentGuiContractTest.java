@@ -198,6 +198,18 @@ class GuidedPunishmentGuiContractTest {
     }
 
     @Test
+    void guidedNoteAndVisibilityEditsRetainReviewedOutcomeOrRequireReassessment() throws Exception {
+        String controller = source("PunishmentGuiController.java");
+        String edit = controller.substring(controller.indexOf("private void reprepare("),
+                controller.indexOf("private void showPrepared("));
+        assertTrue(edit.contains("state.draft().expectation()"));
+        assertTrue(edit.contains("state.assessment().orElse(null), state.draft().expectation()"));
+        assertTrue(edit.contains("isGuidedDraft(state.draft().internalExplanation())"));
+        assertTrue(edit.contains(": workflow.prepare(edited, mode.get())"),
+                "Expert note and visibility edits must keep their existing workflow");
+    }
+
+    @Test
     void warningAndSeverityChoicesUseMeaningfulMaterials() {
         assertEquals(Material.RED_DYE, PunishmentGuiRenderer.guidedAnswerMaterial(
                 "continued", "yes", 0));

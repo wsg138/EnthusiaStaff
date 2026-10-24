@@ -1049,20 +1049,24 @@ public final class PunishmentGuiController implements Listener {
                         + "before editing the saved guided draft.");
                 return;
             }
-            PunishmentDraftEvaluation evaluation = workflow.prepare(
-                    new PreparePunishmentDraftRequest(
-                            state.target().playerId(),
-                            actor,
-                            state.draft().reasonId(),
-                            guidedAuditExplanation(state.draft().internalExplanation(), explanation),
-                            visibility,
-                            state.commandName(),
-                            PunishmentDraftReprepareOverrides.choose(
-                                    state.draft().expectation(), state.assessment(),
-                                    policies.find(state.draft().reasonId()))
-                    ),
-                    mode.get()
+            PreparePunishmentDraftRequest edited = new PreparePunishmentDraftRequest(
+                    state.target().playerId(),
+                    actor,
+                    state.draft().reasonId(),
+                    guidedAuditExplanation(state.draft().internalExplanation(), explanation),
+                    visibility,
+                    state.commandName(),
+                    PunishmentDraftReprepareOverrides.choose(
+                            state.draft().expectation(), state.assessment(),
+                            policies.find(state.draft().reasonId()))
             );
+            // A note or visibility edit must not silently replace the guided
+            // sanctions reviewed by staff, even after a resumed draft has lost
+            // its transient assessment. Expert edits retain the original path.
+            PunishmentDraftEvaluation evaluation = isGuidedDraft(state.draft().internalExplanation())
+                    ? workflow.prepare(edited, mode.get(),
+                            state.assessment().orElse(null), state.draft().expectation())
+                    : workflow.prepare(edited, mode.get());
             if (evaluation instanceof PunishmentDraftEvaluation.Prepared updated) {
                 GuidedReturn previous = guidedReturns.get(viewer.getUniqueId());
                 if (previous != null && previous.draftId().equals(state.draft().draftId())) {
