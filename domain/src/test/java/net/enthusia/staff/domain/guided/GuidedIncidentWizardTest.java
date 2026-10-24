@@ -132,4 +132,19 @@ class GuidedIncidentWizardTest {
         var first = flow.answer(MEDIUM, "public-chat");
         assertTrue(first.back().answers().isEmpty());
     }
+
+    @Test
+    void voiceNoiseRequiresReviewUntilVoiceEnforcementIsVerified() {
+        var voice = GuidedIncidentWizard.start(CHAT)
+                .answer(MEDIUM, "voice").answer(CONDUCT, SPAM)
+                .answer(EXTENT, "sustained").answer(CONTINUED, NO_WARNING)
+                .finding();
+        assertEquals("spam.noise-pollution", voice.candidateId(),
+                "Keep the configured reason for audited manual handling");
+        assertTrue(voice.needsReview(),
+                "Do not issue a Minecraft chat mute as an unverified voice sanction");
+        var normalChat = spam("sustained", NO_WARNING).finding();
+        assertFalse(normalChat.needsReview(),
+                "Ordinary public chat spam remains eligible for the guided workflow");
+    }
 }

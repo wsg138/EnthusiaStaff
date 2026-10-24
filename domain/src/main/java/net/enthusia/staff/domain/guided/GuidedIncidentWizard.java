@@ -216,6 +216,11 @@ public final class GuidedIncidentWizard {
     }
 
     private boolean channelCompatible(String medium, String conduct) {
+        // Standard Minecraft chat mutes are not proof that connected voice chat is muted.
+        // Until voice-channel enforcement is verified, keep voice incidents in manual review.
+        if (CHAT.equals(category) && "voice".equals(medium)) {
+            return false;
+        }
         if (GAMEPLAY.equals(category)) {
             return IN_GAME.equals(medium);
         }
