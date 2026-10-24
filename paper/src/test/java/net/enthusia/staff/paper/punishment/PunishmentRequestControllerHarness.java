@@ -261,6 +261,8 @@ final class PunishmentRequestControllerHarness {
         final AtomicInteger messages = new AtomicInteger();
         volatile String lastMessage;
         final AtomicInteger openInventories = new AtomicInteger();
+        final AtomicInteger closedInventories = new AtomicInteger();
+        volatile boolean authorized = true;
         private final UUID id;
         private final Player proxy;
 
@@ -270,7 +272,7 @@ final class PunishmentRequestControllerHarness {
                 case "getUniqueId" -> this.id;
                 case "getName" -> "Reviewer";
                 case "getScheduler" -> scheduler.proxy;
-                case "hasPermission" -> permission(arguments[0].toString());
+                case "hasPermission" -> authorized && permission(arguments[0].toString());
                 case "sendMessage" -> {
                     messages.incrementAndGet();
                     if (arguments.length > 0 && arguments[0] instanceof net.kyori.adventure.text.Component component) {
@@ -283,7 +285,10 @@ final class PunishmentRequestControllerHarness {
                     openInventories.incrementAndGet();
                     yield null;
                 }
-                case "closeInventory" -> null;
+                case "closeInventory" -> {
+                    closedInventories.incrementAndGet();
+                    yield null;
+                }
                 default -> defaultValue(method);
             });
         }
@@ -367,6 +372,7 @@ final class PunishmentRequestControllerHarness {
         int pendingReads;
         int findReads;
         int acquireCalls;
+        int abandonCalls;
         int approveTransitions;
         boolean failAfterApprove;
         int denyTransitions;
@@ -412,6 +418,12 @@ final class PunishmentRequestControllerHarness {
             fence++;
             current = copy(current, PunishmentRequestStatus.PENDING, current.revision() + 1, null, null, null, null);
             return Optional.of(new PunishmentApprovalLease(current, ownerId, fence, leaseExpiresAt));
+        }
+
+        @Override
+        public boolean abandon(PunishmentApprovalLease lease) {
+            abandonCalls++;
+            return true;
         }
 
         @Override

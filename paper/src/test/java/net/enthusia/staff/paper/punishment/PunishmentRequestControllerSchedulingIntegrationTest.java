@@ -217,6 +217,95 @@ class PunishmentRequestControllerSchedulingIntegrationTest {
     }
 
     @Test
+    void queuedApprovalListDoesNotRenderAfterReviewerLosesPermission() {
+        Fixture fixture = fixture(pending(StaffRank.MOD), SchedulerMode.HOLD);
+        assertTrue(fixture.controller().openQueue(fixture.player().proxy()));
+        assertEquals(1, fixture.scheduler().heldActions.size());
+
+        fixture.player().authorized = false;
+        fixture.scheduler().heldActions.removeFirst().run();
+
+        assertEquals(0, fixture.player().openInventories.get());
+        assertEquals(1, fixture.player().closedInventories.get());
+        assertEquals(1, fixture.player().messages.get());
+        assertEquals(1, fixture.store().pendingReads);
+    }
+
+    @Test
+    void resolvedRequestDetailsDoNotRenderAfterReviewerLosesPermission() {
+        Fixture fixture = fixture(deniedRequest(), SchedulerMode.HOLD);
+        assertTrue(fixture.controller().openReview(fixture.player().proxy(), REQUEST_ID));
+        assertEquals(1, fixture.scheduler().heldActions.size());
+
+        fixture.player().authorized = false;
+        fixture.scheduler().heldActions.removeFirst().run();
+
+        assertEquals(0, fixture.player().openInventories.get());
+        assertEquals(1, fixture.player().closedInventories.get());
+        assertEquals(1, fixture.player().messages.get());
+    }
+
+    @Test
+    void pendingReviewDoesNotRenderAndReleasesLeaseAfterReviewerLosesPermission() {
+        Fixture fixture = fixture(pending(StaffRank.MOD), SchedulerMode.HOLD);
+        assertTrue(fixture.controller().openReview(fixture.player().proxy(), REQUEST_ID));
+        assertEquals(1, fixture.store().acquireCalls);
+        assertEquals(1, fixture.scheduler().heldActions.size());
+
+        fixture.player().authorized = false;
+        fixture.scheduler().heldActions.removeFirst().run();
+
+        assertEquals(0, fixture.player().openInventories.get());
+        assertEquals(1, fixture.player().closedInventories.get());
+        assertEquals(1, fixture.player().messages.get());
+        assertEquals(1, fixture.store().abandonCalls);
+    }
+
+    @Test
+    void retiredReviewerReleasesUnpresentedLeaseExactlyOnce() {
+        Fixture fixture = fixture(pending(StaffRank.MOD), SchedulerMode.RETIRE_FALSE);
+        assertTrue(fixture.controller().openReview(fixture.player().proxy(), REQUEST_ID));
+
+        assertEquals(1, fixture.store().acquireCalls);
+        assertEquals(1, fixture.store().abandonCalls);
+        assertEquals(0, fixture.player().openInventories.get());
+        assertEquals(1, fixture.logger().retired.get());
+    }
+
+    @Test
+    void committedDecisionIsAcknowledgedWithoutRevealingDetailsAfterDemotion() {
+        Fixture fixture = fixture(pending(StaffRank.MOD), SchedulerMode.HOLD);
+        PunishmentApprovalLease lease = acquire(fixture);
+        fixture.controller().onInventoryClick(click(
+                fixture.player().proxy(), review(lease), PunishmentRequestGuiRenderer.APPROVE_SLOT));
+        assertEquals(PunishmentRequestStatus.APPROVED, fixture.store().current.status());
+        assertEquals(1, fixture.scheduler().heldActions.size());
+
+        fixture.player().authorized = false;
+        fixture.scheduler().heldActions.removeFirst().run();
+
+        assertEquals(1, fixture.store().approveTransitions);
+        assertEquals(0, fixture.player().openInventories.get());
+        assertTrue(fixture.player().messages.get() >= 1);
+        assertTrue(fixture.player().closedInventories.get() >= 2);
+    }
+
+    @Test
+    void alreadyOpenReviewCannotBeClickedAfterReviewerLosesPermission() {
+        Fixture fixture = fixture(pending(StaffRank.MOD), SchedulerMode.RUN);
+        PunishmentApprovalLease lease = acquire(fixture);
+        fixture.player().authorized = false;
+
+        fixture.controller().onInventoryClick(click(
+                fixture.player().proxy(), review(lease), PunishmentRequestGuiRenderer.DENY_SLOT));
+
+        assertEquals(0, fixture.store().approveTransitions);
+        assertEquals(0, fixture.store().denyTransitions);
+        assertEquals(1, fixture.player().closedInventories.get());
+        assertEquals(1, fixture.player().messages.get());
+    }
+
+    @Test
     void workerAdmissionRejectionStartsNoStorageWork() {
         Fixture fixture = fixture(pending(StaffRank.MOD), SchedulerMode.RUN);
         fixture.executor().reject = true;
