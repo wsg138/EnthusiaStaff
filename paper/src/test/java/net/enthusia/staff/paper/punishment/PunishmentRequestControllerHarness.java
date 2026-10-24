@@ -263,6 +263,7 @@ final class PunishmentRequestControllerHarness {
         final AtomicInteger openInventories = new AtomicInteger();
         final AtomicInteger closedInventories = new AtomicInteger();
         volatile boolean authorized = true;
+        volatile StaffRank rank = StaffRank.MOD;
         private final UUID id;
         private final Player proxy;
 
@@ -293,9 +294,16 @@ final class PunishmentRequestControllerHarness {
             });
         }
 
-        private static boolean permission(String permission) {
+        private boolean permission(String permission) {
             return "enthusiastaff.punishment.requests.review".equals(permission)
-                    || "enthusiastaff.rank.mod".equals(permission);
+                    || switch (rank) {
+                        case FOUNDER -> "enthusiastaff.rank.founder".equals(permission);
+                        case ADMIN -> "enthusiastaff.rank.admin".equals(permission);
+                        case MOD -> "enthusiastaff.rank.mod".equals(permission);
+                        case HELPER -> "enthusiastaff.rank.helper".equals(permission);
+                        case DEVELOPER -> "enthusiastaff.rank.developer".equals(permission);
+                        case SYSTEM -> false;
+                    };
         }
 
         Player proxy() {
