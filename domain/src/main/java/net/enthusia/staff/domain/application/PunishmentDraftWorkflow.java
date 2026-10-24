@@ -107,6 +107,21 @@ public final class PunishmentDraftWorkflow {
             OperationalMode mode,
             PunishmentAssessment expectedPreview
     ) {
+        return prepare(request, mode, expectedPreview, null);
+    }
+
+    /**
+     * Re-preparation of an already reviewed guided draft (notes/visibility only)
+     * must preserve its exact approved outcome. A resumed review may not have an
+     * in-memory assessment, so its durable expectation is independently checked.
+     * A fresh guided calculation can also pass the complete preview snapshot.
+     */
+    public PunishmentDraftEvaluation prepare(
+            PreparePunishmentDraftRequest request,
+            OperationalMode mode,
+            PunishmentAssessment expectedPreview,
+            PunishmentExpectation expectedReviewed
+    ) {
         Objects.requireNonNull(request);
         UUID draftId = Objects.requireNonNull(identifiers.get(), "generated draft identifier");
         CreatePunishmentRequest punishmentRequest = punishmentRequest(
@@ -130,6 +145,12 @@ public final class PunishmentDraftWorkflow {
             return new PunishmentDraftEvaluation.Rejected(
                     "RECOMMENDATION_CHANGED",
                     "The policy or punishment history changed during guided calculation; recalculate before saving"
+            );
+        }
+        if (expectedReviewed != null && !expectedReviewed.matches(assessment)) {
+            return new PunishmentDraftEvaluation.Rejected(
+                    "RECOMMENDATION_CHANGED",
+                    "The reviewed punishment changed while editing this draft; reassess before saving"
             );
         }
         Instant createdAt = clock.instant();

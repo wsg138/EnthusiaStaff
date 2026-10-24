@@ -135,6 +135,59 @@ class PunishmentDraftWorkflowTest {
     }
 
     @Test
+    void guidedDraftNoteEditRejectsHistoryDriftWithoutOverwritingSavedDraft() {
+        Fixture fixture = fixture();
+        SanctionSpec warning = new SanctionSpec(SanctionType.WARNING, SanctionLength.instant());
+        SanctionSpec mute = new SanctionSpec(SanctionType.MUTE,
+                SanctionLength.temporary(Duration.ofHours(2)));
+        fixture.policies.replace("v1", List.of(new ReasonPolicy("chat.toxicity", "chat",
+                "Chat toxicity", 10, true, List.of(
+                new PunishmentStep(0, "First", List.of(warning)),
+                new PunishmentStep(1, "Escalated", List.of(mute))))));
+        PreparePunishmentDraftRequest originalRequest = new PreparePunishmentDraftRequest(
+                TARGET_ID, actor(StaffRank.MOD), "chat.toxicity",
+                "Guided incident v1 | original facts", CaseVisibility.PUBLIC, "punish");
+        PunishmentDraftEvaluation.Prepared original = assertInstanceOf(
+                PunishmentDraftEvaluation.Prepared.class,
+                fixture.workflow.prepare(originalRequest, OperationalMode.ACTIVE));
+        fixture.moderation.priorOffenses = List.of(new PriorOffense(
+                "chat", 10, 0, NOW.minus(Duration.ofHours(1)), true, false));
+        PreparePunishmentDraftRequest edited = new PreparePunishmentDraftRequest(
+                TARGET_ID, actor(StaffRank.MOD), "chat.toxicity",
+                "Guided incident v1 | original facts | Staff note: clarified",
+                CaseVisibility.PRIVATE, "punish");
+        PunishmentDraftEvaluation.Rejected changed = assertInstanceOf(
+                PunishmentDraftEvaluation.Rejected.class,
+                fixture.workflow.prepare(edited, OperationalMode.ACTIVE,
+                        null, original.draft().expectation()));
+        assertEquals("RECOMMENDATION_CHANGED", changed.code());
+        assertEquals(original.draft(), fixture.workflow.resume(ACTOR_ID, TARGET_ID).orElseThrow(),
+                "Changing notes or visibility must not silently overwrite the reviewed outcome");
+    }
+
+    @Test
+    void guidedDraftNoteEditPreservesReviewedOutcomeWhenHistoryStable() {
+        Fixture fixture = fixture();
+        PreparePunishmentDraftRequest originalRequest = new PreparePunishmentDraftRequest(
+                TARGET_ID, actor(StaffRank.MOD), "chat.toxicity",
+                "Guided incident v1 | original facts", CaseVisibility.PUBLIC, "punish");
+        PunishmentDraftEvaluation.Prepared original = assertInstanceOf(
+                PunishmentDraftEvaluation.Prepared.class,
+                fixture.workflow.prepare(originalRequest, OperationalMode.ACTIVE));
+        PreparePunishmentDraftRequest edited = new PreparePunishmentDraftRequest(
+                TARGET_ID, actor(StaffRank.MOD), "chat.toxicity",
+                "Guided incident v1 | original facts | Staff note: clarified",
+                CaseVisibility.PRIVATE, "punish");
+        PunishmentDraftEvaluation.Prepared revised = assertInstanceOf(
+                PunishmentDraftEvaluation.Prepared.class,
+                fixture.workflow.prepare(edited, OperationalMode.ACTIVE,
+                        original.assessment(), original.draft().expectation()));
+        assertEquals(original.draft().expectation(), revised.draft().expectation());
+        assertEquals(CaseVisibility.PRIVATE, revised.draft().visibility());
+        assertTrue(revised.draft().internalExplanation().contains("Staff note: clarified"));
+    }
+
+    @Test
     void guidedExactConfiguredHigherStepSurvivesDraftConfirmation() {
         Fixture fixture = fixture();
         SanctionSpec warn = new SanctionSpec(SanctionType.WARNING, SanctionLength.instant());
