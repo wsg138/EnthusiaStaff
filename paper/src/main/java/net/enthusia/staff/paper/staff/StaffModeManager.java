@@ -53,6 +53,7 @@ import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.persistence.PersistentDataContainer;
 import org.bukkit.persistence.PersistentDataType;
+import org.bukkit.plugin.Plugin;
 import org.bukkit.plugin.java.JavaPlugin;
 
 public final class StaffModeManager implements Listener {
@@ -60,7 +61,7 @@ public final class StaffModeManager implements Listener {
     public static final String UNRESTRICTED_PERMISSION = "enthusiastaff.identity.unrestricted";
     private static final String RANK_REMOVED_MESSAGE =
             "Your explicit staff rank is no longer assigned; restoring your saved state.";
-    private final JavaPlugin plugin;
+    private final Plugin plugin;
     private final Clock clock;
     private final Instant runtimeStartedAt;
     private final String serverId;
@@ -76,6 +77,7 @@ public final class StaffModeManager implements Listener {
     private final Map<UUID, StaffSessionSnapshot> pendingLocalSessions = new ConcurrentHashMap<>();
     private final Map<UUID, StaffRank> ranks = new ConcurrentHashMap<>();
     private final Map<UUID, String> toolSessions = new ConcurrentHashMap<>();
+    private final Map<UUID, UUID> closedToolCleanups = new ConcurrentHashMap<>();
     private final Map<UUID, Boolean> toolInventoryPreferences = new ConcurrentHashMap<>();
     private final java.util.Set<UUID> toolPreferenceWrites = ConcurrentHashMap.newKeySet();
     private final java.util.Set<UUID> unrestrictedIdentities = ConcurrentHashMap.newKeySet();
@@ -105,6 +107,17 @@ public final class StaffModeManager implements Listener {
 
     public StaffModeManager(
             JavaPlugin plugin,
+            Clock clock,
+            String serverId,
+            Supplier<StaffSessionStore> store,
+            Supplier<StaffPreferenceStore> preferences,
+            ExecutorService workers
+    ) {
+        this((Plugin) plugin, clock, serverId, store, preferences, workers);
+    }
+
+    StaffModeManager(
+            Plugin plugin,
             Clock clock,
             String serverId,
             Supplier<StaffSessionStore> store,
@@ -492,13 +505,14 @@ public final class StaffModeManager implements Listener {
     }
 
     public void recover(UUID playerId, StaffRank rankSnapshot) {
-        if (!recoveryGate.begin(playerId)) {
+        Object recoveryAttempt = recoveryGate.beginAttempt(playerId);
+        if (recoveryAttempt == null) {
             return;
         }
         if (!submit(() -> {
             StaffSessionStore loaded = store.get();
             if (loaded == null) {
-                recoveryGate.retry(playerId);
+                recoveryGate.retry(playerId, recoveryAttempt);
                 message(
                         playerId,
                         "Staff session storage is not ready; interaction remains blocked until startup recovery retries."
@@ -508,14 +522,7 @@ public final class StaffModeManager implements Listener {
             try {
                 StaffSessionSnapshot session = loaded.active(playerId).orElse(null);
                 if (session == null) {
-                    recoveryGate.clear(playerId);
-                    if (handoffGaps.contains(playerId) && rankSnapshot != null) {
-                        onEntity(
-                                playerId,
-                                current -> enter(current, rankSnapshot),
-                                () -> abandonHandoffGap(playerId)
-                        );
-                    }
+                    finishInactiveRecovery(playerId, rankSnapshot, recoveryAttempt);
                     return;
                 }
                 if (StaffSessionOwnership.detached(session.serverId())) {
@@ -525,8 +532,9 @@ public final class StaffModeManager implements Listener {
                 if (!session.serverId().equalsIgnoreCase(serverId)) {
                     // A backend switch can race the source's quit/detach write. Do not turn
                     // that normal race into RECOVERY_REQUIRED or block the destination.
-                    recoveryGate.retry(playerId);
-                    scheduleRecoveryRetry(playerId);
+                    if (recoveryGate.retry(playerId, recoveryAttempt)) {
+                        scheduleRecoveryRetry(playerId);
+                    }
                     return;
                 }
                 pendingLocalSessions.put(playerId, session);
@@ -554,13 +562,70 @@ public final class StaffModeManager implements Listener {
                 rememberToolInventoryPreference(playerId);
                 onEntity(playerId, current -> finishActiveRecovery(playerId, session, loaded, current));
             } catch (RuntimeException exception) {
-                recoveryGate.retry(playerId);
+                recoveryGate.retry(playerId, recoveryAttempt);
                 plugin.getLogger().log(Level.SEVERE, "Staff session recovery failed", exception);
                 message(playerId, "Your staff session could not be recovered automatically; contact an administrator.");
             }
         })) {
-            recoveryGate.retry(playerId);
+            recoveryGate.retry(playerId, recoveryAttempt);
             message(playerId, "The bounded work queue is full; staff session recovery did not start.");
+        }
+    }
+
+    private void finishInactiveRecovery(UUID playerId, StaffRank rankSnapshot, Object recoveryAttempt) {
+        onEntity(playerId,
+                player -> finishInactiveRecoveryOnEntity(playerId, rankSnapshot, recoveryAttempt, player),
+                () -> finishRetiredInactiveRecovery(playerId, recoveryAttempt),
+                exception -> {
+                    recoveryGate.retry(playerId, recoveryAttempt);
+                    plugin.getLogger().log(Level.SEVERE, "Inactive Staff tool cleanup could not be scheduled", exception);
+                });
+    }
+
+    private void finishInactiveRecoveryOnEntity(UUID playerId, StaffRank rankSnapshot, Object recoveryAttempt,
+                                                Player player) {
+        try {
+            // Ownership, player mutation and fence release are atomic with respect
+            // to clear/retry/new recovery; the callback never runs database work.
+            AtomicBoolean completedExit = new AtomicBoolean();
+            boolean completed = recoveryGate.complete(playerId, recoveryAttempt,
+                    () -> cleanInactiveState(playerId, player, completedExit));
+            if (completed && completedExit.get()) {
+                notifyRuntimeExit(playerId);
+            }
+            if (completed && handoffGaps.contains(playerId) && rankSnapshot != null) {
+                enter(player, rankSnapshot);
+            }
+        } catch (RuntimeException exception) {
+            recoveryGate.retry(playerId, recoveryAttempt);
+            plugin.getLogger().log(Level.SEVERE, "Inactive Staff tool cleanup failed", exception);
+        }
+    }
+
+    // Invoked inside recoveryGate.complete so eligibility and mutation share its monitor.
+    private boolean cleanInactiveState(UUID playerId, Player player, AtomicBoolean completedExit) {
+        UUID closedSession = closedToolCleanups.get(playerId);
+        boolean localState = active.containsKey(playerId) || pendingLocalSessions.containsKey(playerId)
+                || toolSessions.containsKey(playerId);
+        if (localState && (closedSession == null || !ownsClosingSession(playerId, closedSession))) {
+            return false;
+        }
+        removeStaffTools(player);
+        if (closedSession != null) {
+            removeCompletedRuntimeState(playerId);
+            completedExit.set(true);
+        }
+        return true;
+    }
+
+    private void finishRetiredInactiveRecovery(UUID playerId, Object recoveryAttempt) {
+        AtomicBoolean abandonedGap = new AtomicBoolean();
+        boolean completed = recoveryGate.complete(playerId, recoveryAttempt, () -> {
+            abandonedGap.set(handoffGaps.remove(playerId));
+            return true;
+        });
+        if (completed && abandonedGap.get()) {
+            notifyRuntimeExit(playerId);
         }
     }
 
@@ -1723,6 +1788,10 @@ public final class StaffModeManager implements Listener {
     private void restoreAndVerify(UUID playerId, StaffSessionSnapshot session,
                                   StaffSessionStore loaded, String reason) {
         onEntity(playerId, player -> {
+            Object restorationAttempt = recoveryGate.ensureAttempt(playerId);
+            if (restorationAttempt == null) {
+                return;
+            }
             try {
                 ExitAuditContext exitAudit = captureExitAudit(playerId, player);
                 if (!restoreSavedState(player, session)) {
@@ -1736,7 +1805,7 @@ public final class StaffModeManager implements Listener {
                 String restoredChecksum = codec.verifiedRestorationChecksum(
                         player, session.serverId(), session.snapshot(), session.checksum());
                 if (!submit(() -> completeRestoration(
-                        playerId, session, loaded, restoredChecksum, exitAudit, reason))) {
+                        playerId, session, loaded, restoredChecksum, exitAudit, reason, restorationAttempt))) {
                     retainRecoveryAfterRuntimeExit(playerId);
                     player.sendMessage(StaffMessageStyle.style(Component.text(
                             "State was restored, but durable verification is still pending; contact an administrator."
@@ -1826,7 +1895,8 @@ public final class StaffModeManager implements Listener {
             StaffSessionStore loaded,
             String restoredChecksum,
             ExitAuditContext exitAudit,
-            String reason
+            String reason,
+            Object restorationAttempt
     ) {
         boolean closed;
         try {
@@ -1842,9 +1912,51 @@ public final class StaffModeManager implements Listener {
             safeMessage(playerId, "State was restored, but checksum verification requires administrator review.");
             return;
         }
-        completeRuntimeExit(playerId);
         logCommittedExit(exitAudit, session.sessionId(), reason);
-        safeMessage(playerId, "Staff mode exited; your exact saved state was restored and verified.");
+        if (recoveryGate.withAttempt(playerId, restorationAttempt,
+                () -> closedToolCleanups.put(playerId, session.sessionId()))) {
+            finishVerifiedExit(playerId, session, restorationAttempt);
+        }
+    }
+
+    private void finishVerifiedExit(UUID playerId, StaffSessionSnapshot session, Object restorationAttempt) {
+        onEntity(playerId, player -> finishVerifiedExitOnEntity(playerId, session, player, restorationAttempt),
+                () -> recoveryGate.retry(playerId, restorationAttempt), exception -> {
+                    recoveryGate.retry(playerId, restorationAttempt);
+                    plugin.getLogger().log(Level.SEVERE, "Closed Staff tool cleanup could not be scheduled", exception);
+                });
+    }
+
+    private void finishVerifiedExitOnEntity(UUID playerId, StaffSessionSnapshot session, Player player,
+                                            Object restorationAttempt) {
+        try {
+            boolean completed = recoveryGate.complete(playerId, restorationAttempt, () -> {
+                if (!ownsClosingSession(playerId, session.sessionId())) {
+                    return false;
+                }
+                // Original bytes and checksum were restored and durably verified first.
+                // Only ephemeral tools are retired; the durable snapshot stays unchanged.
+                removeStaffTools(player);
+                removeCompletedRuntimeState(playerId);
+                return true;
+            });
+            if (completed) {
+                notifyRuntimeExit(playerId);
+                safeMessage(playerId, "Staff mode exited; your exact saved state was restored and verified.");
+            }
+        } catch (RuntimeException exception) {
+            recoveryGate.retry(playerId, restorationAttempt);
+            plugin.getLogger().log(Level.SEVERE, "Closed Staff tool cleanup failed", exception);
+        }
+    }
+
+    private boolean ownsClosingSession(UUID playerId, UUID sessionId) {
+        StaffSessionSnapshot applied = active.get(playerId);
+        StaffSessionSnapshot pending = pendingLocalSessions.get(playerId);
+        return transitions.contains(playerId)
+                && (applied != null || pending != null)
+                && (applied == null || applied.sessionId().equals(sessionId))
+                && (pending == null || pending.sessionId().equals(sessionId));
     }
 
     private void retainRecoveryAfterRuntimeExit(UUID playerId) {
@@ -1859,10 +1971,18 @@ public final class StaffModeManager implements Listener {
     }
 
     private void completeRuntimeExit(UUID playerId) {
-        removeRuntimeState(playerId);
+        removeCompletedRuntimeState(playerId);
         recoveryGate.clear(playerId);
+        notifyRuntimeExit(playerId);
+    }
+
+    private void removeCompletedRuntimeState(UUID playerId) {
+        removeRuntimeState(playerId);
         scheduledRecoveryRetries.remove(playerId);
         handoffGaps.remove(playerId);
+    }
+
+    private void notifyRuntimeExit(UUID playerId) {
         try {
             exitListener.accept(playerId);
         } catch (RuntimeException exception) {
@@ -1888,6 +2008,7 @@ public final class StaffModeManager implements Listener {
     }
 
     private void removeRuntimeState(UUID playerId) {
+        closedToolCleanups.remove(playerId);
         active.remove(playerId);
         pendingLocalSessions.remove(playerId);
         ranks.remove(playerId);
@@ -2159,6 +2280,9 @@ public final class StaffModeManager implements Listener {
                 player.getInventory().setItem(index, null);
             }
         }
+        if (isStaffTool(player.getItemOnCursor())) {
+            player.setItemOnCursor(null);
+        }
     }
 
     public static StaffRank rank(Player player) {
@@ -2194,21 +2318,30 @@ public final class StaffModeManager implements Listener {
     }
 
     private void onEntity(UUID playerId, Consumer<Player> operation, Runnable retired) {
-        plugin.getServer().getGlobalRegionScheduler().execute(plugin, () -> {
-            Player player = plugin.getServer().getPlayer(playerId);
-            if (player == null) {
-                retired.run();
-                return;
-            }
-            boolean scheduled = player.getScheduler().execute(
-                    plugin,
-                    () -> operation.accept(player),
-                    retired,
-                    1L
-            );
-            if (!scheduled) {
-                retired.run();
-            }
-        });
+        onEntity(playerId, operation, retired, exception -> { throw exception; });
+    }
+
+    private void onEntity(UUID playerId, Consumer<Player> operation, Runnable retired,
+                          Consumer<RuntimeException> schedulingFailure) {
+        try {
+            plugin.getServer().getGlobalRegionScheduler().execute(plugin, () -> {
+                boolean scheduled = false;
+                try {
+                    Player player = plugin.getServer().getPlayer(playerId);
+                    if (player != null) {
+                        scheduled = player.getScheduler().execute(
+                                plugin, () -> operation.accept(player), retired, 1L);
+                    }
+                } catch (RuntimeException exception) {
+                    schedulingFailure.accept(exception);
+                    return;
+                }
+                if (!scheduled) {
+                    retired.run();
+                }
+            });
+        } catch (RuntimeException exception) {
+            schedulingFailure.accept(exception);
+        }
     }
 }

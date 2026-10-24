@@ -16,12 +16,16 @@ public final class CombatStatusAdapter {
         UNAVAILABLE
     }
 
-    private final JavaPlugin owner;
+    private final Plugin owner;
     private Optional<Binding> statusBinding = Optional.empty();
     private Optional<UntagBinding> untagBinding = Optional.empty();
     private boolean combatPluginPresent;
 
     public CombatStatusAdapter(JavaPlugin owner) {
+        this((Plugin) owner);
+    }
+
+    CombatStatusAdapter(Plugin owner) {
         this.owner = owner;
         refresh();
     }
