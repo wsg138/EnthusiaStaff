@@ -10,6 +10,7 @@ import net.enthusia.staff.domain.application.PunishmentApprovalLease;
 import net.enthusia.staff.domain.application.PunishmentApprovalRequest;
 import net.enthusia.staff.domain.application.PunishmentRequestResult;
 import net.enthusia.staff.domain.auth.Actor;
+import net.enthusia.staff.domain.auth.StaffRank;
 
 public interface PunishmentRequestStore {
     PunishmentRequestResult submit(PunishmentApprovalRequest request);
@@ -28,6 +29,30 @@ public interface PunishmentRequestStore {
     }
 
     List<PunishmentApprovalRequest> pending(Instant now, int limit);
+
+    /**
+     * Find the oldest eligible pending requests, applying requester/rank filters
+     * before the limit. Durable stores must implement a filtered query so an
+     * unreviewable backlog cannot hide later eligible requests.
+     *
+     * The default is retained for simple in-memory/test adapters only.
+     */
+    default List<PunishmentApprovalRequest> pendingReviewable(
+            Instant now, UUID reviewerId, StaffRank reviewerRank, int limit
+    ) {
+        if (reviewerRank == null || !reviewerRank.canApprovePunishmentRequests()) {
+            return List.of();
+        }
+        return pending(now, limit).stream()
+                .filter(request -> !request.proposal().requester().id().equals(reviewerId))
+                .filter(request -> switch (request.proposal().requiredRank()) {
+                    case HELPER, MOD -> reviewerRank.canApprovePunishmentRequests();
+                    case ADMIN -> reviewerRank == StaffRank.ADMIN || reviewerRank == StaffRank.FOUNDER;
+                    case FOUNDER -> reviewerRank == StaffRank.FOUNDER;
+                    case DEVELOPER, SYSTEM -> false;
+                })
+                .toList();
+    }
 
     Optional<PunishmentApprovalLease> acquire(
             UUID requestId,
