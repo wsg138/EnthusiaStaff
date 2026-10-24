@@ -33,12 +33,18 @@ python tools/staffbot-chat-preflight/check.py \
   --staffbot-environment-source staff-bot/src/main/java/net/enthusia/staff/discordbot/StaffBotEnvironment.java
 ```
 
-For the **separate TEST-only** runner, use the same inputs but also include these flags:
+For the **separate TEST-only** runner, use this **complete, alternative command**. Set the environment to **staging instead of production**; do not pass both environments:
 
-```text
---staffbot-environment staging
---isolated-test
---velocity-config PRIVATE_READONLY_VELOCITY.properties
+```sh
+python tools/staffbot-chat-preflight/check.py \\
+  --paper PRIVATE_TEST_PAPER.yml \\
+  --discordsrv-test PRIVATE_TEST_DISCORDSRV.yml \\
+  --discordsrv-live PRIVATE_READONLY_SMP_DISCORDSRV.yml \\
+  --chat PRIVATE_ISOLATED_TEST_CHAT.properties \\
+  --staffbot-environment staging \\
+  --staffbot-environment-source staff-bot/src/main/java/net/enthusia/staff/discordbot/StaffBotEnvironment.java \\
+  --isolated-test \\
+  --velocity-config PRIVATE_READONLY_VELOCITY.properties
 ```
 
 The isolated checks require `channel.enabled=true`, the existing `STAFFBOT` and `TEST` peer mappings, and a separate `STAFFBOT_TEST` mapping using a secret **environment-variable name distinct from every other configured peer**. They deliberately do not inspect the secret values or prove that HMAC material differs. Velocity must reject shared key material at startup; bot identity, TLS connectivity, and runtime permissions still need separate proof.
