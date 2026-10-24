@@ -60,6 +60,9 @@ public final class PunishmentRequestGuiController implements Listener {
     private final Map<UUID, PunishmentApprovalLease> preservingTransitions = new ConcurrentHashMap<>();
     private final Set<PunishmentApprovalLease> decisionsInFlight = ConcurrentHashMap.newKeySet();
     private final Set<PunishmentApprovalLease> decisionClosures = ConcurrentHashMap.newKeySet();
+    /** The latest async navigation for each reviewer; superseded callbacks cannot reopen it. */
+    private final Map<UUID, Navigation> pendingNavigation = new ConcurrentHashMap<>();
+    private final java.util.concurrent.atomic.AtomicLong navigationIds = new java.util.concurrent.atomic.AtomicLong();
 
     public PunishmentRequestGuiController(
             JavaPlugin plugin,
@@ -172,12 +175,14 @@ public final class PunishmentRequestGuiController implements Listener {
     @EventHandler(priority = EventPriority.MONITOR)
     public void onInventoryClose(InventoryCloseEvent event) {
         if (event.getPlayer() instanceof Player player) {
+            pendingNavigation.remove(player.getUniqueId());
             releaseIfAbandoned(player, leasedState(event.getView()));
         }
     }
 
     @EventHandler(priority = EventPriority.MONITOR)
     public void onPlayerQuit(PlayerQuitEvent event) {
+        pendingNavigation.remove(event.getPlayer().getUniqueId());
         // Quit can occur without a usable close callback; database release
         // still happens exclusively on the existing bounded worker executor.
         releaseIfAbandoned(event.getPlayer(), leasedState(event.getPlayer().getOpenInventory()));
@@ -264,11 +269,15 @@ public final class PunishmentRequestGuiController implements Listener {
         if (actor == null) {
             return false;
         }
-        submit(player, () -> loadQueue(player, actor, page));
+        Navigation navigation = beginNavigation(player);
+        submit(player, () -> loadQueue(player, actor, page, navigation));
         return true;
     }
 
-    private void loadQueue(Player player, Actor actor, int page) {
+    private void loadQueue(Player player, Actor actor, int page, Navigation navigation) {
+        if (!stillRequested(player, navigation)) {
+            return;
+        }
         PunishmentRequestService service = readyService(player);
         if (service == null) {
             return;
@@ -278,7 +287,7 @@ public final class PunishmentRequestGuiController implements Listener {
                 .toList();
         // Rank can change while the async query is loading; only render entries
         // the reviewer may still inspect at the moment of presentation.
-        onAuthorizedEntity(player, current -> true, current -> {
+        onAuthorizedEntity(player, navigation, current -> true, current -> {
             PunishmentRequestGuiState.Queue state = PunishmentRequestGuiState.Queue.page(
                     visibleRequestsForActor(views, current, service),
                     page,
@@ -289,27 +298,34 @@ public final class PunishmentRequestGuiController implements Listener {
     }
 
     private void openRequest(Player player, Actor actor, UUID requestId, int returnPage) {
-        submit(player, () -> loadRequest(player, actor, requestId, returnPage));
+        Navigation navigation = beginNavigation(player);
+        submit(player, () -> loadRequest(player, actor, requestId, returnPage, navigation));
     }
 
-    private void loadRequest(Player player, Actor actor, UUID requestId, int returnPage) {
+    private void loadRequest(Player player, Actor actor, UUID requestId,
+                             int returnPage, Navigation navigation) {
+        if (!stillRequested(player, navigation)) {
+            return;
+        }
         PunishmentRequestService service = readyService(player);
         if (service == null) {
             return;
         }
         PunishmentApprovalRequest request = service.find(requestId).orElse(null);
         if (request == null) {
-            onEntity(player, () -> rejection(player, rejected("REQUEST_NOT_FOUND", "The punishment request does not exist")));
+            onAuthorizedEntity(player, navigation, current -> true,
+                    current -> rejection(player, rejected(
+                            "REQUEST_NOT_FOUND", "The punishment request does not exist")), () -> { });
             return;
         }
         if (!service.mayReview(actor, request)) {
-            onEntity(player, () -> rejection(player, rejected(
-                    "FORBIDDEN",
-                    "You are not authorized to review this punishment request"
-            )));
+            onAuthorizedEntity(player, navigation, current -> true,
+                    current -> rejection(player, rejected(
+                            "FORBIDDEN", "You are not authorized to review this punishment request")),
+                    () -> { });
             return;
         }
-        openLoadedRequest(player, actor, request, returnPage, service);
+        openLoadedRequest(player, actor, request, returnPage, service, navigation);
     }
 
     private void openLoadedRequest(
@@ -317,21 +333,26 @@ public final class PunishmentRequestGuiController implements Listener {
             Actor actor,
             PunishmentApprovalRequest request,
             int returnPage,
-            PunishmentRequestService service
+            PunishmentRequestService service,
+            Navigation navigation
     ) {
+        if (!stillRequested(player, navigation)) {
+            return;
+        }
         String resolvedTargetName = targetName(request);
         if (request.status() != PunishmentRequestStatus.PENDING) {
             PunishmentRequestGuiState.Details state = new PunishmentRequestGuiState.Details(
                     new PunishmentRequestGuiState.RequestView(request, resolvedTargetName),
                     returnPage
             );
-            onAuthorizedEntity(player,
+            onAuthorizedEntity(player, navigation,
                     current -> service.mayReview(current, request),
                     current -> player.openInventory(detailsRenderer.apply(state)),
                     () -> { });
             return;
         }
-        acquireAndOpen(player, actor, request.requestId(), resolvedTargetName, returnPage, service);
+        acquireAndOpen(player, actor, request.requestId(), resolvedTargetName,
+                returnPage, service, navigation);
     }
 
     private void acquireAndOpen(
@@ -340,8 +361,12 @@ public final class PunishmentRequestGuiController implements Listener {
             UUID requestId,
             String targetName,
             int returnPage,
-            PunishmentRequestService service
+            PunishmentRequestService service,
+            Navigation navigation
     ) {
+        if (!stillRequested(player, navigation)) {
+            return;
+        }
         PunishmentRequestResult result = service.acquire(requestId, actor);
         if (result instanceof PunishmentRequestResult.Leased leased) {
             PunishmentRequestGuiState.Review state = new PunishmentRequestGuiState.Review(
@@ -349,7 +374,7 @@ public final class PunishmentRequestGuiController implements Listener {
                     targetName,
                     returnPage
             );
-            onAuthorizedEntity(player,
+            onAuthorizedEntity(player, navigation,
                     current -> service.mayReview(current, leased.lease().request()),
                     current -> player.openInventory(reviewRenderer.apply(state)),
                     () -> abandonLeaseAsync(service, leased.lease()));
@@ -358,14 +383,15 @@ public final class PunishmentRequestGuiController implements Listener {
         PunishmentApprovalRequest current = service.find(requestId).orElse(null);
         if (current != null && current.status() != PunishmentRequestStatus.PENDING && service.mayReview(actor, current)) {
             PunishmentRequestGuiState.Details state = new PunishmentRequestGuiState.Details(view(current), returnPage);
-            onAuthorizedEntity(player,
+            onAuthorizedEntity(player, navigation,
                     fresh -> service.mayReview(fresh, current),
                     fresh -> player.openInventory(detailsRenderer.apply(state)),
                     () -> { });
             return;
         }
         PunishmentRequestResult.Rejected rejected = (PunishmentRequestResult.Rejected) result;
-        onEntity(player, () -> rejection(player, rejected));
+        onAuthorizedEntity(player, navigation, currentActor -> true,
+                currentActor -> rejection(player, rejected), () -> { });
     }
 
     private void handleQueueClick(Player player, PunishmentRequestGuiState.Queue queue, int slot) {
@@ -716,6 +742,16 @@ public final class PunishmentRequestGuiController implements Listener {
             java.util.function.Consumer<Actor> action,
             Runnable onUnavailable
     ) {
+        onAuthorizedEntity(player, null, mayView, action, onUnavailable);
+    }
+
+    private void onAuthorizedEntity(
+            Player player,
+            Navigation navigation,
+            java.util.function.Predicate<Actor> mayView,
+            java.util.function.Consumer<Actor> action,
+            Runnable onUnavailable
+    ) {
         java.util.concurrent.atomic.AtomicBoolean cleanupOnce = new java.util.concurrent.atomic.AtomicBoolean();
         Runnable cleanup = () -> {
             if (cleanupOnce.compareAndSet(false, true)) {
@@ -726,6 +762,11 @@ public final class PunishmentRequestGuiController implements Listener {
                 plugin,
                 player,
                 () -> {
+                    // An older database callback must not close or overwrite a newer GUI.
+                    if (navigation != null && !currentNavigation(player, navigation)) {
+                        cleanup.run();
+                        return;
+                    }
                     Actor current = authorizedActor(player);
                     if (current == null || !mayView.test(current)) {
                         player.closeInventory();
@@ -739,6 +780,28 @@ public final class PunishmentRequestGuiController implements Listener {
                     cleanup.run();
                 }
         );
+    }
+
+    private Navigation beginNavigation(Player player) {
+        InventoryView view = player.getOpenInventory();
+        Navigation navigation = new Navigation(
+                navigationIds.incrementAndGet(), view == null ? null : view.getTopInventory());
+        pendingNavigation.put(player.getUniqueId(), navigation);
+        return navigation;
+    }
+
+    /** Safe on the database worker: never reads Bukkit inventory state. */
+    private boolean stillRequested(Player player, Navigation navigation) {
+        return pendingNavigation.get(player.getUniqueId()) == navigation;
+    }
+
+    /** Only on the player entity thread, after the database callback. */
+    private boolean currentNavigation(Player player, Navigation navigation) {
+        if (!stillRequested(player, navigation)) {
+            return false;
+        }
+        InventoryView view = player.getOpenInventory();
+        return (view == null ? null : view.getTopInventory()) == navigation.origin();
     }
 
     static List<PunishmentRequestGuiState.RequestView> visibleRequestsForActor(
@@ -819,6 +882,9 @@ public final class PunishmentRequestGuiController implements Listener {
 
     private static PunishmentRequestResult.Rejected rejected(String code, String message) {
         return new PunishmentRequestResult.Rejected(code, message);
+    }
+
+    private record Navigation(long id, Inventory origin) {
     }
 
     private record ClickContext(Player player, PunishmentRequestGuiState state, int slot) {
