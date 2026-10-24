@@ -646,6 +646,108 @@ class PunishmentRequestControllerSchedulingIntegrationTest {
     }
 
     @Test
+    void closingQueueBeforePendingReviewCallbackReleasesUnshownLease() {
+        Fixture fixture = fixture(pending(StaffRank.MOD), SchedulerMode.HOLD);
+        var queue = PunishmentRequestGuiState.Queue.page(
+                java.util.List.of(), 0, PunishmentRequestGuiRenderer.QUEUE_CONTENT_SIZE);
+
+        assertTrue(fixture.controller().openReview(fixture.player().proxy(), REQUEST_ID));
+        assertEquals(1, fixture.store().acquireCalls);
+        assertEquals(1, fixture.scheduler().heldActions.size());
+
+        fixture.controller().onInventoryClose(close(fixture.player().proxy(), queue));
+        fixture.scheduler().heldActions.removeFirst().run();
+
+        assertEquals(0, fixture.player().openInventories.get(),
+                "A completed worker must not reopen the GUI after staff closed it");
+        assertEquals(1, fixture.store().abandonCalls,
+                "A lease acquired for a cancelled presentation must be released");
+    }
+
+    @Test
+    void closingQueueBeforeItsWorkerCallbackMustNotReopenIt() {
+        Fixture fixture = fixture(pending(StaffRank.MOD), SchedulerMode.HOLD);
+        var queue = PunishmentRequestGuiState.Queue.page(
+                java.util.List.of(), 0, PunishmentRequestGuiRenderer.QUEUE_CONTENT_SIZE);
+
+        assertTrue(fixture.controller().openQueue(fixture.player().proxy()));
+        assertEquals(1, fixture.scheduler().heldActions.size());
+        fixture.controller().onInventoryClose(close(fixture.player().proxy(), queue));
+        fixture.scheduler().heldActions.removeFirst().run();
+
+        assertEquals(0, fixture.player().openInventories.get(),
+                "Stale queue data must not reopen an inventory the reviewer closed");
+    }
+
+    @Test
+    void newerReviewNavigationMustNotBeOverwrittenByOlderQueueCallback() {
+        Fixture fixture = fixture(pending(StaffRank.MOD), SchedulerMode.HOLD);
+
+        assertTrue(fixture.controller().openQueue(fixture.player().proxy()));
+        assertTrue(fixture.controller().openReview(fixture.player().proxy(), REQUEST_ID));
+        assertEquals(2, fixture.scheduler().heldActions.size());
+        fixture.scheduler().heldActions.remove(1).run();
+        assertEquals(1, fixture.player().openInventories.get());
+        fixture.scheduler().heldActions.remove(0).run();
+
+        assertEquals(1, fixture.player().openInventories.get(),
+                "Earlier queue callback must not replace the newer review");
+        assertEquals(0, fixture.store().abandonCalls);
+    }
+
+    @Test
+    void unrelatedInventoryOpenedDuringReviewLoadPreventsStaleReviewPresentation() {
+        Fixture fixture = fixture(pending(StaffRank.MOD), SchedulerMode.HOLD);
+        var original = PunishmentRequestGuiState.Queue.page(
+                java.util.List.of(), 0, PunishmentRequestGuiRenderer.QUEUE_CONTENT_SIZE);
+        var unrelated = new PunishmentRequestGuiState.Details(
+                new PunishmentRequestGuiState.RequestView(deniedRequest(), "Target"), 0);
+        fixture.player().openView = viewForState(fixture.player().proxy(), original);
+
+        assertTrue(fixture.controller().openReview(fixture.player().proxy(), REQUEST_ID));
+        fixture.player().openView = viewForState(fixture.player().proxy(), unrelated);
+        fixture.scheduler().heldActions.removeFirst().run();
+
+        assertEquals(0, fixture.player().openInventories.get(),
+                "Opening another GUI without a close callback must invalidate the old review");
+        assertEquals(1, fixture.store().abandonCalls);
+        assertEquals(0, fixture.player().closedInventories.get(),
+                "A stale callback must not close the unrelated inventory");
+    }
+
+    @Test
+    void quittingBeforeQueuedReviewCallbackReleasesUnshownLease() {
+        Fixture fixture = fixture(pending(StaffRank.MOD), SchedulerMode.HOLD);
+        assertTrue(fixture.controller().openReview(fixture.player().proxy(), REQUEST_ID));
+        assertEquals(1, fixture.store().acquireCalls);
+
+        fixture.controller().onPlayerQuit(new PlayerQuitEvent(
+                fixture.player().proxy(), Component.empty(), PlayerQuitEvent.QuitReason.DISCONNECTED));
+        fixture.scheduler().heldActions.removeFirst().run();
+
+        assertEquals(0, fixture.player().openInventories.get());
+        assertEquals(1, fixture.store().abandonCalls);
+    }
+
+    @Test
+    void queuedReviewWorkerMustNotAcquireAfterStaffClosesQueue() {
+        Fixture fixture = fixture(pending(StaffRank.MOD), SchedulerMode.RUN);
+        var queue = PunishmentRequestGuiState.Queue.page(
+                java.util.List.of(), 0, PunishmentRequestGuiRenderer.QUEUE_CONTENT_SIZE);
+        fixture.executor().hold = true;
+
+        assertTrue(fixture.controller().openReview(fixture.player().proxy(), REQUEST_ID));
+        assertEquals(0, fixture.store().acquireCalls);
+        fixture.controller().onInventoryClose(close(fixture.player().proxy(), queue));
+        fixture.executor().hold = false;
+        fixture.executor().runNext();
+
+        assertEquals(0, fixture.store().acquireCalls,
+                "Do not acquire a fenced lease for a navigation cancelled before worker admission");
+        assertEquals(0, fixture.player().openInventories.get());
+    }
+
+    @Test
     void workerAdmissionRejectionStartsNoStorageWork() {
         Fixture fixture = fixture(pending(StaffRank.MOD), SchedulerMode.RUN);
         fixture.executor().reject = true;
