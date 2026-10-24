@@ -12,6 +12,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Function;
 import java.util.regex.Pattern;
 import net.enthusia.staff.domain.ports.DiscordModerationPersistenceStore.ReconciliationState;
 import net.enthusia.staff.persistence.DiscordStaffReadRuntime;
@@ -119,16 +120,16 @@ final class ManagedRoleShadowService {
         Map<UUID, Set<String>> linkedUsers = new HashMap<>();
         List<ResolvedClaim> result = new ArrayList<>(snapshot.claims().size());
         for (Claim claim : snapshot.claims()) {
-            result.add(resolveClaim(claim, linkedUsers));
+            result.add(resolveClaim(claim, id -> linkedUsers.computeIfAbsent(id, this::discordUsers)));
         }
         return List.copyOf(result);
     }
 
-    private ResolvedClaim resolveClaim(Claim claim, Map<UUID, Set<String>> linkedUsers) {
+    static ResolvedClaim resolveClaim(Claim claim, Function<UUID, Set<String>> discordUsers) {
         Set<String> desiredDiscord = new LinkedHashSet<>();
         int unlinked = 0;
         for (UUID minecraftId : claim.desiredMinecraftAccounts()) {
-            Set<String> users = linkedUsers.computeIfAbsent(minecraftId, this::discordUsers);
+            Set<String> users = discordUsers.apply(minecraftId);
             if (users.isEmpty()) {
                 unlinked++;
             } else {
