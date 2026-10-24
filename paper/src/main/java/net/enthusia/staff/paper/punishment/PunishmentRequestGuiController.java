@@ -29,6 +29,7 @@ import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryDragEvent;
+import org.bukkit.inventory.Inventory;
 import org.bukkit.plugin.Plugin;
 import org.bukkit.plugin.java.JavaPlugin;
 
@@ -41,6 +42,7 @@ public final class PunishmentRequestGuiController implements Listener {
     private final Supplier<PlayerDirectory> players;
     private final AuthorizationPolicy authorization;
     private final ExecutorService workers;
+    private final Function<PunishmentRequestGuiState.Details, Inventory> detailsRenderer;
 
     public PunishmentRequestGuiController(
             JavaPlugin plugin,
@@ -59,6 +61,19 @@ public final class PunishmentRequestGuiController implements Listener {
             AuthorizationPolicy authorization,
             ExecutorService workers
     ) {
+        this(plugin, services, players, authorization, workers,
+                PunishmentRequestGuiRenderer::renderDetails);
+    }
+
+    /** Allows scheduler tests to render details without a static Bukkit server. */
+    PunishmentRequestGuiController(
+            Plugin plugin,
+            Supplier<PunishmentRequestService> services,
+            Supplier<PlayerDirectory> players,
+            AuthorizationPolicy authorization,
+            ExecutorService workers,
+            Function<PunishmentRequestGuiState.Details, Inventory> detailsRenderer
+    ) {
         if (plugin == null || services == null || players == null || authorization == null || workers == null) {
             throw new IllegalArgumentException("punishment request GUI dependencies must be present");
         }
@@ -67,6 +82,7 @@ public final class PunishmentRequestGuiController implements Listener {
         this.players = players;
         this.authorization = authorization;
         this.workers = workers;
+        this.detailsRenderer = Objects.requireNonNull(detailsRenderer);
     }
 
     public String targetName(PunishmentApprovalRequest request) {
@@ -196,7 +212,7 @@ public final class PunishmentRequestGuiController implements Listener {
                     new PunishmentRequestGuiState.RequestView(request, resolvedTargetName),
                     returnPage
             );
-            onEntity(player, () -> player.openInventory(PunishmentRequestGuiRenderer.renderDetails(state)));
+            onEntity(player, () -> player.openInventory(detailsRenderer.apply(state)));
             return;
         }
         acquireAndOpen(player, actor, request.requestId(), resolvedTargetName, returnPage, service);
@@ -223,7 +239,7 @@ public final class PunishmentRequestGuiController implements Listener {
         PunishmentApprovalRequest current = service.find(requestId).orElse(null);
         if (current != null && current.status() != PunishmentRequestStatus.PENDING && service.mayReview(actor, current)) {
             PunishmentRequestGuiState.Details state = new PunishmentRequestGuiState.Details(view(current), returnPage);
-            onEntity(player, () -> player.openInventory(PunishmentRequestGuiRenderer.renderDetails(state)));
+            onEntity(player, () -> player.openInventory(detailsRenderer.apply(state)));
             return;
         }
         PunishmentRequestResult.Rejected rejected = (PunishmentRequestResult.Rejected) result;
@@ -407,13 +423,13 @@ public final class PunishmentRequestGuiController implements Listener {
     ) {
         decisionMessage(player, result, resolvedView);
         if (result instanceof PunishmentRequestResult.Approved || result instanceof PunishmentRequestResult.Denied) {
-            player.openInventory(PunishmentRequestGuiRenderer.renderDetails(new PunishmentRequestGuiState.Details(
+            player.openInventory(detailsRenderer.apply(new PunishmentRequestGuiState.Details(
                     resolvedView, returnPage
             )));
             return;
         }
         if (resolvedView != null) {
-            player.openInventory(PunishmentRequestGuiRenderer.renderDetails(new PunishmentRequestGuiState.Details(
+            player.openInventory(detailsRenderer.apply(new PunishmentRequestGuiState.Details(
                     resolvedView,
                     returnPage
             )));
@@ -509,9 +525,6 @@ public final class PunishmentRequestGuiController implements Listener {
                             + (approved.replayed() ? " (already processed)." : "."),
                     NamedTextColor.GREEN
             )));
-            PunishmentPublicAnnouncement.publish(plugin, approved.request().proposal().visibility(),
-                    approved.replayed(), resolvedView.targetName(),
-                    approved.request().proposal().sanctions(), approved.request().proposal().publicReason());
         } else if (result instanceof PunishmentRequestResult.Denied denied) {
             player.sendMessage(StaffMessageStyle.style(Component.text(
                     denied.replayed()

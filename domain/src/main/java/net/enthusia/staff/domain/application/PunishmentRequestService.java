@@ -7,6 +7,8 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.function.Consumer;
 import java.util.function.Supplier;
 import net.enthusia.staff.common.Checks;
 import net.enthusia.staff.common.IdempotencyKey;
@@ -33,6 +35,8 @@ public final class PunishmentRequestService {
     private final PunishmentService punishments;
     private final PunishmentRequestStore requests;
     private final int expirationBatchSize;
+    private final List<Consumer<PunishmentRequestResult.Approved>> approvedObservers =
+            new CopyOnWriteArrayList<>();
 
     public PunishmentRequestService(
             Clock clock,
@@ -123,6 +127,13 @@ public final class PunishmentRequestService {
             throw new IllegalArgumentException("expiration batch size must be between 1 and 500");
         }
         this.expirationBatchSize = expirationBatchSize;
+    }
+
+    /** Register a notification-only observer for the first durable approval commit. */
+    public Runnable addApprovedObserver(Consumer<PunishmentRequestResult.Approved> observer) {
+        Consumer<PunishmentRequestResult.Approved> checked = Objects.requireNonNull(observer);
+        approvedObservers.add(checked);
+        return () -> approvedObservers.remove(checked);
     }
 
     public PunishmentRequestResult submit(CreatePunishmentRequest request, OperationalMode mode) {
@@ -219,7 +230,19 @@ public final class PunishmentRequestService {
         if (rejection != null) {
             return rejection;
         }
-        return requests.approve(lease, approver, caseIds.newCaseId(), now);
+        PunishmentRequestResult result = requests.approve(lease, approver, caseIds.newCaseId(), now);
+        if (result instanceof PunishmentRequestResult.Approved approved && !approved.replayed()) {
+            // The case has already committed. A failed announcement cannot roll
+            // back or misreport the durable approval, and replay must stay silent.
+            for (Consumer<PunishmentRequestResult.Approved> observer : approvedObservers) {
+                try {
+                    observer.accept(approved);
+                } catch (RuntimeException ignored) {
+                    // Notification consumers reconcile failures independently.
+                }
+            }
+        }
+        return result;
     }
 
     public PunishmentRequestResult deny(
