@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -66,9 +67,15 @@ final class ManagedRoleShadowServiceTest {
     void twoMinecraftAccountsLinkedToOneDiscordUserProduceOneRoleMember() {
         UUID first = UUID.fromString("11111111-1111-1111-1111-111111111111");
         UUID second = UUID.fromString("22222222-2222-2222-2222-222222222222");
+        List<UUID> lookedUp = new ArrayList<>();
         var result = ManagedRoleShadowService.resolveClaim(
-                claim(Set.of(first, second)), ignored -> Set.of(SYNTHETIC_DISCORD_A));
+                claim(Set.of(first, second)), minecraftId -> {
+                    lookedUp.add(minecraftId);
+                    return Set.of(SYNTHETIC_DISCORD_A);
+                });
 
+        assertEquals(2, lookedUp.size());
+        assertEquals(Set.of(first, second), Set.copyOf(lookedUp));
         assertEquals(Set.of(SYNTHETIC_DISCORD_A), result.desiredDiscordUserIds());
         assertEquals(0, result.unlinkedMinecraftAccounts());
     }
