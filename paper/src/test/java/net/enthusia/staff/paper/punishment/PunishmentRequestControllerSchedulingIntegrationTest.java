@@ -154,6 +154,69 @@ class PunishmentRequestControllerSchedulingIntegrationTest {
     }
 
     @Test
+    void completedDecisionAcknowledgesCommitWithoutReplacingUnrelatedInventory() {
+        Fixture fixture = fixture(pending(StaffRank.MOD), SchedulerMode.HOLD_AFTER_FIRST);
+        PunishmentApprovalLease lease = acquire(fixture);
+        fixture.controller().onInventoryClick(click(
+                fixture.player().proxy(), review(lease), PunishmentRequestGuiRenderer.APPROVE_SLOT
+        ));
+        assertEquals(1, fixture.store().approveTransitions);
+        assertEquals(1, fixture.scheduler().heldActions.size(),
+                "Authorization completed, but decision presentation is queued");
+
+        // Staff opened a different inventory before the scheduled acknowledgement.
+        fixture.player().openView = viewForState(fixture.player().proxy(),
+                new PunishmentRequestGuiState.Details(
+                        new PunishmentRequestGuiState.RequestView(deniedRequest(), "Other"), 0));
+        fixture.scheduler().heldActions.removeFirst().run();
+
+        assertEquals(1, fixture.player().messages.get(),
+                "Committed decision still requires its acknowledgement");
+        assertEquals(0, fixture.player().openInventories.get(),
+                "A delayed decision must not overwrite the inventory opened afterward");
+        assertEquals(PunishmentRequestStatus.APPROVED, fixture.store().current.status());
+    }
+
+    @Test
+    void laterQueueNavigationIsNotOverwrittenByEarlierDecisionAcknowledgement() {
+        Fixture fixture = fixture(pending(StaffRank.MOD), SchedulerMode.HOLD_AFTER_FIRST);
+        PunishmentApprovalLease lease = acquire(fixture);
+        fixture.controller().onInventoryClick(click(
+                fixture.player().proxy(), review(lease), PunishmentRequestGuiRenderer.APPROVE_SLOT
+        ));
+        assertEquals(1, fixture.scheduler().heldActions.size());
+
+        assertTrue(fixture.controller().openQueue(fixture.player().proxy()));
+        assertEquals(2, fixture.scheduler().heldActions.size());
+        // A later queue page is already visible when the older decision arrives.
+        // The static queue renderer needs a live Bukkit registry, so model the
+        // newly opened queue inventory directly in this controller harness.
+        fixture.player().openView = viewForState(fixture.player().proxy(),
+                PunishmentRequestGuiState.Queue.page(java.util.List.of(), 0,
+                        PunishmentRequestGuiRenderer.QUEUE_CONTENT_SIZE));
+        fixture.scheduler().heldActions.removeFirst().run();
+
+        assertEquals(0, fixture.player().openInventories.get());
+        assertEquals(1, fixture.player().messages.get());
+        assertEquals(1, fixture.store().approveTransitions);
+    }
+
+    @Test
+    void sameLeasedReviewCanReceiveImmediateDecisionPresentation() {
+        Fixture fixture = fixture(pending(StaffRank.MOD), SchedulerMode.RUN);
+        PunishmentApprovalLease lease = acquire(fixture);
+        fixture.player().openView = viewForState(fixture.player().proxy(), review(lease));
+
+        fixture.controller().onInventoryClick(click(
+                fixture.player().proxy(), review(lease), PunishmentRequestGuiRenderer.APPROVE_SLOT
+        ));
+
+        assertEquals(1, fixture.store().approveTransitions);
+        assertEquals(1, fixture.player().openInventories.get(),
+                "An immediate acknowledgement must still display its own completed review");
+    }
+
+    @Test
     void lostAcknowledgementAfterDurableApprovalDoesNotFalselyClaimNoAction() {
         Fixture fixture = fixture(pending(StaffRank.MOD), SchedulerMode.RUN);
         PunishmentApprovalLease lease = acquire(fixture);
