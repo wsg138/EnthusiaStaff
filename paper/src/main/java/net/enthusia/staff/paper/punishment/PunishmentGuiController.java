@@ -1181,6 +1181,11 @@ public final class PunishmentGuiController implements Listener {
             );
             finish(viewer, "Punishment committed as case " + exception.accepted().caseId()
                     + ", but draft cleanup failed. Reconfirming is idempotent.");
+            // The case was committed even though draft deletion failed. This
+            // first success still deserves its public announcement; replay does not.
+            if (!exception.accepted().replayed()) {
+                announceNewlyCommitted(viewer, state);
+            }
         } catch (PunishmentRequestDraftCleanupException exception) {
             plugin.getLogger().log(
                     Level.SEVERE,
@@ -1203,18 +1208,7 @@ public final class PunishmentGuiController implements Listener {
             finish(viewer, "Punishment saved | Case " + applied.accepted().caseId()
                     + (applied.accepted().replayed() ? " (already processed)" : "") + '.');
             if (!applied.accepted().replayed()) {
-                // Resumed reviews have no transient assessment. Use the saved
-                // sanctions and an exact-version policy reason, never a fresh
-                // recommendation or an unrelated policy after a reload.
-                state.assessment()
-                        .map(assessment -> assessment.policy().publicReason())
-                        .or(() -> PunishmentPublicAnnouncement.publicReasonForConfirmedDraft(
-                                state.draft(), policies))
-                        .ifPresent(publicReason -> PunishmentPublicAnnouncement.publish(
-                                plugin, state.draft().visibility(), false,
-                                state.target().currentUsername()
-                                        .orElse(state.target().playerId().toString()),
-                                state.draft().expectation().sanctions(), publicReason));
+                announceNewlyCommitted(viewer, state);
             }
             return;
         }
@@ -1234,6 +1228,22 @@ public final class PunishmentGuiController implements Listener {
             return;
         }
         handleRejected(viewer, actor, state, (PunishmentDraftConfirmation.Rejected) result);
+    }
+
+    /** Publish the first committed result, including after draft cleanup failure. */
+    private void announceNewlyCommitted(Player viewer, PunishmentGuiState.Review state) {
+        // Resumed reviews have no transient assessment. Use the saved
+        // sanctions and an exact-version policy reason, never a fresh
+        // recommendation or an unrelated policy after a reload.
+        state.assessment()
+                .map(assessment -> assessment.policy().publicReason())
+                .or(() -> PunishmentPublicAnnouncement.publicReasonForConfirmedDraft(
+                        state.draft(), policies))
+                .ifPresent(publicReason -> PunishmentPublicAnnouncement.publish(
+                        plugin, state.draft().visibility(), false,
+                        state.target().currentUsername()
+                                .orElse(state.target().playerId().toString()),
+                        state.draft().expectation().sanctions(), publicReason));
     }
 
     /** Reopen only the questionnaire that created this exact target's draft. */
