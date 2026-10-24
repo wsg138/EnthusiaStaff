@@ -149,6 +149,43 @@ class GuidedIncidentWizardTest {
     }
 
     @Test
+    void discordStaffArgumentNeedsManualReviewWithoutLosingReason() {
+        var discord = GuidedIncidentWizard.start("community")
+                .answer(MEDIUM, "discord").answer(CONDUCT, "staff")
+                .answer("detail", "argument");
+        assertTrue(discord.nextQuestion().isEmpty(),
+                "Discord route should stop before irrelevant Minecraft severity questions");
+        var discordFinding = discord.finding();
+        assertEquals("staff.public-punishment-argument", discordFinding.candidateId(),
+                "Keep the configured reason available for expert review");
+        assertTrue(discordFinding.needsReview(),
+                "A Minecraft mute cannot be assumed to restrict Discord messages");
+
+        var minecraft = GuidedIncidentWizard.start("community")
+                .answer(MEDIUM, CHAT).answer(CONDUCT, "staff")
+                .answer("detail", "argument").answer(EXTENT, "large-scale")
+                .answer(CONTINUED, "yes").finding();
+        assertFalse(minecraft.needsReview(),
+                "Minecraft chat incidents remain eligible for ordinary guided sanctions");
+    }
+
+    @Test
+    void everyDiscordCategoryStopsAfterIdentifyingItsConfiguredReason() {
+        for (String category : new String[]{"gameplay", "safety", "accounts",
+                "community", "economy"}) {
+            var flow = GuidedIncidentWizard.start(category).answer(MEDIUM, "discord");
+            var conduct = flow.nextQuestion().orElseThrow().choices().getFirst().id();
+            flow = flow.answer(CONDUCT, conduct);
+            var detail = flow.nextQuestion().orElseThrow();
+            assertEquals("detail", detail.id(), category);
+            flow = flow.answer(detail.id(), detail.choices().getFirst().id());
+            assertTrue(flow.nextQuestion().isEmpty(), category);
+            assertNotNull(flow.finding().candidateId(), category);
+            assertTrue(flow.finding().needsReview(), category);
+        }
+    }
+
+    @Test
     void unknownLocationStopsAtConductForManualReview() {
         var incident = GuidedIncidentWizard.start(CHAT)
                 .answer(MEDIUM, "unknown").answer(CONDUCT, SPAM);

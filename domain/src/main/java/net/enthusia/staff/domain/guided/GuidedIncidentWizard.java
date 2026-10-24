@@ -29,6 +29,7 @@ public final class GuidedIncidentWizard {
     private static final String GAMEPLAY = "gameplay";
     private static final String ECONOMY = "economy";
     private static final String IN_GAME = "in-game";
+    private static final String DISCORD = "discord";
     private static final String MARKET = "market";
     private static final String PUBLIC_CHAT = "public-chat";
     private static final String HARASSMENT = "harassment";
@@ -93,6 +94,13 @@ public final class GuidedIncidentWizard {
                 category, answers.get(MEDIUM), answers.get(CONDUCT), answers.get(DETAIL),
                 null, null);
         if (sensitiveCandidate(classified)) {
+            return List.copyOf(result);
+        }
+        // This wizard proposes Minecraft sanctions. Discord messages require
+        // channel-specific staff review, not a guessed Minecraft mute.
+        // Keep the detail-derived reason but skip severity questions that
+        // cannot make an unsupported cross-platform remedy automatic.
+        if (DISCORD.equals(answers.get(MEDIUM))) {
             return List.copyOf(result);
         }
         return targetingPath(result);
@@ -239,6 +247,11 @@ public final class GuidedIncidentWizard {
     }
 
     private boolean channelCompatible(String medium, String conduct) {
+        // Discord moderation/enforcement is not verified by this Minecraft GUI.
+        // A Discord incident must be handled through expert review.
+        if (DISCORD.equals(medium)) {
+            return false;
+        }
         // Standard Minecraft chat mutes are not proof that connected voice chat is muted.
         // Until voice-channel enforcement is verified, keep voice incidents in manual review.
         if (CHAT.equals(category) && "voice".equals(medium)) {
