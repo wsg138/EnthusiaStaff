@@ -2,6 +2,9 @@ package net.enthusia.staff.paper.punishment;
 
 import net.enthusia.staff.paper.presentation.StaffMessageStyle;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
@@ -33,8 +36,11 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.inventory.InventoryClickEvent;
+import org.bukkit.event.inventory.InventoryCloseEvent;
+import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.event.inventory.InventoryDragEvent;
 import org.bukkit.inventory.Inventory;
+import org.bukkit.inventory.InventoryView;
 import org.bukkit.plugin.Plugin;
 import org.bukkit.plugin.java.JavaPlugin;
 
@@ -48,6 +54,12 @@ public final class PunishmentRequestGuiController implements Listener {
     private final AuthorizationPolicy authorization;
     private final ExecutorService workers;
     private final Function<PunishmentRequestGuiState.Details, Inventory> detailsRenderer;
+    private final Function<PunishmentRequestGuiState.Review, Inventory> reviewRenderer;
+    private final Function<PunishmentRequestGuiState.Denial, Inventory> denialRenderer;
+    /** Review and denial pages share a fenced lease. */
+    private final Map<UUID, PunishmentApprovalLease> preservingTransitions = new ConcurrentHashMap<>();
+    private final Set<PunishmentApprovalLease> decisionsInFlight = ConcurrentHashMap.newKeySet();
+    private final Set<PunishmentApprovalLease> decisionClosures = ConcurrentHashMap.newKeySet();
 
     public PunishmentRequestGuiController(
             JavaPlugin plugin,
@@ -79,6 +91,22 @@ public final class PunishmentRequestGuiController implements Listener {
             ExecutorService workers,
             Function<PunishmentRequestGuiState.Details, Inventory> detailsRenderer
     ) {
+        this(plugin, services, players, authorization, workers, detailsRenderer,
+                PunishmentRequestGuiRenderer::renderReview,
+                PunishmentRequestGuiRenderer::renderDenial);
+    }
+
+    /** Renderer injection exercises page transitions without static Bukkit state. */
+    PunishmentRequestGuiController(
+            Plugin plugin,
+            Supplier<PunishmentRequestService> services,
+            Supplier<PlayerDirectory> players,
+            AuthorizationPolicy authorization,
+            ExecutorService workers,
+            Function<PunishmentRequestGuiState.Details, Inventory> detailsRenderer,
+            Function<PunishmentRequestGuiState.Review, Inventory> reviewRenderer,
+            Function<PunishmentRequestGuiState.Denial, Inventory> denialRenderer
+    ) {
         if (plugin == null || services == null || players == null || authorization == null || workers == null) {
             throw new IllegalArgumentException("punishment request GUI dependencies must be present");
         }
@@ -88,6 +116,8 @@ public final class PunishmentRequestGuiController implements Listener {
         this.authorization = authorization;
         this.workers = workers;
         this.detailsRenderer = Objects.requireNonNull(detailsRenderer);
+        this.reviewRenderer = Objects.requireNonNull(reviewRenderer);
+        this.denialRenderer = Objects.requireNonNull(denialRenderer);
     }
 
     public String targetName(PunishmentApprovalRequest request) {
@@ -136,6 +166,56 @@ public final class PunishmentRequestGuiController implements Listener {
     public void onInventoryDrag(InventoryDragEvent event) {
         if (event.getView().getTopInventory().getHolder(false) instanceof PunishmentRequestGuiHolder) {
             event.setCancelled(true);
+        }
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR)
+    public void onInventoryClose(InventoryCloseEvent event) {
+        if (event.getPlayer() instanceof Player player) {
+            releaseIfAbandoned(player, leasedState(event.getView()));
+        }
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR)
+    public void onPlayerQuit(PlayerQuitEvent event) {
+        // Quit can occur without a usable close callback; database release
+        // still happens exclusively on the existing bounded worker executor.
+        releaseIfAbandoned(event.getPlayer(), leasedState(event.getPlayer().getOpenInventory()));
+    }
+
+    private static PunishmentApprovalLease leasedState(InventoryView view) {
+        if (view == null || !(view.getTopInventory().getHolder(false)
+                instanceof PunishmentRequestGuiHolder holder)) {
+            return null;
+        }
+        return switch (holder.state()) {
+            case PunishmentRequestGuiState.Review review -> review.lease();
+            case PunishmentRequestGuiState.Denial denial -> denial.lease();
+            default -> null;
+        };
+    }
+
+    private void releaseIfAbandoned(Player player, PunishmentApprovalLease lease) {
+        if (lease == null
+                || lease.equals(preservingTransitions.get(player.getUniqueId()))
+                || decisionsInFlight.contains(lease)
+                || decisionClosures.contains(lease)) {
+            return;
+        }
+        PunishmentRequestService service = services.get();
+        if (service != null) {
+            abandonLeaseAsync(service, lease);
+        }
+    }
+
+    /** InventoryCloseEvent fires synchronously inside an inventory page swap. */
+    private void preserveLeaseDuringPageSwap(Player player, PunishmentApprovalLease lease, Runnable open) {
+        UUID playerId = player.getUniqueId();
+        preservingTransitions.put(playerId, lease);
+        try {
+            open.run();
+        } finally {
+            preservingTransitions.remove(playerId, lease);
         }
     }
 
@@ -271,7 +351,7 @@ public final class PunishmentRequestGuiController implements Listener {
             );
             onAuthorizedEntity(player,
                     current -> service.mayReview(current, leased.lease().request()),
-                    current -> player.openInventory(PunishmentRequestGuiRenderer.renderReview(state)),
+                    current -> player.openInventory(reviewRenderer.apply(state)),
                     () -> abandonLeaseAsync(service, leased.lease()));
             return;
         }
@@ -330,11 +410,12 @@ public final class PunishmentRequestGuiController implements Listener {
         } else if (slot == PunishmentRequestGuiRenderer.BACK_SLOT) {
             openQueue(player, review.returnPage());
         } else if (slot == PunishmentRequestGuiRenderer.DENY_SLOT) {
-            player.openInventory(PunishmentRequestGuiRenderer.renderDenial(new PunishmentRequestGuiState.Denial(
-                    review.lease(),
-                    review.targetName(),
-                    review.returnPage()
-            )));
+            preserveLeaseDuringPageSwap(player, review.lease(), () ->
+                    player.openInventory(denialRenderer.apply(new PunishmentRequestGuiState.Denial(
+                            review.lease(),
+                            review.targetName(),
+                            review.returnPage()
+                    ))));
         } else if (slot == PunishmentRequestGuiRenderer.APPROVE_SLOT) {
             approve(player, review);
         }
@@ -357,11 +438,12 @@ public final class PunishmentRequestGuiController implements Listener {
         if (slot == PunishmentRequestGuiRenderer.REVIEW_CLOSE_SLOT) {
             player.closeInventory();
         } else if (slot == PunishmentRequestGuiRenderer.BACK_SLOT) {
-            player.openInventory(PunishmentRequestGuiRenderer.renderReview(new PunishmentRequestGuiState.Review(
-                    denial.lease(),
-                    denial.targetName(),
-                    denial.returnPage()
-            )));
+            preserveLeaseDuringPageSwap(player, denial.lease(), () ->
+                    player.openInventory(reviewRenderer.apply(new PunishmentRequestGuiState.Review(
+                            denial.lease(),
+                            denial.targetName(),
+                            denial.returnPage()
+                    ))));
         } else if (slot == PunishmentRequestGuiRenderer.CUSTOM_DENIAL_SLOT) {
             prepareCustomDenial(player, denial);
         } else {
@@ -417,8 +499,28 @@ public final class PunishmentRequestGuiController implements Listener {
         // Keep the leased review available when the worker queue is saturated.
         // Closing before admission strands the fenced lease until its timeout
         // and prevents the reviewer from retrying the same approved/denied action.
-        if (submit(player, () -> completeDecision(player, lease, returnPage, decision))) {
+        if (!decisionsInFlight.add(lease)) {
+            message(player, "This punishment request decision is already in progress.");
+            return;
+        }
+        // The closure marker must outlive even a synchronously completed worker.
+        decisionClosures.add(lease);
+        boolean admitted = submit(player, () -> {
+            try {
+                completeDecision(player, lease, returnPage, decision);
+            } finally {
+                decisionsInFlight.remove(lease);
+            }
+        });
+        if (!admitted) {
+            decisionsInFlight.remove(lease);
+            decisionClosures.remove(lease);
+            return;
+        }
+        try {
             player.closeInventory();
+        } finally {
+            decisionClosures.remove(lease);
         }
     }
 

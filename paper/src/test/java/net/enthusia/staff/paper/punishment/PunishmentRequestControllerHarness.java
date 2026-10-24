@@ -47,6 +47,7 @@ import org.bukkit.entity.Player;
 import org.bukkit.event.inventory.ClickType;
 import org.bukkit.event.inventory.InventoryAction;
 import org.bukkit.event.inventory.InventoryClickEvent;
+import org.bukkit.event.inventory.InventoryCloseEvent;
 import org.bukkit.event.inventory.InventoryType;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.InventoryView;
@@ -74,7 +75,9 @@ final class PunishmentRequestControllerHarness {
                 () -> null,
                 authorization,
                 executor,
-                details -> inventory(new PunishmentRequestGuiHolder(details))
+                details -> inventory(new PunishmentRequestGuiHolder(details)),
+                review -> inventory(new PunishmentRequestGuiHolder(review)),
+                denial -> inventory(new PunishmentRequestGuiHolder(denial))
         );
         return new Fixture(controller, store, scheduler, player, logger, executor, service);
     }
@@ -170,6 +173,14 @@ final class PunishmentRequestControllerHarness {
                 ClickType.LEFT,
                 InventoryAction.PICKUP_ALL
         );
+    }
+
+    static InventoryCloseEvent close(Player player, PunishmentRequestGuiState state) {
+        return new InventoryCloseEvent(viewForState(player, state));
+    }
+
+    static InventoryView viewForState(Player player, PunishmentRequestGuiState state) {
+        return inventoryView(player, inventory(new PunishmentRequestGuiHolder(state)));
     }
 
     private static Inventory inventory(PunishmentRequestGuiHolder holder) {
@@ -282,6 +293,9 @@ final class PunishmentRequestControllerHarness {
         final AtomicInteger closedInventories = new AtomicInteger();
         volatile boolean authorized = true;
         volatile StaffRank rank = StaffRank.MOD;
+        Runnable onCloseInventory;
+        Runnable onOpenInventory;
+        volatile InventoryView openView;
         private final UUID id;
         private final Player proxy;
 
@@ -302,12 +316,19 @@ final class PunishmentRequestControllerHarness {
                 }
                 case "openInventory" -> {
                     openInventories.incrementAndGet();
+                    if (onOpenInventory != null) {
+                        onOpenInventory.run();
+                    }
                     yield null;
                 }
                 case "closeInventory" -> {
                     closedInventories.incrementAndGet();
+                    if (onCloseInventory != null) {
+                        onCloseInventory.run();
+                    }
                     yield null;
                 }
+                case "getOpenInventory" -> openView;
                 default -> defaultValue(method);
             });
         }
