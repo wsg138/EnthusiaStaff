@@ -196,4 +196,69 @@ class GuidedIncidentWizardTest {
         assertEquals(CONTINUED, incident.back().answer(EXTENT, "sustained")
                 .nextQuestion().orElseThrow().id());
     }
+
+    @Test
+    void protectedIncidentPathsStopAfterRelevantDetails() {
+        var fullSlur = GuidedIncidentWizard.start(CHAT)
+                .answer(MEDIUM, "public-chat").answer(CONDUCT, "slur")
+                .answer("detail", "full").answer("targeting", "targeted");
+        assertTrue(fullSlur.nextQuestion().isEmpty());
+        assertEquals(4, fullSlur.answers().size());
+        assertEquals("hate.full-slur-targeted", fullSlur.finding().candidateId());
+        assertTrue(fullSlur.finding().needsReview());
+        assertFalse(fullSlur.answers().containsKey(EXTENT));
+
+        var hate = GuidedIncidentWizard.start(CHAT)
+                .answer(MEDIUM, "public-chat").answer(CONDUCT, "hate")
+                .answer("detail", "advocacy");
+        assertTrue(hate.nextQuestion().isEmpty());
+        assertEquals(3, hate.answers().size());
+        assertEquals("hate.advocating-hate-violence", hate.finding().candidateId());
+        assertTrue(hate.finding().needsReview());
+
+        var sexual = GuidedIncidentWizard.start(CHAT)
+                .answer(MEDIUM, "public-chat").answer(CONDUCT, "harassment")
+                .answer("detail", "sexual");
+        assertTrue(sexual.nextQuestion().isEmpty());
+        assertEquals("harassment.sexual", sexual.finding().candidateId());
+        assertTrue(sexual.finding().needsReview());
+
+        var malicious = GuidedIncidentWizard.start("community")
+                .answer(MEDIUM, "discord").answer(CONDUCT, "advertising")
+                .answer("detail", "malicious");
+        assertTrue(malicious.nextQuestion().isEmpty());
+        assertEquals("advertising.malicious-link", malicious.finding().candidateId());
+        assertTrue(malicious.finding().needsReview());
+
+        var crash = GuidedIncidentWizard.start("gameplay")
+                .answer(MEDIUM, "in-game").answer(CONDUCT, "exploit")
+                .answer("detail", "crash");
+        assertTrue(crash.nextQuestion().isEmpty());
+        assertEquals("exploit.server-crash-attempt", crash.finding().candidateId());
+        assertTrue(crash.finding().needsReview());
+    }
+
+    @Test
+    void ordinaryHarassmentRetainsIntensityAndWarningQuestions() {
+        var normal = GuidedIncidentWizard.start(CHAT)
+                .answer(MEDIUM, "public-chat").answer(CONDUCT, "harassment")
+                .answer("detail", "verbal").answer("targeting", "targeted");
+        assertEquals(EXTENT, normal.nextQuestion().orElseThrow().id());
+        normal = normal.answer(EXTENT, "sustained");
+        assertEquals(CONTINUED, normal.nextQuestion().orElseThrow().id());
+        assertTrue(normal.answer(CONTINUED, NO_WARNING).finding().candidateId()
+                .equals("hate.targeted-harassment"));
+    }
+
+    @Test
+    void targetedSlurCanBeReclassifiedFromManualReviewByEditingEarlierAnswer() {
+        var slur = GuidedIncidentWizard.start(CHAT)
+                .answer(MEDIUM, "public-chat").answer(CONDUCT, "slur")
+                .answer("detail", "full").answer("targeting", "targeted");
+        assertTrue(slur.nextQuestion().isEmpty());
+        var amended = slur.back().answer("targeting", "general");
+        assertEquals("hate.full-slur-untargeted", amended.finding().candidateId());
+        assertTrue(amended.finding().needsReview());
+        assertFalse(amended.answers().containsKey(EXTENT));
+    }
 }
