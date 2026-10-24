@@ -188,6 +188,7 @@ public final class StaffBotRuntime implements AutoCloseable {
                 configuration.interactionCapacity(), configuration.interactionTtl());
         Optional<StaffModerationRuntime> moderation = Optional.empty();
         Optional<StaffBotChatTransport> chatTransport = Optional.empty();
+        Optional<StaffBotChatTransport> testChatTransport = Optional.empty();
         Optional<JdaDiscordGateway> publicChatGateway = Optional.empty();
         Optional<AiMirrorRegistrationPublisher> mirrorPublisher = Optional.empty();
         Optional<AiMirrorDurableRecoverySession> durableRecovery = Optional.empty();
@@ -201,6 +202,9 @@ public final class StaffBotRuntime implements AutoCloseable {
                     selectChatConfiguration(configuration, chatSettings, chatSettingsFile.isPresent());
             Optional<StaffBotChatBridgeConfiguration> chatConfiguration = selected.bridge();
             Optional<PublicChatDiscordConfiguration> publicChatConfig = selected.publicApp();
+            Optional<StaffBotChatBridgeConfiguration> testChatConfig =
+                    StaffBotSharedJdaTestPeer.select(configuration.environment(), selected.bridge(),
+                            chatSettingsFile.isPresent(), publicChatConfig.isPresent(), chatSettings);
             StaffBotHealthServer healthServer = new StaffBotHealthServer(configuration.healthAddress(), health);
             Optional<StaffModerationRuntime> openedModeration = moderation;
             JdaDiscordGateway gateway = new JdaDiscordGateway(
@@ -213,11 +217,19 @@ public final class StaffBotRuntime implements AutoCloseable {
             JdaDiscordGateway chatGateway = installedPublicChat.orElse(gateway);
             chatTransport = chatConfiguration.map(
                     current -> StaffBotChatTransport.create(current, chatGateway, chatGateway));
+            testChatTransport = testChatConfig.map(
+                    current -> StaffBotChatTransport.createIsolatedTest(
+                            current, chatGateway, chatGateway));
             MirrorSelection selectedMirror = selectMirror(
                     configuration, chatConfiguration, chatTransport, chatGateway, health);
             mirrorPublisher = selectedMirror.publisher();
             durableRecovery = selectedMirror.durable();
             Optional<StaffBotChatLifecycle> chat = selectedMirror.chat();
+            if (testChatTransport.isPresent()) {
+                StaffBotChatLifecycle primaryChat = chat.orElseThrow();
+                chat = Optional.of(new StaffBotDualChatLifecycle(
+                        primaryChat, testChatTransport.orElseThrow()));
+            }
             installChatIngress(chatConfiguration, chatGateway, chatTransport);
             return new StaffBotRuntime(
                     configuration,
@@ -232,6 +244,7 @@ public final class StaffBotRuntime implements AutoCloseable {
                             installedPublicChat.map(current -> new PublicChatRuntime(
                                     current, publicChatConfig.orElseThrow().applicationId()))));
         } catch (IOException | RuntimeException exception) {
+            testChatTransport.ifPresent(StaffBotChatTransport::close);
             mirrorPublisher.ifPresent(AiMirrorRegistrationPublisher::close);
             durableRecovery.ifPresent(AiMirrorDurableRecoverySession::close);
             if (durableRecovery.isEmpty()) {
