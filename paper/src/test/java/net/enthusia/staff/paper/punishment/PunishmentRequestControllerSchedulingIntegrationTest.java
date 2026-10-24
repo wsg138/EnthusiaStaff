@@ -135,9 +135,9 @@ class PunishmentRequestControllerSchedulingIntegrationTest {
         assertEquals(1, fixture.store().approveTransitions);
         assertEquals(PunishmentRequestStatus.APPROVED, fixture.store().current.status());
         assertEquals(1, fixture.player().messages.get());
-        assertEquals(1, fixture.scheduler().scheduled.get());
+        assertEquals(2, fixture.scheduler().scheduled.get(),
+                "Worker authorization and result presentation each use the entity scheduler");
 
-        fixture.scheduler().mode = SchedulerMode.HOLD;
         fixture.controller().onInventoryClick(click(
                 fixture.player().proxy(),
                 review(lease),
@@ -146,7 +146,7 @@ class PunishmentRequestControllerSchedulingIntegrationTest {
 
         assertEquals(1, fixture.store().approveTransitions);
         assertEquals(PunishmentRequestStatus.APPROVED, fixture.store().current.status());
-        assertEquals(2, fixture.scheduler().scheduled.get());
+        assertEquals(4, fixture.scheduler().scheduled.get());
     }
 
     @Test
@@ -192,12 +192,12 @@ class PunishmentRequestControllerSchedulingIntegrationTest {
         assertEquals(1, fixture.store().approveTransitions);
         assertEquals(0, fixture.store().denyTransitions);
         assertEquals(PunishmentRequestStatus.APPROVED, fixture.store().current.status());
-        assertEquals(2, fixture.scheduler().scheduled.get());
+        assertEquals(3, fixture.scheduler().scheduled.get());
     }
 
     @Test
     void deniedDecisionSurvivesPresentationRetirementAndRetryDoesNotDuplicateIt() {
-        Fixture fixture = fixture(pending(StaffRank.MOD), SchedulerMode.RETIRE);
+        Fixture fixture = fixture(pending(StaffRank.MOD), SchedulerMode.RETIRE_AFTER_FIRST);
         PunishmentApprovalLease lease = acquire(fixture);
         PunishmentRequestGuiState.Denial denial = new PunishmentRequestGuiState.Denial(lease, "Target", 0);
         int presetSlot = PunishmentRequestDenialPreset.values()[0].slot();
@@ -207,13 +207,13 @@ class PunishmentRequestControllerSchedulingIntegrationTest {
         assertEquals(1, fixture.store().denyTransitions);
         assertEquals(PunishmentRequestStatus.DENIED, fixture.store().current.status());
         assertEquals(0, fixture.player().messages.get());
-        assertEquals(1, fixture.scheduler().scheduled.get());
+        assertEquals(2, fixture.scheduler().scheduled.get());
 
         fixture.controller().onInventoryClick(click(fixture.player().proxy(), denial, presetSlot));
 
         assertEquals(1, fixture.store().denyTransitions);
         assertEquals(PunishmentRequestStatus.DENIED, fixture.store().current.status());
-        assertEquals(2, fixture.scheduler().scheduled.get());
+        assertEquals(3, fixture.scheduler().scheduled.get());
     }
 
     @Test
@@ -274,7 +274,7 @@ class PunishmentRequestControllerSchedulingIntegrationTest {
 
     @Test
     void committedDecisionIsAcknowledgedWithoutRevealingDetailsAfterDemotion() {
-        Fixture fixture = fixture(pending(StaffRank.MOD), SchedulerMode.HOLD);
+        Fixture fixture = fixture(pending(StaffRank.MOD), SchedulerMode.HOLD_AFTER_FIRST);
         PunishmentApprovalLease lease = acquire(fixture);
         fixture.controller().onInventoryClick(click(
                 fixture.player().proxy(), review(lease), PunishmentRequestGuiRenderer.APPROVE_SLOT));
@@ -378,7 +378,7 @@ class PunishmentRequestControllerSchedulingIntegrationTest {
 
     @Test
     void approvedAdminOnlyDecisionAcknowledgesCommitWithoutDetailsAfterDemotion() {
-        Fixture fixture = fixture(pending(StaffRank.ADMIN), SchedulerMode.HOLD);
+        Fixture fixture = fixture(pending(StaffRank.ADMIN), SchedulerMode.HOLD_AFTER_FIRST);
         fixture.player().rank = StaffRank.ADMIN;
         var admin = new net.enthusia.staff.domain.auth.Actor(REVIEWER_ID, "Reviewer", StaffRank.ADMIN);
         PunishmentApprovalLease lease = org.junit.jupiter.api.Assertions.assertInstanceOf(
@@ -396,6 +396,75 @@ class PunishmentRequestControllerSchedulingIntegrationTest {
         assertEquals(1, fixture.store().approveTransitions);
         assertEquals(0, fixture.player().openInventories.get());
         assertTrue(fixture.player().messages.get() >= 1);
+    }
+
+    @Test
+    void retiredReviewerBeforeWorkerPreflightCannotCommitAndReleasesLease() {
+        Fixture fixture = fixture(pending(StaffRank.MOD), SchedulerMode.RETIRE);
+        PunishmentApprovalLease lease = acquire(fixture);
+
+        fixture.controller().onInventoryClick(click(
+                fixture.player().proxy(), review(lease), PunishmentRequestGuiRenderer.APPROVE_SLOT));
+
+        assertEquals(0, fixture.store().approveTransitions);
+        assertEquals(PunishmentRequestStatus.PENDING, fixture.store().current.status());
+        assertEquals(1, fixture.store().abandonCalls);
+    }
+
+    @Test
+    void queuedApprovalMustRecheckPermissionAfterClickBeforeWorkerCommits() {
+        Fixture fixture = fixture(pending(StaffRank.MOD), SchedulerMode.RUN);
+        PunishmentApprovalLease lease = acquire(fixture);
+        fixture.executor().hold = true;
+
+        fixture.controller().onInventoryClick(click(
+                fixture.player().proxy(), review(lease), PunishmentRequestGuiRenderer.APPROVE_SLOT));
+        assertEquals(0, fixture.store().approveTransitions);
+        assertEquals(1, fixture.executor().heldActions.size());
+
+        fixture.player().authorized = false;
+        fixture.executor().hold = false;
+        fixture.executor().runNext();
+
+        assertEquals(0, fixture.store().approveTransitions,
+                "A revoked reviewer must not approve with the Actor captured at click time");
+        assertEquals(PunishmentRequestStatus.PENDING, fixture.store().current.status());
+        assertEquals(1, fixture.store().abandonCalls,
+                "Rejected queued decisions should release the held lease");
+    }
+
+    @Test
+    void queuedApprovalAndDenialMustRecheckRequestRankAfterClick() {
+        for (boolean approve : new boolean[]{true, false}) {
+            Fixture fixture = fixture(pending(StaffRank.ADMIN), SchedulerMode.RUN);
+            fixture.player().rank = StaffRank.ADMIN;
+            var admin = new net.enthusia.staff.domain.auth.Actor(
+                    REVIEWER_ID, "Reviewer", StaffRank.ADMIN);
+            PunishmentApprovalLease lease = org.junit.jupiter.api.Assertions.assertInstanceOf(
+                    net.enthusia.staff.domain.application.PunishmentRequestResult.Leased.class,
+                    fixture.service().acquire(REQUEST_ID, admin)).lease();
+            fixture.executor().hold = true;
+
+            if (approve) {
+                fixture.controller().onInventoryClick(click(
+                        fixture.player().proxy(), review(lease), PunishmentRequestGuiRenderer.APPROVE_SLOT));
+            } else {
+                fixture.controller().onInventoryClick(click(
+                        fixture.player().proxy(),
+                        new PunishmentRequestGuiState.Denial(lease, "Target", 0),
+                        PunishmentRequestDenialPreset.values()[0].slot()));
+            }
+            assertEquals(1, fixture.executor().heldActions.size());
+
+            fixture.player().rank = StaffRank.MOD; // Generic review permission remains.
+            fixture.executor().hold = false;
+            fixture.executor().runNext();
+
+            assertEquals(0, fixture.store().approveTransitions);
+            assertEquals(0, fixture.store().denyTransitions);
+            assertEquals(PunishmentRequestStatus.PENDING, fixture.store().current.status());
+            assertEquals(1, fixture.store().abandonCalls);
+        }
     }
 
     @Test
