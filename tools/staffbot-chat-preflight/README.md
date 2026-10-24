@@ -53,6 +53,37 @@ The isolated checks require `channel.enabled=true`, the existing `STAFFBOT` and 
 
 **Exit status:** `0` means all config checks passed, `2` means blocked or unreadable. Neither result establishes that a bot is connected or ready.
 
+## Existing StaffBot process: shared-JDA TEST peer
+
+For the existing Bloom StaffBot and Discord public-chat session, use the
+alternative --shared-jda-test mode. This does not start another bot or JDA.
+Do not combine with --isolated-test or --production-chat.
+
+Use only local protected read-only copies of the production StaffBot chat
+properties, TEST/SMP DiscordSRV configs and Velocity configuration, including
+the private Velocity secrets.properties file. Never commit or disclose them.
+
+```sh
+python tools/staffbot-chat-preflight/check.py \
+  --paper PRIVATE_TEST_PAPER.yml \
+  --discordsrv-test PRIVATE_TEST_DISCORDSRV.yml \
+  --discordsrv-live PRIVATE_READONLY_SMP_DISCORDSRV.yml \
+  --chat PRIVATE_READONLY_PRODUCTION_STAFFBOT_CHAT.properties \
+  --staffbot-environment production \
+  --staffbot-environment-source staff-bot/src/main/java/net/enthusia/staff/discordbot/StaffBotEnvironment.java \
+  --shared-jda-test \
+  --velocity-config PRIVATE_READONLY_VELOCITY.properties \
+  --velocity-secrets PRIVATE_READONLY_VELOCITY_SECRETS.properties
+```
+
+The primary StaffBot route remains exactly SMP/global to the pinned private
+channel. TEST/global is derived by the runtime when the default-off TEST switch
+is explicitly enabled. Read-only checks compare decoded HMAC material against
+the STAFFBOT and STAFFBOT_TEST values in the **provided** Velocity secret file,
+but environment overrides can take precedence at startup. Runtime peer handshakes,
+JDA identity and Discord permissions require separate evidence. The checker
+never writes configs or sends any Discord messages.
+
 ## Rules checked
 
 1. The pinned private channel doesn't equal the global, staff or console DiscordSRV destination on test or production.
