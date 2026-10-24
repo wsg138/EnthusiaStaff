@@ -1054,7 +1054,8 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
                         mode::get, this::effectiveWriteMode,
                         new net.enthusia.staff.paper.auth.ActiveDutyAuthorizationPolicy(
                                 authorizationPolicy,
-                                runtimeComponents.staffMode()::authorityActiveOrUnrestricted), reasonPolicies
+                                runtimeComponents.staffMode()::authorityActiveOrUnrestricted), reasonPolicies,
+                        runtimeComponents.staffMode()::authorityActive
                 ),
                 new PaperIntegrationManager.Stores(
                         () -> storageValue(PaperStorageBindings::punishmentService),
@@ -1063,6 +1064,7 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
                         () -> storageValue(PaperStorageBindings::staffSessionStore),
                         () -> storageValue(PaperStorageBindings::reportStore),
                         () -> storageValue(PaperStorageBindings::playerDirectory),
+                        () -> storageValue(bindings -> bindings.runtime().discordModerationPersistenceStore()),
                         () -> storageValue(PaperStorageBindings::economyJournalStore),
                         () -> storageValue(PaperStorageBindings::inventoryJournalStore)
                 ),

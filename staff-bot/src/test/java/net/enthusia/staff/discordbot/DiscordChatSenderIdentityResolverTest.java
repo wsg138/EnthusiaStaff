@@ -46,6 +46,33 @@ class DiscordChatSenderIdentityResolverTest {
     }
 
     @Test
+    void freshMentionResolutionNeverUsesStaleCachedMainOrUnlinkedIdentity() {
+        MutableClock clock = new MutableClock(NOW);
+        java.util.concurrent.atomic.AtomicReference<Optional<String>> latest =
+                new java.util.concurrent.atomic.AtomicReference<>(Optional.of(DISCORD_ID));
+        DiscordChatSenderIdentityResolver resolver = new DiscordChatSenderIdentityResolver(
+                clock, 8, Duration.ofSeconds(30), ignored -> latest.get());
+        UUID player = UUID.randomUUID();
+
+        assertEquals(Optional.of(DISCORD_ID), resolver.resolve(player));
+        latest.set(Optional.empty());
+        assertEquals(Optional.of(DISCORD_ID), resolver.resolve(player));
+        assertTrue(resolver.resolveFresh(player).isEmpty());
+
+        latest.set(Optional.of("2410303324745371709"));
+        assertEquals(Optional.of("2410303324745371709"), resolver.resolveFresh(player));
+        latest.set(Optional.of("not-a-snowflake"));
+        assertTrue(resolver.resolveFresh(player).isEmpty());
+    }
+
+    @Test
+    void freshMentionLookupFailureIsNonMentioning() {
+        DiscordChatSenderIdentityResolver resolver = new DiscordChatSenderIdentityResolver(
+                ignored -> { throw new IllegalStateException("database unavailable"); });
+        assertTrue(resolver.resolveFresh(UUID.randomUUID()).isEmpty());
+    }
+
+    @Test
     void invalidAndFailedLookupsDegradeToUnlinkedPresentation() {
         MutableClock clock = new MutableClock(NOW);
         DiscordChatSenderIdentityResolver invalid = new DiscordChatSenderIdentityResolver(

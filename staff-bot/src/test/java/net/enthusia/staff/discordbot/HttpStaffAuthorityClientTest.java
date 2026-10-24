@@ -63,9 +63,11 @@ class HttpStaffAuthorityClientTest {
     void privateReviewApproveUsesBodyBoundSignatureAndVerifiedCommittedResponse() throws IOException {
         AtomicReference<StaffAuthorityHttpSigning.Verification> proof = new AtomicReference<>();
         AtomicReference<Boolean> bodyBound = new AtomicReference<>();
+        AtomicReference<String> requestBody = new AtomicReference<>();
         HttpServer server = HttpServer.create(new InetSocketAddress(LOOPBACK, 0), 1);
         server.createContext("/v1/staff-reviews/approve", exchange -> {
             byte[] input = exchange.getRequestBody().readAllBytes();
+            requestBody.set(new String(input, StandardCharsets.UTF_8));
             String target = exchange.getRequestURI().toString();
             bodyBound.set(target.equals(StaffAuthorityHttpSigning.punishmentRequestTarget(
                     "/v1/staff-reviews/approve", input)));
@@ -89,9 +91,16 @@ class HttpStaffAuthorityClientTest {
             var client = new HttpStaffAuthorityClient(URI.create(
                     RANK_URL.formatted(server.getAddress().getPort())), CREDENTIAL,
                     StaffModerationConfiguration.AuthorityTransport.BLOOM_PRIVATE_SPLIT);
+            String actorId = UUID.randomUUID().toString();
+            String requestId = UUID.randomUUID().toString();
+            String discordUserId = String.join("", "123456", "789012", "345678");
             var result = client.review("approve", java.util.Map.of(
-                    "actorId", UUID.randomUUID().toString(),
-                    "requestId", UUID.randomUUID().toString(), "note", ""));
+                    "actorId", actorId, "requestId", requestId,
+                    "discordUserId", discordUserId, "note", ""));
+            var signedPayload = new com.fasterxml.jackson.databind.ObjectMapper().readTree(requestBody.get());
+            assertEquals(actorId, signedPayload.path("actorId").asText());
+            assertEquals(requestId, signedPayload.path("requestId").asText());
+            assertEquals(discordUserId, signedPayload.path("discordUserId").asText());
             assertEquals("APPROVED", result.path("state").asText());
             assertEquals("CASE000000000001", result.path("caseId").asText());
             assertEquals(true, bodyBound.get());

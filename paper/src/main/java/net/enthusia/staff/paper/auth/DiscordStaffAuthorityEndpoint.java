@@ -74,7 +74,7 @@ public final class DiscordStaffAuthorityEndpoint implements AutoCloseable {
         this.webPunishments = webDependencies == null ? null : new StaffWebPunishmentService(
                 webDependencies, this::punishmentActor, this::resolve);
         this.webReviews = reviewDependencies == null ? null : new StaffWebReviewService(
-                reviewDependencies, this::reviewActor, this::resolve);
+                reviewDependencies, this::reviewActor, this::resolve, this::reviewOfflineAllowed);
         this.webReports = reportDependencies == null ? null : new StaffWebReportService(
                 reportDependencies, this::reportActor, this::resolve);
         HttpServer createdServer = HttpServer.create(
@@ -407,6 +407,12 @@ public final class DiscordStaffAuthorityEndpoint implements AutoCloseable {
                 .orElseThrow(() -> new SecurityException("current staff rank is required"));
         return new net.enthusia.staff.domain.auth.Actor(playerId,
                 user.getUsername() == null ? playerId.toString() : user.getUsername(), rank);
+    }
+
+    private boolean reviewOfflineAllowed(UUID playerId) {
+        User user = loadUser(playerId);
+        return user.getCachedData().getPermissionData()
+                .checkPermission("enthusiastaff.punishment.requests.review.discord-offline").asBoolean();
     }
 
     private net.enthusia.staff.domain.auth.Actor reportActor(UUID playerId) {

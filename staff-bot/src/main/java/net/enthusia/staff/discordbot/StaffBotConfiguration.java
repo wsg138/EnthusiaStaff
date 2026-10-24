@@ -46,6 +46,7 @@ public final class StaffBotConfiguration {
     private final ModerationPreviewWebConfig previewWebConfig;
     private final java.util.Optional<URI> moderationWebUri;
     private final java.util.Optional<String> aiReadToken;
+    private final DiscordAccountAgeGateConfiguration accountAgeGate;
 
     StaffBotConfiguration(
             StaffBotEnvironment environment,
@@ -67,6 +68,7 @@ public final class StaffBotConfiguration {
         this.previewWebConfig = ModerationPreviewWebConfig.fromEnvironment(Map.of());
         this.moderationWebUri = java.util.Optional.empty();
         this.aiReadToken = java.util.Optional.empty();
+        this.accountAgeGate = DiscordAccountAgeGateConfiguration.disabled();
         validateRuntimeBounds();
     }
 
@@ -83,6 +85,7 @@ public final class StaffBotConfiguration {
         this.previewWebConfig = Objects.requireNonNull(previewWebConfig, "previewWebConfig");
         this.moderationWebUri = source.moderationWebUri;
         this.aiReadToken = source.aiReadToken;
+        this.accountAgeGate = source.accountAgeGate;
     }
 
     private StaffBotConfiguration(StaffBotConfiguration source, URI moderationWebUri) {
@@ -97,6 +100,7 @@ public final class StaffBotConfiguration {
         this.previewWebConfig = source.previewWebConfig;
         this.moderationWebUri = java.util.Optional.of(moderationWebUri);
         this.aiReadToken = source.aiReadToken;
+        this.accountAgeGate = source.accountAgeGate;
     }
 
     private StaffBotConfiguration(
@@ -114,6 +118,23 @@ public final class StaffBotConfiguration {
         this.previewWebConfig = source.previewWebConfig;
         this.moderationWebUri = source.moderationWebUri;
         this.aiReadToken = Objects.requireNonNull(aiReadToken, "aiReadToken");
+        this.accountAgeGate = source.accountAgeGate;
+    }
+
+    private StaffBotConfiguration(StaffBotConfiguration source,
+            DiscordAccountAgeGateConfiguration accountAgeGate) {
+        this.environment = source.environment;
+        this.discordToken = source.discordToken;
+        this.uiPreviewEnabled = source.uiPreviewEnabled;
+        this.healthAddress = source.healthAddress;
+        this.workerThreads = source.workerThreads;
+        this.workerQueueCapacity = source.workerQueueCapacity;
+        this.interactionCapacity = source.interactionCapacity;
+        this.interactionTtl = source.interactionTtl;
+        this.previewWebConfig = source.previewWebConfig;
+        this.moderationWebUri = source.moderationWebUri;
+        this.aiReadToken = source.aiReadToken;
+        this.accountAgeGate = Objects.requireNonNull(accountAgeGate, "accountAgeGate");
     }
 
     StaffBotConfiguration(
@@ -192,7 +213,9 @@ public final class StaffBotConfiguration {
         StaffBotConfiguration configured = base.uiPreviewEnabled
                 ? new StaffBotConfiguration(base, ModerationPreviewWebConfig.fromEnvironment(values))
                 : productionWebsiteConfiguration(values, base);
-        return new StaffBotConfiguration(configured, optionalSecret(values.get(AI_READ_TOKEN_KEY)));
+        return new StaffBotConfiguration(
+                new StaffBotConfiguration(configured, optionalSecret(values.get(AI_READ_TOKEN_KEY))),
+                DiscordAccountAgeGateConfiguration.fromEnvironment(configured.environment(), values));
     }
 
     private static StaffBotConfiguration baseConfiguration(Map<String, String> values) {
@@ -304,6 +327,10 @@ public final class StaffBotConfiguration {
         return aiReadToken;
     }
 
+    DiscordAccountAgeGateConfiguration accountAgeGate() {
+        return accountAgeGate;
+    }
+
     public int maxReconnectDelaySeconds() {
         return MAX_RECONNECT_DELAY_SECONDS;
     }
@@ -323,6 +350,7 @@ public final class StaffBotConfiguration {
                 + ", interactionTtl=" + interactionTtl
                 + ", previewWebPublic=" + (previewWebConfig.publicBaseUri().isPresent() ? "<configured>" : "<none>")
                 + ", aiReadToken=" + (aiReadToken.isPresent() ? "<configured>" : "<none>")
+                + ", accountAgeGateEnabled=" + accountAgeGate.enabled()
                 + ", discordToken=<redacted>]";
     }
 

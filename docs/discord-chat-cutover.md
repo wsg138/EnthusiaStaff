@@ -99,7 +99,7 @@ controlled server with the actual dependency set.
 
 | Case | Expected Minecraft -> Discord | Expected Discord -> Minecraft |
 | --- | --- | --- |
-| Normal public chat | one clean StaffBot message, correct RoseChat sender/rank/text | one RoseChat message, no echo back to Discord |
+| Normal public chat | one clean StaffBot `sender: text` message, no RoseChat rank/server clutter | one RoseChat message, no echo back to Discord |
 | Legacy `&` / section colors | no raw formatting codes leak | readable text reaches RoseChat |
 | Hex/RGB chat | readable Discord fallback; exact Adventure render retained internally | readable text reaches RoseChat |
 | Bold/italic/underline/etc. | clean supported Discord Markdown where representable | no malformed formatting injection |
@@ -109,9 +109,11 @@ controlled server with the actual dependency set.
 | Escaped InteractiveChat placeholder | no artifact for escaped placeholder | n/a |
 | Oversize image/artifact | text-only fallback, no duplicate Discord message | n/a |
 | Missing attachment permission | text-only fallback | n/a |
-| Linked Minecraft account | optional cached linked display label; no raw Discord ID | n/a |
+| Verified selected main Minecraft account | exact Discord sender mention; no speculative role or user-input mention | n/a |
+| Linked alternate, unlinked or no selected main | bare Minecraft username without Discord mention | n/a |
+| Link revoked/main changed within 30 seconds | fresh identity lookup never pings the previously linked main | n/a |
 | Unlinked Minecraft account | normal Minecraft-only sender prefix | n/a |
-| Discord user/role/channel mention text | mentions disabled on send | readable normalized text, no delegated DiscordSRV parsing |
+| Discord user/role/channel mention text | player-supplied mentions disabled; only the separately verified main sender may be pinged | readable normalized text, no delegated DiscordSRV parsing |
 | Bot/webhook Discord message | n/a | ignored |
 | Private/non-public RoseChat channel | no public Discord export | only explicitly configured public route accepted |
 | StaffBot queue saturation | Minecraft chat still succeeds; bridge may drop | Discord message may drop; no durable backlog |
@@ -133,7 +135,8 @@ controlled server with the actual dependency set.
 7. Verify bounded queue/drop behavior and no durable chat replay.
 8. Verify server/channel route maps are exact and symmetric where inbound is enabled.
 9. Verify the StaffBot application has Message Content intent only when inbound routes are configured.
-10. Verify no public message can create Discord mentions.
+10. Verify only a freshly verified selected-main sender can be pinged; player text never triggers user, role, everyone, or here mentions.
+11. Record PASS/FAIL/BLOCKED and screenshots for every applicable row in `docs/staffbot-chat-shadow-acceptance.md`.
 
 ## Production cutover sequence
 

@@ -131,8 +131,8 @@ PR #381 adds the next bounded leg while remaining default-off and staging-only:
 - StaffBot uses a dedicated bounded single-thread chat queue and bounded event-ID dedupe.
 - JDA egress validates that the target channel belongs to the pinned Enthusia guild and that the bot
   has `VIEW_CHANNEL` + `MESSAGE_SEND`.
-- Final Discord content is bounded to 2,000 characters after the `[server] sender: ` prefix.
-- Allowed mentions are set to an empty list for every chat send.
+- Final Discord content is bounded to 2,000 characters after the selected main-account mention or bare Minecraft-username prefix.
+- Player-supplied mentions are disabled. Exactly one sender mention can be enabled for a freshly verified, selected main account; other accounts and lookup failures use the Minecraft name.
 
 StaffBot chat is default-off. The legacy
 `ENTHUSIA_STAFF_BOT_CHAT_BRIDGE_ENABLED=true` form remains a staging-only alias for SHADOW when
@@ -253,10 +253,8 @@ Important migration behavior:
 - Velocity authorizes styled outbound frames only from configured Paper backend peers and forwards
   them only to authenticated `STAFFBOT`.
 - StaffBot applies the same exact `server/channel -> Discord channel` route map used by V1.
-- JDA performs one final send. It uses the resolved full-line Discord Markdown when it fits the
-  Discord 2,000-character content limit. If it does not fit, it falls back to the resolved full-line
-  plain text before truncation so an oversized message cannot leave broken Markdown delimiters.
-- Allowed mentions remain empty, so player content cannot create `@everyone`, role, or user pings.
+- JDA performs one final send, displaying only the clean selected sender label and sanitized resolved message body, bounded to Discord's 2,000-character limit. RoseChat's decorated full-line render is not copied into the Discord text.
+- Player-supplied mentions remain disabled. The separately verified selected-main sender may generate its own explicit user mention; role, everyone, and user-input pings remain prohibited.
 - Raw Minecraft color codes are never emitted to Discord by this path. RoseChat has already resolved
   color/format tokens before transport.
 
@@ -281,9 +279,11 @@ send:
 - expiry/reconnect cleanup;
 - text-only fallback when optional artifacts are absent or cannot be prepared safely.
 
-StaffBot sends the styled text and available files as one final Discord message when attachment
-permissions and preparation succeed. It does not retry a file-bearing REST request as text-only
-after submission because delivery is ambiguous and a retry could duplicate chat.
+StaffBot sends styled text and available images as one final Discord message when attachment
+permissions and preparation succeed. Items use a thumbnail-plus-tooltip embed when both images
+are available; inventory, Ender chest, map, and custom previews have their own image embeds.
+Orphan tooltip files are not sent as bare ALT attachments. It does not retry a file-bearing REST
+request as text-only after submission because delivery is ambiguous and a retry could duplicate chat.
 
 Merged PR #406 adds a temporary staging compatibility provider for the currently installed
 InteractiveChat + InteractiveChatDiscordSrvAddon image renderer. It supports held-item, inventory,
@@ -298,26 +298,24 @@ separate GPL-compatible companion/fork task.
 
 ## Sender/account-link presentation
 
-StaffBot may enrich the server prefix using the authoritative current Minecraft -> Discord link
-projection when the moderation read runtime is available. This is presentation metadata only.
+After PR #577, StaffBot renders ordinary chat as `sender: cleaned body` rather than emitting
+RoseChat's decorated line, internal InteractiveChat transport markers, or a `[SMP · linked]`
+prefix. The identity store supplies the current Minecraft username when available; if unavailable,
+the displayed sender name is sanitized and falls back to `Player`.
 
-Rules:
+Exactly one **verified Discord user** may be mentioned: the sender must be the canonical selected
+main Minecraft account with one unambiguous verified Discord link. Linked alternate accounts,
+unlinked accounts, missing main selection, malformed identities, and failed lookups display the
+Minecraft username without mentioning a Discord user.
 
-- the RoseChat-resolved Minecraft sender/rank/message line remains unchanged;
-- current link reads are cached for 30 seconds in a bounded 4,096-entry cache;
-- link lookup failure degrades to the normal unlinked prefix and never blocks Discord delivery;
-- Discord roles are never consulted for chat authority or routing;
-- StaffBot never performs a Discord REST lookup merely to decorate chat;
-- if the linked Discord member/user is already present in JDA's local cache, its escaped display
-  name is shown as `[SMP · @DisplayName]`;
-- if the authoritative link exists but JDA has no cached display name, the prefix is
-  `[SMP · linked]`;
-- if no current link is available, the existing `[SMP]` prefix is preserved;
-- raw Discord user IDs are never emitted into public chat;
-- cached presentation state is cleared with the Discord runtime lifecycle.
+Sender-mention resolution intentionally performs a fresh canonical identity lookup for each
+outgoing message, not the legacy 30-second presentation cache. A revoked link or newly selected
+main therefore must not reuse a cached ping. All player-controlled message mentions remain
+disabled using JDA's allowlist plus an explicit sender-only mention.
 
-The linked display name is ordinary escaped text, not a Discord mention token, and allowed mentions
-remain disabled on the final send.
+The data read is presentation-only: it grants no chat, role, or moderation privileges. Shadow
+behavior and expected screenshot cases are documented in
+`docs/staffbot-chat-shadow-acceptance.md`.
 
 ## Authority and remaining scope
 

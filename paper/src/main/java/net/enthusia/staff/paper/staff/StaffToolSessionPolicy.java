@@ -13,7 +13,7 @@ final class StaffToolSessionPolicy {
         RANK_UNAVAILABLE("That staff tool is not available to your current explicit staff rank."),
         OWNER_MISMATCH("That staff tool belongs to another staff player and cannot be used."),
         SESSION_MISMATCH("That staff tool belongs to an older staff session and cannot be used."),
-        SLOT_MISMATCH("That staff tool is outside its protected hotbar slot and cannot be used."),
+        SLOT_MISMATCH("Staff tools can only be used from your hotbar."),
         MATERIAL_MISMATCH("That staff tool does not match the server-issued tool definition.");
 
         private final String message;
@@ -78,9 +78,11 @@ final class StaffToolSessionPolicy {
     }
 
     private static Status validateItem(int heldSlot, StaffToolDefinition tool, Material actualMaterial, int expectedSlot) {
-        if (heldSlot != expectedSlot) {
+        if (heldSlot < 0 || heldSlot >= 9) {
             return Status.SLOT_MISMATCH;
         }
+        // Player-owned tools may be rearranged within the inventory. PDC owner
+        // and per-entry session binding still authorize every tool invocation.
         return actualMaterial == tool.material() ? Status.VALID : Status.MATERIAL_MISMATCH;
     }
 }

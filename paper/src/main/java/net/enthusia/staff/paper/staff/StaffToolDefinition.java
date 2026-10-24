@@ -71,7 +71,7 @@ enum StaffToolDefinition {
             true,
             false,
             CooldownClass.TARGET,
-            "Right-click a player to follow them in spectator mode."
+            "Right-click a player to follow them. Right-click air to stop."
     ),
     VANISH(
             "vanish",

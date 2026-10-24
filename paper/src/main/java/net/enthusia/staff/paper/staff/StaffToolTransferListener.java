@@ -33,7 +33,8 @@ public final class StaffToolTransferListener implements Listener {
                 || !staffMode.active(player.getUniqueId())) {
             return;
         }
-        if (blocksToolTransfer(player, event)) {
+        if (blocksToolTransfer(player, event)
+                && !staffMode.permitsToolRearrangement(player, event)) {
             event.setCancelled(true);
         }
     }
@@ -47,7 +48,8 @@ public final class StaffToolTransferListener implements Listener {
     public void onDeniedToolTransferAudit(InventoryClickEvent event) {
         if (!(event.getWhoClicked() instanceof Player player)
                 || !staffMode.active(player.getUniqueId())
-                || !blocksToolTransfer(player, event)) {
+                || !blocksToolTransfer(player, event)
+                || staffMode.permitsToolRearrangement(player, event)) {
             return;
         }
         // Only enum-valued metadata, never an ItemStack, NBT, or tool token.

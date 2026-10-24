@@ -3,6 +3,7 @@ package net.enthusia.staff.discordbot;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.time.Clock;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.EnumSet;
@@ -21,6 +22,7 @@ import net.dv8tion.jda.api.entities.ApplicationInfo;
 import net.dv8tion.jda.api.entities.Guild;
 import net.dv8tion.jda.api.entities.Member;
 import net.dv8tion.jda.api.entities.Message;
+import net.dv8tion.jda.api.entities.MessageEmbed;
 import net.dv8tion.jda.api.entities.User;
 import net.dv8tion.jda.api.entities.channel.concrete.TextChannel;
 import net.dv8tion.jda.api.events.ExceptionEvent;
@@ -118,8 +120,13 @@ final class JdaDiscordGateway implements DiscordGateway, DiscordChatEgress, Disc
         this.moderation = moderation == null ? Optional.empty() : moderation;
         this.chatConfiguration = chatConfiguration == null ? Optional.empty() : chatConfiguration;
         this.chatSenderIdentities = new DiscordChatSenderIdentityResolver(playerId ->
-                this.moderation.flatMap(current ->
-                        current.reads().minecraftTarget(playerId).discordId().map(value -> value.value())));
+                this.moderation.flatMap(current -> {
+                    StaffModerationReadService.Target target = current.reads().minecraftTarget(playerId);
+                    return target.subject().flatMap(value ->
+                            DiscordChatMessagePresentation.mainDiscordUserId(
+                                    playerId, value.subject().mainMinecraftAccount(),
+                                    value.subject().discordUserIds()));
+                }));
         validateInteractionResources();
         validateRoleSyncBoundary();
     }
@@ -197,6 +204,16 @@ final class JdaDiscordGateway implements DiscordGateway, DiscordChatEgress, Disc
             JDABuilder builder = baseBuilder(listener);
             addInteractionListener(builder);
             addChatIngressListener(builder);
+            if (staffInteractionsEnabled && configuration.accountAgeGate().enabled()) {
+                try {
+                    builder.addEventListeners(new DiscordAccountAgeGateListener(
+                            configuration.environment().guildId(), Clock.systemUTC(),
+                            DiscordAccountAgeBypassStore.open(configuration.accountAgeGate().bypassFile()),
+                            workers, moderation.isEmpty() || configuration.uiPreviewEnabled()));
+                } catch (IOException error) {
+                    throw new IllegalStateException("account-age bypass store unavailable; refusing to start gate", error);
+                }
+            }
             jda = builder.build();
         }
     }
@@ -219,7 +236,8 @@ final class JdaDiscordGateway implements DiscordGateway, DiscordChatEgress, Disc
                         && moderation.flatMap(StaffModerationRuntime::managedRoleShadow).isPresent(),
                 chatConfiguration.map(configuration -> !configuration.ingressRoutes().isEmpty()).orElse(false),
                 staffInteractionsEnabled
-                        && moderation.map(StaffModerationRuntime::investigationsEnabled).orElse(false)
+                        && moderation.map(StaffModerationRuntime::investigationsEnabled).orElse(false),
+                staffInteractionsEnabled && configuration.accountAgeGate().enabled()
         );
     }
 
@@ -233,8 +251,14 @@ final class JdaDiscordGateway implements DiscordGateway, DiscordChatEgress, Disc
 
     static Set<GatewayIntent> gatewayIntents(
             boolean managedRoleShadowEnabled, boolean discordChatIngressEnabled, boolean investigationsEnabled) {
+        return gatewayIntents(managedRoleShadowEnabled, discordChatIngressEnabled, investigationsEnabled, false);
+    }
+
+    static Set<GatewayIntent> gatewayIntents(
+            boolean managedRoleShadowEnabled, boolean discordChatIngressEnabled,
+            boolean investigationsEnabled, boolean accountAgeGateEnabled) {
         EnumSet<GatewayIntent> intents = EnumSet.noneOf(GatewayIntent.class);
-        if (managedRoleShadowEnabled) {
+        if (managedRoleShadowEnabled || accountAgeGateEnabled) {
             intents.add(GatewayIntent.GUILD_MEMBERS);
         }
         if (discordChatIngressEnabled || investigationsEnabled) {
@@ -272,7 +296,8 @@ final class JdaDiscordGateway implements DiscordGateway, DiscordChatEgress, Disc
                     configuration.interactionCapacity(),
                     configuration.previewWebConfig(),
                     discordToken,
-                    moderation
+                    moderation,
+                    configuration.accountAgeGate().enabled()
             );
             previewListener.startWeb();
             builder.addEventListeners(previewListener);
@@ -281,7 +306,8 @@ final class JdaDiscordGateway implements DiscordGateway, DiscordChatEgress, Disc
         moderation.ifPresent(runtime -> {
             moderationListener = new JdaStaffModerationListener(
                     configuration.environment().guildId(), workers, interactions, runtime,
-                    configuration.moderationWebUri(), discordToken);
+                    configuration.moderationWebUri(), discordToken,
+                    configuration.accountAgeGate().enabled());
             builder.addEventListeners(moderationListener);
             runtime.investigationService().ifPresent(service -> {
                 investigationEvidenceListener = new JdaDiscordInvestigationEvidenceListener(
@@ -417,13 +443,11 @@ final class JdaDiscordGateway implements DiscordGateway, DiscordChatEgress, Disc
             return false;
         }
 
-        String content = chatContent(
-                message,
-                chatSenderIdentity(api, channel.getGuild(), message.minecraftPlayerId())
-        );
+        Optional<String> mainDiscordId = chatSenderIdentities.resolveFresh(message.minecraftPlayerId());
+        String content = chatContent(message, mainDiscordId,
+                minecraftChatName(message.minecraftPlayerId(), message.displayName()));
         try {
-            Message published = channel.sendMessage(content)
-                    .setAllowedMentions(List.of())
+            Message published = withExactSenderMention(channel.sendMessage(content), mainDiscordId)
                     .complete();
             notifyChatPublished(channel, message.canonicalMessageId(), message.plainText(), published);
             return true;
@@ -433,20 +457,17 @@ final class JdaDiscordGateway implements DiscordGateway, DiscordChatEgress, Disc
     }
 
     static String chatContent(ChatBridgeOutboundMessage message) {
-        return chatContent(message, Optional.empty());
+        return chatContent(message, Optional.empty(),
+                DiscordChatMessagePresentation.minecraftName(Optional.empty(), message.displayName()));
     }
 
-    static String chatContent(
-            ChatBridgeOutboundMessage message,
-            Optional<String> linkedPresentation
-    ) {
+    static String chatContent(ChatBridgeOutboundMessage message, Optional<String> mainDiscordId,
+            String minecraftName) {
         Objects.requireNonNull(message, "message");
-        String prefix = sourcePrefix(message.sourceServerId(), linkedPresentation)
-                + message.displayName() + ": ";
-        int available = Math.max(0, 2_000 - prefix.length());
-        return prefix + truncateDiscordText(message.plainText(), available);
+        String prefix = DiscordChatMessagePresentation.sender(mainDiscordId, minecraftName) + ": ";
+        return prefix + truncateDiscordText(
+                DiscordChatMessagePresentation.body(message.plainText()), Math.max(0, 2_000 - prefix.length()));
     }
-
 
     @Override
     public boolean sendRendered(
@@ -473,24 +494,27 @@ final class JdaDiscordGateway implements DiscordGateway, DiscordChatEgress, Disc
             return false;
         }
 
-        String content = renderedChatContent(
-                message,
-                chatSenderIdentity(api, channel.getGuild(), message.minecraftPlayerId())
-        );
+        Optional<String> mainDiscordId = chatSenderIdentities.resolveFresh(message.minecraftPlayerId());
+        String content = renderedChatContent(message, mainDiscordId,
+                minecraftChatName(message.minecraftPlayerId(), message.displayName()));
         if (artifacts.isEmpty()
                 || !channel.getGuild().getSelfMember().hasPermission(
                         channel, Permission.MESSAGE_ATTACH_FILES)) {
-            return sendRenderedText(channel, content, message);
+            return sendRenderedText(channel, content, message, mainDiscordId);
         }
 
         List<FileUpload> uploads = artifactUploads(artifacts);
         if (uploads.isEmpty()) {
-            return sendRenderedText(channel, content, message);
+            return sendRenderedText(channel, content, message, mainDiscordId);
         }
         try {
-            MessageCreateAction action = channel.sendMessage(content)
-                    .setAllowedMentions(List.of())
+            List<MessageEmbed> embeds = DiscordRichItemEmbeds.create(
+                    artifacts, minecraftChatName(message.minecraftPlayerId(), message.displayName()));
+            MessageCreateAction action = withExactSenderMention(channel.sendMessage(content), mainDiscordId)
                     .addFiles(uploads);
+            if (!embeds.isEmpty()) {
+                action.addEmbeds(embeds);
+            }
             Message published = action.complete();
             notifyChatPublished(
                     channel, message.canonicalMessageId(), message.canonicalPlainText(), published);
@@ -522,11 +546,7 @@ final class JdaDiscordGateway implements DiscordGateway, DiscordChatEgress, Disc
     }
 
     private static List<FileUpload> artifactUploads(List<ChatBridgeArtifact> artifacts) {
-        List<ChatBridgeArtifact> ordered = artifacts.stream()
-                .filter(Objects::nonNull)
-                .sorted(Comparator.comparingInt(ChatBridgeArtifact::position)
-                        .thenComparing(ChatBridgeArtifact::filename))
-                .toList();
+        List<ChatBridgeArtifact> ordered = DiscordRichItemEmbeds.referencedArtifacts(artifacts);
         List<FileUpload> uploads = new ArrayList<>(ordered.size());
         try {
             for (ChatBridgeArtifact artifact : ordered) {
@@ -551,10 +571,10 @@ final class JdaDiscordGateway implements DiscordGateway, DiscordChatEgress, Disc
     }
 
     private boolean sendRenderedText(
-            TextChannel channel, String content, ChatBridgeRenderedMessage original) {
+            TextChannel channel, String content, ChatBridgeRenderedMessage original,
+            Optional<String> mainDiscordId) {
         try {
-            Message published = channel.sendMessage(content)
-                    .setAllowedMentions(List.of())
+            Message published = withExactSenderMention(channel.sendMessage(content), mainDiscordId)
                     .complete();
             notifyChatPublished(
                     channel, original.canonicalMessageId(), original.canonicalPlainText(), published);
@@ -565,58 +585,32 @@ final class JdaDiscordGateway implements DiscordGateway, DiscordChatEgress, Disc
     }
 
     static String renderedChatContent(ChatBridgeRenderedMessage message) {
-        return renderedChatContent(message, Optional.empty());
+        return renderedChatContent(message, Optional.empty(),
+                DiscordChatMessagePresentation.minecraftName(Optional.empty(), message.displayName()));
     }
 
-    static String renderedChatContent(
-            ChatBridgeRenderedMessage message,
-            Optional<String> linkedPresentation
-    ) {
+    static String renderedChatContent(ChatBridgeRenderedMessage message,
+            Optional<String> mainDiscordId, String minecraftName) {
         Objects.requireNonNull(message, "message");
-        String prefix = sourcePrefix(message.sourceServerId(), linkedPresentation);
-        int available = Math.max(0, 2_000 - prefix.length());
-        String markdown = message.lineMarkdown();
-        if (markdown.length() <= available) {
-            return prefix + markdown;
+        String prefix = DiscordChatMessagePresentation.sender(mainDiscordId, minecraftName) + ": ";
+        String cleaned = DiscordChatMessagePresentation.body(message.bodyPlainText());
+        if (cleaned.isBlank()) {
+            cleaned = DiscordChatMessagePresentation.body(message.canonicalPlainText());
         }
-        String plain = message.linePlainText();
-        if (plain.length() <= available) {
-            return prefix + plain;
-        }
-        return prefix + truncateDiscordText(plain, available);
+        return prefix + truncateDiscordText(cleaned, Math.max(0, 2_000 - prefix.length()));
     }
 
-    private Optional<String> chatSenderIdentity(
-            JDA api,
-            Guild guild,
-            UUID minecraftPlayerId
-    ) {
-        Optional<String> discordId = chatSenderIdentities.resolve(minecraftPlayerId);
-        if (discordId.isEmpty()) {
-            return Optional.empty();
-        }
-        String id = discordId.orElseThrow();
-        Member member = guild.getMemberById(id);
-        if (member != null) {
-            return Optional.of("@" + escapeDiscordMarkdown(member.getEffectiveName()));
-        }
-        User user = api.getUserById(id);
-        if (user != null) {
-            return Optional.of("@" + escapeDiscordMarkdown(
-                    ModerationDiscordMessageMapper.displayName(user)));
-        }
-        return Optional.of("linked");
+    private String minecraftChatName(UUID playerId, String decorated) {
+        Optional<String> name = moderation.flatMap(current ->
+                current.reads().minecraftChatUsername(playerId));
+        return DiscordChatMessagePresentation.minecraftName(name, decorated);
     }
 
-    private static String sourcePrefix(
-            String sourceServerId,
-            Optional<String> linkedPresentation
-    ) {
-        Objects.requireNonNull(sourceServerId, "sourceServerId");
-        Objects.requireNonNull(linkedPresentation, "linkedPresentation");
-        return linkedPresentation
-                .map(value -> "[" + sourceServerId + " · " + value + "] ")
-                .orElseGet(() -> "[" + sourceServerId + "] ");
+    private static MessageCreateAction withExactSenderMention(
+            MessageCreateAction action, Optional<String> mainDiscordId) {
+        action.setAllowedMentions(List.of());
+        mainDiscordId.ifPresent(id -> action.mentionUsers(id));
+        return action;
     }
 
     static String escapeDiscordMarkdown(String value) {

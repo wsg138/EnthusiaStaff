@@ -9,9 +9,12 @@ import java.lang.reflect.Method;
 import java.nio.charset.StandardCharsets;
 import java.time.Clock;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
+import java.util.HashSet;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
@@ -42,6 +45,8 @@ import org.bukkit.plugin.java.JavaPlugin;
  */
 public final class InteractiveChatStagingArtifactProvider
         implements RichChatArtifactProvider, AutoCloseable {
+    private static final System.Logger LOGGER =
+            System.getLogger(InteractiveChatStagingArtifactProvider.class.getName());
     public static final String INTERACTIVE_CHAT = "InteractiveChat";
     public static final String DISCORD_ADDON = "InteractiveChatDiscordSrvAddon";
     private static final int PLAYER_INVENTORY_SIZE = 45;
@@ -83,19 +88,37 @@ public final class InteractiveChatStagingArtifactProvider
         }
     }
 
-    record RenderJob(Kind kind, int position, ItemStack item, Inventory inventory) {
+    record RenderJob(Kind kind, int position, ItemStack item, Inventory inventory,
+            String itemTitle, List<?> tooltipComponents, Object tooltipStyleKey) {
+        RenderJob(Kind kind, int position, ItemStack item, Inventory inventory) {
+            this(kind, position, item, inventory, "", List.of(), null);
+        }
+
         RenderJob {
             Objects.requireNonNull(kind, "kind");
             if (position < 0) {
                 throw new IllegalArgumentException("render position must not be negative");
             }
+            itemTitle = Objects.requireNonNull(itemTitle, "itemTitle");
+            tooltipComponents = List.copyOf(Objects.requireNonNull(tooltipComponents, "tooltipComponents"));
         }
+    }
+
+    /**
+     * Render in chat order, not in provider discovery order. With a four-file wire limit,
+     * an earlier [inventory] must not be crowded out by later [item] placeholders.
+     */
+    static List<RenderJob> orderedJobs(List<RenderJob> jobs) {
+        List<RenderJob> sorted = new ArrayList<>(Objects.requireNonNull(jobs, "jobs"));
+        sorted.sort(Comparator.comparingInt(RenderJob::position)
+                .thenComparingInt(job -> job.kind().ordinal()));
+        return List.copyOf(sorted);
     }
 
     record Snapshot(Object interactivePlayer, List<RenderJob> jobs) {
         Snapshot {
             Objects.requireNonNull(interactivePlayer, "interactivePlayer");
-            jobs = List.copyOf(Objects.requireNonNull(jobs, "jobs"));
+            jobs = orderedJobs(jobs);
         }
     }
 
@@ -181,18 +204,29 @@ public final class InteractiveChatStagingArtifactProvider
     }
 
     static int firstUnescapedMatch(Pattern pattern, String message) {
+        List<Integer> positions = unescapedMatchPositions(pattern, message, 1);
+        return positions.isEmpty() ? -1 : positions.getFirst();
+    }
+
+    static List<Integer> unescapedMatchPositions(Pattern pattern, String message, int maximum) {
         Objects.requireNonNull(pattern, "pattern");
         Objects.requireNonNull(message, "message");
+        if (maximum <= 0) {
+            return List.of();
+        }
+        List<Integer> positions = new ArrayList<>();
         Matcher matcher = pattern.matcher(message);
-        while (matcher.find()) {
-            int start = matcher.start();
-            if (start < 1
-                    || message.charAt(start - 1) != '\\'
-                    || (start > 1 && message.charAt(start - 2) == '\\')) {
-                return start;
+        while (matcher.find() && positions.size() < maximum) {
+            int precedingSlashes = 0;
+            for (int index = matcher.start() - 1;
+                    index >= 0 && message.charAt(index) == '\\'; index--) {
+                precedingSlashes++;
+            }
+            if (precedingSlashes % 2 == 0) {
+                positions.add(matcher.start());
             }
         }
-        return -1;
+        return List.copyOf(positions);
     }
 
     static UUID detachedSnapshotUuid(UUID playerId) {
@@ -295,6 +329,82 @@ public final class InteractiveChatStagingArtifactProvider
         services.unregister(RichChatArtifactProvider.class, this);
     }
 
+    static List<RichChatArtifact> withinBundleBudget(List<RichChatArtifact> candidates) {
+        List<RichChatArtifact> kept = new ArrayList<>();
+        // After skipping an oversized icon, its tooltip has no item thumbnail to
+        // attach to. Never spend the bounded wire budget on an orphan image.
+        Set<Integer> retainedItemPositions = new HashSet<>();
+        long total = 0L;
+        for (RichChatArtifact artifact : candidates) {
+            if (kept.size() >= net.enthusia.staff.protocol.ChatBridgeArtifactBundle.MAX_ARTIFACTS) {
+                break;
+            }
+            if (artifact.kind() == RichChatArtifact.Kind.TOOLTIP
+                    && !retainedItemPositions.contains(artifact.position())) {
+                continue;
+            }
+            long size = artifact.data().length;
+            if (total + size > net.enthusia.staff.protocol.ChatBridgeArtifactBundle.MAX_TOTAL_ARTIFACT_BYTES) {
+                continue;
+            }
+            kept.add(artifact);
+            total += size;
+            if (artifact.kind() == RichChatArtifact.Kind.ITEM) {
+                retainedItemPositions.add(artifact.position());
+            }
+        }
+        return List.copyOf(kept);
+    }
+
+
+    /**
+     * Reads an optional item tooltip-style Key while still on the player's owner thread.
+     * The image worker receives only the detached value; a missing/incompatible API
+     * retains the normal Minecraft tooltip background.
+     */
+    static boolean isMatchingLocalSender(UUID senderId, Object resolved) {
+        return senderId != null && resolved instanceof Player player
+                && senderId.equals(player.getUniqueId());
+    }
+
+    static Object captureTooltipStyle(Method getInstance, Method getStyle, ItemStack item) {
+        try {
+            Object wrapper = getInstance.invoke(null);
+            return getStyle.invoke(wrapper, item);
+        } catch (ReflectiveOperationException | RuntimeException unavailable) {
+            return null;
+        }
+    }
+
+    static BufferedImage renderDetachedTooltip(Method method, List<?> components, Object styleKey)
+            throws ReflectiveOperationException {
+        try {
+            return (BufferedImage) method.invoke(null, components, styleKey);
+        } catch (InvocationTargetException failure) {
+            Throwable cause = failure.getCause();
+            if (cause instanceof ReflectiveOperationException reflective) {
+                throw reflective;
+            }
+            if (cause instanceof RuntimeException runtime) {
+                throw runtime;
+            }
+            if (cause instanceof Error error) {
+                throw error;
+            }
+            throw failure;
+        }
+    }
+
+    static String plainItemTitle(String value) {
+        String filtered = value.replaceAll("(?i)§[0-9a-fk-or]", "")
+                .replaceAll("(?i)</?reset>", "").strip();
+        if (filtered.isBlank()) {
+            return "Shared item";
+        }
+        return filtered.substring(0, Math.min(filtered.length(), 240));
+    }
+
+
     private static final class ReflectionAccess implements Access {
         private final Field useItem;
         private final Field useInventory;
@@ -306,6 +416,17 @@ public final class InteractiveChatStagingArtifactProvider
         private final Constructor<?> offlinePlayerConstructor;
         private final Method renderItem;
         private final Method renderInventory;
+        private final Optional<Method> itemTitleMethod;
+        private final Optional<Method> itemTooltipMethod;
+        private final Optional<Method> tooltipHiddenMethod;
+        private final Optional<Method> tooltipComponentsMethod;
+        private final Optional<Method> renderTooltipMethod;
+        private final Optional<Method> tooltipStyleInstanceMethod;
+        private final Optional<Method> tooltipStyleLookupMethod;
+        private final Optional<Method> getSnapshotICPlayerMethod;
+        private final Optional<Method> getLocalICPlayerMethod;
+        private final String addonLanguage;
+        private final boolean detailedTooltipsEnabled;
         private final boolean itemImagesEnabled;
         private final boolean inventoryImagesEnabled;
         private final boolean enderImagesEnabled;
@@ -374,6 +495,87 @@ public final class InteractiveChatStagingArtifactProvider
                     Inventory.class,
                     offlinePlayerClass
             );
+            // Optional addon APIs: do not disable existing icon/inventory rendering
+            // when older installed addon builds lack tooltip support.
+            Optional<Method> itemName = Optional.empty();
+            Optional<Method> tooltip = Optional.empty();
+            Optional<Method> hidden = Optional.empty();
+            Optional<Method> components = Optional.empty();
+            Optional<Method> tooltipImage = Optional.empty();
+            String language = "en_us";
+            boolean advanced = false;
+            try {
+                Class<?> itemUtils = Class.forName(
+                        "com.loohp.interactivechatdiscordsrvaddon.utils.DiscordItemStackUtils",
+                        false, addonLoader);
+                Class<?> tooltipClass = Class.forName(
+                        "com.loohp.interactivechatdiscordsrvaddon.utils.DiscordItemStackUtils$DiscordToolTip",
+                        false, addonLoader);
+                Class<?> keyClass = Class.forName(
+                        "com.loohp.interactivechat.libs.net.kyori.adventure.key.Key",
+                        false, interactiveLoader);
+                itemName = Optional.of(itemUtils.getMethod(
+                        "getItemNameForDiscord", ItemStack.class, offlinePlayerClass, String.class));
+                tooltip = Optional.of(itemUtils.getMethod(
+                        "getToolTip", ItemStack.class, offlinePlayerClass, boolean.class));
+                hidden = Optional.of(tooltipClass.getMethod("isHideTooltip"));
+                components = Optional.of(tooltipClass.getMethod("getComponents"));
+                tooltipImage = Optional.of(imageGeneration.getMethod("getToolTipImage", List.class, keyClass));
+                language = String.valueOf(addonClass.getField("language").get(discordAddon));
+                advanced = addonClass.getField("showAdvanceDetails").getBoolean(discordAddon);
+            } catch (ReflectiveOperationException | LinkageError unavailable) {
+                // Preserve icon-only fallback when addon APIs/config differ.
+                itemName = Optional.empty();
+                tooltip = Optional.empty();
+                hidden = Optional.empty();
+                components = Optional.empty();
+                tooltipImage = Optional.empty();
+            }
+            // Custom tooltip backgrounds are optional on older addon versions. Resolve the
+            // style on the player's owner scheduler, never from the async image worker.
+            Optional<Method> styleInstance = Optional.empty();
+            Optional<Method> styleLookup = Optional.empty();
+            if (tooltipImage.isPresent()) {
+                try {
+                    Class<?> addonNms = Class.forName(
+                            "com.loohp.interactivechatdiscordsrvaddon.nms.NMSAddon",
+                            false, addonLoader);
+                    Class<?> addonNmsWrapper = Class.forName(
+                            "com.loohp.interactivechatdiscordsrvaddon.nms.NMSAddonWrapper",
+                            false, addonLoader);
+                    styleInstance = Optional.of(addonNms.getMethod("getInstance"));
+                    styleLookup = Optional.of(addonNmsWrapper.getMethod(
+                            "getCustomTooltipResourceLocation", ItemStack.class));
+                } catch (ReflectiveOperationException | LinkageError unsupportedStyle) {
+                    // Keep the standard tooltip and icon when the style API is absent.
+                }
+            }
+            tooltipStyleInstanceMethod = styleInstance;
+            tooltipStyleLookupMethod = styleLookup;
+
+            // The addon falls back to Bukkit.getOnlinePlayers().iterator().next()
+            // if a detached OfflineICPlayer does not resolve to a local player.
+            // A random online entity may be owned by another Folia region thread.
+            Optional<Method> icPlayerLookup = Optional.empty();
+            Optional<Method> localPlayerLookup = Optional.empty();
+            try {
+                Class<?> icPlayer = Class.forName(
+                        "com.loohp.interactivechat.objectholders.ICPlayer",
+                        false, interactiveLoader);
+                icPlayerLookup = Optional.of(offlinePlayerClass.getMethod("getPlayer"));
+                localPlayerLookup = Optional.of(icPlayer.getMethod("getLocalPlayer"));
+            } catch (ReflectiveOperationException | LinkageError unsupportedOwnerLookup) {
+                // Icon rendering remains available; optional tooltip snapshot fails closed.
+            }
+            getSnapshotICPlayerMethod = icPlayerLookup;
+            getLocalICPlayerMethod = localPlayerLookup;
+            itemTitleMethod = itemName;
+            itemTooltipMethod = tooltip;
+            tooltipHiddenMethod = hidden;
+            tooltipComponentsMethod = components;
+            renderTooltipMethod = tooltipImage;
+            addonLanguage = language;
+            detailedTooltipsEnabled = advanced;
         }
 
         @Override
@@ -387,13 +589,11 @@ public final class InteractiveChatStagingArtifactProvider
                     normalizedInventorySize(player.getEnderChest().getSize())
             );
             Object detachedPlayer = newOfflinePlayer(
-                    player,
-                    inventory,
-                    enderChest
+                    player, inventory, enderChest, detachedSnapshotUuid(player.getUniqueId())
             );
 
             List<RenderJob> jobs = new ArrayList<>(3);
-            addItemJob(player, request, inventory, jobs);
+            addItemJob(player, request, inventory, enderChest, detachedPlayer, jobs);
             addInventoryJob(
                     Kind.INVENTORY,
                     useInventory,
@@ -419,6 +619,8 @@ public final class InteractiveChatStagingArtifactProvider
                 Player player,
                 RichChatArtifactRequest request,
                 Inventory inventory,
+                Inventory enderChest,
+                Object detachedPlayer,
                 List<RenderJob> jobs
         ) throws ReflectiveOperationException {
             if (!itemImagesEnabled) {
@@ -434,17 +636,66 @@ public final class InteractiveChatStagingArtifactProvider
             if (match == null) {
                 return;
             }
+            Pattern keyword = (Pattern) invoke(getKeyword, itemPlaceholder.get(null));
+            List<Integer> positions = unescapedMatchPositions(
+                    keyword, request.canonicalPlainText(),
+                    net.enthusia.staff.protocol.ChatBridgeArtifactBundle.MAX_ARTIFACTS / 2);
+            if (positions.isEmpty()) {
+                return;
+            }
             int selectedSlot = player.getInventory().getHeldItemSlot();
             ItemStack item = inventory.getItem(selectedSlot);
             if (item == null) {
                 return;
             }
-            jobs.add(new RenderJob(
-                    Kind.ITEM,
-                    match.position(),
-                    item.clone(),
-                    null
-            ));
+            String name = "";
+            List<?> tooltip = List.of();
+            Object tooltipStyleKey = null;
+            if (itemTitleMethod.isPresent() && itemTooltipMethod.isPresent()
+                    && tooltipHiddenMethod.isPresent() && tooltipComponentsMethod.isPresent()
+                    && getSnapshotICPlayerMethod.isPresent()
+                    && getLocalICPlayerMethod.isPresent()) {
+                try {
+                    // On the player's entity scheduler, use an owner-identity wrapper only
+                    // for the addon tooltip snapshot. The image worker below receives the
+                    // separately detached synthetic-UUID player and never accesses a live player.
+                    Object ownerSnapshot = newOfflinePlayer(player, inventory, enderChest,
+                            player.getUniqueId());
+                    Object resolvedICPlayer = invoke(
+                            getSnapshotICPlayerMethod.orElseThrow(), ownerSnapshot);
+                    Object resolvedLocalPlayer = invoke(
+                            getLocalICPlayerMethod.orElseThrow(), resolvedICPlayer);
+                    if (isMatchingLocalSender(player.getUniqueId(), resolvedLocalPlayer)) {
+                        name = String.valueOf(invoke(itemTitleMethod.orElseThrow(), null, item,
+                                ownerSnapshot, addonLanguage));
+                        Object data = invoke(itemTooltipMethod.orElseThrow(), null, item,
+                                ownerSnapshot, detailedTooltipsEnabled);
+                        if (!Boolean.TRUE.equals(invoke(tooltipHiddenMethod.orElseThrow(), data))) {
+                            Object components = invoke(tooltipComponentsMethod.orElseThrow(), data);
+                            if (components instanceof List<?> list) {
+                                tooltip = List.copyOf(list);
+                            }
+                        }
+                    }
+                } catch (ReflectiveOperationException | RuntimeException unsupported) {
+                    if (LOGGER.isLoggable(System.Logger.Level.DEBUG)) {
+                        LOGGER.log(System.Logger.Level.DEBUG,
+                                "InteractiveChat tooltip snapshot unavailable: {0}",
+                                unsupported.getClass().getSimpleName());
+                    }
+                }
+            }
+            if (!tooltip.isEmpty() && tooltipStyleInstanceMethod.isPresent()
+                    && tooltipStyleLookupMethod.isPresent()) {
+                tooltipStyleKey = captureTooltipStyle(
+                        tooltipStyleInstanceMethod.orElseThrow(),
+                        tooltipStyleLookupMethod.orElseThrow(), item);
+            }
+            for (int position : positions) {
+                jobs.add(new RenderJob(
+                        Kind.ITEM, position, item.clone(), null, name, tooltip, tooltipStyleKey
+                ));
+            }
         }
 
         private void addInventoryJob(
@@ -470,13 +721,14 @@ public final class InteractiveChatStagingArtifactProvider
         private Object newOfflinePlayer(
                 Player player,
                 Inventory inventory,
-                Inventory enderChest
+                Inventory enderChest,
+                UUID snapshotUuid
         ) throws ReflectiveOperationException {
             try {
                 boolean rightHanded = player.getMainHand()
                         == org.bukkit.inventory.MainHand.RIGHT;
                 return offlinePlayerConstructor.newInstance(
-                        detachedSnapshotUuid(player.getUniqueId()),
+                        snapshotUuid,
                         player.getName(),
                         player.getInventory().getHeldItemSlot(),
                         rightHanded,
@@ -572,16 +824,53 @@ public final class InteractiveChatStagingArtifactProvider
                     continue;
                 }
                 String suffix = eventId.toString().substring(0, 8);
+                String iconTitle = job.kind() == Kind.ITEM && !job.itemTitle().isBlank()
+                        ? plainItemTitle(job.itemTitle()) : job.kind().altText;
                 artifacts.add(new RichChatArtifact(
                         job.kind().artifactKind,
                         job.position(),
                         "IC-" + job.kind().filename + "-" + suffix + "-" + ordinal++ + ".png",
                         "image/png",
-                        job.kind().altText,
+                        iconTitle,
                         png
                 ));
+                if (job.kind() == Kind.ITEM && !job.tooltipComponents().isEmpty()
+                        && renderTooltipMethod.isPresent()
+                        && artifacts.size() < net.enthusia.staff.protocol.ChatBridgeArtifactBundle.MAX_ARTIFACTS) {
+                    renderItemTooltip(artifacts, job, suffix, ordinal++);
+                }
             }
-            return artifacts;
+            return withinBundleBudget(artifacts);
+        }
+
+        private void renderItemTooltip(List<RichChatArtifact> artifacts,
+                RenderJob job, String suffix, int ordinal) {
+            try {
+                BufferedImage tooltip = renderDetachedTooltip(
+                        renderTooltipMethod.orElseThrow(), job.tooltipComponents(),
+                        job.tooltipStyleKey());
+                if (tooltip == null) {
+                    return;
+                }
+                byte[] rendered = png(tooltip);
+                if (rendered.length == 0 || rendered.length > RichChatArtifact.MAX_ARTIFACT_BYTES) {
+                    return;
+                }
+                artifacts.add(new RichChatArtifact(
+                        RichChatArtifact.Kind.TOOLTIP,
+                        job.position(),
+                        "IC-ToolTip-" + suffix + "-" + ordinal + ".png",
+                        "image/png",
+                        "Minecraft item details",
+                        rendered
+                ));
+            } catch (ReflectiveOperationException | RuntimeException failure) {
+                if (LOGGER.isLoggable(System.Logger.Level.DEBUG)) {
+                    LOGGER.log(System.Logger.Level.DEBUG,
+                            "InteractiveChat tooltip image unavailable: {0}",
+                            failure.getClass().getSimpleName());
+                }
+            }
         }
 
         private static byte[] png(BufferedImage image) {

@@ -9,7 +9,7 @@ Last updated: 2026-10-12 (source-verified event matrix and punishment-note priva
 |---|---|---|---|
 | `punishments` | #in-game-punishments | ⚠️ CONFIG REQUIRED | Central log for every punishment originating from EnthusiaStaff's authoritative event pipeline (external anticheat sources not covered). |
 | `logs-staffmode` | #staff-logs | ⚠️ CONFIG REQUIRED | Staff entry/exit, vanish and detailed StaffActionLogger events, now using the supported delivery route. |
-| `reports` | Private #staff-reviews or a replacement report channel | ⚠️ CONFIG REQUIRED | Existing report event delivery; the obsolete #reports channel itself need not be retained. |
+| `reports` | Private #staff-reviews or a replacement report channel | ⚠️ CONFIG REQUIRED | Private report notifications with current reporter/target usernames and readable reason labels; keep this destination restricted to staff. |
 | `alerts` | Private #staff-reviews | ⚠️ CONFIG REQUIRED | Punishment approval required, alt-suspicion join, inherited-muted chat attempt; optional exactly one reviewer-role ping. |
 
 **Important:** All four webhook destinations currently require valid configured URLs whenever `discord.enabled=true`. These messages now use clean embeds. See `docs/discord-integration-rollout-20261010.md` for the exact enabled/not-yet-enabled breakdown and bot-side approval blockers.

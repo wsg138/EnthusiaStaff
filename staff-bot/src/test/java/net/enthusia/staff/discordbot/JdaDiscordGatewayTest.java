@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.Set;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
 import net.dv8tion.jda.api.requests.GatewayIntent;
@@ -15,6 +16,7 @@ import net.enthusia.staff.protocol.ChatBridgeRenderedMessage;
 import org.junit.jupiter.api.Test;
 
 class JdaDiscordGatewayTest {
+    private static final String CHAT_PLAYER_NAME = "Player";
     @Test
     void restrictionRuntimeEnablesOnlyMemberOverrideCache() {
         assertEquals(Set.of(CacheFlag.MEMBER_OVERRIDES), JdaDiscordGateway.requiredCacheFlags());
@@ -79,96 +81,51 @@ class JdaDiscordGatewayTest {
         assertTrue(invoked.get());
     }
     @Test
-    void chatContentIncludesSourceAndSenderAndHonorsDiscordLimit() {
+    void chatContentIsOnlySenderAndCanonicalMessageWithoutSourceOrRanks() {
         ChatBridgeOutboundMessage shortMessage = chatMessage("hello");
-        assertEquals("[SMP] Player: hello", JdaDiscordGateway.chatContent(shortMessage));
+        assertEquals("Player: hello", JdaDiscordGateway.chatContent(shortMessage));
 
-        ChatBridgeOutboundMessage longMessage = chatMessage("x".repeat(2_000));
-        String rendered = JdaDiscordGateway.chatContent(longMessage);
+        String rendered = JdaDiscordGateway.chatContent(chatMessage("x".repeat(2_000)));
         assertEquals(2_000, rendered.length());
-        assertTrue(rendered.startsWith("[SMP] Player: "));
+        assertTrue(rendered.startsWith("Player: "));
 
-        ChatBridgeOutboundMessage unicodeBoundary = chatMessage("x".repeat(1_985) + "\uD83D\uDE00");
-        String unicodeRendered = JdaDiscordGateway.chatContent(unicodeBoundary);
-        assertFalse(Character.isHighSurrogate(unicodeRendered.charAt(unicodeRendered.length() - 1)));
+        String unicodeRendered = JdaDiscordGateway.chatContent(
+                chatMessage("x".repeat(1_991) + "\uD83D\uDE00"));
         assertTrue(unicodeRendered.length() <= 2_000);
+        assertFalse(Character.isHighSurrogate(unicodeRendered.charAt(unicodeRendered.length() - 1)));
     }
 
     @Test
-    void linkedSenderPresentationIsAdditiveAndSafeAcrossFallbacks() {
-        ChatBridgeOutboundMessage plain = chatMessage("hello");
-        assertEquals(
-                "[SMP · @DiscordName] Player: hello",
-                JdaDiscordGateway.chatContent(plain, java.util.Optional.of("@DiscordName"))
-        );
+    void primaryLinkedAccountGetsMentionButAltUsesMinecraftUsername() {
+        ChatBridgeOutboundMessage message = chatMessage("hello");
+        assertEquals("<@123456789" + "012345678>: hello",
+                JdaDiscordGateway.chatContent(message,
+                        Optional.of("123456789" + "012345678"), CHAT_PLAYER_NAME));
+        assertEquals("AltPlayer: hello",
+                JdaDiscordGateway.chatContent(message, Optional.empty(), "AltPlayer"));
+    }
 
-        ChatBridgeRenderedMessage rendered = renderedMessage(
-                "hello",
-                "**[VIP] Player:** *hello*",
-                "[VIP] Player: hello"
-        );
-        assertEquals(
-                "[SMP · @DiscordName] **[VIP] Player:** *hello*",
+    @Test
+    void renderedChatUsesOnlyBodyNotWholeDecoratedRoseChatLine() {
+        ChatBridgeRenderedMessage message = renderedMessage(
+                "hello", "**[VIP] Player:** *hello*", "[VIP] Player: hello");
+        assertEquals("Player: hello", JdaDiscordGateway.renderedChatContent(message));
+        assertEquals("<@123456789" + "012345678>: hello",
                 JdaDiscordGateway.renderedChatContent(
-                        rendered,
-                        java.util.Optional.of("@DiscordName")
-                )
-        );
+                        message, Optional.of("123456789" + "012345678"), CHAT_PLAYER_NAME));
     }
 
     @Test
-    void linkedPrefixStillHonorsDiscordContentLimit() {
-        ChatBridgeRenderedMessage rendered = renderedMessage(
-                "hello",
-                "*".repeat(2_100),
-                "[VIP] Player: " + "x".repeat(2_100)
-        );
-
-        String content = JdaDiscordGateway.renderedChatContent(
-                rendered,
-                java.util.Optional.of("@DiscordName")
-        );
-
-        assertEquals(2_000, content.length());
-        assertTrue(content.startsWith("[SMP · @DiscordName] [VIP] Player: "));
-        assertFalse(Character.isHighSurrogate(content.charAt(content.length() - 1)));
+    void canonicalBodyFallsBackAfterDecoratedTransportMarkersAreStripped() {
+        ChatBridgeRenderedMessage message = renderedMessage(
+                "hello", "<reset>**[VIP] Player:** *hello*", "[VIP] Player: hello");
+        assertEquals("Player: hello", JdaDiscordGateway.renderedChatContent(message));
     }
 
     @Test
     void discordDisplayNamesAreEscapedBeforeMarkdownPresentation() {
-        assertEquals(
-                "Name\\*With\\_Markdown\\|",
-                JdaDiscordGateway.escapeDiscordMarkdown("Name*With_Markdown|")
-        );
-        assertEquals("linked", JdaDiscordGateway.escapeDiscordMarkdown("\n\t"));
-    }
-
-    @Test
-    void renderedChatUsesResolvedMarkdownWithoutDuplicatingSender() {
-        ChatBridgeRenderedMessage message = renderedMessage(
-                "hello",
-                "**[VIP] Player:** *hello*",
-                "[VIP] Player: hello"
-        );
-
-        assertEquals(
-                "[SMP] **[VIP] Player:** *hello*",
-                JdaDiscordGateway.renderedChatContent(message)
-        );
-    }
-
-    @Test
-    void renderedChatFallsBackToPlainBeforeTruncatingBrokenMarkdown() {
-        ChatBridgeRenderedMessage message = renderedMessage(
-                "hello",
-                "*".repeat(2_100),
-                "[VIP] Player: " + "x".repeat(2_100)
-        );
-
-        String rendered = JdaDiscordGateway.renderedChatContent(message);
-        assertEquals(2_000, rendered.length());
-        assertTrue(rendered.startsWith("[SMP] [VIP] Player: "));
-        assertFalse(Character.isHighSurrogate(rendered.charAt(rendered.length() - 1)));
+        assertEquals("Name\\*With\\_Markdown\\|",
+                JdaDiscordGateway.escapeDiscordMarkdown("Name*With_Markdown|"));
     }
 
     private static ChatBridgeRenderedMessage renderedMessage(
@@ -186,7 +143,7 @@ class JdaDiscordGatewayTest {
                 "SMP",
                 "global",
                 UUID.randomUUID(),
-                "Player",
+                CHAT_PLAYER_NAME,
                 canonical,
                 canonical,
                 canonical,
@@ -208,7 +165,7 @@ class JdaDiscordGatewayTest {
                 "SMP",
                 "global",
                 UUID.randomUUID(),
-                "Player",
+                CHAT_PLAYER_NAME,
                 text
         );
     }

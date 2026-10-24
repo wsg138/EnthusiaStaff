@@ -74,10 +74,10 @@ class StaffToolSessionPolicyTest {
     }
 
     @Test
-    void copiedOrMutatedToolOutsideCanonicalSlotAndMaterialFailsClosed() {
+    void movesBetweenHotbarSlotsWorkButOutsideHotbarOrWrongMaterialFailsClosed() {
         StaffToolDefinition tool = StaffToolDefinition.REPORTS;
         assertEquals(
-                StaffToolSessionPolicy.Status.SLOT_MISMATCH,
+                StaffToolSessionPolicy.Status.VALID,
                 StaffToolSessionPolicy.validate(
                         PLAYER_ID,
                         TOKEN,
@@ -87,6 +87,13 @@ class StaffToolSessionPolicyTest {
                         PLAYER_ID.toString(),
                         TOKEN,
                         StaffRank.ADMIN
+                )
+        );
+        assertEquals(
+                StaffToolSessionPolicy.Status.SLOT_MISMATCH,
+                StaffToolSessionPolicy.validate(
+                        PLAYER_ID, TOKEN, 18, tool, tool.material(),
+                        PLAYER_ID.toString(), TOKEN, StaffRank.ADMIN
                 )
         );
         assertEquals(

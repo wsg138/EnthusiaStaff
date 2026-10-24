@@ -110,6 +110,7 @@ final class JdaStaffModerationListener extends ListenerAdapter {
     private final SignedComponentCodec reviewComponents;
     private final Optional<DiscordInvestigationCommandController> investigations;
     private final java.util.concurrent.atomic.AtomicBoolean enabled = new java.util.concurrent.atomic.AtomicBoolean();
+    private final boolean accountAgeGateEnabled;
 
     JdaStaffModerationListener(
             long guildId,
@@ -117,22 +118,33 @@ final class JdaStaffModerationListener extends ListenerAdapter {
             InteractionReplayGuard interactions,
             StaffModerationRuntime moderation
     ) {
-        this(guildId, workers, interactions, moderation, Optional.empty());
+        this(guildId, workers, interactions, moderation, Optional.empty(), false);
     }
 
     JdaStaffModerationListener(
             long guildId, StaffBotWorkerPool workers, InteractionReplayGuard interactions,
             StaffModerationRuntime moderation, Optional<URI> moderationWebUri, String discordToken
     ) {
+        this(guildId, workers, interactions, moderation, moderationWebUri, discordToken, false);
+    }
+
+    JdaStaffModerationListener(
+            long guildId, StaffBotWorkerPool workers, InteractionReplayGuard interactions,
+            StaffModerationRuntime moderation, Optional<URI> moderationWebUri,
+            String discordToken, boolean accountAgeGateEnabled
+    ) {
         this(guildId, workers, interactions, moderation,
-                moderationWebUri.map(uri -> new ModerationPreviewHostedLaunchIssuer(uri, discordToken, "production")));
+                moderationWebUri.map(uri -> new ModerationPreviewHostedLaunchIssuer(uri, discordToken, "production")),
+                accountAgeGateEnabled);
     }
 
     private JdaStaffModerationListener(
             long guildId, StaffBotWorkerPool workers, InteractionReplayGuard interactions,
-            StaffModerationRuntime moderation, Optional<ModerationPreviewHostedLaunchIssuer> webIssuer
+            StaffModerationRuntime moderation, Optional<ModerationPreviewHostedLaunchIssuer> webIssuer,
+            boolean accountAgeGateEnabled
     ) {
         this.guildId = guildId;
+        this.accountAgeGateEnabled = accountAgeGateEnabled;
         this.workers = workers;
         this.interactions = interactions;
         this.punishments = moderation.punishmentService().map(DiscordPunishmentCommandController::new);
@@ -163,7 +175,7 @@ final class JdaStaffModerationListener extends ListenerAdapter {
         }
         List<CommandData> expected = commands(
                 punishments.isPresent(), webIssuer.isPresent(), commandBridge.isPresent(),
-                investigations.isPresent());
+                investigations.isPresent(), accountAgeGateEnabled);
         guild.updateCommands().addCommands(expected).queue(
                 registered -> commandsRegistered(registered, expected.size()),
                 this::commandRegistrationFailed
@@ -189,6 +201,10 @@ final class JdaStaffModerationListener extends ListenerAdapter {
 
     @Override
     public void onSlashCommandInteraction(SlashCommandInteractionEvent event) {
+        // This command is exclusively handled by DiscordAccountAgeGateListener.
+        if (DiscordAccountAgeGateListener.COMMAND.equals(event.getName())) {
+            return;
+        }
         if (!accepted(guildId(event.getGuild()))) {
             unavailable(event);
             return;
@@ -251,6 +267,22 @@ final class JdaStaffModerationListener extends ListenerAdapter {
         }
     }
 
+    /** Helpers and Developers may triage reports, never punishment approvals or alt alerts. */
+    static boolean reviewQueueAllowed(net.enthusia.staff.domain.auth.StaffRank rank,
+            ReviewQueueView view) {
+        if (rank == null || view == null || rank == net.enthusia.staff.domain.auth.StaffRank.SYSTEM) {
+            return false;
+        }
+        return view == ReviewQueueView.REPORTS || rank.canApprovePunishmentRequests();
+    }
+
+    /** Paper's report mutation endpoint accepts only these ranks, with live duty also required. */
+    static boolean canMutateReportInDiscord(net.enthusia.staff.domain.auth.StaffRank rank) {
+        return rank == net.enthusia.staff.domain.auth.StaffRank.MOD
+                || rank == net.enthusia.staff.domain.auth.StaffRank.ADMIN
+                || rank == net.enthusia.staff.domain.auth.StaffRank.FOUNDER;
+    }
+
     /** Private interactive queue. Every button is HMAC-bound to the invoker and short-lived. */
     private void dispatchReviewQueue(SlashCommandInteractionEvent event, long actorId, String actorName) {
         ReviewQueueView view = ReviewQueueView.parse(option(event, REVIEW_VIEW_OPTION, "all"));
@@ -263,10 +295,12 @@ final class JdaStaffModerationListener extends ListenerAdapter {
                 try {
                     var actor = actors.invoker(
                             new DiscordUserId(Long.toUnsignedString(actorId)), actorName);
-                    if (!actor.rank().canApprovePunishmentRequests()) {
-                        hook.sendMessage("Current Minecraft moderator rank is required.").queue();
+                    if (!reviewQueueAllowed(actor.rank(), view)) {
+                        hook.sendMessage("Current Minecraft Mod+ rank is required for this queue. "
+                                + "Helpers and Developers may use view:reports.").queue();
                         return;
                     }
+                    boolean reportActionsEnabled = canMutateReportInDiscord(actor.rank());
                     var pulse = moderationRuntime.reviewPulse();
                     var altAlerts = view.showAlts()
                             ? moderationRuntime.pendingAltAlerts(view == ReviewQueueView.ALL ? 2 : 5)
@@ -280,15 +314,27 @@ final class JdaStaffModerationListener extends ListenerAdapter {
                                     view == ReviewQueueView.ALL ? 5 - reports.size() - altAlerts.size() : 5)
                             : java.util.List.<net.enthusia.staff.persistence.DiscordStaffReadRuntime.PendingReview>of();
                     StringBuilder message = new StringBuilder(512).append("**Staff review center · ")
-                            .append(view.name().toLowerCase(java.util.Locale.ROOT)).append("**\n")
-                            .append("Pending punishments: ").append(pulse.pendingPunishmentRequests())
-                            .append(" | Open reports: ").append(pulse.openReports())
-                            .append(" | Claimed reports: ").append(pulse.claimedReports())
-                            .append(" | Alt alert events (24h): ").append(pulse.altSignalsInLastDay())
-                            .append("\n");
+                            .append(view.name().toLowerCase(java.util.Locale.ROOT)).append("**\n");
+                    if (view == ReviewQueueView.REPORTS) {
+                        message.append("Open reports: ").append(pulse.openReports())
+                                .append(" | Claimed reports: ").append(pulse.claimedReports())
+                                .append("\n");
+                    } else {
+                        message.append("Pending punishments: ").append(pulse.pendingPunishmentRequests())
+                                .append(" | Open reports: ").append(pulse.openReports())
+                                .append(" | Claimed reports: ").append(pulse.claimedReports())
+                                .append(" | Alt alert events (24h): ").append(pulse.altSignalsInLastDay())
+                                .append("\n");
+                    }
                     if (reviews.isEmpty() && reports.isEmpty() && altAlerts.isEmpty()) {
-                        hook.sendMessage(message.append("No actionable items in this view. Try another /review-queue view.").toString())
-                                .queue();
+                        if (view == ReviewQueueView.REPORTS) {
+                            hook.sendMessageEmbeds(
+                                    DiscordReportReviewCard.render(pulse, reports, reportActionsEnabled)).queue();
+                        } else {
+                            hook.sendMessage(message.append(
+                                    "No actionable items in this view. Try another /review-queue view.").toString())
+                                    .queue();
+                        }
                         return;
                     }
                     java.util.List<ActionRow> rows = new ArrayList<>();
@@ -311,23 +357,27 @@ final class JdaStaffModerationListener extends ListenerAdapter {
                     }
                     for (var report : reports) {
                         var target = SignedComponentCodec.TargetRef.report(report.reportId(), report.revision());
-                        message.append("Report ").append(number).append(". **").append(report.reasonId())
-                                .append("** · ").append(report.state()).append(" · Target: `")
-                                .append(report.targetId()).append("` · Report: `")
+                        message.append("Report ").append(number).append(". **")
+                                .append(net.enthusia.staff.domain.report.ReportReasonLabel.display(report.reasonId()))
+                                .append("** · ").append(report.state()).append(" · Target: ")
+                                .append(report.targetName()).append(" · Reported by: ")
+                                .append(report.reporterName()).append(" · Report: `")
                                 .append(report.reportId()).append("` rev=")
                                 .append(report.revision()).append("\n");
-                        if ("OPEN".equals(report.state())) {
-                            rows.add(ActionRow.of(Button.primary(reviewComponents.encode(
-                                    SignedComponentCodec.Action.REPORT_CLAIM, target, actorId),
-                                    "Claim report " + number)));
-                        } else {
-                            rows.add(ActionRow.of(
-                                    Button.success(reviewComponents.encode(
-                                            SignedComponentCodec.Action.REPORT_CLOSE, target, actorId),
-                                            "Close report " + number),
-                                    Button.secondary(reviewComponents.encode(
-                                            SignedComponentCodec.Action.REPORT_NO_VIOLATION, target, actorId),
-                                            "No violation " + number)));
+                        if (reportActionsEnabled) {
+                            if ("OPEN".equals(report.state())) {
+                                rows.add(ActionRow.of(Button.primary(reviewComponents.encode(
+                                        SignedComponentCodec.Action.REPORT_CLAIM, target, actorId),
+                                        "Claim report " + number)));
+                            } else {
+                                rows.add(ActionRow.of(
+                                        Button.success(reviewComponents.encode(
+                                                SignedComponentCodec.Action.REPORT_CLOSE, target, actorId),
+                                                "Close report " + number),
+                                        Button.secondary(reviewComponents.encode(
+                                                SignedComponentCodec.Action.REPORT_NO_VIOLATION, target, actorId),
+                                                "No violation " + number)));
+                            }
                         }
                         number++;
                     }
@@ -351,7 +401,17 @@ final class JdaStaffModerationListener extends ListenerAdapter {
                     }
                     message.append("Showing at most five items; select another /review-queue view for more. "
                             + "Controls expire shortly. Every action rechecks Minecraft authority and state.");
-                    hook.sendMessage(message.toString()).addComponents(rows).queue();
+                    if (view == ReviewQueueView.REPORTS) {
+                        var reply = hook.sendMessageEmbeds(
+                                DiscordReportReviewCard.render(pulse, reports, reportActionsEnabled));
+                        if (rows.isEmpty()) {
+                            reply.queue();
+                        } else {
+                            reply.addComponents(rows).queue();
+                        }
+                    } else {
+                        hook.sendMessage(message.toString()).addComponents(rows).queue();
+                    }
                 } catch (RuntimeException exception) {
                     log("discord_review_queue_failed", exception);
                     hook.sendMessage("The private review queue could not be loaded.").queue();
@@ -551,7 +611,8 @@ final class JdaStaffModerationListener extends ListenerAdapter {
             String decision, String note) {
         var actor = actors.invoker(new DiscordUserId(Long.toUnsignedString(actorId)), actorName);
         var response = reviewAuthority.review(decision, java.util.Map.of(
-                "actorId", actor.id().toString(), "requestId", requestId.toString(), "note", note));
+                "actorId", actor.id().toString(), "requestId", requestId.toString(),
+                "note", note, "discordUserId", Long.toUnsignedString(actorId)));
         return switch (response.path("state").asText()) {
             case "APPROVED" -> "Approved and saved; network enforcement queued. Case: "
                     + response.path("caseId").asText();
@@ -591,7 +652,8 @@ final class JdaStaffModerationListener extends ListenerAdapter {
                     var response = reviewAuthority.review(decision, java.util.Map.of(
                             "actorId", actor.id().toString(),
                             "requestId", java.util.UUID.fromString(id).toString(),
-                            "note", note
+                            "note", note,
+                            "discordUserId", Long.toUnsignedString(actorId)
                     ));
                     String state = response.path("state").asText();
                     if ("APPROVED".equals(state)) {
@@ -1340,6 +1402,12 @@ final class JdaStaffModerationListener extends ListenerAdapter {
     static List<CommandData> commands(
             boolean includePunishments, boolean webEnabled,
             boolean includeConsole, boolean includeInvestigations) {
+        return commands(includePunishments, webEnabled, includeConsole, includeInvestigations, false);
+    }
+
+    static List<CommandData> commands(
+            boolean includePunishments, boolean webEnabled,
+            boolean includeConsole, boolean includeInvestigations, boolean includeAgeGate) {
         DefaultMemberPermissions discovery = DefaultMemberPermissions.DISABLED;
         List<CommandData> commands = new ArrayList<>(List.of(
                 moderateSlash(MODERATE, webEnabled, discovery),
@@ -1357,20 +1425,8 @@ final class JdaStaffModerationListener extends ListenerAdapter {
                 userSlash(HISTORY, "View recent moderation history", discovery),
                 userSlash(NOTES, "View recent private staff notes", discovery),
                 stringSlash(CASE, "View a moderation case by exact ID", CASE_ID_OPTION, "16-character case ID", discovery),
-                Commands.slash(REVIEW_QUEUE, "Review punishments, reports and alt-evasion alerts")
-                        .addOptions(new OptionData(OptionType.STRING, REVIEW_VIEW_OPTION,
-                                "Choose a queue to see up to five matching cases", false)
-                                .addChoice("All (mixed)", "all")
-                                .addChoice("Punishment approvals", "punishments")
-                                .addChoice("Player reports", "reports")
-                                .addChoice("Alt-evasion alerts", "alts"))
-                        .setDefaultPermissions(discovery),
-                Commands.slash(REVIEW_REQUEST, "Approve or deny a Minecraft punishment request")
-                        .addOption(OptionType.STRING, REVIEW_ID, "Exact request UUID", true)
-                        .addOptions(new OptionData(OptionType.STRING, REVIEW_DECISION, "Review decision", true)
-                                .addChoice("Approve", "approve").addChoice("Deny", "deny"))
-                        .addOption(OptionType.STRING, REVIEW_NOTE, "Required for denial", false)
-                        .setDefaultPermissions(discovery)
+                reviewQueueSlash(discovery),
+                reviewRequestSlash(discovery)
         ));
         if (includePunishments) {
             commands.addAll(punishmentCommands(discovery));
@@ -1384,7 +1440,30 @@ final class JdaStaffModerationListener extends ListenerAdapter {
         if (includeInvestigations) {
             commands.addAll(DiscordInvestigationCommandController.commands(discovery));
         }
+        if (includeAgeGate) {
+            commands.add(DiscordAccountAgeGateListener.command());
+        }
         return List.copyOf(commands);
+    }
+
+    private static CommandData reviewQueueSlash(DefaultMemberPermissions discovery) {
+        return Commands.slash(REVIEW_QUEUE, "Review punishments, reports and alt-evasion alerts")
+                .addOptions(new OptionData(OptionType.STRING, REVIEW_VIEW_OPTION,
+                        "Choose a queue to see up to five matching cases", false)
+                        .addChoice("All (mixed)", "all")
+                        .addChoice("Punishment approvals", "punishments")
+                        .addChoice("Player reports", "reports")
+                        .addChoice("Alt-evasion alerts", "alts"))
+                .setDefaultPermissions(discovery);
+    }
+
+    private static CommandData reviewRequestSlash(DefaultMemberPermissions discovery) {
+        return Commands.slash(REVIEW_REQUEST, "Approve or deny a Minecraft punishment request")
+                .addOption(OptionType.STRING, REVIEW_ID, "Exact request UUID", true)
+                .addOptions(new OptionData(OptionType.STRING, REVIEW_DECISION, "Review decision", true)
+                        .addChoice("Approve", "approve").addChoice("Deny", "deny"))
+                .addOption(OptionType.STRING, REVIEW_NOTE, "Required for denial", false)
+                .setDefaultPermissions(discovery);
     }
 
     private static CommandData moderateSlash(

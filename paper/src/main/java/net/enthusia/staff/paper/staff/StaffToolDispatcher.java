@@ -120,11 +120,23 @@ public final class StaffToolDispatcher implements Listener, CommandExecutor, Tab
             return;
         }
         Player player = event.getPlayer();
+        // A staff tool must not hijack a chest/barrel/shulker right-click.
+        // Normal rank-based container permissions still apply downstream.
+        if (prefersContainerOpen(event.getAction(),
+                event.getAction() == Action.RIGHT_CLICK_BLOCK
+                        && StaffModeWorldInteractionListener.isContainer(event.getClickedBlock()))) {
+            return;
+        }
         StaffToolResolution resolution = resolveHeldTool(player);
         if (!resolution.tagged()) {
             return;
         }
         event.setCancelled(true);
+        if (resolution.valid() && resolution.tool() == StaffToolDefinition.SPECTATE
+                && event.getAction() == Action.RIGHT_CLICK_AIR && spectateFlow.stop(player)) {
+            player.sendMessage(StaffMessageStyle.style(Component.text("Stopped following the player.", NamedTextColor.GREEN)));
+            return;
+        }
         if (resolution.valid()
                 && resolution.tool() == StaffToolDefinition.STAFF_TOOLS
                 && player.isSneaking()) {
@@ -138,6 +150,10 @@ public final class StaffToolDispatcher implements Listener, CommandExecutor, Tab
             return;
         }
         dispatchResolved(player, resolution, null);
+    }
+
+    static boolean prefersContainerOpen(Action action, boolean clickedContainer) {
+        return action == Action.RIGHT_CLICK_BLOCK && clickedContainer;
     }
 
     private static boolean isPrimaryToolClick(PlayerInteractEvent event) {
@@ -234,6 +250,7 @@ public final class StaffToolDispatcher implements Listener, CommandExecutor, Tab
             return;
         }
         action.execute(player, targetId);
+        auditToolInvocation(player, tool, targetId != null);
     }
 
     void dispatchFromMenu(Player player, StaffToolDefinition tool, UUID targetId) {
@@ -297,6 +314,7 @@ public final class StaffToolDispatcher implements Listener, CommandExecutor, Tab
         }
         player.closeInventory();
         runCommand(player, action.command(target));
+        auditToolInvocation(player, StaffToolDefinition.PLAYER_INSPECTOR, target != null && !target.isBlank());
     }
 
     void showMenuHelp(Player player) {
@@ -326,6 +344,7 @@ public final class StaffToolDispatcher implements Listener, CommandExecutor, Tab
             return;
         }
         cheatTester.showConfiguration(player);
+        auditToolInvocation(player, tool, false);
     }
 
     private void dispatchCheatRun(Player player, Player target, StaffToolDefinition tool) {
@@ -340,6 +359,19 @@ public final class StaffToolDispatcher implements Listener, CommandExecutor, Tab
             return;
         }
         cheatTester.runSelected(player, target);
+        auditToolInvocation(player, tool, true);
+    }
+
+    // This audit means an authorized tool handler was invoked, not that an
+    // asynchronous command, teleport or downstream target operation succeeded.
+    // Never include command arguments, target names/IDs or private case details.
+    private void auditToolInvocation(Player actor, StaffToolDefinition tool, boolean targetSupplied) {
+        staffMode.logStaffAction(actor, "staff-tool-invoked", toolInvocationDetail(tool, targetSupplied));
+    }
+
+    static String toolInvocationDetail(StaffToolDefinition tool, boolean targetSupplied) {
+        return "tool=" + java.util.Objects.requireNonNull(tool, "tool").name()
+                + " target=" + (targetSupplied ? "supplied" : "none");
     }
 
     private boolean hasToolAuthority(Player player, StaffToolDefinition tool) {

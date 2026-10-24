@@ -183,11 +183,44 @@ final class PaperIntegrationManager implements Listener {
                         dependencies.policy().authorization()),
                 new net.enthusia.staff.paper.auth.StaffWebReviewService.Dependencies(
                         clock(), dependencies.policy().writeMode(), dependencies.stores().punishmentRequests(),
-                        dependencies.stores().staffSessions()),
+                        dependencies.stores().staffSessions(),
+                        () -> plugin().getConfig().getBoolean(
+                                "punishment-request-discord-offline.enabled", false),
+                        (actorId, discordUserId) -> currentVerifiedDiscordLink(actorId, discordUserId),
+                        dependencies.policy().locallyAppliedStaffMode()),
                 new net.enthusia.staff.paper.auth.StaffWebReportService.Dependencies(
                         clock(), dependencies.policy().writeMode(), dependencies.stores().reportStore(),
                         dependencies.stores().staffSessions()))
                 .ifPresent(endpoint -> discordStaffAuthority = endpoint);
+    }
+
+    private boolean currentVerifiedDiscordLink(java.util.UUID actorId, String discordUserId) {
+        var identities = dependencies.stores().discordModerationStore().get();
+        if (identities == null) {
+            return false;
+        }
+        return identities.currentLink(actorId)
+                .filter(link -> verifiedReviewLink(link, actorId, discordUserId))
+                .isPresent();
+    }
+
+    static boolean verifiedReviewLink(
+            net.enthusia.staff.domain.ports.DiscordModerationPersistenceStore.VersionedLink link,
+            java.util.UUID actorId,
+            String discordUserId
+    ) {
+        return link != null
+                && actorId != null
+                && discordUserId != null
+                && link.link().active()
+                && link.link().minecraftPlayerId().equals(actorId)
+                && link.link().discordUserId().value().equals(discordUserId)
+                // Imported/recovery links are not sufficient proof of Discord ownership
+                // for offline approval of a Minecraft punishment.
+                && switch (link.link().source()) {
+                    case DISCORD_CODE, MINECRAFT_CODE -> true;
+                    default -> false;
+                };
     }
 
     void deliverNetworkPunishment(net.enthusia.staff.domain.network.PunishmentCommitNotification notification) {
@@ -857,7 +890,8 @@ final class PaperIntegrationManager implements Listener {
             Supplier<OperationalMode> authoritativeMode,
             Supplier<OperationalMode> writeMode,
             AuthorizationPolicy authorization,
-            AtomicReasonPolicyRepository reasons
+            AtomicReasonPolicyRepository reasons,
+            java.util.function.Predicate<java.util.UUID> locallyAppliedStaffMode
     ) {
     }
 
@@ -868,6 +902,7 @@ final class PaperIntegrationManager implements Listener {
             Supplier<net.enthusia.staff.domain.ports.StaffSessionStore> staffSessions,
             Supplier<net.enthusia.staff.domain.ports.ReportStore> reportStore,
             Supplier<net.enthusia.staff.domain.ports.PlayerDirectory> players,
+            Supplier<net.enthusia.staff.domain.ports.DiscordModerationPersistenceStore> discordModerationStore,
             Supplier<EconomyJournalStore> economyJournal,
             Supplier<InventoryJournalStore> inventoryJournal
     ) {

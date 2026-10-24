@@ -268,6 +268,8 @@ final class PaperCommandRegistrar {
                 workers()
         );
         bindCompleting("report", report, report);
+        plugin().getServer().getPluginManager().registerEvents(report.reasonMenu(), plugin());
+        plugin().getServer().getPluginManager().registerEvents(report, plugin());
         ClientCommand client = new ClientCommand(
                 plugin(), dependencies.evidence().clientEvidence(),
                 storage(PaperStorageBindings::clientEvidenceStore), workers()
@@ -281,7 +283,8 @@ final class PaperCommandRegistrar {
                 workers()
         );
         plugin().getServer().getPluginManager().registerEvents(reportGui, plugin());
-        ReportsCommand reports = new ReportsCommand(plugin(), clock(), activeReportStore, workers(), reportGui);
+        ReportsCommand reports = new ReportsCommand(plugin(), clock(), activeReportStore,
+                storage(PaperStorageBindings::playerDirectory), workers(), reportGui);
         bindCompleting("reports", reports, reports);
     }
 

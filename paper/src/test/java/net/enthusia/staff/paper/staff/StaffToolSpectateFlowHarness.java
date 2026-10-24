@@ -168,6 +168,8 @@ final class StaffToolSpectateFlowHarness {
         final boolean actorHandle;
         final int entityId;
         final AtomicBoolean online = new AtomicBoolean(true);
+        GameMode gameMode;
+        Location location = new Location(null, 10.0, 64.0, -5.0);
         final AtomicBoolean permission = new AtomicBoolean(true);
         final AtomicBoolean exempt = new AtomicBoolean();
         final AtomicBoolean teleportThrows = new AtomicBoolean();
@@ -188,6 +190,7 @@ final class StaffToolSpectateFlowHarness {
             this.name = name;
             this.actorHandle = actorHandle;
             this.entityId = nextEntityId++;
+            this.gameMode = actorHandle ? GameMode.SPECTATOR : GameMode.SURVIVAL;
         }
 
         void retireNext() {
@@ -254,8 +257,9 @@ final class StaffToolSpectateFlowHarness {
         @SuppressWarnings("unchecked")
         private Object scheduleRecurring(Object[] arguments) {
             assertSame(plugin, arguments[0]);
-            assertEquals(1L, arguments[3]);
-            assertEquals(1L, arguments[4]);
+            long interval = actorHandle && gameMode != GameMode.SPECTATOR ? 5L : 1L;
+            assertEquals(interval, arguments[3]);
+            assertEquals(interval, arguments[4]);
             Consumer<ScheduledTask> owned = (Consumer<ScheduledTask>) arguments[1];
             Runnable retired = (Runnable) arguments[2];
             Recurring task = new Recurring(owned, retired);
@@ -300,7 +304,7 @@ final class StaffToolSpectateFlowHarness {
             return switch (method.getName()) {
                 case "getUniqueId" -> id;
                 case "getName" -> name;
-                case "getLocation" -> new Location(null, 10.0, 64.0, -5.0);
+                case "getLocation" -> location.clone();
                 case "getEntityId" -> entityId;
                 case "getScheduler" -> scheduler;
                 case "isOnline" -> online.get();
@@ -312,7 +316,7 @@ final class StaffToolSpectateFlowHarness {
         private Object playerActionCall(Method method, Object[] arguments) {
             return switch (method.getName()) {
                 case "hasPermission" -> permission((String) arguments[0]);
-                case "getGameMode" -> actorHandle ? GameMode.SPECTATOR : GameMode.SURVIVAL;
+                case "getGameMode" -> gameMode;
                 case "teleportAsync" -> teleport((Location) arguments[0]);
                 case "setSpectatorTarget" -> setSpectatorTarget((Player) arguments[0]);
                 case "sendMessage" -> sendMessage(arguments[0]);

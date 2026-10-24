@@ -1247,6 +1247,8 @@ public final class StaffModeManager implements Listener {
         return unrestricted || StaffModeAccessPolicy.allowsCombatTesting(rank);
     }
 
+    // Preserve HIGHEST enforcement. Only MONITOR owns successful item movement,
+    // so third-party region/protection plugins cannot cause false success records.
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     public void onDrop(PlayerDropItemEvent event) {
         Player player = event.getPlayer();
@@ -1259,18 +1261,22 @@ public final class StaffModeManager implements Listener {
             audit(player, rank, "staff-tool-drop-denied", "protected staff tool");
             return;
         }
-        if (isUnrestricted(player)) {
-            audit(player, rank, "item-drop", describe(event.getItemDrop().getItemStack()));
-            return;
-        }
-        StaffDutyTier tier = StaffDutyTier.of(rank);
-        if (tier == null || tier == StaffDutyTier.HELPER) {
+        if (!permitsInventoryMove(isUnrestricted(player), rank)) {
             event.setCancelled(true);
             audit(player, rank, "item-drop-denied", describe(event.getItemDrop().getItemStack()));
+        }
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onCompletedDrop(PlayerDropItemEvent event) {
+        Player player = event.getPlayer();
+        if (!protectedMode(player.getUniqueId()) || isStaffTool(event.getItemDrop().getItemStack())) {
             return;
         }
-        // Mod/Developer: logged-not-blocked. Admin/Founder: unrestricted but logged.
-        audit(player, rank, "item-drop", describe(event.getItemDrop().getItemStack()));
+        StaffRank rank = rankForAction(player);
+        if (permitsInventoryMove(isUnrestricted(player), rank)) {
+            audit(player, rank, "item-drop", describe(event.getItemDrop().getItemStack()));
+        }
     }
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
@@ -1278,18 +1284,26 @@ public final class StaffModeManager implements Listener {
         if (!(event.getEntity() instanceof Player player) || !protectedMode(player.getUniqueId())) {
             return;
         }
-        StaffRank rank = rankForAction(player);
-        if (isUnrestricted(player)) {
-            audit(player, rank, "item-pickup", describe(event.getItem().getItemStack()));
-            return;
-        }
-        StaffDutyTier tier = StaffDutyTier.of(rank);
-        if (tier == null || tier == StaffDutyTier.HELPER) {
+        if (!permitsInventoryMove(isUnrestricted(player), rankForAction(player))) {
+            // Passive denied pickups intentionally have no noisy audit record.
             event.setCancelled(true);
+        }
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onCompletedPickup(EntityPickupItemEvent event) {
+        if (!(event.getEntity() instanceof Player player) || !protectedMode(player.getUniqueId())) {
             return;
         }
-        // Mod/Developer: logged-not-blocked. Admin/Founder: unrestricted but logged.
-        audit(player, rank, "item-pickup", describe(event.getItem().getItemStack()));
+        StaffRank rank = rankForAction(player);
+        if (permitsInventoryMove(isUnrestricted(player), rank)) {
+            audit(player, rank, "item-pickup", describe(event.getItem().getItemStack()));
+        }
+    }
+
+    static boolean permitsInventoryMove(boolean unrestricted, StaffRank rank) {
+        StaffDutyTier tier = StaffDutyTier.of(rank);
+        return unrestricted || (tier != null && tier != StaffDutyTier.HELPER);
     }
 
     // Orbs must remain in the world while the player is invisible or working from
@@ -1319,21 +1333,25 @@ public final class StaffModeManager implements Listener {
             return;
         }
         StaffRank rank = rankForAction(player);
-        if (isUnrestricted(player)) {
-            audit(player, rank, "inventory-swap-hands",
-                    describe(event.getMainHandItem()) + " <-> " + describe(event.getOffHandItem()));
-            return;
-        }
-        StaffDutyTier tier = StaffDutyTier.of(rank);
-        if (tier == null || tier == StaffDutyTier.HELPER) {
+        if (isStaffTool(event.getMainHandItem()) || isStaffTool(event.getOffHandItem())
+                || !permitsInventoryMove(isUnrestricted(player), rank)) {
             event.setCancelled(true);
             audit(player, rank, "inventory-swap-hands-denied",
                     describe(event.getMainHandItem()) + " <-> " + describe(event.getOffHandItem()));
+        }
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onCompletedSwapHands(PlayerSwapHandItemsEvent event) {
+        Player player = event.getPlayer();
+        if (!protectedMode(player.getUniqueId())) {
             return;
         }
-        // Mod/Developer: logged-not-blocked (staff/empty inventory toggle). Admin/Founder: logged.
-        audit(player, rank, "inventory-swap-hands",
-                describe(event.getMainHandItem()) + " <-> " + describe(event.getOffHandItem()));
+        StaffRank rank = rankForAction(player);
+        if (permitsInventoryMove(isUnrestricted(player), rank)) {
+            audit(player, rank, "inventory-swap-hands",
+                    describe(event.getMainHandItem()) + " <-> " + describe(event.getOffHandItem()));
+        }
     }
 
     /**
@@ -1392,7 +1410,8 @@ public final class StaffModeManager implements Listener {
         if (StaffModeAccessPolicy.blocksStaffToolTransfer(
                 event.getClick(), isStaffTool(event.getCurrentItem()),
                 isStaffTool(event.getCursor()), hotbarStaffTool,
-                isStaffTool(player.getInventory().getItemInOffHand()))) {
+                isStaffTool(player.getInventory().getItemInOffHand()))
+                && !permitsToolRearrangement(player, event)) {
             event.setCancelled(true);
             return;
         }
@@ -1402,6 +1421,9 @@ public final class StaffModeManager implements Listener {
             return;
         }
         if (rank == null || StaffModeAccessPolicy.blocksInventoryMutation(rank, ender)) {
+            if (rank != null && permitsToolRearrangement(player, event)) {
+                return;
+            }
             event.setCancelled(true);
             int topSize = event.getView().getTopInventory().getSize();
             StaffDutyTier deniedTier = StaffDutyTier.of(rank);
@@ -1434,7 +1456,7 @@ public final class StaffModeManager implements Listener {
             return;
         }
         StaffRank rank = rankForAction(player);
-        if (isStaffTool(event.getOldCursor())) {
+        if (isStaffTool(event.getOldCursor()) && !permitsToolDrag(player, event)) {
             event.setCancelled(true);
             return;
         }
@@ -1445,7 +1467,10 @@ public final class StaffModeManager implements Listener {
         }
         if (rank == null
                 || StaffModeAccessPolicy.blocksInventoryMutation(rank, ender)
-                || isStaffTool(event.getOldCursor())) {
+                || (isStaffTool(event.getOldCursor()) && !permitsToolDrag(player, event))) {
+            if (rank != null && permitsToolDrag(player, event)) {
+                return;
+            }
             event.setCancelled(true);
             int topSize = event.getView().getTopInventory().getSize();
             StaffDutyTier deniedTier = StaffDutyTier.of(rank);
@@ -2074,6 +2099,52 @@ public final class StaffModeManager implements Listener {
         data.set(staffToolSessionKey, PersistentDataType.STRING, toolSession);
         item.setItemMeta(meta);
         return item;
+    }
+
+    boolean permitsToolRearrangement(Player player, InventoryClickEvent event) {
+        if (!authorityActive(player.getUniqueId())) {
+            return false;
+        }
+        boolean tagged = isStaffTool(event.getCurrentItem()) || isStaffTool(event.getCursor());
+        int hotbar = event.getHotbarButton();
+        if (hotbar >= 0 && hotbar < 9) {
+            tagged |= isStaffTool(player.getInventory().getItem(hotbar));
+        }
+        if (!tagged || (isStaffTool(event.getCurrentItem())
+                && !currentSessionTool(player, event.getCurrentItem()))
+                || (isStaffTool(event.getCursor())
+                && !currentSessionTool(player, event.getCursor()))
+                || (hotbar >= 0 && hotbar < 9
+                && isStaffTool(player.getInventory().getItem(hotbar))
+                && !currentSessionTool(player, player.getInventory().getItem(hotbar)))) {
+            return false;
+        }
+        return StaffToolMovePolicy.safeClick(event.getView().getTopInventory().getType().name(),
+                event.getView().getTopInventory().getSize(), event.getRawSlot(),
+                event.getClick(), event.getAction(), tagged);
+    }
+
+    boolean permitsToolDrag(Player player, InventoryDragEvent event) {
+        return authorityActive(player.getUniqueId())
+                && currentSessionTool(player, event.getOldCursor())
+                && StaffToolMovePolicy.safeDrag(event.getView().getTopInventory().getType().name(),
+                        event.getView().getTopInventory().getSize(), event.getRawSlots(), true);
+    }
+
+    private boolean currentSessionTool(Player player, ItemStack item) {
+        if (!isStaffTool(item)) {
+            return false;
+        }
+        PersistentDataContainer data = item.getItemMeta().getPersistentDataContainer();
+        String owner = data.get(staffToolOwnerKey, PersistentDataType.STRING);
+        String session = data.get(staffToolSessionKey, PersistentDataType.STRING);
+        String id = data.get(staffToolKey, PersistentDataType.STRING);
+        StaffToolDefinition tool = StaffToolDefinition.fromId(id).orElse(null);
+        StaffRank rank = rankForAction(player);
+        String activeToken = toolSessions.get(player.getUniqueId());
+        return activeToken != null && activeToken.equals(session)
+                && player.getUniqueId().toString().equals(owner)
+                && tool != null && tool.availableFor(rank) && item.getType() == tool.material();
     }
 
     private boolean isStaffTool(ItemStack item) {

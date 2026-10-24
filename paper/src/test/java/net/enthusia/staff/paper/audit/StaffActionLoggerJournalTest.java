@@ -29,6 +29,14 @@ class StaffActionLoggerJournalTest {
     Path directory;
 
     @Test
+    void slowSynchronousFlushDetectionUsesOneFullTickBoundary() {
+        assertTrue(StaffActionLogger.isSlowFileAppend(50_000_000L));
+        assertTrue(StaffActionLogger.isSlowFileAppend(75_000_000L));
+        org.junit.jupiter.api.Assertions.assertFalse(StaffActionLogger.isSlowFileAppend(49_999_999L));
+        org.junit.jupiter.api.Assertions.assertFalse(StaffActionLogger.isSlowFileAppend(0L));
+    }
+
+    @Test
     void brokenJournalWriterIsClosedAndReopenedAfterFilesystemRecovery() throws Exception {
         var executor = Executors.newSingleThreadExecutor();
         String date = LocalDate.now(ZoneOffset.UTC).toString();

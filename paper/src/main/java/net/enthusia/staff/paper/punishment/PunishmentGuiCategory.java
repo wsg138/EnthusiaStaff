@@ -1,35 +1,40 @@
 package net.enthusia.staff.paper.punishment;
 
-import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
 import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Material;
 
-/** Player-facing groups; policy families and reason IDs remain unchanged. */
+/**
+ * Six broad staff-facing navigation groups. Family/ID/escalation semantics are
+ * deliberately unchanged; unknown future families go to OTHER.
+ */
 enum PunishmentGuiCategory {
-    CHAT("chat", "Chat & Spam", "Spam, language, and public topics", Material.WRITABLE_BOOK,
-            NamedTextColor.AQUA, Set.of("chat", "spam", "language", "politics")),
-    HARASSMENT("harassment", "Harassment & Hate", "Targeted abuse, slurs, and harassment", Material.REDSTONE,
-            NamedTextColor.RED, Set.of("hate", "harassment")),
-    SAFETY("safety", "Safety & Privacy", "Threats, exploitation, and personal information", Material.SHIELD,
-            NamedTextColor.RED, Set.of("safety", "privacy")),
-    CONTENT("content", "Identity & Content", "Profiles, impersonation, and inappropriate content", Material.PAINTING,
-            NamedTextColor.LIGHT_PURPLE, Set.of("content", "identity")),
-    ADVERTISING("advertising", "Advertising & Scams", "Server ads, promotions, and deceptive links", Material.EMERALD,
-            NamedTextColor.GREEN, Set.of("advertising")),
-    CHEATING("cheating", "Cheating", "Unfair clients, X-ray, and automation", Material.DIAMOND_SWORD,
-            NamedTextColor.GOLD, Set.of("cheating")),
-    EXPLOITS("exploits", "Exploits & Disruption", "Duplication, exploit abuse, and server impact", Material.TNT,
-            NamedTextColor.GOLD, Set.of("exploit", "mechanics", "complicity")),
-    ACCOUNTS("accounts", "Accounts & Evasion", "Account misuse and evading punishments", Material.ENDER_EYE,
-            NamedTextColor.LIGHT_PURPLE, Set.of("account", "evasion")),
-    REPORTS("reports", "Reports & Cooperation", "False reports, evidence, and staff instructions", Material.LECTERN,
-            NamedTextColor.AQUA, Set.of("reports", "staff", "dishonesty")),
-    TRADE("trade", "Trade & Reputation", "Market rules and reputation misuse", Material.GOLD_INGOT,
-            NamedTextColor.GREEN, Set.of("market", "reputation")),
+    CHAT("chat", "Chat & Communication", "Chat abuse, harassment, language and spam",
+            Material.WRITABLE_BOOK, NamedTextColor.AQUA,
+            Set.of("chat", "spam", "language", "politics", "hate", "harassment")),
+    GAMEPLAY("gameplay", "Cheating & Gameplay", "Unfair clients, exploits and disruption",
+            Material.DIAMOND_SWORD, NamedTextColor.GOLD,
+            Set.of("cheating", "exploit", "mechanics", "complicity")),
+    SAFETY("safety", "Safety & Privacy", "Threats, dangerous conduct and private information",
+            Material.SHIELD, NamedTextColor.RED,
+            Set.of("safety", "privacy")),
+    ACCOUNTS("accounts", "Accounts & Evasion", "Account misuse, evasion and impersonation",
+            Material.ENDER_EYE, NamedTextColor.LIGHT_PURPLE,
+            Set.of("account", "evasion", "identity")),
+    COMMUNITY("community", "Community & Conduct", "Advertising, reports and public conduct",
+            Material.LECTERN, NamedTextColor.GREEN,
+            Set.of("advertising", "reports", "staff", "dishonesty", "content")),
+    ECONOMY("economy", "Economy & Reputation", "Market rules and reputation abuse",
+            Material.GOLD_INGOT, NamedTextColor.GREEN,
+            Set.of("market", "reputation")),
     OTHER("other", "Other Rules", "Additional configured reasons", Material.MAP,
             NamedTextColor.GRAY, Set.of());
+
+    private static final Set<String> MAPPED_FAMILIES = List.of(values()).stream()
+            .filter(category -> category != OTHER)
+            .flatMap(category -> category.families.stream())
+            .collect(java.util.stream.Collectors.toUnmodifiableSet());
 
     private final String id;
     private final String title;
@@ -45,7 +50,7 @@ enum PunishmentGuiCategory {
         this.description = description;
         this.material = material;
         this.color = color;
-        this.families = families;
+        this.families = Set.copyOf(families);
     }
 
     String id() { return id; }
@@ -56,17 +61,25 @@ enum PunishmentGuiCategory {
     Set<String> families() { return families; }
 
     boolean includes(String family) {
-        return this == OTHER ? Arrays.stream(values()).filter(value -> value != OTHER)
-                .noneMatch(value -> value.families.contains(family)) : families.contains(family);
+        return this == OTHER ? !MAPPED_FAMILIES.contains(family) : families.contains(family);
     }
 
     static PunishmentGuiCategory forFamily(String family) {
-        return Arrays.stream(values()).filter(value -> value != OTHER && value.families.contains(family))
-                .findFirst().orElse(OTHER);
+        for (PunishmentGuiCategory category : values()) {
+            if (category != OTHER && category.families.contains(family)) {
+                return category;
+            }
+        }
+        return OTHER;
     }
 
     static PunishmentGuiCategory byId(String id) {
-        return Arrays.stream(values()).filter(value -> value.id.equals(id)).findFirst().orElse(null);
+        for (PunishmentGuiCategory category : values()) {
+            if (category.id.equals(id)) {
+                return category;
+            }
+        }
+        return null;
     }
 
     static List<PunishmentGuiCategory> ordered() {

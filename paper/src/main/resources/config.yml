@@ -87,6 +87,11 @@ sanction-actions:
 
 # This section is reloadable. Unknown keys inside this section are rejected.
 # The subsystem remains disabled unless explicitly enabled.
+# Offline Discord punishment approvals require current two-way code-based identity
+# verification plus a separate LuckPerms permission. Default disabled until staged.
+punishment-request-discord-offline:
+  enabled: false
+
 punishment-request-alerts:
   enabled: false
 
