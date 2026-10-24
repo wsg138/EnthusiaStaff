@@ -414,8 +414,12 @@ public final class PunishmentRequestGuiController implements Listener {
             int returnPage,
             BiFunction<PunishmentRequestService, Actor, PunishmentRequestResult> decision
     ) {
-        player.closeInventory();
-        submit(player, () -> completeDecision(player, lease, returnPage, decision));
+        // Keep the leased review available when the worker queue is saturated.
+        // Closing before admission strands the fenced lease until its timeout
+        // and prevents the reviewer from retrying the same approved/denied action.
+        if (submit(player, () -> completeDecision(player, lease, returnPage, decision))) {
+            player.closeInventory();
+        }
     }
 
     private void completeDecision(
@@ -554,15 +558,18 @@ public final class PunishmentRequestGuiController implements Listener {
         return service;
     }
 
-    private void submit(Player player, Runnable operation) {
+    /** Returns whether the operation was admitted, not whether it committed. */
+    private boolean submit(Player player, Runnable operation) {
         try {
             workers.submit(() -> runOperation(player, operation));
+            return true;
         } catch (RejectedExecutionException exception) {
             plugin.getLogger().log(Level.WARNING, "Punishment request GUI worker rejected operation", exception);
             player.sendMessage(StaffMessageStyle.style(Component.text(
                     "Punishment request storage is unavailable; try again shortly.",
                     NamedTextColor.RED
             )));
+            return false;
         }
     }
 

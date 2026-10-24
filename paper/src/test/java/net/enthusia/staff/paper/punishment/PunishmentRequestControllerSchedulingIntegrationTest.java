@@ -468,6 +468,42 @@ class PunishmentRequestControllerSchedulingIntegrationTest {
     }
 
     @Test
+    void rejectedDecisionWorkerAdmissionKeepsLeasedReviewOpenForSafeRetry() {
+        for (boolean approve : new boolean[]{true, false}) {
+            Fixture fixture = fixture(pending(StaffRank.MOD), SchedulerMode.RUN);
+            PunishmentApprovalLease lease = acquire(fixture);
+            PunishmentRequestGuiState state = approve
+                    ? review(lease)
+                    : new PunishmentRequestGuiState.Denial(lease, "Target", 0);
+            int slot = approve
+                    ? PunishmentRequestGuiRenderer.APPROVE_SLOT
+                    : PunishmentRequestDenialPreset.values()[0].slot();
+            fixture.executor().reject = true;
+
+            fixture.controller().onInventoryClick(click(fixture.player().proxy(), state, slot));
+
+            assertEquals(0, fixture.player().closedInventories.get(),
+                    "A rejected decision worker must leave the leased review open for retry");
+            assertEquals(1, fixture.player().messages.get());
+            assertEquals(0, fixture.store().approveTransitions);
+            assertEquals(0, fixture.store().denyTransitions);
+            assertEquals(0, fixture.store().abandonCalls);
+            assertEquals(PunishmentRequestStatus.PENDING, fixture.store().current.status());
+
+            fixture.executor().reject = false;
+            fixture.controller().onInventoryClick(click(fixture.player().proxy(), state, slot));
+
+            assertEquals(1, fixture.player().closedInventories.get(),
+                    "Only an admitted decision should close the review");
+            assertEquals(approve ? 1 : 0, fixture.store().approveTransitions);
+            assertEquals(approve ? 0 : 1, fixture.store().denyTransitions);
+            assertEquals(approve ? PunishmentRequestStatus.APPROVED : PunishmentRequestStatus.DENIED,
+                    fixture.store().current.status());
+            assertEquals(0, fixture.store().abandonCalls);
+        }
+    }
+
+    @Test
     void workerAdmissionRejectionStartsNoStorageWork() {
         Fixture fixture = fixture(pending(StaffRank.MOD), SchedulerMode.RUN);
         fixture.executor().reject = true;
