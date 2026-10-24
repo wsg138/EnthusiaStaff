@@ -84,7 +84,7 @@ final class PunishmentGuiRenderer {
         this.catalog = catalog;
     }
 
-    Inventory render(PunishmentGuiState state, Actor actor) {
+    Inventory render(PunishmentGuiState state, Actor actor, boolean guidedModeEnabled) {
         PunishmentGuiHolder holder = new PunishmentGuiHolder(state);
         Inventory inventory = Bukkit.createInventory(holder, 54, title(state));
         holder.attach(inventory);
@@ -93,13 +93,24 @@ final class PunishmentGuiRenderer {
         if (state instanceof PunishmentGuiState.Categories categories) {
             renderCategories(inventory, categories, actor);
         } else if (state instanceof PunishmentGuiState.Guided guided) {
-            renderGuided(inventory, guided, actor);
+            if (guidedModeEnabled) {
+                renderGuided(inventory, guided, actor);
+            } else {
+                inventory.setItem(22, item(Material.GRAY_CONCRETE,
+                        "Guided Mode Disabled", NamedTextColor.RED,
+                        List.of(Component.text("No guided punishment can be prepared now.",
+                                        NamedTextColor.GRAY),
+                                Component.text("Return to categories and use Expert Reasons.",
+                                        NamedTextColor.YELLOW))));
+                inventory.setItem(BACK_SLOT,
+                        button(Material.ARROW, "Back to Categories", NamedTextColor.AQUA));
+            }
         } else if (state instanceof PunishmentGuiState.Reasons reasons) {
             renderReasons(inventory, reasons, actor);
         } else if (state instanceof PunishmentGuiState.Search search) {
             renderSearch(inventory, search, actor);
         } else if (state instanceof PunishmentGuiState.Review review) {
-            renderReview(inventory, review, actor);
+            renderReview(inventory, review, actor, guidedModeEnabled);
         } else if (state instanceof PunishmentGuiState.History history) {
             renderHistory(inventory, history);
         }
@@ -500,7 +511,8 @@ final class PunishmentGuiRenderer {
         ));
     }
 
-    private void renderReview(Inventory inventory, PunishmentGuiState.Review state, Actor actor) {
+    private void renderReview(Inventory inventory, PunishmentGuiState.Review state, Actor actor,
+                              boolean guidedModeEnabled) {
         PunishmentDraft draft = state.draft();
         Optional<PunishmentAssessment> assessment = state.assessment();
         ReasonPolicy policy = assessment.map(PunishmentAssessment::policy)
@@ -535,7 +547,14 @@ final class PunishmentGuiRenderer {
                 draft.internalExplanation());
         boolean stalePolicy = !reviewPolicyCurrent(
                 draft.expectation().configurationVersion(), catalog.activeVersion());
-        inventory.setItem(CONFIRM_SLOT, policy == null
+        boolean guidedDisabled = guidedReview && !guidedModeEnabled;
+        inventory.setItem(CONFIRM_SLOT, guidedDisabled
+                ? item(Material.GRAY_CONCRETE, "Guided Mode Disabled", NamedTextColor.RED,
+                        List.of(Component.text("The guided punishment feature was disabled.",
+                                        NamedTextColor.GRAY),
+                                Component.text("This saved draft cannot be submitted.",
+                                        NamedTextColor.YELLOW)))
+                : policy == null
                 ? item(Material.GRAY_DYE, "Reason Unavailable", NamedTextColor.RED,
                         List.of(Component.text("Go back and choose a current reason.", NamedTextColor.YELLOW)))
                 : stalePolicy

@@ -115,6 +115,58 @@ class GuidedPunishmentGuiContractTest {
     }
 
     @Test
+    void disabledGuidedModeBlocksAlreadyOpenQuestionnairesAndQueuedPreparation() throws Exception {
+        String controller = source("PunishmentGuiController.java");
+        assertTrue(controller.contains(
+                "plugin.getConfig().getBoolean(\"guided-punishment.enabled\", false)"));
+        String entry = controller.substring(controller.indexOf("private void categoryClick("),
+                controller.indexOf("private void openGuidedExpertReasons("));
+        assertTrue(entry.contains("&& guidedModeEnabled()"));
+        assertTrue(entry.contains("if (!guidedModeEnabled())"));
+        assertTrue(entry.contains("openState(viewer, categoriesState(state))"));
+
+        String preparation = controller.substring(controller.indexOf("private void prepareGuided("),
+                controller.indexOf("private static String guidedExplanation("));
+        assertTrue(preparation.contains("if (!guidedModeEnabled())"));
+        assertTrue(preparation.contains("Guided punishment mode was disabled during calculation."));
+        assertTrue(preparation.lastIndexOf("if (!guidedModeEnabled())")
+                < preparation.indexOf("workflow.prepare(proposal, mode.get())"));
+        assertTrue(preparation.lastIndexOf("if (!guidedModeEnabled())")
+                > preparation.indexOf("GuidedPolicyResolution.calculate("));
+    }
+
+    @Test
+    void disablingGuidedModeLocksSavedReviewWhileExpertRoutesRemainAvailable() throws Exception {
+        String controller = source("PunishmentGuiController.java");
+        assertTrue(controller.contains(
+                "renderer.render(state, actor, guidedModeEnabled())"));
+        String resume = controller.substring(controller.indexOf("public void resume("),
+                controller.indexOf("public void showPreparedDraft("));
+        assertTrue(resume.contains(
+                "isGuidedDraft(draft.internalExplanation()) && !guidedModeEnabled()"));
+
+        String review = controller.substring(controller.indexOf("private void reviewClick("),
+                controller.indexOf("private void historyClick("));
+        assertTrue(review.contains(
+                "isGuidedDraft(state.draft().internalExplanation()) && !guidedModeEnabled()"));
+        String reprepare = controller.substring(controller.indexOf("private void reprepare("),
+                controller.indexOf("private void showPrepared("));
+        assertTrue(reprepare.contains(
+                "isGuidedDraft(state.draft().internalExplanation()) && !guidedModeEnabled()"));
+        String confirm = controller.substring(controller.indexOf("private void confirmOnce("),
+                controller.indexOf("private void handleConfirmation("));
+        assertTrue(confirm.contains(
+                "isGuidedDraft(state.draft().internalExplanation()) && !guidedModeEnabled()"));
+        assertTrue(confirm.contains("No sanction or approval request was submitted."));
+
+        String renderer = source("PunishmentGuiRenderer.java");
+        assertTrue(renderer.contains("Guided Mode Disabled"));
+        assertTrue(renderer.contains("boolean guidedDisabled = guidedReview && !guidedModeEnabled"));
+        assertTrue(renderer.contains("This saved draft cannot be submitted."));
+        assertTrue(controller.contains("new PunishmentGuiState.Reasons("));
+    }
+
+    @Test
     void warningAndSeverityChoicesUseMeaningfulMaterials() {
         assertEquals(Material.RED_DYE, PunishmentGuiRenderer.guidedAnswerMaterial(
                 "continued", "yes", 0));
