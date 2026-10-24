@@ -96,6 +96,20 @@ public final class JdbcPunishmentRequestStore implements PunishmentRequestStore 
     }
 
     @Override
+    public List<PunishmentApprovalRequest> pendingReviewable(
+            Instant now, UUID reviewerId, StaffRank reviewerRank, int limit
+    ) {
+        if (now == null || reviewerId == null || reviewerRank == null
+                || limit < 1 || limit > 500) {
+            throw new IllegalArgumentException("reviewer, time, and a limit between 1 and 500 are required");
+        }
+        if (!reviewerRank.canApprovePunishmentRequests()) {
+            return List.of();
+        }
+        return repository.pendingReviewable(now, reviewerId, reviewerRank, limit);
+    }
+
+    @Override
     public Optional<PunishmentApprovalLease> acquire(
             UUID requestId,
             UUID ownerId,

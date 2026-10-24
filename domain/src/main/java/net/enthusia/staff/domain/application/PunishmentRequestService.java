@@ -187,7 +187,8 @@ public final class PunishmentRequestService {
         if (!hasApprovalAuthority(approver)) {
             return List.of();
         }
-        return pending(MAXIMUM_QUERY_LIMIT).stream()
+        return requests.pendingReviewable(clock.instant(), approver.id(), approver.rank(), limit)
+                .stream()
                 .filter(request -> mayReview(approver, request))
                 .limit(limit)
                 .toList();

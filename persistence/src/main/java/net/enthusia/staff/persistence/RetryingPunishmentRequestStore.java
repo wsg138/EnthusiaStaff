@@ -12,6 +12,7 @@ import net.enthusia.staff.domain.application.PunishmentApprovalLease;
 import net.enthusia.staff.domain.application.PunishmentApprovalRequest;
 import net.enthusia.staff.domain.application.PunishmentRequestResult;
 import net.enthusia.staff.domain.auth.Actor;
+import net.enthusia.staff.domain.auth.StaffRank;
 import net.enthusia.staff.domain.ports.PunishmentRequestStore;
 
 final class RetryingPunishmentRequestStore implements PunishmentRequestStore {
@@ -51,6 +52,13 @@ final class RetryingPunishmentRequestStore implements PunishmentRequestStore {
     @Override
     public List<PunishmentApprovalRequest> pending(Instant now, int limit) {
         return delegate.pending(now, limit);
+    }
+
+    @Override
+    public List<PunishmentApprovalRequest> pendingReviewable(
+            Instant now, UUID reviewerId, StaffRank reviewerRank, int limit
+    ) {
+        return delegate.pendingReviewable(now, reviewerId, reviewerRank, limit);
     }
 
     @Override
