@@ -262,21 +262,77 @@ final class PunishmentGuiRenderer {
         for (int i = 0; i < prompt.choices().size() && i < GUIDED_CHOICE_SLOTS.length; i++) {
             var choice = prompt.choices().get(i);
             inventory.setItem(GUIDED_CHOICE_SLOTS[i],
-                    item(guidedAnswerMaterial(i), choice.label(), NamedTextColor.WHITE,
-                            List.of(Component.text("Click to answer", NamedTextColor.YELLOW))));
+                    item(guidedAnswerMaterial(prompt.id(), choice.id(), i),
+                            choice.label(), NamedTextColor.WHITE,
+                            guidedAnswerLore(prompt.id(), choice.id())));
         }
     }
 
-    private static Material guidedAnswerMaterial(int index) {
+    /**
+     * The position of an answer does not indicate its seriousness. In particular,
+     * "ignored warning" must never appear as a green/safe response.
+     */
+    static Material guidedAnswerMaterial(String questionId, String choiceId, int index) {
+        if ("continued".equals(questionId)) {
+            return switch (choiceId) {
+                case "yes" -> Material.RED_DYE;
+                case "no" -> Material.LIME_DYE;
+                case "not-applicable" -> Material.LIGHT_GRAY_DYE;
+                default -> Material.YELLOW_DYE;
+            };
+        }
+        if ("extent".equals(questionId)) {
+            return switch (choiceId) {
+                case "few" -> Material.LIME_DYE;
+                case "sustained" -> Material.ORANGE_DYE;
+                case "large-scale" -> Material.RED_DYE;
+                default -> Material.YELLOW_DYE;
+            };
+        }
+        if ("targeting".equals(questionId)) {
+            return switch (choiceId) {
+                case "targeted" -> Material.RED_DYE;
+                case "general" -> Material.LIGHT_BLUE_DYE;
+                default -> Material.YELLOW_DYE;
+            };
+        }
         return switch (index) {
-            case 0 -> Material.LIME_DYE;
-            case 1 -> Material.LIGHT_BLUE_DYE;
+            case 0 -> Material.LIGHT_BLUE_DYE;
+            case 1 -> Material.CYAN_DYE;
             case 2 -> Material.ORANGE_DYE;
             case 3 -> Material.PURPLE_DYE;
-            case 4 -> Material.CYAN_DYE;
+            case 4 -> Material.WHITE_DYE;
             case 5 -> Material.MAGENTA_DYE;
             default -> Material.GRAY_DYE;
         };
+    }
+
+    static List<Component> guidedAnswerLore(String questionId, String choiceId) {
+        String explanation = switch (questionId) {
+            case "continued" -> switch (choiceId) {
+                case "yes" -> "A verified warning was ignored.";
+                case "no" -> "They stopped after a warning; not defiance.";
+                case "not-applicable" -> "No warning was given; not defiance.";
+                default -> "Warning status uncertain; do not assume defiance.";
+            };
+            case "extent" -> switch (choiceId) {
+                case "few" -> "An isolated or minor incident.";
+                case "sustained" -> "Repeated or sustained behavior.";
+                case "large-scale" -> "An extensive or large-scale incident.";
+                default -> "The incident extent is not established.";
+            };
+            case "targeting" -> switch (choiceId) {
+                case "targeted" -> "Directed at a particular player or group.";
+                case "general" -> "Not specifically directed at a player or group.";
+                default -> "Who was targeted is not established.";
+            };
+            default -> null;
+        };
+        if (explanation == null) {
+            return List.of(Component.text("Click to answer", NamedTextColor.YELLOW));
+        }
+        return List.of(Component.text(explanation, NamedTextColor.GRAY),
+                Component.text("Click to answer", NamedTextColor.YELLOW));
     }
 
     /**
@@ -289,14 +345,21 @@ final class PunishmentGuiRenderer {
                 "Review Incident Details", NamedTextColor.AQUA,
                 List.of(Component.text("Conduct: " + humanize(finding.conduct()), NamedTextColor.WHITE),
                         Component.text("Location: " + humanize(finding.medium()), NamedTextColor.GRAY),
-                        Component.text("Preliminary incident impact: " + finding.preliminaryImpact(),
+                        Component.text("Incident answers recorded for assessment.",
                                 NamedTextColor.GOLD),
                         Component.text("Relevant punishment history is checked automatically.",
-                                NamedTextColor.GRAY))));
+                                NamedTextColor.GRAY),
+                        Component.text(finding.needsReview() || finding.candidateId() == null
+                                        ? "Uncertain incidents require individual staff review."
+                                        : "Exact sanction and duration appear in final review.",
+                                NamedTextColor.YELLOW))));
         inventory.setItem(31, item(Material.WRITABLE_BOOK, "Incident Factors", NamedTextColor.AQUA,
-                finding.facts().stream()
-                        .<Component>map(value -> Component.text(value, NamedTextColor.WHITE))
-                        .toList()));
+                finding.facts().isEmpty()
+                        ? List.of(Component.text("No additional factors selected.",
+                                NamedTextColor.GRAY))
+                        : finding.facts().stream()
+                                .<Component>map(value -> Component.text(value, NamedTextColor.WHITE))
+                                .toList()));
         if (finding.needsReview() || finding.candidateId() == null) {
             inventory.setItem(22, item(Material.SHIELD, "Needs Staff Review", NamedTextColor.GOLD,
                     List.of(Component.text("These answers are not sufficient for automatic classification.",
