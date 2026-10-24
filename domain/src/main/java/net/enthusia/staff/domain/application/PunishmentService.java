@@ -169,7 +169,10 @@ public final class PunishmentService {
                 assessment.sanctions()
         );
         PunishmentResult result = store.createPunishment(plan);
-        if (result instanceof PunishmentResult.Accepted) {
+        if (result instanceof PunishmentResult.Accepted accepted && !accepted.replayed()) {
+            // Replays return the original case ID, while this fresh plan has a
+            // different generated ID. Dispatching it again can duplicate online
+            // warning/kick effects and attribute them to a nonexistent case.
             notifyCommitted(plan);
         }
         return result;
