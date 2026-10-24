@@ -177,6 +177,11 @@ public final class PunishmentGuiController implements Listener {
                 message(viewer, "No unexpired punishment draft exists for " + targetName(target) + '.');
                 return;
             }
+            if (isGuidedDraft(draft.internalExplanation()) && !guidedModeEnabled()) {
+                message(viewer, "Guided punishment mode is disabled. This saved draft is not "
+                        + "available for submission; use Expert Reasons instead.");
+                return;
+            }
             if (!"punish".equalsIgnoreCase(invokedCommand)
                     && !draft.commandName().equalsIgnoreCase(invokedCommand)) {
                 message(viewer, "That draft belongs to /" + draft.commandName() + ". Resume it with /punish.");
@@ -432,7 +437,7 @@ public final class PunishmentGuiController implements Listener {
         int index = PunishmentGuiRenderer.categoryIndex(slot, categories.size());
         if (index >= 0 && index < categories.size()) {
             if (PUNISH_COMMAND.equalsIgnoreCase(state.commandName())
-                    && plugin.getConfig().getBoolean("guided-punishment.enabled", false)) {
+                    && guidedModeEnabled()) {
                 String categoryId = categories.get(index).id();
                 openState(viewer, new PunishmentGuiState.Guided(
                         state.viewerId(), state.target(), state.commandName(),
@@ -451,8 +456,13 @@ public final class PunishmentGuiController implements Listener {
         }
     }
 
-    /** Guided answers are routed to normal authorized draft preparation. */
+    /** The flag is checked on every click, not only when entering the questionnaire. */
     private void guidedClick(Player viewer, Actor actor, PunishmentGuiState.Guided state, int slot) {
+        if (!guidedModeEnabled()) {
+            message(viewer, "Guided punishment mode was disabled. Use Expert Reasons instead.");
+            openState(viewer, categoriesState(state));
+            return;
+        }
         if (openHistoryFromControl(viewer, state, slot)) {
             return;
         }
@@ -531,6 +541,10 @@ public final class PunishmentGuiController implements Listener {
 
     /** An incident can only become a draft through the current policy gates. */
     private void prepareGuided(Player viewer, Actor actor, PunishmentGuiState.Guided state) {
+        if (!guidedModeEnabled()) {
+            message(viewer, "Guided punishment mode was disabled. No draft was created.");
+            return;
+        }
         if (state.interview().nextQuestion().isPresent()) {
             message(viewer, "Finish the incident questionnaire before calculating.");
             return;
@@ -545,6 +559,10 @@ public final class PunishmentGuiController implements Listener {
 
     private void evaluateGuided(Player viewer, Actor actor, PunishmentGuiState.Guided state,
                                 GuidedIncidentWizard.Finding finding) {
+        if (!guidedModeEnabled()) {
+            message(viewer, "Guided punishment mode was disabled. No draft was created.");
+            return;
+        }
         if (!targetAllowed(viewer, actor, state.target().playerId())) {
             return;
         }
@@ -583,6 +601,12 @@ public final class PunishmentGuiController implements Listener {
                 explanation + " | " + outcome.reasoning(), CaseVisibility.PUBLIC,
                 state.commandName(), defaultSanctions ? List.of() : outcome.sanctions()
         );
+        // Recheck just before persistence; the switch may change during async preview.
+        if (!guidedModeEnabled()) {
+            message(viewer, "Guided punishment mode was disabled during calculation. "
+                    + "No draft was created.");
+            return;
+        }
         PunishmentDraftEvaluation evaluated = workflow.prepare(proposal, mode.get());
         if (evaluated instanceof PunishmentDraftEvaluation.Prepared prepared) {
             guidedReturns.put(viewer.getUniqueId(),
@@ -820,6 +844,11 @@ public final class PunishmentGuiController implements Listener {
             return;
         }
         if (slot == PunishmentGuiRenderer.CONFIRM_SLOT) {
+            if (isGuidedDraft(state.draft().internalExplanation()) && !guidedModeEnabled()) {
+                message(viewer, "Guided punishment mode is disabled. "
+                        + "This saved draft cannot be submitted.");
+                return;
+            }
             if (!PunishmentGuiRenderer.reviewPolicyCurrent(
                     state.draft().expectation().configurationVersion(), policies.activeVersion())) {
                 message(viewer, "Punishment rules changed since this draft was prepared. "
@@ -965,6 +994,10 @@ public final class PunishmentGuiController implements Listener {
         });
     }
 
+    private boolean guidedModeEnabled() {
+        return plugin.getConfig().getBoolean("guided-punishment.enabled", false);
+    }
+
     private static final String GUIDED_AUDIT_PREFIX = "Guided incident v1";
     private static final String STAFF_NOTE_SEPARATOR = " | Staff note: ";
 
@@ -1002,6 +1035,11 @@ public final class PunishmentGuiController implements Listener {
             PunishmentDraftWorkflow workflow = workflows.get();
             if (workflow == null) {
                 message(viewer, "Moderation storage is not ready; the existing draft remains saved.");
+                return;
+            }
+            if (isGuidedDraft(state.draft().internalExplanation()) && !guidedModeEnabled()) {
+                message(viewer, "Guided punishment mode is disabled. "
+                        + "This saved draft cannot be modified.");
                 return;
             }
             if (isGuidedDraft(state.draft().internalExplanation())
@@ -1104,6 +1142,11 @@ public final class PunishmentGuiController implements Listener {
     }
 
     private void confirmOnce(Player viewer, Actor actor, PunishmentGuiState.Review state) {
+        if (isGuidedDraft(state.draft().internalExplanation()) && !guidedModeEnabled()) {
+            message(viewer, "Guided punishment mode is disabled. "
+                    + "No sanction or approval request was submitted.");
+            return;
+        }
         if (!targetAllowed(viewer, actor, state.target().playerId())) {
             return;
         }
@@ -1123,6 +1166,12 @@ public final class PunishmentGuiController implements Listener {
             PunishmentDraftWorkflow workflow
     ) {
         try {
+            // A feature disable between the GUI click and the worker run must fail closed.
+            if (isGuidedDraft(state.draft().internalExplanation()) && !guidedModeEnabled()) {
+                message(viewer, "Guided punishment mode was disabled during confirmation. "
+                        + "No sanction or approval request was submitted.");
+                return Optional.empty();
+            }
             return Optional.of(workflow.confirmRouted(state.draft().draftId(), actor, mode.get()));
         } catch (PunishmentDraftCleanupException exception) {
             plugin.getLogger().log(
@@ -1376,7 +1425,7 @@ public final class PunishmentGuiController implements Listener {
                 openHistory(viewer, history.returnState(), history.history().page());
                 return;
             }
-            Inventory inventory = renderer.render(state, actor);
+            Inventory inventory = renderer.render(state, actor, guidedModeEnabled());
             if (viewer.getOpenInventory().getTopInventory().getHolder(false) instanceof PunishmentGuiHolder) {
                 suppressedClosures.add(viewer.getUniqueId());
             }
