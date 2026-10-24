@@ -189,4 +189,16 @@ class GuidedPolicyResolutionTest {
         assertThrows(IllegalArgumentException.class, () -> GuidedPolicyResolution.calculate(
                 spam, assessment(0, "spam.low-level"), 2));
     }
+
+    @Test
+    void voiceNoiseCannotBeAutoConvertedToAMinecraftMute() {
+        var voice = GuidedIncidentWizard.start("chat")
+                .answer("medium", "voice").answer("conduct", "spam")
+                .answer("extent", "sustained").answer("continued", "not-applicable")
+                .finding();
+        assertEquals("spam.noise-pollution", voice.candidateId());
+        assertThrows(IllegalArgumentException.class,
+                () -> GuidedPolicyResolution.calculate(
+                        voice, assessment(0, "spam.noise-pollution"), 0));
+    }
 }
