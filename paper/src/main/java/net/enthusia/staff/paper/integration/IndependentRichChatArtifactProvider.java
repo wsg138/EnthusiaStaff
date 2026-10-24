@@ -125,7 +125,7 @@ public final class IndependentRichChatArtifactProvider
     private final ExecutorService workers;
     private final ServicesManager services;
     private final List<MatchRule> rules;
-    private volatile boolean closed;
+    private final RichArtifactRequestGate requests = new RichArtifactRequestGate();
 
     private IndependentRichChatArtifactProvider(
             JavaPlugin plugin, Clock clock, ExecutorService workers, List<MatchRule> rules
@@ -194,9 +194,13 @@ public final class IndependentRichChatArtifactProvider
     @Override
     public CompletionStage<List<RichChatArtifact>> render(RichChatArtifactRequest request) {
         Objects.requireNonNull(request, "request");
-        CompletableFuture<List<RichChatArtifact>> result = new CompletableFuture<>();
+        CompletableFuture<List<RichChatArtifact>> result = requests.begin();
+        if (result.isDone()) {
+            return result;
+        }
         if (captureExpired(request)) {
-            return CompletableFuture.completedFuture(List.of());
+            result.complete(List.of());
+            return result;
         }
         try {
             plugin.getServer().getGlobalRegionScheduler().execute(plugin, () -> {
@@ -223,7 +227,7 @@ public final class IndependentRichChatArtifactProvider
     }
 
     private boolean expired(RichChatArtifactRequest request) {
-        return shouldDrop(closed, request, clock.millis());
+        return shouldDrop(requests.isClosed(), request, clock.millis());
     }
 
     private boolean captureExpired(RichChatArtifactRequest request) {
@@ -438,8 +442,8 @@ public final class IndependentRichChatArtifactProvider
 
     @Override
     public void close() {
-        if (!closed) {
-            closed = true;
+        if (requests.close()) {
+
             services.unregister(RichChatArtifactProvider.class, this);
         }
     }

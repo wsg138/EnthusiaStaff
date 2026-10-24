@@ -202,6 +202,22 @@ class IndependentRichChatArtifactProviderTest {
         assertEquals(List.of(), result.join());
     }
 
+    @Test
+    void queuedEntityCallbackObservesChangesBeforeCaptureNotSendTime() {
+        AtomicReference<IndependentRichChatArtifactProvider.Slot> current =
+                new AtomicReference<>(new IndependentRichChatArtifactProvider.Slot(STONE_MATERIAL, 1));
+        AtomicReference<IndependentRichChatArtifactProvider.Job> captured = new AtomicReference<>();
+        Runnable entityOwnedCallback = () -> captured.set(
+                IndependentRichChatArtifactProvider.captureJob(
+                        itemRule(), () -> true, () -> true, ITEM_PLACEHOLDER,
+                        () -> List.of(current.get())).orElseThrow());
+        // The chat event happened with STONE; inventory changed before the callback ran.
+        current.set(new IndependentRichChatArtifactProvider.Slot("DIAMOND", 2));
+        entityOwnedCallback.run();
+        assertEquals("DIAMOND", captured.get().slots().get(0).material());
+        assertEquals(2, captured.get().slots().get(0).amount());
+    }
+
     private static IndependentRichChatArtifactProvider.MatchRule itemRule() {
         return new IndependentRichChatArtifactProvider.MatchRule(
                 IndependentRichChatArtifactProvider.Kind.ITEM,
