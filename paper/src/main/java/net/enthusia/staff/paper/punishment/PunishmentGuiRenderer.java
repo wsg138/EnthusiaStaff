@@ -226,16 +226,18 @@ final class PunishmentGuiRenderer {
     }
 
     private void renderGuided(Inventory inventory, PunishmentGuiState.Guided state, Actor actor) {
+        List<ReasonPolicy> authorizedReasons =
+                catalog.reasons(actor, state.commandName(), state.categoryId());
         var question = state.interview().nextQuestion();
         if (question.isPresent()) {
             renderGuidedQuestion(inventory, state, question.orElseThrow());
         } else {
-            renderGuidedResult(inventory, state, state.interview().finding());
+            renderGuidedResult(inventory, state, state.interview().finding(), authorizedReasons);
         }
         inventory.setItem(BACK_SLOT, button(Material.ARROW,
                 state.interview().answers().isEmpty() ? "Back · Categories" : "Previous Question",
                 NamedTextColor.AQUA));
-        if (catalog.reasons(actor, state.commandName(), state.categoryId()).isEmpty()) {
+        if (authorizedReasons.isEmpty()) {
             inventory.setItem(SEARCH_SLOT, item(Material.GRAY_DYE,
                     "Exact Reasons Unavailable", NamedTextColor.GRAY,
                     List.of(Component.text("No authorized exact reasons in this category.",
@@ -340,7 +342,11 @@ final class PunishmentGuiRenderer {
      * authoritative policy service can calculate a proposed outcome.
      */
     private void renderGuidedResult(Inventory inventory, PunishmentGuiState.Guided state,
-                                    GuidedIncidentWizard.Finding finding) {
+                                    GuidedIncidentWizard.Finding finding,
+                                    List<ReasonPolicy> authorizedReasons) {
+        boolean requiresReview = finding.needsReview() || finding.candidateId() == null;
+        boolean available = !requiresReview
+                && guidedCandidateAuthorized(finding.candidateId(), authorizedReasons);
         inventory.setItem(13, item(Material.KNOWLEDGE_BOOK,
                 "Review Incident Details", NamedTextColor.AQUA,
                 List.of(Component.text("Conduct: " + humanize(finding.conduct()), NamedTextColor.WHITE),
@@ -349,9 +355,11 @@ final class PunishmentGuiRenderer {
                                 NamedTextColor.GOLD),
                         Component.text("Relevant punishment history is checked automatically.",
                                 NamedTextColor.GRAY),
-                        Component.text(finding.needsReview() || finding.candidateId() == null
+                        Component.text(requiresReview
                                         ? "Uncertain incidents require individual staff review."
-                                        : "Exact sanction and duration appear in final review.",
+                                        : available
+                                                ? "Exact sanction and duration appear in final review."
+                                                : "Identified reason unavailable for your staff access.",
                                 NamedTextColor.YELLOW))));
         inventory.setItem(31, item(Material.WRITABLE_BOOK, "Incident Factors", NamedTextColor.AQUA,
                 finding.facts().isEmpty()
@@ -360,11 +368,20 @@ final class PunishmentGuiRenderer {
                         : finding.facts().stream()
                                 .<Component>map(value -> Component.text(value, NamedTextColor.WHITE))
                                 .toList()));
-        if (finding.needsReview() || finding.candidateId() == null) {
+        if (requiresReview) {
             inventory.setItem(22, item(Material.SHIELD, "Needs Staff Review", NamedTextColor.GOLD,
                     List.of(Component.text("These answers are not sufficient for automatic classification.",
                                     NamedTextColor.GRAY),
                             Component.text("Use Expert Reasons for a reviewed action.", NamedTextColor.YELLOW))));
+            return;
+        }
+        if (!available) {
+            inventory.setItem(22, item(Material.GRAY_CONCRETE,
+                    "Reason Unavailable", NamedTextColor.RED,
+                    List.of(Component.text("Your current rank or route cannot select this reason.",
+                                    NamedTextColor.GRAY),
+                            Component.text("Browse permitted reasons or ask authorized staff.",
+                                    NamedTextColor.YELLOW))));
             return;
         }
         inventory.setItem(GUIDED_SHORTER_SLOT, guidedPreference(
@@ -379,6 +396,12 @@ final class PunishmentGuiRenderer {
                                 NamedTextColor.WHITE),
                         Component.text("Opens final review; no punishment is applied yet.",
                                 NamedTextColor.YELLOW))));
+    }
+
+    /** Presentation-only check; draft preparation repeats authorization against current policy. */
+    static boolean guidedCandidateAuthorized(String candidateId, List<ReasonPolicy> authorizedReasons) {
+        return candidateId != null && authorizedReasons.stream()
+                .anyMatch(policy -> policy.id().equals(candidateId));
     }
 
     private static ItemStack guidedPreference(String name, int value, int selected) {

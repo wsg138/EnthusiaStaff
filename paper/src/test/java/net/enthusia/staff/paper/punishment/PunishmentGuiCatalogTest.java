@@ -50,6 +50,17 @@ class PunishmentGuiCatalogTest {
     }
 
     @Test
+    void guidedProposalVisibilityUsesTheSameFilteredReasonListAsExpertMode() {
+        PunishmentGuiCatalog catalog = catalog();
+        var helperChat = catalog.reasons(actor(StaffRank.HELPER), "punish", CHAT);
+        assertTrue(PunishmentGuiRenderer.guidedCandidateAuthorized(CHAT_MOD, helperChat));
+        assertFalse(PunishmentGuiRenderer.guidedCandidateAuthorized(SAFETY_ADMIN, helperChat));
+        assertFalse(PunishmentGuiRenderer.guidedCandidateAuthorized("chat.unknown", helperChat));
+        assertFalse(PunishmentGuiRenderer.guidedCandidateAuthorized(null, helperChat));
+        assertFalse(PunishmentGuiRenderer.guidedCandidateAuthorized(CHAT_MOD, List.of()));
+    }
+
+    @Test
     void helperSeesModeratorReasonsButNotAdministrativeReasons() {
         PunishmentGuiCatalog catalog = catalog();
 
