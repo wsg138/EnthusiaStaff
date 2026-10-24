@@ -137,6 +137,10 @@ public final class PunishmentDraftWorkflow {
         if (draft == null) {
             return draftNotFound();
         }
+        if (!punishments.currentPolicyMatches(
+                draft.reasonId(), draft.expectation().configurationVersion())) {
+            return staleDraft();
+        }
         CreatePunishmentRequest request = requestFor(draft, actor);
         PunishmentResult result = punishments.createConfirmed(request, mode, draft.expectation());
         if (result instanceof PunishmentResult.Accepted accepted) {
@@ -150,6 +154,11 @@ public final class PunishmentDraftWorkflow {
         PunishmentDraft draft = drafts.find(draftId, actor.id(), clock.instant()).orElse(null);
         if (draft == null) {
             PunishmentResult.Rejected rejected = draftNotFound();
+            return new PunishmentDraftConfirmation.Rejected(rejected.code(), rejected.message());
+        }
+        if (!punishments.currentPolicyMatches(
+                draft.reasonId(), draft.expectation().configurationVersion())) {
+            PunishmentResult.Rejected rejected = staleDraft();
             return new PunishmentDraftConfirmation.Rejected(rejected.code(), rejected.message());
         }
         CreatePunishmentRequest request = requestFor(draft, actor);
@@ -218,6 +227,13 @@ public final class PunishmentDraftWorkflow {
         return PunishmentApprovalRules.requiresApproval(actor.rank(), expectation.customDuration());
     }
 
+    private static PunishmentResult.Rejected staleDraft() {
+        return new PunishmentResult.Rejected(
+                "RECOMMENDATION_CHANGED",
+                "The punishment policy has changed; reassess the draft before confirming"
+        );
+    }
+
     private static PunishmentResult.Rejected draftNotFound() {
         return new PunishmentResult.Rejected(
                 "DRAFT_NOT_FOUND",
@@ -233,9 +249,12 @@ public final class PunishmentDraftWorkflow {
                 draft.reasonId(),
                 draft.internalExplanation(),
                 draft.visibility(),
-                draft.expectation().customDuration()
-                        ? draft.expectation().sanctions()
-                        : List.of()
+                // Replay the complete reviewed outcome, including a higher or lower
+                // configured step. An exact policy tier is not a custom duration,
+                // but omitting it here silently falls back to history's step.
+                // PunishmentService reauthorizes every explicit selection against
+                // current rank, history and policy before creating a case/request.
+                draft.expectation().sanctions()
         );
     }
 
