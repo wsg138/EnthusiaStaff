@@ -61,6 +61,15 @@ final class PunishmentRequestControllerHarness {
     static final UUID REVIEWER_ID = UUID.fromString("62000000-0000-0000-0000-000000000004");
 
     static Fixture fixture(PunishmentApprovalRequest request, SchedulerMode mode) {
+        return fixture(request, mode,
+                review -> inventory(new PunishmentRequestGuiHolder(review)));
+    }
+
+    static Fixture fixture(
+            PunishmentApprovalRequest request,
+            SchedulerMode mode,
+            java.util.function.Function<PunishmentRequestGuiState.Review, Inventory> reviewRenderer
+    ) {
         RequestStoreHarness store = new RequestStoreHarness(request);
         DefaultAuthorizationPolicy authorization = new DefaultAuthorizationPolicy();
         PunishmentRequestService service = service(store, authorization);
@@ -76,7 +85,7 @@ final class PunishmentRequestControllerHarness {
                 authorization,
                 executor,
                 details -> inventory(new PunishmentRequestGuiHolder(details)),
-                review -> inventory(new PunishmentRequestGuiHolder(review)),
+                reviewRenderer,
                 denial -> inventory(new PunishmentRequestGuiHolder(denial))
         );
         return new Fixture(controller, store, scheduler, player, logger, executor, service);
