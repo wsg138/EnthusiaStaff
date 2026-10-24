@@ -239,6 +239,12 @@ public final class GuidedIncidentWizard {
     }
 
     private boolean channelCompatible(String medium, String conduct) {
+        // The generic punishment path does not establish Discord-side enforcement.
+        // Preserve the classified reason, but require channel-specific staff review
+        // rather than silently treating a Minecraft mute as a Discord mute.
+        if ("discord".equals(medium)) {
+            return false;
+        }
         // Standard Minecraft chat mutes are not proof that connected voice chat is muted.
         // Until voice-channel enforcement is verified, keep voice incidents in manual review.
         if (CHAT.equals(category) && "voice".equals(medium)) {
