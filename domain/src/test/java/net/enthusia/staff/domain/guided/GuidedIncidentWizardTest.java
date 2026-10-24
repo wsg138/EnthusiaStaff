@@ -132,4 +132,68 @@ class GuidedIncidentWizardTest {
         var first = flow.answer(MEDIUM, "public-chat");
         assertTrue(first.back().answers().isEmpty());
     }
+
+    @Test
+    void voiceNoiseRequiresReviewUntilVoiceEnforcementIsVerified() {
+        var voice = GuidedIncidentWizard.start(CHAT)
+                .answer(MEDIUM, "voice").answer(CONDUCT, SPAM)
+                .answer(EXTENT, "sustained").answer(CONTINUED, NO_WARNING)
+                .finding();
+        assertEquals("spam.noise-pollution", voice.candidateId(),
+                "Keep the configured reason for audited manual handling");
+        assertTrue(voice.needsReview(),
+                "Do not issue a Minecraft chat mute as an unverified voice sanction");
+        var normalChat = spam("sustained", NO_WARNING).finding();
+        assertFalse(normalChat.needsReview(),
+                "Ordinary public chat spam remains eligible for the guided workflow");
+    }
+
+    @Test
+    void unknownLocationStopsAtConductForManualReview() {
+        var incident = GuidedIncidentWizard.start(CHAT)
+                .answer(MEDIUM, "unknown").answer(CONDUCT, SPAM);
+        assertTrue(incident.nextQuestion().isEmpty());
+        assertTrue(incident.finding().needsReview());
+        assertFalse(incident.answers().containsKey(EXTENT));
+        assertFalse(incident.answers().containsKey(CONTINUED));
+    }
+
+    @Test
+    void unknownDetailSkipsUnneededSeverityQuestions() {
+        var incident = GuidedIncidentWizard.start("gameplay")
+                .answer(MEDIUM, "in-game").answer(CONDUCT, "cheating")
+                .answer("detail", "other");
+        assertTrue(incident.nextQuestion().isEmpty());
+        assertTrue(incident.finding().needsReview());
+        assertFalse(incident.answers().containsKey(EXTENT));
+    }
+
+    @Test
+    void unknownTargetStopsBeforeExtentButValidTargetStillAsksExtent() {
+        var base = GuidedIncidentWizard.start(CHAT)
+                .answer(MEDIUM, "public-chat").answer(CONDUCT, "harassment")
+                .answer("detail", "verbal");
+        var unknown = base.answer("targeting", "unknown");
+        assertTrue(unknown.nextQuestion().isEmpty());
+        assertTrue(unknown.finding().needsReview());
+        assertFalse(unknown.answers().containsKey(EXTENT));
+        assertEquals("targeting", unknown.back().nextQuestion().orElseThrow().id());
+        assertEquals(EXTENT, unknown.back().answer("targeting", "targeted")
+                .nextQuestion().orElseThrow().id());
+    }
+
+    @Test
+    void unknownExtentSkipsWarningQuestionWithoutFabricatingAggravation() {
+        var incident = GuidedIncidentWizard.start(CHAT)
+                .answer(MEDIUM, "public-chat").answer(CONDUCT, SPAM)
+                .answer(EXTENT, "unknown");
+        assertTrue(incident.nextQuestion().isEmpty());
+        assertTrue(incident.finding().needsReview());
+        assertEquals("spam.low-level", incident.finding().candidateId());
+        assertEquals(10, incident.finding().preliminaryImpact());
+        assertFalse(incident.answers().containsKey(CONTINUED));
+        assertEquals(EXTENT, incident.back().nextQuestion().orElseThrow().id());
+        assertEquals(CONTINUED, incident.back().answer(EXTENT, "sustained")
+                .nextQuestion().orElseThrow().id());
+    }
 }

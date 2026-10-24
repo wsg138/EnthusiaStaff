@@ -189,4 +189,47 @@ class GuidedPolicyResolutionTest {
         assertThrows(IllegalArgumentException.class, () -> GuidedPolicyResolution.calculate(
                 spam, assessment(0, "spam.low-level"), 2));
     }
+
+    @Test
+    void voiceNoiseCannotBeAutoConvertedToAMinecraftMute() {
+        var voice = GuidedIncidentWizard.start("chat")
+                .answer("medium", "voice").answer("conduct", "spam")
+                .answer("extent", "sustained").answer("continued", "not-applicable")
+                .finding();
+        assertEquals("spam.noise-pollution", voice.candidateId());
+        assertThrows(IllegalArgumentException.class,
+                () -> GuidedPolicyResolution.calculate(
+                        voice, assessment(0, "spam.noise-pollution"), 0));
+    }
+
+    @Test
+    void descendingMuteLadderNeedsManualReviewInsteadOfSeverityDowngrade() {
+        var incident = finding("large-scale", "yes");
+        List<PunishmentStep> steps = List.of(
+                new PunishmentStep(0, "Warning", List.of(warn())),
+                new PunishmentStep(1, "One hour", List.of(mute(60))),
+                new PunishmentStep(2, "Misordered fifteen minutes", List.of(mute(15))));
+        var policy = new ReasonPolicy(FLOOD_ID, SPAM_FAMILY, "Flooding", 15, true, steps);
+        var history = new EscalationDecision(0, 0, 0, List.of(), steps.getFirst());
+        var assessed = new PunishmentAssessment("test.descending", policy, history,
+                steps.getFirst().sanctions());
+        assertThrows(IllegalArgumentException.class,
+                () -> GuidedPolicyResolution.calculate(incident, assessed, 0));
+    }
+
+    @Test
+    void severityCannotJumpFromPermanentMuteBaselineToOrdinaryMute() {
+        var incident = finding("large-scale", "yes");
+        var restricted = new SanctionSpec(SanctionType.MUTE, SanctionLength.permanent());
+        List<PunishmentStep> steps = List.of(
+                new PunishmentStep(0, "Permanent mute", List.of(restricted)),
+                new PunishmentStep(1, "Mute", List.of(mute(15))),
+                new PunishmentStep(2, "Longer mute", List.of(mute(60))));
+        var policy = new ReasonPolicy(FLOOD_ID, SPAM_FAMILY, "Flooding", 15, true, steps);
+        var history = new EscalationDecision(0, 0, 0, List.of(), steps.getFirst());
+        var assessed = new PunishmentAssessment("test.permanent-baseline", policy, history,
+                steps.getFirst().sanctions());
+        assertThrows(IllegalArgumentException.class,
+                () -> GuidedPolicyResolution.calculate(incident, assessed, 0));
+    }
 }

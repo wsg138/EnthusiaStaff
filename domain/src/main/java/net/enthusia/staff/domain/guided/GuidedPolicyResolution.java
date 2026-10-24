@@ -35,7 +35,8 @@ public final class GuidedPolicyResolution {
         checkTransition(ladder, historyStep, selected);
         requireOrdinaryGuidedRemedy(originals);
         String explanation = explanation(finding, historyStep, selected);
-        return variableDuration(originals, ladder, selected, preference, explanation, profile);
+        return variableDuration(originals, ladder, selected, preference, explanation,
+                profile, finding.preliminaryImpact());
     }
 
     private static void validate(GuidedIncidentWizard.Finding finding,
@@ -62,6 +63,8 @@ public final class GuidedPolicyResolution {
             return;
         }
         List<SanctionSpec> previous = ladder.get(baselineStep).sanctions();
+        // A severity jump must not escape an unsupported baseline remedy.
+        requireOrdinaryGuidedRemedy(previous);
         for (int step = baselineStep + 1; step <= selected; step++) {
             List<SanctionSpec> next = ladder.get(step).sanctions();
             // A large incident score must not jump over a restricted policy step.
@@ -105,7 +108,7 @@ public final class GuidedPolicyResolution {
     private static Outcome variableDuration(List<SanctionSpec> originals,
                                             List<PunishmentStep> ladder, int selected,
                                             int preference, String explanation,
-                                            GuidedSeverityProfile profile) {
+                                            GuidedSeverityProfile profile, int incidentImpact) {
         if (originals.size() != 1 || originals.getFirst().length().temporary().isEmpty()) {
             return new Outcome(originals, explanation + "; configured remedy", false);
         }
@@ -116,18 +119,19 @@ public final class GuidedPolicyResolution {
             return new Outcome(originals, explanation + "; maximum policy tier", false);
         }
         return calculateWithinBounds(originals, initial, low, high, preference, explanation,
-                profile);
+                profile, incidentImpact);
     }
 
     private static Outcome calculateWithinBounds(List<SanctionSpec> originals,
                                                   SanctionSpec initial, Duration low,
                                                   Duration high, int preference,
-                                                  String explanation, GuidedSeverityProfile profile) {
+                                                  String explanation, GuidedSeverityProfile profile,
+                                                  int incidentImpact) {
         // Anchor minute-granularity choices to the exact configured lower bound.
         // Truncating low.toMinutes() can otherwise produce a sub-policy sanction
         // when a configured duration includes seconds.
         long availableMinutes = high.minus(low).toMinutes();
-        double ratio = profile.durationFraction(preference);
+        double ratio = profile.durationFraction(preference, incidentImpact);
         Duration calculated = low.plus(Duration.ofMinutes(Math.round(availableMinutes * ratio)));
         if (calculated.compareTo(high) > 0) {
             calculated = high;
@@ -158,6 +162,13 @@ public final class GuidedPolicyResolution {
             return false;
         }
         if (after.type() == before.type()) {
+            if (after.type() == SanctionType.MUTE) {
+                var current = before.length().temporary();
+                var next = after.length().temporary();
+                // Misordered custom ladders must not turn increased severity into a shorter mute.
+                return current.isPresent() && next.isPresent()
+                        && next.orElseThrow().compareTo(current.orElseThrow()) >= 0;
+            }
             return true;
         }
         return before.type() == SanctionType.WARNING && after.type() == SanctionType.MUTE;

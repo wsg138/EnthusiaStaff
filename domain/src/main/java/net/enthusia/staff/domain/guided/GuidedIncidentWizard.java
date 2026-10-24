@@ -72,6 +72,9 @@ public final class GuidedIncidentWizard {
         List<Question> result = new ArrayList<>();
         if (appendUnanswered(result, mediumQuestion())) { return List.copyOf(result); }
         if (appendUnanswered(result, conductQuestion())) { return List.copyOf(result); }
+        // An unknown channel cannot be safely classified. Record the conduct,
+        // then stop instead of collecting severity answers for a manual outcome.
+        if (UNKNOWN.equals(answers.get(MEDIUM))) { return List.copyOf(result); }
         return detailPath(result);
     }
 
@@ -79,6 +82,9 @@ public final class GuidedIncidentWizard {
         List<Choice> details = GuidedOffenseClassifier.details(category, answers.get(CONDUCT));
         if (!details.isEmpty() && appendUnanswered(result,
                 new Question(DETAIL, "Which behavior describes it?", details))) {
+            return List.copyOf(result);
+        }
+        if (UNKNOWN.equals(answers.get(DETAIL)) || OTHER.equals(answers.get(DETAIL))) {
             return List.copyOf(result);
         }
         return targetingPath(result);
@@ -92,6 +98,8 @@ public final class GuidedIncidentWizard {
                         c("general", "No - general conduct"), c(UNKNOWN, "Unclear / quoted"))))) {
             return List.copyOf(result);
         }
+        // Targeting cannot be established; no intensity answer can make this automatic.
+        if (UNKNOWN.equals(answers.get(TARGETING))) { return List.copyOf(result); }
         return severityPath(result);
     }
 
@@ -102,6 +110,8 @@ public final class GuidedIncidentWizard {
                             c("large-scale", "Severe / large scale"), c(UNKNOWN, "Not sure"))))) {
                 return List.copyOf(result);
             }
+            // Unknown extent already requires review. Do not force extra warning questions.
+            if (UNKNOWN.equals(answers.get(EXTENT))) { return List.copyOf(result); }
             if (appendUnanswered(result, new Question(CONTINUED,
                     "Did they continue after a warning?", List.of(
                     c("yes", "Yes - ignored warning"), c("no", "No - stopped after warning"),
@@ -216,6 +226,11 @@ public final class GuidedIncidentWizard {
     }
 
     private boolean channelCompatible(String medium, String conduct) {
+        // Standard Minecraft chat mutes are not proof that connected voice chat is muted.
+        // Until voice-channel enforcement is verified, keep voice incidents in manual review.
+        if (CHAT.equals(category) && "voice".equals(medium)) {
+            return false;
+        }
         if (GAMEPLAY.equals(category)) {
             return IN_GAME.equals(medium);
         }
