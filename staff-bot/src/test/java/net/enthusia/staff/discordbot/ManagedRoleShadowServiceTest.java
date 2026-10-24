@@ -14,6 +14,7 @@ import net.enthusia.staff.domain.ports.DiscordModerationPersistenceStore.Reconci
 import org.junit.jupiter.api.Test;
 
 final class ManagedRoleShadowServiceTest {
+    private static final String SYNTHETIC_DISCORD_A = "synthetic-discord-a";
     private static final String VALID_JSON = """
             {
               "version": 1,
@@ -66,9 +67,9 @@ final class ManagedRoleShadowServiceTest {
         UUID first = UUID.fromString("11111111-1111-1111-1111-111111111111");
         UUID second = UUID.fromString("22222222-2222-2222-2222-222222222222");
         var result = ManagedRoleShadowService.resolveClaim(
-                claim(Set.of(first, second)), ignored -> Set.of("synthetic-discord-a"));
+                claim(Set.of(first, second)), ignored -> Set.of(SYNTHETIC_DISCORD_A));
 
-        assertEquals(Set.of("synthetic-discord-a"), result.desiredDiscordUserIds());
+        assertEquals(Set.of(SYNTHETIC_DISCORD_A), result.desiredDiscordUserIds());
         assertEquals(0, result.unlinkedMinecraftAccounts());
     }
 
@@ -78,13 +79,13 @@ final class ManagedRoleShadowServiceTest {
         UUID second = UUID.fromString("22222222-2222-2222-2222-222222222222");
         UUID third = UUID.fromString("33333333-3333-3333-3333-333333333333");
         Map<UUID, Set<String>> currentLinks = Map.of(
-                first, Set.of("synthetic-discord-a"),
+                first, Set.of(SYNTHETIC_DISCORD_A),
                 second, Set.of(),
-                third, Set.of("synthetic-discord-a", "synthetic-discord-b"));
+                third, Set.of(SYNTHETIC_DISCORD_A, "synthetic-discord-b"));
         var result = ManagedRoleShadowService.resolveClaim(
                 claim(Set.of(first, second, third)), currentLinks::get);
 
-        assertEquals(Set.of("synthetic-discord-a", "synthetic-discord-b"),
+        assertEquals(Set.of(SYNTHETIC_DISCORD_A, "synthetic-discord-b"),
                 result.desiredDiscordUserIds());
         assertEquals(1, result.unlinkedMinecraftAccounts());
     }
