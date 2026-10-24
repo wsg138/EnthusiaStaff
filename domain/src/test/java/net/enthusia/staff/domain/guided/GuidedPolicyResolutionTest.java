@@ -218,6 +218,31 @@ class GuidedPolicyResolutionTest {
     }
 
     @Test
+    void boundedDurationCannotSkipDescendingIntermediateMuteTier() {
+        // A history-selected 60m mute must not interpolate toward 180m
+        // by silently skipping an intervening, misordered 15m policy tier.
+        // The incident has no severity offset, so checkTransition alone
+        // cannot catch the invalid ladder.
+        var incident = finding("few", "not-applicable");
+        List<PunishmentStep> steps = List.of(
+                new PunishmentStep(0, "Warning", List.of(warn())),
+                new PunishmentStep(1, "One hour", List.of(mute(60))),
+                new PunishmentStep(2, "Misordered fifteen minutes", List.of(mute(15))),
+                new PunishmentStep(3, "Three hours", List.of(mute(180))));
+        var policy = new ReasonPolicy("spam.low-level", SPAM_FAMILY,
+                "Spam", 10, true, steps);
+        var history = new EscalationDecision(1, 1, 0, List.of(), steps.get(1));
+        var assessed = new PunishmentAssessment("test.intervening-descending",
+                policy, history, steps.get(1).sanctions());
+
+        for (int preference : new int[]{-1, 0, 1}) {
+            assertThrows(IllegalArgumentException.class,
+                    () -> GuidedPolicyResolution.calculate(incident, assessed, preference),
+                    "A descending intervening mute tier needs explicit review");
+        }
+    }
+
+    @Test
     void severityCannotJumpFromPermanentMuteBaselineToOrdinaryMute() {
         var incident = finding("large-scale", "yes");
         var restricted = new SanctionSpec(SanctionType.MUTE, SanctionLength.permanent());

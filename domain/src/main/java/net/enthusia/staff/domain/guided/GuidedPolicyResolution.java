@@ -185,6 +185,13 @@ public final class GuidedPolicyResolution {
                 break;
             }
             Duration candidate = items.getFirst().length().temporary().orElseThrow();
+            if (candidate.compareTo(current) < 0) {
+                // Do not leap over a descending configured tier to find a later,
+                // longer mute. Even without a severity-step transition, a
+                // misordered ladder needs individual staff review.
+                throw new IllegalArgumentException(
+                        "Descending mute duration tier requires explicit review");
+            }
             if (candidate.compareTo(current) > 0) {
                 return candidate;
             }
