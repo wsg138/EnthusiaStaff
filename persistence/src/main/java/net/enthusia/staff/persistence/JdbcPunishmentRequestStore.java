@@ -83,6 +83,11 @@ public final class JdbcPunishmentRequestStore implements PunishmentRequestStore 
     }
 
     @Override
+    public Optional<PunishmentApprovalRequest> findBySubmissionKey(IdempotencyKey key) {
+        return repository.findBySubmissionKey(key);
+    }
+
+    @Override
     public List<PunishmentApprovalRequest> pending(Instant now, int limit) {
         if (now == null || limit < 1 || limit > 500) {
             throw new IllegalArgumentException("current time and a limit between 1 and 500 are required");

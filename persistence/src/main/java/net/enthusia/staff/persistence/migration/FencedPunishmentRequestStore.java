@@ -6,6 +6,7 @@ import java.util.Optional;
 import java.util.UUID;
 import javax.sql.DataSource;
 import net.enthusia.staff.common.CaseId;
+import net.enthusia.staff.common.IdempotencyKey;
 import net.enthusia.staff.domain.application.PunishmentApprovalLease;
 import net.enthusia.staff.domain.application.PunishmentApprovalRequest;
 import net.enthusia.staff.domain.application.PunishmentRequestResult;
@@ -38,6 +39,11 @@ public final class FencedPunishmentRequestStore implements PunishmentRequestStor
     @Override
     public Optional<PunishmentApprovalRequest> find(UUID requestId) {
         return delegate.find(requestId);
+    }
+
+    @Override
+    public Optional<PunishmentApprovalRequest> findBySubmissionKey(IdempotencyKey key) {
+        return delegate.findBySubmissionKey(key);
     }
 
     @Override

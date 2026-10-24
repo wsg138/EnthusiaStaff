@@ -7,6 +7,7 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.function.IntConsumer;
 import net.enthusia.staff.common.CaseId;
+import net.enthusia.staff.common.IdempotencyKey;
 import net.enthusia.staff.domain.application.PunishmentApprovalLease;
 import net.enthusia.staff.domain.application.PunishmentApprovalRequest;
 import net.enthusia.staff.domain.application.PunishmentRequestResult;
@@ -40,6 +41,11 @@ final class RetryingPunishmentRequestStore implements PunishmentRequestStore {
     @Override
     public Optional<PunishmentApprovalRequest> find(UUID requestId) {
         return delegate.find(requestId);
+    }
+
+    @Override
+    public Optional<PunishmentApprovalRequest> findBySubmissionKey(IdempotencyKey key) {
+        return delegate.findBySubmissionKey(key);
     }
 
     @Override

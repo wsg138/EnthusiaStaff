@@ -142,6 +142,15 @@ public final class PunishmentDraftWorkflow {
             deleteAppliedDraft(draft, actor, committed);
             return committed;
         }
+        // A prior routed submission may have committed while draft cleanup failed.
+        // Never bypass that approval request through the direct confirmation API,
+        // including after the actor has since been promoted.
+        if (existingSubmittedRequest(draft) != null) {
+            return new PunishmentResult.Rejected(
+                    "REQUEST_ALREADY_SUBMITTED",
+                    "An approval request already exists for this draft; use routed confirmation to recover it"
+            );
+        }
         if (!punishments.currentPolicyMatches(
                 draft.reasonId(), draft.expectation().configurationVersion())) {
             return staleDraft();
@@ -165,6 +174,19 @@ public final class PunishmentDraftWorkflow {
         if (committed != null) {
             deleteAppliedDraft(draft, actor, committed);
             return new PunishmentDraftConfirmation.Applied(committed);
+        }
+        PunishmentApprovalRequest existingRequest = existingSubmittedRequest(draft);
+        if (existingRequest != null) {
+            if (!sameDraftSubmission(draft, existingRequest)) {
+                return new PunishmentDraftConfirmation.Rejected(
+                        "IDEMPOTENCY_CONFLICT",
+                        "The existing approval request does not match this saved punishment draft"
+                );
+            }
+            PunishmentRequestResult.Submitted replay =
+                    new PunishmentRequestResult.Submitted(existingRequest, true);
+            deleteSubmittedDraft(draft, actor, replay);
+            return new PunishmentDraftConfirmation.Requested(replay);
         }
         if (!punishments.currentPolicyMatches(
                 draft.reasonId(), draft.expectation().configurationVersion())) {
@@ -210,15 +232,40 @@ public final class PunishmentDraftWorkflow {
                 draft.expectation()
         );
         if (result instanceof PunishmentRequestResult.Submitted submitted) {
-            try {
-                drafts.delete(draft.draftId(), actor.id());
-            } catch (RuntimeException exception) {
-                throw new PunishmentRequestDraftCleanupException(submitted, exception);
-            }
+            deleteSubmittedDraft(draft, actor, submitted);
             return new PunishmentDraftConfirmation.Requested(submitted);
         }
         PunishmentRequestResult.Rejected rejected = (PunishmentRequestResult.Rejected) result;
         return new PunishmentDraftConfirmation.Rejected(rejected.code(), rejected.message());
+    }
+
+    private PunishmentApprovalRequest existingSubmittedRequest(PunishmentDraft draft) {
+        if (punishmentRequests == null) {
+            return null;
+        }
+        return punishmentRequests.findSubmitted(
+                new IdempotencyKey("punishment-draft:" + draft.draftId())).orElse(null);
+    }
+
+    private static boolean sameDraftSubmission(
+            PunishmentDraft draft, PunishmentApprovalRequest existing) {
+        PunishmentProposal proposal = existing.proposal();
+        return proposal.requester().id().equals(draft.actorId())
+                && proposal.targetId().equals(draft.targetId())
+                && proposal.reasonId().equals(draft.reasonId())
+                && proposal.internalExplanation().equals(draft.internalExplanation())
+                && proposal.visibility() == draft.visibility()
+                && proposal.configurationVersion().equals(draft.expectation().configurationVersion())
+                && proposal.sanctions().equals(draft.expectation().sanctions());
+    }
+
+    private void deleteSubmittedDraft(
+            PunishmentDraft draft, Actor actor, PunishmentRequestResult.Submitted submitted) {
+        try {
+            drafts.delete(draft.draftId(), actor.id());
+        } catch (RuntimeException exception) {
+            throw new PunishmentRequestDraftCleanupException(submitted, exception);
+        }
     }
 
     private PunishmentResult.Accepted committedDraftCase(PunishmentDraft draft) {

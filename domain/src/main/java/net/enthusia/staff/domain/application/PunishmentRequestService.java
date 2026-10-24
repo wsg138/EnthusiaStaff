@@ -9,6 +9,7 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.function.Supplier;
 import net.enthusia.staff.common.Checks;
+import net.enthusia.staff.common.IdempotencyKey;
 import net.enthusia.staff.common.SecureIdentifiers;
 import net.enthusia.staff.domain.OperationalMode;
 import net.enthusia.staff.domain.auth.Actor;
@@ -163,6 +164,11 @@ public final class PunishmentRequestService {
     public Optional<PunishmentApprovalRequest> find(UUID requestId) {
         Objects.requireNonNull(requestId);
         return requests.find(requestId);
+    }
+
+    /** Does not evaluate a new proposal or mutate the original durable request. */
+    public Optional<PunishmentApprovalRequest> findSubmitted(IdempotencyKey submissionKey) {
+        return requests.findBySubmissionKey(Objects.requireNonNull(submissionKey));
     }
 
     public List<PunishmentApprovalRequest> reviewable(Actor approver, int limit) {

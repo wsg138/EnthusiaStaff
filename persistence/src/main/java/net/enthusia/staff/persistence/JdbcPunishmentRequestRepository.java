@@ -14,6 +14,7 @@ import java.util.Optional;
 import java.util.UUID;
 import javax.sql.DataSource;
 import net.enthusia.staff.common.CaseId;
+import net.enthusia.staff.common.IdempotencyKey;
 import net.enthusia.staff.domain.application.PunishmentApprovalRequest;
 import net.enthusia.staff.domain.application.PunishmentMatchKey;
 import net.enthusia.staff.domain.application.PunishmentProposal;
@@ -52,6 +53,22 @@ final class JdbcPunishmentRequestRepository {
             }
         } catch (SQLException exception) {
             throw new ModerationPersistenceException("Unable to read punishment request", exception);
+        }
+    }
+
+    Optional<PunishmentApprovalRequest> findBySubmissionKey(IdempotencyKey key) {
+        if (key == null) {
+            throw new IllegalArgumentException("submission key must be present");
+        }
+        String sql = SELECT_REQUESTS + "WHERE submission_key = ?";
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, key.value());
+            try (ResultSet result = statement.executeQuery()) {
+                return result.next() ? Optional.of(codec.read(result)) : Optional.empty();
+            }
+        } catch (SQLException exception) {
+            throw new ModerationPersistenceException("Unable to read submitted punishment request", exception);
         }
     }
 

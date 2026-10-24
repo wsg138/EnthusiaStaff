@@ -30,6 +30,7 @@ import net.enthusia.staff.domain.application.PunishmentDraftEvaluation;
 import net.enthusia.staff.domain.application.PunishmentDraftWorkflow;
 import net.enthusia.staff.domain.application.PunishmentDraftReprepareOverrides;
 import net.enthusia.staff.domain.application.PunishmentRequestDraftCleanupException;
+import net.enthusia.staff.domain.application.PunishmentRequestStatus;
 import net.enthusia.staff.domain.auth.Actor;
 import net.enthusia.staff.domain.auth.AuthorizationPolicy;
 import net.enthusia.staff.domain.auth.ModerationAction;
@@ -1218,9 +1219,18 @@ public final class PunishmentGuiController implements Listener {
             return;
         }
         if (result instanceof PunishmentDraftConfirmation.Requested requested) {
-            finish(viewer, "Approval request "
-                    + (requested.submitted().replayed() ? "already exists" : "submitted")
-                    + ". No punishment has been applied yet.");
+            PunishmentRequestStatus status = requested.submitted().request().status();
+            if (status == PunishmentRequestStatus.PENDING) {
+                finish(viewer, "Approval request "
+                        + (requested.submitted().replayed() ? "already exists" : "submitted")
+                        + ". No punishment has been applied yet.");
+            } else {
+                // Recovery can discover a request that was resolved after the
+                // original submission committed but draft cleanup failed.
+                // Do not tell staff no punishment was applied if it was approved.
+                finish(viewer, "Approval request already exists ("
+                        + status.name() + "). Check request and case history for its outcome.");
+            }
             return;
         }
         handleRejected(viewer, actor, state, (PunishmentDraftConfirmation.Rejected) result);

@@ -19,6 +19,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import net.enthusia.staff.common.CaseId;
+import net.enthusia.staff.common.IdempotencyKey;
 import net.enthusia.staff.common.SecureIdentifiers;
 import net.enthusia.staff.domain.OperationalMode;
 import net.enthusia.staff.domain.auth.Actor;
@@ -176,6 +177,115 @@ class PunishmentDraftRequestRoutingTest {
         );
         assertTrue(replay.submitted().replayed());
         assertEquals(1, fixture.requests().entries.size());
+        assertFalse(fixture.workflow().find(DRAFT_ID, ACTOR_ID).isPresent());
+    }
+
+    @Test
+    void submittedRequestRecoversAfterCleanupFailureAndPolicyChangeWithoutDuplicateSubmission() {
+        Fixture fixture = fixture(SanctionLength.temporary(Duration.ofDays(1)));
+        prepare(fixture, StaffRank.DEVELOPER);
+        fixture.drafts().failDelete = true;
+        assertThrows(PunishmentRequestDraftCleanupException.class,
+                () -> fixture.workflow().confirmRouted(
+                        DRAFT_ID, actor(StaffRank.DEVELOPER), OperationalMode.ACTIVE));
+        assertEquals(1, fixture.requests().entries.size());
+
+        fixture.policies().replace(
+                "v2",
+                List.of(policy(SanctionLength.temporary(Duration.ofDays(7))))
+        );
+        fixture.drafts().failDelete = false;
+        PunishmentDraftConfirmation.Requested recovered = assertInstanceOf(
+                PunishmentDraftConfirmation.Requested.class,
+                fixture.workflow().confirmRouted(
+                        DRAFT_ID, actor(StaffRank.DEVELOPER), OperationalMode.ACTIVE)
+        );
+        assertTrue(recovered.submitted().replayed());
+        assertEquals(REQUEST_ID, recovered.submitted().request().requestId());
+        assertEquals("v1", recovered.submitted().request().proposal().configurationVersion());
+        assertEquals(1, fixture.requests().entries.size());
+        assertTrue(fixture.moderation().plans.isEmpty());
+        assertFalse(fixture.workflow().find(DRAFT_ID, ACTOR_ID).isPresent());
+    }
+
+    @Test
+    void directConfirmCannotCreateCaseAfterRequestCommittedAndRequesterPromoted() {
+        Fixture fixture = fixture(SanctionLength.temporary(Duration.ofDays(1)));
+        prepare(fixture, StaffRank.DEVELOPER);
+        fixture.drafts().failDelete = true;
+        assertThrows(PunishmentRequestDraftCleanupException.class,
+                () -> fixture.workflow().confirmRouted(
+                        DRAFT_ID, actor(StaffRank.DEVELOPER), OperationalMode.ACTIVE));
+        fixture.drafts().failDelete = false;
+
+        PunishmentResult.Rejected rejected = assertInstanceOf(
+                PunishmentResult.Rejected.class,
+                fixture.workflow().confirm(DRAFT_ID, actor(StaffRank.MOD), OperationalMode.ACTIVE)
+        );
+        assertEquals("REQUEST_ALREADY_SUBMITTED", rejected.code());
+        assertEquals(1, fixture.requests().entries.size());
+        assertTrue(fixture.moderation().plans.isEmpty());
+        assertTrue(fixture.workflow().find(DRAFT_ID, ACTOR_ID).isPresent());
+    }
+
+    @Test
+    void submittedRequestReplayRejectsMismatchedDraftWithoutDeletingOrApplying() {
+        Fixture fixture = fixture(SanctionLength.temporary(Duration.ofDays(1)));
+        prepare(fixture, StaffRank.DEVELOPER);
+        fixture.drafts().failDelete = true;
+        assertThrows(PunishmentRequestDraftCleanupException.class,
+                () -> fixture.workflow().confirmRouted(
+                        DRAFT_ID, actor(StaffRank.DEVELOPER), OperationalMode.ACTIVE));
+        fixture.drafts().failDelete = false;
+        PunishmentDraft original = fixture.drafts().entries.get(DRAFT_ID);
+        fixture.drafts().entries.put(DRAFT_ID, new PunishmentDraft(
+                original.draftId(), original.actorId(), original.targetId(),
+                original.reasonId(), "Changed after request was submitted",
+                original.visibility(), original.commandName(), original.expectation(),
+                original.createdAt(), original.expiresAt()
+        ));
+
+        PunishmentDraftConfirmation.Rejected rejected = assertInstanceOf(
+                PunishmentDraftConfirmation.Rejected.class,
+                fixture.workflow().confirmRouted(
+                        DRAFT_ID, actor(StaffRank.DEVELOPER), OperationalMode.ACTIVE)
+        );
+        assertEquals("IDEMPOTENCY_CONFLICT", rejected.code());
+        assertEquals(1, fixture.requests().entries.size());
+        assertTrue(fixture.moderation().plans.isEmpty());
+        assertTrue(fixture.workflow().find(DRAFT_ID, ACTOR_ID).isPresent());
+    }
+
+    @Test
+    void submittedRequestRecoveryReturnsAlreadyResolvedRequestWithoutCreatingAnother() {
+        Fixture fixture = fixture(SanctionLength.temporary(Duration.ofDays(1)));
+        prepare(fixture, StaffRank.DEVELOPER);
+        fixture.drafts().failDelete = true;
+        assertThrows(PunishmentRequestDraftCleanupException.class,
+                () -> fixture.workflow().confirmRouted(
+                        DRAFT_ID, actor(StaffRank.DEVELOPER), OperationalMode.ACTIVE));
+        PunishmentApprovalRequest submitted = fixture.requests().entries.get(REQUEST_ID);
+        fixture.requests().entries.put(REQUEST_ID, new PunishmentApprovalRequest(
+                submitted.requestId(), submitted.submissionKey(), submitted.proposal(),
+                submitted.createdAt(), submitted.expiresAt(), PunishmentRequestStatus.APPROVED,
+                1, UUID.fromString("53000000-0000-0000-0000-000000000005"),
+                "Approved after initial submission", new CaseId("TESTCASE00000003"),
+                NOW.plusSeconds(1)
+        ));
+        fixture.policies().replace("v2", List.of(policy(SanctionLength.temporary(Duration.ofDays(7)))));
+        fixture.drafts().failDelete = false;
+
+        PunishmentDraftConfirmation.Requested recovered = assertInstanceOf(
+                PunishmentDraftConfirmation.Requested.class,
+                fixture.workflow().confirmRouted(
+                        DRAFT_ID, actor(StaffRank.DEVELOPER), OperationalMode.ACTIVE)
+        );
+        assertTrue(recovered.submitted().replayed());
+        assertEquals(PunishmentRequestStatus.APPROVED, recovered.submitted().request().status());
+        assertEquals(new CaseId("TESTCASE00000003"),
+                recovered.submitted().request().resultingCaseId());
+        assertEquals(1, fixture.requests().entries.size());
+        assertTrue(fixture.moderation().plans.isEmpty());
         assertFalse(fixture.workflow().find(DRAFT_ID, ACTOR_ID).isPresent());
     }
 
@@ -344,6 +454,13 @@ class PunishmentDraftRequestRoutingTest {
         @Override
         public Optional<PunishmentApprovalRequest> find(UUID requestId) {
             return Optional.ofNullable(entries.get(requestId));
+        }
+
+        @Override
+        public Optional<PunishmentApprovalRequest> findBySubmissionKey(IdempotencyKey key) {
+            return entries.values().stream()
+                    .filter(request -> request.submissionKey().equals(key))
+                    .findFirst();
         }
 
         @Override
