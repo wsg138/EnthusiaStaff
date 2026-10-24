@@ -87,6 +87,14 @@ public final class GuidedIncidentWizard {
         if (UNKNOWN.equals(answers.get(DETAIL)) || OTHER.equals(answers.get(DETAIL))) {
             return List.copyOf(result);
         }
+        // Once a reason is already protected and requires expert review, further
+        // generic extent/warning questions cannot authorize an automatic sanction.
+        String classified = GuidedOffenseClassifier.resolve(
+                category, answers.get(MEDIUM), answers.get(CONDUCT), answers.get(DETAIL),
+                null, null);
+        if (sensitiveCandidate(classified)) {
+            return List.copyOf(result);
+        }
         return targetingPath(result);
     }
 
@@ -100,6 +108,11 @@ public final class GuidedIncidentWizard {
         }
         // Targeting cannot be established; no intensity answer can make this automatic.
         if (UNKNOWN.equals(answers.get(TARGETING))) { return List.copyOf(result); }
+        // Slurs always require individual review, but targeted/untargeted distinctions
+        // still matter for the expert reason. Hate details already identify the reason.
+        if (CHAT.equals(category) && List.of("slur", "hate").contains(answers.get(CONDUCT))) {
+            return List.copyOf(result);
+        }
         return severityPath(result);
     }
 
