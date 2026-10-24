@@ -19,8 +19,10 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
+import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.RejectedExecutionException;
+import java.util.function.BooleanSupplier;
+import java.util.function.Supplier;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import javax.imageio.ImageIO;
@@ -41,7 +43,9 @@ import org.bukkit.plugin.java.JavaPlugin;
  *
  * <p>This deliberately does NOT promise upstream pixel/texture fidelity. Item material names,
  * counts and inventory positions are represented visibly without redistributing game assets.
- * Opt-in, with original addon rendering still preferred whenever available.</p>
+ * Opt-in, with original addon rendering still preferred whenever available. Player inventory
+ * is captured on the later Folia entity callback, so exact send-time state is not guaranteed;
+ * late capture fails closed to text-only rather than rendering a long-stale inventory.</p>
  */
 public final class IndependentRichChatArtifactProvider
         implements RichChatArtifactProvider, AutoCloseable {
@@ -50,6 +54,9 @@ public final class IndependentRichChatArtifactProvider
     private static final int CELL_HEIGHT = 62;
     private static final int TOP = 55;
     private static final int MAX_SLOTS = 54;
+    // The entity callback may be delayed after a chat event. Prefer missing an optional
+    // image over showing a player's unrelated later inventory.
+    private static final long MAX_SNAPSHOT_AGE_MILLIS = 2_000L;
     private static final Color BACKGROUND = new Color(32, 35, 42);
     private static final Color CELL = new Color(51, 55, 66);
     private static final Color OUTLINE = new Color(98, 105, 120);
@@ -118,7 +125,7 @@ public final class IndependentRichChatArtifactProvider
     private final ExecutorService workers;
     private final ServicesManager services;
     private final List<MatchRule> rules;
-    private volatile boolean closed;
+    private final RichArtifactRequestGate requests = new RichArtifactRequestGate();
 
     private IndependentRichChatArtifactProvider(
             JavaPlugin plugin, Clock clock, ExecutorService workers, List<MatchRule> rules
@@ -187,13 +194,17 @@ public final class IndependentRichChatArtifactProvider
     @Override
     public CompletionStage<List<RichChatArtifact>> render(RichChatArtifactRequest request) {
         Objects.requireNonNull(request, "request");
-        CompletableFuture<List<RichChatArtifact>> result = new CompletableFuture<>();
-        if (expired(request)) {
-            return CompletableFuture.completedFuture(List.of());
+        CompletableFuture<List<RichChatArtifact>> result = requests.begin();
+        if (result.isDone()) {
+            return result;
+        }
+        if (captureExpired(request)) {
+            result.complete(List.of());
+            return result;
         }
         try {
             plugin.getServer().getGlobalRegionScheduler().execute(plugin, () -> {
-                if (expired(request)) {
+                if (captureExpired(request)) {
                     result.complete(List.of());
                     return;
                 }
@@ -216,14 +227,27 @@ public final class IndependentRichChatArtifactProvider
     }
 
     private boolean expired(RichChatArtifactRequest request) {
-        return closed || clock.millis() >= request.expiresAtEpochMillis();
+        return shouldDrop(requests.isClosed(), request, clock.millis());
+    }
+
+    private boolean captureExpired(RichChatArtifactRequest request) {
+        return expired(request) || snapshotWindowExpired(request, clock.millis());
+    }
+
+    static boolean shouldDrop(boolean closed, RichChatArtifactRequest request, long nowMillis) {
+        return closed || nowMillis >= request.expiresAtEpochMillis();
+    }
+
+    static boolean snapshotWindowExpired(RichChatArtifactRequest request, long nowMillis) {
+        return nowMillis >= request.expiresAtEpochMillis()
+                || nowMillis - request.createdAtEpochMillis() >= MAX_SNAPSHOT_AGE_MILLIS;
     }
 
     private void snapshot(
             Player player, RichChatArtifactRequest request,
             CompletableFuture<List<RichChatArtifact>> result
     ) {
-        if (expired(request) || result.isDone()) {
+        if (captureExpired(request) || result.isDone() || !player.isOnline()) {
             result.complete(List.of());
             return;
         }
@@ -240,9 +264,16 @@ public final class IndependentRichChatArtifactProvider
             result.complete(List.of());
             return;
         }
+        enqueueSnapshot(workers, () -> renderSnapshots(request, jobs, result), result);
+    }
+
+    static void enqueueSnapshot(
+            Executor executor, Runnable render, CompletableFuture<List<RichChatArtifact>> result
+    ) {
         try {
-            workers.execute(() -> renderSnapshots(request, jobs, result));
-        } catch (RejectedExecutionException failure) {
+            executor.execute(render);
+        } catch (RuntimeException failure) {
+            // Fail closed for any executor startup failure, not just a full queue.
             result.complete(List.of());
         }
     }
@@ -250,19 +281,30 @@ public final class IndependentRichChatArtifactProvider
     private static Optional<Job> captureJob(
             MatchRule rule, Player player, RichChatArtifactRequest request
     ) {
-        if (!rule.enabled() || !player.hasPermission(rule.kind().permission)) {
+        return captureJob(rule, player::isOnline,
+                () -> player.hasPermission(rule.kind().permission),
+                request.canonicalPlainText(), () -> switch (rule.kind()) {
+                    case ITEM -> List.of(slot(player.getInventory().getItemInMainHand()));
+                    case INVENTORY -> copySlots(player.getInventory(), MAX_SLOTS);
+                    case ENDER_CHEST -> copySlots(player.getEnderChest(), MAX_SLOTS);
+                });
+    }
+
+    // Called from the Folia entity-owned callback. The pure supplier seam also
+    // verifies that denied/quit players never trigger inventory reads and that
+    // the captured Job remains immutable before worker rendering.
+    static Optional<Job> captureJob(
+            MatchRule rule, BooleanSupplier online, BooleanSupplier permitted,
+            String message, Supplier<List<Slot>> snapshot
+    ) {
+        if (!rule.enabled() || !online.getAsBoolean() || !permitted.getAsBoolean()) {
             return Optional.empty();
         }
-        int position = firstUnescapedMatch(rule.expression(), request.canonicalPlainText());
+        int position = firstUnescapedMatch(rule.expression(), message);
         if (position < 0) {
             return Optional.empty();
         }
-        List<Slot> slots = switch (rule.kind()) {
-            case ITEM -> List.of(slot(player.getInventory().getItemInMainHand()));
-            case INVENTORY -> copySlots(player.getInventory(), MAX_SLOTS);
-            case ENDER_CHEST -> copySlots(player.getEnderChest(), MAX_SLOTS);
-        };
-        return Optional.of(new Job(rule.kind(), position, slots));
+        return Optional.of(new Job(rule.kind(), position, snapshot.get()));
     }
 
     private void renderSnapshots(
@@ -294,7 +336,9 @@ public final class IndependentRichChatArtifactProvider
                 }
             }
         } finally {
-            result.complete(List.copyOf(artifacts));
+            // A provider shutdown or hard message expiry invalidates even images
+            // that a worker finished rendering during the same shutdown window.
+            result.complete(expired(request) ? List.of() : List.copyOf(artifacts));
         }
     }
 
@@ -398,8 +442,8 @@ public final class IndependentRichChatArtifactProvider
 
     @Override
     public void close() {
-        if (!closed) {
-            closed = true;
+        if (requests.close()) {
+
             services.unregister(RichChatArtifactProvider.class, this);
         }
     }

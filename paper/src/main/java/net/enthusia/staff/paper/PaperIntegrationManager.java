@@ -8,6 +8,7 @@ import java.time.Clock;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
@@ -90,7 +91,7 @@ final class PaperIntegrationManager implements Listener {
     private RoseChatOutboundRenderBridgeIntegration roseChatOutboundRender;
     private RoseChatInboundBridgeIntegration roseChatInbound;
     private InteractiveChatStagingArtifactProvider interactiveChatRenderer;
-    private IndependentRichChatArtifactProvider independentRichRenderer;
+    private Optional<IndependentRichChatArtifactProvider> independentRichRenderer = Optional.empty();
     private enum RendererFallback { DISABLED, READY, UNAVAILABLE }
     private final AtomicReference<LegacyDiscordChatSuppression.Registration> legacyDiscordSuppression =
             new AtomicReference<>();
@@ -717,13 +718,9 @@ final class PaperIntegrationManager implements Listener {
             clearIssue(INTERACTIVE_CHAT_RENDERER);
             return;
         }
-        // Explicit opt-in allows native slot-card rendering independently of DiscordSRV.
-        // Keep this before addon discovery: the addon can load yet fail at render time.
-        if (plugin().getConfig().getBoolean(
-                "discord-chat-bridge.independent-rich-renderer-enabled", false)
-                && registerIndependentRichRenderer() == RendererFallback.READY) {
-            return;
-        }
+        // Preserve the installed addon's item thumbnails and native tooltip/lore fidelity.
+        // The opt-in independent slot-card renderer is a fallback, not a replacement
+        // while a functional addon provider is present.
         InteractiveChatStagingArtifactProvider.Discovery discovery =
                 InteractiveChatStagingArtifactProvider.discoverAndRegister(
                         plugin(), clock(), workers());
@@ -752,7 +749,7 @@ final class PaperIntegrationManager implements Listener {
                 IndependentRichChatArtifactProvider.discoverAndRegister(
                         plugin(), clock(), workers());
         if (discovered.integration().isPresent()) {
-            independentRichRenderer = discovered.integration().orElseThrow();
+            independentRichRenderer = discovered.integration();
             clearIssue(INTERACTIVE_CHAT_RENDERER);
             return RendererFallback.READY;
         }
@@ -767,8 +764,9 @@ final class PaperIntegrationManager implements Listener {
     private void closeInteractiveChatRenderer() {
         resources.close("InteractiveChat staging rich renderer", interactiveChatRenderer);
         interactiveChatRenderer = null;
-        resources.close("Independent InteractiveChat rich renderer", independentRichRenderer);
-        independentRichRenderer = null;
+        independentRichRenderer.ifPresent(provider ->
+                resources.close("Independent InteractiveChat rich renderer", provider));
+        independentRichRenderer = Optional.empty();
     }
 
     private void installEconomy(CurrencyGateway gateway, List<CurrencyAssetSource> removalOrder) {
