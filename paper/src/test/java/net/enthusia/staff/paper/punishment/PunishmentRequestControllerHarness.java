@@ -216,7 +216,9 @@ final class PunishmentRequestControllerHarness {
     enum SchedulerMode {
         RUN,
         HOLD,
+        HOLD_AFTER_FIRST,
         RETIRE,
+        RETIRE_AFTER_FIRST,
         RETIRE_FALSE
     }
 
@@ -232,7 +234,7 @@ final class PunishmentRequestControllerHarness {
                 if (!method.getName().equals("execute")) {
                     return defaultValue(method);
                 }
-                scheduled.incrementAndGet();
+                int scheduledCount = scheduled.incrementAndGet();
                 Runnable action = (Runnable) arguments[1];
                 Runnable retired = (Runnable) arguments[2];
                 return switch (this.mode) {
@@ -242,6 +244,22 @@ final class PunishmentRequestControllerHarness {
                     }
                     case HOLD -> {
                         heldActions.add(action);
+                        yield true;
+                    }
+                    case HOLD_AFTER_FIRST -> {
+                        if (scheduledCount == 1) {
+                            action.run();
+                        } else {
+                            heldActions.add(action);
+                        }
+                        yield true;
+                    }
+                    case RETIRE_AFTER_FIRST -> {
+                        if (scheduledCount == 1) {
+                            action.run();
+                        } else {
+                            retired.run();
+                        }
                         yield true;
                     }
                     case RETIRE -> {
@@ -336,7 +354,13 @@ final class PunishmentRequestControllerHarness {
 
     static final class WorkerHarness extends AbstractExecutorService {
         boolean reject;
+        boolean hold;
+        final java.util.ArrayDeque<Runnable> heldActions = new java.util.ArrayDeque<>();
         private boolean shutdown;
+
+        void runNext() {
+            heldActions.removeFirst().run();
+        }
 
         @Override
         public void shutdown() {
@@ -369,7 +393,11 @@ final class PunishmentRequestControllerHarness {
             if (reject) {
                 throw new RejectedExecutionException("test rejection");
             }
-            command.run();
+            if (hold) {
+                heldActions.addLast(command);
+            } else {
+                command.run();
+            }
         }
     }
 

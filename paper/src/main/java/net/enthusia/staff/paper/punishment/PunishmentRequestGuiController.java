@@ -4,8 +4,13 @@ import net.enthusia.staff.paper.presentation.StaffMessageStyle;
 import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
+import java.util.function.BiFunction;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Function;
 import java.util.function.Supplier;
@@ -342,10 +347,9 @@ public final class PunishmentRequestGuiController implements Listener {
         }
         decide(
                 player,
-                actor,
                 review.lease(),
                 review.returnPage(),
-                service -> service.approve(review.lease(), actor)
+                (service, current) -> service.approve(review.lease(), current)
         );
     }
 
@@ -381,10 +385,9 @@ public final class PunishmentRequestGuiController implements Listener {
         }
         decide(
                 player,
-                actor,
                 denial.lease(),
                 denial.returnPage(),
-                service -> service.deny(denial.lease(), actor, preset.auditNote())
+                (service, current) -> service.deny(denial.lease(), current, preset.auditNote())
         );
     }
 
@@ -407,33 +410,79 @@ public final class PunishmentRequestGuiController implements Listener {
 
     private void decide(
             Player player,
-            Actor actor,
             PunishmentApprovalLease lease,
             int returnPage,
-            Function<PunishmentRequestService, PunishmentRequestResult> decision
+            BiFunction<PunishmentRequestService, Actor, PunishmentRequestResult> decision
     ) {
         player.closeInventory();
-        submit(player, () -> completeDecision(player, actor, lease, returnPage, decision));
+        submit(player, () -> completeDecision(player, lease, returnPage, decision));
     }
 
     private void completeDecision(
             Player player,
-            Actor actor,
             PunishmentApprovalLease lease,
             int returnPage,
-            Function<PunishmentRequestService, PunishmentRequestResult> decision
+            BiFunction<PunishmentRequestService, Actor, PunishmentRequestResult> decision
     ) {
         PunishmentRequestService service = readyService(player);
         if (service == null) {
             return;
         }
-        PunishmentRequestResult result = decision.apply(service);
+        // The click-time Actor is stale if permission or rank changes while the
+        // database worker waits in its queue. Resolve a fresh Actor on the
+        // player's entity thread after this worker starts, immediately before
+        // attempting a durable decision. Never read Bukkit permissions here.
+        Actor current = decisionActorOnOwner(player, service, lease);
+        if (current == null) {
+            abandonLeaseSafely(service, lease);
+            return;
+        }
+        PunishmentRequestResult result = decision.apply(service, current);
         PunishmentRequestGuiState.RequestView resolvedView = result instanceof PunishmentRequestResult.Approved approved
                 ? view(approved.request())
                 : result instanceof PunishmentRequestResult.Denied denied
                 ? view(denied.request())
-                : resolvedView(service, actor, lease, result);
+                : resolvedView(service, current, lease, result);
         onEntity(player, () -> presentDecision(player, service, result, resolvedView, returnPage));
+    }
+
+    /**
+     * Request a fresh reviewer snapshot from Folia's entity thread. The worker
+     * waits with a finite deadline, fails closed if the player retires, and
+     * never accesses Bukkit permission state from the database executor.
+     */
+    private Actor decisionActorOnOwner(
+            Player player, PunishmentRequestService service, PunishmentApprovalLease lease
+    ) {
+        CompletableFuture<Actor> checked = new CompletableFuture<>();
+        try {
+            onAuthorizedEntity(
+                    player,
+                    current -> service.mayReview(current, lease.request()),
+                    checked::complete,
+                    () -> checked.complete(null)
+            );
+            return checked.get(5, TimeUnit.SECONDS);
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+            message(player, "Punishment request decision was not submitted; authorization was interrupted.");
+        } catch (ExecutionException | TimeoutException | RuntimeException exception) {
+            plugin.getLogger().log(Level.WARNING,
+                    "Punishment request decision authorization did not complete", exception);
+            message(player, "Punishment request decision was not submitted; "
+                    + "authorization could not be confirmed.");
+        }
+        return null;
+    }
+
+    private void abandonLeaseSafely(PunishmentRequestService service, PunishmentApprovalLease lease) {
+        try {
+            service.abandon(lease);
+        } catch (RuntimeException exception) {
+            plugin.getLogger().log(Level.WARNING,
+                    "Could not release punishment approval lease after decision authorization failed",
+                    exception);
+        }
     }
 
     private PunishmentRequestGuiState.RequestView resolvedView(
