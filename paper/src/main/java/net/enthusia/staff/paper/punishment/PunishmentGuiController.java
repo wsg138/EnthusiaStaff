@@ -1201,11 +1201,19 @@ public final class PunishmentGuiController implements Listener {
         if (result instanceof PunishmentDraftConfirmation.Applied applied) {
             finish(viewer, "Punishment saved | Case " + applied.accepted().caseId()
                     + (applied.accepted().replayed() ? " (already processed)" : "") + '.');
-            if (!applied.accepted().replayed() && state.assessment().isPresent()) {
-                PunishmentAssessment assessment = state.assessment().orElseThrow();
-                PunishmentPublicAnnouncement.publish(plugin, state.draft().visibility(), false,
-                        state.target().currentUsername().orElse(state.target().playerId().toString()),
-                        assessment.sanctions(), assessment.policy().publicReason());
+            if (!applied.accepted().replayed()) {
+                // Resumed reviews have no transient assessment. Use the saved
+                // sanctions and an exact-version policy reason, never a fresh
+                // recommendation or an unrelated policy after a reload.
+                state.assessment()
+                        .map(assessment -> assessment.policy().publicReason())
+                        .or(() -> PunishmentPublicAnnouncement.publicReasonForConfirmedDraft(
+                                state.draft(), policies))
+                        .ifPresent(publicReason -> PunishmentPublicAnnouncement.publish(
+                                plugin, state.draft().visibility(), false,
+                                state.target().currentUsername()
+                                        .orElse(state.target().playerId().toString()),
+                                state.draft().expectation().sanctions(), publicReason));
             }
             return;
         }
