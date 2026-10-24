@@ -215,6 +215,15 @@ public final class PunishmentService {
         );
     }
 
+    /** Read-only early policy-drift check for persisted draft replay.
+     * The authoritative create/submit path still revalidates after this check.
+     */
+    boolean currentPolicyMatches(String reasonId, String expectedVersion) {
+        return expectedVersion != null && policies.resolve(reasonId)
+                .map(current -> current.version().equals(expectedVersion))
+                .orElse(false);
+    }
+
     public boolean requiresApproval(Actor actor, PunishmentAssessment assessment) {
         Objects.requireNonNull(actor);
         Objects.requireNonNull(assessment);

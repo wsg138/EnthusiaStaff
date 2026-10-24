@@ -72,6 +72,48 @@ class PunishmentDraftWorkflowTest {
     }
 
     @Test
+    void guidedExactConfiguredHigherStepSurvivesDraftConfirmation() {
+        Fixture fixture = fixture();
+        SanctionSpec warn = new SanctionSpec(SanctionType.WARNING, SanctionLength.instant());
+        SanctionSpec mute = new SanctionSpec(SanctionType.MUTE,
+                SanctionLength.temporary(Duration.ofHours(2)));
+        ReasonPolicy ladder = new ReasonPolicy("chat.toxicity", "chat",
+                "Chat toxicity", 10, true, List.of(
+                new PunishmentStep(0, "Initial warning", List.of(warn)),
+                new PunishmentStep(1, "Elevated mute", List.of(mute))
+        ));
+        fixture.policies.replace("v1", List.of(ladder));
+        PreparePunishmentDraftRequest selectedTier = new PreparePunishmentDraftRequest(
+                TARGET_ID, actor(StaffRank.ADMIN), "chat.toxicity",
+                "Guided incident v1 | verified escalation", CaseVisibility.PUBLIC,
+                "punish", List.of(mute));
+        PunishmentDraftEvaluation.Prepared prepared = assertInstanceOf(
+                PunishmentDraftEvaluation.Prepared.class,
+                fixture.workflow.prepare(selectedTier, OperationalMode.ACTIVE));
+        assertEquals(0, prepared.draft().expectation().stepOrdinal(),
+                "History is still first-offense even though guided chose another policy step");
+        assertEquals(List.of(mute), prepared.draft().expectation().sanctions());
+        assertFalse(prepared.draft().expectation().customDuration(),
+                "An exact configured tier does not count as a custom duration");
+        PunishmentDraftConfirmation.Rejected demoted = assertInstanceOf(
+                PunishmentDraftConfirmation.Rejected.class,
+                fixture.workflow.confirmRouted(DRAFT_ID, actor(StaffRank.MOD),
+                        OperationalMode.ACTIVE));
+        assertEquals("FORBIDDEN_OVERRIDE", demoted.code(),
+                "A moderator cannot replay an administrator's elevated tier");
+        assertTrue(fixture.workflow.find(DRAFT_ID, ACTOR_ID).isPresent());
+        assertTrue(fixture.moderation.plans.isEmpty());
+        PunishmentDraftConfirmation.Applied confirmed = assertInstanceOf(
+                PunishmentDraftConfirmation.Applied.class,
+                fixture.workflow.confirmRouted(DRAFT_ID, actor(StaffRank.ADMIN),
+                        OperationalMode.ACTIVE),
+                "Confirm must replay the saved configured tier, not silently revert to history");
+        assertEquals(new CaseId("TESTCASE00000001"), confirmed.accepted().caseId());
+        assertEquals(1, fixture.moderation.plans.size());
+        assertEquals(List.of(mute), fixture.moderation.plans.getFirst().sanctions());
+    }
+
+    @Test
     void developerCanPrepareRequestDraftWithoutDirectPunishmentAuthority() {
         Fixture fixture = fixture();
 
@@ -140,6 +182,11 @@ class PunishmentDraftWorkflowTest {
         );
 
         assertEquals("RECOMMENDATION_CHANGED", rejected.code());
+        PunishmentDraftConfirmation.Rejected routed = assertInstanceOf(
+                PunishmentDraftConfirmation.Rejected.class,
+                fixture.workflow.confirmRouted(DRAFT_ID, actor(StaffRank.MOD),
+                        OperationalMode.ACTIVE));
+        assertEquals("RECOMMENDATION_CHANGED", routed.code());
         assertTrue(fixture.workflow.find(DRAFT_ID, ACTOR_ID).isPresent());
         assertTrue(fixture.moderation.plans.isEmpty());
     }
