@@ -53,7 +53,7 @@ final class VelocityStaffBotChatHealthRelay {
 
     boolean accept(ProtocolEnvelope envelope) {
         Objects.requireNonNull(envelope, "envelope");
-        if (!VelocityStaffBotChatSink.PEER_ID.equals(envelope.serverId()) || !handles(envelope)) {
+        if (!VelocityStaffBotPeerRoute.isStaffBotPeer(envelope.serverId()) || !handles(envelope)) {
             return false;
         }
         ChatBridgeHealthMessage health;
@@ -69,7 +69,19 @@ final class VelocityStaffBotChatHealthRelay {
         if (current == null) {
             return false;
         }
-        for (String backendId : paperBackendIds) {
+        boolean isolatedTest = VelocityStaffBotPeerRoute.TEST_PEER.equals(envelope.serverId());
+        if (isolatedTest && !paperBackendIds.contains(VelocityStaffBotPeerRoute.TEST_BACKEND)) {
+            return false;
+        }
+        Set<String> targets = isolatedTest
+                ? Set.of(VelocityStaffBotPeerRoute.TEST_BACKEND)
+                : paperBackendIds.stream()
+                        .filter(id -> !VelocityStaffBotPeerRoute.TEST_BACKEND.equals(id))
+                        .collect(java.util.stream.Collectors.toUnmodifiableSet());
+        if (targets.isEmpty()) {
+            return false;
+        }
+        for (String backendId : targets) {
             current.send(
                     backendId,
                     envelope.messageId(),
