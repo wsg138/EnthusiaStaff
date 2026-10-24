@@ -61,6 +61,30 @@ class PunishmentGuiCatalogTest {
     }
 
     @Test
+    void guidedResultDoesNotOfferAutomaticActionForBanOrMixedOnlyPolicies() {
+        assertTrue(PunishmentGuiRenderer.guidedPolicyHasOrdinaryRemedy(
+                policy(CHAT_MOD, CHAT, StaffRank.MOD, SanctionType.MUTE)));
+        assertTrue(PunishmentGuiRenderer.guidedPolicyHasOrdinaryRemedy(
+                policy("chat.warning", CHAT, StaffRank.MOD, SanctionType.WARNING)));
+        assertFalse(PunishmentGuiRenderer.guidedPolicyHasOrdinaryRemedy(
+                policy("cheating.xray", "cheating", StaffRank.MOD, SanctionType.NETWORK_BAN)));
+
+        var ban = new SanctionSpec(SanctionType.NETWORK_BAN,
+                SanctionLength.temporary(Duration.ofDays(30)));
+        var confiscation = new SanctionSpec(SanctionType.INVENTORY_CONFISCATION,
+                SanctionLength.instant());
+        var mixed = new ReasonPolicy("cheating.xray", "cheating", "X-ray", 80, true,
+                List.of(new PunishmentStep(0, "Ban and confiscation",
+                        List.of(ban, confiscation))));
+        assertFalse(PunishmentGuiRenderer.guidedPolicyHasOrdinaryRemedy(mixed));
+
+        var permanentMute = new ReasonPolicy("hate.permanent-mute", "hate", "Permanent mute",
+                90, true, List.of(new PunishmentStep(0, "Permanent",
+                        List.of(new SanctionSpec(SanctionType.MUTE, SanctionLength.permanent())))));
+        assertFalse(PunishmentGuiRenderer.guidedPolicyHasOrdinaryRemedy(permanentMute));
+    }
+
+    @Test
     void helperSeesModeratorReasonsButNotAdministrativeReasons() {
         PunishmentGuiCatalog catalog = catalog();
 

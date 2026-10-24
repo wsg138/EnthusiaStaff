@@ -22,6 +22,7 @@ import net.enthusia.staff.domain.history.ModerationHistoryEntry;
 import net.enthusia.staff.domain.sanction.ActiveSanction;
 import net.enthusia.staff.domain.sanction.SanctionLength;
 import net.enthusia.staff.domain.sanction.SanctionSpec;
+import net.enthusia.staff.domain.sanction.SanctionType;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.format.TextDecoration;
@@ -347,6 +348,9 @@ final class PunishmentGuiRenderer {
         boolean requiresReview = finding.needsReview() || finding.candidateId() == null;
         boolean available = !requiresReview
                 && guidedCandidateAuthorized(finding.candidateId(), authorizedReasons);
+        boolean ordinaryRemedy = available && authorizedReasons.stream()
+                .filter(policy -> policy.id().equals(finding.candidateId()))
+                .anyMatch(PunishmentGuiRenderer::guidedPolicyHasOrdinaryRemedy);
         inventory.setItem(13, item(Material.KNOWLEDGE_BOOK,
                 "Review Incident Details", NamedTextColor.AQUA,
                 List.of(Component.text("Conduct: " + humanize(finding.conduct()), NamedTextColor.WHITE),
@@ -357,9 +361,11 @@ final class PunishmentGuiRenderer {
                                 NamedTextColor.GRAY),
                         Component.text(requiresReview
                                         ? "Uncertain incidents require individual staff review."
-                                        : available
-                                                ? "Exact sanction and duration appear in final review."
-                                                : "Identified reason unavailable for your staff access.",
+                                        : !available
+                                                ? "Identified reason unavailable for your staff access."
+                                                : ordinaryRemedy
+                                                        ? "Exact sanction and duration appear in final review."
+                                                        : "Configured sanctions require individual review.",
                                 NamedTextColor.YELLOW))));
         inventory.setItem(31, item(Material.WRITABLE_BOOK, "Incident Factors", NamedTextColor.AQUA,
                 finding.facts().isEmpty()
@@ -384,6 +390,15 @@ final class PunishmentGuiRenderer {
                                     NamedTextColor.YELLOW))));
             return;
         }
+        if (!ordinaryRemedy) {
+            inventory.setItem(22, item(Material.SHIELD,
+                    "Manual Sanction Review", NamedTextColor.GOLD,
+                    List.of(Component.text("No ordinary warning or temporary mute is configured.",
+                                    NamedTextColor.GRAY),
+                            Component.text("Use Expert Reasons for protected sanction types.",
+                                    NamedTextColor.YELLOW))));
+            return;
+        }
         inventory.setItem(GUIDED_SHORTER_SLOT, guidedPreference(
                 "Conservative", -1, state.durationChoice()));
         inventory.setItem(GUIDED_SUGGESTED_SLOT, guidedPreference(
@@ -402,6 +417,24 @@ final class PunishmentGuiRenderer {
     static boolean guidedCandidateAuthorized(String candidateId, List<ReasonPolicy> authorizedReasons) {
         return candidateId != null && authorizedReasons.stream()
                 .anyMatch(policy -> policy.id().equals(candidateId));
+    }
+
+    /**
+     * Preview only: policies containing exclusively bans, confiscation, permanent or
+     * mixed sanctions can never succeed in the current ordinary guided resolver.
+     * This does not predict the history-selected step or bypass the actual resolver.
+     */
+    static boolean guidedPolicyHasOrdinaryRemedy(ReasonPolicy policy) {
+        return policy.steps().stream().anyMatch(step -> {
+            if (step.sanctions().size() != 1) {
+                return false;
+            }
+            SanctionSpec spec = step.sanctions().getFirst();
+            return (spec.type() == SanctionType.WARNING
+                        && spec.length().isInstant())
+                    || (spec.type() == SanctionType.MUTE
+                        && spec.length().temporary().isPresent());
+        });
     }
 
     private static ItemStack guidedPreference(String name, int value, int selected) {
