@@ -22,6 +22,7 @@ and must not be treated as a live configuration, policy approval, or recommendat
 - The row calculations use source logic and the repository's default ladders, not actual
   `PunishmentDraftWorkflow` or rank/history/storage/end-to-end execution.
 - Unknown/unsupported channels, allegations or evidence may add further mandatory review.
+- Voice noise retains its configured reason ID for expert review, but ordinary chat mutes are not assumed to mute voice.
 
 ## Current prototype examples — not approved
 
@@ -35,7 +36,7 @@ and must not be treated as a live configuration, policy approval, or recommendat
 | Large-scale flooding, ignored verified warning | `spam.message-flooding` | 50 | 2-day mute |
 | Isolated private-message spam, no prior warning | `spam.private-message` | 10 | Warning |
 | Sustained private-message spam, no prior warning | `spam.private-message` | 25 | 15-hour mute |
-| Sustained voice noise, no prior warning | `spam.noise-pollution` | 25 | 15-hour mute (channel enforcement needs runtime verification) |
+| Sustained voice noise, no prior warning | `spam.noise-pollution` | 25 | Manual review required: voice mute enforcement is not verified |
 | Isolated targeted verbal harassment, no prior warning | `hate.targeted-harassment` | 25 | 2-day mute |
 | Repeated targeted verbal harassment, no prior warning | `hate.targeted-harassment` | 40 | 2-day mute |
 | Repeated targeted verbal harassment, ignored verified warning | `hate.targeted-harassment` | 50 | 5-day mute |
