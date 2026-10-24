@@ -122,14 +122,18 @@ def isolated_peer_checks(config: str) -> list[tuple[str, bool]]:
 def evaluate(
     paper: str, legacy_test: str, legacy_live: str, chat: str,
     java_source: str, staffbot_environment: str,
-    velocity_config: str | None = None, isolated_test: bool = False
+    velocity_config: str | None = None, isolated_test: bool = False,
+    production_chat: str | None = None
 ) -> list[tuple[str, bool]]:
     if isolated_test and staffbot_environment != "staging":
         raise ValueError("isolated TEST runner requires staging environment")
     if isolated_test and velocity_config is None:
         raise ValueError("isolated TEST runner requires Velocity config")
+    if isolated_test and production_chat is None:
+        raise ValueError("isolated TEST runner requires production public-chat config")
     pin = private_channel(java_source)
     prop = properties(chat)
+    live_chat = properties(production_chat) if isolated_test else {}
     server_id = yaml_scalar(yaml_section(paper, "network"), "server-id")
     routes_raw = prop.get("ENTHUSIA_STAFF_BOT_CHAT_BRIDGE_ROUTES", "")
     routes = [item.strip() for item in routes_raw.split(";") if item.strip()]
@@ -158,7 +162,12 @@ def evaluate(
          legacy_setting(legacy_test, "DiscordChatChannelConsoleCommandEnabled").lower() == "false"),
         ("Test legacy console Discord destination absent",
          legacy_setting(legacy_test, "DiscordConsoleChannelId").strip("'\" ") in ("", "0")),
-    ] + (isolated_peer_checks(velocity_config) if isolated_test else [])
+    ] + (isolated_peer_checks(velocity_config) + [
+        ("Isolated chat application differs from current production public-chat application",
+         bool(re.fullmatch(r"\d{16,22}", live_chat.get("ENTHUSIA_STAFF_BOT_PUBLIC_CHAT_APPLICATION_ID", "")))
+         and prop.get("ENTHUSIA_STAFF_BOT_PUBLIC_CHAT_APPLICATION_ID", "")
+         != live_chat["ENTHUSIA_STAFF_BOT_PUBLIC_CHAT_APPLICATION_ID"])
+    ] if isolated_test else [])
 
 
 def main() -> int:
@@ -173,6 +182,8 @@ def main() -> int:
                         help="Check the separate STAFFBOT_TEST peer, not the live STAFFBOT connection")
     parser.add_argument("--velocity-config", type=Path,
                         help="Read-only Velocity properties, required for --isolated-test")
+    parser.add_argument("--production-chat", type=Path,
+                        help="Read-only existing production public-chat settings, required for --isolated-test")
     args = parser.parse_args()
     try:
         results = evaluate(
@@ -185,6 +196,8 @@ def main() -> int:
             args.velocity_config.read_text(encoding="utf-8")
             if args.velocity_config is not None else None,
             args.isolated_test,
+            args.production_chat.read_text(encoding="utf-8")
+            if args.production_chat is not None else None,
         )
     except (OSError, UnicodeError, ValueError) as error:
         print(f"BLOCKED: configuration cannot be validated ({type(error).__name__})")
@@ -195,7 +208,7 @@ def main() -> int:
     print(f"CONFIGURATION PREFLIGHT: {len(results)-count} PASS, {count} BLOCKED")
     print("Runtime identity, channel permissions, TLS peers, bot readiness, and rollback are NOT VERIFIED.")
     if args.isolated_test:
-        print("Actual HMAC secret values and their uniqueness are NOT VERIFIED by this read-only check.")
+        print("Actual HMAC secret values, bot tokens, active sessions and their uniqueness are NOT VERIFIED.")
     return 2 if count else 0
 
 

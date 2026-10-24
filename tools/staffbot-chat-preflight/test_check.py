@@ -52,6 +52,9 @@ CHAT = (
 )
 
 
+PRODUCTION_CHAT = "ENTHUSIA_STAFF_BOT_PUBLIC_CHAT_APPLICATION_ID=1650000000000000009\n"
+
+
 VELOCITY = """channel.enabled=true
 channel.backend.STAFFBOT.secret-environment=ES_CHANNEL_STAFFBOT_SECRET
 channel.backend.TEST.secret-environment=ES_CHANNEL_TEST_SECRET
@@ -63,10 +66,12 @@ class PreflightTest(unittest.TestCase):
     def checks(self, paper=PAPER, legacy=LEGACY, live=LIVE, chat=CHAT, environment="production"):
         return dict(CHECK.evaluate(paper, legacy, live, chat, SOURCE_JAVA, environment))
 
-    def isolated_checks(self, velocity=VELOCITY, environment="staging"):
+    def isolated_checks(self, velocity=VELOCITY, environment="staging",
+                        production_chat=PRODUCTION_CHAT):
         return dict(CHECK.evaluate(
             PAPER, LEGACY, LIVE, CHAT, SOURCE_JAVA, environment,
             velocity_config=velocity, isolated_test=True,
+            production_chat=production_chat,
         ))
 
     def test_isolated_peer_only_passes_when_explicitly_configured(self):
@@ -143,6 +148,24 @@ class PreflightTest(unittest.TestCase):
         self.assertFalse(self.isolated_checks(velocity=malformed)[
             "Velocity distinct STAFFBOT_TEST peer secret identifier configured"
         ])
+
+    def test_isolated_chat_app_differs_from_production_chat_app(self):
+        check = "Isolated chat application differs from current production public-chat application"
+        self.assertTrue(self.isolated_checks()[check])
+        same_app = PRODUCTION_CHAT.replace("1650000000000000009", "1650000000000000008")
+        self.assertFalse(self.isolated_checks(production_chat=same_app)[check])
+        self.assertFalse(self.isolated_checks(production_chat="")[check])
+        self.assertFalse(self.isolated_checks(production_chat=
+            "ENTHUSIA_STAFF_BOT_PUBLIC_CHAT_APPLICATION_ID=invalid\\n")[check])
+
+    def test_duplicate_production_chat_app_property_fails_closed(self):
+        with self.assertRaises(ValueError):
+            self.isolated_checks(production_chat=PRODUCTION_CHAT + PRODUCTION_CHAT)
+
+    def test_isolated_mode_requires_read_only_production_chat_input(self):
+        with self.assertRaises(ValueError):
+            CHECK.evaluate(PAPER, LEGACY, LIVE, CHAT, SOURCE_JAVA,
+                           "staging", velocity_config=VELOCITY, isolated_test=True)
 
     def test_isolated_mode_cannot_use_production_environment_or_missing_proxy(self):
         with self.assertRaises(ValueError):

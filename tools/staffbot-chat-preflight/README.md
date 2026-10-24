@@ -20,6 +20,7 @@ Use copies of these **existing** configuration sources in an authorized, secure 
 - `--staffbot-environment-source`: checked-out `staff-bot/src/main/java/net/enthusia/staff/discordbot/StaffBotEnvironment.java`.
 - `--isolated-test`: optional flag for the separate test-only JDA runner in draft #658; requires `--staffbot-environment staging`.
 - `--velocity-config`: read-only copy of Velocity `plugins/enthusiastaff/config.properties`; required with `--isolated-test`.
+- `--production-chat`: read-only copy of the currently deployed production StaffBot public-chat settings file (e.g. `c`); required with `--isolated-test`. Keep the whole file private, including its token.
 
 Run from the repository root after gathering authorized local config copies:
 
@@ -44,10 +45,11 @@ python tools/staffbot-chat-preflight/check.py \\
   --staffbot-environment staging \\
   --staffbot-environment-source staff-bot/src/main/java/net/enthusia/staff/discordbot/StaffBotEnvironment.java \\
   --isolated-test \\
-  --velocity-config PRIVATE_READONLY_VELOCITY.properties
+  --velocity-config PRIVATE_READONLY_VELOCITY.properties \
+  --production-chat PRIVATE_READONLY_PRODUCTION_CHAT.properties
 ```
 
-The isolated checks require `channel.enabled=true`, the existing `STAFFBOT` and `TEST` peer mappings, and a separate `STAFFBOT_TEST` mapping using a secret **environment-variable name distinct from every other configured peer**. They deliberately do not inspect the secret values or prove that HMAC material differs. Velocity must reject shared key material at startup; bot identity, TLS connectivity, and runtime permissions still need separate proof.
+The isolated checks require `channel.enabled=true`, the existing `STAFFBOT` and `TEST` peer mappings, and a separate `STAFFBOT_TEST` mapping using a secret **environment-variable name distinct from every other configured peer**. They deliberately do not inspect the secret values or prove that HMAC material differs. Velocity must reject shared key material at startup. The candidate chat application ID must also differ from the running production public-chat application ID, not merely from the staff bot IDs. The checker never inspects or outputs bot tokens. Actual token-to-ID binding, active-session exclusivity, TLS connectivity and permissions still need independent proof.
 
 **Exit status:** `0` means all config checks passed, `2` means blocked or unreadable. Neither result establishes that a bot is connected or ready.
 
