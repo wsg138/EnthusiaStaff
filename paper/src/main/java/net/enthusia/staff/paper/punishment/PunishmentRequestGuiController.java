@@ -575,7 +575,7 @@ public final class PunishmentRequestGuiController implements Listener {
                 : result instanceof PunishmentRequestResult.Denied denied
                 ? view(denied.request())
                 : resolvedView(service, current, lease, result);
-        onEntity(player, () -> presentDecision(player, service, result, resolvedView, returnPage));
+        onEntity(player, () -> presentDecision(player, service, lease, result, resolvedView, returnPage));
     }
 
     /**
@@ -636,13 +636,18 @@ public final class PunishmentRequestGuiController implements Listener {
     private void presentDecision(
             Player player,
             PunishmentRequestService service,
+            PunishmentApprovalLease lease,
             PunishmentRequestResult result,
             PunishmentRequestGuiState.RequestView resolvedView,
             int returnPage
     ) {
-        // The decision may already have committed, so acknowledge it even if
-        // the reviewer has lost access. Do not show private details afterward.
+        // A durable decision must be acknowledged even if staff navigated away.
         decisionMessage(player, result, resolvedView);
+        // Presentation is not a new navigation request: never replace a later
+        // inventory (including a different punishment review) with stale details.
+        if (!mayPresentDecisionInventory(player, lease)) {
+            return;
+        }
         Actor current = authorizedActor(player);
         if (current == null || (resolvedView != null && !service.mayReview(current, resolvedView.request()))) {
             player.closeInventory();
@@ -662,6 +667,28 @@ public final class PunishmentRequestGuiController implements Listener {
         } else {
             openQueue(player, returnPage);
         }
+    }
+
+    /** Owner-thread only: the player may have opened another GUI after deciding. */
+    private static boolean mayPresentDecisionInventory(Player player, PunishmentApprovalLease lease) {
+        InventoryView view = player.getOpenInventory();
+        if (view == null) {
+            return true;
+        }
+        Inventory top = view.getTopInventory();
+        if (top == null) {
+            return true;
+        }
+        if (top.getHolder(false) instanceof PunishmentRequestGuiHolder holder) {
+            return lease.equals(switch (holder.state()) {
+                case PunishmentRequestGuiState.Review review -> review.lease();
+                case PunishmentRequestGuiState.Denial denial -> denial.lease();
+                default -> null;
+            });
+        }
+        // Normal post-close player inventory has a CRAFTING top; any other
+        // inventory belongs to a later navigation and must not be replaced.
+        return top.getType() == org.bukkit.event.inventory.InventoryType.CRAFTING;
     }
 
     private Actor authorizedActor(Player player) {
