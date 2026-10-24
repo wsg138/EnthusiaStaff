@@ -73,7 +73,8 @@ final class PunishmentRequestControllerHarness {
                 () -> service,
                 () -> null,
                 authorization,
-                executor
+                executor,
+                details -> inventory(new PunishmentRequestGuiHolder(details))
         );
         return new Fixture(controller, store, scheduler, player, logger, executor, service);
     }
