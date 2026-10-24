@@ -259,6 +259,7 @@ final class PunishmentRequestControllerHarness {
 
     static final class PlayerHarness {
         final AtomicInteger messages = new AtomicInteger();
+        volatile String lastMessage;
         final AtomicInteger openInventories = new AtomicInteger();
         private final UUID id;
         private final Player proxy;
@@ -272,6 +273,10 @@ final class PunishmentRequestControllerHarness {
                 case "hasPermission" -> permission(arguments[0].toString());
                 case "sendMessage" -> {
                     messages.incrementAndGet();
+                    if (arguments.length > 0 && arguments[0] instanceof net.kyori.adventure.text.Component component) {
+                        lastMessage = net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
+                                .plainText().serialize(component);
+                    }
                     yield null;
                 }
                 case "openInventory" -> {
@@ -363,6 +368,7 @@ final class PunishmentRequestControllerHarness {
         int findReads;
         int acquireCalls;
         int approveTransitions;
+        boolean failAfterApprove;
         int denyTransitions;
         private long fence;
 
@@ -428,6 +434,9 @@ final class PunishmentRequestControllerHarness {
                     caseId,
                     now
             );
+            if (failAfterApprove) {
+                throw new IllegalStateException("synthetic lost acknowledgement after durable approval");
+            }
             return new PunishmentRequestResult.Approved(current, caseId, false);
         }
 

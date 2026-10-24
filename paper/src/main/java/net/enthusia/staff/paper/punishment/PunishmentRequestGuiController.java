@@ -477,7 +477,11 @@ public final class PunishmentRequestGuiController implements Listener {
             operation.run();
         } catch (RuntimeException exception) {
             plugin.getLogger().log(Level.SEVERE, "Punishment request GUI operation failed", exception);
-            message(player, "Punishment request storage is unavailable; no action was taken.");
+            // An exception can occur after a durable approve/deny commit but
+            // before the worker receives or presents its acknowledgement.
+            // Never tell staff that no action occurred on this ambiguous path.
+            message(player, "Punishment request operation failed; a decision may have been committed. "
+                    + "Check case history and request status before retrying.");
         }
     }
 

@@ -150,6 +150,25 @@ class PunishmentRequestControllerSchedulingIntegrationTest {
     }
 
     @Test
+    void lostAcknowledgementAfterDurableApprovalDoesNotFalselyClaimNoAction() {
+        Fixture fixture = fixture(pending(StaffRank.MOD), SchedulerMode.RUN);
+        PunishmentApprovalLease lease = acquire(fixture);
+        fixture.store().failAfterApprove = true;
+
+        fixture.controller().onInventoryClick(click(
+                fixture.player().proxy(), review(lease), PunishmentRequestGuiRenderer.APPROVE_SLOT
+        ));
+
+        assertEquals(1, fixture.store().approveTransitions);
+        assertEquals(PunishmentRequestStatus.APPROVED, fixture.store().current.status());
+        assertEquals(1, fixture.player().messages.get());
+        assertEquals(1, fixture.logger().severe.get());
+        assertTrue(fixture.player().lastMessage.contains("may have been committed"));
+        assertTrue(fixture.player().lastMessage.contains("Check case history"));
+        assertTrue(!fixture.player().lastMessage.contains("no action was taken"));
+    }
+
+    @Test
     void refreshAfterApprovedDecisionDoesNotCreateASecondDurableDecision() {
         Fixture fixture = fixture(pending(StaffRank.MOD), SchedulerMode.RUN);
         PunishmentApprovalLease lease = acquire(fixture);
