@@ -22,6 +22,7 @@ import net.enthusia.staff.domain.history.ModerationHistoryEntry;
 import net.enthusia.staff.domain.sanction.ActiveSanction;
 import net.enthusia.staff.domain.sanction.SanctionLength;
 import net.enthusia.staff.domain.sanction.SanctionSpec;
+import net.enthusia.staff.domain.sanction.SanctionType;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.format.TextDecoration;
@@ -226,16 +227,18 @@ final class PunishmentGuiRenderer {
     }
 
     private void renderGuided(Inventory inventory, PunishmentGuiState.Guided state, Actor actor) {
+        List<ReasonPolicy> authorizedReasons =
+                catalog.reasons(actor, state.commandName(), state.categoryId());
         var question = state.interview().nextQuestion();
         if (question.isPresent()) {
             renderGuidedQuestion(inventory, state, question.orElseThrow());
         } else {
-            renderGuidedResult(inventory, state, state.interview().finding());
+            renderGuidedResult(inventory, state, state.interview().finding(), authorizedReasons);
         }
         inventory.setItem(BACK_SLOT, button(Material.ARROW,
                 state.interview().answers().isEmpty() ? "Back · Categories" : "Previous Question",
                 NamedTextColor.AQUA));
-        if (catalog.reasons(actor, state.commandName(), state.categoryId()).isEmpty()) {
+        if (authorizedReasons.isEmpty()) {
             inventory.setItem(SEARCH_SLOT, item(Material.GRAY_DYE,
                     "Exact Reasons Unavailable", NamedTextColor.GRAY,
                     List.of(Component.text("No authorized exact reasons in this category.",
@@ -340,7 +343,14 @@ final class PunishmentGuiRenderer {
      * authoritative policy service can calculate a proposed outcome.
      */
     private void renderGuidedResult(Inventory inventory, PunishmentGuiState.Guided state,
-                                    GuidedIncidentWizard.Finding finding) {
+                                    GuidedIncidentWizard.Finding finding,
+                                    List<ReasonPolicy> authorizedReasons) {
+        boolean requiresReview = finding.needsReview() || finding.candidateId() == null;
+        boolean available = !requiresReview
+                && guidedCandidateAuthorized(finding.candidateId(), authorizedReasons);
+        boolean ordinaryRemedy = available && authorizedReasons.stream()
+                .filter(policy -> policy.id().equals(finding.candidateId()))
+                .anyMatch(PunishmentGuiRenderer::guidedPolicyHasOrdinaryRemedy);
         inventory.setItem(13, item(Material.KNOWLEDGE_BOOK,
                 "Review Incident Details", NamedTextColor.AQUA,
                 List.of(Component.text("Conduct: " + humanize(finding.conduct()), NamedTextColor.WHITE),
@@ -349,9 +359,13 @@ final class PunishmentGuiRenderer {
                                 NamedTextColor.GOLD),
                         Component.text("Relevant punishment history is checked automatically.",
                                 NamedTextColor.GRAY),
-                        Component.text(finding.needsReview() || finding.candidateId() == null
+                        Component.text(requiresReview
                                         ? "Uncertain incidents require individual staff review."
-                                        : "Exact sanction and duration appear in final review.",
+                                        : !available
+                                                ? "Identified reason unavailable for your staff access."
+                                                : ordinaryRemedy
+                                                        ? "Exact sanction and duration appear in final review."
+                                                        : "Configured sanctions require individual review.",
                                 NamedTextColor.YELLOW))));
         inventory.setItem(31, item(Material.WRITABLE_BOOK, "Incident Factors", NamedTextColor.AQUA,
                 finding.facts().isEmpty()
@@ -360,11 +374,29 @@ final class PunishmentGuiRenderer {
                         : finding.facts().stream()
                                 .<Component>map(value -> Component.text(value, NamedTextColor.WHITE))
                                 .toList()));
-        if (finding.needsReview() || finding.candidateId() == null) {
+        if (requiresReview) {
             inventory.setItem(22, item(Material.SHIELD, "Needs Staff Review", NamedTextColor.GOLD,
                     List.of(Component.text("These answers are not sufficient for automatic classification.",
                                     NamedTextColor.GRAY),
                             Component.text("Use Expert Reasons for a reviewed action.", NamedTextColor.YELLOW))));
+            return;
+        }
+        if (!available) {
+            inventory.setItem(22, item(Material.GRAY_CONCRETE,
+                    "Reason Unavailable", NamedTextColor.RED,
+                    List.of(Component.text("Your current rank or route cannot select this reason.",
+                                    NamedTextColor.GRAY),
+                            Component.text("Browse permitted reasons or ask authorized staff.",
+                                    NamedTextColor.YELLOW))));
+            return;
+        }
+        if (!ordinaryRemedy) {
+            inventory.setItem(22, item(Material.SHIELD,
+                    "Manual Sanction Review", NamedTextColor.GOLD,
+                    List.of(Component.text("No ordinary warning or temporary mute is configured.",
+                                    NamedTextColor.GRAY),
+                            Component.text("Use Expert Reasons for protected sanction types.",
+                                    NamedTextColor.YELLOW))));
             return;
         }
         inventory.setItem(GUIDED_SHORTER_SLOT, guidedPreference(
@@ -379,6 +411,30 @@ final class PunishmentGuiRenderer {
                                 NamedTextColor.WHITE),
                         Component.text("Opens final review; no punishment is applied yet.",
                                 NamedTextColor.YELLOW))));
+    }
+
+    /** Presentation-only check; draft preparation repeats authorization against current policy. */
+    static boolean guidedCandidateAuthorized(String candidateId, List<ReasonPolicy> authorizedReasons) {
+        return candidateId != null && authorizedReasons.stream()
+                .anyMatch(policy -> policy.id().equals(candidateId));
+    }
+
+    /**
+     * Preview only: policies containing exclusively bans, confiscation, permanent or
+     * mixed sanctions can never succeed in the current ordinary guided resolver.
+     * This does not predict the history-selected step or bypass the actual resolver.
+     */
+    static boolean guidedPolicyHasOrdinaryRemedy(ReasonPolicy policy) {
+        return policy.steps().stream().anyMatch(step -> {
+            if (step.sanctions().size() != 1) {
+                return false;
+            }
+            SanctionSpec spec = step.sanctions().getFirst();
+            return (spec.type() == SanctionType.WARNING
+                        && spec.length().isInstant())
+                    || (spec.type() == SanctionType.MUTE
+                        && spec.length().temporary().isPresent());
+        });
     }
 
     private static ItemStack guidedPreference(String name, int value, int selected) {
