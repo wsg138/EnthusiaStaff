@@ -72,6 +72,69 @@ class PunishmentDraftWorkflowTest {
     }
 
     @Test
+    void guidedPreparationRejectsPolicyReloadBetweenPreviewAndPersistence() {
+        Fixture fixture = fixture();
+        PunishmentAssessment preview = assertInstanceOf(PunishmentEvaluation.Allowed.class,
+                fixture.workflow.preview(request(StaffRank.MOD), OperationalMode.ACTIVE)).assessment();
+        fixture.policies.replace("v2", List.of(policy(Duration.ofDays(7))));
+
+        PunishmentDraftEvaluation.Rejected changed = assertInstanceOf(
+                PunishmentDraftEvaluation.Rejected.class,
+                fixture.workflow.prepare(request(StaffRank.MOD), OperationalMode.ACTIVE, preview));
+        assertEquals("RECOMMENDATION_CHANGED", changed.code());
+        assertTrue(fixture.workflow.resume(ACTOR_ID, TARGET_ID).isEmpty(),
+                "A guided audit computed from an obsolete policy must not be saved");
+    }
+
+    @Test
+    void guidedPreparationRejectsNewHistoryBetweenPreviewAndPersistence() {
+        Fixture fixture = fixture();
+        SanctionSpec warning = new SanctionSpec(SanctionType.WARNING, SanctionLength.instant());
+        SanctionSpec mute = new SanctionSpec(SanctionType.MUTE,
+                SanctionLength.temporary(Duration.ofHours(2)));
+        fixture.policies.replace("v1", List.of(new ReasonPolicy("chat.toxicity", "chat",
+                "Chat toxicity", 10, true, List.of(
+                new PunishmentStep(0, "First", List.of(warning)),
+                new PunishmentStep(1, "Escalated", List.of(mute))))));
+        PunishmentAssessment preview = assertInstanceOf(PunishmentEvaluation.Allowed.class,
+                fixture.workflow.preview(request(StaffRank.MOD), OperationalMode.ACTIVE)).assessment();
+        assertEquals(0, preview.escalation().selectedStep().ordinal());
+        fixture.moderation.priorOffenses = List.of(new PriorOffense(
+                "chat", 10, 0, NOW.minus(Duration.ofHours(1)), true, false));
+
+        PunishmentDraftEvaluation.Rejected changed = assertInstanceOf(
+                PunishmentDraftEvaluation.Rejected.class,
+                fixture.workflow.prepare(request(StaffRank.MOD), OperationalMode.ACTIVE, preview));
+        assertEquals("RECOMMENDATION_CHANGED", changed.code());
+        assertTrue(fixture.workflow.resume(ACTOR_ID, TARGET_ID).isEmpty(),
+                "History drift must not persist an audit with an obsolete guided outcome");
+    }
+
+    @Test
+    void guidedPreparationAcceptsStableBaselineWithConfiguredTierOverride() {
+        Fixture fixture = fixture();
+        SanctionSpec warning = new SanctionSpec(SanctionType.WARNING, SanctionLength.instant());
+        SanctionSpec mute = new SanctionSpec(SanctionType.MUTE,
+                SanctionLength.temporary(Duration.ofHours(2)));
+        fixture.policies.replace("v1", List.of(new ReasonPolicy("chat.toxicity", "chat",
+                "Chat toxicity", 10, true, List.of(
+                new PunishmentStep(0, "First", List.of(warning)),
+                new PunishmentStep(1, "Escalated", List.of(mute))))));
+        PunishmentAssessment preview = assertInstanceOf(PunishmentEvaluation.Allowed.class,
+                fixture.workflow.preview(request(StaffRank.ADMIN), OperationalMode.ACTIVE)).assessment();
+        PreparePunishmentDraftRequest selected = new PreparePunishmentDraftRequest(
+                TARGET_ID, actor(StaffRank.ADMIN), "chat.toxicity",
+                "Guided incident v1 | severity validated", CaseVisibility.PUBLIC,
+                "punish", List.of(mute));
+
+        PunishmentDraftEvaluation.Prepared prepared = assertInstanceOf(
+                PunishmentDraftEvaluation.Prepared.class,
+                fixture.workflow.prepare(selected, OperationalMode.ACTIVE, preview));
+        assertEquals(List.of(mute), prepared.draft().expectation().sanctions());
+        assertEquals(0, prepared.draft().expectation().stepOrdinal());
+    }
+
+    @Test
     void guidedExactConfiguredHigherStepSurvivesDraftConfirmation() {
         Fixture fixture = fixture();
         SanctionSpec warn = new SanctionSpec(SanctionType.WARNING, SanctionLength.instant());
@@ -319,10 +382,11 @@ class PunishmentDraftWorkflowTest {
 
     private static final class CapturingModerationStore implements ModerationStore {
         private final List<PunishmentPlan> plans = new ArrayList<>();
+        private List<PriorOffense> priorOffenses = List.of();
 
         @Override
         public List<PriorOffense> relatedHistory(UUID targetId, String family) {
-            return List.of();
+            return priorOffenses;
         }
 
         @Override

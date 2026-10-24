@@ -608,7 +608,7 @@ public final class PunishmentGuiController implements Listener {
                     + "No draft was created.");
             return;
         }
-        PunishmentDraftEvaluation evaluated = workflow.prepare(proposal, mode.get());
+        PunishmentDraftEvaluation evaluated = workflow.prepare(proposal, mode.get(), assessment);
         if (evaluated instanceof PunishmentDraftEvaluation.Prepared prepared) {
             guidedReturns.put(viewer.getUniqueId(),
                     new GuidedReturn(prepared.draft().draftId(), state));
