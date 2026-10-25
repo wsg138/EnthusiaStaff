@@ -67,6 +67,7 @@ import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryCloseEvent;
 import org.bukkit.event.inventory.InventoryDragEvent;
 import org.bukkit.event.inventory.InventoryOpenEvent;
+import org.bukkit.event.player.PlayerCommandPreprocessEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.InventoryHolder;
@@ -358,6 +359,21 @@ public final class PunishmentGuiController implements Listener {
         // supersedes that old navigation; otherwise a delayed callback could
         // replace the unrelated inventory or intercept its owner's next chat.
         UUID viewerId = viewer.getUniqueId();
+        noteCaptures.remove(viewerId);
+        searchCaptures.remove(viewerId);
+        historyFence.invalidate(viewerId);
+        preparationFence.invalidate(viewerId);
+        targetResolutionFence.invalidate(viewerId);
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR)
+    public void onCommand(PlayerCommandPreprocessEvent event) {
+        // A typed slash command indicates the staff member has left the
+        // pending punishment interaction, even when no inventory was opened.
+        // Invalidate unconditionally: AsyncChatEvent may already have removed
+        // its capture while the corresponding entity callback is still queued.
+        // The next /punish command mints its own fresh ticket afterwards.
+        UUID viewerId = event.getPlayer().getUniqueId();
         noteCaptures.remove(viewerId);
         searchCaptures.remove(viewerId);
         historyFence.invalidate(viewerId);
