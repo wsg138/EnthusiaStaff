@@ -36,4 +36,34 @@ class PunishmentCommandPreparedNavigationContractTest {
         assertTrue(finalPresentation.contains("targetResolutionFence.consume(viewer.getUniqueId(), targetTicket"),
                 "A delayed typed-command result must not reopen after the source inventory changed");
     }
+
+    @Test
+    void typedCommandSupersedesPromptOriginBeforeAnyWorkerCanPresent() throws Exception {
+        String command = read("command/PunishmentCommand.java");
+        String prepare = command.substring(command.indexOf("private void prepare(CommandSender sender,"),
+                command.indexOf("private static boolean isBanRoute("));
+        assertTrue(prepare.indexOf("gui.beginCommandPreparation(player)")
+                < prepare.indexOf("submit(sender,"),
+                "The typed command must invalidate prompts BEFORE scheduling storage work");
+
+        String controller = read("punishment/PunishmentGuiController.java");
+        String ticket = controller.substring(controller.indexOf("private PunishmentGuiTargetResolutionFence.Ticket beginTargetResolution("),
+                controller.indexOf("private void resolveTarget("));
+        assertTrue(ticket.contains("noteCaptures.remove(viewer.getUniqueId())"),
+                "A new typed punishment command cancels the previous private note prompt");
+        assertTrue(ticket.contains("searchCaptures.remove(viewer.getUniqueId())"),
+                "A new typed punishment command cancels the previous private search prompt");
+        assertTrue(ticket.indexOf("preparationFence.invalidate(viewerId)")
+                < ticket.indexOf("targetResolutionFence.begin(viewerId"),
+                "The old prompt ticket must be invalidated before the new typed command ticket is issued");
+
+        String chat = controller.substring(controller.indexOf("public void onChat("),
+                controller.indexOf("public void onQuit("));
+        assertTrue(chat.contains("preparationFence.consume(viewer.getUniqueId(), search.navigationToken())"),
+                "A delayed search response must never mint a fresh token after command navigation");
+        assertTrue(chat.contains("preparationFence.consume(viewer.getUniqueId(), capture.navigationToken())"),
+                "A delayed note response must never mint a fresh token after command navigation");
+        assertTrue(!chat.contains("preparationFence.begin(viewer.getUniqueId())"),
+                "Capture identity must be fixed at prompt creation, not revived by late chat");
+    }
 }
