@@ -698,6 +698,9 @@ public final class PunishmentGuiController implements Listener {
 
     private void evaluateGuided(Player viewer, Actor actor, PunishmentGuiState.Guided state,
                                 GuidedIncidentWizard.Finding finding, Object token) {
+        if (!workerAuthorityActive(viewer, actor)) {
+            return;
+        }
         if (!guidedModeEnabled()) {
             message(viewer, "Guided punishment mode was disabled. No draft was created.");
             return;
@@ -744,6 +747,9 @@ public final class PunishmentGuiController implements Listener {
         if (!guidedModeEnabled()) {
             message(viewer, "Guided punishment mode was disabled during calculation. "
                     + "No draft was created.");
+            return;
+        }
+        if (!workerAuthorityActive(viewer, actor)) {
             return;
         }
         PunishmentDraftEvaluation evaluated = workflow.prepare(proposal, mode.get(), assessment);
@@ -1130,12 +1136,16 @@ public final class PunishmentGuiController implements Listener {
     ) {
         Object token = preparationFence.begin(viewer.getUniqueId());
         boolean submitted = submit(viewer, () -> {
-            if (!targetAllowed(viewer, actor, state.target().playerId())) {
+            if (!workerAuthorityActive(viewer, actor)
+                    || !targetAllowed(viewer, actor, state.target().playerId())) {
                 return;
             }
             PunishmentDraftWorkflow workflow = workflows.get();
             if (workflow == null) {
                 message(viewer, "Moderation storage is not ready; no draft was created.");
+                return;
+            }
+            if (!workerAuthorityActive(viewer, actor)) {
                 return;
             }
             PunishmentDraftEvaluation evaluation = workflow.prepare(
@@ -1199,7 +1209,8 @@ public final class PunishmentGuiController implements Listener {
     ) {
         Object token = preparationFence.begin(viewer.getUniqueId());
         boolean submitted = submit(viewer, () -> {
-            if (!targetAllowed(viewer, actor, state.target().playerId())) {
+            if (!workerAuthorityActive(viewer, actor)
+                    || !targetAllowed(viewer, actor, state.target().playerId())) {
                 return;
             }
             PunishmentDraftWorkflow workflow = workflows.get();
@@ -1233,6 +1244,9 @@ public final class PunishmentGuiController implements Listener {
             // A note or visibility edit must not silently replace the guided
             // sanctions reviewed by staff, even after a resumed draft has lost
             // its transient assessment. Expert edits retain the original path.
+            if (!workerAuthorityActive(viewer, actor)) {
+                return;
+            }
             PunishmentDraftEvaluation evaluation = isGuidedDraft(state.draft().internalExplanation())
                     ? workflow.prepare(edited, mode.get(),
                             state.assessment().orElse(null), state.draft().expectation())
@@ -1384,6 +1398,9 @@ public final class PunishmentGuiController implements Listener {
     }
 
     private void confirmOnce(Player viewer, Actor actor, PunishmentGuiState.Review state) {
+        if (!workerAuthorityActive(viewer, actor)) {
+            return;
+        }
         if (isGuidedDraft(state.draft().internalExplanation()) && !guidedModeEnabled()) {
             message(viewer, "Guided punishment mode is disabled. "
                     + "No sanction or approval request was submitted.");
@@ -1395,6 +1412,9 @@ public final class PunishmentGuiController implements Listener {
         PunishmentDraftWorkflow workflow = workflows.get();
         if (workflow == null) {
             message(viewer, "Moderation storage is not ready; no action was taken.");
+            return;
+        }
+        if (!workerAuthorityActive(viewer, actor)) {
             return;
         }
         Optional<PunishmentDraftConfirmation> result = confirmDraft(viewer, actor, state, workflow);
@@ -1815,11 +1835,30 @@ public final class PunishmentGuiController implements Listener {
         });
     }
 
+    /**
+     * GUI clicks are authorized on the entity thread, but queued work must
+     * recheck active Staff Mode before it can create or confirm a draft.
+     * Rank drift is independently rejected by the target hierarchy guard.
+     */
+    private boolean workerAuthorityActive(Player viewer, Actor actor) {
+        if (currentWorkerAuthority(authorization, actor, viewer.getUniqueId())) {
+            return true;
+        }
+        message(viewer, "Your active staff authority expired while this punishment was queued. "
+                + "Reopen the punishment GUI after entering Staff Mode.");
+        return false;
+    }
+
+    static boolean currentWorkerAuthority(AuthorizationPolicy policy, Actor actor, UUID viewerId) {
+        return policy != null && actor != null && viewerId != null
+                && viewerId.equals(actor.id())
+                && (policy.permits(actor, ModerationAction.ISSUE_POLICY_SANCTION)
+                || policy.permits(actor, ModerationAction.REQUEST_POLICY_SANCTION));
+    }
+
     private Actor authorizedActor(Player viewer) {
         Actor actor = PaperActorResolver.resolve(viewer).orElse(null);
-        if (actor == null || !actor.id().equals(viewer.getUniqueId())
-                || (!authorization.permits(actor, ModerationAction.ISSUE_POLICY_SANCTION)
-                && !authorization.permits(actor, ModerationAction.REQUEST_POLICY_SANCTION))) {
+        if (!currentWorkerAuthority(authorization, actor, viewer.getUniqueId())) {
             viewer.sendMessage(StaffMessageStyle.style(Component.text("You do not have punishment authority.")));
             return null;
         }
