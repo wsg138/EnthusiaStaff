@@ -356,7 +356,7 @@ public final class PunishmentRequestCommandHandler {
         } catch (RuntimeException exception) {
             plugin.getLogger().log(Level.SEVERE, "Punishment request command failed", exception);
             onSenderThread(sender, () -> sender.sendMessage(StaffMessageStyle.style(Component.text(
-                    "Punishment request storage is unavailable; no decision was made.",
+                    PunishmentOutcomeUnknownNotice.requestDecision(),
                     NamedTextColor.RED
             ))));
         }
