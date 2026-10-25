@@ -139,6 +139,7 @@ public final class PunishmentGuiController implements Listener {
         if (authorizedActor(viewer) == null) {
             return;
         }
+        noteCaptures.remove(viewer.getUniqueId());
         String normalizedCommand = normalizeCommand(commandName);
         onEntity(viewer, () -> openTargetPickerPage(viewer, normalizedCommand, 0));
     }
@@ -357,6 +358,12 @@ public final class PunishmentGuiController implements Listener {
             return;
         }
         event.setCancelled(true);
+        // A delayed 60-second scheduler callback can run late under load.
+        // Never let an already-expired private prompt edit an old draft.
+        if (noteCaptureExpired(capture.startedAt(), clock.instant())) {
+            message(viewer, "Punishment note entry expired. Reopen the saved review to edit it.");
+            return;
+        }
         String note = PlainTextComponentSerializer.plainText().serialize(event.message()).trim();
         Object noteTicket = preparationFence.begin(viewer.getUniqueId());
         onEntity(viewer, () -> {
@@ -873,7 +880,15 @@ public final class PunishmentGuiController implements Listener {
             return;
         }
         if (slot == PunishmentGuiRenderer.NOTE_SLOT) {
-            noteCaptures.put(viewer.getUniqueId(), new NoteCapture(state));
+            NoteCapture capture = new NoteCapture(state, clock.instant());
+            noteCaptures.put(viewer.getUniqueId(), capture);
+            viewer.getScheduler().runDelayed(plugin, task -> {
+                if (noteCaptures.remove(viewer.getUniqueId(), capture)) {
+                    viewer.sendMessage(StaffMessageStyle.style(Component.text(
+                            "Punishment note entry timed out. Reopen the saved review to edit it."
+                    )));
+                }
+            }, null, 20L * 60L);
             suppressedClosures.add(viewer.getUniqueId());
             viewer.closeInventory();
             viewer.sendMessage(StaffMessageStyle.style(Component.text(
@@ -1507,6 +1522,7 @@ public final class PunishmentGuiController implements Listener {
 
     private PunishmentGuiTargetResolutionFence.Ticket beginTargetResolution(Player viewer) {
         UUID viewerId = viewer.getUniqueId();
+        noteCaptures.remove(viewer.getUniqueId());
         // A new /punish command supersedes any older pending GUI work.
         historyFence.invalidate(viewerId);
         preparationFence.invalidate(viewerId);
@@ -1571,6 +1587,7 @@ public final class PunishmentGuiController implements Listener {
     }
 
     private void openTargetPickerPage(Player viewer, String commandName, int requestedPage) {
+        noteCaptures.remove(viewer.getUniqueId());
         historyFence.invalidate(viewer.getUniqueId());
         preparationFence.invalidate(viewer.getUniqueId());
         targetResolutionFence.invalidate(viewer.getUniqueId());
@@ -1598,6 +1615,7 @@ public final class PunishmentGuiController implements Listener {
     }
 
     private void openState(Player viewer, PunishmentGuiState state) {
+        noteCaptures.remove(viewer.getUniqueId());
         historyFence.invalidate(viewer.getUniqueId());
         preparationFence.invalidate(viewer.getUniqueId());
         targetResolutionFence.invalidate(viewer.getUniqueId());
@@ -1655,6 +1673,9 @@ public final class PunishmentGuiController implements Listener {
                 return;
             }
             Inventory inventory = renderer.render(state, actor, guidedModeEnabled());
+            // Resolved targets, history pages and prepared reviews also supersede
+            // abandoned chat-note prompts, even without calling openState().
+            noteCaptures.remove(viewer.getUniqueId());
             if (guidedOrigin != null && state instanceof PunishmentGuiState.Review review
                     && guidedModeEnabled()) {
                 guidedReturns.put(viewer.getUniqueId(),
@@ -1810,10 +1831,14 @@ public final class PunishmentGuiController implements Listener {
         }
     }
 
-    private record NoteCapture(PunishmentGuiState.Review review) {
+    static boolean noteCaptureExpired(Instant startedAt, Instant now) {
+        return !now.isBefore(startedAt.plus(Duration.ofSeconds(60)));
+    }
+
+    private record NoteCapture(PunishmentGuiState.Review review, Instant startedAt) {
         private NoteCapture {
-            if (review == null) {
-                throw new IllegalArgumentException("punishment note capture requires a review");
+            if (review == null || startedAt == null) {
+                throw new IllegalArgumentException("punishment note capture requires a review and start time");
             }
         }
     }
