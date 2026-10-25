@@ -190,6 +190,7 @@ public final class StaffToolDispatcher implements Listener, CommandExecutor, Tab
 
     @EventHandler(priority = EventPriority.MONITOR)
     public void onQuit(PlayerQuitEvent event) {
+        spectateFlow.stop(event.getPlayer());
         randomTeleport.forget(event.getPlayer().getUniqueId());
         cooldowns.clear(event.getPlayer().getUniqueId());
     }
