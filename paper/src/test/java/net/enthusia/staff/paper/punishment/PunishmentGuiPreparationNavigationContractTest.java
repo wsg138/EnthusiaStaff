@@ -94,6 +94,26 @@ class PunishmentGuiPreparationNavigationContractTest {
     }
 
     @Test
+    void delayedPrivateChatRepliesCannotRestoreSupersededSearchOrDraft() throws Exception {
+        String controller = controller();
+        String chat = controller.substring(controller.indexOf("public void onChat("),
+                controller.indexOf("public void onQuit("));
+        // AsyncChatEvent may complete before its entity-scheduler callback runs.
+        // Both chat captures must obey the same navigation invalidations as
+        // delayed database draft preparation, before reopening an old GUI.
+        assertTrue(chat.contains("preparationFence.begin(viewer.getUniqueId())"),
+                "Chat responses must acquire single-use navigation tickets");
+        assertTrue(chat.contains("preparationFence.consume(viewer.getUniqueId(), searchTicket)"),
+                "Queued search replies cannot reopen a superseded reason page");
+        assertTrue(chat.contains("preparationFence.consume(viewer.getUniqueId(), noteTicket)"),
+                "Queued note replies cannot reopen or change a superseded draft");
+        assertTrue(chat.indexOf("preparationFence.consume(viewer.getUniqueId(), searchTicket)")
+                < chat.indexOf("finishSearch(viewer, search, query)"));
+        assertTrue(chat.indexOf("preparationFence.consume(viewer.getUniqueId(), noteTicket)")
+                < chat.indexOf("reprepare(viewer, actor, capture.review(), note,"));
+    }
+
+    @Test
     void closeClickDragQuitAndNewNavigationInvalidatePendingDraftPresentation() throws Exception {
         String controller = controller();
         for (String method : new String[] {
