@@ -40,7 +40,9 @@ final class StaffBotChatSettingsFile {
             StaffBotChatBridgeConfiguration.QUEUE_CAPACITY_ENV,
             StaffBotChatBridgeConfiguration.DEDUPE_CAPACITY_ENV,
             PublicChatDiscordConfiguration.TOKEN_ENV,
-            PublicChatDiscordConfiguration.APPLICATION_ID_ENV);
+            PublicChatDiscordConfiguration.APPLICATION_ID_ENV,
+            StaffBotSharedJdaTestPeer.ENABLED,
+            StaffBotSharedJdaTestPeer.CLIENT_SECRET);
 
     private StaffBotChatSettingsFile() {
     }
