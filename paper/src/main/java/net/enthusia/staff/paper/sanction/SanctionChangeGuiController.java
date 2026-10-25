@@ -40,6 +40,7 @@ import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryOpenEvent;
+import org.bukkit.event.inventory.InventoryCloseEvent;
 import org.bukkit.event.inventory.InventoryDragEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.event.player.PlayerCommandPreprocessEvent;
@@ -76,6 +77,7 @@ public final class SanctionChangeGuiController implements Listener {
     private final Map<UUID, InputCapture> inputCaptures = new ConcurrentHashMap<>();
     // A chat callback may already be queued after AsyncChatEvent removes the capture.
     private final Map<UUID, Object> pendingChatTokens = new ConcurrentHashMap<>();
+    private final SanctionChangeGuiLookupFence lookupFence = new SanctionChangeGuiLookupFence();
     private final Set<UUID> confirmations = ConcurrentHashMap.newKeySet();
 
     public SanctionChangeGuiController(
@@ -115,7 +117,11 @@ public final class SanctionChangeGuiController implements Listener {
             return;
         }
         String normalizedCommand = commandName.toLowerCase(Locale.ROOT);
-        submit(viewer, () -> resolveAndOpen(viewer, targetQuery, normalizedCommand));
+        SanctionChangeGuiLookupFence.Ticket ticket = lookupFence.begin(
+                viewer.getUniqueId(), viewer.getOpenInventory().getTopInventory());
+        if (!submit(viewer, () -> resolveAndOpen(viewer, targetQuery, normalizedCommand, ticket))) {
+            lookupFence.cancel(viewer.getUniqueId(), ticket);
+        }
     }
 
     @EventHandler(priority = EventPriority.HIGHEST)
@@ -177,12 +183,21 @@ public final class SanctionChangeGuiController implements Listener {
     public void onInventoryOpen(InventoryOpenEvent event) {
         if (event.getPlayer() instanceof Player viewer) {
             cancelPendingInput(viewer.getUniqueId());
+            lookupFence.cancel(viewer.getUniqueId());
+        }
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR)
+    public void onInventoryClose(InventoryCloseEvent event) {
+        if (event.getPlayer() instanceof Player viewer) {
+            lookupFence.cancel(viewer.getUniqueId());
         }
     }
 
     @EventHandler(priority = EventPriority.HIGHEST)
     public void onCommandPreprocess(PlayerCommandPreprocessEvent event) {
         cancelPendingInput(event.getPlayer().getUniqueId());
+        lookupFence.cancel(event.getPlayer().getUniqueId());
     }
 
     private void cancelPendingInput(UUID viewerId) {
@@ -228,6 +243,7 @@ public final class SanctionChangeGuiController implements Listener {
     public void onQuit(PlayerQuitEvent event) {
         UUID viewerId = event.getPlayer().getUniqueId();
         cancelPendingInput(viewerId);
+        lookupFence.cancel(viewerId);
         confirmations.remove(viewerId);
     }
 
@@ -257,7 +273,8 @@ public final class SanctionChangeGuiController implements Listener {
     private void resolveAndOpen(
             Player viewer,
             String targetQuery,
-            String commandName
+            String commandName,
+            SanctionChangeGuiLookupFence.Ticket ticket
     ) {
         CaseReviewStore reviewStore = reviews.get();
         CaseLookup caseLookup = cases.get();
@@ -267,7 +284,7 @@ public final class SanctionChangeGuiController implements Listener {
             return;
         }
         CaseId direct = parseCaseId(targetQuery);
-        if (direct != null && tryOpenDirectCase(viewer, commandName, direct, reviewStore, caseLookup)) {
+        if (direct != null && tryOpenDirectCase(viewer, commandName, direct, reviewStore, caseLookup, ticket)) {
             return;
         }
         PlayerIdentity target = directory.find(targetQuery).orElse(null);
@@ -275,7 +292,7 @@ public final class SanctionChangeGuiController implements Listener {
             message(viewer, "No matching player or case was found.");
             return;
         }
-        openPlayerTarget(viewer, commandName, target, reviewStore, caseLookup);
+        openPlayerTarget(viewer, commandName, target, reviewStore, caseLookup, ticket);
     }
 
     private boolean tryOpenDirectCase(
@@ -283,7 +300,8 @@ public final class SanctionChangeGuiController implements Listener {
             String commandName,
             CaseId caseId,
             CaseReviewStore reviewStore,
-            CaseLookup caseLookup
+            CaseLookup caseLookup,
+            SanctionChangeGuiLookupFence.Ticket ticket
     ) {
         CaseReview review = reviewStore.find(caseId).orElse(null);
         if (review == null || !matchesCommandCase(commandName, caseId, caseLookup)) {
@@ -294,9 +312,9 @@ public final class SanctionChangeGuiController implements Listener {
             message(viewer, "That case is Discord-only and cannot be changed from the Minecraft sanction GUI.");
             return true;
         }
-        openState(viewer, new SanctionChangeGuiState.Actions(
+        openResolvedState(viewer, new SanctionChangeGuiState.Actions(
                 viewer.getUniqueId(), commandName, targetId.toString(), review, Optional.empty()
-        ));
+        ), ticket);
         return true;
     }
 
@@ -305,11 +323,12 @@ public final class SanctionChangeGuiController implements Listener {
             String commandName,
             PlayerIdentity target,
             CaseReviewStore reviewStore,
-            CaseLookup caseLookup
+            CaseLookup caseLookup,
+            SanctionChangeGuiLookupFence.Ticket ticket
     ) {
         String targetLabel = target.currentUsername().orElse(target.playerId().toString());
         if (REMOVE_PUNISHMENT_COMMAND.equals(commandName)) {
-            openRemovalCases(viewer, commandName, target, targetLabel, reviewStore);
+            openRemovalCases(viewer, commandName, target, targetLabel, reviewStore, ticket);
             return;
         }
         CaseId latest = caseLookup.latestCase(
@@ -320,9 +339,9 @@ public final class SanctionChangeGuiController implements Listener {
             message(viewer, "No matching active punishment was found for " + targetLabel + '.');
             return;
         }
-        openState(viewer, new SanctionChangeGuiState.Actions(
+        openResolvedState(viewer, new SanctionChangeGuiState.Actions(
                 viewer.getUniqueId(), commandName, targetLabel, review, Optional.empty()
-        ));
+        ), ticket);
     }
 
     private void openRemovalCases(
@@ -330,16 +349,17 @@ public final class SanctionChangeGuiController implements Listener {
             String commandName,
             PlayerIdentity target,
             String targetLabel,
-            CaseReviewStore reviewStore
+            CaseReviewStore reviewStore,
+            SanctionChangeGuiLookupFence.Ticket ticket
     ) {
         List<CaseReview> recent = reviewStore.recent(target.playerId(), RECENT_CASE_LIMIT);
         if (recent.isEmpty()) {
             message(viewer, "No punishment history was found for " + targetLabel + '.');
             return;
         }
-        openState(viewer, new SanctionChangeGuiState.Cases(
+        openResolvedState(viewer, new SanctionChangeGuiState.Cases(
                 viewer.getUniqueId(), commandName, targetLabel, recent, 0
-        ));
+        ), ticket);
     }
 
     private void caseClick(
@@ -529,6 +549,21 @@ public final class SanctionChangeGuiController implements Listener {
         if (!submitted) {
             confirmations.remove(viewer.getUniqueId());
         }
+    }
+
+    private void openResolvedState(
+            Player viewer, SanctionChangeGuiState state, SanctionChangeGuiLookupFence.Ticket ticket
+    ) {
+        onEntity(viewer, () -> {
+            if (!lookupFence.consume(viewer.getUniqueId(), ticket,
+                    viewer.getOpenInventory().getTopInventory())) {
+                return;
+            }
+            Actor actor = authorizedActor(viewer);
+            if (actor != null) {
+                viewer.openInventory(renderer.render(state, actor, viewer));
+            }
+        });
     }
 
     private void openState(Player viewer, SanctionChangeGuiState state) {
