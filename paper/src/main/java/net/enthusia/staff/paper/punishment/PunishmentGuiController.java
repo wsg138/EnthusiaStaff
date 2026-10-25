@@ -98,6 +98,7 @@ public final class PunishmentGuiController implements Listener {
     private final Set<UUID> confirmations = ConcurrentHashMap.newKeySet();
     private final Map<UUID, NoteCapture> noteCaptures = new ConcurrentHashMap<>();
     private final Map<UUID, SearchCapture> searchCaptures = new ConcurrentHashMap<>();
+    private final PunishmentGuiHistoryFence historyFence = new PunishmentGuiHistoryFence();
     private static final String PUNISH_COMMAND = "punish";
     private final Map<UUID, GuidedReturn> guidedReturns = new ConcurrentHashMap<>();
 
@@ -222,6 +223,8 @@ public final class PunishmentGuiController implements Listener {
             return;
         }
         event.setCancelled(true);
+        // A new interaction supersedes any history page still loading.
+        historyFence.invalidate(viewer.getUniqueId());
         int slot = topInventorySlot(event, top);
         if (slot < 0) {
             return;
@@ -290,6 +293,7 @@ public final class PunishmentGuiController implements Listener {
         InventoryHolder holder = event.getView().getTopInventory().getHolder(false);
         if (holder instanceof PunishmentGuiHolder || holder instanceof PunishmentTargetPickerHolder) {
             event.setCancelled(true);
+            historyFence.invalidate(event.getWhoClicked().getUniqueId());
         }
     }
 
@@ -299,6 +303,8 @@ public final class PunishmentGuiController implements Listener {
                 || !(event.getInventory().getHolder(false) instanceof PunishmentGuiHolder holder)) {
             return;
         }
+        // Closing the source inventory must cancel a delayed database result.
+        historyFence.invalidate(viewer.getUniqueId());
         if (suppressedClosures.remove(viewer.getUniqueId())) {
             return;
         }
@@ -358,6 +364,7 @@ public final class PunishmentGuiController implements Listener {
         guidedReturns.remove(viewerId);
         suppressedClosures.remove(viewerId);
         confirmations.remove(viewerId);
+        historyFence.invalidate(viewerId);
     }
 
     private void targetPickerClick(Player viewer, PunishmentTargetPickerHolder picker, int slot) {
@@ -903,11 +910,12 @@ public final class PunishmentGuiController implements Listener {
 
     private void openHistory(Player viewer, PunishmentGuiState returnState, int page) {
         boolean sensitiveHistory = viewer.hasPermission(HistoryCommand.SENSITIVE_PERMISSION);
-        submit(viewer, () -> {
+        Object token = historyFence.begin(viewer.getUniqueId());
+        boolean submitted = submit(viewer, () -> {
             ModerationHistoryStore store = histories.get();
             ModerationFeatureSettings active = settings.get();
             if (store == null || active == null) {
-                openUnavailableHistory(viewer, returnState, sensitiveHistory);
+                openUnavailableHistory(viewer, returnState, sensitiveHistory, token);
                 return;
             }
             HistoryQueryOptions options = historyOptions(active, sensitiveHistory);
@@ -918,7 +926,7 @@ public final class PunishmentGuiController implements Listener {
                         HISTORY_PAGE_SIZE,
                         options
                 );
-                openState(viewer, new PunishmentGuiState.History(
+                openHistoryState(viewer, new PunishmentGuiState.History(
                         returnState.viewerId(),
                         returnState.target(),
                         returnState.commandName(),
@@ -927,20 +935,25 @@ public final class PunishmentGuiController implements Listener {
                         sensitiveHistory,
                         true,
                         returnState
-                ));
+                ), token);
             } catch (IllegalArgumentException exception) {
+                historyFence.consume(viewer.getUniqueId(), token);
                 message(viewer, "That history page is no longer available.");
             } catch (RuntimeException exception) {
                 plugin.getLogger().log(Level.WARNING, "Punishment GUI history lookup failed", exception);
-                openUnavailableHistory(viewer, returnState, sensitiveHistory);
+                openUnavailableHistory(viewer, returnState, sensitiveHistory, token);
             }
         });
+        if (!submitted) {
+            historyFence.consume(viewer.getUniqueId(), token);
+        }
     }
 
     private void openUnavailableHistory(
             Player viewer,
             PunishmentGuiState returnState,
-            boolean sensitiveHistory
+            boolean sensitiveHistory,
+            Object token
     ) {
         ModerationHistoryPage empty = new ModerationHistoryPage(
                 returnState.target().playerId(),
@@ -950,7 +963,7 @@ public final class PunishmentGuiController implements Listener {
                 0,
                 List.of()
         );
-        openState(viewer, new PunishmentGuiState.History(
+        openHistoryState(viewer, new PunishmentGuiState.History(
                 returnState.viewerId(),
                 returnState.target(),
                 returnState.commandName(),
@@ -959,7 +972,7 @@ public final class PunishmentGuiController implements Listener {
                 sensitiveHistory,
                 false,
                 returnState
-        ));
+        ), token);
     }
 
     private void prepare(
@@ -1445,6 +1458,7 @@ public final class PunishmentGuiController implements Listener {
     }
 
     private void openTargetPickerPage(Player viewer, String commandName, int requestedPage) {
+        historyFence.invalidate(viewer.getUniqueId());
         Actor actor = authorizedActor(viewer);
         if (actor == null) {
             return;
@@ -1469,7 +1483,22 @@ public final class PunishmentGuiController implements Listener {
     }
 
     private void openState(Player viewer, PunishmentGuiState state) {
+        historyFence.invalidate(viewer.getUniqueId());
+        presentState(viewer, state, null);
+    }
+
+    private void openHistoryState(Player viewer, PunishmentGuiState.History state, Object token) {
+        presentState(viewer, state, token);
+    }
+
+    private void presentState(Player viewer, PunishmentGuiState state, Object historyToken) {
         onEntity(viewer, () -> {
+            // Guard on the entity thread at presentation time, not merely when
+            // the asynchronous history store finishes querying.
+            if (historyToken != null
+                    && !historyFence.consume(viewer.getUniqueId(), historyToken)) {
+                return;
+            }
             searchCaptures.remove(viewer.getUniqueId());
             Actor actor = authorizedActor(viewer);
             if (actor == null) {
@@ -1501,6 +1530,7 @@ public final class PunishmentGuiController implements Listener {
     }
 
     private void closeWithoutResume(Player viewer) {
+        historyFence.invalidate(viewer.getUniqueId());
         if (viewer.getOpenInventory().getTopInventory().getHolder(false) instanceof PunishmentGuiHolder) {
             suppressedClosures.add(viewer.getUniqueId());
         }
