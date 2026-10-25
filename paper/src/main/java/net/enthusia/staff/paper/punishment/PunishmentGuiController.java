@@ -1382,7 +1382,9 @@ public final class PunishmentGuiController implements Listener {
             ));
             return;
         }
-        boolean submitted = submit(viewer, () -> runConfirmation(viewer, actor, state, viewerId));
+        Inventory confirmationOrigin = viewer.getOpenInventory().getTopInventory();
+        boolean submitted = submit(viewer, () ->
+                runConfirmation(viewer, actor, state, viewerId, confirmationOrigin));
         if (!submitted) {
             confirmations.remove(viewerId);
         }
@@ -1392,16 +1394,18 @@ public final class PunishmentGuiController implements Listener {
             Player viewer,
             Actor actor,
             PunishmentGuiState.Review state,
-            UUID viewerId
+            UUID viewerId,
+            Inventory confirmationOrigin
     ) {
         try {
-            confirmOnce(viewer, actor, state);
+            confirmOnce(viewer, actor, state, confirmationOrigin);
         } finally {
             confirmations.remove(viewerId);
         }
     }
 
-    private void confirmOnce(Player viewer, Actor actor, PunishmentGuiState.Review state) {
+    private void confirmOnce(Player viewer, Actor actor, PunishmentGuiState.Review state,
+                             Inventory confirmationOrigin) {
         if (!workerAuthorityActive(viewer, actor)) {
             return;
         }
@@ -1421,15 +1425,17 @@ public final class PunishmentGuiController implements Listener {
         if (!workerAuthorityActive(viewer, actor)) {
             return;
         }
-        Optional<PunishmentDraftConfirmation> result = confirmDraft(viewer, actor, state, workflow);
-        result.ifPresent(value -> handleConfirmation(viewer, actor, state, value));
+        Optional<PunishmentDraftConfirmation> result =
+                confirmDraft(viewer, actor, state, workflow, confirmationOrigin);
+        result.ifPresent(value -> handleConfirmation(viewer, actor, state, value, confirmationOrigin));
     }
 
     private Optional<PunishmentDraftConfirmation> confirmDraft(
             Player viewer,
             Actor actor,
             PunishmentGuiState.Review state,
-            PunishmentDraftWorkflow workflow
+            PunishmentDraftWorkflow workflow,
+            Inventory confirmationOrigin
     ) {
         try {
             // A feature disable between the GUI click and the worker run must fail closed.
@@ -1446,7 +1452,7 @@ public final class PunishmentGuiController implements Listener {
                     exception
             );
             finish(viewer, "Punishment committed as case " + exception.accepted().caseId()
-                    + ", but draft cleanup failed. Reconfirming is idempotent.");
+                    + ", but draft cleanup failed. Reconfirming is idempotent.", confirmationOrigin);
             // The case was committed even though draft deletion failed. This
             // first success still deserves its public announcement; replay does not.
             if (!exception.accepted().replayed()) {
@@ -1459,7 +1465,8 @@ public final class PunishmentGuiController implements Listener {
                             + exception.submitted().request().requestId(),
                     exception
             );
-            finish(viewer, "Punishment request submitted, but draft cleanup failed. Reconfirming is idempotent.");
+            finish(viewer, "Punishment request submitted, but draft cleanup failed. Reconfirming is idempotent.",
+                    confirmationOrigin);
         }
         return Optional.empty();
     }
@@ -1468,11 +1475,13 @@ public final class PunishmentGuiController implements Listener {
             Player viewer,
             Actor actor,
             PunishmentGuiState.Review state,
-            PunishmentDraftConfirmation result
+            PunishmentDraftConfirmation result,
+            Inventory confirmationOrigin
     ) {
         if (result instanceof PunishmentDraftConfirmation.Applied applied) {
             finish(viewer, "Punishment saved | Case " + applied.accepted().caseId()
-                    + (applied.accepted().replayed() ? " (already processed)" : "") + '.');
+                    + (applied.accepted().replayed() ? " (already processed)" : "") + '.',
+                    confirmationOrigin);
             if (!applied.accepted().replayed()) {
                 announceNewlyCommitted(viewer, state);
             }
@@ -1483,13 +1492,14 @@ public final class PunishmentGuiController implements Listener {
             if (status == PunishmentRequestStatus.PENDING) {
                 finish(viewer, "Approval request "
                         + (requested.submitted().replayed() ? "already exists" : "submitted")
-                        + ". No punishment has been applied yet.");
+                        + ". No punishment has been applied yet.", confirmationOrigin);
             } else {
                 // Recovery can discover a request that was resolved after the
                 // original submission committed but draft cleanup failed.
                 // Do not tell staff no punishment was applied if it was approved.
                 finish(viewer, "Approval request already exists ("
-                        + status.name() + "). Check request and case history for its outcome.");
+                        + status.name() + "). Check request and case history for its outcome.",
+                        confirmationOrigin);
             }
             return;
         }
@@ -1881,10 +1891,19 @@ public final class PunishmentGuiController implements Listener {
         viewer.closeInventory();
     }
 
-    private void finish(Player viewer, String result) {
+    /** Do not close a chest, other plugin GUI or newer review after a slow confirmation. */
+    static boolean confirmedInventoryStillOpen(Inventory confirmationOrigin, Inventory current) {
+        return confirmationOrigin != null && confirmationOrigin == current;
+    }
+
+    private void finish(Player viewer, String result, Inventory confirmationOrigin) {
         onEntity(viewer, () -> {
-            guidedReturns.remove(viewer.getUniqueId());
-            closeWithoutResume(viewer);
+            if (confirmedInventoryStillOpen(confirmationOrigin,
+                    viewer.getOpenInventory().getTopInventory())) {
+                guidedReturns.remove(viewer.getUniqueId());
+                closeWithoutResume(viewer);
+            }
+            // The sanction/request may have committed even if navigation changed.
             viewer.sendMessage(StaffMessageStyle.style(Component.text(result)));
         });
     }
