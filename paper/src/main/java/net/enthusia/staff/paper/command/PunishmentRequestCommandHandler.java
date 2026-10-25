@@ -135,7 +135,7 @@ public final class PunishmentRequestCommandHandler {
         List<RequestView> pending = service.reviewable(actor, CONSOLE_QUEUE_LIMIT).stream()
                 .map(this::view)
                 .toList();
-        onMain(() -> sendQueue(sender, pending));
+        onSenderThread(sender, () -> sendQueue(sender, pending));
     }
 
     private void review(CommandSender sender, String[] args, Actor actor) {
@@ -157,7 +157,7 @@ public final class PunishmentRequestCommandHandler {
         }
         PunishmentApprovalRequest request = service.find(requestId).orElse(null);
         RequestView view = request != null && service.mayReview(actor, request) ? view(request) : null;
-        onMain(() -> {
+        onSenderThread(sender, () -> {
             if (view == null) {
                 sender.sendMessage(StaffMessageStyle.style(Component.text(
                         "The request does not exist or you are not authorized to review it.",
@@ -200,7 +200,7 @@ public final class PunishmentRequestCommandHandler {
         }
         PunishmentRequestResult acquired = service.acquire(requestId, current);
         if (!(acquired instanceof PunishmentRequestResult.Leased leased)) {
-            onMain(() -> sendDecision(sender, acquired));
+            onSenderThread(sender, () -> sendDecision(sender, acquired));
             return;
         }
         // The first snapshot may have gone stale during database lease
@@ -221,7 +221,7 @@ public final class PunishmentRequestCommandHandler {
             return;
         }
         PunishmentRequestResult result = decideLeased(service, leased, fresh, approve, denialNote);
-        onMain(() -> sendDecision(sender, result));
+        onSenderThread(sender, () -> sendDecision(sender, result));
     }
 
     private StaffTargetGuard.Result decisionTargetCheck(Actor actor, UUID targetId, boolean systemActor) {
@@ -250,15 +250,11 @@ public final class PunishmentRequestCommandHandler {
     private void sendReviewerFailure(CommandSender sender, String message) {
         Runnable action = () -> sender.sendMessage(StaffMessageStyle.style(
                 Component.text(message, NamedTextColor.RED)));
-        if (sender instanceof Player player) {
-            try {
-                player.getScheduler().execute(plugin, action, null, 1L);
-            } catch (RuntimeException exception) {
-                plugin.getLogger().log(Level.WARNING,
-                        "Unable to send punishment request failure to retired reviewer", exception);
-            }
-        } else {
-            onMain(action);
+        try {
+            PunishmentReplyScheduler.onSenderThread(plugin, sender, action);
+        } catch (RuntimeException exception) {
+            plugin.getLogger().log(Level.WARNING,
+                    "Unable to send punishment request failure to retired reviewer", exception);
         }
     }
 
@@ -337,7 +333,7 @@ public final class PunishmentRequestCommandHandler {
     private PunishmentRequestService readyService(CommandSender sender) {
         PunishmentRequestService service = services.get();
         if (service == null) {
-            onMain(() -> sender.sendMessage(StaffMessageStyle.style(Component.text(NOT_READY_MESSAGE, NamedTextColor.RED))));
+            onSenderThread(sender, () -> sender.sendMessage(StaffMessageStyle.style(Component.text(NOT_READY_MESSAGE, NamedTextColor.RED))));
         }
         return service;
     }
@@ -359,15 +355,15 @@ public final class PunishmentRequestCommandHandler {
             operation.run();
         } catch (RuntimeException exception) {
             plugin.getLogger().log(Level.SEVERE, "Punishment request command failed", exception);
-            onMain(() -> sender.sendMessage(StaffMessageStyle.style(Component.text(
+            onSenderThread(sender, () -> sender.sendMessage(StaffMessageStyle.style(Component.text(
                     "Punishment request storage is unavailable; no decision was made.",
                     NamedTextColor.RED
             ))));
         }
     }
 
-    private void onMain(Runnable action) {
-        plugin.getServer().getScheduler().runTask(plugin, action);
+    private void onSenderThread(CommandSender sender, Runnable action) {
+        PunishmentReplyScheduler.onSenderThread(plugin, sender, action);
     }
 
     private static void sendQueue(CommandSender sender, List<RequestView> pending) {

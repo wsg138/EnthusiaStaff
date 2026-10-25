@@ -542,7 +542,7 @@ public final class PunishmentCommand implements CommandExecutor, TabCompleter {
     }
 
     private void send(CommandSender sender, Component message) {
-        plugin.getServer().getScheduler().runTask(plugin, () -> sender.sendMessage(message));
+        PunishmentReplyScheduler.onSenderThread(plugin, sender, () -> sender.sendMessage(message));
     }
 
     private boolean permitsPunishmentDraft(Actor actor) {
