@@ -343,13 +343,26 @@ public final class PunishmentGuiController implements Listener {
             if (search != null) {
                 event.setCancelled(true);
                 String query = PlainTextComponentSerializer.plainText().serialize(event.message());
-                onEntity(viewer, () -> finishSearch(viewer, search, query));
+                // Async chat may precede a newer /punish page or target lookup.
+                // Consume only on the player's entity thread after navigation
+                // has had a chance to invalidate this pending response.
+                Object searchTicket = preparationFence.begin(viewer.getUniqueId());
+                onEntity(viewer, () -> {
+                    if (!preparationFence.consume(viewer.getUniqueId(), searchTicket)) {
+                        return;
+                    }
+                    finishSearch(viewer, search, query);
+                });
             }
             return;
         }
         event.setCancelled(true);
         String note = PlainTextComponentSerializer.plainText().serialize(event.message()).trim();
+        Object noteTicket = preparationFence.begin(viewer.getUniqueId());
         onEntity(viewer, () -> {
+            if (!preparationFence.consume(viewer.getUniqueId(), noteTicket)) {
+                return;
+            }
             if (note.equalsIgnoreCase("cancel")) {
                 openState(viewer, capture.review());
                 return;
