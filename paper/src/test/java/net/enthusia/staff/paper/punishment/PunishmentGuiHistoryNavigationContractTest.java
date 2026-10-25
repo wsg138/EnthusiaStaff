@@ -20,8 +20,13 @@ class PunishmentGuiHistoryNavigationContractTest {
         assertTrue(query.contains("Object token = historyFence.begin(viewer.getUniqueId())"));
         assertTrue(query.contains("openHistoryState(viewer, new PunishmentGuiState.History("));
         assertTrue(query.contains("), token);"));
-        assertTrue(query.contains("openUnavailableHistory(viewer, returnState, sensitiveHistory, token)"));
+        assertTrue(query.contains("openUnavailableHistory(viewer, actor, returnState, sensitiveHistory, token)"));
         assertTrue(query.contains("if (!submitted)"));
+        String denial = controller.substring(controller.indexOf("private boolean historyTargetAllowed("),
+                controller.indexOf("private void openUnavailableHistory("));
+        assertTrue(denial.contains("onEntity(viewer, () -> {"));
+        assertTrue(denial.contains("historyFence.consume(viewer.getUniqueId(), token)"),
+                "Hierarchy denial messages must not outlive their navigation token");
         String render = controller.substring(controller.indexOf("private void presentState("),
                 controller.indexOf("private Actor authorizedActor("));
         assertTrue(render.contains("historyFence.consume(viewer.getUniqueId(), historyToken)"));
