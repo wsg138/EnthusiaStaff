@@ -79,6 +79,43 @@ class StaffRecoveryRetryOwnerDispatchTest {
     }
 
     @Test
+    void unavailableEntityDispatcherDoesNotStrandTheRecoveryRetry() {
+        ConcurrentMap<UUID, Object> pending = new ConcurrentHashMap<>();
+        Object ticket = new Object();
+        pending.put(PLAYER_ID, ticket);
+        AtomicInteger recoveries = new AtomicInteger();
+
+        assertThrows(IllegalStateException.class, () ->
+                StaffRecoveryRetryOwnerDispatcher.forward(
+                        PLAYER_ID, ticket, pending,
+                        (id, action, retired) -> {
+                            throw new IllegalStateException("entity scheduler unavailable");
+                        },
+                        player -> recoveries.incrementAndGet()));
+        assertFalse(pending.containsKey(PLAYER_ID),
+                "Scheduler rejection must not permanently block recovery for this player");
+        assertEquals(0, recoveries.get());
+    }
+
+    @Test
+    void staleDispatcherRejectionDoesNotEraseReplacementRetry() {
+        ConcurrentMap<UUID, Object> pending = new ConcurrentHashMap<>();
+        Object old = new Object();
+        Object replacement = new Object();
+        pending.put(PLAYER_ID, old);
+        assertThrows(IllegalStateException.class, () ->
+                StaffRecoveryRetryOwnerDispatcher.forward(
+                        PLAYER_ID, old, pending,
+                        (id, action, retired) -> {
+                            pending.put(PLAYER_ID, replacement);
+                            throw new IllegalStateException("previous task rejected");
+                        },
+                        player -> fail("Stale retry must not execute")));
+        assertSame(replacement, pending.get(PLAYER_ID),
+                "Rejected old dispatcher must not consume the current pending retry");
+    }
+
+    @Test
     void sourceTimerNeverRecoversPlayerOnGlobalRegionThread() throws Exception {
         String source = Files.readString(Path.of(
                 "src/main/java/net/enthusia/staff/paper/staff/StaffModeManager.java"));

@@ -28,15 +28,23 @@ final class StaffRecoveryRetryOwnerDispatcher {
         Objects.requireNonNull(pending);
         Objects.requireNonNull(ownerDispatch);
         Objects.requireNonNull(recover);
-        ownerDispatch.execute(
-                playerId,
-                player -> {
-                    // Callbacks queued before disconnect may not consume new retries.
-                    if (pending.remove(playerId, ticket)) {
-                        recover.accept(player);
-                    }
-                },
-                () -> pending.remove(playerId, ticket)
-        );
+        try {
+            ownerDispatch.execute(
+                    playerId,
+                    player -> {
+                        // Callbacks queued before disconnect may not consume new retries.
+                        if (pending.remove(playerId, ticket)) {
+                            recover.accept(player);
+                        }
+                    },
+                    () -> pending.remove(playerId, ticket)
+            );
+        } catch (RuntimeException schedulingFailure) {
+            // Scheduler submission may fail during shutdown or region retirement.
+            // Keep subsequent recovery attempts possible without erasing a newer
+            // retry that superseded this one while the callback was in flight.
+            pending.remove(playerId, ticket);
+            throw schedulingFailure;
+        }
     }
 }
