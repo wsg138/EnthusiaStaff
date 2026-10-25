@@ -15,7 +15,7 @@ class DiscordChatMessagePresentationTest {
     private static final String MAIN_DISCORD_ID = "123456789" + "012345678";
     private static final String ALT_MINECRAFT_NAME = "FireFlyy";
     @Test
-    void onlyTheExplicitMainMinecraftAccountMayMentionItsLinkedDiscordIdentity() {
+    void verifiedMainIdentityCanBeResolvedButNeverAuthorizesACasualChatPing() {
         UUID main = UUID.randomUUID();
         UUID alt = UUID.randomUUID();
         var selected = Optional.of(new MainMinecraftAccount(main, MainAccountSelectionSource.AUTOMATIC));
@@ -45,8 +45,10 @@ class DiscordChatMessagePresentationTest {
         assertEquals(ALT_MINECRAFT_NAME, DiscordChatMessagePresentation.minecraftName(
                 Optional.of(ALT_MINECRAFT_NAME), "✧ **[Avid]<reset> SomethingElse"));
         assertEquals(ALT_MINECRAFT_NAME, DiscordChatMessagePresentation.sender(Optional.empty(), ALT_MINECRAFT_NAME));
-        assertEquals("<@123456789" + "012345678>",
+        assertEquals(ALT_MINECRAFT_NAME,
                 DiscordChatMessagePresentation.sender(Optional.of(MAIN_DISCORD_ID), ALT_MINECRAFT_NAME));
+        assertEquals("SomeName", DiscordChatMessagePresentation.sender(
+                Optional.of(MAIN_DISCORD_ID), "SomeName"));
     }
 
     @Test

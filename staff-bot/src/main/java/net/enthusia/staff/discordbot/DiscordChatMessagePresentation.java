@@ -53,10 +53,8 @@ final class DiscordChatMessagePresentation {
     }
 
     static String sender(Optional<String> verifiedMainDiscordId, String minecraftName) {
-        if (verifiedMainDiscordId != null && verifiedMainDiscordId.isPresent()
-                && verifiedMainDiscordId.orElseThrow().matches("[0-9]{15,20}")) {
-            return "<@" + verifiedMainDiscordId.orElseThrow() + ">";
-        }
+        // Linked Discord identity is not a notification authorization.
+        // Even a verified Minecraft main account must not ping on every chat post.
         return escapeMarkdown(minecraftName);
     }
 

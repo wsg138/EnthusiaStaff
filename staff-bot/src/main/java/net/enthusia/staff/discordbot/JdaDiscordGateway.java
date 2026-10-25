@@ -447,7 +447,7 @@ final class JdaDiscordGateway implements DiscordGateway, DiscordChatEgress, Disc
         String content = chatContent(message, mainDiscordId,
                 minecraftChatName(message.minecraftPlayerId(), message.displayName()));
         try {
-            Message published = withExactSenderMention(channel.sendMessage(content), mainDiscordId)
+            Message published = withoutChatMentions(channel.sendMessage(content))
                     .complete();
             notifyChatPublished(channel, message.canonicalMessageId(), message.plainText(), published);
             return true;
@@ -510,7 +510,7 @@ final class JdaDiscordGateway implements DiscordGateway, DiscordChatEgress, Disc
         try {
             List<MessageEmbed> embeds = DiscordRichItemEmbeds.create(
                     artifacts, minecraftChatName(message.minecraftPlayerId(), message.displayName()));
-            MessageCreateAction action = withExactSenderMention(channel.sendMessage(content), mainDiscordId)
+            MessageCreateAction action = withoutChatMentions(channel.sendMessage(content))
                     .addFiles(uploads);
             if (!embeds.isEmpty()) {
                 action.addEmbeds(embeds);
@@ -574,7 +574,7 @@ final class JdaDiscordGateway implements DiscordGateway, DiscordChatEgress, Disc
             TextChannel channel, String content, ChatBridgeRenderedMessage original,
             Optional<String> mainDiscordId) {
         try {
-            Message published = withExactSenderMention(channel.sendMessage(content), mainDiscordId)
+            Message published = withoutChatMentions(channel.sendMessage(content))
                     .complete();
             notifyChatPublished(
                     channel, original.canonicalMessageId(), original.canonicalPlainText(), published);
@@ -606,11 +606,10 @@ final class JdaDiscordGateway implements DiscordGateway, DiscordChatEgress, Disc
         return DiscordChatMessagePresentation.minecraftName(name, decorated);
     }
 
-    private static MessageCreateAction withExactSenderMention(
-            MessageCreateAction action, Optional<String> mainDiscordId) {
-        action.setAllowedMentions(List.of());
-        mainDiscordId.ifPresent(id -> action.mentionUsers(id));
-        return action;
+    private static MessageCreateAction withoutChatMentions(MessageCreateAction action) {
+        // Defense in depth: normal chat, rich attachments, and fallback text never
+        // notify Discord users, roles, @everyone, or @here.
+        return action.setAllowedMentions(List.of());
     }
 
     static String escapeDiscordMarkdown(String value) {
