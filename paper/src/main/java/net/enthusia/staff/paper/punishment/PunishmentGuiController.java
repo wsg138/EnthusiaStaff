@@ -214,15 +214,43 @@ public final class PunishmentGuiController implements Listener {
         });
     }
 
+    /** Opaque, viewer-bound ticket for the asynchronous typed /punish reason route. */
+    public static final class CommandPreparationTicket {
+        private final UUID viewerId;
+        private final PunishmentGuiTargetResolutionFence.Ticket resolution;
+
+        private CommandPreparationTicket(UUID viewerId,
+                                         PunishmentGuiTargetResolutionFence.Ticket resolution) {
+            this.viewerId = viewerId;
+            this.resolution = resolution;
+        }
+    }
+
+    /** Called on the viewer's entity thread before dispatching the typed command worker. */
+    public CommandPreparationTicket beginCommandPreparation(Player viewer) {
+        return new CommandPreparationTicket(viewer.getUniqueId(), beginTargetResolution(viewer));
+    }
+
+    public void cancelCommandPreparation(Player viewer, CommandPreparationTicket ticket) {
+        if (ticket != null && ticket.viewerId.equals(viewer.getUniqueId())) {
+            targetResolutionFence.cancel(viewer.getUniqueId(), ticket.resolution);
+        }
+    }
+
     public void showPreparedDraft(
             Player viewer,
             PlayerIdentity target,
             String commandName,
             Actor actor,
-            PunishmentDraftEvaluation.Prepared prepared
+            PunishmentDraftEvaluation.Prepared prepared,
+            CommandPreparationTicket ticket
     ) {
+        if (ticket == null || !ticket.viewerId.equals(viewer.getUniqueId())) {
+            return;
+        }
         PunishmentGuiOverview overview = loadOverview(target.playerId());
-        showPrepared(viewer, target, commandName, actor, overview, prepared);
+        showPrepared(viewer, target, commandName, actor, overview, prepared,
+                null, null, ticket.resolution);
     }
 
     @EventHandler(priority = EventPriority.HIGHEST)
@@ -1206,8 +1234,27 @@ public final class PunishmentGuiController implements Listener {
             Object token,
             PunishmentGuiState.Guided guidedOrigin
     ) {
+        showPrepared(viewer, target, commandName, actor, overview, evaluation,
+                token, guidedOrigin, null);
+    }
+
+    private void showPrepared(
+            Player viewer,
+            PlayerIdentity target,
+            String commandName,
+            Actor actor,
+            PunishmentGuiOverview overview,
+            PunishmentDraftEvaluation evaluation,
+            Object token,
+            PunishmentGuiState.Guided guidedOrigin,
+            PunishmentGuiTargetResolutionFence.Ticket targetTicket
+    ) {
         if (evaluation instanceof PunishmentDraftEvaluation.Rejected rejected) {
-            preparedMessage(viewer, token, rejected.code() + ": " + rejected.message());
+            if (targetTicket != null) {
+                resolvedMessage(viewer, targetTicket, rejected.code() + ": " + rejected.message());
+            } else {
+                preparedMessage(viewer, token, rejected.code() + ": " + rejected.message());
+            }
             return;
         }
         PunishmentDraftEvaluation.Prepared prepared = (PunishmentDraftEvaluation.Prepared) evaluation;
@@ -1217,9 +1264,13 @@ public final class PunishmentGuiController implements Listener {
             if (workflow != null) {
                 workflow.discard(prepared.draft().draftId(), actor.id());
             }
-            preparedMessage(viewer, token,
-                    "The current recommendation does not contain the sanction type selected by /"
-                            + commandName + ".");
+            String warning = "The current recommendation does not contain the sanction type selected by /"
+                    + commandName + ".";
+            if (targetTicket != null) {
+                resolvedMessage(viewer, targetTicket, warning);
+            } else {
+                preparedMessage(viewer, token, warning);
+            }
             return;
         }
         PunishmentGuiState.Review review = new PunishmentGuiState.Review(
@@ -1230,7 +1281,9 @@ public final class PunishmentGuiController implements Listener {
                 prepared.draft(),
                 Optional.of(assessment)
         );
-        if (token == null) {
+        if (targetTicket != null) {
+            presentResolvedState(viewer, review, targetTicket);
+        } else if (token == null) {
             openState(viewer, review);
         } else {
             presentState(viewer, review, null, token, guidedOrigin);
