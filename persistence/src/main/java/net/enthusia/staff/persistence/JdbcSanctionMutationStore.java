@@ -18,6 +18,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import javax.sql.DataSource;
 import net.enthusia.staff.domain.auth.StaffHierarchy;
@@ -26,6 +27,7 @@ import net.enthusia.staff.domain.ports.SanctionMutationStore;
 import net.enthusia.staff.domain.sanction.SanctionChangeAction;
 import net.enthusia.staff.domain.sanction.SanctionChangeRequest;
 import net.enthusia.staff.domain.sanction.SanctionChangeResult;
+import net.enthusia.staff.domain.sanction.SanctionType;
 
 public final class JdbcSanctionMutationStore implements SanctionMutationStore {
     private static final int PROTOCOL_VERSION = 1;
@@ -356,25 +358,23 @@ public final class JdbcSanctionMutationStore implements SanctionMutationStore {
             boolean includeApplied
     ) throws SQLException {
         List<UUID> sanctions = lockChangeableSanctions(
-                connection,
-                request.caseId().value(),
-                includeApplied
+                connection, request.caseId().value(), includeApplied, request.typeScope()
         );
         if (sanctions.isEmpty()) {
-            return Change.rejected("NO_ACTIVE_SANCTIONS", "The case has no active sanctions to change");
+            return Change.rejected("NO_ACTIVE_SANCTIONS",
+                    "The case has no matching active sanctions to change");
         }
-        try (PreparedStatement statement = includeApplied
-                ? connection.prepareStatement("""
-                        UPDATE sanctions SET status = ?, ended_at = ?, revision = revision + 1
-                        WHERE case_id = ? AND inherited_from IS NULL AND status IN ('PENDING', 'ACTIVE', 'APPLIED')
-                        """)
-                : connection.prepareStatement("""
-                        UPDATE sanctions SET status = ?, ended_at = ?, revision = revision + 1
-                        WHERE case_id = ? AND inherited_from IS NULL AND status IN ('PENDING', 'ACTIVE')
-                        """)) {
+        String statuses = includeApplied
+                ? "'PENDING', 'ACTIVE', 'APPLIED'" : "'PENDING', 'ACTIVE'";
+        String sql = """
+                UPDATE sanctions SET status = ?, ended_at = ?, revision = revision + 1
+                WHERE case_id = ? AND inherited_from IS NULL AND status IN (%s)
+                """.formatted(statuses) + scopePredicate(request.typeScope());
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
             statement.setString(1, status);
             statement.setTimestamp(2, Timestamp.from(now));
             statement.setString(3, request.caseId().value());
+            bindScope(statement, 4, request.typeScope());
             statement.executeUpdate();
         }
         return Change.applied(sanctions);
@@ -560,20 +560,43 @@ public final class JdbcSanctionMutationStore implements SanctionMutationStore {
     private static List<UUID> lockChangeableSanctions(
             Connection connection,
             String caseId,
-            boolean includeApplied
+            boolean includeApplied,
+            Optional<Set<SanctionType>> typeScope
     ) throws SQLException {
-        try (PreparedStatement statement = includeApplied
-                ? connection.prepareStatement("""
-                        SELECT sanction_id FROM sanctions
-                        WHERE case_id = ? AND inherited_from IS NULL AND status IN ('PENDING', 'ACTIVE', 'APPLIED')
-                        FOR UPDATE
-                        """)
-                : connection.prepareStatement("""
-                        SELECT sanction_id FROM sanctions
-                        WHERE case_id = ? AND inherited_from IS NULL AND status IN ('PENDING', 'ACTIVE')
-                        FOR UPDATE
-                        """)) {
+        String statuses = includeApplied
+                ? "'PENDING', 'ACTIVE', 'APPLIED'" : "'PENDING', 'ACTIVE'";
+        String sql = """
+                SELECT sanction_id FROM sanctions
+                WHERE case_id = ? AND inherited_from IS NULL AND status IN (%s)
+                """.formatted(statuses) + scopePredicate(typeScope) + " FOR UPDATE";
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, caseId);
+            bindScope(statement, 2, typeScope);
             return lockedSanctions(statement, caseId);
+        }
+    }
+
+    /**
+     * A scoped shortcut must never mutate unrelated sanction families from the
+     * same case. The type predicate is applied in both the row lock and UPDATE
+     * inside the same transaction; case-wide actions retain their prior scope.
+     */
+    private static String scopePredicate(Optional<Set<SanctionType>> typeScope) {
+        if (typeScope.isEmpty()) {
+            return "";
+        }
+        return " AND sanction_type IN (" + String.join(", ",
+                java.util.Collections.nCopies(typeScope.orElseThrow().size(), "?")) + ")";
+    }
+
+    private static void bindScope(
+            PreparedStatement statement, int start, Optional<Set<SanctionType>> typeScope
+    ) throws SQLException {
+        if (typeScope.isEmpty()) {
+            return;
+        }
+        for (SanctionType type : java.util.EnumSet.copyOf(typeScope.orElseThrow())) {
+            statement.setString(start++, type.name());
         }
     }
 
