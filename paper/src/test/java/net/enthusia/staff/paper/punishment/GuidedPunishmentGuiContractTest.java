@@ -104,6 +104,24 @@ class GuidedPunishmentGuiContractTest {
     }
 
     @Test
+    void savedReviewHonorsCurrentRankAndCommandEligibility() throws Exception {
+        String renderer = source("PunishmentGuiRenderer.java");
+        String review = renderer.substring(renderer.indexOf("private void renderReview("),
+                renderer.indexOf("private void renderHistory("));
+        assertTrue(review.contains("catalog.maySelectReason("));
+        assertTrue(review.contains("Reason Not Authorized"));
+        assertTrue(review.contains("Your current rank or command cannot select this reason."));
+        assertTrue(review.indexOf("reasonUnauthorized") < review.indexOf("Submit Punishment"));
+        String controller = source("PunishmentGuiController.java");
+        String click = controller.substring(controller.indexOf("private void reviewClick("),
+                controller.indexOf("private void historyClick("));
+        assertTrue(click.contains("catalog.maySelectReason(actor, state.commandName()"));
+        assertTrue(click.contains("Your current rank or command can no longer select this reason."));
+        assertTrue(click.indexOf("catalog.maySelectReason(actor, state.commandName()")
+                < click.indexOf("confirm(viewer, actor, state)"));
+    }
+
+    @Test
     void finalGuidedReviewShowsFactsWithoutUnapprovedImpactScore() throws Exception {
         String renderer = source("PunishmentGuiRenderer.java");
         String review = renderer.substring(renderer.indexOf("renderGuidedReviewFactors("),

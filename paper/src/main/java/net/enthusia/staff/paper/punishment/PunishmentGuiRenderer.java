@@ -548,6 +548,8 @@ final class PunishmentGuiRenderer {
         boolean stalePolicy = !reviewPolicyCurrent(
                 draft.expectation().configurationVersion(), catalog.activeVersion());
         boolean guidedDisabled = guidedReview && !guidedModeEnabled;
+        boolean reasonUnauthorized = !catalog.maySelectReason(
+                actor, state.commandName(), draft.reasonId());
         inventory.setItem(CONFIRM_SLOT, guidedDisabled
                 ? item(Material.GRAY_CONCRETE, "Guided Mode Disabled", NamedTextColor.RED,
                         List.of(Component.text("The guided punishment feature was disabled.",
@@ -557,6 +559,12 @@ final class PunishmentGuiRenderer {
                 : policy == null
                 ? item(Material.GRAY_DYE, "Reason Unavailable", NamedTextColor.RED,
                         List.of(Component.text("Go back and choose a current reason.", NamedTextColor.YELLOW)))
+                : reasonUnauthorized
+                        ? item(Material.GRAY_CONCRETE, "Reason Not Authorized", NamedTextColor.RED,
+                                List.of(Component.text("Your current rank or command cannot select this reason.",
+                                                NamedTextColor.GRAY),
+                                        Component.text("Return to categories and choose an available reason.",
+                                                NamedTextColor.YELLOW)))
                 : stalePolicy
                         ? item(Material.GRAY_CONCRETE, "Reassessment Required", NamedTextColor.RED,
                                 List.of(Component.text("Rules changed since this draft was prepared.",
