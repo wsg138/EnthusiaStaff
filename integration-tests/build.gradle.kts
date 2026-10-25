@@ -20,19 +20,18 @@ dependencies {
     testRuntimeOnly("org.slf4j:slf4j-simple:2.0.17")
 }
 
+// Resolve the exact shaded artifact at configuration time. The old doFirst
+// closure called project(":paper") at execution time, which breaks Gradle's
+// configuration cache even after all MariaDB integration tests pass.
+val paperRuntimeJar = project(":paper").layout.buildDirectory.file(
+    "libs/EnthusiaStaff-Paper-" + project.version + ".jar"
+)
+
 tasks.named<Test>("test") {
     dependsOn(":paper:shadowJar")
-    doFirst {
-        val runtimeDirectory = project(":paper").layout.buildDirectory.dir("libs").get().asFile
-        val runtimeJars = checkNotNull(runtimeDirectory.listFiles { file ->
-            file.isFile
-                    && file.name.startsWith("EnthusiaStaff-Paper-")
-                    && file.name.endsWith(".jar")
-                    && !file.name.endsWith("-sources.jar")
-        }).toList()
-        require(runtimeJars.size == 1) {
-            "Expected exactly one Paper runtime jar, found: ${runtimeJars.joinToString { it.name }}"
-        }
-        systemProperty("enthusia.paperRuntimeJar", runtimeJars.single().absolutePath)
-    }
+    // Packaging tests must rerun when the shaded JAR content changes.
+    inputs.file(paperRuntimeJar).withPropertyName("paperRuntimeJar")
+    // A fixed versioned path avoids accidentally selecting an old shaded JAR
+    // or a sources JAR when multiple release builds exist in build/libs.
+    systemProperty("enthusia.paperRuntimeJar", paperRuntimeJar.get().asFile.absolutePath)
 }
