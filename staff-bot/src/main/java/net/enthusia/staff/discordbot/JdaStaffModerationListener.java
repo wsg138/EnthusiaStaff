@@ -283,6 +283,11 @@ final class JdaStaffModerationListener extends ListenerAdapter {
                 || rank == net.enthusia.staff.domain.auth.StaffRank.FOUNDER;
     }
 
+    static boolean mayPreviewReportText(ReviewQueueView view,
+            net.enthusia.staff.domain.auth.StaffRank rank) {
+        return view == ReviewQueueView.REPORTS && canMutateReportInDiscord(rank);
+    }
+
     /** Private interactive queue. Every button is HMAC-bound to the invoker and short-lived. */
     private void dispatchReviewQueue(SlashCommandInteractionEvent event, long actorId, String actorName) {
         ReviewQueueView view = ReviewQueueView.parse(option(event, REVIEW_VIEW_OPTION, "all"));
@@ -307,7 +312,8 @@ final class JdaStaffModerationListener extends ListenerAdapter {
                             : java.util.List.<net.enthusia.staff.persistence.DiscordStaffReadRuntime.PendingAltAlert>of();
                     var reports = view.showReports()
                             ? moderationRuntime.pendingReports(
-                                    view == ReviewQueueView.ALL ? (altAlerts.isEmpty() ? 2 : 1) : 5)
+                                    view == ReviewQueueView.ALL ? (altAlerts.isEmpty() ? 2 : 1) : 5,
+                                    mayPreviewReportText(view, actor.rank()))
                             : java.util.List.<net.enthusia.staff.persistence.DiscordStaffReadRuntime.PendingReport>of();
                     var reviews = view.showPunishments()
                             ? moderationRuntime.pendingReviews(
@@ -402,6 +408,14 @@ final class JdaStaffModerationListener extends ListenerAdapter {
                     message.append("Showing at most five items; select another /review-queue view for more. "
                             + "Controls expire shortly. Every action rechecks Minecraft authority and state.");
                     if (view == ReviewQueueView.REPORTS) {
+                        // Authorization is revalidated after the asynchronous database read.
+                        if (reportActionsEnabled && !mayPreviewReportText(view,
+                                actors.invoker(new DiscordUserId(Long.toUnsignedString(actorId)),
+                                        actorName).rank())) {
+                            hook.sendMessage("Your Minecraft staff authority changed during the read; "
+                                    + "report text was not delivered. Retry the command.").queue();
+                            return;
+                        }
                         var reply = hook.sendMessageEmbeds(
                                 DiscordReportReviewCard.render(pulse, reports, reportActionsEnabled));
                         if (rows.isEmpty()) {
