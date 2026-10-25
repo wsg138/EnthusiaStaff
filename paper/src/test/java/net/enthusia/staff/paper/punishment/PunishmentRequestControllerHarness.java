@@ -48,6 +48,7 @@ import org.bukkit.event.inventory.ClickType;
 import org.bukkit.event.inventory.InventoryAction;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryCloseEvent;
+import net.enthusia.staff.paper.auth.StaffTargetGuard;
 import org.bukkit.event.inventory.InventoryType;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.InventoryView;
@@ -70,6 +71,15 @@ final class PunishmentRequestControllerHarness {
             SchedulerMode mode,
             java.util.function.Function<PunishmentRequestGuiState.Review, Inventory> reviewRenderer
     ) {
+        return fixture(request, mode, reviewRenderer, (actor, target, system) -> StaffTargetGuard.Result.allow());
+    }
+
+    static Fixture fixture(
+            PunishmentApprovalRequest request,
+            SchedulerMode mode,
+            java.util.function.Function<PunishmentRequestGuiState.Review, Inventory> reviewRenderer,
+            StaffTargetGuard targetGuard
+    ) {
         RequestStoreHarness store = new RequestStoreHarness(request);
         DefaultAuthorizationPolicy authorization = new DefaultAuthorizationPolicy();
         PunishmentRequestService service = service(store, authorization);
@@ -86,7 +96,8 @@ final class PunishmentRequestControllerHarness {
                 executor,
                 details -> inventory(new PunishmentRequestGuiHolder(details)),
                 reviewRenderer,
-                denial -> inventory(new PunishmentRequestGuiHolder(denial))
+                denial -> inventory(new PunishmentRequestGuiHolder(denial)),
+                targetGuard
         );
         return new Fixture(controller, store, scheduler, player, logger, executor, service);
     }
@@ -192,7 +203,7 @@ final class PunishmentRequestControllerHarness {
         return inventoryView(player, inventory(new PunishmentRequestGuiHolder(state)));
     }
 
-    private static Inventory inventory(PunishmentRequestGuiHolder holder) {
+    static Inventory inventory(PunishmentRequestGuiHolder holder) {
         return proxy(Inventory.class, (method, arguments) -> switch (method.getName()) {
             case "getHolder" -> holder;
             case "getSize" -> 27;

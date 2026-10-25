@@ -22,6 +22,8 @@ import net.enthusia.staff.domain.auth.Actor;
 import net.enthusia.staff.domain.auth.AuthorizationPolicy;
 import net.enthusia.staff.domain.auth.ModerationAction;
 import net.enthusia.staff.paper.auth.PaperActorResolver;
+import net.enthusia.staff.paper.auth.StaffTargetGuard;
+import net.enthusia.staff.paper.auth.LuckPermsStaffTargetGuard;
 import net.enthusia.staff.paper.punishment.PunishmentRequestGuiController;
 import net.enthusia.staff.paper.punishment.PunishmentRequestPresentation;
 import net.kyori.adventure.text.Component;
@@ -46,6 +48,7 @@ public final class PunishmentRequestCommandHandler {
     private final AuthorizationPolicy authorization;
     private final PunishmentRequestGuiController gui;
     private final ExecutorService workers;
+    private final StaffTargetGuard targetGuard;
 
     public PunishmentRequestCommandHandler(
             JavaPlugin plugin,
@@ -53,6 +56,17 @@ public final class PunishmentRequestCommandHandler {
             AuthorizationPolicy authorization,
             PunishmentRequestGuiController gui,
             ExecutorService workers
+    ) {
+        this(plugin, services, authorization, gui, workers, LuckPermsStaffTargetGuard.discover(plugin));
+    }
+
+    PunishmentRequestCommandHandler(
+            JavaPlugin plugin,
+            Supplier<PunishmentRequestService> services,
+            AuthorizationPolicy authorization,
+            PunishmentRequestGuiController gui,
+            ExecutorService workers,
+            StaffTargetGuard targetGuard
     ) {
         if (plugin == null || services == null || authorization == null || gui == null || workers == null) {
             throw new IllegalArgumentException("punishment request command dependencies must be present");
@@ -62,6 +76,7 @@ public final class PunishmentRequestCommandHandler {
         this.authorization = authorization;
         this.gui = gui;
         this.workers = workers;
+        this.targetGuard = java.util.Objects.requireNonNull(targetGuard, "targetGuard");
     }
 
     boolean handles(String commandName, String[] args) {
@@ -192,17 +207,59 @@ public final class PunishmentRequestCommandHandler {
         // acquisition. Reauthorize before the irreversible approve/deny call.
         Actor fresh = currentDecisionActor(sender, current);
         if (fresh == null) {
-            try {
-                service.abandon(leased.lease());
-            } catch (RuntimeException failure) {
-                plugin.getLogger().log(Level.WARNING,
-                        "Unable to abandon punishment request lease after reviewer authority expired",
-                        failure);
-            }
+            abandonLeaseSafely(service, leased);
+            return;
+        }
+        // A request may have been submitted against a non-staff target who was
+        // promoted while awaiting review. Revalidate the *current* LuckPerms
+        // hierarchy after lease acquisition, before any durable decision.
+        StaffTargetGuard.Result targetCheck = decisionTargetCheck(
+                fresh, leased.lease().request().proposal().targetId(), !(sender instanceof Player));
+        if (!targetCheck.allowed()) {
+            abandonLeaseSafely(service, leased);
+            sendReviewerFailure(sender, "Punishment request decision was not submitted: " + targetCheck.message());
             return;
         }
         PunishmentRequestResult result = decideLeased(service, leased, fresh, approve, denialNote);
         onMain(() -> sendDecision(sender, result));
+    }
+
+    private StaffTargetGuard.Result decisionTargetCheck(Actor actor, UUID targetId, boolean systemActor) {
+        try {
+            return java.util.Objects.requireNonNull(
+                    targetGuard.check(actor, targetId, systemActor), "target hierarchy check");
+        } catch (RuntimeException exception) {
+            plugin.getLogger().log(Level.WARNING,
+                    "Punishment request target hierarchy verification failed", exception);
+            return StaffTargetGuard.Result.deny(
+                    "Staff-target verification is unavailable; no decision was made.");
+        }
+    }
+
+    private void abandonLeaseSafely(
+            PunishmentRequestService service, PunishmentRequestResult.Leased leased
+    ) {
+        try {
+            service.abandon(leased.lease());
+        } catch (RuntimeException failure) {
+            plugin.getLogger().log(Level.WARNING,
+                    "Unable to abandon punishment request lease after authorization failure", failure);
+        }
+    }
+
+    private void sendReviewerFailure(CommandSender sender, String message) {
+        Runnable action = () -> sender.sendMessage(StaffMessageStyle.style(
+                Component.text(message, NamedTextColor.RED)));
+        if (sender instanceof Player player) {
+            try {
+                player.getScheduler().execute(plugin, action, null, 1L);
+            } catch (RuntimeException exception) {
+                plugin.getLogger().log(Level.WARNING,
+                        "Unable to send punishment request failure to retired reviewer", exception);
+            }
+        } else {
+            onMain(action);
+        }
     }
 
     private static PunishmentRequestResult decideLeased(
