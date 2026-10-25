@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.logging.Logger;
 import net.enthusia.staff.domain.auth.Actor;
 import net.enthusia.staff.domain.auth.StaffRank;
@@ -57,6 +58,20 @@ class LuckPermsStaffTargetGuardTest {
     void unchangedStaffRankRetainsNormalOrdinaryTargetAccess() {
         assertTrue(guard(StaffRank.MOD, Optional.empty()).check(
                 new Actor(ACTOR_ID, "ActiveMod", StaffRank.MOD), TARGET_ID, false).allowed());
+    }
+
+    @Test
+    void repeatedRankValidationRejectsMutationBetweenPreviewAndWrite() {
+        AtomicReference<StaffRank> current = new AtomicReference<>(StaffRank.ADMIN);
+        StaffTargetGuard guard = LuckPermsStaffTargetGuard.forTesting(
+                id -> id.equals(ACTOR_ID) ? Optional.of(current.get()) : Optional.empty(),
+                LOGGER
+        );
+        Actor queued = new Actor(ACTOR_ID, "AdminAtClick", StaffRank.ADMIN);
+        assertTrue(guard.check(queued, TARGET_ID, false).allowed());
+        current.set(StaffRank.MOD);
+        assertFalse(guard.check(queued, TARGET_ID, false).allowed(),
+                "Repeating the guard after a slow read must reject an actor demoted in the meantime");
     }
 
     @Test

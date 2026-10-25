@@ -749,7 +749,11 @@ public final class PunishmentGuiController implements Listener {
                     + "No draft was created.");
             return;
         }
-        if (!workerAuthorityActive(viewer, actor)) {
+        if (!workerAuthorityActive(viewer, actor)
+                || !targetAllowed(viewer, actor, state.target().playerId())) {
+            // Preview and questionnaire classification may read slow storage.
+            // Revalidate the live LuckPerms hierarchy and immutable actor rank
+            // before persisting the calculated guided draft.
             return;
         }
         PunishmentDraftEvaluation evaluated = workflow.prepare(proposal, mode.get(), assessment);
