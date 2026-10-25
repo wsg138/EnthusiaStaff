@@ -54,6 +54,36 @@ class PunishmentGuiPreparationNavigationContractTest {
     }
 
     @Test
+    void delayedGuidedCalculationRequiresTokenAndCannotSaveWrongQuestionnaireReturn() throws Exception {
+        String controller = controller();
+        String guided = controller.substring(controller.indexOf("private void prepareGuided("),
+                controller.indexOf("private static String guidedExplanation("));
+        assertTrue(guided.contains("preparationFence.begin(viewer.getUniqueId())"),
+                "Guided requests must have the same single-use navigation fence as expert drafts");
+        assertTrue(guided.contains("evaluateGuided(viewer, actor, state, finding, token)"));
+        assertTrue(guided.contains("preparationFence.consume(viewer.getUniqueId(), token)"),
+                "Queue admission failures must clear the outstanding guided request");
+        assertTrue(guided.contains("evaluated, token, state"),
+                "Guided result presentation must carry the exact questionnaire origin");
+        String edit = controller.substring(controller.indexOf("private void reprepare("),
+                controller.indexOf("private void showPrepared("));
+        assertTrue(edit.contains("evaluation, token, originalAnswers"),
+                "Edited guided drafts must also restore answers only after accepted presentation");
+        assertFalse(edit.contains("guidedReturns.put("),
+                "Async draft edits must not overwrite a newer questionnaire return state");
+        assertFalse(guided.contains("guidedReturns.put("),
+                "Workers must not publish a return page for stale or abandoned requests");
+
+        String presentation = controller.substring(controller.indexOf("private void presentState("),
+                controller.indexOf("private Actor authorizedActor("));
+        int accept = presentation.indexOf("preparationFence.consume(viewer.getUniqueId(), preparationToken)");
+        int remember = presentation.indexOf("guidedReturns.put(");
+        int open = presentation.indexOf("viewer.openInventory(inventory)");
+        assertTrue(accept >= 0 && remember > accept && open > remember,
+                "Guided origin must be updated only after the navigation token was accepted");
+    }
+
+    @Test
     void delayedPreparedInventoryOnlyOpensIfTokenIsConsumedOnEntityThread() throws Exception {
         String controller = controller();
         String presentation = controller.substring(controller.indexOf("private void presentState("),
