@@ -99,6 +99,8 @@ public final class PunishmentGuiController implements Listener {
     private final Map<UUID, NoteCapture> noteCaptures = new ConcurrentHashMap<>();
     private final Map<UUID, SearchCapture> searchCaptures = new ConcurrentHashMap<>();
     private final PunishmentGuiHistoryFence historyFence = new PunishmentGuiHistoryFence();
+    // Independent single-use tokens prevent delayed draft results reopening old pages.
+    private final PunishmentGuiHistoryFence preparationFence = new PunishmentGuiHistoryFence();
     private static final String PUNISH_COMMAND = "punish";
     private final Map<UUID, GuidedReturn> guidedReturns = new ConcurrentHashMap<>();
 
@@ -225,6 +227,7 @@ public final class PunishmentGuiController implements Listener {
         event.setCancelled(true);
         // A new interaction supersedes any history page still loading.
         historyFence.invalidate(viewer.getUniqueId());
+        preparationFence.invalidate(viewer.getUniqueId());
         int slot = topInventorySlot(event, top);
         if (slot < 0) {
             return;
@@ -294,6 +297,7 @@ public final class PunishmentGuiController implements Listener {
         if (holder instanceof PunishmentGuiHolder || holder instanceof PunishmentTargetPickerHolder) {
             event.setCancelled(true);
             historyFence.invalidate(event.getWhoClicked().getUniqueId());
+            preparationFence.invalidate(event.getWhoClicked().getUniqueId());
         }
     }
 
@@ -305,6 +309,7 @@ public final class PunishmentGuiController implements Listener {
         }
         // Closing the source inventory must cancel a delayed database result.
         historyFence.invalidate(viewer.getUniqueId());
+        preparationFence.invalidate(viewer.getUniqueId());
         if (suppressedClosures.remove(viewer.getUniqueId())) {
             return;
         }
@@ -365,6 +370,7 @@ public final class PunishmentGuiController implements Listener {
         suppressedClosures.remove(viewerId);
         confirmations.remove(viewerId);
         historyFence.invalidate(viewerId);
+        preparationFence.invalidate(viewerId);
     }
 
     private void targetPickerClick(Player viewer, PunishmentTargetPickerHolder picker, int slot) {
@@ -981,7 +987,8 @@ public final class PunishmentGuiController implements Listener {
             PunishmentGuiState state,
             ReasonPolicy policy
     ) {
-        submit(viewer, () -> {
+        Object token = preparationFence.begin(viewer.getUniqueId());
+        boolean submitted = submit(viewer, () -> {
             if (!targetAllowed(viewer, actor, state.target().playerId())) {
                 return;
             }
@@ -1007,9 +1014,12 @@ public final class PunishmentGuiController implements Listener {
                     state.commandName(),
                     actor,
                     state.overview(),
-                    evaluation
+                    evaluation, token
             );
         });
+        if (!submitted) {
+            preparationFence.consume(viewer.getUniqueId(), token);
+        }
     }
 
     private boolean guidedModeEnabled() {
@@ -1046,7 +1056,8 @@ public final class PunishmentGuiController implements Listener {
             String explanation,
             CaseVisibility visibility
     ) {
-        submit(viewer, () -> {
+        Object token = preparationFence.begin(viewer.getUniqueId());
+        boolean submitted = submit(viewer, () -> {
             if (!targetAllowed(viewer, actor, state.target().playerId())) {
                 return;
             }
@@ -1098,9 +1109,12 @@ public final class PunishmentGuiController implements Listener {
                     state.commandName(),
                     actor,
                     state.overview(),
-                    evaluation
+                    evaluation, token
             );
         });
+        if (!submitted) {
+            preparationFence.consume(viewer.getUniqueId(), token);
+        }
     }
 
     private void showPrepared(
@@ -1111,8 +1125,20 @@ public final class PunishmentGuiController implements Listener {
             PunishmentGuiOverview overview,
             PunishmentDraftEvaluation evaluation
     ) {
+        showPrepared(viewer, target, commandName, actor, overview, evaluation, null);
+    }
+
+    private void showPrepared(
+            Player viewer,
+            PlayerIdentity target,
+            String commandName,
+            Actor actor,
+            PunishmentGuiOverview overview,
+            PunishmentDraftEvaluation evaluation,
+            Object token
+    ) {
         if (evaluation instanceof PunishmentDraftEvaluation.Rejected rejected) {
-            message(viewer, rejected.code() + ": " + rejected.message());
+            preparedMessage(viewer, token, rejected.code() + ": " + rejected.message());
             return;
         }
         PunishmentDraftEvaluation.Prepared prepared = (PunishmentDraftEvaluation.Prepared) evaluation;
@@ -1122,18 +1148,36 @@ public final class PunishmentGuiController implements Listener {
             if (workflow != null) {
                 workflow.discard(prepared.draft().draftId(), actor.id());
             }
-            message(viewer, "The current recommendation does not contain the sanction type selected by /"
-                    + commandName + ".");
+            preparedMessage(viewer, token,
+                    "The current recommendation does not contain the sanction type selected by /"
+                            + commandName + ".");
             return;
         }
-        openState(viewer, new PunishmentGuiState.Review(
+        PunishmentGuiState.Review review = new PunishmentGuiState.Review(
                 viewer.getUniqueId(),
                 target,
                 commandName,
                 overview,
                 prepared.draft(),
                 Optional.of(assessment)
-        ));
+        );
+        if (token == null) {
+            openState(viewer, review);
+        } else {
+            presentState(viewer, review, null, token);
+        }
+    }
+
+    private void preparedMessage(Player viewer, Object token, String body) {
+        if (token == null) {
+            message(viewer, body);
+            return;
+        }
+        onEntity(viewer, () -> {
+            if (preparationFence.consume(viewer.getUniqueId(), token)) {
+                viewer.sendMessage(StaffMessageStyle.style(Component.text(body)));
+            }
+        });
     }
 
     private void confirm(Player viewer, Actor actor, PunishmentGuiState.Review state) {
@@ -1459,6 +1503,7 @@ public final class PunishmentGuiController implements Listener {
 
     private void openTargetPickerPage(Player viewer, String commandName, int requestedPage) {
         historyFence.invalidate(viewer.getUniqueId());
+        preparationFence.invalidate(viewer.getUniqueId());
         Actor actor = authorizedActor(viewer);
         if (actor == null) {
             return;
@@ -1484,19 +1529,24 @@ public final class PunishmentGuiController implements Listener {
 
     private void openState(Player viewer, PunishmentGuiState state) {
         historyFence.invalidate(viewer.getUniqueId());
-        presentState(viewer, state, null);
+        preparationFence.invalidate(viewer.getUniqueId());
+        presentState(viewer, state, null, null);
     }
 
     private void openHistoryState(Player viewer, PunishmentGuiState.History state, Object token) {
-        presentState(viewer, state, token);
+        presentState(viewer, state, token, null);
     }
 
-    private void presentState(Player viewer, PunishmentGuiState state, Object historyToken) {
+    private void presentState(Player viewer, PunishmentGuiState state,
+                              Object historyToken, Object preparationToken) {
         onEntity(viewer, () -> {
-            // Guard on the entity thread at presentation time, not merely when
-            // the asynchronous history store finishes querying.
+            // Consume at final entity-thread presentation, never at worker completion.
             if (historyToken != null
                     && !historyFence.consume(viewer.getUniqueId(), historyToken)) {
+                return;
+            }
+            if (preparationToken != null
+                    && !preparationFence.consume(viewer.getUniqueId(), preparationToken)) {
                 return;
             }
             searchCaptures.remove(viewer.getUniqueId());
@@ -1531,6 +1581,7 @@ public final class PunishmentGuiController implements Listener {
 
     private void closeWithoutResume(Player viewer) {
         historyFence.invalidate(viewer.getUniqueId());
+        preparationFence.invalidate(viewer.getUniqueId());
         if (viewer.getOpenInventory().getTopInventory().getHolder(false) instanceof PunishmentGuiHolder) {
             suppressedClosures.add(viewer.getUniqueId());
         }
