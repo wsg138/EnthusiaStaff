@@ -221,3 +221,16 @@ ai-review:
   maximum-reason-codes: 12
   maximum-scores: 10
   admin-override-enabled: false
+
+
+# Private, non-punitive player-support GUI, disabled by default.
+# Requires separately authorized Moderation API #129 and isolated server testing.
+# Bearer tokens must be supplied as environment variables, never committed here.
+ai-safety-check:
+  enabled: false
+  base-url: ""
+  scope-id: ""
+  reply-client-id: ""
+  alerts-client-id: ""
+  reply-token-environment: ES_SAFETY_REPLY_TOKEN
+  alerts-token-environment: ES_SAFETY_ALERTS_TOKEN
