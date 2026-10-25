@@ -60,6 +60,18 @@ class PunishmentDraftWorkflowTest {
     }
 
     @Test
+    void guidedPreviewReadsAuthoritativePolicyWithoutPersistingADraftOrCase() {
+        Fixture fixture = fixture();
+        PunishmentEvaluation.Allowed assessed = assertInstanceOf(
+                PunishmentEvaluation.Allowed.class,
+                fixture.workflow.preview(request(StaffRank.MOD), OperationalMode.ACTIVE)
+        );
+        assertEquals("v1", assessed.assessment().configurationVersion());
+        assertTrue(fixture.workflow.resume(ACTOR_ID, TARGET_ID).isEmpty());
+        assertTrue(fixture.moderation.plans.isEmpty());
+    }
+
+    @Test
     void developerCanPrepareRequestDraftWithoutDirectPunishmentAuthority() {
         Fixture fixture = fixture();
 
