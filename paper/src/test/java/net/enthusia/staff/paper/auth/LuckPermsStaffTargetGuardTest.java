@@ -75,6 +75,21 @@ class LuckPermsStaffTargetGuardTest {
     }
 
     @Test
+    void targetPromotionDuringSlowOverviewRequiresSecondHierarchyCheck() {
+        AtomicReference<StaffRank> currentTarget = new AtomicReference<>();
+        StaffTargetGuard guard = LuckPermsStaffTargetGuard.forTesting(
+                id -> id.equals(ACTOR_ID) ? Optional.of(StaffRank.MOD)
+                        : Optional.ofNullable(currentTarget.get()),
+                LOGGER
+        );
+        Actor actor = new Actor(ACTOR_ID, "ModAtOpen", StaffRank.MOD);
+        assertTrue(guard.check(actor, TARGET_ID, false).allowed());
+        currentTarget.set(StaffRank.ADMIN);
+        assertFalse(guard.check(actor, TARGET_ID, false).allowed(),
+                "A target promoted while overview loads must not be shown as an ordinary player");
+    }
+
+    @Test
     void actorThatNoLongerHasStaffRankFailsClosed() {
         Actor staleAdmin = new Actor(ACTOR_ID, "FormerAdmin", StaffRank.ADMIN);
         StaffTargetGuard guard = LuckPermsStaffTargetGuard.forTesting(

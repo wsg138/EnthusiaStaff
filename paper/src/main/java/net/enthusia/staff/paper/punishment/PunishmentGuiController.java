@@ -167,6 +167,11 @@ public final class PunishmentGuiController implements Listener {
                 return;
             }
             PunishmentGuiOverview overview = loadOverview(target.playerId());
+            // The overview reads multiple stores and may outlive the original
+            // hierarchy decision. Recheck on the worker, not the entity thread.
+            if (!targetAllowed(viewer, actor, target.playerId(), ticket)) {
+                return;
+            }
             presentResolvedState(viewer, new PunishmentGuiState.Categories(
                     viewer.getUniqueId(),
                     target,
@@ -208,6 +213,11 @@ public final class PunishmentGuiController implements Listener {
                 return;
             }
             PunishmentGuiOverview overview = loadOverview(target.playerId());
+            // Draft and overview storage may be slow; do not reopen a saved
+            // review if the target became protected while they were loading.
+            if (!targetAllowed(viewer, actor, target.playerId(), ticket)) {
+                return;
+            }
             presentResolvedState(viewer, new PunishmentGuiState.Review(
                     viewer.getUniqueId(),
                     target,
@@ -1066,13 +1076,20 @@ public final class PunishmentGuiController implements Listener {
     }
 
     private void openHistory(Player viewer, PunishmentGuiState returnState, int page) {
+        Actor actor = authorizedActor(viewer);
+        if (actor == null) {
+            return;
+        }
         boolean sensitiveHistory = viewer.hasPermission(HistoryCommand.SENSITIVE_PERMISSION);
         Object token = historyFence.begin(viewer.getUniqueId());
         boolean submitted = submit(viewer, () -> {
+            if (!historyTargetAllowed(viewer, actor, returnState, token)) {
+                return;
+            }
             ModerationHistoryStore store = histories.get();
             ModerationFeatureSettings active = settings.get();
             if (store == null || active == null) {
-                openUnavailableHistory(viewer, returnState, sensitiveHistory, token);
+                openUnavailableHistory(viewer, actor, returnState, sensitiveHistory, token);
                 return;
             }
             HistoryQueryOptions options = historyOptions(active, sensitiveHistory);
@@ -1083,6 +1100,11 @@ public final class PunishmentGuiController implements Listener {
                         HISTORY_PAGE_SIZE,
                         options
                 );
+                // A target can gain a protected staff rank during the history
+                // query. Verify again on this worker before exposing the page.
+                if (!historyTargetAllowed(viewer, actor, returnState, token)) {
+                    return;
+                }
                 openHistoryState(viewer, new PunishmentGuiState.History(
                         returnState.viewerId(),
                         returnState.target(),
@@ -1098,7 +1120,7 @@ public final class PunishmentGuiController implements Listener {
                 message(viewer, "That history page is no longer available.");
             } catch (RuntimeException exception) {
                 plugin.getLogger().log(Level.WARNING, "Punishment GUI history lookup failed", exception);
-                openUnavailableHistory(viewer, returnState, sensitiveHistory, token);
+                openUnavailableHistory(viewer, actor, returnState, sensitiveHistory, token);
             }
         });
         if (!submitted) {
@@ -1106,12 +1128,34 @@ public final class PunishmentGuiController implements Listener {
         }
     }
 
+    private boolean historyTargetAllowed(Player viewer, Actor actor,
+                                         PunishmentGuiState returnState, Object token) {
+        StaffTargetGuard.Result result = targetGuard.check(
+                actor, returnState.target().playerId(), false);
+        if (result.allowed()) {
+            return true;
+        }
+        // Never report a denial for an abandoned history request after the
+        // viewer has navigated elsewhere. The token is consumed only on owner.
+        onEntity(viewer, () -> {
+            if (historyFence.consume(viewer.getUniqueId(), token)) {
+                viewer.sendMessage(StaffMessageStyle.style(Component.text(
+                        result.message(), NamedTextColor.RED)));
+            }
+        });
+        return false;
+    }
+
     private void openUnavailableHistory(
             Player viewer,
+            Actor actor,
             PunishmentGuiState returnState,
             boolean sensitiveHistory,
             Object token
     ) {
+        if (!historyTargetAllowed(viewer, actor, returnState, token)) {
+            return;
+        }
         ModerationHistoryPage empty = new ModerationHistoryPage(
                 returnState.target().playerId(),
                 1,
