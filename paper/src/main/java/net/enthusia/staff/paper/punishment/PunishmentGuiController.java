@@ -568,11 +568,16 @@ public final class PunishmentGuiController implements Listener {
             message(viewer, "This incident requires individual review. Choose Expert Reasons.");
             return;
         }
-        submit(viewer, () -> evaluateGuided(viewer, actor, state, finding));
+        Object token = preparationFence.begin(viewer.getUniqueId());
+        boolean submitted = submit(viewer,
+                () -> evaluateGuided(viewer, actor, state, finding, token));
+        if (!submitted) {
+            preparationFence.consume(viewer.getUniqueId(), token);
+        }
     }
 
     private void evaluateGuided(Player viewer, Actor actor, PunishmentGuiState.Guided state,
-                                GuidedIncidentWizard.Finding finding) {
+                                GuidedIncidentWizard.Finding finding, Object token) {
         if (!guidedModeEnabled()) {
             message(viewer, "Guided punishment mode was disabled. No draft was created.");
             return;
@@ -622,12 +627,10 @@ public final class PunishmentGuiController implements Listener {
             return;
         }
         PunishmentDraftEvaluation evaluated = workflow.prepare(proposal, mode.get(), assessment);
-        if (evaluated instanceof PunishmentDraftEvaluation.Prepared prepared) {
-            guidedReturns.put(viewer.getUniqueId(),
-                    new GuidedReturn(prepared.draft().draftId(), state));
-        }
+        // The questionnaire return state is committed only if this request
+        // still owns the viewer's navigation at final entity-thread presentation.
         showPrepared(viewer, state.target(), state.commandName(),
-                actor, state.overview(), evaluated);
+                actor, state.overview(), evaluated, token, state);
     }
 
     private static String guidedExplanation(PunishmentGuiState.Guided state,
@@ -1096,20 +1099,17 @@ public final class PunishmentGuiController implements Listener {
                     ? workflow.prepare(edited, mode.get(),
                             state.assessment().orElse(null), state.draft().expectation())
                     : workflow.prepare(edited, mode.get());
-            if (evaluation instanceof PunishmentDraftEvaluation.Prepared updated) {
-                GuidedReturn previous = guidedReturns.get(viewer.getUniqueId());
-                if (previous != null && previous.draftId().equals(state.draft().draftId())) {
-                    guidedReturns.put(viewer.getUniqueId(),
-                            new GuidedReturn(updated.draft().draftId(), previous.state()));
-                }
-            }
+            GuidedReturn previous = guidedReturns.get(viewer.getUniqueId());
+            PunishmentGuiState.Guided originalAnswers = previous != null
+                    && previous.draftId().equals(state.draft().draftId())
+                    ? previous.state() : null;
             showPrepared(
                     viewer,
                     state.target(),
                     state.commandName(),
                     actor,
                     state.overview(),
-                    evaluation, token
+                    evaluation, token, originalAnswers
             );
         });
         if (!submitted) {
@@ -1125,7 +1125,7 @@ public final class PunishmentGuiController implements Listener {
             PunishmentGuiOverview overview,
             PunishmentDraftEvaluation evaluation
     ) {
-        showPrepared(viewer, target, commandName, actor, overview, evaluation, null);
+        showPrepared(viewer, target, commandName, actor, overview, evaluation, null, null);
     }
 
     private void showPrepared(
@@ -1136,6 +1136,19 @@ public final class PunishmentGuiController implements Listener {
             PunishmentGuiOverview overview,
             PunishmentDraftEvaluation evaluation,
             Object token
+    ) {
+        showPrepared(viewer, target, commandName, actor, overview, evaluation, token, null);
+    }
+
+    private void showPrepared(
+            Player viewer,
+            PlayerIdentity target,
+            String commandName,
+            Actor actor,
+            PunishmentGuiOverview overview,
+            PunishmentDraftEvaluation evaluation,
+            Object token,
+            PunishmentGuiState.Guided guidedOrigin
     ) {
         if (evaluation instanceof PunishmentDraftEvaluation.Rejected rejected) {
             preparedMessage(viewer, token, rejected.code() + ": " + rejected.message());
@@ -1164,7 +1177,7 @@ public final class PunishmentGuiController implements Listener {
         if (token == null) {
             openState(viewer, review);
         } else {
-            presentState(viewer, review, null, token);
+            presentState(viewer, review, null, token, guidedOrigin);
         }
     }
 
@@ -1539,6 +1552,12 @@ public final class PunishmentGuiController implements Listener {
 
     private void presentState(Player viewer, PunishmentGuiState state,
                               Object historyToken, Object preparationToken) {
+        presentState(viewer, state, historyToken, preparationToken, null);
+    }
+
+    private void presentState(Player viewer, PunishmentGuiState state,
+                              Object historyToken, Object preparationToken,
+                              PunishmentGuiState.Guided guidedOrigin) {
         onEntity(viewer, () -> {
             // Consume at final entity-thread presentation, never at worker completion.
             if (historyToken != null
@@ -1561,6 +1580,11 @@ public final class PunishmentGuiController implements Listener {
                 return;
             }
             Inventory inventory = renderer.render(state, actor, guidedModeEnabled());
+            if (guidedOrigin != null && state instanceof PunishmentGuiState.Review review
+                    && guidedModeEnabled()) {
+                guidedReturns.put(viewer.getUniqueId(),
+                        new GuidedReturn(review.draft().draftId(), guidedOrigin));
+            }
             if (viewer.getOpenInventory().getTopInventory().getHolder(false) instanceof PunishmentGuiHolder) {
                 suppressedClosures.add(viewer.getUniqueId());
             }
