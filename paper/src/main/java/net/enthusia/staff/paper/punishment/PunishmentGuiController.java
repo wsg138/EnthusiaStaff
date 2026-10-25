@@ -66,6 +66,7 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryCloseEvent;
 import org.bukkit.event.inventory.InventoryDragEvent;
+import org.bukkit.event.inventory.InventoryOpenEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.InventoryHolder;
@@ -343,6 +344,25 @@ public final class PunishmentGuiController implements Listener {
             preparationFence.invalidate(event.getWhoClicked().getUniqueId());
             targetResolutionFence.invalidate(event.getWhoClicked().getUniqueId());
         }
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onOpen(InventoryOpenEvent event) {
+        if (!(event.getPlayer() instanceof Player viewer)) {
+            return;
+        }
+        // A staff member can open a chest or another plugin's GUI while an
+        // asynchronous punishment lookup/review is pending, or while a private
+        // note/search prompt is awaiting chat. Closing our own GUI is not
+        // guaranteed to happen in either case. Any successful inventory open
+        // supersedes that old navigation; otherwise a delayed callback could
+        // replace the unrelated inventory or intercept its owner's next chat.
+        UUID viewerId = viewer.getUniqueId();
+        noteCaptures.remove(viewerId);
+        searchCaptures.remove(viewerId);
+        historyFence.invalidate(viewerId);
+        preparationFence.invalidate(viewerId);
+        targetResolutionFence.invalidate(viewerId);
     }
 
     @EventHandler(priority = EventPriority.MONITOR)
