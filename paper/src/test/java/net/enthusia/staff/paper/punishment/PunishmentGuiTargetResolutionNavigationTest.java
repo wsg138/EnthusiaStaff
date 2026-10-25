@@ -69,6 +69,27 @@ class PunishmentGuiTargetResolutionNavigationTest {
     }
 
     @Test
+    void mergedTargetAndGuidedPreparationTokensShareSafeEntityThreadPresentation() throws Exception {
+        String source = controller();
+        String presentation = source.substring(source.indexOf("private void presentResolvedState("),
+                source.indexOf("private Actor authorizedActor("));
+        assertTrue(presentation.contains(
+                "presentState(viewer, state, null, null, null, ticket)"),
+                "Resolved target lookup must carry its inventory-bound ticket");
+        assertTrue(presentation.contains(
+                "presentState(viewer, state, historyToken, preparationToken, guidedOrigin, null)"),
+                "Guided draft preparation must keep its original questionnaire separately");
+        assertTrue(presentation.contains("PunishmentGuiTargetResolutionFence.Ticket targetTicket"));
+        assertTrue(presentation.contains("PunishmentGuiState.Guided guidedOrigin"));
+        int target = presentation.indexOf("targetResolutionFence.consume(viewer.getUniqueId(), targetTicket");
+        int prepared = presentation.indexOf("preparationFence.consume(viewer.getUniqueId(), preparationToken)");
+        int returnState = presentation.indexOf("guidedReturns.put(viewer.getUniqueId()");
+        int open = presentation.indexOf("viewer.openInventory(inventory)");
+        assertTrue(target > 0 && prepared > target && returnState > prepared && open > returnState,
+                "Both navigation fences must reject stale work before saving the guided return or opening GUI");
+    }
+
+    @Test
     void navigationCloseAndQuitCancelPendingTargetLookup() throws Exception {
         String source = controller();
         for (String method : new String[] {
