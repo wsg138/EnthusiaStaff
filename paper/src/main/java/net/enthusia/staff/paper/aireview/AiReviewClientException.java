@@ -11,6 +11,8 @@ final class AiReviewClientException extends RuntimeException {
         OVERSIZED,
         MALFORMED,
         HTTP,
+        NOT_FOUND,
+        INVALID_CURSOR,
         NETWORK
     }
 
