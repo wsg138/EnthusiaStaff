@@ -127,10 +127,16 @@ class PunishmentGuiPreparationNavigationContractTest {
 
         String pickerEntry = controller.substring(controller.indexOf("public void openTargetPicker("),
                 controller.indexOf("public void open(Player viewer,"));
-        assertTrue(pickerEntry.contains("preparationFence.invalidate(viewer.getUniqueId())"),
-                "A picker command must invalidate chat immediately, before its queued page opens");
-        assertTrue(pickerEntry.indexOf("preparationFence.invalidate(viewer.getUniqueId())")
-                < pickerEntry.indexOf("onEntity(viewer,"));
+        assertTrue(pickerEntry.contains("beginTargetResolution(viewer)"),
+                "A picker command must invalidate chat through beginTargetResolution");
+        assertTrue(pickerEntry.indexOf("beginTargetResolution(viewer)")
+                < pickerEntry.indexOf("onEntity(viewer,"),
+                "The picker must cancel old chat before its page is queued");
+        String targetBegin = controller.substring(
+                controller.indexOf("private PunishmentGuiTargetResolutionFence.Ticket beginTargetResolution("),
+                controller.indexOf("private void resolveTarget("));
+        assertTrue(targetBegin.contains("preparationFence.invalidate(viewerId)"),
+                "The shared target navigation entry must synchronously invalidate old chat tickets");
 
         String searchPrompt = controller.substring(controller.indexOf("private void startSearch("),
                 controller.indexOf("private void finishSearch("));

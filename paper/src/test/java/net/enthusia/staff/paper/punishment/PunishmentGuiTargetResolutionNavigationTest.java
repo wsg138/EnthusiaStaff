@@ -52,6 +52,36 @@ class PunishmentGuiTargetResolutionNavigationTest {
     }
 
     @Test
+    void queuedTargetPickerCannotReplaceNewerTypedCommandOrDifferentInventory() throws Exception {
+        PunishmentGuiTargetResolutionFence fence = new PunishmentGuiTargetResolutionFence();
+        UUID viewer = UUID.fromString("43000000-0000-0000-0000-000000000004");
+        Object originalInventory = new Object();
+
+        // The first /punish command schedules a picker; a second typed command
+        // arrives before the first entity-scheduler callback executes.
+        var oldPicker = fence.begin(viewer, originalInventory);
+        var newerTypedCommand = fence.begin(viewer, originalInventory);
+        assertFalse(fence.consume(viewer, oldPicker, originalInventory),
+                "A queued picker must not supersede a newer typed command");
+        assertTrue(fence.consume(viewer, newerTypedCommand, originalInventory));
+
+        var switchedInventory = fence.begin(viewer, originalInventory);
+        assertFalse(fence.consume(viewer, switchedInventory, new Object()),
+                "Opening another inventory before the picker callback must cancel it");
+
+        String source = controller();
+        String picker = source.substring(source.indexOf("public void openTargetPicker("),
+                source.indexOf("public void open(Player viewer,"));
+        assertTrue(picker.contains("beginTargetResolution(viewer)"),
+                "Picker request must capture navigation identity before scheduling its page");
+        assertTrue(picker.contains("targetResolutionFence.consume("),
+                "The queued picker must consume its original ticket on the entity thread");
+        assertTrue(picker.indexOf("targetResolutionFence.consume(")
+                        < picker.indexOf("openTargetPickerPage(viewer,"),
+                "Stale queued picker must be rejected before it invalidates newer command work");
+    }
+
+    @Test
     void openAndResumeAreGuardedAtFinalEntityThreadPresentation() throws Exception {
         String source = controller();
         String open = source.substring(source.indexOf("public void open(Player viewer,"),

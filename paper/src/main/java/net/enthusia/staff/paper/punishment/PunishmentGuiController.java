@@ -139,15 +139,18 @@ public final class PunishmentGuiController implements Listener {
         if (authorizedActor(viewer) == null) {
             return;
         }
-        noteCaptures.remove(viewer.getUniqueId());
-        searchCaptures.remove(viewer.getUniqueId());
-        // The picker page is queued on the entity scheduler. Invalidate
-        // immediately so an already-queued private chat callback cannot win.
-        historyFence.invalidate(viewer.getUniqueId());
-        preparationFence.invalidate(viewer.getUniqueId());
-        targetResolutionFence.invalidate(viewer.getUniqueId());
+        // The picker is queued on the entity scheduler. Claim navigation now,
+        // rather than letting an older queued picker cancel a newer /punish
+        // command when its callback eventually runs.
+        var ticket = beginTargetResolution(viewer);
         String normalizedCommand = normalizeCommand(commandName);
-        onEntity(viewer, () -> openTargetPickerPage(viewer, normalizedCommand, 0));
+        onEntity(viewer, () -> {
+            if (!targetResolutionFence.consume(viewer.getUniqueId(), ticket,
+                    viewer.getOpenInventory().getTopInventory())) {
+                return;
+            }
+            openTargetPickerPage(viewer, normalizedCommand, 0);
+        });
     }
 
     public void open(Player viewer, String targetQuery, String commandName) {
