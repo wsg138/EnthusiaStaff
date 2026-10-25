@@ -6,8 +6,12 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.function.Supplier;
 import java.util.logging.Level;
 import net.enthusia.staff.domain.application.PunishmentApprovalRequest;
@@ -17,12 +21,14 @@ import net.enthusia.staff.domain.application.PunishmentRequestStatus;
 import net.enthusia.staff.domain.auth.Actor;
 import net.enthusia.staff.domain.auth.AuthorizationPolicy;
 import net.enthusia.staff.domain.auth.ModerationAction;
+import net.enthusia.staff.paper.auth.PaperActorResolver;
 import net.enthusia.staff.paper.punishment.PunishmentRequestGuiController;
 import net.enthusia.staff.paper.punishment.PunishmentRequestPresentation;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
+import org.bukkit.plugin.Plugin;
 import org.bukkit.plugin.java.JavaPlugin;
 
 public final class PunishmentRequestCommandHandler {
@@ -167,14 +173,35 @@ public final class PunishmentRequestCommandHandler {
             boolean approve,
             String denialNote
     ) {
+        // Player permission/rank and Staff Mode must be resolved on the owner
+        // entity thread, not read from the queued worker or a captured actor.
+        Actor current = currentDecisionActor(sender, actor);
+        if (current == null) {
+            return;
+        }
         PunishmentRequestService service = readyService(sender);
         if (service == null) {
             return;
         }
-        PunishmentRequestResult acquired = service.acquire(requestId, actor);
-        PunishmentRequestResult result = acquired instanceof PunishmentRequestResult.Leased leased
-                ? decideLeased(service, leased, actor, approve, denialNote)
-                : acquired;
+        PunishmentRequestResult acquired = service.acquire(requestId, current);
+        if (!(acquired instanceof PunishmentRequestResult.Leased leased)) {
+            onMain(() -> sendDecision(sender, acquired));
+            return;
+        }
+        // The first snapshot may have gone stale during database lease
+        // acquisition. Reauthorize before the irreversible approve/deny call.
+        Actor fresh = currentDecisionActor(sender, current);
+        if (fresh == null) {
+            try {
+                service.abandon(leased.lease());
+            } catch (RuntimeException failure) {
+                plugin.getLogger().log(Level.WARNING,
+                        "Unable to abandon punishment request lease after reviewer authority expired",
+                        failure);
+            }
+            return;
+        }
+        PunishmentRequestResult result = decideLeased(service, leased, fresh, approve, denialNote);
         onMain(() -> sendDecision(sender, result));
     }
 
@@ -188,6 +215,66 @@ public final class PunishmentRequestCommandHandler {
         return approve
                 ? service.approve(leased.lease(), actor)
                 : service.deny(leased.lease(), actor, denialNote);
+    }
+
+    /** Resolve the current player actor on the Folia-safe owner thread. */
+    static CompletableFuture<Actor> requestReviewerSnapshot(
+            Player player, Plugin plugin, AuthorizationPolicy policy
+    ) {
+        CompletableFuture<Actor> checked = new CompletableFuture<>();
+        try {
+            boolean scheduled = player.getScheduler().execute(plugin, () -> {
+                try {
+                    Actor fresh = player.isOnline()
+                            ? PaperActorResolver.resolve(player).orElse(null) : null;
+                    checked.complete(reviewerAuthorized(policy, fresh, player.getUniqueId())
+                            ? fresh : null);
+                } catch (RuntimeException failure) {
+                    checked.complete(null);
+                }
+            }, () -> checked.complete(null), 1L);
+            if (!scheduled) {
+                checked.complete(null);
+            }
+        } catch (RuntimeException failure) {
+            checked.complete(null);
+        }
+        return checked;
+    }
+
+    static boolean reviewerAuthorized(AuthorizationPolicy policy, Actor current, UUID viewerId) {
+        return policy != null && current != null && viewerId != null
+                && current.id().equals(viewerId)
+                && current.rank().canApprovePunishmentRequests()
+                && policy.permits(current, ModerationAction.APPROVE_POLICY_SANCTION);
+    }
+
+    private Actor currentDecisionActor(CommandSender sender, Actor captured) {
+        if (!(sender instanceof Player player)) {
+            // Console/system command authorization is handled on entry.
+            return captured;
+        }
+        try {
+            Actor fresh = requestReviewerSnapshot(player, plugin, authorization)
+                    .get(5, TimeUnit.SECONDS);
+            if (fresh != null) {
+                return fresh;
+            }
+        } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
+        } catch (ExecutionException | TimeoutException | RuntimeException unavailable) {
+            plugin.getLogger().log(Level.WARNING,
+                    "Punishment request command reviewer reauthorization unavailable", unavailable);
+        }
+        // Never use the old click-time actor when owner-thread authorization
+        // was denied, unavailable, or timed out.
+        player.getScheduler().execute(plugin, () ->
+                player.sendMessage(StaffMessageStyle.style(Component.text(
+                        "Punishment request decision was not submitted; current staff authority "
+                                + "could not be verified. Reenter Staff Mode and retry.",
+                        NamedTextColor.RED
+                ))), null, 1L);
+        return null;
     }
 
     private PunishmentRequestService readyService(CommandSender sender) {
