@@ -85,6 +85,22 @@ class PunishmentGuiCatalogTest {
     }
 
     @Test
+    void savedReviewReasonEligibilityRespondsToRankAndCommandChanges() {
+        PunishmentGuiCatalog catalog = catalog();
+        // A previously valid administrative draft cannot stay actionable when
+        // the viewer loses the policy-required rank.
+        assertTrue(catalog.maySelectReason(actor(StaffRank.ADMIN), "punish", SAFETY_ADMIN));
+        assertFalse(catalog.maySelectReason(actor(StaffRank.MOD), "punish", SAFETY_ADMIN));
+        assertFalse(catalog.maySelectReason(actor(StaffRank.HELPER), "punish", SAFETY_ADMIN));
+        // Developer is request-only, but still can select policy reasons.
+        assertTrue(catalog.maySelectReason(actor(StaffRank.DEVELOPER), "punish", SAFETY_ADMIN));
+        // Command-specific screens must not offer an incompatible saved reason.
+        assertTrue(catalog.maySelectReason(actor(StaffRank.MOD), MUTE_COMMAND, CHAT_MOD));
+        assertFalse(catalog.maySelectReason(actor(StaffRank.ADMIN), MUTE_COMMAND, SAFETY_ADMIN));
+        assertFalse(catalog.maySelectReason(actor(StaffRank.ADMIN), "punish", "missing.reason"));
+    }
+
+    @Test
     void helperSeesModeratorReasonsButNotAdministrativeReasons() {
         PunishmentGuiCatalog catalog = catalog();
 

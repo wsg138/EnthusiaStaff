@@ -864,6 +864,11 @@ public final class PunishmentGuiController implements Listener {
                 message(viewer, "That saved reason is no longer available. Go back and choose another reason.");
                 return;
             }
+            if (!catalog.maySelectReason(actor, state.commandName(), state.draft().reasonId())) {
+                message(viewer, "Your current rank or command can no longer select this reason. "
+                        + "Return to categories before submitting.");
+                return;
+            }
             confirm(viewer, actor, state);
         }
     }
