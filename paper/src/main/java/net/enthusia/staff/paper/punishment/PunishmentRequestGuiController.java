@@ -15,6 +15,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.function.BiFunction;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.logging.Level;
@@ -60,6 +61,8 @@ public final class PunishmentRequestGuiController implements Listener {
     private final Map<UUID, PunishmentApprovalLease> preservingTransitions = new ConcurrentHashMap<>();
     private final Set<PunishmentApprovalLease> decisionsInFlight = ConcurrentHashMap.newKeySet();
     private final Set<PunishmentApprovalLease> decisionClosures = ConcurrentHashMap.newKeySet();
+    /** A later inventory close must not let an old decision reopen a page. */
+    private final Map<UUID, AtomicLong> inventoryCloseEpochs = new ConcurrentHashMap<>();
     /** The latest async navigation for each reviewer; superseded callbacks cannot reopen it. */
     private final Map<UUID, Navigation> pendingNavigation = new ConcurrentHashMap<>();
     private final java.util.concurrent.atomic.AtomicLong navigationIds = new java.util.concurrent.atomic.AtomicLong();
@@ -175,14 +178,29 @@ public final class PunishmentRequestGuiController implements Listener {
     @EventHandler(priority = EventPriority.MONITOR)
     public void onInventoryClose(InventoryCloseEvent event) {
         if (event.getPlayer() instanceof Player player) {
-            pendingNavigation.remove(player.getUniqueId());
-            releaseIfAbandoned(player, leasedState(event.getView()));
+            UUID playerId = player.getUniqueId();
+            PunishmentApprovalLease lease = leasedState(event.getView());
+            // closeInventory() for an admitted decision and review/denial page
+            // swaps are not later navigation. All other closes invalidate
+            // delayed decision presentation, even if the new page is now gone.
+            if (lease == null || (!decisionClosures.contains(lease)
+                    && !lease.equals(preservingTransitions.get(playerId)))) {
+                inventoryCloseEpochs.computeIfAbsent(playerId, unused -> new AtomicLong())
+                        .incrementAndGet();
+            }
+            pendingNavigation.remove(playerId);
+            releaseIfAbandoned(player, lease);
         }
     }
 
     @EventHandler(priority = EventPriority.MONITOR)
     public void onPlayerQuit(PlayerQuitEvent event) {
-        pendingNavigation.remove(event.getPlayer().getUniqueId());
+        UUID playerId = event.getPlayer().getUniqueId();
+        pendingNavigation.remove(playerId);
+        AtomicLong closeEpoch = inventoryCloseEpochs.remove(playerId);
+        if (closeEpoch != null) {
+            closeEpoch.incrementAndGet();
+        }
         // Quit can occur without a usable close callback; database release
         // still happens exclusively on the existing bounded worker executor.
         releaseIfAbandoned(event.getPlayer(), leasedState(event.getPlayer().getOpenInventory()));
@@ -531,9 +549,12 @@ public final class PunishmentRequestGuiController implements Listener {
         }
         // The closure marker must outlive even a synchronously completed worker.
         decisionClosures.add(lease);
+        AtomicLong closeEpoch = inventoryCloseEpochs.computeIfAbsent(
+                player.getUniqueId(), unused -> new AtomicLong());
+        long expectedCloseEpoch = closeEpoch.get();
         boolean admitted = submit(player, () -> {
             try {
-                completeDecision(player, lease, returnPage, decision);
+                completeDecision(player, lease, returnPage, decision, closeEpoch, expectedCloseEpoch);
             } finally {
                 decisionsInFlight.remove(lease);
             }
@@ -554,7 +575,9 @@ public final class PunishmentRequestGuiController implements Listener {
             Player player,
             PunishmentApprovalLease lease,
             int returnPage,
-            BiFunction<PunishmentRequestService, Actor, PunishmentRequestResult> decision
+            BiFunction<PunishmentRequestService, Actor, PunishmentRequestResult> decision,
+            AtomicLong closeEpoch,
+            long expectedCloseEpoch
     ) {
         PunishmentRequestService service = readyService(player);
         if (service == null) {
@@ -575,7 +598,8 @@ public final class PunishmentRequestGuiController implements Listener {
                 : result instanceof PunishmentRequestResult.Denied denied
                 ? view(denied.request())
                 : resolvedView(service, current, lease, result);
-        onEntity(player, () -> presentDecision(player, service, lease, result, resolvedView, returnPage));
+        onEntity(player, () -> presentDecision(player, service, lease, result, resolvedView,
+                returnPage, closeEpoch, expectedCloseEpoch));
     }
 
     /**
@@ -639,13 +663,15 @@ public final class PunishmentRequestGuiController implements Listener {
             PunishmentApprovalLease lease,
             PunishmentRequestResult result,
             PunishmentRequestGuiState.RequestView resolvedView,
-            int returnPage
+            int returnPage,
+            AtomicLong closeEpoch,
+            long expectedCloseEpoch
     ) {
         // A durable decision must be acknowledged even if staff navigated away.
         decisionMessage(player, result, resolvedView);
         // Presentation is not a new navigation request: never replace a later
         // inventory (including a different punishment review) with stale details.
-        if (!mayPresentDecisionInventory(player, lease)) {
+        if (closeEpoch.get() != expectedCloseEpoch || !mayPresentDecisionInventory(player, lease)) {
             return;
         }
         Actor current = authorizedActor(player);

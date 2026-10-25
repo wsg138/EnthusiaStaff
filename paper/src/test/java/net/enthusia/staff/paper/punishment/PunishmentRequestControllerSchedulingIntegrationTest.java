@@ -178,6 +178,62 @@ class PunishmentRequestControllerSchedulingIntegrationTest {
     }
 
     @Test
+    void closedLaterPunishmentPageIsNotReopenedByOlderDecisionAcknowledgement() {
+        for (boolean approve : new boolean[]{true, false}) {
+            Fixture fixture = fixture(pending(StaffRank.MOD), SchedulerMode.HOLD_AFTER_FIRST);
+            PunishmentApprovalLease lease = acquire(fixture);
+            PunishmentRequestGuiState state = approve
+                    ? review(lease) : new PunishmentRequestGuiState.Denial(lease, "Target", 0);
+            fixture.controller().onInventoryClick(click(
+                    fixture.player().proxy(), state,
+                    approve ? PunishmentRequestGuiRenderer.APPROVE_SLOT
+                            : PunishmentRequestDenialPreset.values()[0].slot()
+            ));
+            assertEquals(1, fixture.scheduler().heldActions.size());
+
+            // Staff opens and closes another page before the older decision
+            // acknowledgement arrives. No inventory remains open to compare.
+            var laterPage = new PunishmentRequestGuiState.Details(
+                    new PunishmentRequestGuiState.RequestView(deniedRequest(), "Other"), 0);
+            fixture.player().openView = viewForState(fixture.player().proxy(), laterPage);
+            fixture.controller().onInventoryClose(close(fixture.player().proxy(), laterPage));
+            fixture.player().openView = null;
+            fixture.scheduler().heldActions.removeFirst().run();
+
+            assertEquals(1, fixture.player().messages.get(),
+                    "The durable decision must still be acknowledged");
+            assertEquals(0, fixture.player().openInventories.get(),
+                    "A delayed decision must not reopen after a newer page was closed");
+            assertEquals(approve ? PunishmentRequestStatus.APPROVED : PunishmentRequestStatus.DENIED,
+                    fixture.store().current.status());
+        }
+    }
+
+    @Test
+    void ownDecisionCloseStillAllowsDelayedDetailsPresentation() {
+        for (boolean approve : new boolean[]{true, false}) {
+            Fixture fixture = fixture(pending(StaffRank.MOD), SchedulerMode.HOLD_AFTER_FIRST);
+            PunishmentApprovalLease lease = acquire(fixture);
+            PunishmentRequestGuiState state = approve
+                    ? review(lease) : new PunishmentRequestGuiState.Denial(lease, "Target", 0);
+            fixture.player().onCloseInventory = () ->
+                    fixture.controller().onInventoryClose(close(fixture.player().proxy(), state));
+
+            fixture.controller().onInventoryClick(click(
+                    fixture.player().proxy(), state,
+                    approve ? PunishmentRequestGuiRenderer.APPROVE_SLOT
+                            : PunishmentRequestDenialPreset.values()[0].slot()
+            ));
+            assertEquals(1, fixture.scheduler().heldActions.size());
+            fixture.scheduler().heldActions.removeFirst().run();
+
+            assertEquals(1, fixture.player().openInventories.get(),
+                    "Closing the original leased page must not suppress its own acknowledgement");
+            assertEquals(1, fixture.player().messages.get());
+        }
+    }
+
+    @Test
     void laterQueueNavigationIsNotOverwrittenByEarlierDecisionAcknowledgement() {
         Fixture fixture = fixture(pending(StaffRank.MOD), SchedulerMode.HOLD_AFTER_FIRST);
         PunishmentApprovalLease lease = acquire(fixture);
