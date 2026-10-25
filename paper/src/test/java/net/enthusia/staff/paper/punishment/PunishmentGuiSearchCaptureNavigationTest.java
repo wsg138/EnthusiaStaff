@@ -25,8 +25,13 @@ class PunishmentGuiSearchCaptureNavigationTest {
             int start = source.indexOf(marker);
             assertTrue(start >= 0, marker);
             String method = source.substring(start, Math.min(source.length(), start + 600));
-            assertTrue(method.contains("searchCaptures.remove(viewer.getUniqueId())"),
-                    "Abandoned search must be cleared on navigation: " + marker);
+            if (marker.equals("public void openTargetPicker(")) {
+                assertTrue(method.contains("beginTargetResolution(viewer)"),
+                        "Queued picker must synchronously invalidate search through beginTargetResolution");
+            } else {
+                assertTrue(method.contains("searchCaptures.remove(viewer.getUniqueId())"),
+                        "Abandoned search must be cleared on navigation: " + marker);
+            }
         }
     }
 }
