@@ -29,6 +29,8 @@ import net.enthusia.staff.domain.auth.AuthorizationPolicy;
 import net.enthusia.staff.domain.auth.ModerationAction;
 import net.enthusia.staff.domain.ports.PlayerDirectory;
 import net.enthusia.staff.paper.auth.PaperActorResolver;
+import net.enthusia.staff.paper.auth.StaffTargetGuard;
+import net.enthusia.staff.paper.auth.LuckPermsStaffTargetGuard;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.event.ClickEvent;
 import net.kyori.adventure.text.format.NamedTextColor;
@@ -54,6 +56,7 @@ public final class PunishmentRequestGuiController implements Listener {
     private final Supplier<PlayerDirectory> players;
     private final AuthorizationPolicy authorization;
     private final ExecutorService workers;
+    private final StaffTargetGuard targetGuard;
     private final Function<PunishmentRequestGuiState.Details, Inventory> detailsRenderer;
     private final Function<PunishmentRequestGuiState.Review, Inventory> reviewRenderer;
     private final Function<PunishmentRequestGuiState.Denial, Inventory> denialRenderer;
@@ -74,7 +77,11 @@ public final class PunishmentRequestGuiController implements Listener {
             AuthorizationPolicy authorization,
             ExecutorService workers
     ) {
-        this((Plugin) plugin, services, players, authorization, workers);
+        this((Plugin) plugin, services, players, authorization, workers,
+                PunishmentRequestGuiRenderer::renderDetails,
+                PunishmentRequestGuiRenderer::renderReview,
+                PunishmentRequestGuiRenderer::renderDenial,
+                LuckPermsStaffTargetGuard.discover(plugin));
     }
 
     PunishmentRequestGuiController(
@@ -113,6 +120,25 @@ public final class PunishmentRequestGuiController implements Listener {
             Function<PunishmentRequestGuiState.Review, Inventory> reviewRenderer,
             Function<PunishmentRequestGuiState.Denial, Inventory> denialRenderer
     ) {
+        // Any caller that omits the guard fails closed. The production
+        // JavaPlugin constructor always discovers the LuckPerms hierarchy.
+        this(plugin, services, players, authorization, workers,
+                detailsRenderer, reviewRenderer, denialRenderer,
+                (actor, target, system) -> StaffTargetGuard.Result.deny(
+                        "Staff-target verification is not configured."));
+    }
+
+    PunishmentRequestGuiController(
+            Plugin plugin,
+            Supplier<PunishmentRequestService> services,
+            Supplier<PlayerDirectory> players,
+            AuthorizationPolicy authorization,
+            ExecutorService workers,
+            Function<PunishmentRequestGuiState.Details, Inventory> detailsRenderer,
+            Function<PunishmentRequestGuiState.Review, Inventory> reviewRenderer,
+            Function<PunishmentRequestGuiState.Denial, Inventory> denialRenderer,
+            StaffTargetGuard targetGuard
+    ) {
         if (plugin == null || services == null || players == null || authorization == null || workers == null) {
             throw new IllegalArgumentException("punishment request GUI dependencies must be present");
         }
@@ -121,6 +147,7 @@ public final class PunishmentRequestGuiController implements Listener {
         this.players = players;
         this.authorization = authorization;
         this.workers = workers;
+        this.targetGuard = Objects.requireNonNull(targetGuard, "targetGuard");
         this.detailsRenderer = Objects.requireNonNull(detailsRenderer);
         this.reviewRenderer = Objects.requireNonNull(reviewRenderer);
         this.denialRenderer = Objects.requireNonNull(denialRenderer);
@@ -590,6 +617,25 @@ public final class PunishmentRequestGuiController implements Listener {
         Actor current = decisionActorOnOwner(player, service, lease);
         if (current == null) {
             abandonLeaseSafely(service, lease);
+            return;
+        }
+        // A pending request can outlive a target's promotion to staff. The
+        // proposal snapshot has no current LuckPerms hierarchy; recheck after
+        // the lease and before any durable approve or deny transition.
+        StaffTargetGuard.Result targetCheck;
+        try {
+            targetCheck = Objects.requireNonNull(
+                    targetGuard.check(current, lease.request().proposal().targetId(), false),
+                    "target hierarchy check");
+        } catch (RuntimeException exception) {
+            plugin.getLogger().log(Level.WARNING,
+                    "Punishment request target hierarchy verification failed", exception);
+            targetCheck = StaffTargetGuard.Result.deny(
+                    "Staff-target verification is unavailable; no decision was made.");
+        }
+        if (!targetCheck.allowed()) {
+            abandonLeaseSafely(service, lease);
+            message(player, "Punishment request decision was not submitted: " + targetCheck.message());
             return;
         }
         PunishmentRequestResult result = decision.apply(service, current);

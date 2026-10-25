@@ -83,6 +83,23 @@ class PunishmentRequestCommandAuthorityTest {
         assertFalse(operation.contains("decideLeased(service, leased, actor, approve, denialNote)"));
     }
 
+    @Test
+    void typedApprovalChecksCurrentTargetHierarchyAfterLeaseBeforeDurableDecision() throws Exception {
+        String source = Files.readString(Path.of(
+                "src/main/java/net/enthusia/staff/paper/command/PunishmentRequestCommandHandler.java"));
+        String operation = source.substring(source.indexOf("private void decideStored("),
+                source.indexOf("private PunishmentRequestService readyService("));
+        int current = operation.indexOf("currentDecisionActor(sender, current)");
+        int target = operation.indexOf("decisionTargetCheck(");
+        int decision = operation.indexOf("decideLeased(service, leased, fresh, approve, denialNote)");
+        assertTrue(current >= 0 && target > current && decision > target,
+                "Typed approve and deny must recheck current target hierarchy after the lease");
+        assertTrue(operation.contains("abandonLeaseSafely(service, leased)"),
+                "A newly protected target must leave the request pending and release the claim");
+        assertTrue(source.contains("LuckPermsStaffTargetGuard.discover(plugin)"),
+                "Production command constructor must not silently use a permissive guard");
+    }
+
     private static Plugin plugin() {
         return (Plugin) Proxy.newProxyInstance(Plugin.class.getClassLoader(), new Class<?>[]{Plugin.class},
                 (instance, method, args) -> { throw new AssertionError(method.getName()); });
