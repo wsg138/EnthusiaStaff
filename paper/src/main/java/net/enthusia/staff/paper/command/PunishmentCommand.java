@@ -468,7 +468,7 @@ public final class PunishmentCommand implements CommandExecutor, TabCompleter {
         } catch (RuntimeException exception) {
             plugin.getLogger().log(Level.SEVERE, "Punishment command storage operation failed", exception);
             send(sender, Component.text(
-                    "Punishment storage is unavailable; no punishment or request was created.",
+                    PunishmentOutcomeUnknownNotice.directPunishment(),
                     NamedTextColor.RED
             ));
         }
