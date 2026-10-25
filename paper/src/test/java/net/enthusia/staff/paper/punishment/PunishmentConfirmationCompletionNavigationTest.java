@@ -49,6 +49,29 @@ class PunishmentConfirmationCompletionNavigationTest {
                 "Still deliver committed outcome even when player navigated elsewhere");
     }
 
+    @Test
+    void staleRecommendationRejectCannotReopenOrReprepareSupersededReview() throws Exception {
+        String controller = Files.readString(Path.of(
+                "src/main/java/net/enthusia/staff/paper/punishment/PunishmentGuiController.java"));
+        String handler = controller.substring(controller.indexOf("private void handleRejected("),
+                controller.indexOf("private PunishmentGuiOverview loadOverview("));
+        assertTrue(handler.contains("Inventory confirmationOrigin"),
+                "Rejected confirmations must retain the same source inventory identity");
+        int owner = handler.indexOf("onEntity(viewer, () -> {");
+        int guard = handler.indexOf("confirmedInventoryStillOpen(confirmationOrigin,");
+        int authorize = handler.indexOf("authorizedActor(viewer)");
+        int reopen = handler.indexOf("openState(viewer,");
+        int retry = handler.indexOf("reprepare(");
+        assertTrue(owner >= 0 && guard > owner && authorize > guard
+                        && reopen > guard && retry > guard,
+                "Owner-thread inventory and current staff authority must be verified before returning or rebuilding a rejected review");
+
+        String result = controller.substring(controller.indexOf("private void handleConfirmation("),
+                controller.indexOf("private void announceNewlyCommitted("));
+        assertTrue(result.contains("handleRejected(viewer, state, (PunishmentDraftConfirmation.Rejected) result, confirmationOrigin)"),
+                "The rejection path must preserve original confirmation navigation identity");
+    }
+
     private static Inventory inventory() {
         return (Inventory) Proxy.newProxyInstance(
                 Inventory.class.getClassLoader(), new Class<?>[]{Inventory.class},

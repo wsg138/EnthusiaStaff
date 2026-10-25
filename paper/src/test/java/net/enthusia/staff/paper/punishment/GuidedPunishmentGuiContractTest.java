@@ -200,8 +200,9 @@ class GuidedPunishmentGuiContractTest {
         String controller = source("PunishmentGuiController.java");
         String handler = controller.substring(controller.indexOf("private void handleRejected("),
                 controller.indexOf("private PunishmentGuiOverview loadOverview("));
-        String guidedBranch = handler.substring(handler.indexOf("if (isGuidedDraft("),
-                handler.indexOf("message(viewer, \"The recommendation changed. A fresh review"));
+        int guidedStart = handler.indexOf("if (isGuidedDraft(");
+        String guidedBranch = handler.substring(guidedStart,
+                handler.indexOf("return;", guidedStart) + "return;".length());
         assertTrue(guidedBranch.contains("matchingGuidedReturn(viewer, state)"));
         assertTrue(guidedBranch.contains("previous != null && guidedModeEnabled()"));
         assertTrue(guidedBranch.contains("categoriesState(state)"));

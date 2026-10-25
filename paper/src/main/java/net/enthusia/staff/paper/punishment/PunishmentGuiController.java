@@ -1547,7 +1547,7 @@ public final class PunishmentGuiController implements Listener {
             }
             return;
         }
-        handleRejected(viewer, actor, state, (PunishmentDraftConfirmation.Rejected) result);
+        handleRejected(viewer, state, (PunishmentDraftConfirmation.Rejected) result, confirmationOrigin);
     }
 
     /** Publish the first committed result, including after draft cleanup failure. */
@@ -1578,33 +1578,55 @@ public final class PunishmentGuiController implements Listener {
 
     private void handleRejected(
             Player viewer,
-            Actor actor,
             PunishmentGuiState.Review state,
-            PunishmentDraftConfirmation.Rejected rejected
+            PunishmentDraftConfirmation.Rejected rejected,
+            Inventory confirmationOrigin
     ) {
-        if ("RECOMMENDATION_CHANGED".equals(rejected.code())) {
+        if (!"RECOMMENDATION_CHANGED".equals(rejected.code())) {
+            message(viewer, rejected.code() + ": " + rejected.message());
+            return;
+        }
+        // A saved-draft recommendation can change while confirmation reads
+        // history/policy. Do not reopen or reprepare that stale review after
+        // its inventory was closed or replaced with a newer screen.
+        onEntity(viewer, () -> {
+            if (!confirmedInventoryStillOpen(confirmationOrigin,
+                    viewer.getOpenInventory().getTopInventory())) {
+                viewer.sendMessage(StaffMessageStyle.style(Component.text(
+                        "The punishment recommendation changed; no punishment or request was "
+                                + "created. Open the punishment GUI again to reassess."
+                )));
+                return;
+            }
+            // The worker's original actor is not authoritative after a role
+            // or Staff Mode transition. Resolve a fresh snapshot on owner thread
+            // before starting another asynchronous draft preparation.
+            Actor current = authorizedActor(viewer);
+            if (current == null) {
+                return;
+            }
             if (isGuidedDraft(state.draft().internalExplanation())) {
-                // Never reuse a stale guided duration/step without rerunning its
-                // facts against the current policy and actual punishment history.
-                message(viewer, "The guided recommendation changed. No punishment or "
-                        + "request was created. Recalculate this incident before submitting.");
+                viewer.sendMessage(StaffMessageStyle.style(Component.text(
+                        "The guided recommendation changed. No punishment or request was "
+                                + "created. Recalculate this incident before submitting."
+                )));
                 PunishmentGuiState.Guided previous = matchingGuidedReturn(viewer, state);
                 openState(viewer, previous != null && guidedModeEnabled()
                         ? previous : categoriesState(state));
                 return;
             }
-            message(viewer, "The recommendation changed. A fresh review is being opened; "
-                    + "no punishment or request was created.");
+            viewer.sendMessage(StaffMessageStyle.style(Component.text(
+                    "The recommendation changed. A fresh review is being opened; "
+                            + "no punishment or request was created."
+            )));
             reprepare(
                     viewer,
-                    actor,
+                    current,
                     state,
                     state.draft().internalExplanation(),
                     state.draft().visibility()
             );
-            return;
-        }
-        message(viewer, rejected.code() + ": " + rejected.message());
+        });
     }
 
     private PunishmentGuiOverview loadOverview(UUID targetId) {
