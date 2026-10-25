@@ -26,6 +26,10 @@ class FoliaAdmissionTests(unittest.TestCase):
                           "task -> plugin.getServer().getScheduler().runTask(plugin, task)")
         self.write_source("staff/StaffStateCodec.java",
                           "if (!player.teleport(decoded.location())) return false;")
+        self.write_source("staff/StaffModeManager.java",
+                          "public void onQuit(PlayerQuitEvent event) {\n"
+                          " if (restoreSavedState(player, session)) { return; }\n"
+                          "}\n")
 
     def write_metadata(self, yaml):
         with zipfile.ZipFile(self.jar, "w") as z:
@@ -42,8 +46,9 @@ class FoliaAdmissionTests(unittest.TestCase):
         self.assertFalse(result["folia_load_admission"])
         self.assertEqual("NO_GO", result["release_status"])
         self.assertFalse(result["folia_runtime_verified"])
-        self.assertEqual(2, len(result["known_source_blockers"]))
-        self.assertEqual({"legacy_bukkit_scheduler", "synchronous_staff_state_teleport"},
+        self.assertEqual(3, len(result["known_source_blockers"]))
+        self.assertEqual({"legacy_bukkit_scheduler", "synchronous_staff_state_teleport",
+                          "quit_event_synchronous_staff_restore"},
                          {v["id"] for v in result["known_source_blockers"]})
 
     def test_true_marker_cannot_erase_known_threading_blockers(self):
@@ -58,10 +63,29 @@ class FoliaAdmissionTests(unittest.TestCase):
         self.write_metadata("folia-supported: true\n")
         self.write_source("integration/RoseChatInboundBridgeIntegration.java", "safe global schedule")
         self.write_source("staff/StaffStateCodec.java", "player.teleportAsync(destination)")
+        self.write_source("staff/StaffModeManager.java",
+                          "public void onQuit(PlayerQuitEvent event) { asyncDetach(player); }")
         result = audit.inspect(self.root)
         self.assertTrue(result["folia_load_admission"])
         self.assertFalse(result["folia_runtime_verified"])
         self.assertEqual("NO_GO", result["release_status"])
+
+    def test_quit_restore_remains_blocker_even_if_teleport_is_made_async(self):
+        self.write_metadata("folia-supported: true\n")
+        self.write_source("integration/RoseChatInboundBridgeIntegration.java",
+                          "safe global scheduler")
+        self.write_source("staff/StaffStateCodec.java", "player.teleportAsync(destination)")
+        result = audit.inspect(self.root)
+        self.assertEqual(["quit_event_synchronous_staff_restore"],
+                         [b["id"] for b in result["known_source_blockers"]])
+        self.assertFalse(result["folia_load_admission"])
+
+    def test_multiline_legacy_scheduler_still_detected(self):
+        self.write_source("integration/RoseChatInboundBridgeIntegration.java",
+                          "task -> plugin.getServer()\n .getScheduler()\n .runTask(plugin, task)")
+        result = audit.inspect(self.root)
+        self.assertIn("legacy_bukkit_scheduler",
+                      [b["id"] for b in result["known_source_blockers"]])
 
     def test_duplicate_or_invalid_marker_fails_closed(self):
         for yaml in ("folia-supported: true\nfolia-supported: false\n",

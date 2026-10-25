@@ -18,6 +18,11 @@ SOURCE_ROOT = Path("paper/src/main/java")
 FLAG = re.compile(r"^folia-supported\s*:\s*(.*?)\s*$")
 LEGACY = re.compile(r"\.getScheduler\(\)\s*\.runTask(?:Later|Timer|Asynchronously|LaterAsynchronously|TimerAsynchronously)?\s*\(")
 TELEPORT = re.compile(r"\bplayer\s*\.\s*teleport\s*\(")
+QUIT_HANDLER = re.compile(
+    r"public\s+void\s+onQuit\s*\(\s*PlayerQuitEvent\s+\w+\s*\)\s*\{"
+)
+QUIT_RESTORE = re.compile(r"\brestoreSavedState\s*\(")
+
 
 
 class AdmissionError(ValueError):
@@ -48,22 +53,45 @@ def known_source_blockers(root: Path) -> list[dict]:
         raise AdmissionError("Paper Java source tree is empty")
     blockers = []
     for path in files:
-        lines = path.read_text(encoding="utf-8").splitlines()
-        for line_no, line in enumerate(lines, 1):
-            if LEGACY.search(line):
-                blockers.append({
-                    "id": "legacy_bukkit_scheduler",
-                    "path": path.relative_to(root).as_posix(),
-                    "line": line_no,
-                    "reason": "Legacy Bukkit scheduler is not valid for Folia's regionized runtime",
-                })
-            if path.name == "StaffStateCodec.java" and TELEPORT.search(line):
+        content = path.read_text(encoding="utf-8")
+        for match in LEGACY.finditer(content):
+            blockers.append({
+                "id": "legacy_bukkit_scheduler",
+                "path": path.relative_to(root).as_posix(),
+                "line": content.count("\n", 0, match.start()) + 1,
+                "reason": "Legacy Bukkit scheduler is not valid for Folia's regionized runtime",
+            })
+        if path.name == "StaffStateCodec.java":
+            for match in TELEPORT.finditer(content):
                 blockers.append({
                     "id": "synchronous_staff_state_teleport",
                     "path": path.relative_to(root).as_posix(),
-                    "line": line_no,
+                    "line": content.count("\n", 0, match.start()) + 1,
                     "reason": "Synchronous staff-state teleport needs cross-region runtime review",
                 })
+        if path.name == "StaffModeManager.java":
+            # PlayerQuitEvent requires restoration before the server persists
+            # the player's native state. Merely making codec.teleport async
+            # would silently violate this existing synchronous lifecycle.
+            for handler in QUIT_HANDLER.finditer(content):
+                opened = content.index("{", handler.start(), handler.end())
+                depth = 1
+                end = opened + 1
+                while end < len(content) and depth > 0:
+                    if content[end] == "{":
+                        depth += 1
+                    elif content[end] == "}":
+                        depth -= 1
+                    end += 1
+                if depth != 0:
+                    raise AdmissionError("Unbalanced StaffModeManager.onQuit handler")
+                for match in QUIT_RESTORE.finditer(content, opened + 1, end - 1):
+                    blockers.append({
+                        "id": "quit_event_synchronous_staff_restore",
+                        "path": path.relative_to(root).as_posix(),
+                        "line": content.count("\n", 0, match.start()) + 1,
+                        "reason": "Quit-event state restore assumes immediate completion before player save",
+                    })
     return blockers
 
 
