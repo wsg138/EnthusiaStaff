@@ -20,6 +20,9 @@ public final class LuckPermsStaffTargetGuard implements StaffTargetGuard {
             "Staff hierarchy blocks targeting staff at an equal or higher authority level.";
     private static final String UNAVAILABLE_MESSAGE =
             "Staff rank verification is unavailable; no action was taken.";
+    private static final String RANK_CHANGED_MESSAGE =
+            "Your staff rank changed while this punishment was being prepared. "
+                    + "Open a new punishment command to recheck your authority.";
 
     private final TargetRankLookup ranks;
     private final StaffTargetHierarchyPolicy hierarchy;
@@ -87,6 +90,12 @@ public final class LuckPermsStaffTargetGuard implements StaffTargetGuard {
             StaffRank actorRank = ranks.resolve(actor.id()).orElse(null);
             if (actorRank == null) {
                 return Result.deny(UNAVAILABLE_MESSAGE);
+            }
+            // Hierarchy already uses live LuckPerms rank, but the sanction
+            // workflow authorizes with the Actor captured when GUI/command
+            // work was queued. Never carry an old elevated role into it.
+            if (actorRank != actor.rank()) {
+                return Result.deny(RANK_CHANGED_MESSAGE);
             }
             StaffRank targetRank = ranks.resolve(targetId).orElse(null);
             return hierarchy.permits(actorRank, targetRank)
