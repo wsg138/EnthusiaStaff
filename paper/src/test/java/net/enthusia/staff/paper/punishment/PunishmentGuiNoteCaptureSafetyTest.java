@@ -29,7 +29,7 @@ class PunishmentGuiNoteCaptureSafetyTest {
         String controller = source();
         String note = controller.substring(controller.indexOf("if (slot == PunishmentGuiRenderer.NOTE_SLOT)"),
                 controller.indexOf("if (slot == PunishmentGuiRenderer.CONFIRM_SLOT)", controller.indexOf("if (slot == PunishmentGuiRenderer.NOTE_SLOT)")));
-        assertTrue(note.contains("new NoteCapture(state, clock.instant())"));
+        assertTrue(note.contains("new NoteCapture(state, clock.instant(), chatToken)"));
         assertTrue(note.contains("noteCaptures.remove(viewer.getUniqueId(), capture)"),
                 "Timeout must only remove the original prompt, not a later one");
         assertTrue(note.contains("20L * 60L"), "Abandoned note prompts should auto-expire");
