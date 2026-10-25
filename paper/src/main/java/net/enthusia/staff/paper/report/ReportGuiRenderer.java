@@ -209,10 +209,15 @@ final class ReportGuiRenderer {
                         Component.text(configuration.message("sensitive-evidence"), NamedTextColor.DARK_GRAY)
                 )
         ));
+        List<Component> descriptionLore = new ArrayList<>(wrap(details.description()));
+        descriptionLore.add(Component.text("Original report text is above.", NamedTextColor.DARK_GRAY));
+        descriptionLore.add(Component.text("View reporter follow-ups and staff action history:", NamedTextColor.YELLOW));
+        descriptionLore.add(Component.text("/reports messages " + details.summary().reportId(),
+                NamedTextColor.WHITE));
         inventory.setItem(configuration.slot("detail-description"), item(
                 configuration.material("description"),
                 configuration.message("description"),
-                wrap(details.description())
+                List.copyOf(descriptionLore)
         ));
         inventory.setItem(configuration.slot("detail-public-chat"), snapshotItem(
                 configuration.material("public-chat"),
