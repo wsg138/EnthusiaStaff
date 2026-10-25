@@ -3,6 +3,7 @@ package net.enthusia.staff.paper.sanction;
 import net.enthusia.staff.paper.presentation.StaffMessageStyle;
 import io.papermc.paper.event.player.AsyncChatEvent;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.format.DateTimeParseException;
 import java.util.List;
@@ -38,8 +39,11 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.inventory.InventoryClickEvent;
+import org.bukkit.event.inventory.InventoryOpenEvent;
 import org.bukkit.event.inventory.InventoryDragEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
+import org.bukkit.event.player.PlayerCommandPreprocessEvent;
+import org.bukkit.inventory.Inventory;
 import org.bukkit.plugin.java.JavaPlugin;
 
 public final class SanctionChangeGuiController implements Listener {
@@ -57,6 +61,7 @@ public final class SanctionChangeGuiController implements Listener {
 
     private static final String REMOVE_PUNISHMENT_COMMAND = "removepunishment";
     private static final int RECENT_CASE_LIMIT = 100;
+    private static final Duration INPUT_CAPTURE_LIFETIME = Duration.ofSeconds(60);
     private final JavaPlugin plugin;
     private final Clock clock;
     private final Supplier<OperationalMode> mode;
@@ -69,6 +74,8 @@ public final class SanctionChangeGuiController implements Listener {
     private final SanctionChangeGuiCatalog catalog;
     private final SanctionChangeGuiRenderer renderer;
     private final Map<UUID, InputCapture> inputCaptures = new ConcurrentHashMap<>();
+    // A chat callback may already be queued after AsyncChatEvent removes the capture.
+    private final Map<UUID, Object> pendingChatTokens = new ConcurrentHashMap<>();
     private final Set<UUID> confirmations = ConcurrentHashMap.newKeySet();
 
     public SanctionChangeGuiController(
@@ -102,6 +109,7 @@ public final class SanctionChangeGuiController implements Listener {
     }
 
     public void open(Player viewer, String targetQuery, String commandName) {
+        cancelPendingInput(viewer.getUniqueId());
         Actor actor = authorizedActor(viewer);
         if (actor == null) {
             return;
@@ -166,22 +174,84 @@ public final class SanctionChangeGuiController implements Listener {
     }
 
     @EventHandler(priority = EventPriority.HIGHEST)
+    public void onInventoryOpen(InventoryOpenEvent event) {
+        if (event.getPlayer() instanceof Player viewer) {
+            cancelPendingInput(viewer.getUniqueId());
+        }
+    }
+
+    @EventHandler(priority = EventPriority.HIGHEST)
+    public void onCommandPreprocess(PlayerCommandPreprocessEvent event) {
+        cancelPendingInput(event.getPlayer().getUniqueId());
+    }
+
+    private void cancelPendingInput(UUID viewerId) {
+        inputCaptures.remove(viewerId);
+        pendingChatTokens.remove(viewerId);
+    }
+
+    @EventHandler(priority = EventPriority.HIGHEST)
     public void onChat(AsyncChatEvent event) {
         Player viewer = event.getPlayer();
-        InputCapture capture = inputCaptures.remove(viewer.getUniqueId());
+        UUID viewerId = viewer.getUniqueId();
+        InputCapture capture = inputCaptures.remove(viewerId);
         if (capture == null) {
             return;
         }
         event.setCancelled(true);
+        if (captureExpired(capture.startedAt(), clock.instant())) {
+            onEntity(viewer, () -> {
+                if (pendingChatTokens.remove(viewerId, capture.navigationToken())) {
+                    viewer.sendMessage(StaffMessageStyle.style(Component.text(
+                            "Sanction change private input expired. Open the GUI again to retry."
+                    )));
+                }
+            });
+            return;
+        }
         String input = PlainTextComponentSerializer.plainText().serialize(event.message()).trim();
-        onEntity(viewer, () -> handleInput(viewer, capture, input));
+        onEntity(viewer, () -> {
+            if (!pendingChatTokens.remove(viewerId, capture.navigationToken())) {
+                return;
+            }
+            if (captureExpired(capture.startedAt(), clock.instant())) {
+                viewer.sendMessage(StaffMessageStyle.style(Component.text(
+                        "Sanction change private input expired. Open the GUI again to retry."
+                )));
+                return;
+            }
+            handleInput(viewer, capture, input);
+        });
     }
 
     @EventHandler(priority = EventPriority.MONITOR)
     public void onQuit(PlayerQuitEvent event) {
         UUID viewerId = event.getPlayer().getUniqueId();
-        inputCaptures.remove(viewerId);
+        cancelPendingInput(viewerId);
         confirmations.remove(viewerId);
+    }
+
+    static boolean captureExpired(Instant startedAt, Instant now) {
+        return !now.isBefore(startedAt.plus(INPUT_CAPTURE_LIFETIME));
+    }
+
+    private void startInputCapture(Player viewer, SanctionChangeGuiState.Actions state,
+                                   SanctionChangeAction action, InputStage stage,
+                                   Optional<Instant> expiration) {
+        Object token = new Object();
+        InputCapture capture = new InputCapture(
+                state, action, stage, expiration, clock.instant(), token);
+        UUID viewerId = viewer.getUniqueId();
+        inputCaptures.put(viewerId, capture);
+        pendingChatTokens.put(viewerId, token);
+        viewer.getScheduler().runDelayed(plugin, task -> {
+            if (inputCaptures.remove(viewer.getUniqueId(), capture)
+                    && pendingChatTokens.remove(viewerId, capture.navigationToken())) {
+                viewer.sendMessage(StaffMessageStyle.style(Component.text(
+                        "Sanction change private input timed out. Reopen the GUI to retry."
+                )));
+            }
+        }, null, 20L * 60L);
     }
 
     private void resolveAndOpen(
@@ -356,13 +426,11 @@ public final class SanctionChangeGuiController implements Listener {
     ) {
         boolean expiration = action == SanctionChangeAction.REDUCE_DURATION
                 || action == SanctionChangeAction.REPLACE_EXPIRATION;
-        inputCaptures.put(viewer.getUniqueId(), new InputCapture(
-                state,
-                action,
-                expiration ? InputStage.EXPIRATION : InputStage.REASON,
-                Optional.empty()
-        ));
         close(viewer);
+        // Deliberate prompt-origin close comes before the navigation ticket.
+        startInputCapture(viewer, state, action,
+                expiration ? InputStage.EXPIRATION : InputStage.REASON,
+                Optional.empty());
         viewer.sendMessage(StaffMessageStyle.style(Component.text(expiration
                 ? "Type the new ISO-8601 expiration in chat (for example 2026-08-01T00:00:00Z), or cancel."
                 : "Type the private audit reason in chat, or cancel. It will not be broadcast.")));
@@ -387,9 +455,8 @@ public final class SanctionChangeGuiController implements Listener {
                 openState(viewer, capture.state());
                 return;
             }
-            inputCaptures.put(viewer.getUniqueId(), new InputCapture(
-                    capture.state(), capture.action(), InputStage.REASON, Optional.of(expiration)
-            ));
+            startInputCapture(viewer, capture.state(), capture.action(),
+                    InputStage.REASON, Optional.of(expiration));
             viewer.sendMessage(StaffMessageStyle.style(Component.text(
                     "Now type the private audit reason in chat, or cancel. It will not be broadcast."
             )));
@@ -418,6 +485,7 @@ public final class SanctionChangeGuiController implements Listener {
             viewer.sendMessage(StaffMessageStyle.style(Component.text("That sanction change is already being confirmed.")));
             return;
         }
+        Inventory confirmationOrigin = viewer.getOpenInventory().getTopInventory();
         boolean submitted = submit(viewer, () -> {
             try {
                 SanctionChangeService service = services.get();
@@ -448,7 +516,8 @@ public final class SanctionChangeGuiController implements Listener {
                 if (result instanceof SanctionChangeResult.Applied applied) {
                     finish(viewer, "Sanction change committed for case " + state.caseReview().caseId()
                             + "; affected sanctions=" + applied.affectedSanctions()
-                            + (applied.replayed() ? " (idempotent replay)" : "") + '.');
+                            + (applied.replayed() ? " (idempotent replay)" : "") + '.',
+                            confirmationOrigin);
                     return;
                 }
                 SanctionChangeResult.Rejected rejected = (SanctionChangeResult.Rejected) result;
@@ -491,9 +560,16 @@ public final class SanctionChangeGuiController implements Listener {
         viewer.closeInventory();
     }
 
-    private void finish(Player viewer, String result) {
+    static boolean sameConfirmationInventory(Inventory origin, Inventory current) {
+        return origin != null && origin == current;
+    }
+
+    private void finish(Player viewer, String result, Inventory confirmationOrigin) {
         onEntity(viewer, () -> {
-            close(viewer);
+            if (sameConfirmationInventory(confirmationOrigin,
+                    viewer.getOpenInventory().getTopInventory())) {
+                close(viewer);
+            }
             viewer.sendMessage(StaffMessageStyle.style(Component.text(result)));
         });
     }
@@ -540,10 +616,13 @@ public final class SanctionChangeGuiController implements Listener {
             SanctionChangeGuiState.Actions state,
             SanctionChangeAction action,
             InputStage stage,
-            Optional<Instant> expiration
+            Optional<Instant> expiration,
+            Instant startedAt,
+            Object navigationToken
     ) {
         private InputCapture {
-            if (state == null || action == null || stage == null || expiration == null) {
+            if (state == null || action == null || stage == null || expiration == null
+                    || startedAt == null || navigationToken == null) {
                 throw new IllegalArgumentException("sanction change input capture fields must be present");
             }
         }
