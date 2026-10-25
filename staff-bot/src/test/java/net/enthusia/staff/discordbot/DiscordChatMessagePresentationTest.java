@@ -59,6 +59,16 @@ class DiscordChatMessagePresentationTest {
                 "<chat=114583e7-f384-42c7-9352-4d34373c3df0:[i]:>Diamond Spear"));
         assertEquals("[Item]", DiscordChatMessagePresentation.body(
                 "<chat=114583e7-f384-42c7-9352-4d34373c3df0:[i]:>"));
+        assertEquals("is this rare?", DiscordChatMessagePresentation.body(
+                "<chat=53bbba9c-9f0c-4e24-8d44-c08fe96b743f:[item]:> is this rare?"));
+        assertEquals("can you check?", DiscordChatMessagePresentation.body(
+                "<chat=4c8181df-6058-4e19-9ed5-98b14618bd6b:[inventory]:> can you check?"));
+        assertEquals("[Item]", DiscordChatMessagePresentation.body(
+                "<chat=53bbba9c-9f0c-4e24-8d44-c08fe96b743f:[enderchest]:>"));
+        // Unknown/invalid ID is user text, not a trusted InteractiveChat token.
+        assertEquals("<chat=not-a-uuid:[item]:\\> is this rare?",
+                DiscordChatMessagePresentation.body(
+                        "<chat=not-a-uuid:[item]:> is this rare?"));
         assertEquals("hi \\*everyone\\* and @everyone", DiscordChatMessagePresentation.body(
                 "hi *everyone* and @everyone"));
     }
