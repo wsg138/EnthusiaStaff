@@ -85,7 +85,8 @@ public final class StaffModeManager implements Listener {
     private final java.util.Set<UUID> profileApplications = ConcurrentHashMap.newKeySet();
     private final java.util.Set<UUID> snapshotRestorations = ConcurrentHashMap.newKeySet();
     private final java.util.Set<UUID> pendingRankChecks = ConcurrentHashMap.newKeySet();
-    private final java.util.Set<UUID> scheduledRecoveryRetries = ConcurrentHashMap.newKeySet();
+    private final java.util.concurrent.ConcurrentMap<UUID, Object> scheduledRecoveryRetries =
+            new ConcurrentHashMap<>();
     private final StaffModeHandoffIntentRegistry handoffResumes;
     private final StaffModeSourceHandoffRegistry sourceHandoffs = new StaffModeSourceHandoffRegistry();
     private final StaffModeActivationCoordinator activation;
@@ -738,16 +739,19 @@ public final class StaffModeManager implements Listener {
     }
 
     private void scheduleRecoveryRetry(UUID playerId) {
-        if (!scheduledRecoveryRetries.add(playerId)) {
+        Object ticket = new Object();
+        if (scheduledRecoveryRetries.putIfAbsent(playerId, ticket) != null) {
             return;
         }
-        plugin.getServer().getGlobalRegionScheduler().runDelayed(plugin, ignored -> {
-            scheduledRecoveryRetries.remove(playerId);
-            Player player = plugin.getServer().getPlayer(playerId);
-            if (player != null) {
-                recover(player);
-            }
-        }, 20L);
+        try {
+            plugin.getServer().getGlobalRegionScheduler().runDelayed(plugin, ignored ->
+                    StaffRecoveryRetryOwnerDispatcher.forward(
+                            playerId, ticket, scheduledRecoveryRetries, this::onEntity, this::recover
+                    ), 20L);
+        } catch (RuntimeException failure) {
+            scheduledRecoveryRetries.remove(playerId, ticket);
+            throw failure;
+        }
     }
 
     private boolean staleFromPriorRuntime(StaffSessionSnapshot session) {
