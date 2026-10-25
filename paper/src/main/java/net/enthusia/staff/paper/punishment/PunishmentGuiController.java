@@ -140,6 +140,7 @@ public final class PunishmentGuiController implements Listener {
             return;
         }
         noteCaptures.remove(viewer.getUniqueId());
+        searchCaptures.remove(viewer.getUniqueId());
         String normalizedCommand = normalizeCommand(commandName);
         onEntity(viewer, () -> openTargetPickerPage(viewer, normalizedCommand, 0));
     }
@@ -1523,6 +1524,7 @@ public final class PunishmentGuiController implements Listener {
     private PunishmentGuiTargetResolutionFence.Ticket beginTargetResolution(Player viewer) {
         UUID viewerId = viewer.getUniqueId();
         noteCaptures.remove(viewer.getUniqueId());
+        searchCaptures.remove(viewer.getUniqueId());
         // A new /punish command supersedes any older pending GUI work.
         historyFence.invalidate(viewerId);
         preparationFence.invalidate(viewerId);
@@ -1588,6 +1590,7 @@ public final class PunishmentGuiController implements Listener {
 
     private void openTargetPickerPage(Player viewer, String commandName, int requestedPage) {
         noteCaptures.remove(viewer.getUniqueId());
+        searchCaptures.remove(viewer.getUniqueId());
         historyFence.invalidate(viewer.getUniqueId());
         preparationFence.invalidate(viewer.getUniqueId());
         targetResolutionFence.invalidate(viewer.getUniqueId());
@@ -1616,6 +1619,7 @@ public final class PunishmentGuiController implements Listener {
 
     private void openState(Player viewer, PunishmentGuiState state) {
         noteCaptures.remove(viewer.getUniqueId());
+        searchCaptures.remove(viewer.getUniqueId());
         historyFence.invalidate(viewer.getUniqueId());
         preparationFence.invalidate(viewer.getUniqueId());
         targetResolutionFence.invalidate(viewer.getUniqueId());
@@ -1700,6 +1704,8 @@ public final class PunishmentGuiController implements Listener {
     }
 
     private void closeWithoutResume(Player viewer) {
+        noteCaptures.remove(viewer.getUniqueId());
+        searchCaptures.remove(viewer.getUniqueId());
         historyFence.invalidate(viewer.getUniqueId());
         preparationFence.invalidate(viewer.getUniqueId());
         targetResolutionFence.invalidate(viewer.getUniqueId());
