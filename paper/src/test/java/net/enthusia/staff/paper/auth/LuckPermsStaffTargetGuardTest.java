@@ -34,6 +34,32 @@ class LuckPermsStaffTargetGuardTest {
     }
 
     @Test
+    void downgradeCannotReuseStaleHigherRankAgainstOrdinaryPlayer() {
+        Actor staleAdmin = new Actor(ACTOR_ID, "FormerAdmin", StaffRank.ADMIN);
+        StaffTargetGuard guard = guard(StaffRank.MOD, Optional.empty());
+
+        StaffTargetGuard.Result result = guard.check(staleAdmin, TARGET_ID, false);
+
+        assertFalse(result.allowed(),
+                "Current lower rank must not authorize a queued punishment using older admin actor");
+    }
+
+    @Test
+    void promotionAlsoRequiresNewCommandAuthoritySnapshot() {
+        Actor staleMod = new Actor(ACTOR_ID, "FormerMod", StaffRank.MOD);
+        StaffTargetGuard guard = guard(StaffRank.ADMIN, Optional.empty());
+
+        assertFalse(guard.check(staleMod, TARGET_ID, false).allowed(),
+                "Rank drift in either direction must require a new authorization snapshot");
+    }
+
+    @Test
+    void unchangedStaffRankRetainsNormalOrdinaryTargetAccess() {
+        assertTrue(guard(StaffRank.MOD, Optional.empty()).check(
+                new Actor(ACTOR_ID, "ActiveMod", StaffRank.MOD), TARGET_ID, false).allowed());
+    }
+
+    @Test
     void actorThatNoLongerHasStaffRankFailsClosed() {
         Actor staleAdmin = new Actor(ACTOR_ID, "FormerAdmin", StaffRank.ADMIN);
         StaffTargetGuard guard = LuckPermsStaffTargetGuard.forTesting(
