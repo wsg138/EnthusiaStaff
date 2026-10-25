@@ -223,7 +223,13 @@ public final class PunishmentCommand implements CommandExecutor, TabCompleter {
             usage(sender, label, route);
             return;
         }
-        submit(sender, () -> prepareStoredDraft(sender, actor, route, label, args));
+        PunishmentGuiController.CommandPreparationTicket ticket = sender instanceof Player player
+                ? gui.beginCommandPreparation(player) : null;
+        boolean queued = submit(sender,
+                () -> prepareStoredDraft(sender, actor, route, label, args, ticket));
+        if (!queued && sender instanceof Player player) {
+            gui.cancelCommandPreparation(player, ticket);
+        }
     }
 
     private static boolean isBanRoute(String route) {
@@ -248,7 +254,8 @@ public final class PunishmentCommand implements CommandExecutor, TabCompleter {
             Actor actor,
             String route,
             String label,
-            String[] args
+            String[] args,
+            PunishmentGuiController.CommandPreparationTicket ticket
     ) {
         if (!permitsPunishmentDraft(actor)) {
             send(sender, Component.text(
@@ -283,7 +290,7 @@ public final class PunishmentCommand implements CommandExecutor, TabCompleter {
         }
         PunishmentDraftEvaluation.Prepared prepared = (PunishmentDraftEvaluation.Prepared) evaluation;
         if (sender instanceof Player player) {
-            gui.showPreparedDraft(player, target, route, actor, prepared);
+            gui.showPreparedDraft(player, target, route, actor, prepared, ticket);
         } else {
             sendPrepared(sender, target, prepared);
         }
@@ -441,15 +448,17 @@ public final class PunishmentCommand implements CommandExecutor, TabCompleter {
         return false;
     }
 
-    private void submit(CommandSender sender, Runnable operation) {
+    private boolean submit(CommandSender sender, Runnable operation) {
         try {
             workers.submit(() -> runOperation(sender, operation));
+            return true;
         } catch (RejectedExecutionException exception) {
             plugin.getLogger().log(Level.WARNING, "Punishment worker rejected command", exception);
             sender.sendMessage(StaffMessageStyle.style(Component.text(
                     "Punishment storage is unavailable; try again shortly.",
                     NamedTextColor.RED
             )));
+            return false;
         }
     }
 
