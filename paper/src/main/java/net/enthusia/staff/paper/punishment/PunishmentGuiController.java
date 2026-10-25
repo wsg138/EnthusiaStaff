@@ -141,6 +141,11 @@ public final class PunishmentGuiController implements Listener {
         }
         noteCaptures.remove(viewer.getUniqueId());
         searchCaptures.remove(viewer.getUniqueId());
+        // The picker page is queued on the entity scheduler. Invalidate
+        // immediately so an already-queued private chat callback cannot win.
+        historyFence.invalidate(viewer.getUniqueId());
+        preparationFence.invalidate(viewer.getUniqueId());
+        targetResolutionFence.invalidate(viewer.getUniqueId());
         String normalizedCommand = normalizeCommand(commandName);
         onEntity(viewer, () -> openTargetPickerPage(viewer, normalizedCommand, 0));
     }
@@ -345,12 +350,10 @@ public final class PunishmentGuiController implements Listener {
             if (search != null) {
                 event.setCancelled(true);
                 String query = PlainTextComponentSerializer.plainText().serialize(event.message());
-                // Async chat may precede a newer /punish page or target lookup.
-                // Consume only on the player's entity thread after navigation
-                // has had a chance to invalidate this pending response.
-                Object searchTicket = preparationFence.begin(viewer.getUniqueId());
+                // Use the ticket minted when the search prompt was opened.
+                // Creating one here races newer entity-thread navigation.
                 onEntity(viewer, () -> {
-                    if (!preparationFence.consume(viewer.getUniqueId(), searchTicket)) {
+                    if (!preparationFence.consume(viewer.getUniqueId(), search.navigationToken())) {
                         return;
                     }
                     finishSearch(viewer, search, query);
@@ -362,13 +365,18 @@ public final class PunishmentGuiController implements Listener {
         // A delayed 60-second scheduler callback can run late under load.
         // Never let an already-expired private prompt edit an old draft.
         if (noteCaptureExpired(capture.startedAt(), clock.instant())) {
-            message(viewer, "Punishment note entry expired. Reopen the saved review to edit it.");
+            onEntity(viewer, () -> {
+                if (preparationFence.consume(viewer.getUniqueId(), capture.navigationToken())) {
+                    viewer.sendMessage(StaffMessageStyle.style(Component.text(
+                            "Punishment note entry expired. Reopen the saved review to edit it."
+                    )));
+                }
+            });
             return;
         }
         String note = PlainTextComponentSerializer.plainText().serialize(event.message()).trim();
-        Object noteTicket = preparationFence.begin(viewer.getUniqueId());
         onEntity(viewer, () -> {
-            if (!preparationFence.consume(viewer.getUniqueId(), noteTicket)) {
+            if (!preparationFence.consume(viewer.getUniqueId(), capture.navigationToken())) {
                 return;
             }
             if (note.equalsIgnoreCase("cancel")) {
@@ -790,18 +798,22 @@ public final class PunishmentGuiController implements Listener {
     }
 
     private void startSearch(Player viewer, PunishmentGuiState state) {
-        SearchCapture capture = new SearchCapture(state, clock.instant());
         noteCaptures.remove(viewer.getUniqueId());
+        suppressedClosures.add(viewer.getUniqueId());
+        viewer.closeInventory();
+        // Closing the punishment inventory invalidates pending preparation
+        // tickets. Mint the chat ticket only AFTER that synchronous close.
+        Object chatToken = preparationFence.begin(viewer.getUniqueId());
+        SearchCapture capture = new SearchCapture(state, clock.instant(), chatToken);
         searchCaptures.put(viewer.getUniqueId(), capture);
         viewer.getScheduler().runDelayed(plugin, task -> {
             if (searchCaptures.remove(viewer.getUniqueId(), capture)) {
+                preparationFence.consume(viewer.getUniqueId(), capture.navigationToken());
                 viewer.sendMessage(StaffMessageStyle.style(Component.text(
                         "Punishment search timed out. Open the GUI and click Search to try again."
                 )));
             }
         }, null, 20L * 60L);
-        suppressedClosures.add(viewer.getUniqueId());
-        viewer.closeInventory();
         viewer.sendMessage(StaffMessageStyle.style(Component.text(
                 "Search punishment reasons: type 2–64 characters, or cancel. Your message will not be broadcast."
         )));
@@ -881,17 +893,21 @@ public final class PunishmentGuiController implements Listener {
             return;
         }
         if (slot == PunishmentGuiRenderer.NOTE_SLOT) {
-            NoteCapture capture = new NoteCapture(state, clock.instant());
+            suppressedClosures.add(viewer.getUniqueId());
+            viewer.closeInventory();
+            // The close event invalidates preparation tickets; capture the
+            // prompt's navigation identity only after that close completes.
+            Object chatToken = preparationFence.begin(viewer.getUniqueId());
+            NoteCapture capture = new NoteCapture(state, clock.instant(), chatToken);
             noteCaptures.put(viewer.getUniqueId(), capture);
             viewer.getScheduler().runDelayed(plugin, task -> {
                 if (noteCaptures.remove(viewer.getUniqueId(), capture)) {
+                    preparationFence.consume(viewer.getUniqueId(), capture.navigationToken());
                     viewer.sendMessage(StaffMessageStyle.style(Component.text(
                             "Punishment note entry timed out. Reopen the saved review to edit it."
                     )));
                 }
             }, null, 20L * 60L);
-            suppressedClosures.add(viewer.getUniqueId());
-            viewer.closeInventory();
             viewer.sendMessage(StaffMessageStyle.style(Component.text(
                     isGuidedDraft(state.draft().internalExplanation())
                             ? "Add a private staff rationale; incident facts are preserved. Type cancel to return."
@@ -1829,10 +1845,10 @@ public final class PunishmentGuiController implements Listener {
     private record GuidedReturn(UUID draftId, PunishmentGuiState.Guided state) {
     }
 
-    private record SearchCapture(PunishmentGuiState origin, Instant startedAt) {
+    private record SearchCapture(PunishmentGuiState origin, Instant startedAt, Object navigationToken) {
         private SearchCapture {
-            if (origin == null || startedAt == null) {
-                throw new IllegalArgumentException("Search origin and time must be provided");
+            if (origin == null || startedAt == null || navigationToken == null) {
+                throw new IllegalArgumentException("Search origin, time and navigation token must be provided");
             }
         }
     }
@@ -1841,10 +1857,10 @@ public final class PunishmentGuiController implements Listener {
         return !now.isBefore(startedAt.plus(Duration.ofSeconds(60)));
     }
 
-    private record NoteCapture(PunishmentGuiState.Review review, Instant startedAt) {
+    private record NoteCapture(PunishmentGuiState.Review review, Instant startedAt, Object navigationToken) {
         private NoteCapture {
-            if (review == null || startedAt == null) {
-                throw new IllegalArgumentException("punishment note capture requires a review and start time");
+            if (review == null || startedAt == null || navigationToken == null) {
+                throw new IllegalArgumentException("punishment note capture requires a review, start time and token");
             }
         }
     }
