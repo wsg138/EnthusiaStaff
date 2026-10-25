@@ -49,6 +49,62 @@ reproducible exact-commit evidence, use the wrapper and preserve its source SHA,
 timestamp and JAR checksum with the review. If the runner is missing cached
 Gradle dependencies, offline execution fails rather than downloading them.
 
+## Separate disposable MariaDB execution on WSL2 (2026-10-25)
+
+This is **additional execution evidence**, NOT a capability of either Python
+offline verifier above. Source under test: clean exact commit
+`68cca43380bc45f07ddbfa3625d4ad7df77531b7`, before the documentation
+and Gradle build-configuration-only follow-up in this draft PR.
+
+On the authorized local Windows computer, WSL2 Ubuntu 24.04 had Java 25,
+Docker Engine 29.1.3 and locally cached `mariadb:11.8.3` and
+`testcontainers/ryuk:0.12.0` images. The Windows scheduled PATH did not
+contain Docker; no Docker installation or external image pull was needed.
+Testcontainers started **disposable local MariaDB databases** on loopback,
+ran Flyway migrations, and cleaned up its containers. No production/staging
+server or database was contacted, and no unrelated Docker container was
+modified.
+
+Executed Gradle from WSL with the repository's checked-in wrapper JAR
+(the Windows checkout's `gradlew` shell file could not execute directly):
+
+    java -cp gradle/wrapper/gradle-wrapper.jar org.gradle.wrapper.GradleWrapperMain --offline --no-daemon :integration-tests:test --tests 'net.enthusia.staff.integration.Punishment*' --tests 'net.enthusia.staff.integration.PolicyV2*' --tests 'net.enthusia.staff.integration.SanctionLifecycleIntegrationTest'
+
+The JUnit XML reports show **111 passed / 0 skipped / 0 failures / 0 errors**
+across **22 integration test classes**. Their stderr contains Testcontainers
+`mariadb:11.8.3` startup and Flyway migration/validation logs, so this was
+real database execution, not merely compilation. Coverage includes draft
+persistence, request replay/lease/concurrency/rollback, request alerts,
+policy V2 enforcement and persistence, historical migrations, and sanction
+lifecycle. The original broad Gradle invocation did **not** finish green:
+after test execution, Gradle rejected its configuration cache because the
+integration-test `doFirst` action captured a Gradle script/project object.
+The 111 successful JUnit cases must not be misreported as a successful
+Gradle invocation.
+
+Fixed that separate build issue in `integration-tests/build.gradle.kts`:
+the test task now uses the exact versioned Paper shaded JAR path resolved at
+configuration time, declares the JAR as a test input, and no longer accesses
+`project(":paper")` from a `doFirst` action. This also prevents accidentally
+selecting a stale JAR when several build versions coexist.
+
+**After the build-script fix:** the selected
+`PunishmentRequest*` integration subset generated **51 passed / 0 skipped /
+0 failed** JUnit cases, and a subsequent exact same Gradle invocation
+returned **BUILD SUCCESSFUL**. The `MariaDbDriverIntegrationTest` packaging
+and JDBC subset generated **3 passed / 0 skipped / 0 failed** cases and
+returned **BUILD SUCCESSFUL** with **Configuration cache entry stored**
+after the final build-script change. The config cache may still recalculate
+because the existing Velocity SNAPSHOT dependency's artifact metadata
+expires; that is a separate cache-reuse issue, not a test failure.
+
+Flyway logged that **MariaDB 11.8 is newer than its last verified MariaDB
+11.7**. No migration failures occurred in the exercised cases, but this
+warning requires consideration in runtime acceptance. This local evidence
+does not prove Folia/Paper scheduler behavior, real Java/Bedrock GUI
+interaction, live custom policies, owner severity calibration or rollback.
+**Release remains NO_GO.** No automatic GitHub Actions workflow was added.
+
 ## Required later release evidence, NOT provided by this script
 
 - Owner signoff on calibrated severity scenarios, warning behavior, repeat-history/duration/rank safety and manual-review boundaries (GitHub issue #616).
