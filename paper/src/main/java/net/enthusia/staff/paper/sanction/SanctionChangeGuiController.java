@@ -530,7 +530,8 @@ public final class SanctionChangeGuiController implements Listener {
                         state.action(),
                         state.replacementExpiration(),
                         state.reason(),
-                        Optional.of(state.caseReview().changeExpectation())
+                        Optional.of(state.caseReview().changeExpectation()),
+                        SanctionChangeAccess.typeScopeForCommand(state.commandName())
                 );
                 SanctionChangeResult result = service.apply(request, mode.get());
                 if (result instanceof SanctionChangeResult.Applied applied) {

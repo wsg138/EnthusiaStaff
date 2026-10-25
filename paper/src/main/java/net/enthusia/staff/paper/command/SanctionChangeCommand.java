@@ -252,7 +252,9 @@ public final class SanctionChangeCommand implements CommandExecutor, TabComplete
                 fresh,
                 action,
                 expiration,
-                reason
+                reason,
+                Optional.empty(),
+                SanctionChangeAccess.typeScopeForCommand(route)
         );
         SanctionChangeResult result = loadedService.apply(request, mode.get());
         if (result instanceof SanctionChangeResult.Applied applied) {
