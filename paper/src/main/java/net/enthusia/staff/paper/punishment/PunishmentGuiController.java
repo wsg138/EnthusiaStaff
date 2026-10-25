@@ -416,6 +416,19 @@ public final class PunishmentGuiController implements Listener {
             SearchCapture search = searchCaptures.remove(viewer.getUniqueId());
             if (search != null) {
                 event.setCancelled(true);
+                // The entity scheduler's 60-second timeout can be delayed under
+                // load. Consume a late private query, but never let it reopen
+                // the old punishment GUI after the prompt's deadline.
+                if (searchCaptureExpired(search.startedAt(), clock.instant())) {
+                    onEntity(viewer, () -> {
+                        if (preparationFence.consume(viewer.getUniqueId(), search.navigationToken())) {
+                            viewer.sendMessage(StaffMessageStyle.style(Component.text(
+                                    "Punishment search timed out. Open the GUI and click Search to try again."
+                            )));
+                        }
+                    });
+                    return;
+                }
                 String query = PlainTextComponentSerializer.plainText().serialize(event.message());
                 // Use the ticket minted when the search prompt was opened.
                 // Creating one here races newer entity-thread navigation.
@@ -891,9 +904,11 @@ public final class PunishmentGuiController implements Listener {
             return;
         }
         PunishmentGuiState origin = capture.origin();
-        if (clock.instant().isAfter(capture.startedAt().plus(Duration.ofSeconds(60)))) {
+        if (searchCaptureExpired(capture.startedAt(), clock.instant())) {
+            // A valid chat may have queued before the deadline but only
+            // reached this entity callback afterwards. Never reopen the
+            // abandoned GUI when the original prompt has expired.
             message(viewer, "Reason search expired; please try again.");
-            openState(viewer, origin);
             return;
         }
         String normalized = text.strip().replaceAll("\\s+", " ");
@@ -1943,6 +1958,10 @@ public final class PunishmentGuiController implements Listener {
                 throw new IllegalArgumentException("Search origin, time and navigation token must be provided");
             }
         }
+    }
+
+    static boolean searchCaptureExpired(Instant startedAt, Instant now) {
+        return noteCaptureExpired(startedAt, now);
     }
 
     static boolean noteCaptureExpired(Instant startedAt, Instant now) {
