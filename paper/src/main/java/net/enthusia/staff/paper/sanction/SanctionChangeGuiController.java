@@ -425,10 +425,20 @@ public final class SanctionChangeGuiController implements Listener {
                     message(viewer, "Moderation storage is not ready; no change was made.");
                     return;
                 }
+                // The click-time actor may be stale by the time the worker
+                // finishes reading case context. Check current staff rank,
+                // Staff Mode and this action's permission on the entity thread.
+                Actor fresh = SanctionChangeWorkerAuthorization.awaitCurrentActor(
+                        viewer, actor, plugin, authorization, state.action());
+                if (fresh == null) {
+                    message(viewer, "Sanction change cancelled: current authority cannot "
+                            + "be verified. Open a new review after checking Staff Mode.");
+                    return;
+                }
                 SanctionChangeRequest request = new SanctionChangeRequest(
                         new IdempotencyKey("sanction-change-gui:" + state.operationId()),
                         state.caseReview().caseId(),
-                        actor,
+                        fresh,
                         state.action(),
                         state.replacementExpiration(),
                         state.reason(),
