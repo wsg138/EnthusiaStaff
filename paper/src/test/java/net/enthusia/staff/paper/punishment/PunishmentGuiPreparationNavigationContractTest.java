@@ -94,23 +94,58 @@ class PunishmentGuiPreparationNavigationContractTest {
     }
 
     @Test
+    void chatCaptureTicketCannotBeResurrectedAfterNewNavigation() {
+        PunishmentGuiHistoryFence preparation = new PunishmentGuiHistoryFence();
+        UUID viewer = UUID.fromString("32000000-0000-0000-0000-000000000003");
+        // Simulate AsyncChatEvent taking the old capture, then newer
+        // navigation invalidating it before the queued entity callback runs.
+        Object capturedAtPrompt = preparation.begin(viewer);
+        preparation.invalidate(viewer);
+        Object newNavigation = preparation.begin(viewer);
+        assertFalse(preparation.consume(viewer, capturedAtPrompt));
+        assertTrue(preparation.consume(viewer, newNavigation));
+    }
+
+    @Test
     void delayedPrivateChatRepliesCannotRestoreSupersededSearchOrDraft() throws Exception {
         String controller = controller();
         String chat = controller.substring(controller.indexOf("public void onChat("),
                 controller.indexOf("public void onQuit("));
-        // AsyncChatEvent may complete before its entity-scheduler callback runs.
-        // Both chat captures must obey the same navigation invalidations as
-        // delayed database draft preparation, before reopening an old GUI.
-        assertTrue(chat.contains("preparationFence.begin(viewer.getUniqueId())"),
-                "Chat responses must acquire single-use navigation tickets");
-        assertTrue(chat.contains("preparationFence.consume(viewer.getUniqueId(), searchTicket)"),
-                "Queued search replies cannot reopen a superseded reason page");
-        assertTrue(chat.contains("preparationFence.consume(viewer.getUniqueId(), noteTicket)"),
-                "Queued note replies cannot reopen or change a superseded draft");
-        assertTrue(chat.indexOf("preparationFence.consume(viewer.getUniqueId(), searchTicket)")
+        // The async event may remove a capture, then lose a race to newer
+        // entity-thread navigation BEFORE it can enqueue its callback. Minting
+        // a token here would resurrect an already invalidated old capture.
+        assertFalse(chat.contains("preparationFence.begin(viewer.getUniqueId())"),
+                "Async chat must never mint a new token after navigation");
+        assertTrue(chat.contains("preparationFence.consume(viewer.getUniqueId(), search.navigationToken())"),
+                "Search must use the token minted with its original prompt");
+        assertTrue(chat.contains("preparationFence.consume(viewer.getUniqueId(), capture.navigationToken())"),
+                "Note must use the token minted with its original prompt");
+        assertTrue(chat.indexOf("preparationFence.consume(viewer.getUniqueId(), search.navigationToken())")
                 < chat.indexOf("finishSearch(viewer, search, query)"));
-        assertTrue(chat.indexOf("preparationFence.consume(viewer.getUniqueId(), noteTicket)")
+        assertTrue(chat.indexOf("preparationFence.consume(viewer.getUniqueId(), capture.navigationToken())")
                 < chat.indexOf("reprepare(viewer, actor, capture.review(), note,"));
+
+        String pickerEntry = controller.substring(controller.indexOf("public void openTargetPicker("),
+                controller.indexOf("public void open(Player viewer,"));
+        assertTrue(pickerEntry.contains("preparationFence.invalidate(viewer.getUniqueId())"),
+                "A picker command must invalidate chat immediately, before its queued page opens");
+        assertTrue(pickerEntry.indexOf("preparationFence.invalidate(viewer.getUniqueId())")
+                < pickerEntry.indexOf("onEntity(viewer,"));
+
+        String searchPrompt = controller.substring(controller.indexOf("private void startSearch("),
+                controller.indexOf("private void finishSearch("));
+        assertTrue(searchPrompt.indexOf("viewer.closeInventory()")
+                < searchPrompt.indexOf("preparationFence.begin(viewer.getUniqueId())"),
+                "Close invalidates tickets, so the new search ticket must be minted after close");
+        assertTrue(searchPrompt.contains("new SearchCapture(state, clock.instant(), chatToken)"));
+
+        String notePrompt = controller.substring(controller.indexOf("if (slot == PunishmentGuiRenderer.NOTE_SLOT)"),
+                controller.indexOf("if (slot == PunishmentGuiRenderer.CONFIRM_SLOT)",
+                        controller.indexOf("if (slot == PunishmentGuiRenderer.NOTE_SLOT)")));
+        assertTrue(notePrompt.indexOf("viewer.closeInventory()")
+                < notePrompt.indexOf("preparationFence.begin(viewer.getUniqueId())"),
+                "Close invalidates tickets, so the new note ticket must be minted after close");
+        assertTrue(notePrompt.contains("new NoteCapture(state, clock.instant(), chatToken)"));
     }
 
     @Test
