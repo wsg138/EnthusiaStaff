@@ -116,6 +116,24 @@ class IndependentRichChatArtifactProviderTest {
     }
 
     @Test
+    void playerQuittingDuringPermissionCheckNeverTriggersInventoryRead() {
+        AtomicBoolean online = new AtomicBoolean(true);
+        AtomicInteger snapshotReads = new AtomicInteger();
+        var snapshot = (java.util.function.Supplier<List<IndependentRichChatArtifactProvider.Slot>>) () -> {
+            snapshotReads.incrementAndGet();
+            return List.of(new IndependentRichChatArtifactProvider.Slot(STONE_MATERIAL, 1));
+        };
+        var permitted = (java.util.function.BooleanSupplier) () -> {
+            // Player disconnected after first online check but before capture.
+            online.set(false);
+            return true;
+        };
+        assertTrue(IndependentRichChatArtifactProvider.captureJob(
+                itemRule(), online::get, permitted, ITEM_PLACEHOLDER, snapshot).isEmpty());
+        assertEquals(0, snapshotReads.get());
+    }
+
+    @Test
     void entityOwnedCaptureFreezesSlotSnapshotBeforeWorkerRendering() {
         AtomicInteger reads = new AtomicInteger();
         List<IndependentRichChatArtifactProvider.Slot> hand = new ArrayList<>(
