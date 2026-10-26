@@ -301,7 +301,10 @@ public final class IndependentRichChatArtifactProvider
             return Optional.empty();
         }
         int position = firstUnescapedMatch(rule.expression(), message);
-        if (position < 0) {
+        // Player may quit or transfer while the delayed entity callback is
+        // checking a permission/placeholder. Re-check immediately before reading
+        // optional inventory data. This does not claim send-time snapshot fidelity.
+        if (position < 0 || !online.getAsBoolean()) {
             return Optional.empty();
         }
         return Optional.of(new Job(rule.kind(), position, snapshot.get()));
