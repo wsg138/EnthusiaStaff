@@ -29,6 +29,7 @@ public final class ClientCommand implements CommandExecutor, TabCompleter {
     private final ClientEvidenceCollector collector;
     private final Supplier<ClientEvidenceStore> evidenceStore;
     private final ExecutorService workers;
+    private final CommandResponseDispatcher responses;
 
     public ClientCommand(
             JavaPlugin plugin,
@@ -40,6 +41,7 @@ public final class ClientCommand implements CommandExecutor, TabCompleter {
         this.collector = java.util.Objects.requireNonNull(collector, "collector");
         this.evidenceStore = java.util.Objects.requireNonNull(evidenceStore, "evidenceStore");
         this.workers = java.util.Objects.requireNonNull(workers, "workers");
+        this.responses = new CommandResponseDispatcher(plugin);
     }
 
     @Override
@@ -60,30 +62,64 @@ public final class ClientCommand implements CommandExecutor, TabCompleter {
             usage(sender, label);
             return true;
         }
-        Player target = onlinePlayer(arguments[0]);
-        if (target == null) {
-            sender.sendMessage(StaffMessageStyle.style(Component.text(
-                    "Client evidence is live-only; that player is not online on this server."
-            )));
-            return true;
-        }
-        ClientEvidenceSnapshot snapshot = collector.capture(target);
-        display(sender, target.getName(), snapshot);
-        if (arguments.length == 1) {
-            return true;
-        }
-        if (!arguments[1].equalsIgnoreCase(SAVE_ARGUMENT)) {
+        if (arguments.length > 1 && !arguments[1].equalsIgnoreCase(SAVE_ARGUMENT)) {
             usage(sender, label);
             return true;
         }
-        if (arguments.length != 3 || !arguments[2].equals("CONFIRM")) {
-            sender.sendMessage(StaffMessageStyle.style(Component.text(
-                    "Review only: no evidence was saved. Append the exact word CONFIRM to save it."
-            )));
+        boolean saveConfirmed = arguments.length == 3 && arguments[2].equals("CONFIRM");
+        boolean reviewOnly = arguments.length > 1 && !saveConfirmed;
+        String targetName = arguments[0];
+        Player target = onlinePlayer(targetName);
+        if (target == null) {
+            send(sender, "Client evidence is live-only; that player is not online on this server.");
             return true;
         }
-        submitSave(sender, snapshot);
+        // The command executor owns the sender, not necessarily this target.
+        // A cross-region target's protocol, brand and integration metadata must
+        // only be read inside the target's entity-owned callback.
+        ClientEvidenceOwnerCapture.capture(
+                (onOwner, retired) -> target.getScheduler().execute(plugin, onOwner, retired, 1L),
+                target::isOnline,
+                () -> collector.capture(target),
+                snapshot -> deliverCaptured(sender, targetName, snapshot, saveConfirmed, reviewOnly),
+                () -> send(sender, "Client evidence capture cancelled: the target disconnected."),
+                exception -> {
+                    plugin.getLogger().log(java.util.logging.Level.WARNING,
+                            "Unable to capture client evidence on target owner", exception);
+                    send(sender, "Client evidence capture failed; no snapshot was saved.");
+                }
+        );
         return true;
+    }
+
+    private void deliverCaptured(
+            CommandSender sender,
+            String targetName,
+            ClientEvidenceSnapshot snapshot,
+            boolean saveConfirmed,
+            boolean reviewOnly
+    ) {
+        // The target owner captured the immutable snapshot. Disclosure, live
+        // permission recheck and any save request belong to the command sender.
+        responses.execute(sender, () -> {
+            if (sender instanceof Player player && !player.isOnline()) {
+                return;
+            }
+            if (!sender.hasPermission(PERMISSION)) {
+                sender.sendMessage(StaffMessageStyle.error(
+                        "Your client-evidence permission changed; nothing was displayed or saved."));
+                return;
+            }
+            display(sender, targetName, snapshot);
+            if (reviewOnly) {
+                sender.sendMessage(StaffMessageStyle.style(Component.text(
+                        "Review only: no evidence was saved. Append the exact word CONFIRM to save it."
+                )));
+            }
+            if (saveConfirmed) {
+                submitSave(sender, snapshot);
+            }
+        });
     }
 
     private void display(CommandSender sender, String targetName, ClientEvidenceSnapshot snapshot) {
@@ -136,12 +172,12 @@ public final class ClientCommand implements CommandExecutor, TabCompleter {
     private void submitSave(CommandSender sender, ClientEvidenceSnapshot snapshot) {
         try {
             workers.execute(() -> {
-                ClientEvidenceStore store = evidenceStore.get();
-                if (store == null) {
-                    send(sender, "Client evidence storage is not ready; no snapshot was saved.");
-                    return;
-                }
                 try {
+                    ClientEvidenceStore store = evidenceStore.get();
+                    if (store == null) {
+                        send(sender, "Client evidence storage is not ready; no snapshot was saved.");
+                        return;
+                    }
                     UUID snapshotId = store.save(snapshot);
                     send(sender, "Client evidence saved as " + snapshotId + '.');
                 } catch (RuntimeException exception) {
@@ -173,10 +209,7 @@ public final class ClientCommand implements CommandExecutor, TabCompleter {
     }
 
     private void send(CommandSender sender, String message) {
-        plugin.getServer().getGlobalRegionScheduler().execute(
-                plugin,
-                () -> sender.sendMessage(StaffMessageStyle.style(Component.text(message)))
-        );
+        responses.send(sender, Component.text(message));
     }
 
     private static void usage(CommandSender sender, String label) {
