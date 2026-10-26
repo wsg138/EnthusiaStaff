@@ -200,7 +200,8 @@ final class JdaDiscordGateway implements DiscordGateway, DiscordChatEgress, Disc
                 throw new IllegalStateException("Discord gateway already started");
             }
             SessionListener listener = new SessionListener(
-                    configuration.environment(), observer, this::disableInteractions);
+                    configuration.environment(), observer, this::disableInteractions,
+                    staffInteractionsEnabled ? "staff" : "public_chat");
             JDABuilder builder = baseBuilder(listener);
             addInteractionListener(builder);
             addChatIngressListener(builder);
@@ -809,37 +810,67 @@ final class JdaDiscordGateway implements DiscordGateway, DiscordChatEgress, Disc
         private final DiscordGatewayObserver observer;
         private final Runnable disableInteractions;
         private final CallbackFence identityCallbacks = new CallbackFence();
+        private final DiscordGatewayReconnectDiagnostics reconnections =
+                new DiscordGatewayReconnectDiagnostics(System::nanoTime);
+        private final String gatewayRole;
 
         private SessionListener(
                 StaffBotEnvironment environment,
                 DiscordGatewayObserver observer,
-                Runnable disableInteractions
+                Runnable disableInteractions,
+                String gatewayRole
         ) {
             this.environment = environment;
             this.observer = observer;
             this.disableInteractions = disableInteractions;
+            this.gatewayRole = Objects.requireNonNull(gatewayRole, "gatewayRole");
         }
 
         @Override
         public void onReady(ReadyEvent event) {
+            logSessionRestored("ready");
             resolveIdentity(event.getJDA());
         }
 
         @Override
         public void onSessionResume(SessionResumeEvent event) {
+            logSessionRestored("resumed");
             resolveIdentity(event.getJDA());
         }
 
         @Override
         public void onSessionRecreate(SessionRecreateEvent event) {
+            logSessionRestored("recreated");
             resolveIdentity(event.getJDA());
         }
 
         @Override
         public void onSessionDisconnect(SessionDisconnectEvent event) {
+            // Emit only known numeric/enum close codes, never free-form close
+            // reasons or frame payloads (they are untrusted and may be private).
+            var code = event.getCloseCode();
+            var counters = reconnections.disconnected();
+            LOGGER.log(System.Logger.Level.WARNING,
+                    "discord_gateway_session_disconnected role={0} remote={1} "
+                    + "close_code={2} close_kind={3} total_events={4} episode_events={5}",
+                    gatewayRole, event.isClosedByServer(),
+                    code == null ? "unknown" : code.getCode(),
+                    code == null ? "unmapped" : code.name(),
+                    counters.totalEvents(), counters.episodeEvents());
             disableInteractions.run();
             identityCallbacks.invalidate();
             observer.onDisconnected();
+        }
+
+        private void logSessionRestored(String mode) {
+            // JDA session restoration precedes the separate, mandatory
+            // Discord identity check; this log never implies service readiness.
+            reconnections.restored().ifPresent(recovery ->
+                    LOGGER.log(System.Logger.Level.INFO,
+                            "discord_gateway_session_restored role={0} mode={1} "
+                            + "downtime_ms={2} episode_events={3} total_events={4}",
+                            gatewayRole, mode, recovery.downtimeMillis(),
+                            recovery.episodeEvents(), recovery.totalEvents()));
         }
 
         @Override
