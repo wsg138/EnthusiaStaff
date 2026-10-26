@@ -8,6 +8,7 @@ import java.time.Clock;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
@@ -35,6 +36,7 @@ import net.enthusia.staff.paper.enforcement.MuteEnforcementListener;
 import net.enthusia.staff.paper.enforcement.PaperBanEnforcementListener;
 import net.enthusia.staff.paper.enforcement.PaperPunishmentCommitEffects;
 import net.enthusia.staff.paper.freeze.FreezeManager;
+import net.enthusia.staff.paper.integration.IndependentRichChatArtifactProvider;
 import net.enthusia.staff.paper.integration.InteractiveChatStagingArtifactProvider;
 import net.enthusia.staff.paper.integration.MarketIntegration;
 import net.enthusia.staff.paper.integration.ReputationIntegration;
@@ -89,6 +91,19 @@ final class PaperIntegrationManager implements Listener {
     private RoseChatOutboundRenderBridgeIntegration roseChatOutboundRender;
     private RoseChatInboundBridgeIntegration roseChatInbound;
     private InteractiveChatStagingArtifactProvider interactiveChatRenderer;
+    private Optional<IndependentRichChatArtifactProvider> independentRichRenderer = Optional.empty();
+    private enum RendererFallback { DISABLED, READY, UNAVAILABLE }
+
+    // Explicit precedence: never trade addon textures/tooltips for opt-in text cards
+    // while the already-installed addon renderer can register successfully.
+    enum RichRendererChoice { ADDON, INDEPENDENT, DISABLED }
+
+    static RichRendererChoice chooseRichRenderer(boolean addonAvailable, boolean independentOptIn) {
+        if (addonAvailable) {
+            return RichRendererChoice.ADDON;
+        }
+        return independentOptIn ? RichRendererChoice.INDEPENDENT : RichRendererChoice.DISABLED;
+    }
     private final AtomicReference<LegacyDiscordChatSuppression.Registration> legacyDiscordSuppression =
             new AtomicReference<>();
     private volatile DiscordChatBridgeMode activeChatBridgeMode = DiscordChatBridgeMode.DISABLED;
@@ -278,7 +293,7 @@ final class PaperIntegrationManager implements Listener {
             }
         } else if (InteractiveChatStagingArtifactProvider.DISCORD_ADDON.equals(pluginName)) {
             closeInteractiveChatRenderer();
-            clearIssue(INTERACTIVE_CHAT_RENDERER);
+            registerIndependentRichRenderer();
             reconcileRoseChatAuthority();
         }
         if (!isRoseChat(pluginName)) {
@@ -714,15 +729,23 @@ final class PaperIntegrationManager implements Listener {
             clearIssue(INTERACTIVE_CHAT_RENDERER);
             return;
         }
+        // Preserve the installed addon's item thumbnails and native tooltip/lore fidelity.
+        // The opt-in independent slot-card renderer is a fallback, not a replacement
+        // while a functional addon provider is present.
         InteractiveChatStagingArtifactProvider.Discovery discovery =
                 InteractiveChatStagingArtifactProvider.discoverAndRegister(
-                        plugin(),
-                        clock(),
-                        workers()
-                );
-        if (discovery.integration().isPresent()) {
+                        plugin(), clock(), workers());
+        RichRendererChoice choice = chooseRichRenderer(
+                discovery.integration().isPresent(),
+                plugin().getConfig().getBoolean(
+                        "discord-chat-bridge.independent-rich-renderer-enabled", false));
+        if (choice == RichRendererChoice.ADDON) {
             interactiveChatRenderer = discovery.integration().orElseThrow();
             clearIssue(INTERACTIVE_CHAT_RENDERER);
+            return;
+        }
+        if (choice == RichRendererChoice.INDEPENDENT) {
+            registerIndependentRichRenderer();
             return;
         }
         if (discovery.issue().isEmpty()) {
@@ -732,10 +755,34 @@ final class PaperIntegrationManager implements Listener {
         }
     }
 
+    private RendererFallback registerIndependentRichRenderer() {
+        if (!activeChatBridgeMode.enabled() || roseChatOutboundRender == null
+                || !plugin().getConfig().getBoolean(
+                "discord-chat-bridge.independent-rich-renderer-enabled", false)) {
+            return RendererFallback.DISABLED;
+        }
+        IndependentRichChatArtifactProvider.Discovery discovered =
+                IndependentRichChatArtifactProvider.discoverAndRegister(
+                        plugin(), clock(), workers());
+        if (discovered.integration().isPresent()) {
+            independentRichRenderer = discovered.integration();
+            clearIssue(INTERACTIVE_CHAT_RENDERER);
+            return RendererFallback.READY;
+        }
+        String failure = discovered.issue().isEmpty()
+                ? "Independent InteractiveChat rich renderer requires an enabled InteractiveChat plugin"
+                : discovered.issue();
+        issue(INTERACTIVE_CHAT_RENDERER, failure);
+        return RendererFallback.UNAVAILABLE;
+    }
+
     @SuppressWarnings(PMD_NULL_ASSIGNMENT)
     private void closeInteractiveChatRenderer() {
         resources.close("InteractiveChat staging rich renderer", interactiveChatRenderer);
         interactiveChatRenderer = null;
+        independentRichRenderer.ifPresent(provider ->
+                resources.close("Independent InteractiveChat rich renderer", provider));
+        independentRichRenderer = Optional.empty();
     }
 
     private void installEconomy(CurrencyGateway gateway, List<CurrencyAssetSource> removalOrder) {
