@@ -116,6 +116,31 @@ class StaffRecoveryRetryOwnerDispatchTest {
     }
 
     @Test
+    void asynchronousOwnerSchedulerFailureReleasesRecoveryTicket() {
+        ConcurrentMap<UUID, Object> pending = new ConcurrentHashMap<>();
+        Object ticket = new Object();
+        pending.put(PLAYER_ID, ticket);
+        AtomicInteger failures = new AtomicInteger();
+        AtomicInteger recoveries = new AtomicInteger();
+        StaffRecoveryRetryOwnerDispatcher.forward(
+                PLAYER_ID, ticket, pending,
+                (id, action, retired) ->
+                        StaffEntityOwnerDispatch.forward(
+                                id, ignored -> player(),
+                                (current, operation, onRetire) -> {
+                                    throw new IllegalStateException("entity scheduler retired asynchronously");
+                                },
+                                action, retired, failure -> failures.incrementAndGet()
+                        ),
+                current -> recoveries.incrementAndGet()
+        );
+        assertEquals(1, failures.get());
+        assertEquals(0, recoveries.get());
+        assertFalse(pending.containsKey(PLAYER_ID),
+                "Global callback failures after initial submission must also release retry tickets");
+    }
+
+    @Test
     void sourceTimerNeverRecoversPlayerOnGlobalRegionThread() throws Exception {
         String source = Files.readString(Path.of(
                 "src/main/java/net/enthusia/staff/paper/staff/StaffModeManager.java"));

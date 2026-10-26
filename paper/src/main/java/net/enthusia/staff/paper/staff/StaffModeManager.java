@@ -2210,21 +2210,19 @@ public final class StaffModeManager implements Listener {
     }
 
     private void onEntity(UUID playerId, Consumer<Player> operation, Runnable retired) {
-        plugin.getServer().getGlobalRegionScheduler().execute(plugin, () -> {
-            Player player = plugin.getServer().getPlayer(playerId);
-            if (player == null) {
-                retired.run();
-                return;
-            }
-            boolean scheduled = player.getScheduler().execute(
-                    plugin,
-                    () -> operation.accept(player),
-                    retired,
-                    1L
-            );
-            if (!scheduled) {
-                retired.run();
-            }
-        });
+        plugin.getServer().getGlobalRegionScheduler().execute(plugin, () ->
+                StaffEntityOwnerDispatch.forward(
+                        playerId,
+                        id -> plugin.getServer().getPlayer(id),
+                        (player, action, onRetire) ->
+                                player.getScheduler().execute(plugin, action, onRetire, 1L),
+                        operation,
+                        retired,
+                        failure -> plugin.getLogger().log(
+                                Level.WARNING, "Staff Mode entity task could not be scheduled for " + playerId,
+                                failure
+                        )
+                )
+        );
     }
 }
