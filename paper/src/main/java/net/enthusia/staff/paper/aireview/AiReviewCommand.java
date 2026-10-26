@@ -4,6 +4,8 @@ import java.time.Clock;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.function.BiConsumer;
+import java.util.logging.Level;
 import net.enthusia.staff.paper.aireview.AiReviewModels.Correction;
 import net.enthusia.staff.paper.aireview.AiReviewModels.CorrectionAuthority;
 import net.enthusia.staff.paper.aireview.AiReviewModels.CorrectionDecision;
@@ -88,17 +90,32 @@ final class AiReviewCommand implements CommandExecutor, TabCompleter {
     }
 
     private void list(CommandSender sender) {
+        if (sender instanceof Player player) {
+            // The queue contains sensitive event identifiers and labels. Do not
+            // render any line until the queued owner callback rechecks authority.
+            onPlayer(player, () -> AiReviewQueueDelivery.deliverIfAuthorized(
+                    player,
+                    () -> subsystem.activeDuty(player) && AiReviewPermissions.queue(player),
+                    () -> renderList((text, color) -> player.sendMessage(
+                            StaffMessageStyle.style(Component.text(text, color)))),
+                    exception -> plugin.getLogger().log(Level.WARNING,
+                            "AI review queue response could not be delivered", exception)
+            ));
+            return;
+        }
+        renderList((text, color) -> send(sender, text, color));
+    }
+
+    private void renderList(BiConsumer<String, NamedTextColor> line) {
         AiReviewPollState.Snapshot snapshot = subsystem.snapshot();
         boolean fresh = snapshot.fresh(clock.instant(), subsystem.configuration().cacheStaleAfter());
-        send(
-                sender,
+        line.accept(
                 "AI review queue: " + snapshot.items().size() + " pending, "
                         + snapshot.urgentCount() + " urgent"
                         + (fresh ? "." : " (cached/unavailable; refreshing)."),
                 fresh ? NamedTextColor.GOLD : NamedTextColor.GRAY
         );
-        snapshot.items().stream().limit(20).forEach(item -> send(
-                sender,
+        snapshot.items().stream().limit(20).forEach(item -> line.accept(
                 item.eventId() + " " + item.reviewPriority() + " "
                         + item.messageAction() + " " + item.semanticLabel(),
                 item.reviewPriority() == ReviewPriority.URGENT
