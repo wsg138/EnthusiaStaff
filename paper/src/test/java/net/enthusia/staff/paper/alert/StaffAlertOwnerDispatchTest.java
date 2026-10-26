@@ -113,6 +113,7 @@ class StaffAlertOwnerDispatchTest {
         String root = "src/main/java/net/enthusia/staff/paper/";
         for (String file : List.of("economy/EconomyCoordinator.java",
                 "inventory/ConfiscationCoordinator.java",
+                "inventory/InventoryCoordinator.java",
                 "auth/DiscordStaffAuthorityEndpoint.java")) {
             String source = Files.readString(Path.of(root + file));
             assertTrue(source.contains("StaffAlertOwnerDispatch.alert("), file);

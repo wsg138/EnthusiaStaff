@@ -261,7 +261,7 @@ public final class InteractiveChatStagingArtifactProvider
                     return;
                 }
                 Player player = plugin.getServer().getPlayer(request.minecraftPlayerId());
-                if (player == null || !player.isOnline()) {
+                if (player == null) {
                     result.complete(List.of());
                     return;
                 }
@@ -286,7 +286,10 @@ public final class InteractiveChatStagingArtifactProvider
             RichChatArtifactRequest request,
             CompletableFuture<List<RichChatArtifact>> result
     ) {
-        if (closed || result.isDone() || clock.millis() > request.expiresAtEpochMillis()) {
+        // This callback runs on the player's owning entity scheduler. Never
+        // inspect Player online state on the global region that resolved it.
+        if (closed || result.isDone() || !player.isOnline()
+                || clock.millis() > request.expiresAtEpochMillis()) {
             result.complete(List.of());
             return;
         }
