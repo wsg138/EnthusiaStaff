@@ -168,13 +168,22 @@ public final class PaperPunishmentCommitEffects implements AutoCloseable {
     }
 
     private void dispatchToPlayer(UUID playerId, java.util.function.Consumer<Player> action) {
-        plugin.getServer().getGlobalRegionScheduler().execute(plugin, () -> {
-            Player player = plugin.getServer().getPlayer(playerId);
-            if (player == null || !player.isOnline()) {
-                return;
-            }
-            player.getScheduler().execute(plugin, () -> action.accept(player), null, 1L);
-        });
+        try {
+            plugin.getServer().getGlobalRegionScheduler().execute(plugin, () ->
+                    PunishmentCommitOwnerDispatch.forward(
+                            playerId,
+                            plugin.getServer()::getPlayer,
+                            (player, callback) -> player.getScheduler().execute(plugin, callback, null, 1L),
+                            player -> !closed && player.isOnline(),
+                            action,
+                            failure -> plugin.getLogger().log(Level.WARNING,
+                                    "Online punishment effect could not be delivered safely to " + playerId,
+                                    failure)
+                    ));
+        } catch (RuntimeException failure) {
+            plugin.getLogger().log(Level.WARNING,
+                    "Online punishment effect could not be queued for " + playerId, failure);
+        }
     }
 
     @Override
