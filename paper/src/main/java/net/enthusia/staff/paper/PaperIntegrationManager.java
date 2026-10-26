@@ -93,6 +93,17 @@ final class PaperIntegrationManager implements Listener {
     private InteractiveChatStagingArtifactProvider interactiveChatRenderer;
     private Optional<IndependentRichChatArtifactProvider> independentRichRenderer = Optional.empty();
     private enum RendererFallback { DISABLED, READY, UNAVAILABLE }
+
+    // Explicit precedence: never trade addon textures/tooltips for opt-in text cards
+    // while the already-installed addon renderer can register successfully.
+    enum RichRendererChoice { ADDON, INDEPENDENT, DISABLED }
+
+    static RichRendererChoice chooseRichRenderer(boolean addonAvailable, boolean independentOptIn) {
+        if (addonAvailable) {
+            return RichRendererChoice.ADDON;
+        }
+        return independentOptIn ? RichRendererChoice.INDEPENDENT : RichRendererChoice.DISABLED;
+    }
     private final AtomicReference<LegacyDiscordChatSuppression.Registration> legacyDiscordSuppression =
             new AtomicReference<>();
     private volatile DiscordChatBridgeMode activeChatBridgeMode = DiscordChatBridgeMode.DISABLED;
@@ -724,12 +735,17 @@ final class PaperIntegrationManager implements Listener {
         InteractiveChatStagingArtifactProvider.Discovery discovery =
                 InteractiveChatStagingArtifactProvider.discoverAndRegister(
                         plugin(), clock(), workers());
-        if (discovery.integration().isPresent()) {
+        RichRendererChoice choice = chooseRichRenderer(
+                discovery.integration().isPresent(),
+                plugin().getConfig().getBoolean(
+                        "discord-chat-bridge.independent-rich-renderer-enabled", false));
+        if (choice == RichRendererChoice.ADDON) {
             interactiveChatRenderer = discovery.integration().orElseThrow();
             clearIssue(INTERACTIVE_CHAT_RENDERER);
             return;
         }
-        if (registerIndependentRichRenderer() != RendererFallback.DISABLED) {
+        if (choice == RichRendererChoice.INDEPENDENT) {
+            registerIndependentRichRenderer();
             return;
         }
         if (discovery.issue().isEmpty()) {
