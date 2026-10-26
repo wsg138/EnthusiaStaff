@@ -85,7 +85,8 @@ public final class StaffModeManager implements Listener {
     private final java.util.Set<UUID> profileApplications = ConcurrentHashMap.newKeySet();
     private final java.util.Set<UUID> snapshotRestorations = ConcurrentHashMap.newKeySet();
     private final java.util.Set<UUID> pendingRankChecks = ConcurrentHashMap.newKeySet();
-    private final java.util.Set<UUID> scheduledRecoveryRetries = ConcurrentHashMap.newKeySet();
+    private final java.util.concurrent.ConcurrentMap<UUID, Object> scheduledRecoveryRetries =
+            new ConcurrentHashMap<>();
     private final StaffModeHandoffIntentRegistry handoffResumes;
     private final StaffModeSourceHandoffRegistry sourceHandoffs = new StaffModeSourceHandoffRegistry();
     private final StaffModeActivationCoordinator activation;
@@ -738,16 +739,19 @@ public final class StaffModeManager implements Listener {
     }
 
     private void scheduleRecoveryRetry(UUID playerId) {
-        if (!scheduledRecoveryRetries.add(playerId)) {
+        Object ticket = new Object();
+        if (scheduledRecoveryRetries.putIfAbsent(playerId, ticket) != null) {
             return;
         }
-        plugin.getServer().getGlobalRegionScheduler().runDelayed(plugin, ignored -> {
-            scheduledRecoveryRetries.remove(playerId);
-            Player player = plugin.getServer().getPlayer(playerId);
-            if (player != null) {
-                recover(player);
-            }
-        }, 20L);
+        try {
+            plugin.getServer().getGlobalRegionScheduler().runDelayed(plugin, ignored ->
+                    StaffRecoveryRetryOwnerDispatcher.forward(
+                            playerId, ticket, scheduledRecoveryRetries, this::onEntity, this::recover
+                    ), 20L);
+        } catch (RuntimeException failure) {
+            scheduledRecoveryRetries.remove(playerId, ticket);
+            throw failure;
+        }
     }
 
     private boolean staleFromPriorRuntime(StaffSessionSnapshot session) {
@@ -2206,21 +2210,19 @@ public final class StaffModeManager implements Listener {
     }
 
     private void onEntity(UUID playerId, Consumer<Player> operation, Runnable retired) {
-        plugin.getServer().getGlobalRegionScheduler().execute(plugin, () -> {
-            Player player = plugin.getServer().getPlayer(playerId);
-            if (player == null) {
-                retired.run();
-                return;
-            }
-            boolean scheduled = player.getScheduler().execute(
-                    plugin,
-                    () -> operation.accept(player),
-                    retired,
-                    1L
-            );
-            if (!scheduled) {
-                retired.run();
-            }
-        });
+        plugin.getServer().getGlobalRegionScheduler().execute(plugin, () ->
+                StaffEntityOwnerDispatch.forward(
+                        playerId,
+                        id -> plugin.getServer().getPlayer(id),
+                        (player, action, onRetire) ->
+                                player.getScheduler().execute(plugin, action, onRetire, 1L),
+                        operation,
+                        retired,
+                        failure -> plugin.getLogger().log(
+                                Level.WARNING, "Staff Mode entity task could not be scheduled for " + playerId,
+                                failure
+                        )
+                )
+        );
     }
 }
