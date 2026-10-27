@@ -20,9 +20,8 @@ class StaffBotChatArtifactStoreTest {
         assertTrue(store.put(bundle, NOW));
         assertEquals(1, store.size());
         assertTrue(store.consume(bundle.eventId(), "HUB", "global", NOW).isEmpty());
-        assertEquals(0, store.size());
+        assertEquals(1, store.size()); // wrong route must not steal this preview
 
-        assertTrue(store.put(bundle, NOW));
         assertEquals(1, store.consume(bundle.eventId(), "SMP", "global", NOW).size());
         assertEquals(0, store.size());
         assertEquals(0L, store.storedBytes());
