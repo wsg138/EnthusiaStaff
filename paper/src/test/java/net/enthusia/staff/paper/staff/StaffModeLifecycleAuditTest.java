@@ -40,9 +40,12 @@ class StaffModeLifecycleAuditTest {
     @Test
     void exitsAreAuditedOnlyAfterDurableClosureAndNotOnBackendHandoff() throws IOException {
         String source = Files.readString(MANAGER);
-        String exit = between(source, "private void completeRestoration(", "private void retainRecoveryAfterRuntimeExit(");
+        String exit = between(source, "private void completeRestoration(", "private void finishVerifiedExit(");
+        assertOrdered(exit, "loaded.completeExit", "if (!closed)");
         assertOrdered(exit, "if (!closed)", "logCommittedExit(");
-        assertOrdered(exit, "completeRuntimeExit(playerId)", "logCommittedExit(");
+        assertOrdered(exit, "logCommittedExit(", "finishVerifiedExit(playerId, session, restorationAttempt)");
+        int mismatchReturn = exit.indexOf("return;", exit.indexOf("if (!closed)"));
+        assertTrue(mismatchReturn > 0 && mismatchReturn < exit.indexOf("logCommittedExit("));
         String handoff = between(source, "private void completeBackendHandoff(", "private void retainCancelledHandoffRecovery(");
         assertTrue(!handoff.contains("logCommittedExit("));
         assertTrue(!handoff.contains("\"staff-mode-exited\""));

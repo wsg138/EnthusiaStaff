@@ -1,6 +1,7 @@
 package net.enthusia.staff.integration;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -29,6 +30,130 @@ class StaffSessionShutdownRecoveryIntegrationTest extends PunishmentRequestMaria
     private static final String ROLLBACK_SERVER = "smp_shutdown_rollback";
     private static final String SHUTDOWN_REASON =
             "Paper runtime disabled before normal staff-mode exit";
+
+    @Test
+    void inspectionReadsDetachedEvidenceWithoutChangingRowsAndDetectsMissingSnapshot() throws Exception {
+        try (MariaDbRuntime runtime = MariaDb.initialize(databaseConfig())) {
+            UUID staffId = identifier("readonly-session-inspection");
+            StaffSessionSnapshot initial = beginInspection(runtime, staffId);
+            byte[] bytes = initial.snapshot();
+            String checksum = initial.checksum();
+            StaffSessionStore store = runtime.staffSessionStore();
+            StaffSessionSnapshot detached = store.detach(staffId, initial.sessionId(), initial.revision(),
+                    OTHER_SERVER, checksum, NOW.plusSeconds(1)).orElseThrow();
+            var observed = store.inspect(staffId).orElseThrow();
+            assertEquals(detached.sessionId(), observed.sessionId());
+            assertEquals(detached.revision(), observed.revision());
+            assertEquals(StaffSessionOwnership.DETACHED_SERVER_ID, observed.serverId());
+            assertArrayEquals(bytes, observed.header());
+            assertEquals(bytes.length, observed.snapshotBytes());
+            assertEquals(observed.revision(), store.active(staffId).orElseThrow().revision());
+            try (Connection connection = connection(); PreparedStatement statement = connection.prepareStatement(
+                    "UPDATE staff_state_snapshots SET snapshot_blob = ? WHERE session_id = ?")) {
+                statement.setBytes(1, new byte[]{3, 2, 1});
+                statement.setBytes(2, uuidBytes(initial.sessionId())); statement.executeUpdate();
+            }
+            var corrupt = assertThrows(
+                    net.enthusia.staff.domain.staff.StaffSessionInspectionException.class,
+                    () -> store.inspect(staffId));
+            assertEquals(net.enthusia.staff.domain.staff.StaffSessionInspectionException.Reason.CHECKSUM_MISMATCH,
+                    corrupt.reason());
+            try (Connection connection = connection(); PreparedStatement statement = connection.prepareStatement(
+                    "DELETE FROM staff_state_snapshots WHERE session_id = ?")) {
+                statement.setBytes(1, uuidBytes(initial.sessionId())); statement.executeUpdate();
+            }
+            var failure = assertThrows(
+                    net.enthusia.staff.domain.staff.StaffSessionInspectionException.class,
+                    () -> store.inspect(staffId));
+            assertEquals(net.enthusia.staff.domain.staff.StaffSessionInspectionException.Reason.MISSING_SNAPSHOT,
+                    failure.reason());
+        }
+    }
+
+    private static StaffSessionSnapshot beginInspection(MariaDbRuntime runtime, UUID staffId) throws Exception {
+        runtime.playerDirectory().recordSeen(staffId, "StaffInspect", PlayerPlatform.JAVA, OTHER_SERVER, NOW);
+        byte[] bytes = new byte[]{1, 2, 3};
+        String checksum = java.util.HexFormat.of().formatHex(
+                java.security.MessageDigest.getInstance("SHA-256").digest(bytes));
+        return runtime.staffSessionStore().begin(staffId, OTHER_SERVER, 1, checksum, bytes, NOW);
+    }
+
+    @Test
+    void exactDetachedRetirementClosesWithoutRebindingOrReplacingSnapshot() throws Exception {
+        try (MariaDbRuntime runtime = MariaDb.initialize(databaseConfig())) {
+            StaffSessionStore store = runtime.staffSessionStore();
+            UUID staffId = identifier("rankless-detached-retirement");
+            StaffSessionSnapshot source = begin(runtime, staffId, OTHER_SERVER, 6);
+            StaffSessionSnapshot detached = store.detach(staffId, source.sessionId(), source.revision(),
+                    OTHER_SERVER, source.checksum(), NOW.plusSeconds(1)).orElseThrow();
+            assertTrue(store.retireDetached(detached, NOW.plusSeconds(2)));
+            assertTrue(store.active(staffId).isEmpty());
+            assertFalse(store.retireDetached(detached, NOW.plusSeconds(3)));
+            try (Connection connection = connection(); PreparedStatement statement = connection.prepareStatement(
+                    "SELECT checksum, snapshot_blob FROM staff_state_snapshots WHERE session_id = ?")) {
+                statement.setBytes(1, uuidBytes(source.sessionId()));
+                try (ResultSet result = statement.executeQuery()) {
+                    assertTrue(result.next());
+                    assertEquals(source.checksum(), result.getString("checksum"));
+                    assertArrayEquals(source.snapshot(), result.getBytes("snapshot_blob"));
+                }
+            }
+        }
+    }
+
+    @Test
+    void detachedRetirementAuditFailureRollsBackClosureAndRevision() throws Exception {
+        try (MariaDbRuntime runtime = MariaDb.initialize(databaseConfig())) {
+            StaffSessionStore store = runtime.staffSessionStore();
+            UUID staffId = identifier("detached-retirement-rollback");
+            StaffSessionSnapshot source = begin(runtime, staffId, OTHER_SERVER, 6);
+            StaffSessionSnapshot detached = store.detach(staffId, source.sessionId(), source.revision(),
+                    OTHER_SERVER, source.checksum(), NOW.plusSeconds(1)).orElseThrow();
+            try (Connection connection = connection(); Statement statement = connection.createStatement()) {
+                statement.execute("""
+                        CREATE TRIGGER test_fail_detached_retirement
+                        BEFORE INSERT ON audit_events FOR EACH ROW
+                        BEGIN
+                            IF NEW.event_type = 'STAFF_MODE_EXITED' THEN
+                                SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'forced detached retirement rollback';
+                            END IF;
+                        END
+                        """);
+            }
+            try {
+                assertThrows(ModerationPersistenceException.class,
+                        () -> store.retireDetached(detached, NOW.plusSeconds(2)));
+                StaffSessionSnapshot retained = store.active(staffId).orElseThrow();
+                assertEquals(detached.revision(), retained.revision());
+                assertEquals(detached.state(), retained.state());
+                assertEquals(detached.serverId(), retained.serverId());
+                assertArrayEquals(detached.snapshot(), retained.snapshot());
+            } finally {
+                try (Connection connection = connection(); Statement statement = connection.createStatement()) {
+                    statement.execute("DROP TRIGGER IF EXISTS test_fail_detached_retirement");
+                }
+            }
+        }
+    }
+
+    @Test
+    void staleDetachedRetirementCannotCloseReboundOrRevisedSession() {
+        try (MariaDbRuntime runtime = MariaDb.initialize(databaseConfig())) {
+            StaffSessionStore store = runtime.staffSessionStore();
+            UUID staffId = identifier("stale-detached-retirement");
+            StaffSessionSnapshot source = begin(runtime, staffId, OTHER_SERVER, 6);
+            StaffSessionSnapshot detached = store.detach(staffId, source.sessionId(), source.revision(),
+                    OTHER_SERVER, source.checksum(), NOW.plusSeconds(1)).orElseThrow();
+            assertTrue(store.setVanish(staffId, true, NOW.plusSeconds(2)));
+            assertFalse(store.retireDetached(detached, NOW.plusSeconds(3)));
+            StaffSessionSnapshot revised = store.active(staffId).orElseThrow();
+            assertTrue(revised.vanishActive());
+            store.begin(staffId, SCOPED_SERVER, 1, "9".repeat(64), new byte[]{9}, NOW.plusSeconds(4));
+            assertFalse(store.retireDetached(revised, NOW.plusSeconds(5)));
+            assertEquals(SCOPED_SERVER, store.active(staffId).orElseThrow().serverId());
+            assertEquals("9".repeat(64), store.active(staffId).orElseThrow().checksum());
+        }
+    }
 
     @Test
     void detachedNetworkSessionRebindsWithDestinationLocalSnapshot() {

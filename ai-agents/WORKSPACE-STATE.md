@@ -1,4 +1,28 @@
+2026-10-28 UTC SD-01..05: same MARKET-02 / PR647 now adds an offline,
+console-only read-only session inspector in isolated current-base
+EnthusiaStaff-session-diagnostic-20261028. Existing join/retirement fixes retained.
+Source/build scope Roundtable1837 with explicit compute ACK1835. No TEST/client,
+live DB, deployment/restart or production use. Query/header/console tests and
+review/artifact evidence tracked in existing market-orphan handoff and
+`docs/staff-session-inspection.md`; exact-head hosted checks pending.
+
+2026-10-28 UTC: same MARKET-02 / PR #647 continuation repairs the rankless
+destination join hint bypass. Main 9efaa056 normally incorporated into preserved
+a380 recovery work. SJ-01 and event-path red/green evidence are in the existing
+market-orphan handoff. REVIEW / ACTIONABLE_CONTINUATION: exact-head validation,
+review and publication pending; local executable head4c800221 passed2688 reported
+tests/16skips and41 focused cases/0skips. Live durable-state evidence/recovery remains
+separate. No TEST/client/deployment/production action in this source slice.
+
 # Workspace state
+
+2026-10-25 UTC owner continuation: existing MARKET-02 / PR #647 now includes the
+Staff Mode retryable-hold/rankless-detached recovery repair in isolated
+`EnthusiaStaff-transition-20261025`, based on PR head `1d44dc533fda` plus current
+main `958e2ace`. REVIEW / ACTIONABLE_CONTINUATION; the owner confirmed Staff-chat
+publication takeover. Exact-head hosted validation and runtime acceptance remain. No live session, rank, deployment or restart action.
+See `reports/agent-handoffs/2026-10-20-market-orphan-staff-tools.md`.
+
 
 2026-10-05 owner extension: continue the same PR #322 with automatic fresh-entry vanish and player-name completion (IT-09..10). Current main `ba6dcabc9a731e7e3e21c8405778764abdc626f4` includes merged cross-server PR #321 and is normally incorporated as `ebff2f09`; previous assumptions that #321 is unmerged are historical. Preserve transfer/recovery visibility and existing exit policy. No new migration/provider API; validation remains pending for the new product head.
 
