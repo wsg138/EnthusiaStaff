@@ -40,6 +40,7 @@ public final class PunishmentGuiSmoke extends JavaPlugin implements Listener {
     private final AtomicBoolean staffAttempted = new AtomicBoolean();
     private final AtomicInteger pickerOpens = new AtomicInteger();
     private final AtomicBoolean closeControlClicked = new AtomicBoolean();
+    private final AtomicBoolean closeConfirmed = new AtomicBoolean();
     private final AtomicBoolean targetHeadClicked = new AtomicBoolean();
     private UUID targetId;
 
@@ -145,8 +146,10 @@ public final class PunishmentGuiSmoke extends JavaPlugin implements Listener {
                 return;
             }
             Inventory top = player.getOpenInventory().getTopInventory();
-            if (!expected(top)) {
-                marker("FAIL=expected_target_picker_not_open");
+            if (expected(top) || !closeConfirmed.get() || pickerOpens.get() != 2) {
+                marker("FAIL=picker_close_not_confirmed_before_reopen");
+            } else {
+                marker("PICKER_CLOSED_AT_CHECKPOINT=true");
             }
         }, 310L);
         Bukkit.getScheduler().runTaskLater(this, () -> {
@@ -229,7 +232,7 @@ public final class PunishmentGuiSmoke extends JavaPlugin implements Listener {
             }
             closeControlClicked.set(true);
             marker("CLOSE_CLICK_OBSERVED=true");
-        } else if (slot == TARGET_HEAD_SLOT && closeControlClicked.get()
+        } else if (slot == TARGET_HEAD_SLOT && closeConfirmed.get()
                 && pickerOpens.get() == 3) {
             if (getServer().getOnlinePlayers().size() != 2
                     || getServer().getPlayerExact(TEST_TARGET) == null
@@ -250,7 +253,8 @@ public final class PunishmentGuiSmoke extends JavaPlugin implements Listener {
         if (event.getPlayer() instanceof Player player
                 && player.getUniqueId().equals(targetId)
                 && expected(event.getView().getTopInventory())
-                && closeControlClicked.get()) {
+                && closeControlClicked.compareAndSet(true, false)) {
+            closeConfirmed.set(true);
             marker("PICKER_CLOSED_AFTER_CONTROL=true");
         }
     }
