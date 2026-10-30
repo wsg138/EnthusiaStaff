@@ -7,6 +7,7 @@ import io
 from pathlib import Path
 import tempfile
 import unittest
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = ROOT / "scripts" / "migrate_ban_evasion_policy.py"
@@ -98,6 +99,55 @@ class PolicyMigrationTests(unittest.TestCase):
         self.assertIn("backup already exists", error)
         self.assertEqual(b"do not overwrite", backup.read_bytes())
         self.assertEqual(self.installed, self.installed_path.read_bytes())
+
+    def test_failed_backup_flush_removes_incomplete_backup_and_keeps_policy(self):
+        with mock.patch.object(migration.os, "fsync", side_effect=OSError("disk full")):
+            status, _, error = self.run_cli(
+                "--apply", "--expected-sha256", migration.digest(self.installed)
+            )
+        self.assertEqual(2, status)
+        self.assertIn("disk full", error)
+        self.assertEqual([], self.backups(), "Partial backup must not be reused")
+        self.assertEqual(self.installed, self.installed_path.read_bytes())
+
+    def test_failed_backup_directory_sync_blocks_policy_replacement(self):
+        with mock.patch.object(migration, "sync_directory",
+                               side_effect=OSError("directory sync unavailable")):
+            status, _, error = self.run_cli(
+                "--apply", "--expected-sha256", migration.digest(self.installed)
+            )
+        self.assertEqual(2, status)
+        self.assertIn("directory sync unavailable", error)
+        self.assertEqual([], self.backups())
+        self.assertEqual(self.installed, self.installed_path.read_bytes())
+
+    def test_failed_atomic_replace_retains_recovery_backup(self):
+        with mock.patch.object(migration.os, "replace", side_effect=OSError("replace failed")):
+            status, _, error = self.run_cli(
+                "--apply", "--expected-sha256", migration.digest(self.installed)
+            )
+        self.assertEqual(2, status)
+        self.assertIn("replace failed", error)
+        self.assertEqual(self.installed, self.installed_path.read_bytes())
+        self.assertEqual(1, len(self.backups()))
+        self.assertEqual(self.installed, self.backups()[0].read_bytes())
+        self.assertEqual([], list(Path(self.tmp.name).glob(".reason-policies-migrate-*")))
+
+    def test_concurrent_change_after_backup_refuses_replacement(self):
+        original_write_backup = migration.write_exclusive_backup
+        def backup_then_external_edit(backup, before, mode):
+            original_write_backup(backup, before, mode)
+            self.installed_path.write_bytes(before + b"# external operator edit\\n")
+
+        with mock.patch.object(migration, "write_exclusive_backup",
+                               side_effect=backup_then_external_edit):
+            status, _, error = self.run_cli(
+                "--apply", "--expected-sha256", migration.digest(self.installed)
+            )
+        self.assertEqual(2, status)
+        self.assertIn("changed during backup", error)
+        self.assertTrue(self.installed_path.read_bytes().endswith(b"# external operator edit\\n"))
+        self.assertEqual(self.installed, self.backups()[0].read_bytes())
 
     def test_other_customization_is_rejected_without_writes(self):
         self.installed_path.write_bytes(
