@@ -2,21 +2,16 @@
 from __future__ import annotations
 
 import contextlib
-import importlib.util
 import io
 from pathlib import Path
 import tempfile
 import unittest
 from unittest import mock
 
-ROOT = Path(__file__).resolve().parents[2]
-SCRIPT = ROOT / "scripts" / "migrate_ban_evasion_policy.py"
-CANDIDATE = ROOT / "paper" / "src" / "main" / "resources" / "reason-policies.yml"
+from scripts import migrate_ban_evasion_policy as migration
 
-spec = importlib.util.spec_from_file_location("ban_evasion_migration", SCRIPT)
-migration = importlib.util.module_from_spec(spec)
-assert spec.loader is not None
-spec.loader.exec_module(migration)
+ROOT = Path(__file__).resolve().parents[2]
+CANDIDATE = ROOT / "paper" / "src" / "main" / "resources" / "reason-policies.yml"
 
 
 class PolicyMigrationTests(unittest.TestCase):
@@ -26,7 +21,8 @@ class PolicyMigrationTests(unittest.TestCase):
         cls.installed = cls.candidate.replace(
             migration.CANDIDATE_VERSION, migration.LEGACY_VERSION, 1
         ).replace(migration.NEW_BLOCK, migration.OLD_BLOCK, 1)
-        assert cls.installed != cls.candidate
+        if cls.installed == cls.candidate:
+            raise ValueError("generated legacy policy unexpectedly equals candidate")
 
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
