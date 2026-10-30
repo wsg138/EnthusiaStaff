@@ -123,6 +123,85 @@ class PunishmentCommitOwnerDispatchTest {
     }
 
     @Test
+    void productionRouteRequiresGlobalLookupThenTargetOwnerBeforeEffect() {
+        UUID targetId = UUID.randomUUID();
+        Player player = player(targetId);
+        AtomicReference<Runnable> global = new AtomicReference<>();
+        AtomicReference<Runnable> owner = new AtomicReference<>();
+        AtomicInteger lookups = new AtomicInteger();
+        AtomicInteger eligibilityChecks = new AtomicInteger();
+        AtomicInteger effects = new AtomicInteger();
+
+        PaperPunishmentCommitEffects.routeToPlayer(
+                targetId,
+                global::set,
+                requested -> {
+                    assertEquals(targetId, requested);
+                    lookups.incrementAndGet();
+                    return player;
+                },
+                (recipient, callback) -> {
+                    assertSame(player, recipient);
+                    owner.set(callback);
+                    return true;
+                },
+                recipient -> {
+                    eligibilityChecks.incrementAndGet();
+                    return true;
+                },
+                recipient -> effects.incrementAndGet(),
+                error -> fail("Unexpected failure", error));
+
+        assertNotNull(global.get(), "The production route must start on the global scheduler");
+        assertEquals(0, lookups.get(), "Do not look up the player before the global callback");
+        assertEquals(0, eligibilityChecks.get());
+        global.get().run();
+        assertEquals(1, lookups.get());
+        assertNotNull(owner.get(), "The global callback must schedule the target entity owner");
+        assertEquals(0, eligibilityChecks.get(), "Do not inspect player state on the global callback");
+        assertEquals(0, effects.get());
+        owner.get().run();
+        assertEquals(1, eligibilityChecks.get());
+        assertEquals(1, effects.get());
+    }
+
+    @Test
+    void productionRouteRejectsWrongLookupOnOwnerWithoutApplyingEffect() {
+        UUID targetId = UUID.randomUUID();
+        Player differentPlayer = player(UUID.randomUUID());
+        AtomicReference<Runnable> global = new AtomicReference<>();
+        AtomicReference<Runnable> owner = new AtomicReference<>();
+        AtomicInteger eligibilityChecks = new AtomicInteger();
+        AtomicInteger effects = new AtomicInteger();
+
+        PaperPunishmentCommitEffects.routeToPlayer(
+                targetId,
+                global::set,
+                requested -> {
+                    assertEquals(targetId, requested);
+                    return differentPlayer;
+                },
+                (recipient, callback) -> {
+                    assertSame(differentPlayer, recipient);
+                    owner.set(callback);
+                    return true;
+                },
+                recipient -> {
+                    eligibilityChecks.incrementAndGet();
+                    return true;
+                },
+                recipient -> effects.incrementAndGet(),
+                error -> fail("Unexpected failure", error));
+
+        assertNotNull(global.get());
+        global.get().run();
+        assertNotNull(owner.get());
+        owner.get().run();
+        assertEquals(0, eligibilityChecks.get());
+        assertEquals(0, effects.get());
+    }
+
+    @Test
     void productionCommitPathDefersOnlineCheckAndEffectToEntityOwner() throws Exception {
         String source = Files.readString(Path.of(
                 "src/main/java/net/enthusia/staff/paper/enforcement/PaperPunishmentCommitEffects.java"));
