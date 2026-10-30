@@ -264,6 +264,14 @@ Created independent [draft PR #765](https://github.com/wsg138/EnthusiaStaff/pull
 - PR #773's exact-head test runs were **queued** when this record was added. Do not claim target-selection success until actual runtime server and client markers pass. The source changes are test harness only, not enforcement code or production settings.
 - Even with a successful PR #773 protocol smoke, all **39 actual human Java/Bedrock acceptance observations remain NOT RUN**; staged Geyser/Bedrock, reviewer rank hierarchy and sanction policy are still release blockers. The system remains **DRAFT / NO-GO**, with no live server or policy changes.
 
+## Actual LuckPerms hierarchy requirement for target GUI proof — 2026-10-30
+
+- Source review of `LuckPermsStaffTargetGuard.check` confirmed that every user-initiated target check reads **actual stored LuckPerms rank data** for both actor and target. If LuckPerms is not loaded, the check deliberately fails closed. Previous no-target picker/Refresh/Close CI did not require LuckPerms and cannot establish target hierarchy acceptance.
+- [Draft PR #773](https://github.com/wsg138/EnthusiaStaff/pull/773) now adds the exact `LuckPerms-Bukkit-5.5.71.jar` official Modrinth artifact, verifies a pinned SHA-1 before loading and requires the plugin to be enabled in ephemeral Paper. The helper records owner identity through the real local `/lp user <UUID> permission set enthusiastaff.identity.owner true` command, not merely a Bukkit attachment. Its disposable MariaDB and the LuckPerms local store have no live connection.
+- The target actor's rank must match the active actor rank and the single disposable unranked target must pass live hierarchy checks before navigating the head to `PunishmentGuiHolder`. Failure of these checks is a **valid test failure**, never a reason to disable the hierarchy policy.
+- Latest #773 head `2fa294bd70dc36fd942b882019dd82de60551a3d` had CI **queued** at the last observation. Codacy's previous source scan showed zero new issues, but exact-head results are still required. CodeRabbit's independent review request was rate-limited. **No tested target-to-category PASS is claimed.**
+- All 39 real human Java/Bedrock acceptance observations remain unrun; policy migration, Folia support and production deployment remain explicitly blocked.
+
 ## Near-term worker queue
 
 - **P0:** Reconcile [#754](https://github.com/wsg138/EnthusiaStaff/pull/754) with newer checked-out/unpublished punishment fixes and establish a single candidate SHA without changing main or live systems.
