@@ -77,11 +77,27 @@ public final class PunishmentGuiSmoke extends JavaPlugin implements Listener {
         player.addAttachment(this, "enthusiastaff.punish", true);
         player.addAttachment(this, "enthusiastaff.staffmode", true);
         marker("CLIENT_JOIN=true");
+        // Deliberately test the real off-duty denial before entering Staff Mode.
+        // Player.performCommand() reports command handling, not authorization.
+        Bukkit.getScheduler().runTaskLater(this, () -> {
+            if (!player.isOnline()) {
+                marker("FAIL=proof_player_left_before_denial");
+                return;
+            }
+            marker("OFF_DUTY_PUNISH_HANDLED=" + player.performCommand("punish"));
+        }, 35L);
+        Bukkit.getScheduler().runTaskLater(this, () -> {
+            if (!player.isOnline() || expected(player.getOpenInventory().getTopInventory())) {
+                marker("FAIL=off_duty_picker_open_or_player_left");
+                return;
+            }
+            marker("OFF_DUTY_PICKER_BLOCKED=true");
+        }, 75L);
         Bukkit.getScheduler().runTaskLater(this, () -> {
             if (player.isOnline()) {
                 marker("STAFF_COMMAND_ACCEPTED=" + player.performCommand("staff"));
             }
-        }, 30L);
+        }, 100L);
         Bukkit.getScheduler().runTaskLater(this, () -> {
             if (!player.isOnline()) {
                 marker("FAIL=proof_player_left");
@@ -89,7 +105,7 @@ public final class PunishmentGuiSmoke extends JavaPlugin implements Listener {
             }
             boolean accepted = player.performCommand("punish");
             marker("PUNISH_COMMAND_ACCEPTED=" + accepted);
-        }, 145L);
+        }, 200L);
         Bukkit.getScheduler().runTaskLater(this, () -> {
             if (!player.isOnline()) {
                 marker("FAIL=proof_player_disconnected");
@@ -99,7 +115,7 @@ public final class PunishmentGuiSmoke extends JavaPlugin implements Listener {
             if (!expected(top)) {
                 marker("FAIL=expected_target_picker_not_open");
             }
-        }, 260L);
+        }, 310L);
     }
 
     @EventHandler(priority = EventPriority.MONITOR)
