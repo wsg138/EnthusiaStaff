@@ -47,22 +47,32 @@ def digest(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
-def prepare(installed: bytes, candidate: bytes) -> tuple[bytes, bool]:
-    """Return (approved bytes, already_current); reject all unapproved differences."""
+def validate_candidate(candidate: bytes) -> None:
+    """Require the exact approved candidate version, reason count and ban ladder."""
     if not candidate.startswith(CANDIDATE_VERSION):
         raise MigrationRejected("candidate version is not the pinned 2026-10-10.1")
     if candidate.count(NEW_BLOCK) != 1 or OLD_BLOCK in candidate:
         raise MigrationRejected("candidate ban-evasion ladder is not the approved permanent ban")
     if candidate.count(b"\n  - id: ") != EXPECTED_REASONS:
         raise MigrationRejected("candidate reason count differs from pinned 85")
-    if installed == candidate:
-        return installed, True
+
+
+def validate_legacy(installed: bytes) -> None:
+    """Reject any source outside the reviewed 85-reason legacy structure."""
     if not installed.startswith(LEGACY_VERSION) or installed.count(LEGACY_VERSION) != 1:
         raise MigrationRejected("installed policy version is not the expected 2026-09-26.1")
     if installed.count(OLD_BLOCK) != 1 or NEW_BLOCK in installed:
         raise MigrationRejected("installed ban-evasion ladder does not match the legacy four steps")
     if installed.count(b"\n  - id: ") != EXPECTED_REASONS:
         raise MigrationRejected("installed policy does not contain exactly 85 reasons")
+
+
+def prepare(installed: bytes, candidate: bytes) -> tuple[bytes, bool]:
+    """Return (approved bytes, already_current); reject all unapproved differences."""
+    validate_candidate(candidate)
+    if installed == candidate:
+        return installed, True
+    validate_legacy(installed)
     proposed = installed.replace(LEGACY_VERSION, CANDIDATE_VERSION, 1).replace(
         OLD_BLOCK, NEW_BLOCK, 1
     )
