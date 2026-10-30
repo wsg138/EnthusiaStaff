@@ -86,6 +86,21 @@ class PolicyMigrationTests(unittest.TestCase):
         self.assertEqual(0, status, error)
         self.assertIn("ALREADY_CURRENT", output)
 
+    def test_backup_and_replacement_preserve_unix_permissions_and_owner(self):
+        if migration.os.name == "nt":
+            self.skipTest("POSIX ownership and mode assertions")
+        self.installed_path.chmod(0o640)
+        previous = self.installed_path.stat()
+        status, _, error = self.run_cli(
+            "--apply", "--expected-sha256", migration.digest(self.installed)
+        )
+        self.assertEqual(0, status, error)
+        for saved in [self.installed_path, self.backups()[0]]:
+            current = saved.stat()
+            self.assertEqual((previous.st_uid, previous.st_gid),
+                             (current.st_uid, current.st_gid))
+            self.assertEqual(0o640, current.st_mode & 0o777)
+
     def test_existing_backup_causes_safe_rejection(self):
         backup = self.installed_path.with_name(
             self.installed_path.name + ".before-ban-evasion-"
@@ -135,8 +150,8 @@ class PolicyMigrationTests(unittest.TestCase):
 
     def test_concurrent_change_after_backup_refuses_replacement(self):
         original_write_backup = migration.write_exclusive_backup
-        def backup_then_external_edit(backup, before, mode):
-            original_write_backup(backup, before, mode)
+        def backup_then_external_edit(source, backup, before, mode):
+            original_write_backup(source, backup, before, mode)
             self.installed_path.write_bytes(before + b"# external operator edit\\n")
 
         with mock.patch.object(migration, "write_exclusive_backup",
