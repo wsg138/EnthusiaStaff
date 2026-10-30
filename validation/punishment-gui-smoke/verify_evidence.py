@@ -58,18 +58,14 @@ def check_sequence(lines: list[str], stages: tuple[str, ...], label: str) -> Non
         previous = positions[0]
 
 
-def validate(server_text: str, client_text: str) -> None:
-    server = server_text.splitlines()
-    client = client_text.splitlines()
+def reject_failure_markers(server: list[str], client: list[str]) -> None:
     if any("FAIL=" in line for line in server + client):
         raise EvidenceFailure("explicit server or client FAIL marker found")
     if any("GUI_CLIENT_ERROR=" in line or "GUI_CLIENT_KICKED=" in line for line in client):
         raise EvidenceFailure("client error or kick found")
 
-    check_sequence(server, SERVER_STAGES, "Paper")
-    check_sequence(client, CLIENT_STAGES, "Java protocol")
-    if server.count("PICKER_OPEN=true") != 3:
-        raise EvidenceFailure("expected exactly three Paper target picker openings")
+
+def authoritative_disposable_uuid(server: list[str]) -> str:
     target_ids = [line.removeprefix("DISPOSABLE_TARGET_UUID=")
                   for line in server if line.startswith("DISPOSABLE_TARGET_UUID=")]
     if len(target_ids) != 1:
@@ -80,23 +76,42 @@ def validate(server_text: str, client_text: str) -> None:
         raise EvidenceFailure("invalid disposable target UUID") from exc
     if target_ids[0] != target_id:
         raise EvidenceFailure("noncanonical disposable target UUID")
+    return target_id
+
+
+def actual_category_title(server: list[str], target_id: str) -> str:
     possible_titles = ("Punish · GuiTarget", "Punish · " + target_id)
-    actual_titles = [
+    titles = [
         line.removeprefix("INVENTORY_OPEN|title=").removesuffix(
             "|size=54|holder=PunishmentGuiHolder")
         for line in server if line.startswith("INVENTORY_OPEN|title=")
         and line.endswith("|size=54|holder=PunishmentGuiHolder")
     ]
-    titles = [title for title in actual_titles if title in possible_titles]
-    if len(titles) != 1:
+    matches = [title for title in titles if title in possible_titles]
+    if len(matches) != 1:
         raise EvidenceFailure("real Paper category title does not match disposable target")
-    expected_title = titles[0]
+    return matches[0]
+
+
+def verify_client_category_packet(client: list[str], expected_title: str) -> None:
     if not any(
         line.startswith("GUI_PACKET_OPEN|inventoryStart=54|")
-        and expected_title in line
-        for line in client
+        and expected_title in line for line in client
     ):
         raise EvidenceFailure("Java protocol category window does not match Paper title")
+
+
+def validate(server_text: str, client_text: str) -> None:
+    server = server_text.splitlines()
+    client = client_text.splitlines()
+    reject_failure_markers(server, client)
+    check_sequence(server, SERVER_STAGES, "Paper")
+    check_sequence(client, CLIENT_STAGES, "Java protocol")
+    if server.count("PICKER_OPEN=true") != 3:
+        raise EvidenceFailure("expected exactly three Paper target picker openings")
+    target_id = authoritative_disposable_uuid(server)
+    title = actual_category_title(server, target_id)
+    verify_client_category_packet(client, title)
 
 
 def main(argv: list[str] | None = None) -> int:
