@@ -2,8 +2,9 @@
 """Fail-closed manifest gate for real Java/Bedrock punishment GUI staging evidence.
 
 This audits evidence *records*, not the authenticity of client sessions.
-Missing recordings, untested rows, and fake/synthetic-client declarations
-can never produce an acceptance PASS. No network or server access.
+Missing recordings, untested rows, and missing client attestations cannot
+produce a complete record. Attestations/media still require independent
+human authenticity review. No network or server access.
 """
 from __future__ import annotations
 
@@ -61,13 +62,22 @@ def safe_relative_path(root: Path, relative: object, extensions: frozenset[str])
     return selected
 
 
+def file_sha256(path: Path) -> str:
+    """Stream large recordings and JARs instead of loading them into memory."""
+    checksum = hashlib.sha256()
+    with path.open("rb") as stream:
+        for block in iter(lambda: stream.read(1024 * 1024), b""):
+            checksum.update(block)
+    return checksum.hexdigest()
+
+
 def evidence_file(root: Path, relative: object, digest: str, extensions: frozenset[str]) -> None:
     selected = safe_relative_path(root, relative, extensions)
     if not selected.is_file():
         raise EvidenceInvalid(f"evidence is missing: {relative}")
     if selected.stat().st_size < 1:
         raise EvidenceInvalid(f"evidence file is empty: {relative}")
-    actual = hashlib.sha256(selected.read_bytes()).hexdigest()
+    actual = file_sha256(selected)
     if actual != digest:
         raise EvidenceInvalid(f"evidence checksum mismatch: {relative}")
 
