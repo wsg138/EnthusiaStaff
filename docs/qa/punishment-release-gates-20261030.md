@@ -130,6 +130,18 @@ A read-only GitHub three-way ancestry/file comparison used shared ancestor `081c
 - Codacy's final renewed assessment and the independent coverage/Sentinel results were still pending at the last inspection. Do **not** mark release gates green based on source remediation alone.
 - The temporary read-only annotation workflow trigger was restored to original content; PR #764 still has four intended changed files. No server config writes or restarts.
 
+## Mainline-reconciled release candidate (draft #765) — 2026-10-30
+
+Created independent [draft PR #765](https://github.com/wsg138/EnthusiaStaff/pull/765), head `23e66070154eda7b4eb5e682577c4588956887d7`, **without changing main**. This is an integration-only Git merge commit with two parents: punishment stack `84144b18e74a577c30ef8e306cee4a2f3c3f268f` (through #764) and main `2fa08f0e3a86d34afdf040a864f60959e6bc6370`, shared ancestor `081ca8a86958499183bcfe20d255d67f57a301d5`.
+
+- Git tree reconciliation read the full recursive main, candidate, and final merged trees. Verified **all 94 main-only changed blob SHAs/modes** and **all 166 candidate-only changed blob SHAs/modes** are preserved exactly. There were **two** overlapping paths, manually reconciled:
+  - `EnthusiaStaffPaperPlugin.java`: main StaffBot active-duty/authority wiring preserved, candidate approval-announcement observer added.
+  - `InteractiveChatStagingArtifactProvider.java`: main's render completion, expiry and inventory diagnostics preserved, global off-owner `Player.isOnline()` check removed, owning callback guard retained.
+- No missing/unexpected file paths were observed after merging; candidate is **ahead of main**, with no missing main commits. GitHub reports #765 mergeable.
+- A passing **source/tree equivalence** check is not behavioral validation. As of the initial read, four new workflows were triggered: aggregate coverage, MariaDB integration, Sentinel proof, Staff state reset runtime proof and migration safety (workflow matrix). Record *exact-merge-SHA* final results before any release claim.
+- **NO-GO**: This combines a broad StaffBot/Velocity/Paper feature stack, not solely the punishment GUI. Independent StaffBot owner review, remaining severity approvals under #616, real Java/Bedrock GUI tests, Folia lifecycle acceptance, and explicit maintenance/deployment authorization remain necessary. Do not treat GitHub mergeability as approval.
+- No server, JAR, database, config file or production service was modified.
+
 ## Near-term worker queue
 
 - **P0:** Reconcile [#754](https://github.com/wsg138/EnthusiaStaff/pull/754) with newer checked-out/unpublished punishment fixes and establish a single candidate SHA without changing main or live systems.
