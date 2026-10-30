@@ -161,6 +161,7 @@ jobs:
           grep -F 'PICKER_REFRESH_OPEN=true' "$server/punishment-gui-smoke.txt"
           grep -F 'CLOSE_CLICK_OBSERVED=true' "$server/punishment-gui-smoke.txt"
           grep -F 'PICKER_CLOSED_AFTER_CONTROL=true' "$server/punishment-gui-smoke.txt"
+          grep -F 'PICKER_CLOSED_AT_CHECKPOINT=true' "$server/punishment-gui-smoke.txt"
           grep -F 'GUI_CLIENT_REFRESH_CLICK=true' "$evidence/client.log"
           grep -F 'GUI_CLIENT_REFRESHED_PICKER=true' "$evidence/client.log"
           grep -F 'GUI_CLIENT_CLOSE_CLICK=true' "$evidence/client.log"
@@ -174,8 +175,18 @@ jobs:
           grep -F 'TARGET_CATEGORIES_OPEN=true' "$server/punishment-gui-smoke.txt"
           grep -F 'GUI_CLIENT_TARGET_CATEGORIES_OPEN=true' "$evidence/client.log"
           grep -F 'INVENTORY_OPEN|' "$server/punishment-gui-smoke.txt"
-          ! grep -F 'FAIL=' "$server/punishment-gui-smoke.txt"
-          ! grep -Eq 'NoSuchMethodError|NoSuchFieldError|ClassNotFoundException|LinkageError' "$evidence/server-console.log"
+          # Do NOT use a bare `! grep` here: Bash exempts negated
+          # pipelines from errexit, so a matching FAIL= previously went green.
+          if grep -qF 'FAIL=' "$server/punishment-gui-smoke.txt" || \
+             grep -qF 'GUI_PACKET_FAIL=' "$evidence/client.log"; then
+            echo "::error::A server/client FAIL marker was recorded; refusing a green smoke."
+            exit 1
+          fi
+          if grep -Eq 'NoSuchMethodError|NoSuchFieldError|ClassNotFoundException|LinkageError' \
+             "$evidence/server-console.log"; then
+            echo "::error::The Paper server encountered a plugin linkage failure."
+            exit 1
+          fi
           cp "$server/punishment-gui-smoke.txt" "$evidence/server-proof.txt"
           echo 'GUI_PROTOCOL_SMOKE_PASS=true' | tee "$evidence/result.txt"
 
