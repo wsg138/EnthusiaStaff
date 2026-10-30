@@ -1,0 +1,28 @@
+name: Punishment GUI client acceptance evidence gate
+
+on:
+  pull_request:
+    paths:
+      - "scripts/qa/punishment_gui_client_evidence_gate.py"
+      - "scripts/qa/test_punishment_gui_client_evidence_gate.py"
+      - "scripts/qa/create_punishment_gui_client_manifest.py"
+      - "scripts/qa/test_create_punishment_gui_client_manifest.py"
+      - ".github/workflows/punishment-gui-client-evidence-gate.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  evidence-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Test fail-closed Java/Bedrock evidence contract
+        run: |
+          python -m unittest discover -s scripts/qa -p 'test_punishment_gui_client_evidence_gate.py' -v
+          python -m unittest discover -s scripts/qa -p 'test_create_punishment_gui_client_manifest.py' -v
