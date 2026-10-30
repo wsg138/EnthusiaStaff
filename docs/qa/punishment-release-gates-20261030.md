@@ -152,6 +152,14 @@ Created independent [draft PR #765](https://github.com/wsg138/EnthusiaStaff/pull
 
 **No production files, servers, databases, credentials, or running services were altered by this integration/security audit. Guided punishment remains OFF and the release is still NO-GO.**
 
+## Completed integrated offline checks and scoped critical finding fix — 2026-10-30
+
+- **Integration draft [#765](https://github.com/wsg138/EnthusiaStaff/pull/765)** exact head `23e66070154eda7b4eb5e682577c4588956887d7`: all four triggered GitHub Actions workflows finished **SUCCESS** (aggregate Coverage/build, dedicated MariaDB tests, Sentinel Restart Artifact, Staff state reset runtime proof, and migration-safety job). The candidate contains both current main and the separate punishment stack; it remains draft, not deployed.
+- **Security follow-up draft [#767](https://github.com/wsg138/EnthusiaStaff/pull/767)** exact head `cd63c423001ce2db3e3b44b640c0e685b40bd465`: dedicated [offline QA safety workflow 41098920252](https://github.com/wsg138/EnthusiaStaff/actions/runs/41098920252) passed **18/18** focused tests and exact-head Codacy completed **SUCCESS with zero new issues** relative to #765. The enhanced XML parser rejects DTD/external entities and oversized/malformed JUnit reports; the build verifier refuses missing/symlinked wrappers and uses fixed no-shell argument execution. The required trusted-source build invocation has a *documented, narrowly scoped* static-analysis exception. This is not permission to run untrusted Gradle projects.
+- #767 **inherits** the exact tested #765 integration tree but adds offline QA source changes. Its own full Coverage/Sentinel workflows were **still in progress** when this note was written; do not transfer the parent commit's CI results without exact-head revalidation.
+- [Diagnostic PR #766](https://github.com/wsg138/EnthusiaStaff/pull/766) was closed **unmerged** after read-only inspection of public Codacy issue metadata. The broad #765 PR still has legacy/stack-wide warnings relative to main; #767's zero new issues represents a narrow source delta, not clearance of every broad historical warning.
+- Real Java+Bedrock GUI tests (20 rows), Folia lifecycle acceptance, remaining guided severity rules and isolated policy migration/rollback are **not done**. Both draft PRs and all production services remain unchanged by this review.
+
 ## Near-term worker queue
 
 - **P0:** Reconcile [#754](https://github.com/wsg138/EnthusiaStaff/pull/754) with newer checked-out/unpublished punishment fixes and establish a single candidate SHA without changing main or live systems.
