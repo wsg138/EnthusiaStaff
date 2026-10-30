@@ -27,6 +27,21 @@ class ManifestTemplateTests(unittest.TestCase):
         self.assertFalse(manifest["server"]["isolated_staging"])
         self.assertEqual("", manifest["candidate_commit"])
 
+    def test_each_scenario_has_a_source_grounded_operator_prompt(self):
+        self.assertEqual(
+            {f"A{i:02d}" for i in range(1, 21)},
+            set(generator.SCENARIO_CHECKS),
+        )
+        rows = generator.make_template()["cases"]
+        self.assertEqual(39, len(rows))
+        for row in rows:
+            self.assertEqual(generator.SCENARIO_CHECKS[row["id"]], row["check"])
+            self.assertGreater(len(row["check"]), 24)
+            self.assertEqual("BLOCKED", row["status"])
+        self.assertNotIn(("A19", "java"), {
+            (row["id"], row["client"]) for row in rows
+        })
+
     def test_template_remains_rejected_until_real_metadata_is_recorded(self):
         with self.assertRaises(gate.EvidenceInvalid):
             gate.evaluate(generator.make_template(), self.target.parent)
