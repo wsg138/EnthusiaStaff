@@ -19,10 +19,14 @@ FLAG = re.compile(r"^folia-supported\s*:\s*(.*?)\s*$")
 LEGACY = re.compile(r"\.getScheduler\(\)\s*\.runTask(?:Later|Timer|Asynchronously|LaterAsynchronously|TimerAsynchronously)?\s*\(")
 TELEPORT = re.compile(r"\bplayer\s*\.\s*teleport\s*\(")
 QUIT_HANDLER = re.compile(
-    r"public\s+void\s+onQuit\s*\(\s*PlayerQuitEvent\s+\w+\s*\)\s*\{"
+    r"public\s+void\s+onQuit\s*\(\s*(?:final\s+)?PlayerQuitEvent\s+"
+    r"(?P<event_var>[A-Za-z_$][A-Za-z0-9_$]*)\s*\)\s*\{"
 )
 QUIT_RESTORE = re.compile(r"\brestoreSavedState\s*\(")
-QUIT_TELEPORT = re.compile(r"\b(?:player|event\.getPlayer\(\))\s*\.\s*teleport(?:Async)?\s*\(")
+def quit_teleport_pattern(event_var: str) -> re.Pattern[str]:
+    """Match a direct player or actual quit-event parameter teleport call."""
+    owner = re.escape(event_var) + r"\s*\.\s*getPlayer\s*\(\s*\)"
+    return re.compile(r"\b(?:player|" + owner + r")\s*\.\s*teleport(?:Async)?\s*\(")
 
 
 
@@ -96,7 +100,8 @@ def known_source_blockers(root: Path) -> list[dict]:
                 # Folia disallows teleporting during PlayerQuitEvent, even via
                 # teleportAsync. A future "fix" that directly moves the player
                 # during quit must not accidentally clear admission.
-                for match in QUIT_TELEPORT.finditer(content, opened + 1, end - 1):
+                pattern = quit_teleport_pattern(handler.group("event_var"))
+                for match in pattern.finditer(content, opened + 1, end - 1):
                     blockers.append({
                         "id": "quit_event_teleport",
                         "path": path.relative_to(root).as_posix(),
