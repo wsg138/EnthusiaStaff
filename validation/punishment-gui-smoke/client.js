@@ -82,7 +82,10 @@ bot.on('windowOpen', window => {
   const title = typeof window.title === 'string' ? window.title : JSON.stringify(window.title)
   console.log('GUI_PACKET_OPEN|inventoryStart=' + String(window.inventoryStart) +
     '|slotCount=' + String(window.slots.length) + '|title=' + title)
-  if (title.includes('Punish') && title.includes(TEST_TARGET)) {
+  if (title.includes('Punish · ') && !title.includes('Select Player')) {
+    // An isolated Paper server has no Velocity username observation, so the
+    // authoritative directory can legitimately render the target's UUID.
+    // The evidence verifier matches this title to the server's exact UUID.
     if (pickerOpens !== 3 || window.inventoryStart !== 54 ||
         window.slots[13]?.name !== 'oak_sign') {
       fail('categories window missing guide sign or wrong state')
