@@ -144,6 +144,7 @@ jobs:
             exit "$client_status"
           fi
 
+          grep -F 'STAFF_COMMAND_ACCEPTED=true' "$server/punishment-gui-smoke.txt"
           grep -F 'PUNISH_COMMAND_ACCEPTED=true' "$server/punishment-gui-smoke.txt"
           grep -F 'PICKER_OPEN=true' "$server/punishment-gui-smoke.txt"
           grep -F 'GUI_PACKET_54_SLOTS=true' "$evidence/client.log"
