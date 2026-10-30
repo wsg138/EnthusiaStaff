@@ -12,13 +12,17 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import net.enthusia.staff.protocol.ChatBridgeInboundMessage;
 import net.enthusia.staff.protocol.ChatBridgeMessages;
 import net.enthusia.staff.protocol.ProtocolEnvelope;
+import org.bukkit.Server;
+import org.bukkit.plugin.Plugin;
 import org.bukkit.plugin.java.JavaPlugin;
 
 /**
  * Best-effort authenticated Velocity -> RoseChat Discord-origin ingress.
  *
  * <p>Admission happens off-thread and is bounded/deduplicated. Actual RoseChat dispatch is always
- * scheduled onto Bukkit's primary thread. No durable inbox/outbox is used.</p>
+ * scheduled on the server's global region. No player or world state is accessed here.
+ * RoseChat provider compatibility with Folia still requires separate runtime validation.
+ * No durable inbox/outbox is used.</p>
  */
 public final class RoseChatInboundBridgeIntegration implements AutoCloseable {
     static final int MAXIMUM_QUEUED_MESSAGES = 256;
@@ -52,11 +56,18 @@ public final class RoseChatInboundBridgeIntegration implements AutoCloseable {
         this(
                 serverId,
                 clock,
-                task -> plugin.getServer().getScheduler().runTask(plugin, task),
+                globalIngressScheduler(plugin.getServer(), plugin),
                 message -> RoseChatAPI.getInstance().dispatchInboundChat(message),
                 MAXIMUM_QUEUED_MESSAGES,
                 MAXIMUM_DEDUPE_ENTRIES
         );
+    }
+
+    /** Server-wide ingress must not use Bukkit's legacy primary-thread scheduler on Folia. */
+    static Scheduler globalIngressScheduler(Server server, Plugin plugin) {
+        Objects.requireNonNull(server, "server");
+        Objects.requireNonNull(plugin, "plugin");
+        return task -> server.getGlobalRegionScheduler().execute(plugin, task);
     }
 
     RoseChatInboundBridgeIntegration(
