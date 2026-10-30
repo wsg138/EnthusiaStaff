@@ -38,6 +38,8 @@ jobs:
       ES_DATABASE_USER: gui_smoke
       ES_DATABASE_PASSWORD: gui-${{ github.run_id }}-${{ github.run_attempt }}
       PAPER_SHA256: b1d8f6bfa1b6101fa8e947b53041cb3bdf5540e7b83b6547ca19ba7edefeb083
+      # Official Modrinth v5.5.71 Bukkit release, SHA-1 pinned from release metadata.
+      LUCKPERMS_SHA1: fc8bb9919fa77c670b7ed5c284bcb66770ea71fc
       MINEFLAYER_COMMIT: f9e7db4447afda7838f08aa13430ec768738c178
       PAPER_USER_AGENT: EnthusiaStaff-gui-protocol-smoke/1.0.0
     steps:
@@ -73,6 +75,11 @@ jobs:
           test -n "$jar_path"
           cp "$jar_path" "$RUNNER_TEMP/gui/server/plugins/EnthusiaStaff-Paper.jar"
           cp validation/punishment-gui-smoke/target/punishment-gui-smoke-1.0.0.jar "$RUNNER_TEMP/gui/server/plugins/"
+          # Real LuckPerms is required: target hierarchy must never be bypassed.
+          curl --fail --location --retry 4 --retry-all-errors \
+            "https://cdn.modrinth.com/data/Vebnzrzj/versions/b0mk8uS6/LuckPerms-Bukkit-5.5.71.jar" \
+            -o "$RUNNER_TEMP/gui/server/plugins/LuckPerms.jar"
+          echo "$LUCKPERMS_SHA1  $RUNNER_TEMP/gui/server/plugins/LuckPerms.jar" | sha1sum --check -
           sha256sum "$RUNNER_TEMP/gui/server/plugins/"*.jar | tee "$RUNNER_TEMP/gui/evidence/jar-sha256.txt"
           git rev-parse HEAD | tee "$RUNNER_TEMP/gui/evidence/source-sha.txt"
 
