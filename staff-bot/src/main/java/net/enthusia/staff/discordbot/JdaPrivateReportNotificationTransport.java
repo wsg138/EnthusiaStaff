@@ -71,6 +71,14 @@ final class JdaPrivateReportNotificationTransport
                     || !jda.getCacheFlags().contains(CacheFlag.MEMBER_OVERRIDES)) {
                 return denied();
             }
+            // Refuse to lease work unless the actual StaffBot account can
+            // both read the approved channel and post a plain-text message.
+            // Staff-role visibility alone does not establish bot readiness.
+            var self = channel.getGuild().getSelfMember();
+            if (self == null || !self.hasPermission(
+                    channel, Permission.VIEW_CHANNEL, Permission.MESSAGE_SEND)) {
+                return denied();
+            }
             Role staffRole = channel.getGuild().getRoleById(staffRoleId);
             boolean present = staffRole != null;
             boolean otherRoleViewer = present && hasExtraViewer(channel, staffRole);
