@@ -304,6 +304,12 @@ Created independent [draft PR #765](https://github.com/wsg138/EnthusiaStaff/pull
 - Earlier parent [PR #771](https://github.com/wsg138/EnthusiaStaff/pull/771) and [PR #772](https://github.com/wsg138/EnthusiaStaff/pull/772) independently have successful disposable runtime smoke and Sentinel runs with repaired fail-closed Bash guards. Their latest Coverage was still in progress at checkpoint.
 - Runtime tests are automated Java-protocol proofs, **not** human Java or Bedrock. All 39 manual client acceptance rows remain NOT RUN; isolated proxy name-resolution acceptance, advanced GUI workflows, Folia and production release are still NO-GO.
 
+## Exact-head retest after Python type and complexity cleanup — 2026-10-30
+
+- Latest [draft PR #773](https://github.com/wsg138/EnthusiaStaff/pull/773) commit `8e838a05eb7d951f82ed378c3000773f6f39e304` was re-tested on disposable Paper/MariaDB with real LuckPerms, one staff-role protocol account and a second throwaway target. The [runtime workflow 41124623828](https://github.com/wsg138/EnthusiaStaff/actions/runs/41124623828) logged **13/13 synthetic Python verifier tests PASS**, `GUI_SMOKE_EVIDENCE_VERIFIED=true`, and `GUI_PROTOCOL_SMOKE_PASS=true` with no recorded `FAIL=` marker. Workflow post-processing still showed **in progress** at this checkpoint, so confirm the final hosted conclusion separately.
+- This commit eliminates the five Python literal-inference warnings with explicit `list[str]`, and refactors the one complexity-21 evidence validator into focused stage/error/target UUID/client packet helpers. **Codacy reanalysis for this exact commit was pending** at checkpoint, so the earlier six-finding summary from a different SHA cannot be treated as resolved until the new result appears.
+- Original false-green run is invalidated; only the corrected strict protocol evidence may be used for any future automated smoke claim. No actual human Java or Geyser/Bedrock acceptance row has been performed. Production remains untouched and NO-GO.
+
 ## Near-term worker queue
 
 - **P0:** Reconcile [#754](https://github.com/wsg138/EnthusiaStaff/pull/754) with newer checked-out/unpublished punishment fixes and establish a single candidate SHA without changing main or live systems.
