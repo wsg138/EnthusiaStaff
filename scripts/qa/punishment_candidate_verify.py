@@ -90,11 +90,11 @@ def build_and_verify(root: Path, *, timeout_seconds: int = 1200) -> dict:
     command = gradle_command(root)
     started = time.time()
     try:
-        # Intentional offline build execution: argv is an immutable task allowlist,
-        # shell is disabled and the wrapper is checked inside a clean checkout.
-        # An explicit checkout root is a trust boundary, not arbitrary shell input.
-        result = subprocess.run(command, cwd=root, check=False, shell=False,
-                                timeout=timeout_seconds)  # nosemgrep: python.lang.security.audit.dangerous-subprocess-use-audit,python.lang.security.audit.dangerous-subprocess-use-tainted-env-args
+        # Intentional offline build execution, not a shell command: fixed
+        # Gradle tasks, shell=False and a non-symlink wrapper from a clean tree.
+        # TRUST BOUNDARY: only run this tool against source the operator trusts.
+        # Security audit exception is scoped to this explicit build-runner call.
+        result = subprocess.run(command, cwd=root, check=False, shell=False, timeout=timeout_seconds)  # nosec B603  # nosemgrep
     except (OSError, subprocess.SubprocessError) as exc:
         raise EvidenceError(f"Offline Gradle candidate build unavailable: {exc}") from exc
     if result.returncode != 0:
