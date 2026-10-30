@@ -160,6 +160,7 @@ public final class PunishmentGuiSmoke extends JavaPlugin implements Listener {
                 return;
             }
             marker("DEDICATED_TARGET_ONLINE=true");
+            marker("DISPOSABLE_TARGET_UUID=" + disposableTarget.getUniqueId());
             marker("TARGET_PICKER_REOPEN_HANDLED=" + player.performCommand("punish"));
         }, 370L);
         Bukkit.getScheduler().runTaskLater(this, () -> {
@@ -173,7 +174,7 @@ public final class PunishmentGuiSmoke extends JavaPlugin implements Listener {
                     .serialize(player.getOpenInventory().title());
             if (!"PunishmentGuiHolder".equals(holderName(top))
                     || top.getSize() != EXPECTED_TOP_SLOTS
-                    || !title.contains(TEST_TARGET)) {
+                    || !expectedCategoryTitle(title)) {
                 marker("FAIL=target_categories_not_open");
             }
         }, 520L);
@@ -189,7 +190,7 @@ public final class PunishmentGuiSmoke extends JavaPlugin implements Listener {
         marker("INVENTORY_OPEN|title=" + title.replace('\n', ' ') + "|size=" + top.getSize()
                 + "|holder=" + holderName(top));
         if ("PunishmentGuiHolder".equals(holderName(top))) {
-            if (!targetHeadClicked.get() || !title.contains(TEST_TARGET)
+            if (!targetHeadClicked.get() || !expectedCategoryTitle(title)
                     || top.getSize() != EXPECTED_TOP_SLOTS) {
                 marker("FAIL=unapproved_category_navigation");
             } else {
@@ -257,6 +258,14 @@ public final class PunishmentGuiSmoke extends JavaPlugin implements Listener {
             closeConfirmed.set(true);
             marker("PICKER_CLOSED_AFTER_CONTROL=true");
         }
+    }
+
+    /** Offline Paper has no proxy observation; the directory may only know the UUID. */
+    private boolean expectedCategoryTitle(String title) {
+        Player target = getServer().getPlayerExact(TEST_TARGET);
+        return target != null && (
+                ("Punish · " + TEST_TARGET).equals(title)
+                || ("Punish · " + target.getUniqueId()).equals(title));
     }
 
     private static boolean expected(Inventory inventory) {
