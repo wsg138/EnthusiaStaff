@@ -70,5 +70,6 @@ jobs:
             curl --fail --silent --show-error -H "Accept: application/json" "$url" > "/tmp/codacy-issues-$cursor.json"
             echo "CODACY_PAGE=$cursor"
             jq -c '{count: (.data | length), pagination: .pagination}' "/tmp/codacy-issues-$cursor.json"
-            jq -c '.data[] | .commitIssue | select(.patternInfo.severityLevel == "Critical" or .patternInfo.severityLevel == "High") | {severity: .patternInfo.severityLevel, pattern: .patternInfo.id, category: .patternInfo.category, file: .filePath, line: .lineNumber, message: .message, lineText: .lineText}' "/tmp/codacy-issues-$cursor.json"
+            jq -c '[.data[].commitIssue.patternInfo.severityLevel] | group_by(.) | map({level: .[0], count: length})' "/tmp/codacy-issues-$cursor.json"
+            jq -c '.data[] | .commitIssue | select(.patternInfo.category == "Security") | {severity: .patternInfo.severityLevel, level: .patternInfo.level, pattern: .patternInfo.id, file: .filePath, line: .lineNumber, message: .message, lineText: .lineText}' "/tmp/codacy-issues-$cursor.json"
           done
