@@ -21,7 +21,7 @@
 | Folia plugin admission | #754 still lacks the `folia-supported` metadata opt-in and documents blocking scheduler/restore paths | **BLOCKED**; do not merely add metadata |
 | Actual Java/Geyser/Bedrock GUI and role acceptance | [Java/Bedrock UX matrix](../implementation-plans/staff-punishment-gui-ux-acceptance-20261015.md) marks runtime rows NOT RUN | **NOT RUN**; do not infer from mocks |
 | Owner-approved severity | [Issue #616](https://github.com/wsg138/EnthusiaStaff/issues/616) remains open; the documented profile is `prototype-20261013-unapproved` | **BLOCKED**; guided mode OFF |
-| Customized production policy compatibility | [#753](https://github.com/wsg138/EnthusiaStaff/pull/753) read-only comparison records material `evasion.ban` difference | **OWNER REVIEW REQUIRED** |
+| Customized production policy compatibility | [#753](https://github.com/wsg138/EnthusiaStaff/pull/753) records `evasion.ban` difference; owner approved permanent network ban on 2026-10-30 | **POLICY INTENT APPROVED; MIGRATION NOT PERFORMED** |
 | Rollback and live rank/permission verification | PR #754 documents these as unverified | **NOT RUN** |
 
 ## Material policy discrepancy — must not be silently normalized
@@ -46,7 +46,17 @@ Read the **current SMP disk file** `plugins/EnthusiaStaff/reason-policies.yml` t
 - This is a **textual on-disk source comparison**, not a complete parser-based semantic proof, not a checksum of the active runtime policy, and not evidence that current deployed processes have loaded/reloaded the file. Exact runtime identity still must be verified before cutover.
 - **No decision or policy update was made.** Preserve the installed file. Approve the desired ban-evasion behavior explicitly under #616 before any migration.
 
-**Owner decision needed:** retain the installed escalating ladder, deliberately choose the bundled immediate-permanent ladder, or require manual review until a different versioned policy is accepted. Record the chosen exact ladder, policy version, rationale, and approval in issue #616 or a linked decision record. Do not infer permission from an unanswered question.
+**Decision:** The owner approved immediate permanent network ban for confirmed ban evasion on 2026-10-30; see the decision record below and [issue #616](https://github.com/wsg138/EnthusiaStaff/issues/616). The on-disk policy has **not** been updated. Release requires an explicit versioned migration, tested rollback, and separate authorization.
+
+### Owner policy decision — confirmed ban evasion (2026-10-30)
+
+**Approved rule:** For a **confirmed ban-evasion offense** (`evasion.ban`), the sanction is an **immediate permanent network ban**, including the first confirmed occurrence. No warning, temporary ban, repeat-count progression, or 30/60/90-day ladder is intended.
+
+**Direct owner statement:** “ban evading is a perm ban.” The approval is scoped to this sanction type/duration. It does **not** automatically approve the guided questionnaire's classification, autonomous enforcement, rank/approval override, proof standard, or other severity calibration outcomes. Keep the existing review-only classification boundary and authority/audit safeguards.
+
+**Implementation gap:** Bundled candidate v`2026-10-10.1` already contains the intended one-step permanent `NETWORK_BAN`; installed SMP v`2026-09-26.1` still has the escalating 30d/60d/90d/permanent ladder. No production file was edited or reloaded by this record. Before any rollout, implement an explicit versioned migration with backup, staging acceptance and rollback, verify loaded policy and staff authority, and obtain separate deploy authorization. Never silently overwrite an installed policy.
+
+**Source of approval:** owner's 2026-10-30 instruction, recorded in [issue #616](https://github.com/wsg138/EnthusiaStaff/issues/616). Issue #616 remains open for all other sanctions and the overall guided-mode release gate.
 
 ## Severity examples requiring explicit adjudication
 
@@ -61,7 +71,8 @@ The existing [guided calibration review](../implementation-plans/guided-severity
 | Large-scale flooding after verified ignored warning | 2-day mute | Approve whether the step increase is allowed |
 | Isolated targeted verbal harassment | 2-day mute | Approve exact classification/threshold or manual review |
 | Sustained voice-channel noise | Manual review | Remain manual unless voice enforcement is actually proven |
-| Cheating/X-ray, major exploit, ban evasion, mixed market/reputation sanctions | Manual review | Do not automatically invent ban, confiscation, permanence or unsupported remedies |
+| Cheating/X-ray, major exploit, mixed market/reputation sanctions | Manual review | Do not automatically invent bans, confiscation, permanence or unsupported remedies |
+| Confirmed ban evasion (`evasion.ban`) | Prototype manual review; candidate policy single permanent network ban | **Sanction type/duration OWNER APPROVED**: permanent network ban; detection/automatic issuance **not** approved |
 
 Record separate **no warning**, **warning obeyed**, **verified ignored warning**, and **unknown** fact states. An unverified warning does not establish defiance. These examples intentionally exclude history/rank/approval effects; production must preserve authoritative history, decay, hierarchy, approval, audit and sanction type guards. No new owner policy is proposed by this ledger.
 
