@@ -11,12 +11,14 @@ import hashlib
 import json
 import subprocess
 import sys
-import xml.etree.ElementTree as ET
+from xml.parsers import expat
 import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
 
 MODULES = ("domain", "paper", "staff-bot", "velocity")
+MAX_JUNIT_REPORT_BYTES = 16 * 1024 * 1024
+MAX_XML_DEPTH = 256
 JAR = Path("paper/build/libs/EnthusiaStaff-Paper-0.1.0-SNAPSHOT.jar")
 NOT_PROVEN = (
     "MariaDB-backed integration execution",
@@ -34,13 +36,50 @@ class EvidenceError(ValueError):
 
 
 def _suite_counts(path: Path) -> dict[str, int]:
+    """Read bounded JUnit attributes without DTDs, external entities or expansion."""
     try:
-        root = ET.parse(path).getroot()
-        if root.tag != "testsuite":
-            raise EvidenceError(f"Unexpected JUnit root element in {path}")
-        counts = {key: int(root.get(key, "0")) for key in
+        if path.stat().st_size > MAX_JUNIT_REPORT_BYTES:
+            raise EvidenceError(f"JUnit report exceeds safe size bound: {path}")
+        payload = path.read_bytes()
+        if len(payload) > MAX_JUNIT_REPORT_BYTES:
+            raise EvidenceError(f"JUnit report changed beyond safe size bound: {path}")
+
+        parser = expat.ParserCreate()
+        parser.SetParamEntityParsing(expat.XML_PARAM_ENTITY_PARSING_NEVER)
+        root_attributes: dict[str, str] | None = None
+        depth = 0
+
+        def no_dtd(*_args: object) -> None:
+            raise EvidenceError(f"DOCTYPE and entity declarations are forbidden in JUnit reports: {path}")
+
+        def no_external_entity(*_args: object) -> int:
+            raise EvidenceError(f"External XML entities are forbidden in JUnit reports: {path}")
+
+        def on_start(name: str, attributes: dict[str, str]) -> None:
+            nonlocal root_attributes, depth
+            if depth == 0:
+                if name != "testsuite":
+                    raise EvidenceError(f"Unexpected JUnit root element in {path}")
+                root_attributes = attributes
+            depth += 1
+            if depth > MAX_XML_DEPTH:
+                raise EvidenceError(f"JUnit XML nesting exceeds safe depth bound: {path}")
+
+        def on_end(_name: str) -> None:
+            nonlocal depth
+            depth -= 1
+
+        parser.StartDoctypeDeclHandler = no_dtd
+        parser.EntityDeclHandler = no_dtd
+        parser.ExternalEntityRefHandler = no_external_entity
+        parser.StartElementHandler = on_start
+        parser.EndElementHandler = on_end
+        parser.Parse(payload, True)
+        if root_attributes is None:
+            raise EvidenceError(f"Missing JUnit testsuite root in {path}")
+        counts = {key: int(root_attributes.get(key, "0")) for key in
                   ("tests", "skipped", "failures", "errors")}
-    except (ET.ParseError, OSError, ValueError) as exc:
+    except (expat.ExpatError, OSError, ValueError) as exc:
         raise EvidenceError(f"Cannot read JUnit report {path}: {exc}") from exc
     if any(v < 0 for v in counts.values()) or (
             counts["skipped"] + counts["failures"] + counts["errors"] > counts["tests"]):

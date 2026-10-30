@@ -54,6 +54,55 @@ class PunishmentOfflineEvidenceTests(unittest.TestCase):
         self.assertEqual(1, record["totals"]["failed"])
         self.assertEqual(11, record["totals"]["passed"])
 
+    def test_junit_doctype_external_entity_is_rejected(self):
+        path = self.root / "paper/build/test-results/test/TEST-example.xml"
+        path.write_text(
+            '<!DOCTYPE testsuite [<!ENTITY xxe SYSTEM "file:///etc/passwd">]>'
+            '<testsuite tests="4" skipped="1" failures="0" errors="0">'
+            '<testcase>&xxe;</testcase></testsuite>'
+        )
+        with self.assertRaises(evidence.EvidenceError):
+            evidence.build_record(self.root)
+
+    def test_junit_internal_entity_expansion_is_rejected(self):
+        path = self.root / "paper/build/test-results/test/TEST-example.xml"
+        path.write_text(
+            '<!DOCTYPE testsuite [<!ENTITY expanded "X">]>'
+            '<testsuite tests="1" skipped="0" failures="0" errors="0">'
+            '<testcase>&expanded;</testcase></testsuite>'
+        )
+        with self.assertRaises(evidence.EvidenceError):
+            evidence.build_record(self.root)
+
+    def test_junit_oversize_report_is_rejected(self):
+        path = self.root / "paper/build/test-results/test/TEST-example.xml"
+        with path.open("wb") as target:
+            target.truncate(evidence.MAX_JUNIT_REPORT_BYTES + 1)
+        with self.assertRaises(evidence.EvidenceError):
+            evidence.build_record(self.root)
+
+    def test_junit_malformed_and_wrong_root_are_rejected(self):
+        path = self.root / "paper/build/test-results/test/TEST-example.xml"
+        for xml in ('<testsuite tests="1"><testcase></testsuite>',
+                    '<testsuites tests="4" skipped="1" failures="0" errors="0"/>'):
+            path.write_text(xml)
+            with self.assertRaises(evidence.EvidenceError):
+                evidence.build_record(self.root)
+
+    def test_valid_junit_nested_testcases_keep_expected_counts(self):
+        path = self.root / "paper/build/test-results/test/TEST-example.xml"
+        path.write_text(
+            '<?xml version="1.0"?>'
+            '<testsuite tests="3" skipped="1" failures="1" errors="0">'
+            '<testcase name="first"/>'
+            '<testcase name="second"><failure message="failed"/></testcase>'
+            '<testcase name="third"><skipped/></testcase></testsuite>'
+        )
+        record = evidence.build_record(self.root)
+        self.assertFalse(record["offline_checks_pass"])
+        self.assertEqual(15, record["totals"]["tests"])
+        self.assertEqual(1, record["totals"]["failures"])
+
     def test_missing_module_report_fails_closed(self):
         (self.root / "velocity/build/test-results/test/TEST-example.xml").unlink()
         with self.assertRaises(evidence.EvidenceError):
