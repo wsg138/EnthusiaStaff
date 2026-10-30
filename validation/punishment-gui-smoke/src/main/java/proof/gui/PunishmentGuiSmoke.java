@@ -36,7 +36,9 @@ public final class PunishmentGuiSmoke extends JavaPlugin implements Listener {
         if (!Boolean.getBoolean("enthusia.gui.smoke.isolated")
                 || !"127.0.0.1".equals(getServer().getIp())
                 || getServer().getOnlineMode()
-                || getServer().getMaxPlayers() > 2) {
+                || getServer().getMaxPlayers() > 2
+                || !"jdbc:mariadb://127.0.0.1:3307/enthusiastaff_gui_smoke"
+                        .equals(System.getenv("ES_DATABASE_URL"))) {
             getLogger().severe("Refusing to enable: disposable loopback offline server required");
             getServer().getPluginManager().disablePlugin(this);
             return;
@@ -69,7 +71,13 @@ public final class PunishmentGuiSmoke extends JavaPlugin implements Listener {
         player.addAttachment(this, "enthusiastaff.identity.owner", true);
         player.addAttachment(this, "enthusiastaff.rank.founder", true);
         player.addAttachment(this, "enthusiastaff.punish", true);
+        player.addAttachment(this, "enthusiastaff.staffmode", true);
         marker("CLIENT_JOIN=true");
+        Bukkit.getScheduler().runTaskLater(this, () -> {
+            if (player.isOnline()) {
+                marker("STAFF_COMMAND_ACCEPTED=" + player.performCommand("staff"));
+            }
+        }, 30L);
         Bukkit.getScheduler().runTaskLater(this, () -> {
             if (!player.isOnline()) {
                 marker("FAIL=proof_player_left");
@@ -77,7 +85,7 @@ public final class PunishmentGuiSmoke extends JavaPlugin implements Listener {
             }
             boolean accepted = player.performCommand("punish");
             marker("PUNISH_COMMAND_ACCEPTED=" + accepted);
-        }, 25L);
+        }, 145L);
         Bukkit.getScheduler().runTaskLater(this, () -> {
             if (!player.isOnline()) {
                 marker("FAIL=proof_player_disconnected");
@@ -87,7 +95,7 @@ public final class PunishmentGuiSmoke extends JavaPlugin implements Listener {
             if (!expected(top)) {
                 marker("FAIL=expected_target_picker_not_open");
             }
-        }, 110L);
+        }, 260L);
     }
 
     @EventHandler(priority = EventPriority.MONITOR)
