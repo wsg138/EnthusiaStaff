@@ -33,12 +33,7 @@ public final class PunishmentGuiSmoke extends JavaPlugin implements Listener {
 
     @Override
     public void onEnable() {
-        if (!Boolean.getBoolean("enthusia.gui.smoke.isolated")
-                || !"127.0.0.1".equals(getServer().getIp())
-                || getServer().getOnlineMode()
-                || getServer().getMaxPlayers() > 2
-                || !"jdbc:mariadb://127.0.0.1:3307/enthusiastaff_gui_smoke"
-                        .equals(System.getenv("ES_DATABASE_URL"))) {
+        if (!disposableServerConfigured()) {
             getLogger().severe("Refusing to enable: disposable loopback offline server required");
             getServer().getPluginManager().disablePlugin(this);
             return;
@@ -58,6 +53,15 @@ public final class PunishmentGuiSmoke extends JavaPlugin implements Listener {
             return;
         }
         getServer().getPluginManager().registerEvents(this, this);
+    }
+
+    private boolean disposableServerConfigured() {
+        return Boolean.getBoolean("enthusia.gui.smoke.isolated")
+                && "127.0.0.1".equals(getServer().getIp())
+                && !getServer().getOnlineMode()
+                && getServer().getMaxPlayers() <= 2
+                && "jdbc:mariadb://127.0.0.1:3307/enthusiastaff_gui_smoke"
+                        .equals(System.getenv("ES_DATABASE_URL"));
     }
 
     @EventHandler(priority = EventPriority.LOWEST)
