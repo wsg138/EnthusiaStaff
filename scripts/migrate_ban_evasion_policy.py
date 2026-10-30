@@ -76,6 +76,36 @@ def safe_regular(path: Path) -> None:
         raise MigrationRejected(f"policy path is missing, not a regular file, or a symlink: {path}")
 
 
+def sync_directory(path: Path) -> None:
+    """Persist file creation/replacement directory entries on POSIX systems."""
+    if os.name == "nt":
+        return  # Windows has different directory-handle and durability semantics.
+    descriptor = os.open(path, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+    try:
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
+
+
+def write_exclusive_backup(backup: Path, original: bytes, mode: int) -> None:
+    """Remove an incomplete *new* backup; never overwrite an existing one."""
+    created = False
+    try:
+        with backup.open("xb") as output:
+            created = True
+            output.write(original)
+            output.flush()
+            os.fsync(output.fileno())
+        os.chmod(backup, mode)
+        if backup.read_bytes() != original:
+            raise MigrationRejected("backup verification failed before policy replacement")
+        sync_directory(backup.parent)
+    except (OSError, MigrationRejected):
+        if created:
+            backup.unlink(missing_ok=True)
+        raise
+
+
 def apply_migration(path: Path, expected_sha256: str, before: bytes, after: bytes) -> Path:
     """Require exact-byte compare-and-swap; keep an exclusive backup before atomic replace."""
     if not re.fullmatch(r"[a-fA-F0-9]{64}", expected_sha256):
@@ -91,12 +121,8 @@ def apply_migration(path: Path, expected_sha256: str, before: bytes, after: byte
     if backup.exists() or backup.is_symlink():
         raise MigrationRejected(f"backup already exists; refusing to overwrite: {backup}")
 
-    # Exclusive backup is durable before the replacement is created.
-    with backup.open("xb") as output:
-        output.write(before)
-        output.flush()
-        os.fsync(output.fileno())
-    os.chmod(backup, original_mode)
+    # Backup is verified and durably recorded before any installed-policy write.
+    write_exclusive_backup(backup, before, original_mode)
 
     temp_name: str | None = None
     try:
@@ -114,6 +140,7 @@ def apply_migration(path: Path, expected_sha256: str, before: bytes, after: byte
             raise MigrationRejected("installed policy changed during staging; original retained")
         os.replace(temp_name, path)
         temp_name = None
+        sync_directory(path.parent)
         if path.read_bytes() != after:
             raise MigrationRejected("post-replacement verification failed; restore from backup")
     finally:
