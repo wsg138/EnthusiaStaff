@@ -149,6 +149,14 @@ jobs:
           grep -F 'PUNISH_COMMAND_ACCEPTED=true' "$server/punishment-gui-smoke.txt"
           grep -F 'PICKER_OPEN=true' "$server/punishment-gui-smoke.txt"
           grep -F 'GUI_PACKET_54_SLOTS=true' "$evidence/client.log"
+          grep -F 'REFRESH_CLICK_OBSERVED=true' "$server/punishment-gui-smoke.txt"
+          grep -F 'PICKER_REFRESH_OPEN=true' "$server/punishment-gui-smoke.txt"
+          grep -F 'CLOSE_CLICK_OBSERVED=true' "$server/punishment-gui-smoke.txt"
+          grep -F 'PICKER_CLOSED_AFTER_CONTROL=true' "$server/punishment-gui-smoke.txt"
+          grep -F 'GUI_CLIENT_REFRESH_CLICK=true' "$evidence/client.log"
+          grep -F 'GUI_CLIENT_REFRESHED_PICKER=true' "$evidence/client.log"
+          grep -F 'GUI_CLIENT_CLOSE_CLICK=true' "$evidence/client.log"
+          grep -F 'GUI_CLIENT_REFRESH_AND_CLOSE=true' "$evidence/client.log"
           grep -F 'INVENTORY_OPEN|' "$server/punishment-gui-smoke.txt"
           # A negated grep is exempt from Bash errexit: use explicit guards.
           if grep -qF 'FAIL=' "$server/punishment-gui-smoke.txt" || \
