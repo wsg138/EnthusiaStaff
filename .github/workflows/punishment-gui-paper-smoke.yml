@@ -20,10 +20,10 @@ jobs:
       mariadb:
         image: mariadb:11.8.3
         env:
-          MARIADB_ROOT_PASSWORD: gui-smoke-root-disposable
+          MARIADB_ROOT_PASSWORD: gui-root-${{ github.run_id }}-${{ github.run_attempt }}
           MARIADB_DATABASE: enthusiastaff_gui_smoke
           MARIADB_USER: gui_smoke
-          MARIADB_PASSWORD: gui-smoke-disposable
+          MARIADB_PASSWORD: gui-${{ github.run_id }}-${{ github.run_attempt }}
         ports:
           - 3307:3306
         options: >-
@@ -36,7 +36,7 @@ jobs:
       # not secrets and never read from a user's live environment.
       ES_DATABASE_URL: jdbc:mariadb://127.0.0.1:3307/enthusiastaff_gui_smoke
       ES_DATABASE_USER: gui_smoke
-      ES_DATABASE_PASSWORD: gui-smoke-disposable
+      ES_DATABASE_PASSWORD: gui-${{ github.run_id }}-${{ github.run_attempt }}
       PAPER_SHA256: b1d8f6bfa1b6101fa8e947b53041cb3bdf5540e7b83b6547ca19ba7edefeb083
       MINEFLAYER_COMMIT: f9e7db4447afda7838f08aa13430ec768738c178
       PAPER_USER_AGENT: EnthusiaStaff-gui-protocol-smoke/1.0.0
