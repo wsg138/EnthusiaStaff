@@ -200,6 +200,15 @@ Created independent [draft PR #765](https://github.com/wsg138/EnthusiaStaff/pull
 - **Do not deploy to `bloom-test1` solely because it is called TEST.** First reserve or provision a dedicated disposable Paper environment, isolate StaffBot/proxy/durable database/webhooks/permissions, verify actual Java and Bedrock connections, use throwaway targets and obtain explicit staging authorization.
 - The 39 real client observations remain **NOT RUN**. No automated media integrity test can substitute for independently witnessed gameplay or prove that self-attested captures are authentic.
 
+## Actual isolated Paper GUI protocol smoke candidate — 2026-10-30
+
+- [Draft PR #771](https://github.com/wsg138/EnthusiaStaff/pull/771), stacked on #770, adds a **new non-sanctioning runtime proof**. It builds the exact candidate from its PR head, launches pinned Paper 26.2 build 129 on `127.0.0.1` in a disposable GitHub Actions runner, grants a temporary identity permission attachment to an offline test player, and runs **only `/punish` without a target**.
+- Server-side `InventoryOpenEvent` must show a real `PunishmentTargetPickerHolder` with a 54-slot top inventory. A separately connected Mineflayer Java protocol client must receive a 54-slot inventory window packet. The workflow verifies both results and preserves an evidence log/JAR hashes.
+- The tiny probe plugin refuses to enable without a dedicated JVM opt-in, loopback binding, offline mode and max two players. The CI test has no real server plugins or remote moderation service, never clicks a sanction, never accesses live SMP, and is disposable after the run.
+- **Important distinction:** This tests an automated Java protocol client only, not a real human client or Bedrock. Even if CI passes, **none of A01–A20's 39 real-client rows are marked PASS**. No Geyser/Floodgate, approval-flow or sanction outcome is claimed. The actual client matrix remains **0/39 observed**.
+- PR #770 latest exact earlier head `f4cdbc5e72ff7ed8c3867d581422345e10e731db` passed the focused **20/20** evidence-contract and generator suite and Sentinel, with Codacy **0 new issues**. Its aggregate Coverage workflow remained in progress at last read. PR #771 exact-head runtime results were **still running** when this checkpoint was written; do not transfer a test pass from another SHA.
+- No production JAR, server, database, config or punishment policy was modified. PR #771 remains DRAFT/NO-GO, and no full release authorization is implied.
+
 ## Near-term worker queue
 
 - **P0:** Reconcile [#754](https://github.com/wsg138/EnthusiaStaff/pull/754) with newer checked-out/unpublished punishment fixes and establish a single candidate SHA without changing main or live systems.
