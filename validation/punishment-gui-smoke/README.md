@@ -2,6 +2,8 @@
 
 **Draft-only test.** GitHub Actions creates an ephemeral, localhost-only Paper 26.2 build 129 server, with a SHA-256-pinned runtime and the exact candidate JAR built from its PR head. A tiny one-purpose helper plugin connects a disposable offline player and opens only the `/punish` target picker. A Mineflayer Java *protocol* client observes its resulting window packet.
 
+The CI probe also checks the **authorization transition**. It first issues `/punish` with the disposable identity's rank permissions but **without active Staff Mode**; the picker must not open (`OFF_DUTY_PICKER_BLOCKED=true`). It then enters Staff Mode using the actual `/staff` command and verifies a new `/punish` attempt opens the picker. A transient off-duty picker opening fails the run, even if it closes before the next inspection. This checks one narrow off-duty denial path, **not** every rank/approval boundary.
+
 The test explicitly checks:
 - Candidate and helper JAR source/build provenance (run and SHA-256 receipts).
 - The plugin is enabled only with an isolated-test JVM flag, `server-ip=127.0.0.1`, `online-mode=false` and at most two players.
