@@ -51,6 +51,12 @@ public final class PunishmentGuiSmoke extends JavaPlugin implements Listener {
             return;
         }
         Plugin staff = getServer().getPluginManager().getPlugin("EnthusiaStaff");
+        Plugin luckPerms = getServer().getPluginManager().getPlugin("LuckPerms");
+        if (luckPerms == null || !luckPerms.isEnabled()) {
+            getLogger().severe("Real LuckPerms is required for hierarchy proof");
+            getServer().getPluginManager().disablePlugin(this);
+            return;
+        }
         if (staff == null || !staff.isEnabled()) {
             getLogger().severe("EnthusiaStaff unavailable");
             getServer().getPluginManager().disablePlugin(this);
@@ -89,6 +95,20 @@ public final class PunishmentGuiSmoke extends JavaPlugin implements Listener {
         player.addAttachment(this, "enthusiastaff.punish", true);
         player.addAttachment(this, "enthusiastaff.staffmode", true);
         marker("CLIENT_JOIN=true");
+        // Record the owner's staff identity with real, isolated LuckPerms storage.
+        // A Bukkit permission attachment alone does not populate LuckPerms cached rank data.
+        Bukkit.getScheduler().runTaskLater(this, () -> {
+            if (!player.isOnline()) {
+                marker("FAIL=owner_left_before_luckperms_identity");
+                return;
+            }
+            boolean accepted = getServer().dispatchCommand(
+                    getServer().getConsoleSender(),
+                    "lp user " + player.getUniqueId()
+                            + " permission set enthusiastaff.identity.owner true"
+            );
+            marker("LUCKPERMS_OWNER_IDENTITY_HANDLED=" + accepted);
+        }, 12L);
         // Deliberately test the real off-duty denial before entering Staff Mode.
         // Player.performCommand() reports command handling, not authorization.
         Bukkit.getScheduler().runTaskLater(this, () -> {
