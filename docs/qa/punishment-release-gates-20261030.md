@@ -123,6 +123,13 @@ A read-only GitHub three-way ancestry/file comparison used shared ancestor `081c
 - Earlier Codacy review on #764 reported **7 new issues (5 high, 2 medium)** before the latest safeguards. Do not claim these are cleared until exact-head quality results have been inspected; GitHub's existing read-only annotation dump was temporarily enabled to identify detailed findings.
 - Production config remains unchanged. A passing migration-script test does **not** unblock guided punishment rollout or authorize server migration. The operator must still independently verify the exact current YAML, staging, policy load, rollback, and safety gates.
 
+### Migration static-analysis remediation checkpoint — 2026-10-30
+
+- [Draft #764](https://github.com/wsg138/EnthusiaStaff/pull/764) received a prior Codacy report of **seven issues**. Read-only GitHub annotations identified: two cyclomatic-complexity functions, three type-checking failures in the test module's dynamic loader, and two Bandit B101 warnings for bare test asserts. These are now **addressed in source**, using smaller helpers, a normal module import and explicit test-fixture exceptions.
+- Exact current PR #764 source commit `84144b18e74a577c30ef8e306cee4a2f3c3f268f` passed the dedicated [migration safety workflow 41095152765](https://github.com/wsg138/EnthusiaStaff/actions/runs/41095152765): **15 tests passed, no failures**. This is synthetic-fixture validation, not production execution.
+- Codacy's final renewed assessment and the independent coverage/Sentinel results were still pending at the last inspection. Do **not** mark release gates green based on source remediation alone.
+- The temporary read-only annotation workflow trigger was restored to original content; PR #764 still has four intended changed files. No server config writes or restarts.
+
 ## Near-term worker queue
 
 - **P0:** Reconcile [#754](https://github.com/wsg138/EnthusiaStaff/pull/754) with newer checked-out/unpublished punishment fixes and establish a single candidate SHA without changing main or live systems.
