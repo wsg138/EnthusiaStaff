@@ -4,7 +4,7 @@
 
 ## What the present code guarantees on Paper
 
-`StaffModeManager.onQuit(PlayerQuitEvent)` currently restores the original backend-local player snapshot **before** native player data is saved. It then submits a durable session-detach update. `StaffStateCodec.restore` first calls synchronous `player.teleport(decoded.location())`, then restores inventory, XP, hunger, effects, game mode, flight, health and other player properties. A failed teleport returns false without proceeding with the rest of the snapshot.
+`StaffModeManager.onQuit(PlayerQuitEvent)` currently restores the original backend-local player snapshot **before** native player data is saved. Only after a successful restore and checksum verification does it **attempt** to enqueue the durable session-detach update; a rejected work queue or failed verification leaves recovery pending. `StaffStateCodec.restore` first calls synchronous `player.teleport(decoded.location())`, then restores inventory, XP, hunger, effects, game mode, flight, health and other player properties. A failed teleport returns false without proceeding with the rest of the snapshot.
 
 This sequence is important: writing the temporary Staff Mode inventory/location to the native player file can persist the wrong state after a disconnect or crash. Existing SHA-256 checks, ownership fences and durable recovery gates must remain intact.
 
