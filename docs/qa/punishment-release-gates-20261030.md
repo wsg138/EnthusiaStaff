@@ -243,6 +243,13 @@ Created independent [draft PR #765](https://github.com/wsg138/EnthusiaStaff/pull
 - The new **exact-head CI/Codacy were still in progress** at ledger checkpoint. Previous exact heads conclusively proved positive on-duty picker delivery only. Do not claim the added off-duty boundary is proven until the new run has passed.
 - Temporary Codacy diagnostic PR #766 again closed without merge. All 39 actual human Java/Bedrock GUI observations are still NOT RUN. Production remains untouched and guided punishment deployment remains NO-GO.
 
+## Confirmed Paper off-duty denial and on-duty GUI delivery — 2026-10-30
+
+- [PR #771 workflow 41118258436](https://github.com/wsg138/EnthusiaStaff/actions/runs/41118258436) at exact source `0700bbee0f8c372037a21bbe69d4aff0cd1a01c7` **SUCCESS** on an isolated Paper+MariaDB server. Server proof: `OFF_DUTY_PUNISH_HANDLED=true`, `OFF_DUTY_PICKER_BLOCKED=true`, `STAFF_COMMAND_ACCEPTED=true`, `PUNISH_COMMAND_ACCEPTED=true`, `PICKER_OPEN=true`; Java protocol client `GUI_PACKET_54_SLOTS=true`, final `GUI_PROTOCOL_SMOKE_PASS=true`. No `FAIL=` markers.
+- The off-duty `performCommand` Boolean only indicates command handling; **the absence of a picker**, including an event-time gate against transient unauthorized openings, is the meaningful negative outcome. On-duty entry uses real Staff Mode, not a backdoor.
+- The initial high Codacy pinning finding and medium `onEnable` complexity finding have been addressed. Codacy's latest PR #771 summary reports **zero new issues**. Sentinel passed latest head `9d885015f3468effd01f484df37ca51a1714eb10`; that head's remaining GUI smoke and Coverage jobs were running at this checkpoint.
+- This is one scenario-specific automated Java protocol regression, **not** real human Java/Bedrock approval, not any of A01–A20's 39 required observations, and not Folia support. No sanctions were applied or deployed.
+
 ## Near-term worker queue
 
 - **P0:** Reconcile [#754](https://github.com/wsg138/EnthusiaStaff/pull/754) with newer checked-out/unpublished punishment fixes and establish a single candidate SHA without changing main or live systems.
