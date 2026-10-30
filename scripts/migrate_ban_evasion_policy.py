@@ -87,7 +87,19 @@ def sync_directory(path: Path) -> None:
         os.close(descriptor)
 
 
-def write_exclusive_backup(backup: Path, original: bytes, mode: int) -> None:
+def require_same_owner(source: Path, generated: Path) -> None:
+    """Never replace an installed policy with a file owned by another account."""
+    if os.name == "nt":
+        return  # Staging on Windows does not establish production ACL compatibility.
+    original = source.stat()
+    replacement = generated.stat()
+    if (original.st_uid, original.st_gid) != (replacement.st_uid, replacement.st_gid):
+        raise MigrationRejected(
+            "owner/group mismatch; run the migration as the installed policy owner"
+        )
+
+
+def write_exclusive_backup(source: Path, backup: Path, original: bytes, mode: int) -> None:
     """Remove an incomplete *new* backup; never overwrite an existing one."""
     created = False
     try:
@@ -97,6 +109,7 @@ def write_exclusive_backup(backup: Path, original: bytes, mode: int) -> None:
             output.flush()
             os.fsync(output.fileno())
         os.chmod(backup, mode)
+        require_same_owner(source, backup)
         if backup.read_bytes() != original:
             raise MigrationRejected("backup verification failed before policy replacement")
         sync_directory(backup.parent)
@@ -122,7 +135,7 @@ def apply_migration(path: Path, expected_sha256: str, before: bytes, after: byte
         raise MigrationRejected(f"backup already exists; refusing to overwrite: {backup}")
 
     # Backup is verified and durably recorded before any installed-policy write.
-    write_exclusive_backup(backup, before, original_mode)
+    write_exclusive_backup(path, backup, before, original_mode)
 
     temp_name: str | None = None
     try:
@@ -136,6 +149,7 @@ def apply_migration(path: Path, expected_sha256: str, before: bytes, after: byte
             output.flush()
             os.fsync(output.fileno())
         os.chmod(temp_name, original_mode)
+        require_same_owner(path, Path(temp_name))
         if path.read_bytes() != before:
             raise MigrationRejected("installed policy changed during staging; original retained")
         os.replace(temp_name, path)
