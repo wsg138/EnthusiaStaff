@@ -80,6 +80,63 @@ class FoliaAdmissionTests(unittest.TestCase):
                          [b["id"] for b in result["known_source_blockers"]])
         self.assertFalse(result["folia_load_admission"])
 
+    def test_teleport_async_inside_quit_does_not_clear_folia_blocker(self):
+        self.write_metadata("folia-supported: true\n")
+        self.write_source("integration/RoseChatInboundBridgeIntegration.java",
+                          "safe global scheduler")
+        self.write_source("staff/StaffStateCodec.java", "player.teleportAsync(destination)")
+        self.write_source("staff/StaffModeManager.java",
+                          "public void onQuit(PlayerQuitEvent event) {\n"
+                          " player.teleportAsync(savedLocation);\n"
+                          "}\n")
+        result = audit.inspect(self.root)
+        self.assertEqual(["quit_event_teleport"],
+                         [b["id"] for b in result["known_source_blockers"]])
+        self.assertFalse(result["folia_load_admission"])
+        self.assertFalse(result["folia_runtime_verified"])
+
+    def test_synchronous_teleport_inside_quit_is_also_blocked(self):
+        self.write_metadata("folia-supported: true\n")
+        self.write_source("integration/RoseChatInboundBridgeIntegration.java",
+                          "safe global scheduler")
+        self.write_source("staff/StaffStateCodec.java", "safe restored state")
+        self.write_source("staff/StaffModeManager.java",
+                          "public void onQuit(PlayerQuitEvent event) {\n"
+                          " player.teleport(savedLocation);\n"
+                          "}\n")
+        result = audit.inspect(self.root)
+        self.assertIn("quit_event_teleport",
+                      [b["id"] for b in result["known_source_blockers"]])
+        self.assertFalse(result["folia_load_admission"])
+
+    def test_renamed_quit_event_parameter_cannot_hide_teleport_async(self):
+        self.write_metadata("folia-supported: true\n")
+        self.write_source("integration/RoseChatInboundBridgeIntegration.java",
+                          "safe global scheduler")
+        self.write_source("staff/StaffStateCodec.java", "safe restored state")
+        self.write_source("staff/StaffModeManager.java",
+                          "public void onQuit(final PlayerQuitEvent quitEvent) {\n"
+                          " quitEvent . getPlayer ( ) . teleportAsync (savedLocation);\n"
+                          "}\n")
+        report = audit.inspect(self.root)
+        self.assertIn("quit_event_teleport",
+                      [item["id"] for item in report["known_source_blockers"]])
+        self.assertFalse(report["folia_load_admission"])
+
+    def test_renamed_quit_event_parameter_cannot_hide_sync_teleport(self):
+        self.write_metadata("folia-supported: true\n")
+        self.write_source("integration/RoseChatInboundBridgeIntegration.java",
+                          "safe global scheduler")
+        self.write_source("staff/StaffStateCodec.java", "safe restored state")
+        self.write_source("staff/StaffModeManager.java",
+                          "public void onQuit(PlayerQuitEvent departure) {\n"
+                          " departure.getPlayer().teleport(savedLocation);\n"
+                          "}\n")
+        report = audit.inspect(self.root)
+        self.assertEqual(["quit_event_teleport"],
+                         [item["id"] for item in report["known_source_blockers"]])
+        self.assertFalse(report["folia_load_admission"])
+
     def test_multiline_legacy_scheduler_still_detected(self):
         self.write_source("integration/RoseChatInboundBridgeIntegration.java",
                           "task -> plugin.getServer()\n .getScheduler()\n .runTask(plugin, task)")
