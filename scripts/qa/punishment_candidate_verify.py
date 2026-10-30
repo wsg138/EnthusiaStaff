@@ -35,8 +35,10 @@ CLOCK_GRACE_SECONDS = 1.0
 
 
 def gradle_command(root: Path) -> list[str]:
-    """Fixed read-only-source test/build tasks, without runtime integration tasks."""
+    """Use only the local, non-symlink Gradle wrapper and fixed offline tasks."""
     executable = root / ("gradlew.bat" if sys.platform == "win32" else "gradlew")
+    if not executable.is_file() or executable.is_symlink():
+        raise EvidenceError("Missing or symlinked Gradle wrapper; refusing candidate execution")
     return [str(executable), "--offline", "--no-daemon", "--rerun-tasks", *GRADLE_TASKS]
 
 
@@ -88,7 +90,11 @@ def build_and_verify(root: Path, *, timeout_seconds: int = 1200) -> dict:
     command = gradle_command(root)
     started = time.time()
     try:
-        result = subprocess.run(command, cwd=root, check=False, timeout=timeout_seconds)
+        # Intentional offline build execution: argv is an immutable task allowlist,
+        # shell is disabled and the wrapper is checked inside a clean checkout.
+        # An explicit checkout root is a trust boundary, not arbitrary shell input.
+        result = subprocess.run(command, cwd=root, check=False, shell=False,
+                                timeout=timeout_seconds)  # nosemgrep: python.lang.security.audit.dangerous-subprocess-use-audit,python.lang.security.audit.dangerous-subprocess-use-tainted-env-args
     except (OSError, subprocess.SubprocessError) as exc:
         raise EvidenceError(f"Offline Gradle candidate build unavailable: {exc}") from exc
     if result.returncode != 0:
