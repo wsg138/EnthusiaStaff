@@ -17,7 +17,7 @@ jobs:
       - name: Read exact-head Codacy annotations
         env:
           GH_TOKEN: ${{ github.token }}
-          HEAD_SHA: "b3cd0afa190ac7bedb24cc5677028ba9a80a1c58"
+          HEAD_SHA: "d39462dec81c1bff499160f369e5a6e6d8eb6b55"
         shell: bash
         run: |
           set -Eeuo pipefail
@@ -63,7 +63,7 @@ jobs:
         shell: bash
         run: |
           set -Eeuo pipefail
-          base="https://api.codacy.com/api/v3/analysis/organizations/gh/wsg138/repositories/EnthusiaStaff/pull-requests/767/issues?limit=100&status=new"
+          base="https://api.codacy.com/api/v3/analysis/organizations/gh/wsg138/repositories/EnthusiaStaff/pull-requests/768/issues?limit=100&status=new"
           for cursor in 1 2; do
             url="$base"
             if [ "$cursor" = "2" ]; then url="$base&cursor=2"; fi
