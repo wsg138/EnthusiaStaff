@@ -14,6 +14,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicReference;
 import net.dv8tion.jda.api.Permission;
 import net.dv8tion.jda.api.entities.Guild;
+import net.dv8tion.jda.api.entities.Member;
 import net.dv8tion.jda.api.entities.Message;
 import net.dv8tion.jda.api.entities.PermissionOverride;
 import net.dv8tion.jda.api.entities.Role;
@@ -152,11 +153,26 @@ final class JdaPrivateReportNotificationTransportTest {
     }
 
     private static Guild syntheticGuild(Role publicRole, Role staffRole) {
+        return syntheticGuild(publicRole, staffRole, true, true);
+    }
+
+    private static Guild syntheticGuild(
+            Role publicRole, Role staffRole, boolean botCanView, boolean botCanSend) {
+        var self = proxy(Member.class, (instance, method, args) -> {
+            if ("hasPermission".equals(method.getName())) {
+                var requested = (Permission[]) args[1];
+                return java.util.Arrays.stream(requested).allMatch(permission ->
+                        (permission == Permission.VIEW_CHANNEL && botCanView)
+                        || (permission == Permission.MESSAGE_SEND && botCanSend));
+            }
+            throw new AssertionError(method.getName());
+        });
         return proxy(Guild.class, (instance, method, args) -> switch (method.getName()) {
             case "getId" -> GUILD;
             case "getRoleById" -> staffRole;
             case "getPublicRole" -> publicRole;
             case "getRoles" -> List.of();
+            case "getSelfMember" -> self;
             default -> throw new AssertionError(method.getName());
         });
     }
@@ -224,6 +240,15 @@ final class JdaPrivateReportNotificationTransportTest {
         assertFalse(sender.verify().eligible());
         assertEquals(PrivateReportNotificationDispatcher.DeliveryReceipt.uncertain(),
                 sender.send("Synthetic private report text"));
+    }
+
+    @Test
+    void staffRoleAccessWithoutBotViewOrSendPermissionCannotLeaseOrSend() {
+        var publicRole = syntheticRole(false);
+        var staffRole = syntheticRole(true);
+        assertPrivateSendBlocked(syntheticGuild(publicRole, staffRole, false, true));
+        assertPrivateSendBlocked(syntheticGuild(publicRole, staffRole, true, false));
+        assertPrivateSendBlocked(syntheticGuild(publicRole, staffRole, false, false));
     }
 
     @Test
