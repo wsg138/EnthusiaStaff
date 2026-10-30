@@ -12,8 +12,8 @@
 - Strictly requires exact legacy version and exact four-step `evasion.ban` block.
 - Constructs the proposed result by changing **only** the legacy version line and `evasion.ban` block. Proceeds only if resulting bytes equal the exact trusted repository candidate YAML. No other installed customization may be overwritten.
 - **Explicit apply** requires both `--apply` and `--expected-sha256` matching the installed SHA reported by dry-run. Rechecks source bytes before writing.
-- Creates an **exclusive, fsynced recovery backup beside the installed file** before a temporary-file-plus-`os.replace` atomic update. Refuses to replace an existing recovery backup and verifies post-update exact bytes.
-- Refuses symlinks, wrong path equality, unexpected version/ladder, missing reason IDs and divergent policies. Already-migrated identical content is a no-op.
+- Creates an **exclusive, fsynced and verified recovery backup beside the installed file** before a temporary-file-plus-`os.replace` atomic update. Deletes a newly created incomplete backup after a recoverable write/sync error, retains a complete backup after a failed replacement, and refuses to overwrite any existing backup. On supported POSIX filesystems, fsyncs containing directories after creating the backup and replacing the policy. Verifies exact post-write bytes.
+- Refuses symlinks, wrong path equality, unexpected version/ladder, missing reason IDs and divergent policies. Refuses to replace the installed policy if the staged file's POSIX user/group ownership differs from the original; use the existing server file owner for the migration. Preserves the original POSIX permission bits. Already-migrated identical content is a no-op.
 - The script is **not concurrency-safe against arbitrary other writers during the last byte check and replace**. Stop or isolate the server/plugin and coordinate all operators before applying. Do not run it while policy files may be edited by an independent process.
 
 ## Staging-only example
