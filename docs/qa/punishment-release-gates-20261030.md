@@ -192,6 +192,14 @@ Created independent [draft PR #765](https://github.com/wsg138/EnthusiaStaff/pull
 - CodeRabbit was manually requested for #770 but was **rate-limited**; no independent new CodeRabbit approval exists. Manual review should include untrusted media/path handling and the limits of self-attestation.
 - Real Java and Geyser/Bedrock GUI client acceptance remains **0/39 observed**, not a passed quality gate. Passing code/tests only ensures the future evidence validator fails closed. Staging server, actual clients, reviewed footage and approved server rollout plan remain prerequisites.
 
+## Existing TEST environment and guided client test preparation — 2026-10-30
+
+- [Draft PR #770](https://github.com/wsg138/EnthusiaStaff/pull/770) exact earlier head `fe702bfc3c4c3a8fc8fe1b4fdad571968ac339ea`: Codacy cleared with zero new issues, Sentinel success, and the dedicated client evidence test suite **19/19 PASS** (15 validation and 4 blocked-manifest generator tests). The broad Coverage workflow was still running when inspected; do not infer its result.
+- Subsequent [PR #770](https://github.com/wsg138/EnthusiaStaff/pull/770) head `f4cdbc5e72ff7ed8c3867d581422345e10e731db` improves the generated manifest with **source-derived per-scenario A01–A20 test instructions** (all 39 cases remain BLOCKED by default), adds a mapping regression test, and updates the staging guide with a read-only TEST-site assessment. Exact-head CI and Codacy must be checked afresh; older passes do not transfer automatically.
+- A read-only SFTP inspection of `bloom-test1` found hundreds of existing plugin entries, multiple other projects' `UNMERGED-TEST` JARs, a TEST README for a different Market release and a Leaf-based server installation. It is a **shared and possibly active TEST host, not proven isolated for punishment GUI/ban experiments**. No SFTP write, plugin load, restart or live config modification was made.
+- **Do not deploy to `bloom-test1` solely because it is called TEST.** First reserve or provision a dedicated disposable Paper environment, isolate StaffBot/proxy/durable database/webhooks/permissions, verify actual Java and Bedrock connections, use throwaway targets and obtain explicit staging authorization.
+- The 39 real client observations remain **NOT RUN**. No automated media integrity test can substitute for independently witnessed gameplay or prove that self-attested captures are authentic.
+
 ## Near-term worker queue
 
 - **P0:** Reconcile [#754](https://github.com/wsg138/EnthusiaStaff/pull/754) with newer checked-out/unpublished punishment fixes and establish a single candidate SHA without changing main or live systems.
