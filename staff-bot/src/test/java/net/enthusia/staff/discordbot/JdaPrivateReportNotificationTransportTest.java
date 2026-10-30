@@ -9,6 +9,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.lang.reflect.Proxy;
 import java.util.List;
 import java.util.EnumSet;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicReference;
 import net.dv8tion.jda.api.Permission;
@@ -38,6 +39,12 @@ final class JdaPrivateReportNotificationTransportTest {
                 Thread.currentThread().getContextClassLoader(),
                 new Class<?>[]{JDA.class},
                 (proxy, method, args) -> {
+                    if ("getStatus".equals(method.getName())) {
+                        return JDA.Status.CONNECTED;
+                    }
+                    if ("getUnavailableGuilds".equals(method.getName())) {
+                        return Set.of();
+                    }
                     if ("getTextChannelById".equals(method.getName())) {
                         return null;
                     }
@@ -159,6 +166,9 @@ final class JdaPrivateReportNotificationTransportTest {
             if ("getGuild".equals(method.getName())) {
                 return guild;
             }
+            if ("getId".equals(method.getName())) {
+                return CHANNEL;
+            }
             if ("getMemberPermissionOverrides".equals(method.getName())) {
                 return List.of();
             }
@@ -185,7 +195,15 @@ final class JdaPrivateReportNotificationTransportTest {
 
     private static JDA syntheticApi(
             TextChannel channel, SelfUser selfUser, EnumSet<CacheFlag> cacheFlags) {
+        return syntheticApi(channel, selfUser, cacheFlags, JDA.Status.CONNECTED, Set.of());
+    }
+
+    private static JDA syntheticApi(
+            TextChannel channel, SelfUser selfUser, EnumSet<CacheFlag> cacheFlags,
+            JDA.Status status, Set<String> unavailableGuilds) {
         return proxy(JDA.class, (instance, method, args) -> switch (method.getName()) {
+            case "getStatus" -> status;
+            case "getUnavailableGuilds" -> unavailableGuilds;
             case "getTextChannelById" -> channel;
             case "getCacheFlags" -> cacheFlags;
             case "getSelfUser" -> selfUser;
@@ -244,11 +262,56 @@ final class JdaPrivateReportNotificationTransportTest {
             if ("getGuild".equals(method.getName())) {
                 return guild;
             }
+            if ("getId".equals(method.getName())) {
+                return CHANNEL;
+            }
             if ("getMemberPermissionOverrides".equals(method.getName())) {
                 return overrides;
             }
             throw new AssertionError("Private channel must not be used: " + method.getName());
         });
+    }
+
+    @Test
+    void disconnectedGatewayAndUnavailableGuildCannotSendFromCachedPermissions() {
+        var guild = syntheticGuild(syntheticRole(false), syntheticRole(true));
+        var staleChannel = neverSendChannel(guild, List.of());
+        var cache = EnumSet.of(CacheFlag.MEMBER_OVERRIDES);
+        var disconnected = new JdaPrivateReportNotificationTransport(
+                syntheticApi(staleChannel, syntheticSelfUser(), cache,
+                        JDA.Status.DISCONNECTED, Set.of()),
+                GUILD, CHANNEL, STAFF_ROLE, true);
+        assertFalse(disconnected.verify().eligible());
+        assertEquals(PrivateReportNotificationDispatcher.DeliveryReceipt.uncertain(),
+                disconnected.send("Must not send while Discord is offline"));
+
+        var guildUnavailable = new JdaPrivateReportNotificationTransport(
+                syntheticApi(staleChannel, syntheticSelfUser(), cache,
+                        JDA.Status.CONNECTED, Set.of(GUILD)),
+                GUILD, CHANNEL, STAFF_ROLE, true);
+        assertFalse(guildUnavailable.verify().eligible());
+        assertEquals(PrivateReportNotificationDispatcher.DeliveryReceipt.uncertain(),
+                guildUnavailable.send("Must not send to an unavailable guild"));
+    }
+
+    @Test
+    void mismatchedCachedChannelIdCannotReceivePrivateReportText() {
+        var guild = syntheticGuild(syntheticRole(false), syntheticRole(true));
+        var wrongChannel = proxy(TextChannel.class, (instance, method, args) -> {
+            if ("getId".equals(method.getName())) {
+                return "923456789012345678";
+            }
+            if ("getGuild".equals(method.getName())) {
+                return guild;
+            }
+            throw new AssertionError("Mismatched channel must not be used: " + method.getName());
+        });
+        var sender = new JdaPrivateReportNotificationTransport(
+                syntheticApi(wrongChannel, syntheticSelfUser()),
+                GUILD, CHANNEL, STAFF_ROLE, true);
+        assertFalse(sender.verify().eligible());
+        assertEquals(PrivateReportNotificationDispatcher.DeliveryReceipt.uncertain(),
+                sender.send("Must not send to another channel"));
     }
 
     @Test
