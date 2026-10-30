@@ -209,6 +209,14 @@ Created independent [draft PR #765](https://github.com/wsg138/EnthusiaStaff/pull
 - PR #770 latest exact earlier head `f4cdbc5e72ff7ed8c3867d581422345e10e731db` passed the focused **20/20** evidence-contract and generator suite and Sentinel, with Codacy **0 new issues**. Its aggregate Coverage workflow remained in progress at last read. PR #771 exact-head runtime results were **still running** when this checkpoint was written; do not transfer a test pass from another SHA.
 - No production JAR, server, database, config or punishment policy was modified. PR #771 remains DRAFT/NO-GO, and no full release authorization is implied.
 
+## CI completion and isolated GUI bootstrapping finding — 2026-10-30
+
+- **[Draft PR #770](https://github.com/wsg138/EnthusiaStaff/pull/770) fully green at head `f4cdbc5e72ff7ed8c3867d581422345e10e731db`:** exact-head Coverage, Sentinel, and the dedicated 20/20 GUI evidence-contract/generator tests all SUCCESS; Codacy reports zero new issues. This is evidence tool certification only, **not** any of the 39 real-client acceptance observations.
+- **[Draft PR #771](https://github.com/wsg138/EnthusiaStaff/pull/771)** adds a real disposable Paper/Java-protocol picker smoke. Its initial exact commit `a09d43ef7920389813d7a3044b516d48dc4b22bf` **FAILED**. The test client joined but no GUI window arrived. Downloaded workflow artifact shows `PUNISH_COMMAND_ACCEPTED=true` and `FAIL=expected_target_picker_not_open`. Actual Paper server log confirms **required database environment variables were missing; destructive actions disabled**, followed by **freeze storage unavailable; joining player remains restricted**. The runtime was correctly fail-closed; no user data was lost and no sanction was issued.
+- CI harness was subsequently corrected to use an **ephemeral MariaDB 11.8.3 GitHub Actions service bound to localhost** with fixed disposable credentials and actual schema/bootstrap. This preserves the production authorization and freeze guards rather than bypassing them. The amended exact head `b8b24e2351371d1b9bf07cbd3c03ec249ee6a3f3` was running when this note was written; no smoke PASS has yet been claimed.
+- Both versions require a 54-slot `PunishmentTargetPickerHolder` actual Paper inventory and a matching 54-slot Mineflayer Java protocol window packet. This limited automated protocol smoke is **not** a human Java or Bedrock test. The 39 human acceptance observations remain **NOT RUN**.
+- This experiment uses ephemeral GitHub runners only, not `bloom-test1`, live SMP, any shared DB, or actual moderation accounts. Do not deploy or merge based solely on the isolated smoke.
+
 ## Near-term worker queue
 
 - **P0:** Reconcile [#754](https://github.com/wsg138/EnthusiaStaff/pull/754) with newer checked-out/unpublished punishment fixes and establish a single candidate SHA without changing main or live systems.
