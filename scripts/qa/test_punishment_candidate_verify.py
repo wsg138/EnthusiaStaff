@@ -17,6 +17,9 @@ class PunishmentCandidateVerificationTests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
+        self.wrapper = self.root / ("gradlew.bat" if candidate.sys.platform == "win32" else "gradlew")
+        self.wrapper.write_text("fake test-only Gradle wrapper")
+        self.wrapper.chmod(0o755)
         self.reports = []
         for module in ("domain", "paper", "staff-bot", "velocity"):
             p = self.root / module / "build/test-results/test/TEST-Example.xml"
@@ -55,6 +58,19 @@ class PunishmentCandidateVerificationTests(unittest.TestCase):
         # This fixture has no git metadata; it must not imply an exact candidate HEAD.
         with self.assertRaises(candidate.EvidenceError):
             candidate.assert_exact_source_identity(self.root)
+
+    def test_missing_or_symlinked_wrapper_cannot_be_executed(self):
+        self.wrapper.unlink()
+        with self.assertRaises(candidate.EvidenceError):
+            candidate.gradle_command(self.root)
+        outside = self.root / "outside"
+        outside.write_text("not a wrapper")
+        try:
+            self.wrapper.symlink_to(outside)
+        except (OSError, NotImplementedError):
+            self.skipTest("Symlinks are unavailable in the test environment")
+        with self.assertRaises(candidate.EvidenceError):
+            candidate.gradle_command(self.root)
 
     def test_run_invocation_uses_offline_no_daemon_rerun_tasks_and_never_integration_execution(self):
         args = candidate.gradle_command(self.root)
