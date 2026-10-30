@@ -24,6 +24,9 @@ function fail (reason) {
   bot.quit()
 }
 bot.on('spawn', () => console.log('GUI_CLIENT_SPAWN=true'))
+bot.on('messagestr', message => {
+  console.log('GUI_CLIENT_MESSAGE=' + String(message).replace(/[\\r\\n]/g, ' ').slice(0, 350))
+})
 bot.on('windowOpen', window => {
   const title = typeof window.title === 'string' ? window.title : JSON.stringify(window.title)
   console.log('GUI_PACKET_OPEN|inventoryStart=' + String(window.inventoryStart) +
