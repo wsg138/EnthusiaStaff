@@ -46,6 +46,12 @@ final class JdaPrivateReportNotificationTransport
             return denied();
         }
         try {
+            // Cached channel permissions are not authoritative while the gateway
+            // is disconnected or the destination guild is unavailable.
+            if (jda.getStatus() != JDA.Status.CONNECTED
+                    || jda.getUnavailableGuilds().contains(guildId)) {
+                return denied();
+            }
             return verifyChannel(jda.getTextChannelById(channelId));
         } catch (RuntimeException unavailable) {
             return denied();
@@ -58,8 +64,19 @@ final class JdaPrivateReportNotificationTransport
             return denied();
         }
         try {
-            if (channel == null || !channel.getGuild().getId().equals(guildId)
+            if (jda.getStatus() != JDA.Status.CONNECTED
+                    || jda.getUnavailableGuilds().contains(guildId)
+                    || channel == null || !channelId.equals(channel.getId())
+                    || !channel.getGuild().getId().equals(guildId)
                     || !jda.getCacheFlags().contains(CacheFlag.MEMBER_OVERRIDES)) {
+                return denied();
+            }
+            // Refuse to lease work unless the actual StaffBot account can
+            // both read the approved channel and post a plain-text message.
+            // Staff-role visibility alone does not establish bot readiness.
+            var self = channel.getGuild().getSelfMember();
+            if (self == null || !self.hasPermission(
+                    channel, Permission.VIEW_CHANNEL, Permission.MESSAGE_SEND)) {
                 return denied();
             }
             Role staffRole = channel.getGuild().getRoleById(staffRoleId);

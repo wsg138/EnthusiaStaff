@@ -9,10 +9,13 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.lang.reflect.Proxy;
 import java.util.List;
 import java.util.EnumSet;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.atomic.AtomicBoolean;
 import net.dv8tion.jda.api.Permission;
 import net.dv8tion.jda.api.entities.Guild;
+import net.dv8tion.jda.api.entities.SelfMember;
 import net.dv8tion.jda.api.entities.Message;
 import net.dv8tion.jda.api.entities.PermissionOverride;
 import net.dv8tion.jda.api.entities.Role;
@@ -38,6 +41,12 @@ final class JdaPrivateReportNotificationTransportTest {
                 Thread.currentThread().getContextClassLoader(),
                 new Class<?>[]{JDA.class},
                 (proxy, method, args) -> {
+                    if ("getStatus".equals(method.getName())) {
+                        return JDA.Status.CONNECTED;
+                    }
+                    if ("getUnavailableGuilds".equals(method.getName())) {
+                        return Set.of();
+                    }
                     if ("getTextChannelById".equals(method.getName())) {
                         return null;
                     }
@@ -145,11 +154,33 @@ final class JdaPrivateReportNotificationTransportTest {
     }
 
     private static Guild syntheticGuild(Role publicRole, Role staffRole) {
+        return syntheticGuild(publicRole, staffRole, true, true);
+    }
+
+    private static Guild syntheticGuild(
+            Role publicRole, Role staffRole, boolean botCanView, boolean botCanSend) {
+        return syntheticGuild(publicRole, staffRole, () -> botCanView, () -> botCanSend);
+    }
+
+    private static Guild syntheticGuild(
+            Role publicRole, Role staffRole,
+            java.util.function.BooleanSupplier botCanView,
+            java.util.function.BooleanSupplier botCanSend) {
+        var self = proxy(SelfMember.class, (instance, method, args) -> {
+            if ("hasPermission".equals(method.getName())) {
+                var requested = (Permission[]) args[1];
+                return java.util.Arrays.stream(requested).allMatch(permission ->
+                        (permission == Permission.VIEW_CHANNEL && botCanView.getAsBoolean())
+                        || (permission == Permission.MESSAGE_SEND && botCanSend.getAsBoolean()));
+            }
+            throw new AssertionError(method.getName());
+        });
         return proxy(Guild.class, (instance, method, args) -> switch (method.getName()) {
             case "getId" -> GUILD;
             case "getRoleById" -> staffRole;
             case "getPublicRole" -> publicRole;
             case "getRoles" -> List.of();
+            case "getSelfMember" -> self;
             default -> throw new AssertionError(method.getName());
         });
     }
@@ -158,6 +189,9 @@ final class JdaPrivateReportNotificationTransportTest {
         return proxy(TextChannel.class, (instance, method, args) -> {
             if ("getGuild".equals(method.getName())) {
                 return guild;
+            }
+            if ("getId".equals(method.getName())) {
+                return CHANNEL;
             }
             if ("getMemberPermissionOverrides".equals(method.getName())) {
                 return List.of();
@@ -185,7 +219,15 @@ final class JdaPrivateReportNotificationTransportTest {
 
     private static JDA syntheticApi(
             TextChannel channel, SelfUser selfUser, EnumSet<CacheFlag> cacheFlags) {
+        return syntheticApi(channel, selfUser, cacheFlags, JDA.Status.CONNECTED, Set.of());
+    }
+
+    private static JDA syntheticApi(
+            TextChannel channel, SelfUser selfUser, EnumSet<CacheFlag> cacheFlags,
+            JDA.Status status, Set<String> unavailableGuilds) {
         return proxy(JDA.class, (instance, method, args) -> switch (method.getName()) {
+            case "getStatus" -> status;
+            case "getUnavailableGuilds" -> unavailableGuilds;
             case "getTextChannelById" -> channel;
             case "getCacheFlags" -> cacheFlags;
             case "getSelfUser" -> selfUser;
@@ -206,6 +248,31 @@ final class JdaPrivateReportNotificationTransportTest {
         assertFalse(sender.verify().eligible());
         assertEquals(PrivateReportNotificationDispatcher.DeliveryReceipt.uncertain(),
                 sender.send("Synthetic private report text"));
+    }
+
+    @Test
+    void staffRoleAccessWithoutBotViewOrSendPermissionCannotLeaseOrSend() {
+        var publicRole = syntheticRole(false);
+        var staffRole = syntheticRole(true);
+        assertPrivateSendBlocked(syntheticGuild(publicRole, staffRole, false, true));
+        assertPrivateSendBlocked(syntheticGuild(publicRole, staffRole, true, false));
+        assertPrivateSendBlocked(syntheticGuild(publicRole, staffRole, false, false));
+    }
+
+    @Test
+    void revokingBotSendPermissionAfterPreflightStopsDelivery() {
+        var canSend = new AtomicBoolean(true);
+        var guild = syntheticGuild(syntheticRole(false), syntheticRole(true),
+                () -> true, canSend::get);
+        var channel = neverSendChannel(guild, List.of());
+        var sender = new JdaPrivateReportNotificationTransport(
+                syntheticApi(channel, syntheticSelfUser()),
+                GUILD, CHANNEL, STAFF_ROLE, true);
+
+        assertTrue(sender.verify().eligible());
+        canSend.set(false);
+        assertEquals(PrivateReportNotificationDispatcher.DeliveryReceipt.uncertain(),
+                sender.send("Must not send after bot permission revocation"));
     }
 
     @Test
@@ -244,11 +311,56 @@ final class JdaPrivateReportNotificationTransportTest {
             if ("getGuild".equals(method.getName())) {
                 return guild;
             }
+            if ("getId".equals(method.getName())) {
+                return CHANNEL;
+            }
             if ("getMemberPermissionOverrides".equals(method.getName())) {
                 return overrides;
             }
             throw new AssertionError("Private channel must not be used: " + method.getName());
         });
+    }
+
+    @Test
+    void disconnectedGatewayAndUnavailableGuildCannotSendFromCachedPermissions() {
+        var guild = syntheticGuild(syntheticRole(false), syntheticRole(true));
+        var staleChannel = neverSendChannel(guild, List.of());
+        var cache = EnumSet.of(CacheFlag.MEMBER_OVERRIDES);
+        var disconnected = new JdaPrivateReportNotificationTransport(
+                syntheticApi(staleChannel, syntheticSelfUser(), cache,
+                        JDA.Status.DISCONNECTED, Set.of()),
+                GUILD, CHANNEL, STAFF_ROLE, true);
+        assertFalse(disconnected.verify().eligible());
+        assertEquals(PrivateReportNotificationDispatcher.DeliveryReceipt.uncertain(),
+                disconnected.send("Must not send while Discord is offline"));
+
+        var guildUnavailable = new JdaPrivateReportNotificationTransport(
+                syntheticApi(staleChannel, syntheticSelfUser(), cache,
+                        JDA.Status.CONNECTED, Set.of(GUILD)),
+                GUILD, CHANNEL, STAFF_ROLE, true);
+        assertFalse(guildUnavailable.verify().eligible());
+        assertEquals(PrivateReportNotificationDispatcher.DeliveryReceipt.uncertain(),
+                guildUnavailable.send("Must not send to an unavailable guild"));
+    }
+
+    @Test
+    void mismatchedCachedChannelIdCannotReceivePrivateReportText() {
+        var guild = syntheticGuild(syntheticRole(false), syntheticRole(true));
+        var wrongChannel = proxy(TextChannel.class, (instance, method, args) -> {
+            if ("getId".equals(method.getName())) {
+                return "923456789012345678";
+            }
+            if ("getGuild".equals(method.getName())) {
+                return guild;
+            }
+            throw new AssertionError("Mismatched channel must not be used: " + method.getName());
+        });
+        var sender = new JdaPrivateReportNotificationTransport(
+                syntheticApi(wrongChannel, syntheticSelfUser()),
+                GUILD, CHANNEL, STAFF_ROLE, true);
+        assertFalse(sender.verify().eligible());
+        assertEquals(PrivateReportNotificationDispatcher.DeliveryReceipt.uncertain(),
+                sender.send("Must not send to another channel"));
     }
 
     @Test
