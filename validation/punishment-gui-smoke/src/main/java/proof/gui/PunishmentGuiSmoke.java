@@ -34,10 +34,13 @@ public final class PunishmentGuiSmoke extends JavaPlugin implements Listener {
     private static final String EXPECTED_HOLDER = "PunishmentTargetPickerHolder";
     private static final int REFRESH_SLOT = 49;
     private static final int CLOSE_SLOT = 51;
+    private static final int TARGET_HEAD_SLOT = 9;
+    private static final String TEST_TARGET = "GuiTarget";
     private final AtomicBoolean started = new AtomicBoolean();
     private final AtomicBoolean staffAttempted = new AtomicBoolean();
     private final AtomicInteger pickerOpens = new AtomicInteger();
     private final AtomicBoolean closeControlClicked = new AtomicBoolean();
+    private final AtomicBoolean targetHeadClicked = new AtomicBoolean();
     private UUID targetId;
 
     @Override
@@ -126,6 +129,31 @@ public final class PunishmentGuiSmoke extends JavaPlugin implements Listener {
                 marker("FAIL=expected_target_picker_not_open");
             }
         }, 310L);
+        Bukkit.getScheduler().runTaskLater(this, () -> {
+            Player disposableTarget = getServer().getPlayerExact(TEST_TARGET);
+            if (!player.isOnline() || disposableTarget == null || !disposableTarget.isOnline()
+                    || getServer().getOnlinePlayers().size() != 2) {
+                marker("FAIL=dedicated_target_not_connected");
+                return;
+            }
+            marker("DEDICATED_TARGET_ONLINE=true");
+            marker("TARGET_PICKER_REOPEN_HANDLED=" + player.performCommand("punish"));
+        }, 370L);
+        Bukkit.getScheduler().runTaskLater(this, () -> {
+            if (!player.isOnline()
+                    || !targetHeadClicked.get()) {
+                marker("FAIL=target_head_not_clicked");
+                return;
+            }
+            Inventory top = player.getOpenInventory().getTopInventory();
+            String title = PlainTextComponentSerializer.plainText()
+                    .serialize(player.getOpenInventory().title());
+            if (!"PunishmentGuiHolder".equals(holderName(top))
+                    || top.getSize() != EXPECTED_TOP_SLOTS
+                    || !title.contains(TEST_TARGET)) {
+                marker("FAIL=target_categories_not_open");
+            }
+        }, 520L);
     }
 
     @EventHandler(priority = EventPriority.MONITOR)
@@ -137,6 +165,14 @@ public final class PunishmentGuiSmoke extends JavaPlugin implements Listener {
         String title = PlainTextComponentSerializer.plainText().serialize(event.getView().title());
         marker("INVENTORY_OPEN|title=" + title.replace('\n', ' ') + "|size=" + top.getSize()
                 + "|holder=" + holderName(top));
+        if ("PunishmentGuiHolder".equals(holderName(top))) {
+            if (!targetHeadClicked.get() || !title.contains(TEST_TARGET)
+                    || top.getSize() != EXPECTED_TOP_SLOTS) {
+                marker("FAIL=unapproved_category_navigation");
+            } else {
+                marker("TARGET_CATEGORIES_OPEN=true");
+            }
+        }
         if (expected(top)) {
             if (!staffAttempted.get()) {
                 marker("FAIL=off_duty_picker_open");
@@ -173,6 +209,17 @@ public final class PunishmentGuiSmoke extends JavaPlugin implements Listener {
             }
             closeControlClicked.set(true);
             marker("CLOSE_CLICK_OBSERVED=true");
+        } else if (slot == TARGET_HEAD_SLOT && closeControlClicked.get()
+                && pickerOpens.get() == 3) {
+            if (getServer().getOnlinePlayers().size() != 2
+                    || getServer().getPlayerExact(TEST_TARGET) == null
+                    || event.getCurrentItem() == null
+                    || event.getCurrentItem().getType() != Material.PLAYER_HEAD) {
+                marker("FAIL=disposable_target_head_not_verified");
+                return;
+            }
+            targetHeadClicked.set(true);
+            marker("TARGET_HEAD_CLICK_OBSERVED=true");
         } else {
             marker("FAIL=unapproved_picker_slot_clicked");
         }
