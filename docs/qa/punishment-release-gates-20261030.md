@@ -184,6 +184,14 @@ Created independent [draft PR #765](https://github.com/wsg138/EnthusiaStaff/pull
 - PR #770's branch was updated with a two-parent integration commit incorporating PR #769's reviewed scanner fixes; it retains only four QA/doc-specific changed files relative to the updated base. Diagnostic PR #766 was again **closed unmerged**.
 - **No real Java/Bedrock gameplay acceptance was performed** in any of these checks. Even checksum-matched files cannot prove a session is authentic; a human must review footage and actual isolated staging environment before any matrix PASS is accepted. Owner still needs to explicitly authorize a staging environment for live client checks. Production remains unchanged.
 
+## Exact-commit GUI evidence gate closeout — 2026-10-30
+
+- [Draft PR #769](https://github.com/wsg138/EnthusiaStaff/pull/769), head `20f4c504bd06c5e953ba3d4849ba8738c3013684`: **Coverage, Sentinel, and Folia admission-preflight workflows all SUCCESS**, plus 11/11 source-only admission tests. Folia remains blocked for staff-state restore and synchronous teleport; these are not actual Folia runtime checks.
+- [Draft PR #770](https://github.com/wsg138/EnthusiaStaff/pull/770), initial refactored source head `d77f3bc34953a46eb2b7957820bba4cd0cd4b97b`: **Coverage, Sentinel and 14/14 evidence-contract unit tests SUCCESS**, but Codacy had one remaining medium complexity finding.
+- Subsequent PR #770 head `fe702bfc3c4c3a8fc8fe1b4fdad571968ac339ea` further splits PASS validation, uses **streaming evidence SHA-256**, and provides a create-only manifest generator initialized with **all 39 rows BLOCKED**. The latest Codacy check reported **zero new issues**. New Python tests for streaming and safe template generation have been committed, but the **expanded exact-head GitHub Actions jobs were queued** at last inspection. Do not report a new test pass until completed.
+- CodeRabbit was manually requested for #770 but was **rate-limited**; no independent new CodeRabbit approval exists. Manual review should include untrusted media/path handling and the limits of self-attestation.
+- Real Java and Geyser/Bedrock GUI client acceptance remains **0/39 observed**, not a passed quality gate. Passing code/tests only ensures the future evidence validator fails closed. Staging server, actual clients, reviewed footage and approved server rollout plan remain prerequisites.
+
 ## Near-term worker queue
 
 - **P0:** Reconcile [#754](https://github.com/wsg138/EnthusiaStaff/pull/754) with newer checked-out/unpublished punishment fixes and establish a single candidate SHA without changing main or live systems.
