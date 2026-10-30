@@ -63,6 +63,12 @@ jobs:
         with:
           node-version: "22"
 
+      - name: Prove failed and inconsistent evidence cannot go green
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          (cd validation/punishment-gui-smoke && python3 -m unittest -v test_verify_evidence.py)
+
       - name: Build candidate and isolated probe
         shell: bash
         run: |
@@ -188,6 +194,8 @@ jobs:
             exit 1
           fi
           cp "$server/punishment-gui-smoke.txt" "$evidence/server-proof.txt"
+          python3 validation/punishment-gui-smoke/verify_evidence.py \
+            "$evidence/server-proof.txt" "$evidence/client.log"
           echo 'GUI_PROTOCOL_SMOKE_PASS=true' | tee "$evidence/result.txt"
 
       - name: Preserve isolated evidence
