@@ -78,6 +78,18 @@ For the exact eventual candidate commit and exact built JAR:
 7. **Decision and rollback:** Secure written owner decision on #616 (including versioned policy/profile, allowed class/tier/duration changes, manual-review-only channels). Capture rollback procedure with startup, migrations, fail-safe guided OFF, original artifact/config retention, and validation of no unintended sanctions after rollback.
 8. **Operator gate:** Only after all acceptance records are signed off may a **separate, explicit** authorized deploy/restart/enablement change be considered. Passing tests or merging a draft is never implicit deployment authorization.
 
+## Mainline divergence and merge overlap preflight — 2026-10-30
+
+A read-only GitHub three-way ancestry/file comparison used shared ancestor `081ca8a86958499183bcfe20d255d67f57a301d5`, current main `2fa08f0e3a86d34afdf040a864f60959e6bc6370`, and the review-only stacked candidate [#763](https://github.com/wsg138/EnthusiaStaff/pull/763) head `c0efe498acc7fee489a238122c75ae02c4e5e45c` (stacked on #762/#754).
+
+- **151 candidate-only commits** and **33 main-only commits**; candidate modifies 164 paths since merge base, main 96.
+- **Two overlapping paths by file name** (overlap does not establish an actual textual merge conflict):
+  1. `paper/src/main/java/net/enthusia/staff/paper/EnthusiaStaffPaperPlugin.java`. Main changes the StaffBot bridge wiring/authority predicate near original line 672; candidate adds the shared punishment approval announcement observer near line 523 and one import. Preserve both; the edits are in different sections.
+  2. `paper/src/main/java/net/enthusia/staff/paper/integration/InteractiveChatStagingArtifactProvider.java`. Main has later render-liveness/expiry and inventory diagnostic changes near `snapshotAndRender`, while candidate #754 removes an unsafe global `player.isOnline()` lookup near line 264 and checks it on the owning callback near line 289. **Preserve main's newer timeout/diagnostic logic while removing the global player check.** The callback must retain the owner-thread online check and output-expiry fences; simply selecting either entire version would lose important work.
+- This is a source-level *preflight*, not a tested merge. A future integration checkout should perform a real three-way merge, inspect the exact result, regenerate tests/JARs and obtain peer review. Do **not** force a merge by taking one side wholesale.
+- #763 adds a target-UUID guard **on the entity owner** and one regression test; it is draft, not a production release. The local worker's newer `e92d780f` InteractiveChat render-future changes were intentionally **not** ported into #763 because they require separate ownership/integration verification.
+- All above comparison results refer to these pinned Git refs. Recheck if `main` or any PR head changes.
+
 ## Near-term worker queue
 
 - **P0:** Reconcile [#754](https://github.com/wsg138/EnthusiaStaff/pull/754) with newer checked-out/unpublished punishment fixes and establish a single candidate SHA without changing main or live systems.
