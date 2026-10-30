@@ -228,6 +228,14 @@ Created independent [draft PR #765](https://github.com/wsg138/EnthusiaStaff/pull
 - Important distinction: this is a **real disposable Paper server, but an automated Java protocol client**. No human Java mouse, Bedrock touch/Geyser, approval, sanction, moderation history or policy v2 path was tested. **A01–A20 acceptance remains 0/39 actually witnessed**, and Folia still is NOT supported. No production changes or punishments occurred.
 - Temporary Codacy diagnostic PR #766 was **closed unmerged** after read-only inspection.
 
+## Paper GUI protocol smoke security review and reproduction — 2026-10-30
+
+- [Draft PR #771](https://github.com/wsg138/EnthusiaStaff/pull/771) has now passed the **actual disposable Paper + MariaDB + Java protocol GUI smoke** on multiple exact heads, including `2f23148709b29940b0ca39b27dc427437c6f0bc0` ([run 41116421230](https://github.com/wsg138/EnthusiaStaff/actions/runs/41116421230)). Sentinel also passed that SHA. Test is **no-sanction** and still not a human Java/Bedrock matrix observation.
+- Read-only GH check annotation against a completed earlier PR #771 head identified its **single high Codacy issue** as workflow `.github/workflows/punishment-gui-paper-smoke.yml:57` using `gradle/actions/setup-gradle@v4`, an unpinned third-party action. It was **not** a production secret leak. [PR #771](https://github.com/wsg138/EnthusiaStaff/pull/771) now pins that action to existing audited commit `3f131e8634966bd73d06cc69884922b02e6faf92`.
+- Latest #771 source head `472714135943b1e0ee43fed15d4ddc2e763b1692` needs a **fresh exact-head** Codacy and CI pass. Never transfer prior SHA quality results or infer release readiness from a narrower smoke.
+- The test DB passwords were also changed from fixed disposable values to per-run generated CI values. The test helper refuses non-loopback, online-mode, large-player-limit or a different database URL. No live database, policy, player data or production server was modified.
+- Temporary read-only Codacy diagnostic PR #766 was closed unmerged. Folia lifecycle, production policy migration, all other severity policies and 39 real client acceptance observations remain blocked.
+
 ## Near-term worker queue
 
 - **P0:** Reconcile [#754](https://github.com/wsg138/EnthusiaStaff/pull/754) with newer checked-out/unpublished punishment fixes and establish a single candidate SHA without changing main or live systems.
