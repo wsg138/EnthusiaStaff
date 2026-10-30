@@ -236,6 +236,13 @@ Created independent [draft PR #765](https://github.com/wsg138/EnthusiaStaff/pull
 - The test DB passwords were also changed from fixed disposable values to per-run generated CI values. The test helper refuses non-loopback, online-mode, large-player-limit or a different database URL. No live database, policy, player data or production server was modified.
 - Temporary read-only Codacy diagnostic PR #766 was closed unmerged. Folia lifecycle, production policy migration, all other severity policies and 39 real client acceptance observations remain blocked.
 
+## Additional off-duty Paper punishment GUI boundary proof — 2026-10-30
+
+- A completed [PR #771](https://github.com/wsg138/EnthusiaStaff/pull/771) Codacy check pinpointed the sole remaining medium warning to **`PunishmentGuiSmoke.onEnable` complexity 9 vs limit 8**, not a production security breach. The helper's disposable-only startup checks were extracted intact into a private predicate on the current draft branch.
+- PR #771 head `9d885015f3468effd01f484df37ca51a1714eb10` adds a **non-sanctioning off-duty denial protocol regression** before the existing on-duty picker smoke: invoke `/punish` while ranked but not in Staff Mode, require the top inventory to *not* become the punishment picker, flag even brief unauthorized picker-open events, then enter authentic Staff Mode through `/staff` and require the real 54-slot server inventory + client packet. No production authorization rule was changed.
+- The new **exact-head CI/Codacy were still in progress** at ledger checkpoint. Previous exact heads conclusively proved positive on-duty picker delivery only. Do not claim the added off-duty boundary is proven until the new run has passed.
+- Temporary Codacy diagnostic PR #766 again closed without merge. All 39 actual human Java/Bedrock GUI observations are still NOT RUN. Production remains untouched and guided punishment deployment remains NO-GO.
+
 ## Near-term worker queue
 
 - **P0:** Reconcile [#754](https://github.com/wsg138/EnthusiaStaff/pull/754) with newer checked-out/unpublished punishment fixes and establish a single candidate SHA without changing main or live systems.
