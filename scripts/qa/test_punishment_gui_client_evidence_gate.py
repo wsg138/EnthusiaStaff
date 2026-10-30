@@ -9,6 +9,7 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
+from unittest import mock
 
 from scripts.qa import punishment_gui_client_evidence_gate as gate
 
@@ -116,6 +117,18 @@ class GuiClientEvidenceGateTests(unittest.TestCase):
         self.manifest["cases"][0]["media"] = "linked.png"
         with self.assertRaisesRegex(gate.EvidenceInvalid, "symlink"):
             gate.evaluate(self.manifest, self.root)
+
+    def test_large_media_digest_is_streamed_without_read_bytes(self):
+        payload = b"video evidence fixture " * 250_000
+        (self.root / "clip.mp4").write_bytes(payload)
+        for row in self.manifest["cases"]:
+            row["media"] = "clip.mp4"
+            row["media_sha256"] = sha(payload)
+        with mock.patch.object(Path, "read_bytes",
+                               side_effect=AssertionError("unbounded evidence read")):
+            passed, incomplete = gate.evaluate(self.manifest, self.root)
+        self.assertEqual(39, passed)
+        self.assertEqual([], incomplete)
 
     def test_wrong_jar_hash_rejected(self):
         self.manifest["artifact"]["sha256"] = "f" * 64
