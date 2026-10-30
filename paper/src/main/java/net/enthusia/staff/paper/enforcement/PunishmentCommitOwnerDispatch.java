@@ -37,7 +37,7 @@ final class PunishmentCommitOwnerDispatch {
             }
             boolean accepted = ownerScheduler.execute(player, () -> {
                 try {
-                    if (eligible.test(player)) {
+                    if (playerId.equals(player.getUniqueId()) && eligible.test(player)) {
                         effect.accept(player);
                     }
                 } catch (RuntimeException failure) {
