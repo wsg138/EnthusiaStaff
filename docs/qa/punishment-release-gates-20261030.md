@@ -279,6 +279,14 @@ Created independent [draft PR #765](https://github.com/wsg138/EnthusiaStaff/pull
 - [Draft PR #773](https://github.com/wsg138/EnthusiaStaff/pull/773), latest `2fa294bd70dc36fd942b882019dd82de60551a3d`: new disposable real-LuckPerms target-to-category checks are **queued**. CodeRabbit review hit the rate limit; no independent review approval. This branch remains a test harness and documentation change only.
 - The live policy stays unchanged and guided mode OFF. The 39 human Java/Bedrock observations remain NOT RUN. NO-GO for production.
 
+## Critical GUI smoke false-green corrected — 2026-10-30
+
+- [Draft PR #773](https://github.com/wsg138/EnthusiaStaff/pull/773), earlier exact run [41121215302](https://github.com/wsg138/EnthusiaStaff/actions/runs/41121215302), was reported GitHub **SUCCESS** and logged a real disposable target-head click, server `Punish · GuiTarget` categories inventory, and corresponding Java protocol packet. **This run is NOT clean acceptance**, because its server proof also contained `FAIL=expected_target_picker_not_open` at 310 ticks after the picker had correctly been closed. The helper inherited the obsolete post-close requirement from the initial picker-only smoke.
+- Root-cause investigation identified an independent **false-green workflow bug**: `! grep -F 'FAIL='` beneath `set -e` does not enforce exit on a matching line because Bash exempts negated pipelines from errexit. CI's final `GUI_PROTOCOL_SMOKE_PASS=true` was emitted despite the failure marker. Positive observed GUI evidence should be treated as narrow diagnostics, not a passing end-to-end smoke.
+- Current #773 head `3f8ee581f1341bb32ecb08fec5bd45cae7242d2e` fixes the helper's 310-tick expectation to require the picker closed and confirm the actual close event. It consumes the close control's event token exactly once. The workflow replaces negated `grep` with explicit `if grep; then exit 1; fi` checks for any server/client FAIL or linkage exception; it additionally runs a standalone strict **ordered, unique stage-marker evidence verifier** plus **10 fail-closed regression tests**.
+- **Latest source exact-head CI queued** at this checkpoint: do not call PR #773 green until the revised CI and Codacy finish. Earlier draft PR #772's successful Refresh/Close-only workflow did not show the same failure marker on a separate read-only log check, but the global negated-`grep` reliability defect warranted a permanent fix in the new branch.
+- The entire code change is **isolated CI/probe only**, not live player, plugin policy or mainline code. Human Java/Bedrock 39-case acceptance still NOT RUN; deployment remains **NO-GO**.
+
 ## Near-term worker queue
 
 - **P0:** Reconcile [#754](https://github.com/wsg138/EnthusiaStaff/pull/754) with newer checked-out/unpublished punishment fixes and establish a single candidate SHA without changing main or live systems.
