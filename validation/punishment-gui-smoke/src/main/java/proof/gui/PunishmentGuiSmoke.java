@@ -163,21 +163,8 @@ public final class PunishmentGuiSmoke extends JavaPlugin implements Listener {
             marker("DISPOSABLE_TARGET_UUID=" + disposableTarget.getUniqueId());
             marker("TARGET_PICKER_REOPEN_HANDLED=" + player.performCommand("punish"));
         }, 370L);
-        Bukkit.getScheduler().runTaskLater(this, () -> {
-            if (!player.isOnline()
-                    || !targetHeadClicked.get()) {
-                marker("FAIL=target_head_not_clicked");
-                return;
-            }
-            Inventory top = player.getOpenInventory().getTopInventory();
-            String title = PlainTextComponentSerializer.plainText()
-                    .serialize(player.getOpenInventory().title());
-            if (!"PunishmentGuiHolder".equals(holderName(top))
-                    || top.getSize() != EXPECTED_TOP_SLOTS
-                    || !expectedCategoryTitle(title)) {
-                marker("FAIL=target_categories_not_open");
-            }
-        }, 520L);
+        // Category validity is checked synchronously by onInventoryOpen.
+        // Do not schedule a late check after the protocol client disconnects.
     }
 
     @EventHandler(priority = EventPriority.MONITOR)
