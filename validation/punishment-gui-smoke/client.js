@@ -25,10 +25,13 @@ function fail (reason) {
 }
 bot.on('spawn', () => console.log('GUI_CLIENT_SPAWN=true'))
 bot.on('windowOpen', window => {
+  const title = typeof window.title === 'string' ? window.title : JSON.stringify(window.title)
   console.log('GUI_PACKET_OPEN|inventoryStart=' + String(window.inventoryStart) +
-    '|slotCount=' + String(window.slots.length) + '|title=' + String(window.title))
+    '|slotCount=' + String(window.slots.length) + '|title=' + title)
+  // Staff Mode may open other inventories before /punish. Only the picker is proof.
+  if (!/punish|select player/i.test(title)) return
   if (window.inventoryStart !== 54) {
-    fail('top inventory slot count not 54')
+    fail('punishment picker top inventory slot count not 54')
     return
   }
   completed = true
