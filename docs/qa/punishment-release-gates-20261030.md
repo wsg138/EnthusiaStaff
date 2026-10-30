@@ -116,6 +116,13 @@ A read-only GitHub three-way ancestry/file comparison used shared ancestor `081c
 - The real on-disk SMP source and candidate were compared read-only: the intended version+reason substitutions yield a byte-identical candidate. This is not a production `--apply` execution or in-game policy load test.
 - **No live migration has been performed.** Before release, conduct isolated actual-runtime staging, review backup/recovery, obtain exact production deployment approval and preserve the independently customized file until the operator-controlled cutover. This approval does not unblock Folia or real Java/Bedrock guided GUI acceptance.
 
+### Migration safety hardening and quality gate — 2026-10-30
+
+- [#764](https://github.com/wsg138/EnthusiaStaff/pull/764) now includes failure-injection tests, verified cleanup of an incomplete backup, POSIX directory fsync for backup creation/replacement, and an explicit **owner/group mismatch refusal** before overwriting the installed policy.
+- The dedicated migration safety workflow run [41094625463](https://github.com/wsg138/EnthusiaStaff/actions/runs/41094625463) passed **15/15 offline tests** at exact documentation-adjusted head `2f426d9cf225f3d07d302ebc670fcbb740bae945`. This is **synthetic-fixture** evidence, not an on-server execution or a live migration.
+- Earlier Codacy review on #764 reported **7 new issues (5 high, 2 medium)** before the latest safeguards. Do not claim these are cleared until exact-head quality results have been inspected; GitHub's existing read-only annotation dump was temporarily enabled to identify detailed findings.
+- Production config remains unchanged. A passing migration-script test does **not** unblock guided punishment rollout or authorize server migration. The operator must still independently verify the exact current YAML, staging, policy load, rollback, and safety gates.
+
 ## Near-term worker queue
 
 - **P0:** Reconcile [#754](https://github.com/wsg138/EnthusiaStaff/pull/754) with newer checked-out/unpublished punishment fixes and establish a single candidate SHA without changing main or live systems.
