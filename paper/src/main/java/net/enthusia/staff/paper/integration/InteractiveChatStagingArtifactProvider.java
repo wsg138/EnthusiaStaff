@@ -295,6 +295,8 @@ public final class InteractiveChatStagingArtifactProvider
         try {
             snapshot = access.snapshot(player, request);
         } catch (ReflectiveOperationException | RuntimeException failure) {
+            RichInventoryPreviewDiagnostics.ifInventoryMarker(
+                    request.canonicalPlainText(), "snapshot_unavailable");
             result.complete(List.of());
             return;
         }
@@ -734,6 +736,10 @@ public final class InteractiveChatStagingArtifactProvider
         ) throws ReflectiveOperationException {
             if ((kind == Kind.INVENTORY && !inventoryImagesEnabled)
                     || (kind == Kind.ENDER_CHEST && !enderImagesEnabled)) {
+                if (kind == Kind.INVENTORY) {
+                    RichInventoryPreviewDiagnostics.ifInventoryMarker(
+                            request.canonicalPlainText(), "addon_inventory_images_disabled");
+                }
                 return;
             }
             Match match = match(kind, enabled, placeholder, player, request);
@@ -796,15 +802,32 @@ public final class InteractiveChatStagingArtifactProvider
                 Player player,
                 RichChatArtifactRequest request
         ) throws ReflectiveOperationException {
-            if (!enabled.getBoolean(null) || !player.hasPermission(kind.permission)) {
+            boolean inventoryCandidate = kind == Kind.INVENTORY
+                    && RichInventoryPreviewDiagnostics.markerPresent(request.canonicalPlainText());
+            if (!enabled.getBoolean(null)) {
+                if (inventoryCandidate) {
+                    RichInventoryPreviewDiagnostics.warn("module_inventory_disabled");
+                }
+                return null;
+            }
+            if (!player.hasPermission(kind.permission)) {
+                if (inventoryCandidate) {
+                    RichInventoryPreviewDiagnostics.warn("inventory_permission_denied");
+                }
                 return null;
             }
             Object placeholder = placeholderField.get(null);
             if (placeholder == null) {
+                if (inventoryCandidate) {
+                    RichInventoryPreviewDiagnostics.warn("inventory_placeholder_missing");
+                }
                 return null;
             }
             Pattern pattern = (Pattern) invoke(getKeyword, placeholder);
             int position = firstUnescapedMatch(pattern, request.canonicalPlainText());
+            if (position < 0 && inventoryCandidate) {
+                RichInventoryPreviewDiagnostics.warn("inventory_keyword_not_matched");
+            }
             return position < 0 ? null : new Match(position);
         }
 
@@ -839,13 +862,23 @@ public final class InteractiveChatStagingArtifactProvider
                         );
                     };
                 } catch (ReflectiveOperationException | RuntimeException failure) {
+                    if (job.kind() == Kind.INVENTORY) {
+                        RichInventoryPreviewDiagnostics.warn("inventory_image_render_failed");
+                    }
                     continue;
                 }
                 if (image == null) {
+                    if (job.kind() == Kind.INVENTORY) {
+                        RichInventoryPreviewDiagnostics.warn("inventory_image_null");
+                    }
                     continue;
                 }
                 byte[] png = png(image);
                 if (png.length == 0 || png.length > RichChatArtifact.MAX_ARTIFACT_BYTES) {
+                    if (job.kind() == Kind.INVENTORY) {
+                        RichInventoryPreviewDiagnostics.warn(
+                                png.length == 0 ? "inventory_png_empty" : "inventory_png_over_limit");
+                    }
                     continue;
                 }
                 String suffix = eventId.toString().substring(0, 8);
