@@ -12,6 +12,7 @@ import java.util.EnumSet;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.atomic.AtomicBoolean;
 import net.dv8tion.jda.api.Permission;
 import net.dv8tion.jda.api.entities.Guild;
 import net.dv8tion.jda.api.entities.SelfMember;
@@ -158,12 +159,19 @@ final class JdaPrivateReportNotificationTransportTest {
 
     private static Guild syntheticGuild(
             Role publicRole, Role staffRole, boolean botCanView, boolean botCanSend) {
+        return syntheticGuild(publicRole, staffRole, () -> botCanView, () -> botCanSend);
+    }
+
+    private static Guild syntheticGuild(
+            Role publicRole, Role staffRole,
+            java.util.function.BooleanSupplier botCanView,
+            java.util.function.BooleanSupplier botCanSend) {
         var self = proxy(SelfMember.class, (instance, method, args) -> {
             if ("hasPermission".equals(method.getName())) {
                 var requested = (Permission[]) args[1];
                 return java.util.Arrays.stream(requested).allMatch(permission ->
-                        (permission == Permission.VIEW_CHANNEL && botCanView)
-                        || (permission == Permission.MESSAGE_SEND && botCanSend));
+                        (permission == Permission.VIEW_CHANNEL && botCanView.getAsBoolean())
+                        || (permission == Permission.MESSAGE_SEND && botCanSend.getAsBoolean()));
             }
             throw new AssertionError(method.getName());
         });
@@ -249,6 +257,22 @@ final class JdaPrivateReportNotificationTransportTest {
         assertPrivateSendBlocked(syntheticGuild(publicRole, staffRole, false, true));
         assertPrivateSendBlocked(syntheticGuild(publicRole, staffRole, true, false));
         assertPrivateSendBlocked(syntheticGuild(publicRole, staffRole, false, false));
+    }
+
+    @Test
+    void revokingBotSendPermissionAfterPreflightStopsDelivery() {
+        var canSend = new AtomicBoolean(true);
+        var guild = syntheticGuild(syntheticRole(false), syntheticRole(true),
+                () -> true, canSend::get);
+        var channel = neverSendChannel(guild, List.of());
+        var sender = new JdaPrivateReportNotificationTransport(
+                syntheticApi(channel, syntheticSelfUser()),
+                GUILD, CHANNEL, STAFF_ROLE, true);
+
+        assertTrue(sender.verify().eligible());
+        canSend.set(false);
+        assertEquals(PrivateReportNotificationDispatcher.DeliveryReceipt.uncertain(),
+                sender.send("Must not send after bot permission revocation"));
     }
 
     @Test
