@@ -28,7 +28,7 @@ final class PaperReasonPolicyBootstrap {
         try {
             ReasonPolicyConfigurationLoader.LoadedPolicies loaded =
                     new ReasonPolicyConfigurationLoader().load(file);
-            warnIfPolicyVersionDiffers(loaded.version());
+            warnIfPolicyDrifts(loaded);
             return Optional.of(new AtomicReasonPolicyRepository(
                     loaded.version(),
                     loaded.policies(),
@@ -46,18 +46,26 @@ final class PaperReasonPolicyBootstrap {
         }
     }
 
-    private void warnIfPolicyVersionDiffers(String installedVersion) {
+    private void warnIfPolicyDrifts(ReasonPolicyConfigurationLoader.LoadedPolicies installed) {
         try (InputStream source = bundledPolicy.get()) {
             if (source == null) {
                 logger.warning("Packaged punishment policy unavailable for version comparison");
                 return;
             }
-            String packagedVersion = new ReasonPolicyConfigurationLoader()
-                    .load(source, "bundled reason-policies.yml").version();
-            if (!installedVersion.equals(packagedVersion) && logger.isLoggable(Level.WARNING)) {
-                logger.warning("Installed punishment policy version " + installedVersion
-                        + " differs from bundled version " + packagedVersion
+            ReasonPolicyConfigurationLoader.LoadedPolicies packaged =
+                    new ReasonPolicyConfigurationLoader().load(source, "bundled reason-policies.yml");
+            if (!installed.version().equals(packaged.version()) && logger.isLoggable(Level.WARNING)) {
+                logger.warning("Installed punishment policy version " + installed.version()
+                        + " differs from bundled version " + packaged.version()
                         + "; review the policy changes before applying a migration. "
+                        + "Existing settings remain unchanged.");
+            } else if (installed.version().equals(packaged.version())
+                    && !installed.equals(packaged) && logger.isLoggable(Level.WARNING)) {
+                // A copied or locally edited policy can retain its version while
+                // changing sanctions. Warn rather than overwrite the custom file.
+                logger.warning("Installed punishment policy content differs from bundled policy "
+                        + "despite identical version " + installed.version()
+                        + "; review custom policy changes before any migration. "
                         + "Existing settings remain unchanged.");
             }
         } catch (Exception exception) {
