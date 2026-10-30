@@ -1,0 +1,7 @@
+name: PunishmentGuiSmoke
+version: '1.0.0'
+main: proof.gui.PunishmentGuiSmoke
+api-version: '1.21'
+load: POSTWORLD
+depend:
+  - EnthusiaStaff
