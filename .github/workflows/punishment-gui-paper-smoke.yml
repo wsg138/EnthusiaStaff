@@ -158,8 +158,17 @@ jobs:
           grep -F 'GUI_CLIENT_CLOSE_CLICK=true' "$evidence/client.log"
           grep -F 'GUI_CLIENT_REFRESH_AND_CLOSE=true' "$evidence/client.log"
           grep -F 'INVENTORY_OPEN|' "$server/punishment-gui-smoke.txt"
-          ! grep -F 'FAIL=' "$server/punishment-gui-smoke.txt"
-          ! grep -Eq 'NoSuchMethodError|NoSuchFieldError|ClassNotFoundException|LinkageError' "$evidence/server-console.log"
+          # A negated grep is exempt from Bash errexit: use explicit guards.
+          if grep -qF 'FAIL=' "$server/punishment-gui-smoke.txt" || \
+             grep -qF 'GUI_PACKET_FAIL=' "$evidence/client.log"; then
+            echo "::error::GUI smoke recorded a server/client failure marker."
+            exit 1
+          fi
+          if grep -Eq 'NoSuchMethodError|NoSuchFieldError|ClassNotFoundException|LinkageError' \
+             "$evidence/server-console.log"; then
+            echo "::error::GUI smoke encountered a server linkage failure."
+            exit 1
+          fi
           cp "$server/punishment-gui-smoke.txt" "$evidence/server-proof.txt"
           echo 'GUI_PROTOCOL_SMOKE_PASS=true' | tee "$evidence/result.txt"
 
