@@ -12,6 +12,16 @@ A PASS must have: the actual isolated staging candidate SHA and built JAR hash, 
 
 For missing clients, unconfigured permissions or a test not yet performed, enter **BLOCKED** with a reason. Actual unexpected behavior should be **FAIL**, not BLOCKED. Only an isolated, disposable test target may receive sanctions; repeat permissions, reviewer, target protection, approval, audit, and the guided OFF/ON controls.
 
+## Generate the complete BLOCKED baseline
+
+To avoid manually assembling 39 scenario records, generate a manifest that is intentionally **all BLOCKED**:
+
+```bash
+python3 scripts/qa/create_punishment_gui_client_manifest.py /isolated/staging/evidence/manifest.json
+```
+
+The directory must already exist. This is a create-only operation: an existing manifest is never overwritten. The generator leaves the exact candidate SHA, artifact information, server/client versions and isolation attestation blank or unapproved. Populate those only from the real isolated test session; then update each case to PASS or FAIL with the appropriate real-client evidence. A newly generated manifest necessarily fails admission, as intended.
+
 ## JSON evidence format
 
 Save the manifest next to the candidate JAR and screenshot/video captures in an isolated staging evidence folder. Populate **all 39 applicable records**, not just this one example:
