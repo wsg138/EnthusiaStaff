@@ -59,15 +59,16 @@ jobs:
               | jq -c '.[] | {path,start_line,end_line,annotation_level,title,message,raw_details}'
           done
 
-      - name: Read public Codacy PR issue summary without credentials
+      - name: Triage public Codacy critical and high findings
         shell: bash
         run: |
           set -Eeuo pipefail
-          url="https://api.codacy.com/api/v3/analysis/organizations/gh/wsg138/repositories/EnthusiaStaff/pull-requests/765/issues?limit=100&status=new"
-          if curl --silent --show-error --fail -H "Accept: application/json" "$url" > /tmp/codacy-issues.json; then
-            echo "CODACY_PUBLIC_API_OK=true"
-            jq -c '{total: (.data | length), sample: (.data // [] | .[:2]), pagination: .pagination}' /tmp/codacy-issues.json
-            jq -c '(.data // [])[] | select((tostring | test("critical";"i"))) ' /tmp/codacy-issues.json
-          else
-            echo "CODACY_PUBLIC_API_UNAVAILABLE=true"
-          fi
+          base="https://api.codacy.com/api/v3/analysis/organizations/gh/wsg138/repositories/EnthusiaStaff/pull-requests/765/issues?limit=100&status=new"
+          for cursor in 1 2; do
+            url="$base"
+            if [ "$cursor" = "2" ]; then url="$base&cursor=2"; fi
+            curl --fail --silent --show-error -H "Accept: application/json" "$url" > "/tmp/codacy-issues-$cursor.json"
+            echo "CODACY_PAGE=$cursor"
+            jq -c '{count: (.data | length), pagination: .pagination}' "/tmp/codacy-issues-$cursor.json"
+            jq -c '.data[] | .commitIssue | select(.patternInfo.severityLevel == "Critical" or .patternInfo.severityLevel == "High") | {severity: .patternInfo.severityLevel, pattern: .patternInfo.id, category: .patternInfo.category, file: .filePath, line: .lineNumber, message: .message, lineText: .lineText}' "/tmp/codacy-issues-$cursor.json"
+          done
