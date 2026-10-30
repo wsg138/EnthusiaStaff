@@ -2,7 +2,8 @@
 
 /**
  * An automated Java *protocol* client, not an interactive human Java client.
- * No clicks, chat commands, sanctions, approvals or production network access.
+ * Only two safe UI clicks (Refresh and Close); no target selection,
+ * chat commands, sanctions, approvals or production network access.
  */
 const mineflayer = require('mineflayer')
 const port = Number(process.argv[2])
