@@ -22,6 +22,7 @@ QUIT_HANDLER = re.compile(
     r"public\s+void\s+onQuit\s*\(\s*PlayerQuitEvent\s+\w+\s*\)\s*\{"
 )
 QUIT_RESTORE = re.compile(r"\brestoreSavedState\s*\(")
+QUIT_TELEPORT = re.compile(r"\b(?:player|event\.getPlayer\(\))\s*\.\s*teleport(?:Async)?\s*\(")
 
 
 
@@ -91,6 +92,16 @@ def known_source_blockers(root: Path) -> list[dict]:
                         "path": path.relative_to(root).as_posix(),
                         "line": content.count("\n", 0, match.start()) + 1,
                         "reason": "Quit-event state restore assumes immediate completion before player save",
+                    })
+                # Folia disallows teleporting during PlayerQuitEvent, even via
+                # teleportAsync. A future "fix" that directly moves the player
+                # during quit must not accidentally clear admission.
+                for match in QUIT_TELEPORT.finditer(content, opened + 1, end - 1):
+                    blockers.append({
+                        "id": "quit_event_teleport",
+                        "path": path.relative_to(root).as_posix(),
+                        "line": content.count("\n", 0, match.start()) + 1,
+                        "reason": "Player teleport during quit is unsafe; restore prior to disconnect",
                     })
     return blockers
 
