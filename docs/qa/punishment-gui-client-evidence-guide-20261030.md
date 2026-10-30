@@ -4,6 +4,21 @@
 
 The release candidate must be installed only in an explicitly authorized **disposable Paper staging environment**. This evidence tool does not connect to any Minecraft server, download software, apply sanctions or change the live SMP.
 
+## Available test server preflight (read-only, 2026-10-30)
+
+A read-only inspection of the existing `bloom-test1` host found a **shared TEST environment**, not a dedicated punishment-test sandbox. The plugin folder has hundreds of entries, other projects' unmerged TEST JARs, RoseChat, Floodgate, LiteBans and older EnthusiaStaff test artifacts. The server root contains Leaf build archives, rather than proof of a clean exact-version Paper staging runtime. The existing `README-TEST.md` describes a separate Market acceptance procedure and explicitly requires separate authorization for downtime and installation.
+
+**Conclusion: DO NOT automatically install the punishment candidate on `bloom-test1` or claim that its files satisfy the isolated-staging gate.** Neither SFTP directory listings nor a named TEST host prove that a server is isolated from production permissions, shared network endpoints, database writers, Discord channels, punishment backends or actual players. An authorized isolated, disposable server must be identified before any staged JAR activation.
+
+### Minimum staging isolation checks (operator review)
+
+- Establish a new dedicated Paper instance or explicitly reserve an existing disposable instance for this test; record the exact host, server build, candidate Git commit and JAR digest **without exposing credentials publicly**.
+- Confirm test accounts/permissions: ordinary staff, directly sanction-authorized staff, rank requiring approval, authorized approver, unauthorized account, expendable punishment target. No real player accounts should receive a test sanction.
+- Verify separately isolated permissions, database/queue, audits and sanction targets. Disable shared production proxy/StaffBot integrations and any outbound webhooks or notifications that could affect live moderation.
+- Verify Geyser/Floodgate routing with real Java and Bedrock clients; an installed Floodgate JAR alone does not prove a functioning Bedrock connection.
+- Capture a clean backup and rollback plan before enabling guided mode **only on staging**; repeat the relevant OFF baseline checks. Do not change the live SMP configuration or installed custom reason policy.
+- Run the actual A01–A20 checks and record FAIL/BLOCKED honestly. Confirm staging can be destroyed without affecting any other developer's shared test data.
+
 ## Collection requirements
 
 Record a completed result for every acceptance row and applicable client combination: **20 Java/Bedrock scenarios, 39 required client observations** (A19 is Bedrock-only). Give each row a distinct PASS, FAIL, or BLOCKED assessment.
