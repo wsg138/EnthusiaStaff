@@ -250,6 +250,13 @@ Created independent [draft PR #765](https://github.com/wsg138/EnthusiaStaff/pull
 - The initial high Codacy pinning finding and medium `onEnable` complexity finding have been addressed. Codacy's latest PR #771 summary reports **zero new issues**. At latest head `9d885015f3468effd01f484df37ca51a1714eb10`, **Sentinel and the actual GUI smoke both SUCCESS** ([runtime run 41118311655](https://github.com/wsg138/EnthusiaStaff/actions/runs/41118311655)): off-duty picker blocked, Staff Mode command succeeded, real Paper 54-slot picker opened, and Mineflayer received the matching window. Codacy reports **zero new issues**. Coverage remained in progress at latest inspection.
 - This is one scenario-specific automated Java protocol regression, **not** real human Java/Bedrock approval, not any of A01–A20's 39 required observations, and not Folia support. No sanctions were applied or deployed.
 
+## Actual Java protocol Refresh and Close control proof — 2026-10-30
+
+- Created [draft PR #772](https://github.com/wsg138/EnthusiaStaff/pull/772), stacked on #771, to exercise **only safe control slots** of the real 54-slot Paper punishment target picker. The Mineflayer client requires the slot-49 item to be `CLOCK` (Refresh Players) and slot-51 item to be `BARRIER` (Close) before clicking. It never clicks a player head, reason, confirmation or sanction.
+- The isolated Paper proof plugin observes the two `InventoryClickEvent`s and checks their actual item types, then requires a **second** `PunishmentTargetPickerHolder` opening and an actual `InventoryCloseEvent` after the Close control. The client must also see the replacement window and close packet. No changes to production command, permissions, sanctions or policy.
+- The previously verified #771 off-duty denial, real `/staff` activation, `/punish` opening and 54-slot protocol window remain mandatory prerequisites. The new automated Java protocol sequence **does not fulfill any human Java/Bedrock acceptance row**; all 39 witnessed-client cases remain NOT RUN.
+- **PR #772 initial CI/Codacy was in progress** at this ledger checkpoint. No refreshed picker/close test pass is claimed yet. PR #771 latest existing head `9d885015f3468effd01f484df37ca51a1714eb10` has successful smoke, Sentinel and Codacy; aggregate Coverage was still running. All releases remain DRAFT/NO-GO.
+
 ## Near-term worker queue
 
 - **P0:** Reconcile [#754](https://github.com/wsg138/EnthusiaStaff/pull/754) with newer checked-out/unpublished punishment fixes and establish a single candidate SHA without changing main or live systems.
