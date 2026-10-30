@@ -1,0 +1,65 @@
+# Punishment GUI — staged Java / Bedrock evidence acceptance
+
+**State:** NO-GO; no client sessions have been run or claimed as passing by this document. This supplements, but does not replace, the [existing A01–A20 client checklist](../implementation-plans/staff-punishment-gui-ux-acceptance-20261015.md).
+
+The release candidate must be installed only in an explicitly authorized **disposable Paper staging environment**. This evidence tool does not connect to any Minecraft server, download software, apply sanctions or change the live SMP.
+
+## Collection requirements
+
+Record a completed result for every acceptance row and applicable client combination: **20 Java/Bedrock scenarios, 39 required client observations** (A19 is Bedrock-only). Give each row a distinct PASS, FAIL, or BLOCKED assessment.
+
+A PASS must have: the actual isolated staging candidate SHA and built JAR hash, exact Paper version, Java and Bedrock versions, exact Geyser/Floodgate versions, a timestamp with timezone, an identified reviewer, a useful observation, an explicit real-client attestation, and a matching checksum for locally stored screenshot/video evidence. For a video of multiple cases, reuse the same media file with clear per-case timestamps in the notes. Do not claim PASS from mocked Java Inventory objects or fabricated Bedrock screenshots. A Java automated client is not a substitute for the mandated real Bedrock touch interaction.
+
+For missing clients, unconfigured permissions or a test not yet performed, enter **BLOCKED** with a reason. Actual unexpected behavior should be **FAIL**, not BLOCKED. Only an isolated, disposable test target may receive sanctions; repeat permissions, reviewer, target protection, approval, audit, and the guided OFF/ON controls.
+
+## JSON evidence format
+
+Save the manifest next to the candidate JAR and screenshot/video captures in an isolated staging evidence folder. Populate **all 39 applicable records**, not just this one example:
+
+\`\`\`json
+{
+  "candidate_commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "artifact": {
+    "path": "candidate.jar",
+    "sha256": "replace-with-64-character-lowercase-sha256"
+  },
+  "server": {
+    "isolated_staging": true,
+    "production": false,
+    "paper_version": "exact-staging-paper-version"
+  },
+  "client_versions": {
+    "java": "exact-Java-client-version",
+    "bedrock": "exact-Bedrock-client-version",
+    "geyser": "exact-Geyser-version",
+    "floodgate": "exact-Floodgate-version"
+  },
+  "cases": [
+    {
+      "id": "A01",
+      "client": "java",
+      "status": "BLOCKED",
+      "notes": "Java client staging check has not been performed"
+    }
+  ]
+}
+\`\`\`
+
+That example is **intentionally incomplete**. It will not pass the validator. A real PASS row additionally requires \`actual_client_attested: true\`, \`reviewer\`, \`tested_at\` with timezone, \`media\` (relative local path), \`media_sha256\`, and detailed \`notes\`.
+
+Run from the repository root:
+
+\`\`\`bash
+python3 scripts/qa/punishment_gui_client_evidence_gate.py /isolated/staging/evidence/manifest.json
+\`\`\`
+
+Exit codes: **0** means all 39 records are complete with integrity-checked media and attestations (but human gameplay review is still required); **1** means recorded FAIL/BLOCKED rows remain; **2** means manifest data is missing, unsafe or inconsistent. The validator never changes the manifest, server or plugin.
+
+## Strict boundaries
+
+- **No automatic authenticity claim:** Even checksum-matched video files and reviewer declarations can be inaccurate. A separate human must examine the client footage and server logs for each claim.
+- **No production substitution:** The string \`isolated_staging: true\` is an attestation, not a technical isolation guarantee. Operators must independently verify IP, plugin set, permissions, copied database, audit destinations, and that no live service can be impacted.
+- **No release from evidence alone:** The permanent confirmed-ban-evasion rule is owner-approved, but the installed production policy remains a separate migration gate. Other guided sanction calibration under #616, Folia admission (if targeted), rollback proof, and independent integration review remain required.
+- **Media safety:** The validator rejects absolute/traversing paths, symlinks, missing media and SHA mismatches. Store captures outside the repository if they contain usernames, chat content, server addresses, or other private information.
+
+All tests for this evidence gate are **synthetic fixtures** and must never be marked as A01–A20 runtime acceptance.
