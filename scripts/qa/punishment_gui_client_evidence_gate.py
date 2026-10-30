@@ -45,7 +45,7 @@ def required_text(value: object, label: str, length: int = 1) -> str:
     return value.strip()
 
 
-def evidence_file(root: Path, relative: object, digest: str, extensions: frozenset[str]) -> None:
+def safe_relative_path(root: Path, relative: object, extensions: frozenset[str]) -> Path:
     raw = required_text(relative, "media/artifact path")
     path = Path(raw)
     if path.is_absolute() or ".." in path.parts or not path.parts:
@@ -58,13 +58,33 @@ def evidence_file(root: Path, relative: object, digest: str, extensions: frozens
             break
         if ancestor.is_symlink():
             raise EvidenceInvalid(f"symlink evidence is not allowed: {raw}")
+    return selected
+
+
+def evidence_file(root: Path, relative: object, digest: str, extensions: frozenset[str]) -> None:
+    selected = safe_relative_path(root, relative, extensions)
     if not selected.is_file():
-        raise EvidenceInvalid(f"evidence is missing: {raw}")
+        raise EvidenceInvalid(f"evidence is missing: {relative}")
+    if selected.stat().st_size < 1:
+        raise EvidenceInvalid(f"evidence file is empty: {relative}")
     actual = hashlib.sha256(selected.read_bytes()).hexdigest()
     if actual != digest:
-        raise EvidenceInvalid(f"evidence checksum mismatch: {raw}")
-    if selected.stat().st_size < 1:
-        raise EvidenceInvalid(f"evidence file is empty: {raw}")
+        raise EvidenceInvalid(f"evidence checksum mismatch: {relative}")
+
+
+def verify_server(server: object) -> None:
+    if not isinstance(server, dict) or server.get("isolated_staging") is not True:
+        raise EvidenceInvalid("only explicitly isolated staging evidence is admissible")
+    if server.get("production") is not False:
+        raise EvidenceInvalid("production must explicitly be false")
+    required_text(server.get("paper_version"), "server.paper_version")
+
+
+def verify_clients(clients: object) -> None:
+    if not isinstance(clients, dict):
+        raise EvidenceInvalid("client_versions is required")
+    for name in ("java", "bedrock", "geyser", "floodgate"):
+        required_text(clients.get(name), f"client_versions.{name}")
 
 
 def verify_header(manifest: dict, root: Path) -> None:
@@ -76,28 +96,19 @@ def verify_header(manifest: dict, root: Path) -> None:
         raise EvidenceInvalid("artifact record missing")
     digest = check_digest(artifact.get("sha256"), "artifact.sha256")
     evidence_file(root, artifact.get("path"), digest, frozenset((".jar",)))
-
-    server = manifest.get("server")
-    if not isinstance(server, dict) or server.get("isolated_staging") is not True:
-        raise EvidenceInvalid("only explicitly isolated staging evidence is admissible")
-    if server.get("production") is not False:
-        raise EvidenceInvalid("production must explicitly be false")
-    required_text(server.get("paper_version"), "server.paper_version")
-
-    clients = manifest.get("client_versions")
-    if not isinstance(clients, dict):
-        raise EvidenceInvalid("client_versions is required")
-    for name in ("java", "bedrock", "geyser", "floodgate"):
-        required_text(clients.get(name), f"client_versions.{name}")
+    verify_server(manifest.get("server"))
+    verify_clients(manifest.get("client_versions"))
 
 
 def verify_case(record: dict, root: Path) -> tuple[tuple[str, str], str]:
     scenario, client = record.get("id"), record.get("client")
-    key = (scenario, client)
+    if not isinstance(scenario, str) or not isinstance(client, str):
+        raise EvidenceInvalid("scenario ID and client must be strings")
+    key: tuple[str, str] = (scenario, client)
     if key not in EXPECTED:
         raise EvidenceInvalid(f"unexpected or inapplicable scenario/client: {key}")
     status = record.get("status")
-    if status not in STATUSES:
+    if not isinstance(status, str) or status not in STATUSES:
         raise EvidenceInvalid(f"{key}: status must be PASS, FAIL, or BLOCKED")
     required_text(record.get("notes"), f"{key}.notes", 12)
     if status != "PASS":
@@ -118,11 +129,7 @@ def verify_case(record: dict, root: Path) -> tuple[tuple[str, str], str]:
     return key, status
 
 
-def evaluate(manifest: dict, root: Path) -> tuple[int, list[str]]:
-    if not isinstance(manifest, dict):
-        raise EvidenceInvalid("manifest must be a JSON object")
-    verify_header(manifest, root)
-    cases = manifest.get("cases")
+def collect_cases(cases: object, root: Path) -> dict[tuple[str, str], str]:
     if not isinstance(cases, list):
         raise EvidenceInvalid("cases must be a list")
     seen: dict[tuple[str, str], str] = {}
@@ -133,6 +140,14 @@ def evaluate(manifest: dict, root: Path) -> tuple[int, list[str]]:
         if key in seen:
             raise EvidenceInvalid(f"duplicate acceptance row: {key}")
         seen[key] = status
+    return seen
+
+
+def evaluate(manifest: dict, root: Path) -> tuple[int, list[str]]:
+    if not isinstance(manifest, dict):
+        raise EvidenceInvalid("manifest must be a JSON object")
+    verify_header(manifest, root)
+    seen = collect_cases(manifest.get("cases"), root)
     missing = sorted(EXPECTED.difference(seen))
     if missing:
         raise EvidenceInvalid(f"missing {len(missing)} required acceptance rows: {missing}")
