@@ -17,7 +17,7 @@ jobs:
       - name: Read exact-head Codacy annotations
         env:
           GH_TOKEN: ${{ github.token }}
-          HEAD_SHA: "b8b24e2351371d1b9bf07cbd3c03ec249ee6a3f3"
+          HEAD_SHA: "472714135943b1e0ee43fed15d4ddc2e763b1692"
         shell: bash
         run: |
           set -Eeuo pipefail
