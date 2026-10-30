@@ -9,25 +9,122 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import java.util.List;
+import java.util.ArrayList;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.atomic.AtomicInteger;
+import net.enthusia.staff.api.chat.RichChatArtifact;
+import net.enthusia.staff.api.chat.RichChatArtifactRequest;
 import java.util.UUID;
 import java.util.regex.Pattern;
 import org.junit.jupiter.api.Test;
 
 class InteractiveChatStagingArtifactProviderTest {
+    private static final String PNG_MIME = "image/png";
+    private static final String ICON_FILENAME = "icon.png";
+    private static final String ITEM_LABEL = "Item";
+    private static final String DETAILS_LABEL = "Details";
+    private static final String TOOLTIP_FILENAME = "tooltip.png";
+
 
     private static final Pattern ITEM = Pattern.compile("\\[item\\]");
+
+    @Test
+    void addonRenderBoundaryDropsExpiredOrShutdownPreviews() {
+        RichChatArtifactRequest request = syntheticRequest();
+        assertFalse(InteractiveChatStagingArtifactProvider.shouldDrop(false, 10_999L, request));
+        assertTrue(InteractiveChatStagingArtifactProvider.shouldDrop(false, 11_000L, request));
+        assertTrue(InteractiveChatStagingArtifactProvider.shouldDrop(true, 10_000L, request));
+
+        RichChatArtifact preview = new RichChatArtifact(
+                RichChatArtifact.Kind.ITEM, 0, ICON_FILENAME, PNG_MIME, ITEM_LABEL, new byte[]{1});
+        CompletableFuture<List<RichChatArtifact>> inTime = new CompletableFuture<>();
+        InteractiveChatStagingArtifactProvider.completeIfActive(
+                false, 10_999L, request, inTime, List.of(preview));
+        assertEquals(List.of(preview), inTime.join());
+
+        CompletableFuture<List<RichChatArtifact>> late = new CompletableFuture<>();
+        InteractiveChatStagingArtifactProvider.completeIfActive(
+                false, 11_000L, request, late, List.of(preview));
+        assertEquals(List.of(), late.join());
+
+        CompletableFuture<List<RichChatArtifact>> shutDown = new CompletableFuture<>();
+        InteractiveChatStagingArtifactProvider.completeIfActive(
+                true, 10_999L, request, shutDown, List.of(preview));
+        assertEquals(List.of(), shutDown.join());
+    }
+
+    @Test
+    void addonRenderCompletionFreezesReturnedListForWorkerHandoff() {
+        RichChatArtifactRequest request = syntheticRequest();
+        RichChatArtifact preview = new RichChatArtifact(
+                RichChatArtifact.Kind.ITEM, 0, ICON_FILENAME, PNG_MIME, ITEM_LABEL, new byte[]{1});
+        var produced = new ArrayList<>(List.of(preview));
+        CompletableFuture<List<RichChatArtifact>> completed = new CompletableFuture<>();
+        InteractiveChatStagingArtifactProvider.completeIfActive(
+                false, 10_999L, request, completed, produced);
+        produced.clear();
+        assertEquals(List.of(preview), completed.join());
+        assertThrows(UnsupportedOperationException.class, () -> completed.join().clear());
+    }
+
+    @Test
+    void workerRejectionOrShutdownFailsToTextOnlyWithoutRendering() {
+        CompletableFuture<List<RichChatArtifact>> rejected = new CompletableFuture<>();
+        AtomicInteger renders = new AtomicInteger();
+        InteractiveChatStagingArtifactProvider.enqueueSnapshot(
+                task -> { throw new RejectedExecutionException("queue full"); },
+                renders::incrementAndGet, rejected);
+        assertEquals(List.of(), rejected.join());
+        assertEquals(0, renders.get());
+
+        CompletableFuture<List<RichChatArtifact>> terminated = new CompletableFuture<>();
+        InteractiveChatStagingArtifactProvider.enqueueSnapshot(
+                task -> { throw new IllegalStateException("worker terminated"); },
+                renders::incrementAndGet, terminated);
+        assertEquals(List.of(), terminated.join());
+        assertEquals(0, renders.get());
+    }
+
+    @Test
+    void queuedWorkerDoesNotRenderUntilAcceptedActionRuns() {
+        java.util.concurrent.atomic.AtomicReference<Runnable> queued =
+                new java.util.concurrent.atomic.AtomicReference<>();
+        CompletableFuture<List<RichChatArtifact>> pending = new CompletableFuture<>();
+        AtomicInteger executions = new AtomicInteger();
+        InteractiveChatStagingArtifactProvider.enqueueSnapshot(
+                queued::set,
+                () -> {
+                    executions.incrementAndGet();
+                    pending.complete(List.of());
+                },
+                pending);
+        assertFalse(pending.isDone());
+        queued.get().run();
+        assertEquals(1, executions.get());
+        assertEquals(List.of(), pending.join());
+    }
+
+    private static RichChatArtifactRequest syntheticRequest() {
+        return new RichChatArtifactRequest(
+                UUID.fromString("10000000-0000-0000-0000-000000000001"),
+                UUID.fromString("20000000-0000-0000-0000-000000000001"),
+                "Tester", "global", "[item]", 10_000L, 11_000L);
+    }
+
+
 
     @Test
     void tooltipAndIconBundleStayWithinAggregateSizeAndMaximumCount() {
         var first = new net.enthusia.staff.api.chat.RichChatArtifact(
                 net.enthusia.staff.api.chat.RichChatArtifact.Kind.ITEM,
-                0, "icon.png", "image/png", "Item", new byte[240_000]);
+                0, ICON_FILENAME, PNG_MIME, ITEM_LABEL, new byte[240_000]);
         var tooLarge = new net.enthusia.staff.api.chat.RichChatArtifact(
                 net.enthusia.staff.api.chat.RichChatArtifact.Kind.TOOLTIP,
-                0, "tooltip.png", "image/png", "Details", new byte[240_000]);
+                0, TOOLTIP_FILENAME, PNG_MIME, DETAILS_LABEL, new byte[240_000]);
         var small = new net.enthusia.staff.api.chat.RichChatArtifact(
                 net.enthusia.staff.api.chat.RichChatArtifact.Kind.TOOLTIP,
-                0, "small.png", "image/png", "Details", new byte[10]);
+                0, "small.png", PNG_MIME, DETAILS_LABEL, new byte[10]);
         var result = InteractiveChatStagingArtifactProvider.withinBundleBudget(
                 List.of(first, tooLarge, small));
         assertEquals(List.of(first, small), result);
@@ -37,16 +134,16 @@ class InteractiveChatStagingArtifactProviderTest {
     void budgetRejectsOrphanTooltipIfItemIconCouldNotFit() {
         var inventory = new net.enthusia.staff.api.chat.RichChatArtifact(
                 net.enthusia.staff.api.chat.RichChatArtifact.Kind.INVENTORY,
-                0, "inventory.png", "image/png", "Inventory", new byte[240_000]);
+                0, "inventory.png", PNG_MIME, "Inventory", new byte[240_000]);
         var skippedIcon = new net.enthusia.staff.api.chat.RichChatArtifact(
                 net.enthusia.staff.api.chat.RichChatArtifact.Kind.ITEM,
-                8, "icon.png", "image/png", "Item", new byte[240_000]);
+                8, ICON_FILENAME, PNG_MIME, ITEM_LABEL, new byte[240_000]);
         var orphanTooltip = new net.enthusia.staff.api.chat.RichChatArtifact(
                 net.enthusia.staff.api.chat.RichChatArtifact.Kind.TOOLTIP,
-                8, "tooltip.png", "image/png", "Details", new byte[10_000]);
+                8, TOOLTIP_FILENAME, PNG_MIME, DETAILS_LABEL, new byte[10_000]);
         var laterPreview = new net.enthusia.staff.api.chat.RichChatArtifact(
                 net.enthusia.staff.api.chat.RichChatArtifact.Kind.MAP,
-                22, "map.png", "image/png", "Map", new byte[100_000]);
+                22, "map.png", PNG_MIME, "Map", new byte[100_000]);
 
         var kept = InteractiveChatStagingArtifactProvider.withinBundleBudget(
                 List.of(inventory, skippedIcon, orphanTooltip, laterPreview));
@@ -57,13 +154,13 @@ class InteractiveChatStagingArtifactProviderTest {
     void budgetRetainsMatchedItemTooltipAndIgnoresLoneTooltip() {
         var orphan = new net.enthusia.staff.api.chat.RichChatArtifact(
                 net.enthusia.staff.api.chat.RichChatArtifact.Kind.TOOLTIP,
-                1, "orphan.png", "image/png", "Details", new byte[] {1});
+                1, "orphan.png", PNG_MIME, DETAILS_LABEL, new byte[] {1});
         var icon = new net.enthusia.staff.api.chat.RichChatArtifact(
                 net.enthusia.staff.api.chat.RichChatArtifact.Kind.ITEM,
-                10, "icon.png", "image/png", "Item", new byte[] {2});
+                10, ICON_FILENAME, PNG_MIME, ITEM_LABEL, new byte[] {2});
         var tooltip = new net.enthusia.staff.api.chat.RichChatArtifact(
                 net.enthusia.staff.api.chat.RichChatArtifact.Kind.TOOLTIP,
-                10, "tooltip.png", "image/png", "Details", new byte[] {3});
+                10, TOOLTIP_FILENAME, PNG_MIME, DETAILS_LABEL, new byte[] {3});
         assertEquals(List.of(icon, tooltip),
                 InteractiveChatStagingArtifactProvider.withinBundleBudget(
                         List.of(orphan, icon, tooltip)));

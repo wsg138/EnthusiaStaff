@@ -29,9 +29,12 @@ final class StaffBotChatArtifactStore {
         long bytes = bundle.artifacts().stream()
                 .mapToLong(artifact -> artifact.data().length)
                 .sum();
-        Entry previous = entries.remove(bundle.eventId());
-        if (previous != null) {
-            storedBytes -= previous.bytes();
+        // The first admitted artifact bundle owns this event ID until the
+        // matching rendered chat frame consumes it. An authenticated retry
+        // should be idempotent, not replace the original with later data or
+        // delete it merely because a new payload would exceed cache bounds.
+        if (entries.containsKey(bundle.eventId())) {
+            return true;
         }
         if (entries.size() >= MAXIMUM_EVENTS || storedBytes + bytes > MAXIMUM_BYTES) {
             return false;
@@ -48,17 +51,20 @@ final class StaffBotChatArtifactStore {
             long nowEpochMillis
     ) {
         purgeExpired(nowEpochMillis);
-        Entry entry = entries.remove(eventId);
+        Entry entry = entries.get(eventId);
         if (entry == null) {
             return List.of();
         }
-        storedBytes -= entry.bytes();
         ChatBridgeArtifactBundle bundle = entry.bundle();
+        // A message from another eligible source/channel must never consume
+        // this event's preview. It remains available for the matching frame.
         if (bundle.isExpired(nowEpochMillis)
                 || !bundle.sourceServerId().equals(sourceServerId)
                 || !bundle.logicalChannelId().equals(logicalChannelId)) {
             return List.of();
         }
+        entries.remove(eventId);
+        storedBytes -= entry.bytes();
         return bundle.artifacts();
     }
 

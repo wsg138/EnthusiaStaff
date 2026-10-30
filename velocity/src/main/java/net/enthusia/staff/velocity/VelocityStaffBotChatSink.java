@@ -39,7 +39,7 @@ final class VelocityStaffBotChatSink implements VelocityChatBridgeRelay.Sink {
         Objects.requireNonNull(message, "message");
         try {
             return sender.send(
-                    PEER_ID,
+                    VelocityStaffBotPeerRoute.target(message.sourceServerId()),
                     message.eventId(),
                     ChatBridgeMessages.OUTBOUND,
                     ChatBridgeMessages.encodeOutbound(message),

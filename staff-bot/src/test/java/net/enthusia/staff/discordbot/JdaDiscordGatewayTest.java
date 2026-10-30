@@ -96,9 +96,9 @@ class JdaDiscordGatewayTest {
     }
 
     @Test
-    void primaryLinkedAccountGetsMentionButAltUsesMinecraftUsername() {
+    void linkedAndAltAccountsBothGetNonPingingMinecraftUsername() {
         ChatBridgeOutboundMessage message = chatMessage("hello");
-        assertEquals("<@123456789" + "012345678>: hello",
+        assertEquals("Player: hello",
                 JdaDiscordGateway.chatContent(message,
                         Optional.of("123456789" + "012345678"), CHAT_PLAYER_NAME));
         assertEquals("AltPlayer: hello",
@@ -110,7 +110,7 @@ class JdaDiscordGatewayTest {
         ChatBridgeRenderedMessage message = renderedMessage(
                 "hello", "**[VIP] Player:** *hello*", "[VIP] Player: hello");
         assertEquals("Player: hello", JdaDiscordGateway.renderedChatContent(message));
-        assertEquals("<@123456789" + "012345678>: hello",
+        assertEquals("Player: hello",
                 JdaDiscordGateway.renderedChatContent(
                         message, Optional.of("123456789" + "012345678"), CHAT_PLAYER_NAME));
     }

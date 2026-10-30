@@ -17,8 +17,13 @@ final class DiscordChatMessagePresentation {
             + "underlined|strikethrough|obfuscated|color|gradient|rainbow|font)"
             + "(?:[:=#][^>]{0,120})?>");
     private static final Pattern LEGACY_COLOR = Pattern.compile("(?i)[§&][0-9a-fk-or]");
+    // InteractiveChat "accurate sender" markers carry an item/inventory token
+    // like <chat=UUID:[item]:>. They must never appear in Discord chat text.
+    // Require an exact UUID and a bounded placeholder so unrelated user text
+    // is not removed accidentally.
     private static final Pattern INTERACTIVE_TOKEN = Pattern.compile(
-            "(?i)<chat=[a-z0-9-]{15,100}:(?:\\[[a-z]\\]:)?\\s*>");
+            "(?i)<chat=[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}:"
+            + "(?:\\[[a-z][a-z0-9_]{0,23}\\]:)?\\s*>");
     private static final Pattern MARKDOWN = Pattern.compile("[\\\\*_~`>|]");
 
     private DiscordChatMessagePresentation() {
@@ -53,10 +58,8 @@ final class DiscordChatMessagePresentation {
     }
 
     static String sender(Optional<String> verifiedMainDiscordId, String minecraftName) {
-        if (verifiedMainDiscordId != null && verifiedMainDiscordId.isPresent()
-                && verifiedMainDiscordId.orElseThrow().matches("[0-9]{15,20}")) {
-            return "<@" + verifiedMainDiscordId.orElseThrow() + ">";
-        }
+        // Linked Discord identity is not a notification authorization.
+        // Even a verified Minecraft main account must not ping on every chat post.
         return escapeMarkdown(minecraftName);
     }
 

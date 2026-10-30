@@ -70,6 +70,44 @@ class StaffBotChatSettingsFileTest {
     }
 
     @Test
+    void fileBackedProductionSharedJdaTestSettingsPassThroughBeforeRuntime() throws IOException {
+        byte[] independent = new byte[32];
+        java.util.Arrays.fill(independent, (byte) 0x2c);
+        String primarySecret = java.util.Base64.getEncoder().encodeToString(new byte[32]);
+        String testSecret = java.util.Base64.getEncoder().encodeToString(independent);
+        Path file = write("shared-jda-private.properties",
+                BRIDGE_MODE + SHADOW_SETTING
+                + StaffBotChatBridgeConfiguration.MIGRATION_ACK_ENV
+                        + "=I_ACKNOWLEDGE_PRODUCTION_SHADOW_MIGRATION\n"
+                + StaffBotChatBridgeConfiguration.HOST_ENV + "=velocity.example.test\n"
+                + StaffBotChatBridgeConfiguration.PORT_ENV + "=28765\n"
+                + StaffBotChatBridgeConfiguration.CLIENT_HMAC_ENV + "=" + primarySecret + "\n"
+                + StaffBotChatBridgeConfiguration.PROXY_HMAC_ENV + "=" + primarySecret + "\n"
+                + StaffBotChatBridgeConfiguration.TRUST_STORE_ENV + "=local-trust.p12\n"
+                + StaffBotChatBridgeConfiguration.TRUST_STORE_ACCESS_ENV + "=synthetic\n"
+                + StaffBotChatBridgeConfiguration.ROUTES_ENV
+                        + "=SMP/global=1541286004298752091\n"
+                + CHAT_TOKEN + "=dummy-separate-public-chat-token\n"
+                + CHAT_APP_ID + "=1405605074331373718\n"
+                + StaffBotSharedJdaTestPeer.ENABLED + "=true\n"
+                + StaffBotSharedJdaTestPeer.CLIENT_SECRET + "=" + testSecret + "\n");
+        Map<String, String> settings = StaffBotChatSettingsFile.overlay(file, Map.of(
+                StaffBotConfiguration.ENVIRONMENT_KEY, "production",
+                StaffBotConfiguration.TOKEN_KEY, "dummy-existing-staff-token"));
+        StaffBotChatBridgeConfiguration primary = StaffBotChatBridgeConfiguration.fromEnvironment(
+                StaffBotEnvironment.PRODUCTION, settings).orElseThrow();
+        assertTrue(PublicChatDiscordConfiguration.fromEnvironment(settings, true).isPresent());
+        StaffBotChatBridgeConfiguration test = StaffBotSharedJdaTestPeer.select(
+                StaffBotEnvironment.PRODUCTION, java.util.Optional.of(primary), true, true, settings)
+                .orElseThrow();
+        assertEquals(1, test.routes().size());
+        assertTrue(test.ingressRoutes().isEmpty());
+        assertEquals("dummy-existing-staff-token",
+                settings.get(StaffBotConfiguration.TOKEN_KEY));
+        assertEquals("true", settings.get(StaffBotSharedJdaTestPeer.ENABLED));
+    }
+
+    @Test
     void rejectsUnsupportedKeysIncludingModerationToken() throws IOException {
         Path file = write("chat-bridge.properties",
                 BRIDGE_MODE + SHADOW_SETTING

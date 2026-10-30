@@ -38,7 +38,7 @@ final class VelocityStaffBotRenderedChatSink implements VelocityRenderedChatBrid
         Objects.requireNonNull(message, "message");
         try {
             return sender.send(
-                    VelocityStaffBotChatSink.PEER_ID,
+                    VelocityStaffBotPeerRoute.target(message.sourceServerId()),
                     message.eventId(),
                     ChatRenderMessages.RENDERED,
                     ChatRenderMessages.encode(message),

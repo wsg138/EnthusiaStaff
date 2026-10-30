@@ -9,9 +9,11 @@ import java.util.Optional;
 record DiscordCommandBridgeConfiguration(
         Map<String, URI> endpoints,
         String credential,
-        Duration timeout
+        Duration timeout,
+        long allowedChannelId
 ) {
     static final String ENDPOINTS_ENV = "ENTHUSIA_STAFF_BOT_COMMAND_BRIDGE_ENDPOINTS";
+    static final String CHANNEL_ENV = "ENTHUSIA_STAFF_BOT_COMMAND_BRIDGE_CHANNEL_ID";
     static final String CREDENTIAL_ENV = "ENTHUSIA_STAFF_BOT_COMMAND_BRIDGE_SECRET";
     static final String TIMEOUT_MILLIS_ENV = "ENTHUSIA_STAFF_BOT_COMMAND_BRIDGE_TIMEOUT_MILLIS";
     private static final int DEFAULT_TIMEOUT_MILLIS = 3_000;
@@ -24,7 +26,7 @@ record DiscordCommandBridgeConfiguration(
         endpoints = Map.copyOf(endpoints);
         if (endpoints.isEmpty() || endpoints.size() > MAX_ENDPOINTS
                 || credential == null || credential.length() < MIN_SECRET_LENGTH
-                || timeout == null || timeout.isNegative() || timeout.isZero()) {
+                || timeout == null || timeout.isNegative() || timeout.isZero() || allowedChannelId <= 0) {
             throw new IllegalArgumentException("command bridge configuration is invalid");
         }
     }
@@ -35,7 +37,7 @@ record DiscordCommandBridgeConfiguration(
         }
         boolean any = present(values.get(ENDPOINTS_ENV))
                 || present(values.get(CREDENTIAL_ENV))
-                || present(values.get(TIMEOUT_MILLIS_ENV));
+                || present(values.get(TIMEOUT_MILLIS_ENV)) || present(values.get(CHANNEL_ENV));
         if (!any) {
             return Optional.empty();
         }
@@ -44,7 +46,8 @@ record DiscordCommandBridgeConfiguration(
         return Optional.of(new DiscordCommandBridgeConfiguration(
                 parseEndpoints(rawEndpoints),
                 credential,
-                Duration.ofMillis(timeout(values.get(TIMEOUT_MILLIS_ENV)))
+                Duration.ofMillis(timeout(values.get(TIMEOUT_MILLIS_ENV))),
+                channelId(required(values.get(CHANNEL_ENV), CHANNEL_ENV))
         ));
     }
 
@@ -94,6 +97,21 @@ record DiscordCommandBridgeConfiguration(
 
     private static boolean validScheme(String scheme) {
         return "http".equalsIgnoreCase(scheme) || "https".equalsIgnoreCase(scheme);
+    }
+
+    private static long channelId(String raw) {
+        if (!raw.matches("[0-9]{17,20}")) {
+            throw new IllegalArgumentException("command bridge channel ID is invalid");
+        }
+        try {
+            long channelId = Long.parseLong(raw);
+            if (channelId <= 0) {
+                throw new IllegalArgumentException("command bridge channel ID is invalid");
+            }
+            return channelId;
+        } catch (NumberFormatException failure) {
+            throw new IllegalArgumentException("command bridge channel ID is invalid", failure);
+        }
     }
 
     private static int timeout(String raw) {

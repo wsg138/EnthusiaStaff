@@ -676,7 +676,8 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
                 return;
             }
             commandBridge = PaperCommandBridgeRuntime.open(
-                    this, networkServerId(), storage, configured.orElseThrow());
+                    this, networkServerId(), storage, configured.orElseThrow(),
+                    runtimeComponents.staffMode()::authorityActive);
             featureIssues.remove("discord-command-bridge");
         } catch (RuntimeException exception) {
             featureIssues.put(

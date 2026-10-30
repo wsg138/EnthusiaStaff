@@ -19,7 +19,6 @@ import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.RejectedExecutionException;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import javax.imageio.ImageIO;
@@ -249,14 +248,14 @@ public final class InteractiveChatStagingArtifactProvider
     public CompletionStage<List<RichChatArtifact>> render(RichChatArtifactRequest request) {
         Objects.requireNonNull(request, "request");
         CompletableFuture<List<RichChatArtifact>> result = new CompletableFuture<>();
-        if (closed || clock.millis() > request.expiresAtEpochMillis()) {
+        if (shouldDrop(closed, clock.millis(), request)) {
             result.complete(List.of());
             return result;
         }
 
         try {
             plugin.getServer().getGlobalRegionScheduler().execute(plugin, () -> {
-                if (closed || clock.millis() > request.expiresAtEpochMillis()) {
+                if (shouldDrop(closed, clock.millis(), request)) {
                     result.complete(List.of());
                     return;
                 }
@@ -286,10 +285,9 @@ public final class InteractiveChatStagingArtifactProvider
             RichChatArtifactRequest request,
             CompletableFuture<List<RichChatArtifact>> result
     ) {
-        // This callback runs on the player's owning entity scheduler. Never
-        // inspect Player online state on the global region that resolved it.
-        if (closed || result.isDone() || !player.isOnline()
-                || clock.millis() > request.expiresAtEpochMillis()) {
+        // Online state is checked on the owning player thread, never the global region.
+        if (shouldDrop(closed, clock.millis(), request)
+                || result.isDone() || !player.isOnline()) {
             result.complete(List.of());
             return;
         }
@@ -298,6 +296,8 @@ public final class InteractiveChatStagingArtifactProvider
         try {
             snapshot = access.snapshot(player, request);
         } catch (ReflectiveOperationException | RuntimeException failure) {
+            RichInventoryPreviewDiagnostics.ifInventoryMarker(
+                    request.canonicalPlainText(), "snapshot_unavailable");
             result.complete(List.of());
             return;
         }
@@ -306,21 +306,46 @@ public final class InteractiveChatStagingArtifactProvider
             return;
         }
 
+        enqueueSnapshot(workers, () -> {
+            if (shouldDrop(closed, clock.millis(), request) || result.isDone()) {
+                result.complete(List.of());
+                return;
+            }
+            try {
+                List<RichChatArtifact> rendered = access.render(request.eventId(), snapshot);
+                completeIfActive(closed, clock.millis(), request, result, rendered);
+            } catch (ReflectiveOperationException | RuntimeException failure) {
+                result.complete(List.of());
+            }
+        }, result);
+    }
+
+    static void enqueueSnapshot(
+            java.util.concurrent.Executor executor,
+            Runnable render,
+            CompletableFuture<List<RichChatArtifact>> result
+    ) {
         try {
-            workers.execute(() -> {
-                if (closed || result.isDone() || clock.millis() > request.expiresAtEpochMillis()) {
-                    result.complete(List.of());
-                    return;
-                }
-                try {
-                    result.complete(access.render(request.eventId(), snapshot));
-                } catch (ReflectiveOperationException | RuntimeException failure) {
-                    result.complete(List.of());
-                }
-            });
-        } catch (RejectedExecutionException failure) {
+            executor.execute(render);
+        } catch (RuntimeException failure) {
+            // Optional preview failure never prevents delivery of the text message.
             result.complete(List.of());
         }
+    }
+
+    static boolean shouldDrop(boolean closed, long nowMillis, RichChatArtifactRequest request) {
+        return closed || nowMillis >= request.expiresAtEpochMillis();
+    }
+
+    static void completeIfActive(
+            boolean closed,
+            long nowMillis,
+            RichChatArtifactRequest request,
+            CompletableFuture<List<RichChatArtifact>> result,
+            List<RichChatArtifact> rendered
+    ) {
+        result.complete(shouldDrop(closed, nowMillis, request)
+                ? List.of() : List.copyOf(rendered));
     }
 
     @Override
@@ -712,6 +737,10 @@ public final class InteractiveChatStagingArtifactProvider
         ) throws ReflectiveOperationException {
             if ((kind == Kind.INVENTORY && !inventoryImagesEnabled)
                     || (kind == Kind.ENDER_CHEST && !enderImagesEnabled)) {
+                if (kind == Kind.INVENTORY) {
+                    RichInventoryPreviewDiagnostics.ifInventoryMarker(
+                            request.canonicalPlainText(), "addon_inventory_images_disabled");
+                }
                 return;
             }
             Match match = match(kind, enabled, placeholder, player, request);
@@ -774,15 +803,32 @@ public final class InteractiveChatStagingArtifactProvider
                 Player player,
                 RichChatArtifactRequest request
         ) throws ReflectiveOperationException {
-            if (!enabled.getBoolean(null) || !player.hasPermission(kind.permission)) {
+            boolean inventoryCandidate = kind == Kind.INVENTORY
+                    && RichInventoryPreviewDiagnostics.markerPresent(request.canonicalPlainText());
+            if (!enabled.getBoolean(null)) {
+                if (inventoryCandidate) {
+                    RichInventoryPreviewDiagnostics.warn("module_inventory_disabled");
+                }
+                return null;
+            }
+            if (!player.hasPermission(kind.permission)) {
+                if (inventoryCandidate) {
+                    RichInventoryPreviewDiagnostics.warn("inventory_permission_denied");
+                }
                 return null;
             }
             Object placeholder = placeholderField.get(null);
             if (placeholder == null) {
+                if (inventoryCandidate) {
+                    RichInventoryPreviewDiagnostics.warn("inventory_placeholder_missing");
+                }
                 return null;
             }
             Pattern pattern = (Pattern) invoke(getKeyword, placeholder);
             int position = firstUnescapedMatch(pattern, request.canonicalPlainText());
+            if (position < 0 && inventoryCandidate) {
+                RichInventoryPreviewDiagnostics.warn("inventory_keyword_not_matched");
+            }
             return position < 0 ? null : new Match(position);
         }
 
@@ -817,13 +863,23 @@ public final class InteractiveChatStagingArtifactProvider
                         );
                     };
                 } catch (ReflectiveOperationException | RuntimeException failure) {
+                    if (job.kind() == Kind.INVENTORY) {
+                        RichInventoryPreviewDiagnostics.warn("inventory_image_render_failed");
+                    }
                     continue;
                 }
                 if (image == null) {
+                    if (job.kind() == Kind.INVENTORY) {
+                        RichInventoryPreviewDiagnostics.warn("inventory_image_null");
+                    }
                     continue;
                 }
                 byte[] png = png(image);
                 if (png.length == 0 || png.length > RichChatArtifact.MAX_ARTIFACT_BYTES) {
+                    if (job.kind() == Kind.INVENTORY) {
+                        RichInventoryPreviewDiagnostics.warn(
+                                png.length == 0 ? "inventory_png_empty" : "inventory_png_over_limit");
+                    }
                     continue;
                 }
                 String suffix = eventId.toString().substring(0, 8);

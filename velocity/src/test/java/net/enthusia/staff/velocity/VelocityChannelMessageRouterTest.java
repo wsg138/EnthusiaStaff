@@ -27,6 +27,7 @@ import org.junit.jupiter.api.Test;
 class VelocityChannelMessageRouterTest {
     private static final long NOW = 1_800_000_000_000L;
     private static final String PAPER_SERVER = "SMP";
+    private static final String ISOLATED_BACKEND = "TEST";
     private static final String STAFF_BOT_PEER = "STAFFBOT";
     private static final String LOGICAL_CHANNEL = "global";
     private static final Clock CLOCK = Clock.fixed(Instant.ofEpochMilli(NOW), ZoneOffset.UTC);
@@ -128,6 +129,49 @@ class VelocityChannelMessageRouterTest {
         artifactRelay.close();
         renderedRelay.close();
         inbound.close();
+    }
+
+    @Test
+    void isolatedStaffBotHealthOnlyTargetsTestBackend() {
+        java.util.Set<String> delivered = new java.util.HashSet<>();
+        VelocityStaffBotChatHealthRelay healthRelay = new VelocityStaffBotChatHealthRelay(
+                Set.of(ISOLATED_BACKEND, PAPER_SERVER), CLOCK,
+                (peerId, id, type, body, timeout) -> {
+                    delivered.add(peerId);
+                    return java.util.concurrent.CompletableFuture.completedFuture(
+                            net.enthusia.staff.protocol.PersistentChannelServer.DeliveryStatus.ACKNOWLEDGED);
+                });
+        VelocityChatBridgeRelay relay = new VelocityChatBridgeRelay(CLOCK, 8, 32);
+        VelocityChatArtifactRelay artifacts = new VelocityChatArtifactRelay(CLOCK, 32);
+        VelocityRenderedChatBridgeRelay rendered =
+                new VelocityRenderedChatBridgeRelay(CLOCK, 8, 32);
+        VelocityDiscordChatIngressRelay inbound =
+                new VelocityDiscordChatIngressRelay(Set.of(ISOLATED_BACKEND, PAPER_SERVER), CLOCK, 8, 32);
+        VelocityChannelMessageRouter router = new VelocityChannelMessageRouter(
+                Set.of(ISOLATED_BACKEND, PAPER_SERVER), relay, artifacts, rendered, inbound,
+                healthRelay, message -> true);
+        try {
+            var signal = new ChatBridgeHealthMessage(true, NOW, NOW + 15_000L);
+            assertTrue(router.handle(envelope(
+                    VelocityStaffBotPeerRoute.TEST_PEER,
+                    UUID.randomUUID(), ChatBridgeMessages.HEALTH,
+                    ChatBridgeMessages.encodeHealth(signal))));
+            assertEquals(Set.of(ISOLATED_BACKEND), delivered);
+            delivered.clear();
+            assertTrue(router.handle(envelope(
+                    STAFF_BOT_PEER,
+                    UUID.randomUUID(), ChatBridgeMessages.HEALTH,
+                    ChatBridgeMessages.encodeHealth(signal))));
+            assertEquals(Set.of(PAPER_SERVER), delivered);
+            assertFalse(router.handle(envelope(
+                    VelocityStaffBotPeerRoute.TEST_PEER,
+                    UUID.randomUUID(), "UNAUTHORIZED_FRAME", "{}")));
+        } finally {
+            relay.close();
+            artifacts.close();
+            rendered.close();
+            inbound.close();
+        }
     }
 
     @Test

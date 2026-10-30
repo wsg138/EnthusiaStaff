@@ -1,0 +1,149 @@
+{
+  "schema_version": 1,
+  "kind": "synthetic",
+  "captured_at": "2026-10-15T00:00:00Z",
+  "group_source": "luckperms-effective-inherited",
+  "duty_policy": "ignored",
+  "d13_mode": "SHADOW",
+  "expected_discord": 2,
+  "expected_minecraft": 3,
+  "legacy_mapping": {
+    "helper": "2000000000000000001",
+    "mod": "2000000000000000002"
+  },
+  "d13_mapping": {
+    "helper": "2000000000000000001",
+    "mod": "2000000000000000002"
+  },
+  "protected_roles": [],
+  "links": [
+    {
+      "discord": "1000000000000000001",
+      "minecraft": [
+        "00000000-0000-0000-0000-000000000001",
+        "00000000-0000-0000-0000-000000000002"
+      ],
+      "status": "ACTIVE",
+      "captured_at": "2026-10-15T00:00:00Z"
+    },
+    {
+      "discord": "1000000000000000002",
+      "minecraft": [
+        "00000000-0000-0000-0000-000000000003"
+      ],
+      "status": "ACTIVE",
+      "captured_at": "2026-10-15T00:00:00Z"
+    }
+  ],
+  "accounts": [
+    {
+      "minecraft": "00000000-0000-0000-0000-000000000001",
+      "groups": [
+        "helper",
+        "default"
+      ],
+      "on_duty": false,
+      "captured_at": "2026-10-15T00:00:00Z"
+    },
+    {
+      "minecraft": "00000000-0000-0000-0000-000000000002",
+      "groups": [
+        "mod"
+      ],
+      "on_duty": true,
+      "captured_at": "2026-10-15T00:00:00Z"
+    },
+    {
+      "minecraft": "00000000-0000-0000-0000-000000000003",
+      "groups": [
+        "helper"
+      ],
+      "on_duty": false,
+      "captured_at": "2026-10-15T00:00:00Z"
+    }
+  ],
+  "legacy_members": [
+    {
+      "discord": "1000000000000000001",
+      "roles": [
+        "2000000000000000001",
+        "2000000000000000002",
+        "2000000000000000999"
+      ],
+      "captured_at": "2026-10-15T00:00:00Z"
+    },
+    {
+      "discord": "1000000000000000002",
+      "roles": [
+        "2000000000000000001"
+      ],
+      "captured_at": "2026-10-15T00:00:00Z"
+    }
+  ],
+  "d13_shadow": [
+    {
+      "discord": "1000000000000000001",
+      "state": "SHADOW_MATCH",
+      "desired_roles": [
+        "2000000000000000001",
+        "2000000000000000002"
+      ],
+      "observed_roles": [
+        "2000000000000000001",
+        "2000000000000000002",
+        "2000000000000000999"
+      ],
+      "captured_at": "2026-10-15T00:00:00Z"
+    },
+    {
+      "discord": "1000000000000000002",
+      "state": "SHADOW_MATCH",
+      "desired_roles": [
+        "2000000000000000001"
+      ],
+      "observed_roles": [
+        "2000000000000000001"
+      ],
+      "captured_at": "2026-10-15T00:00:00Z"
+    }
+  ],
+  "role_catalog": [
+    {
+      "id": "2000000000000000001",
+      "name": "Helper",
+      "owner": "staff-ranks",
+      "exists": true,
+      "public": false,
+      "integration_managed": false,
+      "can_interact": true
+    },
+    {
+      "id": "2000000000000000002",
+      "name": "Mod",
+      "owner": "staff-ranks",
+      "exists": true,
+      "public": false,
+      "integration_managed": false,
+      "can_interact": true
+    }
+  ],
+  "ownership_claims": [],
+  "legacy_writer_active": true,
+  "mapping_complete": true,
+  "links_complete": true,
+  "accounts_complete": true,
+  "membership_complete": true,
+  "d13_shadow_complete": true,
+  "role_catalog_complete": true,
+  "ownership_complete": true,
+  "scan_complete": true,
+  "legacy_role_holders": {
+    "2000000000000000001": [
+      "1000000000000000001",
+      "1000000000000000002"
+    ],
+    "2000000000000000002": [
+      "1000000000000000001"
+    ]
+  }
+}

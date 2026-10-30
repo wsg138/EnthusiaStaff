@@ -9,6 +9,10 @@ import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.UUID;
 import net.enthusia.staff.protocol.ChatArtifactMessages;
 import net.enthusia.staff.protocol.ChatBridgeArtifact;
@@ -40,6 +44,45 @@ class StaffBotChatArtifactIngressTest {
         assertEquals(1, store.consume(bundle.eventId(), "SMP", "global", NOW).size());
 
         assertFalse(ingress.accept(envelope(bundle("HUB", "global", NOW + 30_000))));
+        ingress.close();
+    }
+
+    @Test
+    void packetDecodingAcrossPauseAndResumeCannotRepopulateStaleCache() throws Exception {
+        StaffBotChatArtifactStore store = new StaffBotChatArtifactStore();
+        ChatBridgeArtifactBundle bundle = bundle("SMP", "global", NOW + 30_000);
+        CountDownLatch decodingStarted = new CountDownLatch(1);
+        CountDownLatch finishDecode = new CountDownLatch(1);
+        StaffBotChatArtifactIngress ingress = new StaffBotChatArtifactIngress(
+                Map.of(ROUTE, 1541286004298752091L), CLOCK, store,
+                payload -> {
+                    decodingStarted.countDown();
+                    try {
+                        if (!finishDecode.await(5, TimeUnit.SECONDS)) {
+                            throw new IllegalStateException("test decoder release was not signaled");
+                        }
+                    } catch (InterruptedException error) {
+                        Thread.currentThread().interrupt();
+                        return Optional.empty();
+                    }
+                    return Optional.of(bundle);
+                }
+        );
+        ingress.resume();
+        CompletableFuture<Boolean> pending = CompletableFuture.supplyAsync(
+                () -> ingress.accept(envelope(bundle)));
+        try {
+            assertTrue(decodingStarted.await(5, TimeUnit.SECONDS));
+            // The packet began in the old session and finishes in the new
+            // session. It must not survive the previous session's cache clear.
+            ingress.pause();
+            ingress.resume();
+        } finally {
+            finishDecode.countDown();
+        }
+        assertFalse(pending.get(5, TimeUnit.SECONDS));
+        assertEquals(0, store.size());
+        assertEquals(0L, store.storedBytes());
         ingress.close();
     }
 

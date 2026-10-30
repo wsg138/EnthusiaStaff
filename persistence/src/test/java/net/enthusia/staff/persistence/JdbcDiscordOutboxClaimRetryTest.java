@@ -36,14 +36,44 @@ final class JdbcDiscordOutboxClaimRetryTest {
     }
 
     @Test
-    void persistentConflictStopsAfterThreeClaimsWithoutLeasing() {
+    void persistentConflictStopsAfterSixClaimsWithoutLeasing() {
         FakeSqlStore fixture = new FakeSqlStore(10, 1020, "HY000");
         assertThrows(ModerationPersistenceException.class,
                 () -> new JdbcDiscordOutboxStore(fixture.dataSource())
                         .claimDue("velocity-discord:bounded", 1, Duration.ofSeconds(30), NOW));
-        assertEquals(3, fixture.queries);
-        assertEquals(3, fixture.rollbacks);
+        assertEquals(6, fixture.queries);
+        assertEquals(6, fixture.rollbacks);
         assertEquals(0, fixture.commits);
+        assertEquals(6, fixture.closed);
+    }
+
+    @Test
+    void prolongedRecordChangesCanRecoverWithoutDiscordSideEffects() {
+        FakeSqlStore fixture = new FakeSqlStore(4, 1020, "HY000");
+        var messages = new JdbcDiscordOutboxStore(fixture.dataSource())
+                .claimDue("velocity-discord:extended", 1, Duration.ofSeconds(30), NOW);
+        assertTrue(messages.isEmpty());
+        assertEquals(5, fixture.queries);
+        assertEquals(4, fixture.rollbacks);
+        assertEquals(1, fixture.commits);
+        assertEquals(5, fixture.readCommittedSettings);
+    }
+
+    @Test
+    void interruptedRetryFailsClosedAndPreservesInterruptStatus() {
+        FakeSqlStore fixture = new FakeSqlStore(10, 1020, "HY000");
+        Thread.currentThread().interrupt();
+        try {
+            assertThrows(ModerationPersistenceException.class,
+                    () -> new JdbcDiscordOutboxStore(fixture.dataSource())
+                            .claimDue("velocity-discord:interrupted", 1, Duration.ofSeconds(30), NOW));
+            assertTrue(Thread.currentThread().isInterrupted());
+            assertEquals(1, fixture.queries);
+            assertEquals(1, fixture.rollbacks);
+            assertEquals(0, fixture.commits);
+        } finally {
+            Thread.interrupted();
+        }
     }
 
     @Test

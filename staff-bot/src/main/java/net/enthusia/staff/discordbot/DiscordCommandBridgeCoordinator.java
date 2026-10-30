@@ -14,12 +14,21 @@ public final class DiscordCommandBridgeCoordinator {
     private final Transport transport;
     private final Clock clock;
     private final Supplier<UUID> requestIds;
+    private final long allowedChannelId;
 
     public DiscordCommandBridgeCoordinator(
             DiscordCommandActorResolver actors,
             HttpMinecraftCommandBridgeClient client
     ) {
-        this(actors, client::dispatch, Clock.systemUTC(), UUID::randomUUID);
+        this(actors, client, 0L);
+    }
+
+    public DiscordCommandBridgeCoordinator(
+            DiscordCommandActorResolver actors,
+            HttpMinecraftCommandBridgeClient client,
+            long allowedChannelId
+    ) {
+        this(actors, client::dispatch, Clock.systemUTC(), UUID::randomUUID, allowedChannelId);
     }
 
     DiscordCommandBridgeCoordinator(
@@ -28,6 +37,13 @@ public final class DiscordCommandBridgeCoordinator {
             Clock clock,
             Supplier<UUID> requestIds
     ) {
+        this(actors, transport, clock, requestIds, 0L);
+    }
+
+    DiscordCommandBridgeCoordinator(
+            DiscordCommandActorResolver actors, Transport transport, Clock clock,
+            Supplier<UUID> requestIds, long allowedChannelId
+    ) {
         if (actors == null || transport == null || clock == null || requestIds == null) {
             throw new IllegalArgumentException("command bridge coordinator configuration is incomplete");
         }
@@ -35,6 +51,11 @@ public final class DiscordCommandBridgeCoordinator {
         this.transport = transport;
         this.clock = clock;
         this.requestIds = requestIds;
+        this.allowedChannelId = allowedChannelId;
+    }
+
+    public boolean allowsChannel(long channelId) {
+        return allowedChannelId > 0 && channelId == allowedChannelId;
     }
 
     public Result request(DiscordUserId discordUserId, String targetServer, String command) {

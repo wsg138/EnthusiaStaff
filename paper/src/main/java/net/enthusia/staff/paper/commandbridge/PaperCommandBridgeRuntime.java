@@ -3,6 +3,8 @@ package net.enthusia.staff.paper.commandbridge;
 import java.io.IOException;
 import java.time.Clock;
 import java.util.Set;
+import java.util.UUID;
+import java.util.function.Predicate;
 import net.enthusia.staff.domain.commandbridge.CommandBridgeOutputSanitizer;
 import net.enthusia.staff.domain.commandbridge.CommandBridgePolicy;
 import net.enthusia.staff.domain.commandbridge.CommandBridgeService;
@@ -22,18 +24,19 @@ public final class PaperCommandBridgeRuntime implements AutoCloseable {
             JavaPlugin plugin,
             String serverId,
             MariaDbRuntime storage,
-            PaperCommandBridgeConfiguration configuration
+            PaperCommandBridgeConfiguration configuration,
+            Predicate<UUID> activeDuty
     ) {
-        if (plugin == null || storage == null || configuration == null) {
+        if (plugin == null || storage == null || configuration == null || activeDuty == null) {
             throw new IllegalArgumentException("command bridge runtime dependencies are required");
         }
         LuckPerms luckPerms = currentLuckPerms(plugin);
         CommandBridgeService service = new CommandBridgeService(
                 new CommandBridgePolicy(Set.of(serverId), configuration.rules()),
                 new CanonicalCommandBridgeLinkVerifier(storage.discordModerationPersistenceStore()),
-                new LuckPermsCommandBridgeAuthorityResolver(luckPerms),
+                new LuckPermsCommandBridgeAuthorityResolver(luckPerms, activeDuty),
                 storage.commandBridgeAuditStore(),
-                new BukkitConsoleCommandBridgeExecutor(plugin),
+                new BukkitConsoleCommandBridgeExecutor(plugin, activeDuty),
                 new CommandBridgeOutputSanitizer(),
                 Clock.systemUTC()
         );

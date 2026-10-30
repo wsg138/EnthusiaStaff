@@ -64,6 +64,8 @@ final class RichChatArtifactService {
             return Optional.empty();
         }
         if (provider == null) {
+            RichInventoryPreviewDiagnostics.ifInventoryMarker(
+                    message.canonicalPlainText(), "rich_provider_unavailable");
             return Optional.empty();
         }
 
@@ -85,6 +87,8 @@ final class RichChatArtifactService {
                     message.expiresAtEpochMillis()
             ));
             if (stage == null) {
+                RichInventoryPreviewDiagnostics.ifInventoryMarker(
+                        message.canonicalPlainText(), "render_stage_missing");
                 return Optional.empty();
             }
             future = stage.toCompletableFuture();
@@ -96,12 +100,23 @@ final class RichChatArtifactService {
         try {
             List<RichChatArtifact> rendered =
                     future.get(timeoutMillis, TimeUnit.MILLISECONDS);
+            if (rendered == null || rendered.isEmpty()) {
+                RichInventoryPreviewDiagnostics.ifInventoryMarker(
+                        message.canonicalPlainText(), "renderer_returned_no_artifacts");
+            }
             return toBundle(sourceServerId, message, rendered);
         } catch (InterruptedException failure) {
             Thread.currentThread().interrupt();
             future.cancel(true);
             return Optional.empty();
-        } catch (ExecutionException | TimeoutException | RuntimeException failure) {
+        } catch (TimeoutException failure) {
+            RichInventoryPreviewDiagnostics.ifInventoryMarker(
+                    message.canonicalPlainText(), "renderer_timeout");
+            future.cancel(true);
+            return Optional.empty();
+        } catch (ExecutionException | RuntimeException failure) {
+            RichInventoryPreviewDiagnostics.ifInventoryMarker(
+                    message.canonicalPlainText(), "renderer_execution_failed");
             future.cancel(true);
             return Optional.empty();
         }
@@ -127,6 +142,8 @@ final class RichChatArtifactService {
                 byte[] data = value.data();
                 totalBytes += data.length;
                 if (totalBytes > ChatBridgeArtifactBundle.MAX_TOTAL_ARTIFACT_BYTES) {
+                    RichInventoryPreviewDiagnostics.ifInventoryMarker(
+                            message.canonicalPlainText(), "bundle_over_limit");
                     return Optional.empty();
                 }
                 artifacts.add(new ChatBridgeArtifact(

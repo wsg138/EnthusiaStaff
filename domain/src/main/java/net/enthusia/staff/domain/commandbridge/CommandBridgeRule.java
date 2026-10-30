@@ -19,7 +19,7 @@ public record CommandBridgeRule(
         commandName = normalize(commandName);
         requiredPermission = normalize(requiredPermission);
         if (!COMMAND_NAME.matcher(commandName).matches()
-                || minimumRank == null
+                || minimumRank == null || !minimumRank.atLeast(StaffRank.MOD)
                 || !PERMISSION.matcher(requiredPermission).matches()
                 || maximumArguments < 0
                 || maximumArguments > MAX_ARGUMENTS) {

@@ -15,7 +15,7 @@ class DiscordChatMessagePresentationTest {
     private static final String MAIN_DISCORD_ID = "123456789" + "012345678";
     private static final String ALT_MINECRAFT_NAME = "FireFlyy";
     @Test
-    void onlyTheExplicitMainMinecraftAccountMayMentionItsLinkedDiscordIdentity() {
+    void verifiedMainIdentityCanBeResolvedButNeverAuthorizesACasualChatPing() {
         UUID main = UUID.randomUUID();
         UUID alt = UUID.randomUUID();
         var selected = Optional.of(new MainMinecraftAccount(main, MainAccountSelectionSource.AUTOMATIC));
@@ -45,8 +45,10 @@ class DiscordChatMessagePresentationTest {
         assertEquals(ALT_MINECRAFT_NAME, DiscordChatMessagePresentation.minecraftName(
                 Optional.of(ALT_MINECRAFT_NAME), "✧ **[Avid]<reset> SomethingElse"));
         assertEquals(ALT_MINECRAFT_NAME, DiscordChatMessagePresentation.sender(Optional.empty(), ALT_MINECRAFT_NAME));
-        assertEquals("<@123456789" + "012345678>",
+        assertEquals(ALT_MINECRAFT_NAME,
                 DiscordChatMessagePresentation.sender(Optional.of(MAIN_DISCORD_ID), ALT_MINECRAFT_NAME));
+        assertEquals("SomeName", DiscordChatMessagePresentation.sender(
+                Optional.of(MAIN_DISCORD_ID), "SomeName"));
     }
 
     @Test
@@ -57,6 +59,16 @@ class DiscordChatMessagePresentationTest {
                 "<chat=114583e7-f384-42c7-9352-4d34373c3df0:[i]:>Diamond Spear"));
         assertEquals("[Item]", DiscordChatMessagePresentation.body(
                 "<chat=114583e7-f384-42c7-9352-4d34373c3df0:[i]:>"));
+        assertEquals("is this rare?", DiscordChatMessagePresentation.body(
+                "<chat=53bbba9c-9f0c-4e24-8d44-c08fe96b743f:[item]:> is this rare?"));
+        assertEquals("can you check?", DiscordChatMessagePresentation.body(
+                "<chat=4c8181df-6058-4e19-9ed5-98b14618bd6b:[inventory]:> can you check?"));
+        assertEquals("[Item]", DiscordChatMessagePresentation.body(
+                "<chat=53bbba9c-9f0c-4e24-8d44-c08fe96b743f:[enderchest]:>"));
+        // Unknown/invalid ID is user text, not a trusted InteractiveChat token.
+        assertEquals("<chat=not-a-uuid:[item]:\\> is this rare?",
+                DiscordChatMessagePresentation.body(
+                        "<chat=not-a-uuid:[item]:> is this rare?"));
         assertEquals("hi \\*everyone\\* and @everyone", DiscordChatMessagePresentation.body(
                 "hi *everyone* and @everyone"));
     }

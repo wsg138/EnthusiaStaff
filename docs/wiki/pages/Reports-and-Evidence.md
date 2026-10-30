@@ -23,7 +23,7 @@ implementation status and source navigation, see [[Moderation, Punishments, and 
 
 ```text
 /report <player>
-# Choose a named reason in the inventory menu, then click the description prompt
+# Choose a category, then a clearly named reason, then click the description prompt
 /report describe <what happened>
 ```
 

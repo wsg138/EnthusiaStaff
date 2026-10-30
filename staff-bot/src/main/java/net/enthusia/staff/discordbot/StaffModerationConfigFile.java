@@ -35,6 +35,7 @@ final class StaffModerationConfigFile {
     static final String COMMAND_BRIDGE_ENDPOINTS_PROPERTY = "command-bridge.endpoints";
     static final String COMMAND_BRIDGE_CREDENTIAL_PROPERTY = "command-bridge.secret";
     static final String COMMAND_BRIDGE_TIMEOUT_PROPERTY = "command-bridge.timeout-millis";
+    static final String COMMAND_BRIDGE_CHANNEL_PROPERTY = "command-bridge.channel-id";
     static final String ENFORCEMENT_ENABLED_PROPERTY = "discord-enforcement.enabled";
     static final String MUTE_ROLE_PROPERTY = "discord-enforcement.mute-role-id";
     static final String SUPPORT_SCOPES_PROPERTY = "discord-enforcement.support-scope-ids";
@@ -69,6 +70,7 @@ final class StaffModerationConfigFile {
             Map.entry(COMMAND_BRIDGE_ENDPOINTS_PROPERTY, DiscordCommandBridgeConfiguration.ENDPOINTS_ENV),
             Map.entry(COMMAND_BRIDGE_CREDENTIAL_PROPERTY, DiscordCommandBridgeConfiguration.CREDENTIAL_ENV),
             Map.entry(COMMAND_BRIDGE_TIMEOUT_PROPERTY, DiscordCommandBridgeConfiguration.TIMEOUT_MILLIS_ENV),
+            Map.entry(COMMAND_BRIDGE_CHANNEL_PROPERTY, DiscordCommandBridgeConfiguration.CHANNEL_ENV),
             Map.entry(ENFORCEMENT_ENABLED_PROPERTY, DiscordPunishmentConfiguration.ENABLED_ENV),
             Map.entry(MUTE_ROLE_PROPERTY, DiscordPunishmentConfiguration.MUTE_ROLE_ENV),
             Map.entry(SUPPORT_SCOPES_PROPERTY, DiscordPunishmentConfiguration.SUPPORT_SCOPES_ENV),

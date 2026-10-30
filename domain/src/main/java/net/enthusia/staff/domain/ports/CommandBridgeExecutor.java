@@ -1,9 +1,11 @@
 package net.enthusia.staff.domain.ports;
 
+import java.util.UUID;
+
 /** Local Minecraft execution seam. Implementations must never retry a command internally. */
 @FunctionalInterface
 public interface CommandBridgeExecutor {
-    Execution execute(String normalizedCommand);
+    Execution execute(UUID actorPlayerId, String normalizedCommand);
 
     record Execution(boolean accepted, String output) {
         public Execution {

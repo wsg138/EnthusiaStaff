@@ -10,6 +10,7 @@ class ReportQueueRankGateTest {
     @Test void helpersAndDevelopersCanViewOnlyReports() {
         for (StaffRank rank : new StaffRank[] {StaffRank.HELPER, StaffRank.DEVELOPER}) {
             assertTrue(JdaStaffModerationListener.reviewQueueAllowed(rank, ReviewQueueView.REPORTS));
+            assertFalse(JdaStaffModerationListener.canMutateReportInDiscord(rank));
             assertFalse(JdaStaffModerationListener.reviewQueueAllowed(rank, ReviewQueueView.ALL));
             assertFalse(JdaStaffModerationListener.reviewQueueAllowed(rank, ReviewQueueView.PUNISHMENTS));
             assertFalse(JdaStaffModerationListener.reviewQueueAllowed(rank, ReviewQueueView.ALTS));
@@ -20,9 +21,12 @@ class ReportQueueRankGateTest {
         for (StaffRank rank : new StaffRank[] {StaffRank.MOD, StaffRank.ADMIN, StaffRank.FOUNDER}) {
             for (ReviewQueueView view : ReviewQueueView.values()) {
                 assertTrue(JdaStaffModerationListener.reviewQueueAllowed(rank, view));
+                assertTrue(JdaStaffModerationListener.canMutateReportInDiscord(rank));
             }
         }
         assertFalse(JdaStaffModerationListener.reviewQueueAllowed(StaffRank.SYSTEM, ReviewQueueView.REPORTS));
         assertFalse(JdaStaffModerationListener.reviewQueueAllowed(null, ReviewQueueView.REPORTS));
+        assertFalse(JdaStaffModerationListener.canMutateReportInDiscord(StaffRank.SYSTEM));
+        assertFalse(JdaStaffModerationListener.canMutateReportInDiscord(null));
     }
 }

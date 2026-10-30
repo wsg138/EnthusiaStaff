@@ -38,7 +38,7 @@ final class VelocityStaffBotChatArtifactSink implements VelocityChatArtifactRela
         Objects.requireNonNull(bundle, "bundle");
         try {
             return sender.send(
-                    VelocityStaffBotChatSink.PEER_ID,
+                    VelocityStaffBotPeerRoute.target(bundle.sourceServerId()),
                     ChatArtifactMessages.transportMessageId(bundle.eventId()),
                     ChatArtifactMessages.ARTIFACTS,
                     ChatArtifactMessages.encode(bundle),

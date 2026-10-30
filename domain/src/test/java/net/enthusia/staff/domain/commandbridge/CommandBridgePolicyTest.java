@@ -1,6 +1,7 @@
 package net.enthusia.staff.domain.commandbridge;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.time.Instant;
@@ -26,6 +27,18 @@ class CommandBridgePolicyTest {
     );
 
     @Test
+    void configurationCannotDelegateConsoleToHelperDeveloperOrSystem() {
+        for (StaffRank disallowed : List.of(StaffRank.HELPER, StaffRank.DEVELOPER, StaffRank.SYSTEM)) {
+            assertInvalidConsoleRole(disallowed);
+        }
+    }
+
+    private static void assertInvalidConsoleRole(StaffRank disallowed) {
+        assertThrows(IllegalArgumentException.class,
+                () -> new CommandBridgeRule("list", disallowed, "enthusia.console.list", 0));
+    }
+
+    @Test
     void acceptsOnlyExplicitTargetAndCommand() {
         CommandBridgePolicy.Decision decision = policy.evaluate(request(TARGET_SERVER, "/LIST"));
         assertTrue(decision.accepted());
@@ -47,6 +60,11 @@ class CommandBridgePolicyTest {
                 policy.evaluate(request(TARGET_SERVER, "list\nstop")).status());
         assertEquals(CommandBridgePolicy.Status.COMMAND_POLICY_REJECTED,
                 policy.evaluate(request(TARGET_SERVER, "list extra")).status());
+        for (String unsafe : List.of("list;stop", "list | stop", "list \"quoted\"",
+                "list 'quoted'", "list \\ stop", "list\u2028stop", "list\u202Espoof")) {
+            assertEquals(CommandBridgePolicy.Status.MALFORMED_COMMAND,
+                    policy.evaluate(request(TARGET_SERVER, unsafe)).status(), unsafe);
+        }
     }
 
     private static CommandBridgeRequest request(String server, String command) {
