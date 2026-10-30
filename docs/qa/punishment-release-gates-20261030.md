@@ -108,6 +108,14 @@ A read-only GitHub three-way ancestry/file comparison used shared ancestor `081c
 - **Fresh workflows** were triggered at `a79837f90c606a31b8da91f9f17f8c96fa30ac2b`; the prior failure is not waived. Record their complete outcomes, exact source SHA, and review findings before contemplating any release or merge.
 - CodeRabbit's behavioral test coverage concern is addressed in the new #763 source, but real Java/Bedrock/Folia acceptance and the whole candidate's mainline reconciliation remain outstanding.
 
+## Owner-approved ban-evasion migration proposal — 2026-10-30
+
+- The owner approved **permanent `NETWORK_BAN` for the first confirmed ban-evasion offense**. The full guided classification/calibration remains unapproved; see [#616](https://github.com/wsg138/EnthusiaStaff/issues/616).
+- [Draft PR #764](https://github.com/wsg138/EnthusiaStaff/pull/764) implements a default-read-only migration utility, exact-byte candidate check, SHA-256 compare-and-swap guard, exclusive backup and rollback runbook. It does **not** modify the bundled policy (which already has the approved permanent step) or the production YAML.
+- On 2026-10-30, its **dedicated synthetic-fixture CI run 41089825803 passed 10/10 tests** at source head `836a2099382cea040d609ba0446968015addb99e`. Later documentation-only commits should not be treated as a fresh runtime test.
+- The real on-disk SMP source and candidate were compared read-only: the intended version+reason substitutions yield a byte-identical candidate. This is not a production `--apply` execution or in-game policy load test.
+- **No live migration has been performed.** Before release, conduct isolated actual-runtime staging, review backup/recovery, obtain exact production deployment approval and preserve the independently customized file until the operator-controlled cutover. This approval does not unblock Folia or real Java/Bedrock guided GUI acceptance.
+
 ## Near-term worker queue
 
 - **P0:** Reconcile [#754](https://github.com/wsg138/EnthusiaStaff/pull/754) with newer checked-out/unpublished punishment fixes and establish a single candidate SHA without changing main or live systems.
