@@ -35,6 +35,17 @@ The published read-only policy comparison in #753 reports that the installed `re
 
 These are **documented snapshot findings**, not a fresh read of current live configuration. Verify the actual installed file/version and its checksum again during authorized pre-release review. The bootstrap intentionally preserves the installed customized file and warns of version mismatch; no upgrade step should overwrite it.
 
+### Read-only on-disk policy recheck — 2026-10-30
+
+Read the **current SMP disk file** `plugins/EnthusiaStaff/reason-policies.yml` through the existing authorized SFTP read interface (no writes, downloads, restarts, log or secrets access). Compared it with **the exact bundled source YAML** at PR #762 commit `361b9a81cd74117f8c85ae0e4c3065b482864d84` (the same bundled policy in the #754 base).
+
+- SMP file size: **48,772 bytes**; `version: "2026-09-26.1"`.
+- Candidate file size: **48,523 bytes**; `version: "2026-10-10.1"`.
+- **85 reason identifiers** in both, with no ID unique to either file.
+- Comparing all YAML reason blocks after omitting blank lines/comments and trailing whitespace found **one differing reason block: `evasion.ban`**. The resulting progression is exactly the four-step versus immediate-permanent difference above. The normalized defaults/header were identical other than version.
+- This is a **textual on-disk source comparison**, not a complete parser-based semantic proof, not a checksum of the active runtime policy, and not evidence that current deployed processes have loaded/reloaded the file. Exact runtime identity still must be verified before cutover.
+- **No decision or policy update was made.** Preserve the installed file. Approve the desired ban-evasion behavior explicitly under #616 before any migration.
+
 **Owner decision needed:** retain the installed escalating ladder, deliberately choose the bundled immediate-permanent ladder, or require manual review until a different versioned policy is accepted. Record the chosen exact ladder, policy version, rationale, and approval in issue #616 or a linked decision record. Do not infer permission from an unanswered question.
 
 ## Severity examples requiring explicit adjudication
