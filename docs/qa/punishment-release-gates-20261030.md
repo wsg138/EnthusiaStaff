@@ -90,6 +90,13 @@ A read-only GitHub three-way ancestry/file comparison used shared ancestor `081c
 - #763 adds a target-UUID guard **on the entity owner** and one regression test; it is draft, not a production release. The local worker's newer `e92d780f` InteractiveChat render-future changes were intentionally **not** ported into #763 because they require separate ownership/integration verification.
 - All above comparison results refer to these pinned Git refs. Recheck if `main` or any PR head changes.
 
+## Exact-head follow-up: committed punishment owner dispatch — 2026-10-30
+
+- [#763](https://github.com/wsg138/EnthusiaStaff/pull/763) now stacks on [#762](https://github.com/wsg138/EnthusiaStaff/pull/762) and contains the formerly local target-UUID fence, with behavioral tests for **global → lookup → owner → eligibility/effect** ordering. Later head `a79837f90c606a31b8da91f9f17f8c96fa30ac2b` logs an invariant diagnostic for an incorrect lookup instead of silently swallowing the committed online effect. No sanction policy or DB logic is modified.
+- **A preceding #763 head `c0efe498acc7fee489a238122c75ae02c4e5e45c` had a failed Staff state-reset runtime workflow** (run `41084969759`). Log evidence shows an invalid move packet, client disconnection, and rejected game-mode restoration during the proof fixture. The earlier #762 head had passed its corresponding proof. It is unknown whether the new failure is a fixture/timing problem or a code regression; do not treat the #763 stack as green merely because its MariaDB job and Sentinel workflow passed.
+- **Fresh workflows** were triggered at `a79837f90c606a31b8da91f9f17f8c96fa30ac2b`; the prior failure is not waived. Record their complete outcomes, exact source SHA, and review findings before contemplating any release or merge.
+- CodeRabbit's behavioral test coverage concern is addressed in the new #763 source, but real Java/Bedrock/Folia acceptance and the whole candidate's mainline reconciliation remain outstanding.
+
 ## Near-term worker queue
 
 - **P0:** Reconcile [#754](https://github.com/wsg138/EnthusiaStaff/pull/754) with newer checked-out/unpublished punishment fixes and establish a single candidate SHA without changing main or live systems.
