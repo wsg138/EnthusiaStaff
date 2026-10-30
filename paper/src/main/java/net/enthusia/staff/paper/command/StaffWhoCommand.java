@@ -120,7 +120,7 @@ public final class StaffWhoCommand implements CommandExecutor {
         if (!visibleTo(viewerId, playerId, vanish::canSee)) {
             return null;
         }
-        return new Entry(player.getName(), rank, staffMode.active(playerId), vanish.isVanished(playerId));
+        return new Entry(playerId, player.getName(), rank, staffMode.active(playerId), vanish.isVanished(playerId));
     }
 
     static boolean visibleTo(UUID viewerId, UUID targetId, BiPredicate<UUID, UUID> visibility) {
@@ -188,13 +188,19 @@ public final class StaffWhoCommand implements CommandExecutor {
     }
 
     private void respond(CommandSender sender, List<Entry> online, String pending) {
-        List<String> lines = render(online, pending);
-        deliver(sender, () -> lines.forEach(line -> sender.sendMessage(StaffMessageStyle.style(Component.text(line)))));
+        deliver(sender, () -> {
+            UUID viewerId = sender instanceof Player player ? player.getUniqueId() : null;
+            List<Entry> visible = StaffWhoResponseGuard.filterVisible(
+                    viewerId, online, Entry::playerId, vanish::canSee);
+            render(visible, pending).forEach(line ->
+                    sender.sendMessage(StaffMessageStyle.style(Component.text(line))));
+        });
     }
 
     private void deliver(CommandSender sender, Runnable delivery) {
         if (sender instanceof Player player) {
-            player.getScheduler().execute(plugin, delivery, null, 1L);
+            player.getScheduler().execute(plugin,
+                    () -> StaffWhoResponseGuard.deliverIfAuthorized(player, delivery), null, 1L);
             return;
         }
         plugin.getServer().getGlobalRegionScheduler().execute(plugin, delivery);
@@ -226,9 +232,9 @@ public final class StaffWhoCommand implements CommandExecutor {
         return value ? "yes" : "no";
     }
 
-    record Entry(String name, StaffRank rank, boolean staffMode, boolean vanished) {
+    record Entry(UUID playerId, String name, StaffRank rank, boolean staffMode, boolean vanished) {
         Entry {
-            if (name == null || name.isBlank() || rank == null) {
+            if (playerId == null || name == null || name.isBlank() || rank == null) {
                 throw new IllegalArgumentException("staffwho entry requires a name and rank");
             }
         }

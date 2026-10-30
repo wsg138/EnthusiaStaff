@@ -7,8 +7,11 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.function.Consumer;
 import java.util.function.Supplier;
 import net.enthusia.staff.common.Checks;
+import net.enthusia.staff.common.IdempotencyKey;
 import net.enthusia.staff.common.SecureIdentifiers;
 import net.enthusia.staff.domain.OperationalMode;
 import net.enthusia.staff.domain.auth.Actor;
@@ -32,6 +35,8 @@ public final class PunishmentRequestService {
     private final PunishmentService punishments;
     private final PunishmentRequestStore requests;
     private final int expirationBatchSize;
+    private final List<Consumer<PunishmentRequestResult.Approved>> approvedObservers =
+            new CopyOnWriteArrayList<>();
 
     public PunishmentRequestService(
             Clock clock,
@@ -124,6 +129,13 @@ public final class PunishmentRequestService {
         this.expirationBatchSize = expirationBatchSize;
     }
 
+    /** Register a notification-only observer for the first durable approval commit. */
+    public Runnable addApprovedObserver(Consumer<PunishmentRequestResult.Approved> observer) {
+        Consumer<PunishmentRequestResult.Approved> checked = Objects.requireNonNull(observer);
+        approvedObservers.add(checked);
+        return () -> approvedObservers.remove(checked);
+    }
+
     public PunishmentRequestResult submit(CreatePunishmentRequest request, OperationalMode mode) {
         return submitConfirmed(request, mode, null);
     }
@@ -165,12 +177,18 @@ public final class PunishmentRequestService {
         return requests.find(requestId);
     }
 
+    /** Does not evaluate a new proposal or mutate the original durable request. */
+    public Optional<PunishmentApprovalRequest> findSubmitted(IdempotencyKey submissionKey) {
+        return requests.findBySubmissionKey(Objects.requireNonNull(submissionKey));
+    }
+
     public List<PunishmentApprovalRequest> reviewable(Actor approver, int limit) {
         validateQueryLimit(limit);
         if (!hasApprovalAuthority(approver)) {
             return List.of();
         }
-        return pending(MAXIMUM_QUERY_LIMIT).stream()
+        return requests.pendingReviewable(clock.instant(), approver.id(), approver.rank(), limit)
+                .stream()
                 .filter(request -> mayReview(approver, request))
                 .limit(limit)
                 .toList();
@@ -213,7 +231,19 @@ public final class PunishmentRequestService {
         if (rejection != null) {
             return rejection;
         }
-        return requests.approve(lease, approver, caseIds.newCaseId(), now);
+        PunishmentRequestResult result = requests.approve(lease, approver, caseIds.newCaseId(), now);
+        if (result instanceof PunishmentRequestResult.Approved approved && !approved.replayed()) {
+            // The case has already committed. A failed announcement cannot roll
+            // back or misreport the durable approval, and replay must stay silent.
+            for (Consumer<PunishmentRequestResult.Approved> observer : approvedObservers) {
+                try {
+                    observer.accept(approved);
+                } catch (RuntimeException ignored) {
+                    // Notification consumers reconcile failures independently.
+                }
+            }
+        }
+        return result;
     }
 
     public PunishmentRequestResult deny(

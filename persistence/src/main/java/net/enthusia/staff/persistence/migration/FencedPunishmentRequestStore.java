@@ -6,10 +6,12 @@ import java.util.Optional;
 import java.util.UUID;
 import javax.sql.DataSource;
 import net.enthusia.staff.common.CaseId;
+import net.enthusia.staff.common.IdempotencyKey;
 import net.enthusia.staff.domain.application.PunishmentApprovalLease;
 import net.enthusia.staff.domain.application.PunishmentApprovalRequest;
 import net.enthusia.staff.domain.application.PunishmentRequestResult;
 import net.enthusia.staff.domain.auth.Actor;
+import net.enthusia.staff.domain.auth.StaffRank;
 import net.enthusia.staff.domain.ports.PunishmentRequestStore;
 
 public final class FencedPunishmentRequestStore implements PunishmentRequestStore {
@@ -41,8 +43,20 @@ public final class FencedPunishmentRequestStore implements PunishmentRequestStor
     }
 
     @Override
+    public Optional<PunishmentApprovalRequest> findBySubmissionKey(IdempotencyKey key) {
+        return delegate.findBySubmissionKey(key);
+    }
+
+    @Override
     public List<PunishmentApprovalRequest> pending(Instant now, int limit) {
         return delegate.pending(now, limit);
+    }
+
+    @Override
+    public List<PunishmentApprovalRequest> pendingReviewable(
+            Instant now, UUID reviewerId, StaffRank reviewerRank, int limit
+    ) {
+        return delegate.pendingReviewable(now, reviewerId, reviewerRank, limit);
     }
 
     @Override

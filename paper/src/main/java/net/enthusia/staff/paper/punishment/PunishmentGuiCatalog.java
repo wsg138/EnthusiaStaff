@@ -107,6 +107,14 @@ final class PunishmentGuiCatalog {
         return policies.activeVersion();
     }
 
+    /** The same live rank and command filters used by the reason picker.
+     * Saved drafts do not retain authority when a staff role changes.
+     */
+    boolean maySelectReason(Actor actor, String commandName, String reasonId) {
+        return reasonId != null && available(actor, commandName).stream()
+                .anyMatch(policy -> reasonId.equals(policy.id()));
+    }
+
     private List<ReasonPolicy> available(Actor actor, String commandName) {
         boolean mayIssue = authorization.permits(actor, ModerationAction.ISSUE_POLICY_SANCTION);
         boolean mayRequest = authorization.permits(actor, ModerationAction.REQUEST_POLICY_SANCTION);

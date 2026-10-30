@@ -260,7 +260,7 @@ public final class InteractiveChatStagingArtifactProvider
                     return;
                 }
                 Player player = plugin.getServer().getPlayer(request.minecraftPlayerId());
-                if (player == null || !player.isOnline()) {
+                if (player == null) {
                     result.complete(List.of());
                     return;
                 }
@@ -285,6 +285,7 @@ public final class InteractiveChatStagingArtifactProvider
             RichChatArtifactRequest request,
             CompletableFuture<List<RichChatArtifact>> result
     ) {
+        // Online state is checked on the owning player thread, never the global region.
         if (shouldDrop(closed, clock.millis(), request)
                 || result.isDone() || !player.isOnline()) {
             result.complete(List.of());

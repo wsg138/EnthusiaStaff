@@ -1,0 +1,205 @@
+package net.enthusia.staff.domain.guided;
+
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+
+/** Factual answers to the broad questionnaire map to existing v1 policy reasons. */
+public final class GuidedOffenseClassifier {
+    private GuidedOffenseClassifier() { }
+
+    private static GuidedIncidentWizard.Choice c(String id, String label) {
+        return new GuidedIncidentWizard.Choice(id, label);
+    }
+
+    private static final Map<String, List<GuidedIncidentWizard.Choice>> DETAILS = Map.ofEntries(
+            Map.entry("chat/slur", List.of(c("abbreviated", "Abbreviated slur"),
+                    c("full", "Full slur"), c("unknown", "Quoted or unclear"))),
+            Map.entry("chat/harassment", List.of(c("verbal", "General verbal abuse"),
+                    c("sexual", "Sexual harassment"), c("other", "Other / unclear"))),
+            Map.entry("chat/hate", List.of(c("discrimination", "Discriminatory statement"), c("symbol", "Extremist symbol"), c("advocacy", "Advocating hate violence"))),
+            Map.entry("chat/politics", List.of(c("casual", "Casual mention"), c("moderate", "Disruptive political discussion"), c("extreme", "Severe political content"))),
+            Map.entry("chat/communication", List.of(c("language", "Non-English public chat"),
+                    c("begging", "Excessive begging"))),
+            Map.entry("gameplay/cheating", List.of(c("xray", "X-ray ESP"), c("freecam", "Freecam"), c("baritone", "Baritone pathing"), c("printer", "Easy place printer"), c("autoclick", "Combat autoclicker"), c("client", "Unauthorized client"), c("other", "Other cheating"))),
+            Map.entry("gameplay/mods", List.of(c("pvp-indicator", "PvP indicator"),
+                    c("minimap", "Unauthorized minimap"),
+                    c("autoclicker-mod", "Unauthorized autoclicker mod"),
+                    c("bypass", "Autoclicker bypass"), c("other", "Other illegal modification"))),
+            Map.entry("gameplay/exploit", List.of(c("duplication", "Illegal duplication"), c("unclear", "Possessed unexplained dupes"), c("knowingly", "Knowingly kept dupes"), c("withholding", "Withheld exploit knowledge"), c("minor", "Minor bug abuse"), c("major", "Major bug abuse"), c("crash", "Server crash attempt"))),
+            Map.entry("gameplay/mechanics", List.of(c("loader", "Chunk loader"), c("farm", "Laggy farm"), c("portal", "Portal obstruction"))),
+            Map.entry("gameplay/complicity", List.of(c("rule", "Encouraged rule-breaking"), c("cheat", "Encouraged cheating"), c("assisted", "Assisted cheater"), c("laundering", "Laundered duplicated items"))),
+            Map.entry("safety/threat", List.of(c("credible", "Credible threat"), c("blackmail", "Blackmail extortion"), c("grooming", "Grooming"), c("self-harm", "Encouraged self-harm"), c("illegal", "Illegal exploitative content"), c("unknown", "Other uncertain threat"))),
+            Map.entry("safety/privacy", List.of(c("careless", "Careless personal information"), c("doxxing", "Doxxing"), c("unknown", "Unclear privacy allegation"))),
+            Map.entry("accounts/access", List.of(c("vpn", "Unapproved VPN"), c("sharing", "Account sharing"), c("headless", "Headless client"), c("download", "Unsafe download"), c("theft", "Account theft"))),
+            Map.entry("accounts/evasion", List.of(c("mute", "Evaded mute"), c("ban", "Evaded ban"), c("network", "Network identity ban"), c("help", "Helped evader"), c("harbor", "Harbored evader"))),
+            Map.entry("accounts/identity", List.of(c("staff", "Staff impersonation"), c("profile", "Inappropriate profile"))),
+            Map.entry("community/advertising", List.of(c("server", "Another Minecraft server"), c("self", "Unrelated self promotion"), c("malicious", "Malicious link"))),
+            Map.entry("community/reports", List.of(c("spam", "Report spam"), c("false", "False report"), c("abusive", "Abusive content"), c("harass", "Harassed staff"))),
+            Map.entry("community/content", List.of(c("moderate", "Moderately inappropriate"), c("extreme", "Extremely inappropriate"), c("explicit", "Explicit sexual content"))),
+            Map.entry("community/staff", List.of(c("refuse", "Refused staff instruction"), c("argument", "Public punishment argument"))),
+            Map.entry("community/dishonesty", List.of(c("falsify", "Falsified evidence"), c("lie", "Lied in investigation"))),
+            Map.entry("economy/market", List.of(c("compliance", "Market compliance"), c("extra-stall", "Extra alt stall"), c("blacklist", "Market blacklist evasion"))),
+            Map.entry("economy/reputation", List.of(c("false", "False reputation"), c("coordinated", "Coordinated manipulation"), c("alt", "Alt manipulation"), c("blacklist", "Reputation blacklist evasion")))
+    );
+    private static final Map<String, String> REASONS = Map.ofEntries(
+            Map.entry("chat/harassment/sexual", "harassment.sexual"),
+            Map.entry("chat/hate/discrimination", "hate.discriminatory-statement"),
+            Map.entry("chat/hate/symbol", "hate.extremist-symbol"),
+            Map.entry("chat/hate/advocacy", "hate.advocating-hate-violence"),
+            Map.entry("chat/politics/casual", "politics.casual"),
+            Map.entry("chat/politics/moderate", "politics.moderate"),
+            Map.entry("chat/politics/extreme", "politics.extreme"),
+            Map.entry("chat/communication/language", "language.non-english-public-chat"),
+            Map.entry("chat/communication/begging", "spam.begging"),
+            Map.entry("gameplay/cheating/xray", "cheating.xray-esp"),
+            Map.entry("gameplay/cheating/freecam", "cheating.freecam"),
+            Map.entry("gameplay/cheating/baritone", "cheating.baritone"),
+            Map.entry("gameplay/cheating/printer", "cheating.easy-place-printer"),
+            Map.entry("gameplay/cheating/autoclick", "cheating.combat-autoclicker"),
+            Map.entry("gameplay/cheating/client", "cheating.manual-client"),
+            Map.entry("gameplay/mods/pvp-indicator", "cheating.pvp-indicator"),
+            Map.entry("gameplay/mods/minimap", "cheating.minimap-display"),
+            Map.entry("gameplay/mods/autoclicker-mod", "cheating.unauthorized-autoclicker-mod"),
+            Map.entry("gameplay/mods/bypass", "cheating.autoclicker-bypass"),
+            Map.entry("gameplay/mods/other", "cheating.other-modification"),
+            Map.entry("gameplay/exploit/duplication", "exploit.illegal-duplication"),
+            Map.entry("gameplay/exploit/unclear", "exploit.duplicated-possession-unclear"),
+            Map.entry("gameplay/exploit/knowingly", "exploit.duplicated-possession-knowing"),
+            Map.entry("gameplay/exploit/withholding", "exploit.withholding"),
+            Map.entry("gameplay/exploit/minor", "exploit.minor-abuse"),
+            Map.entry("gameplay/exploit/major", "exploit.major-abuse"),
+            Map.entry("gameplay/exploit/crash", "exploit.server-crash-attempt"),
+            Map.entry("gameplay/mechanics/loader", "mechanics.chunk-loader"),
+            Map.entry("gameplay/mechanics/farm", "mechanics.laggy-farm"),
+            Map.entry("gameplay/mechanics/portal", "mechanics.end-portal-obstruction"),
+            Map.entry("gameplay/complicity/rule", "complicity.encouraging-rule-breaking"),
+            Map.entry("gameplay/complicity/cheat", "complicity.encouraging-cheating"),
+            Map.entry("gameplay/complicity/assisted", "complicity.assisting-cheating"),
+            Map.entry("gameplay/complicity/laundering", "complicity.laundering-duplicated-items"),
+            Map.entry("safety/threat/credible", "safety.credible-threat"),
+            Map.entry("safety/threat/blackmail", "safety.blackmail-extortion"),
+            Map.entry("safety/threat/grooming", "safety.grooming"),
+            Map.entry("safety/threat/self-harm", "safety.encouraging-self-harm"),
+            Map.entry("safety/threat/illegal", "safety.illegal-exploitative-content"),
+            Map.entry("safety/privacy/careless", "privacy.personal-information-careless"),
+            Map.entry("safety/privacy/doxxing", "privacy.doxxing"),
+            Map.entry("accounts/access/vpn", "account.unapproved-vpn"),
+            Map.entry("accounts/access/sharing", "account.sharing"),
+            Map.entry("accounts/access/headless", "account.headless-client"),
+            Map.entry("accounts/access/download", "account.unsafe-download"),
+            Map.entry("accounts/access/theft", "account.theft"),
+            Map.entry("accounts/evasion/mute", "evasion.mute"),
+            Map.entry("accounts/evasion/ban", "evasion.ban"),
+            Map.entry("accounts/evasion/network", "evasion.network-identity-ban"),
+            Map.entry("accounts/evasion/help", "evasion.helping-another"),
+            Map.entry("accounts/evasion/harbor", "evasion.harboring-ban-evader"),
+            Map.entry("accounts/identity/staff", "identity.staff-impersonation"),
+            Map.entry("accounts/identity/profile", "identity.inappropriate-profile"),
+            Map.entry("community/advertising/server", "advertising.minecraft-server"),
+            Map.entry("community/advertising/self", "advertising.unrelated-self-promotion"),
+            Map.entry("community/advertising/malicious", "advertising.malicious-link"),
+            Map.entry("community/reports/spam", "reports.spam"),
+            Map.entry("community/reports/false", "reports.false"),
+            Map.entry("community/reports/abusive", "reports.abusive-content"),
+            Map.entry("community/reports/harass", "reports.harassing-staff"),
+            Map.entry("community/content/moderate", "content.moderate-inappropriate"),
+            Map.entry("community/content/extreme", "content.extreme-inappropriate"),
+            Map.entry("community/content/explicit", "content.explicit-sexual"),
+            Map.entry("community/staff/refuse", "staff.refusing-instruction"),
+            Map.entry("community/staff/argument", "staff.public-punishment-argument"),
+            Map.entry("community/dishonesty/falsify", "dishonesty.falsifying-evidence"),
+            Map.entry("community/dishonesty/lie", "dishonesty.lying-investigation"),
+            Map.entry("economy/market/compliance", "market.compliance-failure"),
+            Map.entry("economy/market/extra-stall", "market.extra-stall-alt"),
+            Map.entry("economy/market/blacklist", "market.blacklist-evasion"),
+            Map.entry("economy/reputation/false", "reputation.false"),
+            Map.entry("economy/reputation/coordinated", "reputation.coordinated"),
+            Map.entry("economy/reputation/alt", "reputation.alt-manipulation"),
+            Map.entry("economy/reputation/blacklist", "reputation.blacklist-evasion")
+    );
+
+    public static List<GuidedIncidentWizard.Choice> details(String category, String conduct) {
+        return DETAILS.getOrDefault(category + "/" + conduct, List.of());
+    }
+
+    private static final Set<String> CONTEXTUAL_REASONS = Set.of(
+            "hate.general-toxicity", "hate.targeted-harassment",
+            "hate.abbreviated-slur-untargeted", "hate.abbreviated-slur-targeted",
+            "hate.full-slur-untargeted", "hate.full-slur-targeted",
+            "spam.low-level", "spam.message-flooding",
+            "spam.private-message", "spam.noise-pollution"
+    );
+
+    public static Set<String> mappedReasonIds() {
+        Set<String> all = new HashSet<>(REASONS.values());
+        all.addAll(CONTEXTUAL_REASONS);
+        return Set.copyOf(all);
+    }
+
+    private static final String CHAT = "chat";
+    private static final String PUBLIC_CHAT = "public-chat";
+    private static final String TARGETED = "targeted";
+    private static final String VERBAL = "verbal";
+
+    public static String resolve(String category, String medium, String conduct, String detail,
+                                 String extent, String targeting) {
+        String contextual = CHAT.equals(category)
+                ? resolveChat(medium, conduct, detail, extent, targeting) : null;
+        if (contextual != null) {
+            return contextual;
+        }
+        String prefix = category + "/" + conduct;
+        return REASONS.get(detail == null ? prefix : prefix + "/" + detail);
+    }
+
+    private static String resolveChat(String medium, String conduct, String detail,
+                                      String extent, String targeting) {
+        return switch (conduct) {
+            case "spam" -> resolveSpam(medium, extent);
+            case "harassment" -> resolveHarassment(detail, targeting);
+            case "slur" -> resolveSlur(detail, targeting);
+            case "language" -> resolveLanguage(medium);
+            default -> null;
+        };
+    }
+
+    private static String resolveHarassment(String detail, String targeting) {
+        if (!VERBAL.equals(detail)) {
+            return null;
+        }
+        return TARGETED.equals(targeting)
+                ? "hate.targeted-harassment" : "hate.general-toxicity";
+    }
+
+    private static String resolveLanguage(String medium) {
+        if (!PUBLIC_CHAT.equals(medium)) {
+            return null;
+        }
+        return "language.non-english-public-chat";
+    }
+
+    private static String resolveSpam(String medium, String extent) {
+        return switch (medium) {
+            case PUBLIC_CHAT -> "sustained".equals(extent) || "large-scale".equals(extent)
+                    ? "spam.message-flooding" : "spam.low-level";
+            case "direct-message" -> "spam.private-message";
+            case "voice" -> "spam.noise-pollution";
+            default -> null;
+        };
+    }
+
+    private static String resolveSlur(String detail, String targeting) {
+        if (detail == null) {
+            return null;
+        }
+        return switch (detail) {
+            case "abbreviated" -> TARGETED.equals(targeting)
+                    ? "hate.abbreviated-slur-targeted" : "hate.abbreviated-slur-untargeted";
+            case "full" -> TARGETED.equals(targeting)
+                    ? "hate.full-slur-targeted" : "hate.full-slur-untargeted";
+            default -> null;
+        };
+    }
+}

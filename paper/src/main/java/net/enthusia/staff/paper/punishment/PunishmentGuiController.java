@@ -17,6 +17,9 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.function.Supplier;
 import java.util.logging.Level;
+import net.enthusia.staff.domain.guided.GuidedIncidentWizard;
+import net.enthusia.staff.domain.guided.GuidedPolicyResolution;
+import net.enthusia.staff.domain.application.PunishmentEvaluation;
 import net.enthusia.staff.domain.OperationalMode;
 import net.enthusia.staff.domain.application.PreparePunishmentDraftRequest;
 import net.enthusia.staff.domain.application.PunishmentAssessment;
@@ -25,7 +28,9 @@ import net.enthusia.staff.domain.application.PunishmentDraftCleanupException;
 import net.enthusia.staff.domain.application.PunishmentDraftConfirmation;
 import net.enthusia.staff.domain.application.PunishmentDraftEvaluation;
 import net.enthusia.staff.domain.application.PunishmentDraftWorkflow;
+import net.enthusia.staff.domain.application.PunishmentDraftReprepareOverrides;
 import net.enthusia.staff.domain.application.PunishmentRequestDraftCleanupException;
+import net.enthusia.staff.domain.application.PunishmentRequestStatus;
 import net.enthusia.staff.domain.auth.Actor;
 import net.enthusia.staff.domain.auth.AuthorizationPolicy;
 import net.enthusia.staff.domain.auth.ModerationAction;
@@ -61,6 +66,8 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryCloseEvent;
 import org.bukkit.event.inventory.InventoryDragEvent;
+import org.bukkit.event.inventory.InventoryOpenEvent;
+import org.bukkit.event.player.PlayerCommandPreprocessEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.InventoryHolder;
@@ -93,6 +100,13 @@ public final class PunishmentGuiController implements Listener {
     private final Set<UUID> confirmations = ConcurrentHashMap.newKeySet();
     private final Map<UUID, NoteCapture> noteCaptures = new ConcurrentHashMap<>();
     private final Map<UUID, SearchCapture> searchCaptures = new ConcurrentHashMap<>();
+    private final PunishmentGuiHistoryFence historyFence = new PunishmentGuiHistoryFence();
+    // Independent single-use tokens prevent delayed draft results reopening old pages.
+    private final PunishmentGuiHistoryFence preparationFence = new PunishmentGuiHistoryFence();
+    private final PunishmentGuiTargetResolutionFence targetResolutionFence =
+            new PunishmentGuiTargetResolutionFence();
+    private static final String PUNISH_COMMAND = "punish";
+    private final Map<UUID, GuidedReturn> guidedReturns = new ConcurrentHashMap<>();
 
     public PunishmentGuiController(Dependencies dependencies) {
         this(
@@ -127,8 +141,18 @@ public final class PunishmentGuiController implements Listener {
         if (authorizedActor(viewer) == null) {
             return;
         }
+        // The picker is queued on the entity scheduler. Claim navigation now,
+        // rather than letting an older queued picker cancel a newer /punish
+        // command when its callback eventually runs.
+        var ticket = beginTargetResolution(viewer);
         String normalizedCommand = normalizeCommand(commandName);
-        onEntity(viewer, () -> openTargetPickerPage(viewer, normalizedCommand, 0));
+        onEntity(viewer, () -> {
+            if (!targetResolutionFence.consume(viewer.getUniqueId(), ticket,
+                    viewer.getOpenInventory().getTopInventory())) {
+                return;
+            }
+            openTargetPickerPage(viewer, normalizedCommand, 0);
+        });
     }
 
     public void open(Player viewer, String targetQuery, String commandName) {
@@ -137,18 +161,24 @@ public final class PunishmentGuiController implements Listener {
             return;
         }
         String normalizedCommand = normalizeCommand(commandName);
-        resolveTarget(viewer, targetQuery, target -> {
-            if (!targetAllowed(viewer, actor, target.playerId())) {
+        var ticket = beginTargetResolution(viewer);
+        resolveTarget(viewer, targetQuery, ticket, target -> {
+            if (!targetAllowed(viewer, actor, target.playerId(), ticket)) {
                 return;
             }
             PunishmentGuiOverview overview = loadOverview(target.playerId());
-            openState(viewer, new PunishmentGuiState.Categories(
+            // The overview reads multiple stores and may outlive the original
+            // hierarchy decision. Recheck on the worker, not the entity thread.
+            if (!targetAllowed(viewer, actor, target.playerId(), ticket)) {
+                return;
+            }
+            presentResolvedState(viewer, new PunishmentGuiState.Categories(
                     viewer.getUniqueId(),
                     target,
                     normalizedCommand,
                     overview,
                     0
-            ));
+            ), ticket);
         });
     }
 
@@ -157,35 +187,69 @@ public final class PunishmentGuiController implements Listener {
         if (actor == null) {
             return;
         }
-        resolveTarget(viewer, targetQuery, target -> {
-            if (!targetAllowed(viewer, actor, target.playerId())) {
+        var ticket = beginTargetResolution(viewer);
+        resolveTarget(viewer, targetQuery, ticket, target -> {
+            if (!targetAllowed(viewer, actor, target.playerId(), ticket)) {
                 return;
             }
             PunishmentDraftWorkflow workflow = workflows.get();
             if (workflow == null) {
-                message(viewer, "Moderation storage is not ready; no draft was opened.");
+                resolvedMessage(viewer, ticket, "Moderation storage is not ready; no draft was opened.");
                 return;
             }
             PunishmentDraft draft = workflow.resume(actor.id(), target.playerId()).orElse(null);
             if (draft == null) {
-                message(viewer, "No unexpired punishment draft exists for " + targetName(target) + '.');
+                resolvedMessage(viewer, ticket, "No unexpired punishment draft exists for " + targetName(target) + '.');
+                return;
+            }
+            if (isGuidedDraft(draft.internalExplanation()) && !guidedModeEnabled()) {
+                resolvedMessage(viewer, ticket, "Guided punishment mode is disabled. This saved draft is not "
+                        + "available for submission; use Expert Reasons instead.");
                 return;
             }
             if (!"punish".equalsIgnoreCase(invokedCommand)
                     && !draft.commandName().equalsIgnoreCase(invokedCommand)) {
-                message(viewer, "That draft belongs to /" + draft.commandName() + ". Resume it with /punish.");
+                resolvedMessage(viewer, ticket, "That draft belongs to /" + draft.commandName() + ". Resume it with /punish.");
                 return;
             }
             PunishmentGuiOverview overview = loadOverview(target.playerId());
-            openState(viewer, new PunishmentGuiState.Review(
+            // Draft and overview storage may be slow; do not reopen a saved
+            // review if the target became protected while they were loading.
+            if (!targetAllowed(viewer, actor, target.playerId(), ticket)) {
+                return;
+            }
+            presentResolvedState(viewer, new PunishmentGuiState.Review(
                     viewer.getUniqueId(),
                     target,
                     draft.commandName(),
                     overview,
                     draft,
                     Optional.empty()
-            ));
+            ), ticket);
         });
+    }
+
+    /** Opaque, viewer-bound ticket for the asynchronous typed /punish reason route. */
+    public static final class CommandPreparationTicket {
+        private final UUID viewerId;
+        private final PunishmentGuiTargetResolutionFence.Ticket resolution;
+
+        private CommandPreparationTicket(UUID viewerId,
+                                         PunishmentGuiTargetResolutionFence.Ticket resolution) {
+            this.viewerId = viewerId;
+            this.resolution = resolution;
+        }
+    }
+
+    /** Called on the viewer's entity thread before dispatching the typed command worker. */
+    public CommandPreparationTicket beginCommandPreparation(Player viewer) {
+        return new CommandPreparationTicket(viewer.getUniqueId(), beginTargetResolution(viewer));
+    }
+
+    public void cancelCommandPreparation(Player viewer, CommandPreparationTicket ticket) {
+        if (ticket != null && ticket.viewerId.equals(viewer.getUniqueId())) {
+            targetResolutionFence.cancel(viewer.getUniqueId(), ticket.resolution);
+        }
     }
 
     public void showPreparedDraft(
@@ -193,10 +257,15 @@ public final class PunishmentGuiController implements Listener {
             PlayerIdentity target,
             String commandName,
             Actor actor,
-            PunishmentDraftEvaluation.Prepared prepared
+            PunishmentDraftEvaluation.Prepared prepared,
+            CommandPreparationTicket ticket
     ) {
+        if (ticket == null || !ticket.viewerId.equals(viewer.getUniqueId())) {
+            return;
+        }
         PunishmentGuiOverview overview = loadOverview(target.playerId());
-        showPrepared(viewer, target, commandName, actor, overview, prepared);
+        showPrepared(viewer, target, commandName, actor, overview, prepared,
+                null, null, ticket.resolution);
     }
 
     @EventHandler(priority = EventPriority.HIGHEST)
@@ -210,6 +279,10 @@ public final class PunishmentGuiController implements Listener {
             return;
         }
         event.setCancelled(true);
+        // A new interaction supersedes pending history, draft and target lookups.
+        historyFence.invalidate(viewer.getUniqueId());
+        preparationFence.invalidate(viewer.getUniqueId());
+        targetResolutionFence.invalidate(viewer.getUniqueId());
         int slot = topInventorySlot(event, top);
         if (slot < 0) {
             return;
@@ -252,6 +325,10 @@ public final class PunishmentGuiController implements Listener {
             categoryClick(viewer, actor, categories, slot);
             return;
         }
+        if (state instanceof PunishmentGuiState.Guided guided) {
+            guidedClick(viewer, actor, guided, slot);
+            return;
+        }
         if (state instanceof PunishmentGuiState.Reasons reasons) {
             reasonClick(viewer, actor, reasons, slot);
             return;
@@ -274,13 +351,57 @@ public final class PunishmentGuiController implements Listener {
         InventoryHolder holder = event.getView().getTopInventory().getHolder(false);
         if (holder instanceof PunishmentGuiHolder || holder instanceof PunishmentTargetPickerHolder) {
             event.setCancelled(true);
+            historyFence.invalidate(event.getWhoClicked().getUniqueId());
+            preparationFence.invalidate(event.getWhoClicked().getUniqueId());
+            targetResolutionFence.invalidate(event.getWhoClicked().getUniqueId());
         }
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onOpen(InventoryOpenEvent event) {
+        if (!(event.getPlayer() instanceof Player viewer)) {
+            return;
+        }
+        // A staff member can open a chest or another plugin's GUI while an
+        // asynchronous punishment lookup/review is pending, or while a private
+        // note/search prompt is awaiting chat. Closing our own GUI is not
+        // guaranteed to happen in either case. Any successful inventory open
+        // supersedes that old navigation; otherwise a delayed callback could
+        // replace the unrelated inventory or intercept its owner's next chat.
+        UUID viewerId = viewer.getUniqueId();
+        noteCaptures.remove(viewerId);
+        searchCaptures.remove(viewerId);
+        historyFence.invalidate(viewerId);
+        preparationFence.invalidate(viewerId);
+        targetResolutionFence.invalidate(viewerId);
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR)
+    public void onCommand(PlayerCommandPreprocessEvent event) {
+        // A typed slash command indicates the staff member has left the
+        // pending punishment interaction, even when no inventory was opened.
+        // Invalidate unconditionally: AsyncChatEvent may already have removed
+        // its capture while the corresponding entity callback is still queued.
+        // The next /punish command mints its own fresh ticket afterwards.
+        UUID viewerId = event.getPlayer().getUniqueId();
+        noteCaptures.remove(viewerId);
+        searchCaptures.remove(viewerId);
+        historyFence.invalidate(viewerId);
+        preparationFence.invalidate(viewerId);
+        targetResolutionFence.invalidate(viewerId);
     }
 
     @EventHandler(priority = EventPriority.MONITOR)
     public void onClose(InventoryCloseEvent event) {
         if (!(event.getPlayer() instanceof Player viewer)
-                || !(event.getInventory().getHolder(false) instanceof PunishmentGuiHolder holder)) {
+                || !punishmentHolder(event.getInventory().getHolder(false))) {
+            return;
+        }
+        // Closing either a target picker or a punishment page cancels delayed lookups.
+        historyFence.invalidate(viewer.getUniqueId());
+        preparationFence.invalidate(viewer.getUniqueId());
+        targetResolutionFence.invalidate(viewer.getUniqueId());
+        if (!(event.getInventory().getHolder(false) instanceof PunishmentGuiHolder holder)) {
             return;
         }
         if (suppressedClosures.remove(viewer.getUniqueId())) {
@@ -305,21 +426,59 @@ public final class PunishmentGuiController implements Listener {
             SearchCapture search = searchCaptures.remove(viewer.getUniqueId());
             if (search != null) {
                 event.setCancelled(true);
+                // The entity scheduler's 60-second timeout can be delayed under
+                // load. Consume a late private query, but never let it reopen
+                // the old punishment GUI after the prompt's deadline.
+                if (searchCaptureExpired(search.startedAt(), clock.instant())) {
+                    onEntity(viewer, () -> {
+                        if (preparationFence.consume(viewer.getUniqueId(), search.navigationToken())) {
+                            viewer.sendMessage(StaffMessageStyle.style(Component.text(
+                                    "Punishment search timed out. Open the GUI and click Search to try again."
+                            )));
+                        }
+                    });
+                    return;
+                }
                 String query = PlainTextComponentSerializer.plainText().serialize(event.message());
-                onEntity(viewer, () -> finishSearch(viewer, search, query));
+                // Use the ticket minted when the search prompt was opened.
+                // Creating one here races newer entity-thread navigation.
+                onEntity(viewer, () -> {
+                    if (!preparationFence.consume(viewer.getUniqueId(), search.navigationToken())) {
+                        return;
+                    }
+                    finishSearch(viewer, search, query);
+                });
             }
             return;
         }
         event.setCancelled(true);
+        // A delayed 60-second scheduler callback can run late under load.
+        // Never let an already-expired private prompt edit an old draft.
+        if (noteCaptureExpired(capture.startedAt(), clock.instant())) {
+            onEntity(viewer, () -> {
+                if (preparationFence.consume(viewer.getUniqueId(), capture.navigationToken())) {
+                    viewer.sendMessage(StaffMessageStyle.style(Component.text(
+                            "Punishment note entry expired. Reopen the saved review to edit it."
+                    )));
+                }
+            });
+            return;
+        }
         String note = PlainTextComponentSerializer.plainText().serialize(event.message()).trim();
         onEntity(viewer, () -> {
+            if (!preparationFence.consume(viewer.getUniqueId(), capture.navigationToken())) {
+                return;
+            }
             if (note.equalsIgnoreCase("cancel")) {
                 openState(viewer, capture.review());
                 return;
             }
-            if (note.isBlank() || note.length() > 4_000) {
+            int maxNoteLength = isGuidedDraft(capture.review().draft().internalExplanation())
+                    ? 2_000 : 4_000;
+            if (note.isBlank() || note.length() > maxNoteLength) {
                 viewer.sendMessage(StaffMessageStyle.style(Component.text(
-                        "The internal explanation must contain 1 to 4000 characters; the prior draft remains saved."
+                        "The internal explanation must contain 1 to " + maxNoteLength
+                                + " characters; the prior draft remains saved."
                 )));
                 openState(viewer, capture.review());
                 return;
@@ -336,8 +495,12 @@ public final class PunishmentGuiController implements Listener {
         UUID viewerId = event.getPlayer().getUniqueId();
         noteCaptures.remove(viewerId);
         searchCaptures.remove(viewerId);
+        guidedReturns.remove(viewerId);
         suppressedClosures.remove(viewerId);
         confirmations.remove(viewerId);
+        historyFence.invalidate(viewerId);
+        preparationFence.invalidate(viewerId);
+        targetResolutionFence.invalidate(viewerId);
     }
 
     private void targetPickerClick(Player viewer, PunishmentTargetPickerHolder picker, int slot) {
@@ -417,6 +580,15 @@ public final class PunishmentGuiController implements Listener {
         }
         int index = PunishmentGuiRenderer.categoryIndex(slot, categories.size());
         if (index >= 0 && index < categories.size()) {
+            if (PUNISH_COMMAND.equalsIgnoreCase(state.commandName())
+                    && guidedModeEnabled()) {
+                String categoryId = categories.get(index).id();
+                openState(viewer, new PunishmentGuiState.Guided(
+                        state.viewerId(), state.target(), state.commandName(),
+                        state.overview(), categoryId,
+                        GuidedIncidentWizard.start(categoryId), 0));
+                return;
+            }
             openState(viewer, new PunishmentGuiState.Reasons(
                     state.viewerId(),
                     state.target(),
@@ -426,6 +598,197 @@ public final class PunishmentGuiController implements Listener {
                     0
             ));
         }
+    }
+
+    /** The flag is checked on every click, not only when entering the questionnaire. */
+    private void guidedClick(Player viewer, Actor actor, PunishmentGuiState.Guided state, int slot) {
+        if (!guidedModeEnabled()) {
+            message(viewer, "Guided punishment mode was disabled. Use Expert Reasons instead.");
+            openState(viewer, categoriesState(state));
+            return;
+        }
+        if (openHistoryFromControl(viewer, state, slot)) {
+            return;
+        }
+        if (slot == PunishmentGuiRenderer.CLOSE_SLOT) {
+            viewer.closeInventory();
+        } else if (slot == PunishmentGuiRenderer.SEARCH_SLOT) {
+            openGuidedExpertReasons(viewer, actor, state);
+        } else if (slot == PunishmentGuiRenderer.BACK_SLOT) {
+            backGuided(viewer, state);
+        } else if (state.interview().nextQuestion().isPresent()) {
+            chooseGuidedAnswer(viewer, state, slot);
+        } else {
+            chooseGuidedResult(viewer, actor, state, slot);
+        }
+    }
+
+    private void openGuidedExpertReasons(Player viewer, Actor actor,
+                                         PunishmentGuiState.Guided state) {
+        if (!catalog.reasons(actor, state.commandName(), state.categoryId()).isEmpty()) {
+            openState(viewer, new PunishmentGuiState.Reasons(
+                    state.viewerId(), state.target(), state.commandName(),
+                    state.overview(), state.categoryId(), 0));
+        }
+    }
+
+    private void backGuided(Player viewer, PunishmentGuiState.Guided state) {
+        if (guidedBackGoesToCategories(state.interview())) {
+            openState(viewer, categoriesState(state));
+            return;
+        }
+        // One answered question must return to that question, not the category picker.
+        openGuidedPage(viewer, state, state.interview().back(), 0);
+    }
+
+    /** Only an untouched interview should navigate out of the questionnaire. */
+    static boolean guidedBackGoesToCategories(GuidedIncidentWizard interview) {
+        return interview.answers().isEmpty();
+    }
+
+    private void chooseGuidedAnswer(Player viewer, PunishmentGuiState.Guided state, int slot) {
+        GuidedIncidentWizard.Question prompt = state.interview().nextQuestion().orElseThrow();
+        for (int index = 0; index < prompt.choices().size()
+                && index < PunishmentGuiRenderer.GUIDED_CHOICE_SLOTS.length; index++) {
+            if (slot == PunishmentGuiRenderer.GUIDED_CHOICE_SLOTS[index]) {
+                var choice = prompt.choices().get(index);
+                openGuidedPage(viewer, state,
+                        state.interview().answer(prompt.id(), choice.id()), 0);
+                return;
+            }
+        }
+    }
+
+    private void chooseGuidedResult(Player viewer, Actor actor,
+                                    PunishmentGuiState.Guided state, int slot) {
+        if (slot == PunishmentGuiRenderer.CONFIRM_SLOT) {
+            prepareGuided(viewer, actor, state);
+            return;
+        }
+        int updated = switch (slot) {
+            case PunishmentGuiRenderer.GUIDED_SHORTER_SLOT -> -1;
+            case PunishmentGuiRenderer.GUIDED_SUGGESTED_SLOT -> 0;
+            case PunishmentGuiRenderer.GUIDED_LONGER_SLOT -> 1;
+            default -> state.durationChoice();
+        };
+        if (updated != state.durationChoice()) {
+            openGuidedPage(viewer, state, state.interview(), updated);
+        }
+    }
+
+    private void openGuidedPage(Player viewer, PunishmentGuiState.Guided state,
+                                GuidedIncidentWizard interview, int durationChoice) {
+        openState(viewer, new PunishmentGuiState.Guided(
+                state.viewerId(), state.target(), state.commandName(),
+                state.overview(), state.categoryId(), interview, durationChoice));
+    }
+
+    /** An incident can only become a draft through the current policy gates. */
+    private void prepareGuided(Player viewer, Actor actor, PunishmentGuiState.Guided state) {
+        if (!guidedModeEnabled()) {
+            message(viewer, "Guided punishment mode was disabled. No draft was created.");
+            return;
+        }
+        if (state.interview().nextQuestion().isPresent()) {
+            message(viewer, "Finish the incident questionnaire before calculating.");
+            return;
+        }
+        GuidedIncidentWizard.Finding finding = state.interview().finding();
+        if (finding.needsReview() || finding.candidateId() == null) {
+            message(viewer, "This incident requires individual review. Choose Expert Reasons.");
+            return;
+        }
+        Object token = preparationFence.begin(viewer.getUniqueId());
+        boolean submitted = submit(viewer,
+                () -> evaluateGuided(viewer, actor, state, finding, token));
+        if (!submitted) {
+            preparationFence.consume(viewer.getUniqueId(), token);
+        }
+    }
+
+    private void evaluateGuided(Player viewer, Actor actor, PunishmentGuiState.Guided state,
+                                GuidedIncidentWizard.Finding finding, Object token) {
+        if (!workerAuthorityActive(viewer, actor)) {
+            return;
+        }
+        if (!guidedModeEnabled()) {
+            message(viewer, "Guided punishment mode was disabled. No draft was created.");
+            return;
+        }
+        if (!targetAllowed(viewer, actor, state.target().playerId())) {
+            return;
+        }
+        if (catalog.reasons(actor, state.commandName(), state.categoryId()).stream()
+                .noneMatch(policy -> policy.id().equals(finding.candidateId()))) {
+            message(viewer, "Your rank cannot select that configured reason.");
+            return;
+        }
+        PunishmentDraftWorkflow workflow = workflows.get();
+        if (workflow == null) {
+            message(viewer, "Punishment storage is unavailable; no action was taken.");
+            return;
+        }
+        String explanation = guidedExplanation(state, finding);
+        PreparePunishmentDraftRequest readOnly = new PreparePunishmentDraftRequest(
+                state.target().playerId(), actor, finding.candidateId(), explanation,
+                CaseVisibility.PUBLIC, state.commandName()
+        );
+        PunishmentEvaluation preview = workflow.preview(readOnly, mode.get());
+        if (preview instanceof PunishmentEvaluation.Rejected rejected) {
+            message(viewer, rejected.code() + ": " + rejected.message());
+            return;
+        }
+        PunishmentAssessment assessment = ((PunishmentEvaluation.Allowed) preview).assessment();
+        GuidedPolicyResolution.Outcome outcome;
+        try {
+            outcome = GuidedPolicyResolution.calculate(finding, assessment, state.durationChoice());
+        } catch (IllegalArgumentException invalid) {
+            message(viewer, "The calculated outcome needs manual review.");
+            return;
+        }
+        boolean defaultSanctions = assessment.escalation().selectedStep().sanctions()
+                .equals(outcome.sanctions());
+        PreparePunishmentDraftRequest proposal = new PreparePunishmentDraftRequest(
+                state.target().playerId(), actor, finding.candidateId(),
+                explanation + " | " + outcome.reasoning(), CaseVisibility.PUBLIC,
+                state.commandName(), defaultSanctions ? List.of() : outcome.sanctions()
+        );
+        // Recheck just before persistence; the switch may change during async preview.
+        if (!guidedModeEnabled()) {
+            message(viewer, "Guided punishment mode was disabled during calculation. "
+                    + "No draft was created.");
+            return;
+        }
+        if (!workerAuthorityActive(viewer, actor)
+                || !targetAllowed(viewer, actor, state.target().playerId())) {
+            // Preview and questionnaire classification may read slow storage.
+            // Revalidate the live LuckPerms hierarchy and immutable actor rank
+            // before persisting the calculated guided draft.
+            return;
+        }
+        PunishmentDraftEvaluation evaluated = workflow.prepare(proposal, mode.get(), assessment);
+        // The questionnaire return state is committed only if this request
+        // still owns the viewer's navigation at final entity-thread presentation.
+        showPrepared(viewer, state.target(), state.commandName(),
+                actor, state.overview(), evaluated, token, state);
+    }
+
+    private static String guidedExplanation(PunishmentGuiState.Guided state,
+                                            GuidedIncidentWizard.Finding finding) {
+        StringBuilder result = new StringBuilder(96).append("Guided incident v1 | category=")
+                .append(state.categoryId()).append(" | target=").append(state.target().playerId());
+        state.interview().answers().entrySet().stream()
+                .sorted(Map.Entry.comparingByKey())
+                .forEach(entry -> result.append(" | ").append(entry.getKey())
+                        .append('=').append(entry.getValue()));
+        return result.append(" | incidentImpact=")
+                .append(finding.preliminaryImpact())
+                .append(" | staffPreference=")
+                .append(switch (state.durationChoice()) {
+                    case -1 -> "CONSERVATIVE";
+                    case 1 -> "STRONGER";
+                    default -> "BALANCED";
+                }).toString();
     }
 
     private void reasonClick(Player viewer, Actor actor, PunishmentGuiState.Reasons state, int slot) {
@@ -535,18 +898,22 @@ public final class PunishmentGuiController implements Listener {
     }
 
     private void startSearch(Player viewer, PunishmentGuiState state) {
-        SearchCapture capture = new SearchCapture(state, clock.instant());
         noteCaptures.remove(viewer.getUniqueId());
+        suppressedClosures.add(viewer.getUniqueId());
+        viewer.closeInventory();
+        // Closing the punishment inventory invalidates pending preparation
+        // tickets. Mint the chat ticket only AFTER that synchronous close.
+        Object chatToken = preparationFence.begin(viewer.getUniqueId());
+        SearchCapture capture = new SearchCapture(state, clock.instant(), chatToken);
         searchCaptures.put(viewer.getUniqueId(), capture);
         viewer.getScheduler().runDelayed(plugin, task -> {
             if (searchCaptures.remove(viewer.getUniqueId(), capture)) {
+                preparationFence.consume(viewer.getUniqueId(), capture.navigationToken());
                 viewer.sendMessage(StaffMessageStyle.style(Component.text(
                         "Punishment search timed out. Open the GUI and click Search to try again."
                 )));
             }
         }, null, 20L * 60L);
-        suppressedClosures.add(viewer.getUniqueId());
-        viewer.closeInventory();
         viewer.sendMessage(StaffMessageStyle.style(Component.text(
                 "Search punishment reasons: type 2–64 characters, or cancel. Your message will not be broadcast."
         )));
@@ -557,9 +924,11 @@ public final class PunishmentGuiController implements Listener {
             return;
         }
         PunishmentGuiState origin = capture.origin();
-        if (clock.instant().isAfter(capture.startedAt().plus(Duration.ofSeconds(60)))) {
+        if (searchCaptureExpired(capture.startedAt(), clock.instant())) {
+            // A valid chat may have queued before the deadline but only
+            // reached this entity callback afterwards. Never reopen the
+            // abandoned GUI when the original prompt has expired.
             message(viewer, "Reason search expired; please try again.");
-            openState(viewer, origin);
             return;
         }
         String normalized = text.strip().replaceAll("\\s+", " ");
@@ -591,6 +960,11 @@ public final class PunishmentGuiController implements Listener {
             return;
         }
         if (slot == PunishmentGuiRenderer.BACK_SLOT) {
+            PunishmentGuiState.Guided previous = matchingGuidedReturn(viewer, state);
+            if (previous != null && guidedModeEnabled()) {
+                openState(viewer, previous);
+                return;
+            }
             String categoryId = policies.find(state.draft().reasonId())
                     .map(ReasonPolicy::family)
                     .map(catalog::categoryId)
@@ -621,17 +995,52 @@ public final class PunishmentGuiController implements Listener {
             return;
         }
         if (slot == PunishmentGuiRenderer.NOTE_SLOT) {
-            noteCaptures.put(viewer.getUniqueId(), new NoteCapture(state));
             suppressedClosures.add(viewer.getUniqueId());
             viewer.closeInventory();
+            // The close event invalidates preparation tickets; capture the
+            // prompt's navigation identity only after that close completes.
+            Object chatToken = preparationFence.begin(viewer.getUniqueId());
+            NoteCapture capture = new NoteCapture(state, clock.instant(), chatToken);
+            noteCaptures.put(viewer.getUniqueId(), capture);
+            viewer.getScheduler().runDelayed(plugin, task -> {
+                if (noteCaptures.remove(viewer.getUniqueId(), capture)) {
+                    preparationFence.consume(viewer.getUniqueId(), capture.navigationToken());
+                    viewer.sendMessage(StaffMessageStyle.style(Component.text(
+                            "Punishment note entry timed out. Reopen the saved review to edit it."
+                    )));
+                }
+            }, null, 20L * 60L);
             viewer.sendMessage(StaffMessageStyle.style(Component.text(
-                    "Type the private internal explanation in chat, or type cancel. It will not be broadcast."
+                    isGuidedDraft(state.draft().internalExplanation())
+                            ? "Add a private staff rationale; incident facts are preserved. Type cancel to return."
+                            : "Type the private internal explanation in chat, or type cancel. It will not be broadcast."
             )));
             return;
         }
         if (slot == PunishmentGuiRenderer.CONFIRM_SLOT) {
+            if (isGuidedDraft(state.draft().internalExplanation()) && !guidedModeEnabled()) {
+                message(viewer, "Guided punishment mode is disabled. "
+                        + "This saved draft cannot be submitted.");
+                return;
+            }
+            if (!PunishmentGuiRenderer.reviewPolicyCurrent(
+                    state.draft().expectation().configurationVersion(), policies.activeVersion())) {
+                message(viewer, "Punishment rules changed since this draft was prepared. "
+                        + "Go back and reassess before submitting.");
+                return;
+            }
+            if (guidedNeedsStaffRationale(state.draft().internalExplanation())) {
+                message(viewer, "You changed the suggested assessment. Add an internal note "
+                        + "explaining why before confirming.");
+                return;
+            }
             if (catalog.find(state.draft().reasonId()).isEmpty()) {
                 message(viewer, "That saved reason is no longer available. Go back and choose another reason.");
+                return;
+            }
+            if (!catalog.maySelectReason(actor, state.commandName(), state.draft().reasonId())) {
+                message(viewer, "Your current rank or command can no longer select this reason. "
+                        + "Return to categories before submitting.");
                 return;
             }
             confirm(viewer, actor, state);
@@ -667,12 +1076,20 @@ public final class PunishmentGuiController implements Listener {
     }
 
     private void openHistory(Player viewer, PunishmentGuiState returnState, int page) {
+        Actor actor = authorizedActor(viewer);
+        if (actor == null) {
+            return;
+        }
         boolean sensitiveHistory = viewer.hasPermission(HistoryCommand.SENSITIVE_PERMISSION);
-        submit(viewer, () -> {
+        Object token = historyFence.begin(viewer.getUniqueId());
+        boolean submitted = submit(viewer, () -> {
+            if (!historyTargetAllowed(viewer, actor, returnState, token)) {
+                return;
+            }
             ModerationHistoryStore store = histories.get();
             ModerationFeatureSettings active = settings.get();
             if (store == null || active == null) {
-                openUnavailableHistory(viewer, returnState, sensitiveHistory);
+                openUnavailableHistory(viewer, actor, returnState, sensitiveHistory, token);
                 return;
             }
             HistoryQueryOptions options = historyOptions(active, sensitiveHistory);
@@ -683,7 +1100,12 @@ public final class PunishmentGuiController implements Listener {
                         HISTORY_PAGE_SIZE,
                         options
                 );
-                openState(viewer, new PunishmentGuiState.History(
+                // A target can gain a protected staff rank during the history
+                // query. Verify again on this worker before exposing the page.
+                if (!historyTargetAllowed(viewer, actor, returnState, token)) {
+                    return;
+                }
+                openHistoryState(viewer, new PunishmentGuiState.History(
                         returnState.viewerId(),
                         returnState.target(),
                         returnState.commandName(),
@@ -692,21 +1114,48 @@ public final class PunishmentGuiController implements Listener {
                         sensitiveHistory,
                         true,
                         returnState
-                ));
+                ), token);
             } catch (IllegalArgumentException exception) {
+                historyFence.consume(viewer.getUniqueId(), token);
                 message(viewer, "That history page is no longer available.");
             } catch (RuntimeException exception) {
                 plugin.getLogger().log(Level.WARNING, "Punishment GUI history lookup failed", exception);
-                openUnavailableHistory(viewer, returnState, sensitiveHistory);
+                openUnavailableHistory(viewer, actor, returnState, sensitiveHistory, token);
             }
         });
+        if (!submitted) {
+            historyFence.consume(viewer.getUniqueId(), token);
+        }
+    }
+
+    private boolean historyTargetAllowed(Player viewer, Actor actor,
+                                         PunishmentGuiState returnState, Object token) {
+        StaffTargetGuard.Result result = targetGuard.check(
+                actor, returnState.target().playerId(), false);
+        if (result.allowed()) {
+            return true;
+        }
+        // Never report a denial for an abandoned history request after the
+        // viewer has navigated elsewhere. The token is consumed only on owner.
+        onEntity(viewer, () -> {
+            if (historyFence.consume(viewer.getUniqueId(), token)) {
+                viewer.sendMessage(StaffMessageStyle.style(Component.text(
+                        result.message(), NamedTextColor.RED)));
+            }
+        });
+        return false;
     }
 
     private void openUnavailableHistory(
             Player viewer,
+            Actor actor,
             PunishmentGuiState returnState,
-            boolean sensitiveHistory
+            boolean sensitiveHistory,
+            Object token
     ) {
+        if (!historyTargetAllowed(viewer, actor, returnState, token)) {
+            return;
+        }
         ModerationHistoryPage empty = new ModerationHistoryPage(
                 returnState.target().playerId(),
                 1,
@@ -715,7 +1164,7 @@ public final class PunishmentGuiController implements Listener {
                 0,
                 List.of()
         );
-        openState(viewer, new PunishmentGuiState.History(
+        openHistoryState(viewer, new PunishmentGuiState.History(
                 returnState.viewerId(),
                 returnState.target(),
                 returnState.commandName(),
@@ -724,7 +1173,7 @@ public final class PunishmentGuiController implements Listener {
                 sensitiveHistory,
                 false,
                 returnState
-        ));
+        ), token);
     }
 
     private void prepare(
@@ -733,13 +1182,18 @@ public final class PunishmentGuiController implements Listener {
             PunishmentGuiState state,
             ReasonPolicy policy
     ) {
-        submit(viewer, () -> {
-            if (!targetAllowed(viewer, actor, state.target().playerId())) {
+        Object token = preparationFence.begin(viewer.getUniqueId());
+        boolean submitted = submit(viewer, () -> {
+            if (!workerAuthorityActive(viewer, actor)
+                    || !targetAllowed(viewer, actor, state.target().playerId())) {
                 return;
             }
             PunishmentDraftWorkflow workflow = workflows.get();
             if (workflow == null) {
                 message(viewer, "Moderation storage is not ready; no draft was created.");
+                return;
+            }
+            if (!workerAuthorityActive(viewer, actor)) {
                 return;
             }
             PunishmentDraftEvaluation evaluation = workflow.prepare(
@@ -759,9 +1213,39 @@ public final class PunishmentGuiController implements Listener {
                     state.commandName(),
                     actor,
                     state.overview(),
-                    evaluation
+                    evaluation, token
             );
         });
+        if (!submitted) {
+            preparationFence.consume(viewer.getUniqueId(), token);
+        }
+    }
+
+    private boolean guidedModeEnabled() {
+        return plugin.getConfig().getBoolean("guided-punishment.enabled", false);
+    }
+
+    private static final String GUIDED_AUDIT_PREFIX = "Guided incident v1";
+    private static final String STAFF_NOTE_SEPARATOR = " | Staff note: ";
+
+    private static boolean isGuidedDraft(String explanation) {
+        return explanation.startsWith(GUIDED_AUDIT_PREFIX);
+    }
+
+    static boolean guidedNeedsStaffRationale(String explanation) {
+        return isGuidedDraft(explanation)
+                && (explanation.contains("staffPreference=CONSERVATIVE")
+                        || explanation.contains("staffPreference=STRONGER"))
+                && !explanation.contains(STAFF_NOTE_SEPARATOR);
+    }
+
+    static String guidedAuditExplanation(String previous, String replacement) {
+        if (!isGuidedDraft(previous) || previous.equals(replacement)) {
+            return replacement;
+        }
+        String originalAudit = previous.split(java.util.regex.Pattern.quote(
+                STAFF_NOTE_SEPARATOR), 2)[0];
+        return originalAudit + STAFF_NOTE_SEPARATOR + replacement.trim();
     }
 
     private void reprepare(
@@ -771,8 +1255,10 @@ public final class PunishmentGuiController implements Listener {
             String explanation,
             CaseVisibility visibility
     ) {
-        submit(viewer, () -> {
-            if (!targetAllowed(viewer, actor, state.target().playerId())) {
+        Object token = preparationFence.begin(viewer.getUniqueId());
+        boolean submitted = submit(viewer, () -> {
+            if (!workerAuthorityActive(viewer, actor)
+                    || !targetAllowed(viewer, actor, state.target().playerId())) {
                 return;
             }
             PunishmentDraftWorkflow workflow = workflows.get();
@@ -780,26 +1266,55 @@ public final class PunishmentGuiController implements Listener {
                 message(viewer, "Moderation storage is not ready; the existing draft remains saved.");
                 return;
             }
-            PunishmentDraftEvaluation evaluation = workflow.prepare(
-                    new PreparePunishmentDraftRequest(
-                            state.target().playerId(),
-                            actor,
-                            state.draft().reasonId(),
-                            explanation,
-                            visibility,
-                            state.commandName()
-                    ),
-                    mode.get()
+            if (isGuidedDraft(state.draft().internalExplanation()) && !guidedModeEnabled()) {
+                message(viewer, "Guided punishment mode is disabled. "
+                        + "This saved draft cannot be modified.");
+                return;
+            }
+            if (isGuidedDraft(state.draft().internalExplanation())
+                    && !state.draft().expectation().configurationVersion()
+                            .equals(policies.activeVersion())) {
+                message(viewer, "The punishment policy changed. Reassess this incident "
+                        + "before editing the saved guided draft.");
+                return;
+            }
+            PreparePunishmentDraftRequest edited = new PreparePunishmentDraftRequest(
+                    state.target().playerId(),
+                    actor,
+                    state.draft().reasonId(),
+                    guidedAuditExplanation(state.draft().internalExplanation(), explanation),
+                    visibility,
+                    state.commandName(),
+                    PunishmentDraftReprepareOverrides.choose(
+                            state.draft().expectation(), state.assessment(),
+                            policies.find(state.draft().reasonId()))
             );
+            // A note or visibility edit must not silently replace the guided
+            // sanctions reviewed by staff, even after a resumed draft has lost
+            // its transient assessment. Expert edits retain the original path.
+            if (!workerAuthorityActive(viewer, actor)) {
+                return;
+            }
+            PunishmentDraftEvaluation evaluation = isGuidedDraft(state.draft().internalExplanation())
+                    ? workflow.prepare(edited, mode.get(),
+                            state.assessment().orElse(null), state.draft().expectation())
+                    : workflow.prepare(edited, mode.get());
+            GuidedReturn previous = guidedReturns.get(viewer.getUniqueId());
+            PunishmentGuiState.Guided originalAnswers = previous != null
+                    && previous.draftId().equals(state.draft().draftId())
+                    ? previous.state() : null;
             showPrepared(
                     viewer,
                     state.target(),
                     state.commandName(),
                     actor,
                     state.overview(),
-                    evaluation
+                    evaluation, token, originalAnswers
             );
         });
+        if (!submitted) {
+            preparationFence.consume(viewer.getUniqueId(), token);
+        }
     }
 
     private void showPrepared(
@@ -810,8 +1325,52 @@ public final class PunishmentGuiController implements Listener {
             PunishmentGuiOverview overview,
             PunishmentDraftEvaluation evaluation
     ) {
+        showPrepared(viewer, target, commandName, actor, overview, evaluation, null, null);
+    }
+
+    private void showPrepared(
+            Player viewer,
+            PlayerIdentity target,
+            String commandName,
+            Actor actor,
+            PunishmentGuiOverview overview,
+            PunishmentDraftEvaluation evaluation,
+            Object token
+    ) {
+        showPrepared(viewer, target, commandName, actor, overview, evaluation, token, null);
+    }
+
+    private void showPrepared(
+            Player viewer,
+            PlayerIdentity target,
+            String commandName,
+            Actor actor,
+            PunishmentGuiOverview overview,
+            PunishmentDraftEvaluation evaluation,
+            Object token,
+            PunishmentGuiState.Guided guidedOrigin
+    ) {
+        showPrepared(viewer, target, commandName, actor, overview, evaluation,
+                token, guidedOrigin, null);
+    }
+
+    private void showPrepared(
+            Player viewer,
+            PlayerIdentity target,
+            String commandName,
+            Actor actor,
+            PunishmentGuiOverview overview,
+            PunishmentDraftEvaluation evaluation,
+            Object token,
+            PunishmentGuiState.Guided guidedOrigin,
+            PunishmentGuiTargetResolutionFence.Ticket targetTicket
+    ) {
         if (evaluation instanceof PunishmentDraftEvaluation.Rejected rejected) {
-            message(viewer, rejected.code() + ": " + rejected.message());
+            if (targetTicket != null) {
+                resolvedMessage(viewer, targetTicket, rejected.code() + ": " + rejected.message());
+            } else {
+                preparedMessage(viewer, token, rejected.code() + ": " + rejected.message());
+            }
             return;
         }
         PunishmentDraftEvaluation.Prepared prepared = (PunishmentDraftEvaluation.Prepared) evaluation;
@@ -821,18 +1380,42 @@ public final class PunishmentGuiController implements Listener {
             if (workflow != null) {
                 workflow.discard(prepared.draft().draftId(), actor.id());
             }
-            message(viewer, "The current recommendation does not contain the sanction type selected by /"
-                    + commandName + ".");
+            String warning = "The current recommendation does not contain the sanction type selected by /"
+                    + commandName + ".";
+            if (targetTicket != null) {
+                resolvedMessage(viewer, targetTicket, warning);
+            } else {
+                preparedMessage(viewer, token, warning);
+            }
             return;
         }
-        openState(viewer, new PunishmentGuiState.Review(
+        PunishmentGuiState.Review review = new PunishmentGuiState.Review(
                 viewer.getUniqueId(),
                 target,
                 commandName,
                 overview,
                 prepared.draft(),
                 Optional.of(assessment)
-        ));
+        );
+        if (targetTicket != null) {
+            presentResolvedState(viewer, review, targetTicket);
+        } else if (token == null) {
+            openState(viewer, review);
+        } else {
+            presentState(viewer, review, null, token, guidedOrigin);
+        }
+    }
+
+    private void preparedMessage(Player viewer, Object token, String body) {
+        if (token == null) {
+            message(viewer, body);
+            return;
+        }
+        onEntity(viewer, () -> {
+            if (preparationFence.consume(viewer.getUniqueId(), token)) {
+                viewer.sendMessage(StaffMessageStyle.style(Component.text(body)));
+            }
+        });
     }
 
     private void confirm(Player viewer, Actor actor, PunishmentGuiState.Review state) {
@@ -843,7 +1426,9 @@ public final class PunishmentGuiController implements Listener {
             ));
             return;
         }
-        boolean submitted = submit(viewer, () -> runConfirmation(viewer, actor, state, viewerId));
+        Inventory confirmationOrigin = viewer.getOpenInventory().getTopInventory();
+        boolean submitted = submit(viewer, () ->
+                runConfirmation(viewer, actor, state, viewerId, confirmationOrigin));
         if (!submitted) {
             confirmations.remove(viewerId);
         }
@@ -853,16 +1438,26 @@ public final class PunishmentGuiController implements Listener {
             Player viewer,
             Actor actor,
             PunishmentGuiState.Review state,
-            UUID viewerId
+            UUID viewerId,
+            Inventory confirmationOrigin
     ) {
         try {
-            confirmOnce(viewer, actor, state);
+            confirmOnce(viewer, actor, state, confirmationOrigin);
         } finally {
             confirmations.remove(viewerId);
         }
     }
 
-    private void confirmOnce(Player viewer, Actor actor, PunishmentGuiState.Review state) {
+    private void confirmOnce(Player viewer, Actor actor, PunishmentGuiState.Review state,
+                             Inventory confirmationOrigin) {
+        if (!workerAuthorityActive(viewer, actor)) {
+            return;
+        }
+        if (isGuidedDraft(state.draft().internalExplanation()) && !guidedModeEnabled()) {
+            message(viewer, "Guided punishment mode is disabled. "
+                    + "No sanction or approval request was submitted.");
+            return;
+        }
         if (!targetAllowed(viewer, actor, state.target().playerId())) {
             return;
         }
@@ -871,17 +1466,28 @@ public final class PunishmentGuiController implements Listener {
             message(viewer, "Moderation storage is not ready; no action was taken.");
             return;
         }
-        Optional<PunishmentDraftConfirmation> result = confirmDraft(viewer, actor, state, workflow);
-        result.ifPresent(value -> handleConfirmation(viewer, actor, state, value));
+        if (!workerAuthorityActive(viewer, actor)) {
+            return;
+        }
+        Optional<PunishmentDraftConfirmation> result =
+                confirmDraft(viewer, actor, state, workflow, confirmationOrigin);
+        result.ifPresent(value -> handleConfirmation(viewer, actor, state, value, confirmationOrigin));
     }
 
     private Optional<PunishmentDraftConfirmation> confirmDraft(
             Player viewer,
             Actor actor,
             PunishmentGuiState.Review state,
-            PunishmentDraftWorkflow workflow
+            PunishmentDraftWorkflow workflow,
+            Inventory confirmationOrigin
     ) {
         try {
+            // A feature disable between the GUI click and the worker run must fail closed.
+            if (isGuidedDraft(state.draft().internalExplanation()) && !guidedModeEnabled()) {
+                message(viewer, "Guided punishment mode was disabled during confirmation. "
+                        + "No sanction or approval request was submitted.");
+                return Optional.empty();
+            }
             return Optional.of(workflow.confirmRouted(state.draft().draftId(), actor, mode.get()));
         } catch (PunishmentDraftCleanupException exception) {
             plugin.getLogger().log(
@@ -890,7 +1496,12 @@ public final class PunishmentGuiController implements Listener {
                     exception
             );
             finish(viewer, "Punishment committed as case " + exception.accepted().caseId()
-                    + ", but draft cleanup failed. Reconfirming is idempotent.");
+                    + ", but draft cleanup failed. Reconfirming is idempotent.", confirmationOrigin);
+            // The case was committed even though draft deletion failed. This
+            // first success still deserves its public announcement; replay does not.
+            if (!exception.accepted().replayed()) {
+                announceNewlyCommitted(viewer, state);
+            }
         } catch (PunishmentRequestDraftCleanupException exception) {
             plugin.getLogger().log(
                     Level.SEVERE,
@@ -898,7 +1509,8 @@ public final class PunishmentGuiController implements Listener {
                             + exception.submitted().request().requestId(),
                     exception
             );
-            finish(viewer, "Punishment request submitted, but draft cleanup failed. Reconfirming is idempotent.");
+            finish(viewer, "Punishment request submitted, but draft cleanup failed. Reconfirming is idempotent.",
+                    confirmationOrigin);
         }
         return Optional.empty();
     }
@@ -907,47 +1519,114 @@ public final class PunishmentGuiController implements Listener {
             Player viewer,
             Actor actor,
             PunishmentGuiState.Review state,
-            PunishmentDraftConfirmation result
+            PunishmentDraftConfirmation result,
+            Inventory confirmationOrigin
     ) {
         if (result instanceof PunishmentDraftConfirmation.Applied applied) {
             finish(viewer, "Punishment saved | Case " + applied.accepted().caseId()
-                    + (applied.accepted().replayed() ? " (already processed)" : "") + '.');
-            if (!applied.accepted().replayed() && state.assessment().isPresent()) {
-                PunishmentAssessment assessment = state.assessment().orElseThrow();
-                PunishmentPublicAnnouncement.publish(plugin, state.draft().visibility(), false,
-                        state.target().currentUsername().orElse(state.target().playerId().toString()),
-                        assessment.sanctions(), assessment.policy().publicReason());
+                    + (applied.accepted().replayed() ? " (already processed)" : "") + '.',
+                    confirmationOrigin);
+            if (!applied.accepted().replayed()) {
+                announceNewlyCommitted(viewer, state);
             }
             return;
         }
         if (result instanceof PunishmentDraftConfirmation.Requested requested) {
-            finish(viewer, "Approval request "
-                    + (requested.submitted().replayed() ? "already exists" : "submitted")
-                    + ". No punishment has been applied yet.");
+            PunishmentRequestStatus status = requested.submitted().request().status();
+            if (status == PunishmentRequestStatus.PENDING) {
+                finish(viewer, "Approval request "
+                        + (requested.submitted().replayed() ? "already exists" : "submitted")
+                        + ". No punishment has been applied yet.", confirmationOrigin);
+            } else {
+                // Recovery can discover a request that was resolved after the
+                // original submission committed but draft cleanup failed.
+                // Do not tell staff no punishment was applied if it was approved.
+                finish(viewer, "Approval request already exists ("
+                        + status.name() + "). Check request and case history for its outcome.",
+                        confirmationOrigin);
+            }
             return;
         }
-        handleRejected(viewer, actor, state, (PunishmentDraftConfirmation.Rejected) result);
+        handleRejected(viewer, state, (PunishmentDraftConfirmation.Rejected) result, confirmationOrigin);
+    }
+
+    /** Publish the first committed result, including after draft cleanup failure. */
+    private void announceNewlyCommitted(Player viewer, PunishmentGuiState.Review state) {
+        // Resumed reviews have no transient assessment. Use the saved
+        // sanctions and an exact-version policy reason, never a fresh
+        // recommendation or an unrelated policy after a reload.
+        state.assessment()
+                .map(assessment -> assessment.policy().publicReason())
+                .or(() -> PunishmentPublicAnnouncement.publicReasonForConfirmedDraft(
+                        state.draft(), policies))
+                .ifPresent(publicReason -> PunishmentPublicAnnouncement.publish(
+                        plugin, state.draft().visibility(), false,
+                        state.target().currentUsername()
+                                .orElse(state.target().playerId().toString()),
+                        state.draft().expectation().sanctions(), publicReason));
+    }
+
+    /** Reopen only the questionnaire that created this exact target's draft. */
+    private PunishmentGuiState.Guided matchingGuidedReturn(
+            Player viewer, PunishmentGuiState.Review state) {
+        GuidedReturn origin = guidedReturns.get(viewer.getUniqueId());
+        return origin != null
+                && origin.draftId().equals(state.draft().draftId())
+                && origin.state().target().playerId().equals(state.target().playerId())
+                ? origin.state() : null;
     }
 
     private void handleRejected(
             Player viewer,
-            Actor actor,
             PunishmentGuiState.Review state,
-            PunishmentDraftConfirmation.Rejected rejected
+            PunishmentDraftConfirmation.Rejected rejected,
+            Inventory confirmationOrigin
     ) {
-        if ("RECOMMENDATION_CHANGED".equals(rejected.code())) {
-            message(viewer, "The recommendation changed. A fresh review is being opened; "
-                    + "no punishment or request was created.");
+        if (!"RECOMMENDATION_CHANGED".equals(rejected.code())) {
+            message(viewer, rejected.code() + ": " + rejected.message());
+            return;
+        }
+        // A saved-draft recommendation can change while confirmation reads
+        // history/policy. Do not reopen or reprepare that stale review after
+        // its inventory was closed or replaced with a newer screen.
+        onEntity(viewer, () -> {
+            if (!confirmedInventoryStillOpen(confirmationOrigin,
+                    viewer.getOpenInventory().getTopInventory())) {
+                viewer.sendMessage(StaffMessageStyle.style(Component.text(
+                        "The punishment recommendation changed; no punishment or request was "
+                                + "created. Open the punishment GUI again to reassess."
+                )));
+                return;
+            }
+            // The worker's original actor is not authoritative after a role
+            // or Staff Mode transition. Resolve a fresh snapshot on owner thread
+            // before starting another asynchronous draft preparation.
+            Actor current = authorizedActor(viewer);
+            if (current == null) {
+                return;
+            }
+            if (isGuidedDraft(state.draft().internalExplanation())) {
+                viewer.sendMessage(StaffMessageStyle.style(Component.text(
+                        "The guided recommendation changed. No punishment or request was "
+                                + "created. Recalculate this incident before submitting."
+                )));
+                PunishmentGuiState.Guided previous = matchingGuidedReturn(viewer, state);
+                openState(viewer, previous != null && guidedModeEnabled()
+                        ? previous : categoriesState(state));
+                return;
+            }
+            viewer.sendMessage(StaffMessageStyle.style(Component.text(
+                    "The recommendation changed. A fresh review is being opened; "
+                            + "no punishment or request was created."
+            )));
             reprepare(
                     viewer,
-                    actor,
+                    current,
                     state,
                     state.draft().internalExplanation(),
                     state.draft().visibility()
             );
-            return;
-        }
-        message(viewer, rejected.code() + ": " + rejected.message());
+        });
     }
 
     private PunishmentGuiOverview loadOverview(UUID targetId) {
@@ -1065,28 +1744,62 @@ public final class PunishmentGuiController implements Listener {
         );
     }
 
+    private PunishmentGuiTargetResolutionFence.Ticket beginTargetResolution(Player viewer) {
+        UUID viewerId = viewer.getUniqueId();
+        noteCaptures.remove(viewer.getUniqueId());
+        searchCaptures.remove(viewer.getUniqueId());
+        // A new /punish command supersedes any older pending GUI work.
+        historyFence.invalidate(viewerId);
+        preparationFence.invalidate(viewerId);
+        return targetResolutionFence.begin(viewerId,
+                viewer.getOpenInventory().getTopInventory());
+    }
+
     private void resolveTarget(
             Player viewer,
             String targetQuery,
+            PunishmentGuiTargetResolutionFence.Ticket ticket,
             java.util.function.Consumer<PlayerIdentity> continuation
     ) {
-        submit(viewer, () -> {
+        boolean submitted = submit(viewer, () -> {
             PlayerDirectory directory = players.get();
             if (directory == null) {
-                message(viewer, "Moderation storage is not ready; no player was resolved.");
+                resolvedMessage(viewer, ticket,
+                        "Moderation storage is not ready; no player was resolved.");
                 return;
             }
             PlayerIdentity target = directory.find(targetQuery).orElse(null);
             if (target == null) {
-                message(
-                        viewer,
+                resolvedMessage(viewer, ticket,
                         "Player is not present in the authoritative directory. "
-                                + "UUIDs and historical names are accepted."
-                );
+                                + "UUIDs and historical names are accepted.");
                 return;
             }
             continuation.accept(target);
         });
+        if (!submitted) {
+            targetResolutionFence.cancel(viewer.getUniqueId(), ticket);
+        }
+    }
+
+    private void resolvedMessage(Player viewer, PunishmentGuiTargetResolutionFence.Ticket ticket,
+                                 String body) {
+        onEntity(viewer, () -> {
+            if (targetResolutionFence.consume(viewer.getUniqueId(), ticket,
+                    viewer.getOpenInventory().getTopInventory())) {
+                viewer.sendMessage(StaffMessageStyle.style(Component.text(body)));
+            }
+        });
+    }
+
+    private boolean targetAllowed(Player viewer, Actor actor, UUID targetId,
+                                  PunishmentGuiTargetResolutionFence.Ticket ticket) {
+        StaffTargetGuard.Result result = targetGuard.check(actor, targetId, false);
+        if (result.allowed()) {
+            return true;
+        }
+        resolvedMessage(viewer, ticket, result.message());
+        return false;
     }
 
     private boolean targetAllowed(Player viewer, Actor actor, UUID targetId) {
@@ -1099,6 +1812,11 @@ public final class PunishmentGuiController implements Listener {
     }
 
     private void openTargetPickerPage(Player viewer, String commandName, int requestedPage) {
+        noteCaptures.remove(viewer.getUniqueId());
+        searchCaptures.remove(viewer.getUniqueId());
+        historyFence.invalidate(viewer.getUniqueId());
+        preparationFence.invalidate(viewer.getUniqueId());
+        targetResolutionFence.invalidate(viewer.getUniqueId());
         Actor actor = authorizedActor(viewer);
         if (actor == null) {
             return;
@@ -1123,7 +1841,53 @@ public final class PunishmentGuiController implements Listener {
     }
 
     private void openState(Player viewer, PunishmentGuiState state) {
+        noteCaptures.remove(viewer.getUniqueId());
+        searchCaptures.remove(viewer.getUniqueId());
+        historyFence.invalidate(viewer.getUniqueId());
+        preparationFence.invalidate(viewer.getUniqueId());
+        targetResolutionFence.invalidate(viewer.getUniqueId());
+        presentState(viewer, state, null, null);
+    }
+
+    private void openHistoryState(Player viewer, PunishmentGuiState.History state, Object token) {
+        presentState(viewer, state, token, null);
+    }
+
+    private void presentResolvedState(Player viewer, PunishmentGuiState state,
+                                      PunishmentGuiTargetResolutionFence.Ticket ticket) {
+        presentState(viewer, state, null, null, null, ticket);
+    }
+
+    private void presentState(Player viewer, PunishmentGuiState state,
+                              Object historyToken, Object preparationToken) {
+        presentState(viewer, state, historyToken, preparationToken, null, null);
+    }
+
+    private void presentState(Player viewer, PunishmentGuiState state,
+                              Object historyToken, Object preparationToken,
+                              PunishmentGuiState.Guided guidedOrigin) {
+        presentState(viewer, state, historyToken, preparationToken, guidedOrigin, null);
+    }
+
+    private void presentState(Player viewer, PunishmentGuiState state,
+                              Object historyToken, Object preparationToken,
+                              PunishmentGuiState.Guided guidedOrigin,
+                              PunishmentGuiTargetResolutionFence.Ticket targetTicket) {
         onEntity(viewer, () -> {
+            // Consume at final entity-thread presentation, never at worker completion.
+            if (targetTicket != null
+                    && !targetResolutionFence.consume(viewer.getUniqueId(), targetTicket,
+                            viewer.getOpenInventory().getTopInventory())) {
+                return;
+            }
+            if (historyToken != null
+                    && !historyFence.consume(viewer.getUniqueId(), historyToken)) {
+                return;
+            }
+            if (preparationToken != null
+                    && !preparationFence.consume(viewer.getUniqueId(), preparationToken)) {
+                return;
+            }
             searchCaptures.remove(viewer.getUniqueId());
             Actor actor = authorizedActor(viewer);
             if (actor == null) {
@@ -1135,7 +1899,15 @@ public final class PunishmentGuiController implements Listener {
                 openHistory(viewer, history.returnState(), history.history().page());
                 return;
             }
-            Inventory inventory = renderer.render(state, actor);
+            Inventory inventory = renderer.render(state, actor, guidedModeEnabled());
+            // Resolved targets, history pages and prepared reviews also supersede
+            // abandoned chat-note prompts, even without calling openState().
+            noteCaptures.remove(viewer.getUniqueId());
+            if (guidedOrigin != null && state instanceof PunishmentGuiState.Review review
+                    && guidedModeEnabled()) {
+                guidedReturns.put(viewer.getUniqueId(),
+                        new GuidedReturn(review.draft().draftId(), guidedOrigin));
+            }
             if (viewer.getOpenInventory().getTopInventory().getHolder(false) instanceof PunishmentGuiHolder) {
                 suppressedClosures.add(viewer.getUniqueId());
             }
@@ -1143,11 +1915,30 @@ public final class PunishmentGuiController implements Listener {
         });
     }
 
+    /**
+     * GUI clicks are authorized on the entity thread, but queued work must
+     * recheck active Staff Mode before it can create or confirm a draft.
+     * Rank drift is independently rejected by the target hierarchy guard.
+     */
+    private boolean workerAuthorityActive(Player viewer, Actor actor) {
+        if (currentWorkerAuthority(authorization, actor, viewer.getUniqueId())) {
+            return true;
+        }
+        message(viewer, "Your active staff authority expired while this punishment was queued. "
+                + "Reopen the punishment GUI after entering Staff Mode.");
+        return false;
+    }
+
+    static boolean currentWorkerAuthority(AuthorizationPolicy policy, Actor actor, UUID viewerId) {
+        return policy != null && actor != null && viewerId != null
+                && viewerId.equals(actor.id())
+                && (policy.permits(actor, ModerationAction.ISSUE_POLICY_SANCTION)
+                || policy.permits(actor, ModerationAction.REQUEST_POLICY_SANCTION));
+    }
+
     private Actor authorizedActor(Player viewer) {
         Actor actor = PaperActorResolver.resolve(viewer).orElse(null);
-        if (actor == null || !actor.id().equals(viewer.getUniqueId())
-                || (!authorization.permits(actor, ModerationAction.ISSUE_POLICY_SANCTION)
-                && !authorization.permits(actor, ModerationAction.REQUEST_POLICY_SANCTION))) {
+        if (!currentWorkerAuthority(authorization, actor, viewer.getUniqueId())) {
             viewer.sendMessage(StaffMessageStyle.style(Component.text("You do not have punishment authority.")));
             return null;
         }
@@ -1155,15 +1946,30 @@ public final class PunishmentGuiController implements Listener {
     }
 
     private void closeWithoutResume(Player viewer) {
+        noteCaptures.remove(viewer.getUniqueId());
+        searchCaptures.remove(viewer.getUniqueId());
+        historyFence.invalidate(viewer.getUniqueId());
+        preparationFence.invalidate(viewer.getUniqueId());
+        targetResolutionFence.invalidate(viewer.getUniqueId());
         if (viewer.getOpenInventory().getTopInventory().getHolder(false) instanceof PunishmentGuiHolder) {
             suppressedClosures.add(viewer.getUniqueId());
         }
         viewer.closeInventory();
     }
 
-    private void finish(Player viewer, String result) {
+    /** Do not close a chest, other plugin GUI or newer review after a slow confirmation. */
+    static boolean confirmedInventoryStillOpen(Inventory confirmationOrigin, Inventory current) {
+        return confirmationOrigin != null && confirmationOrigin == current;
+    }
+
+    private void finish(Player viewer, String result, Inventory confirmationOrigin) {
         onEntity(viewer, () -> {
-            closeWithoutResume(viewer);
+            if (confirmedInventoryStillOpen(confirmationOrigin,
+                    viewer.getOpenInventory().getTopInventory())) {
+                guidedReturns.remove(viewer.getUniqueId());
+                closeWithoutResume(viewer);
+            }
+            // The sanction/request may have committed even if navigation changed.
             viewer.sendMessage(StaffMessageStyle.style(Component.text(result)));
         });
     }
@@ -1271,18 +2077,29 @@ public final class PunishmentGuiController implements Listener {
         }
     }
 
-    private record SearchCapture(PunishmentGuiState origin, Instant startedAt) {
+    private record GuidedReturn(UUID draftId, PunishmentGuiState.Guided state) {
+    }
+
+    private record SearchCapture(PunishmentGuiState origin, Instant startedAt, Object navigationToken) {
         private SearchCapture {
-            if (origin == null || startedAt == null) {
-                throw new IllegalArgumentException("Search origin and time must be provided");
+            if (origin == null || startedAt == null || navigationToken == null) {
+                throw new IllegalArgumentException("Search origin, time and navigation token must be provided");
             }
         }
     }
 
-    private record NoteCapture(PunishmentGuiState.Review review) {
+    static boolean searchCaptureExpired(Instant startedAt, Instant now) {
+        return noteCaptureExpired(startedAt, now);
+    }
+
+    static boolean noteCaptureExpired(Instant startedAt, Instant now) {
+        return !now.isBefore(startedAt.plus(Duration.ofSeconds(60)));
+    }
+
+    private record NoteCapture(PunishmentGuiState.Review review, Instant startedAt, Object navigationToken) {
         private NoteCapture {
-            if (review == null) {
-                throw new IllegalArgumentException("punishment note capture requires a review");
+            if (review == null || startedAt == null || navigationToken == null) {
+                throw new IllegalArgumentException("punishment note capture requires a review, start time and token");
             }
         }
     }

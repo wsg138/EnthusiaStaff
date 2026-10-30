@@ -13,9 +13,11 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import javax.sql.DataSource;
 import net.enthusia.staff.common.CaseId;
+import net.enthusia.staff.common.IdempotencyKey;
 import net.enthusia.staff.domain.application.PunishmentPlan;
 import net.enthusia.staff.domain.application.PunishmentResult;
 import net.enthusia.staff.domain.escalation.DecayEligibility;
@@ -95,6 +97,19 @@ public final class JdbcModerationStore implements ModerationStore {
             }
         } catch (SQLException exception) {
             throw new ModerationPersistenceException("Unable to read related punishment history", exception);
+        }
+    }
+
+    @Override
+    public Optional<CaseId> committedCase(IdempotencyKey key) {
+        if (key == null) {
+            throw new IllegalArgumentException("idempotency key must be present");
+        }
+        try (Connection connection = dataSource.getConnection()) {
+            return Optional.ofNullable(existingCase(connection, key.value()));
+        } catch (SQLException exception) {
+            throw new ModerationPersistenceException(
+                    "Unable to read a previously committed punishment case", exception);
         }
     }
 

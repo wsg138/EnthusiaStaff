@@ -27,6 +27,7 @@ import net.enthusia.staff.domain.sanction.SanctionType;
 import net.enthusia.staff.paper.auth.PaperActorResolver;
 import net.enthusia.staff.paper.sanction.SanctionChangeAccess;
 import net.enthusia.staff.paper.sanction.SanctionChangeGuiController;
+import net.enthusia.staff.paper.sanction.SanctionChangeWorkerAuthorization;
 import net.kyori.adventure.text.Component;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
@@ -218,6 +219,12 @@ public final class SanctionChangeCommand implements CommandExecutor, TabComplete
             String reason,
             Actor actor
     ) {
+        Actor current = currentAuthorizedActor(sender, actor, action);
+        if (current == null) {
+            send(sender, "Sanction change cancelled: your current rank, Staff Mode or "
+                    + "permission changed. Start a new command.");
+            return;
+        }
         SanctionChangeService loadedService = service.get();
         PlayerDirectory directory = players.get();
         CaseLookup lookup = cases.get();
@@ -231,13 +238,23 @@ public final class SanctionChangeCommand implements CommandExecutor, TabComplete
             send(sender, "No matching case was found for that player, UUID, or case ID.");
             return;
         }
+        // Case/player resolution may block on storage. Reject rank or Staff Mode
+        // drift once more before issuing any durable sanction modification.
+        Actor fresh = currentAuthorizedActor(sender, current, action);
+        if (fresh == null) {
+            send(sender, "Sanction change cancelled: authority changed during case lookup. "
+                    + "Start a new command.");
+            return;
+        }
         SanctionChangeRequest request = new SanctionChangeRequest(
                 new IdempotencyKey("change:" + UUID.randomUUID()),
                 caseId,
-                actor,
+                fresh,
                 action,
                 expiration,
-                reason
+                reason,
+                Optional.empty(),
+                SanctionChangeAccess.typeScopeForCommand(route)
         );
         SanctionChangeResult result = loadedService.apply(request, mode.get());
         if (result instanceof SanctionChangeResult.Applied applied) {
@@ -247,6 +264,13 @@ public final class SanctionChangeCommand implements CommandExecutor, TabComplete
             SanctionChangeResult.Rejected rejected = (SanctionChangeResult.Rejected) result;
             send(sender, rejected.code() + ": " + rejected.message());
         }
+    }
+
+    private Actor currentAuthorizedActor(
+            CommandSender sender, Actor captured, SanctionChangeAction action
+    ) {
+        return SanctionChangeWorkerAuthorization.awaitCurrentActor(
+                sender, captured, plugin, authorization, action);
     }
 
     private static CaseId resolveCase(
@@ -276,7 +300,9 @@ public final class SanctionChangeCommand implements CommandExecutor, TabComplete
     }
 
     private void send(CommandSender sender, String message) {
-        plugin.getServer().getGlobalRegionScheduler().execute(plugin, () -> sender.sendMessage(StaffMessageStyle.style(Component.text(message))));
+        PunishmentReplyScheduler.onSenderThread(
+                plugin, sender, () -> sender.sendMessage(
+                        StaffMessageStyle.style(Component.text(message))));
     }
 
     @Override

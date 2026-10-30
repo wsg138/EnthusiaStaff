@@ -31,6 +31,7 @@ import net.enthusia.staff.domain.ports.ModerationStore;
 import net.enthusia.staff.domain.ports.AtomicReasonPolicyRepository;
 import net.enthusia.staff.domain.ports.OperationalStateStore;
 import net.enthusia.staff.domain.runtime.OperationalStateSnapshot;
+import net.enthusia.staff.paper.punishment.PunishmentApprovalAnnouncement;
 import net.enthusia.staff.paper.aireview.AiReviewSubsystem;
 import net.enthusia.staff.paper.alert.PunishmentRequestAlertController;
 import net.enthusia.staff.paper.alert.PunishmentRequestAlertLifecycle;
@@ -520,6 +521,12 @@ public final class EnthusiaStaffPaperPlugin extends JavaPlugin {
             opened = MariaDb.initialize(database.orElseThrow());
             PaperStorageBindings bindings = PaperStorageBindings.create(
                     opened, authorizationPolicy, reasonPolicies);
+            // A committed approval can originate from the GUI, /punish approve,
+            // or authenticated web review. Broadcast once at the shared service,
+            // never from an individual presentation route.
+            bindings.punishmentRequestService().addApprovedObserver(approved ->
+                    PunishmentApprovalAnnouncement.publish(
+                            this, bindings.playerDirectory(), approved));
             BootstrapPromotion promotion = resolveBootstrapPromotion(opened);
             if (lifecycle.stopping() || !lifecycle.publishStorage(bindings)) {
                 resources.close("MariaDB runtime opened during shutdown", opened);
