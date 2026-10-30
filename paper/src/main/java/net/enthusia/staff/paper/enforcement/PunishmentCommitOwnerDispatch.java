@@ -37,6 +37,12 @@ final class PunishmentCommitOwnerDispatch {
             }
             boolean accepted = ownerScheduler.execute(player, () -> {
                 try {
+                    if (!playerId.equals(player.getUniqueId())) {
+                        // A wrong identity is a dispatch invariant violation,
+                        // not an ordinary disconnect. Fail closed and surface it.
+                        throw new IllegalStateException(
+                                "Punishment target UUID mismatch during entity-owner delivery");
+                    }
                     if (eligible.test(player)) {
                         effect.accept(player);
                     }
