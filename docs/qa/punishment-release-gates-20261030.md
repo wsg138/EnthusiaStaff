@@ -272,6 +272,13 @@ Created independent [draft PR #765](https://github.com/wsg138/EnthusiaStaff/pull
 - Latest #773 head `2fa294bd70dc36fd942b882019dd82de60551a3d` had CI **queued** at the last observation. Codacy's previous source scan showed zero new issues, but exact-head results are still required. CodeRabbit's independent review request was rate-limited. **No tested target-to-category PASS is claimed.**
 - All 39 real human Java/Bedrock acceptance observations remain unrun; policy migration, Folia support and production deployment remain explicitly blocked.
 
+## Exact-head CI reconciliation — 2026-10-30
+
+- [Draft PR #771](https://github.com/wsg138/EnthusiaStaff/pull/771), exact `9d885015f3468effd01f484df37ca51a1714eb10`: all triggered hosted workflows finally **SUCCESS** (actual isolated Paper GUI protocol smoke, Sentinel Restart Artifact and aggregate Coverage including MariaDB). Codacy had zero new findings at that head. This confirms an automated protocol-only off-duty denial and authorized target-picker opening, **not** human Java/Bedrock acceptance.
+- [Draft PR #772](https://github.com/wsg138/EnthusiaStaff/pull/772), exact `eaccfb020da7fcbd06f98e1cdd2b5a31bbead73c`: isolated safe Refresh/Close runtime smoke and Sentinel **SUCCESS**, Coverage **still running** at last check.
+- [Draft PR #773](https://github.com/wsg138/EnthusiaStaff/pull/773), latest `2fa294bd70dc36fd942b882019dd82de60551a3d`: new disposable real-LuckPerms target-to-category checks are **queued**. CodeRabbit review hit the rate limit; no independent review approval. This branch remains a test harness and documentation change only.
+- The live policy stays unchanged and guided mode OFF. The 39 human Java/Bedrock observations remain NOT RUN. NO-GO for production.
+
 ## Near-term worker queue
 
 - **P0:** Reconcile [#754](https://github.com/wsg138/EnthusiaStaff/pull/754) with newer checked-out/unpublished punishment fixes and establish a single candidate SHA without changing main or live systems.
