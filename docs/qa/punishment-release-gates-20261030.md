@@ -296,6 +296,14 @@ Created independent [draft PR #765](https://github.com/wsg138/EnthusiaStaff/pull
 - [PR #773](https://github.com/wsg138/EnthusiaStaff/pull/773) was reconciled into a two-parent merge commit `12a01e009c267f16e5b7f87cb09334625c6de42c` against the revised #772 base while preserving only six test/CI/doc delta files. GitHub reports mergeable; exact-head smoke, Coverage, Sentinel were **still running** when this record was authored.
 - No mainline merge, live configuration change, sanction or deployment. All 39 real human Java/Bedrock acceptance observations remain NOT RUN; production **NO-GO**.
 
+## Clean target-to-categories proof and six static-analysis findings — 2026-10-30
+
+- [PR #773](https://github.com/wsg138/EnthusiaStaff/pull/773), exact mergeable head `12a01e009c267f16e5b7f87cb09334625c6de42c`, finally passed [disposable Paper runtime 41123936714](https://github.com/wsg138/EnthusiaStaff/actions/runs/41123936714). The 13 standalone verifier regressions passed and the real Paper/Java-protocol interaction confirmed the unique disposable target UUID, actual 54-slot categories inventory, cross-matched client packet, `GUI_SMOKE_EVIDENCE_VERIFIED=true`, and `GUI_PROTOCOL_SMOKE_PASS=true` **with no FAIL markers**. Prior false-green attempt remains explicitly invalidated.
+- Codacy then reported 6 new issues **only in the new QA Python code**: five high static type-inference warnings from `list(SERVER_STAGES)` being inferred as a narrow literal list, and one medium `validate` method complexity (21 vs 8 threshold). The exact six GitHub check annotations were retrieved via read-only temporary PR #766, which is now **closed unmerged**.
+- Current PR #773 head `8e838a05eb7d951f82ed378c3000773f6f39e304` adds an explicit `list[str]` fixture annotation and separates the evidence check into small functions for failure markers, canonical target UUID, actual category title and client packet. Its **own exact-head CI/Codacy remained pending** at this checkpoint; do not transfer earlier green results until the new commit is checked.
+- Earlier parent [PR #771](https://github.com/wsg138/EnthusiaStaff/pull/771) and [PR #772](https://github.com/wsg138/EnthusiaStaff/pull/772) independently have successful disposable runtime smoke and Sentinel runs with repaired fail-closed Bash guards. Their latest Coverage was still in progress at checkpoint.
+- Runtime tests are automated Java-protocol proofs, **not** human Java or Bedrock. All 39 manual client acceptance rows remain NOT RUN; isolated proxy name-resolution acceptance, advanced GUI workflows, Folia and production release are still NO-GO.
+
 ## Near-term worker queue
 
 - **P0:** Reconcile [#754](https://github.com/wsg138/EnthusiaStaff/pull/754) with newer checked-out/unpublished punishment fixes and establish a single candidate SHA without changing main or live systems.
