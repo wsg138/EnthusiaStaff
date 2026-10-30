@@ -160,6 +160,14 @@ Created independent [draft PR #765](https://github.com/wsg138/EnthusiaStaff/pull
 - [Diagnostic PR #766](https://github.com/wsg138/EnthusiaStaff/pull/766) was closed **unmerged** after read-only inspection of public Codacy issue metadata. The broad #765 PR still has legacy/stack-wide warnings relative to main; #767's zero new issues represents a narrow source delta, not clearance of every broad historical warning.
 - Real Java+Bedrock GUI tests (20 rows), Folia lifecycle acceptance, remaining guided severity rules and isolated policy migration/rollback are **not done**. Both draft PRs and all production services remain unchanged by this review.
 
+## Folia legacy RoseChat scheduler fix — 2026-10-30
+
+- [Draft PR #768](https://github.com/wsg138/EnthusiaStaff/pull/768) stacks on #767 and replaces RoseChat's legacy `BukkitScheduler.runTask` inbound delivery with Paper's `GlobalRegionScheduler.execute(plugin, task)`. It retains bounded ingress authentication, dedupe, and capacity handling; adds a behavioral scheduler test and failed-scheduling retry regression. No production settings or live resources are altered.
+- A dedicated source-only Folia admission CI workflow runs existing heuristic tests, rejects reintroduction of the RoseChat legacy scheduler, and rejects accidental `folia-supported: true` opt-in. This workflow does not load the actual server/plugin and does **not** claim Folia support.
+- **Remaining blockers** include synchronous staff-state teleport and quit-event restoration-before-save, plus provider-specific RoseChat delivery semantics and other thread/lifecycle paths requiring isolated runtime verification. Do not simply switch teleport to asynchronous; that could break the quit restoration guarantee.
+- PR #767's complete exact-head workflow set, including Coverage, Sentinel, and 18/18 QA tests, finished **SUCCESS** at `cd63c423001ce2db3e3b44b640c0e685b40bd465`; Codacy reported zero new #767 issues. PR #768 at `d39462dec81c1bff499160f369e5a6e6d8eb6b55` requires **its own exact-head CI** before any claim of passing the new scheduler fix.
+- Guided punishment remains OFF. The real Java/Bedrock GUI acceptance and Folia runtime proof are still NOT RUN. Maintain DRAFT / NO-GO and do not deploy.
+
 ## Near-term worker queue
 
 - **P0:** Reconcile [#754](https://github.com/wsg138/EnthusiaStaff/pull/754) with newer checked-out/unpublished punishment fixes and establish a single candidate SHA without changing main or live systems.
