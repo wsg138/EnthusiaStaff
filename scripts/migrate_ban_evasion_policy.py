@@ -129,8 +129,8 @@ def write_exclusive_backup(source: Path, backup: Path, original: bytes, mode: in
         raise
 
 
-def apply_migration(path: Path, expected_sha256: str, before: bytes, after: bytes) -> Path:
-    """Require exact-byte compare-and-swap; keep an exclusive backup before atomic replace."""
+def verify_apply_request(path: Path, expected_sha256: str, before: bytes) -> None:
+    """Require a fresh byte-level operator acknowledgement before writing."""
     if not re.fullmatch(r"[a-fA-F0-9]{64}", expected_sha256):
         raise MigrationRejected("--expected-sha256 must be the 64-character dry-run SHA-256")
     if expected_sha256.lower() != digest(before):
@@ -139,18 +139,12 @@ def apply_migration(path: Path, expected_sha256: str, before: bytes, after: byte
     if path.read_bytes() != before:
         raise MigrationRejected("installed policy changed since dry-run; no write performed")
 
-    original_mode = stat.S_IMODE(path.stat().st_mode)
-    backup = path.with_name(path.name + ".before-ban-evasion-" + digest(before)[:16] + ".bak")
-    if backup.exists() or backup.is_symlink():
-        raise MigrationRejected(f"backup already exists; refusing to overwrite: {backup}")
 
-    # Backup is verified and durably recorded before any installed-policy write.
-    write_exclusive_backup(path, backup, before, original_mode)
-
+def stage_and_replace(path: Path, before: bytes, after: bytes, mode: int) -> None:
+    """Write a verified replacement; keep the original backup for recovery."""
     temp_name: str | None = None
     try:
-        # Recheck immediately before replacement; plugin/runtime quiescence must be
-        # established separately by the operator.
+        # Plugin/runtime quiescence must be established separately by the operator.
         if path.read_bytes() != before:
             raise MigrationRejected("installed policy changed during backup; original retained")
         fd, temp_name = tempfile.mkstemp(prefix=".reason-policies-migrate-", dir=path.parent)
@@ -158,7 +152,7 @@ def apply_migration(path: Path, expected_sha256: str, before: bytes, after: byte
             output.write(after)
             output.flush()
             os.fsync(output.fileno())
-        os.chmod(temp_name, original_mode)
+        os.chmod(temp_name, mode)
         require_same_owner(path, Path(temp_name))
         if path.read_bytes() != before:
             raise MigrationRejected("installed policy changed during staging; original retained")
@@ -170,6 +164,17 @@ def apply_migration(path: Path, expected_sha256: str, before: bytes, after: byte
     finally:
         if temp_name is not None:
             Path(temp_name).unlink(missing_ok=True)
+
+
+def apply_migration(path: Path, expected_sha256: str, before: bytes, after: bytes) -> Path:
+    """Require exact-byte compare-and-swap; keep an exclusive backup before atomic replace."""
+    verify_apply_request(path, expected_sha256, before)
+    original_mode = stat.S_IMODE(path.stat().st_mode)
+    backup = path.with_name(path.name + ".before-ban-evasion-" + digest(before)[:16] + ".bak")
+    if backup.exists() or backup.is_symlink():
+        raise MigrationRejected(f"backup already exists; refusing to overwrite: {backup}")
+    write_exclusive_backup(path, backup, before, original_mode)
+    stage_and_replace(path, before, after, original_mode)
     return backup
 
 
