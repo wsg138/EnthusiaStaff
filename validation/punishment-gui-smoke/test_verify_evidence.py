@@ -13,7 +13,7 @@ CATEGORY_PACKET = ("GUI_PACKET_OPEN|inventoryStart=54|slotCount=90|title=Punish 
 
 
 def valid_server() -> str:
-    stages = list(gate.SERVER_STAGES)
+    stages: list[str] = list(gate.SERVER_STAGES)
     stages.insert(stages.index("REFRESH_CLICK_OBSERVED=true"), "PICKER_OPEN=true")
     stages.insert(stages.index("PICKER_REFRESH_OPEN=true"), "PICKER_OPEN=true")
     stages.insert(stages.index("TARGET_HEAD_CLICK_OBSERVED=true"), "PICKER_OPEN=true")
