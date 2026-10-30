@@ -217,6 +217,17 @@ Created independent [draft PR #765](https://github.com/wsg138/EnthusiaStaff/pull
 - Both versions require a 54-slot `PunishmentTargetPickerHolder` actual Paper inventory and a matching 54-slot Mineflayer Java protocol window packet. This limited automated protocol smoke is **not** a human Java or Bedrock test. The 39 human acceptance observations remain **NOT RUN**.
 - This experiment uses ephemeral GitHub runners only, not `bloom-test1`, live SMP, any shared DB, or actual moderation accounts. Do not deploy or merge based solely on the isolated smoke.
 
+## First actual Paper GUI runtime proof completed — 2026-10-30
+
+- **[Draft PR #771](https://github.com/wsg138/EnthusiaStaff/pull/771)** produced a first **successful ephemeral Paper GUI protocol smoke** at exact head `b1c0560cb3783af278f704ccd81b88bcb8e5835d` ([run 41115731445](https://github.com/wsg138/EnthusiaStaff/actions/runs/41115731445)). The test built the real candidate plugin, started checksum-pinned Paper 26.2 build 129 with an **isolated local MariaDB 11.8.3**, had its disposable player enter Staff Mode using **/staff**, and issued only **/punish**. Both real Paper server and automated Mineflayer Java packet evidence were observed:
+  - Server: `STAFF_COMMAND_ACCEPTED=true`, `PUNISH_COMMAND_ACCEPTED=true`, `INVENTORY_OPEN|title=Punish · Select Player|size=54|holder=PunishmentTargetPickerHolder`, `PICKER_OPEN=true`.
+  - Java protocol client: `GUI_PACKET_OPEN|inventoryStart=54|slotCount=90|title=...Punish · Select Player`, `GUI_PACKET_54_SLOTS=true`, final `GUI_PROTOCOL_SMOKE_PASS=true`.
+- A later code head `5703f0abca2d50c8f0bb5b648dfa24912a5cb426` added bounded client-message diagnostics and **also passed the same dedicated smoke**; Sentinel succeeded at that SHA, Coverage remained in progress.
+- Earlier no-database and not-on-duty test attempts correctly failed: missing database disabled destructive actions and denied freeze storage, then active Staff Mode authority was required even for an owner-rank test identity. **These production guardrails were preserved**, not bypassed.
+- The initial PR #771 Codacy check reported **one new high-severity issue**. The suspected hardcoded disposable test password strings were replaced with per-run GitHub Actions values in head `2f23148709b29940b0ca39b27dc427437c6f0bc0`; Codacy and exact-head CI were still in progress, so do not yet claim the issue is resolved.
+- Important distinction: this is a **real disposable Paper server, but an automated Java protocol client**. No human Java mouse, Bedrock touch/Geyser, approval, sanction, moderation history or policy v2 path was tested. **A01–A20 acceptance remains 0/39 actually witnessed**, and Folia still is NOT supported. No production changes or punishments occurred.
+- Temporary Codacy diagnostic PR #766 was **closed unmerged** after read-only inspection.
+
 ## Near-term worker queue
 
 - **P0:** Reconcile [#754](https://github.com/wsg138/EnthusiaStaff/pull/754) with newer checked-out/unpublished punishment fixes and establish a single candidate SHA without changing main or live systems.
