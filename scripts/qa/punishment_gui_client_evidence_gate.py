@@ -114,6 +114,11 @@ def verify_case(record: dict, root: Path) -> tuple[tuple[str, str], str]:
     if status != "PASS":
         return key, status
 
+    verify_pass_evidence(record, key, root)
+    return key, status
+
+
+def verify_pass_evidence(record: dict, key: tuple[str, str], root: Path) -> None:
     if record.get("actual_client_attested") is not True:
         raise EvidenceInvalid(f"{key}: PASS requires actual-client attestation")
     required_text(record.get("reviewer"), f"{key}.reviewer")
@@ -126,7 +131,6 @@ def verify_case(record: dict, root: Path) -> tuple[tuple[str, str], str]:
         raise EvidenceInvalid(f"{key}: tested_at must have a timezone")
     media_digest = check_digest(record.get("media_sha256"), f"{key}.media_sha256")
     evidence_file(root, record.get("media"), media_digest, MEDIA_EXTENSIONS)
-    return key, status
 
 
 def collect_cases(cases: object, root: Path) -> dict[tuple[str, str], str]:
