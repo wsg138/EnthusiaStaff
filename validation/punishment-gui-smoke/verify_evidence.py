@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
+import uuid
 import sys
 
 SERVER_STAGES = (
@@ -69,17 +70,33 @@ def validate(server_text: str, client_text: str) -> None:
     check_sequence(client, CLIENT_STAGES, "Java protocol")
     if server.count("PICKER_OPEN=true") != 3:
         raise EvidenceFailure("expected exactly three Paper target picker openings")
+    target_ids = [line.removeprefix("DISPOSABLE_TARGET_UUID=")
+                  for line in server if line.startswith("DISPOSABLE_TARGET_UUID=")]
+    if len(target_ids) != 1:
+        raise EvidenceFailure("expected exactly one authoritative disposable target UUID")
+    try:
+        target_id = str(uuid.UUID(target_ids[0]))
+    except ValueError as exc:
+        raise EvidenceFailure("invalid disposable target UUID") from exc
+    if target_ids[0] != target_id:
+        raise EvidenceFailure("noncanonical disposable target UUID")
+    possible_titles = ("Punish · GuiTarget", "Punish · " + target_id)
+    actual_titles = [
+        line.removeprefix("INVENTORY_OPEN|title=").removesuffix(
+            "|size=54|holder=PunishmentGuiHolder")
+        for line in server if line.startswith("INVENTORY_OPEN|title=")
+        and line.endswith("|size=54|holder=PunishmentGuiHolder")
+    ]
+    titles = [title for title in actual_titles if title in possible_titles]
+    if len(titles) != 1:
+        raise EvidenceFailure("real Paper category title does not match disposable target")
+    expected_title = titles[0]
     if not any(
-        line.startswith("INVENTORY_OPEN|title=Punish · GuiTarget|size=54|holder=PunishmentGuiHolder")
-        for line in server
-    ):
-        raise EvidenceFailure("real Paper disposable target category inventory not proven")
-    if not any(
-        "GUI_PACKET_OPEN|inventoryStart=54|" in line
-        and "Punish · GuiTarget" in line
+        line.startswith("GUI_PACKET_OPEN|inventoryStart=54|")
+        and expected_title in line
         for line in client
     ):
-        raise EvidenceFailure("Java protocol category window not proven")
+        raise EvidenceFailure("Java protocol category window does not match Paper title")
 
 
 def main(argv: list[str] | None = None) -> int:
