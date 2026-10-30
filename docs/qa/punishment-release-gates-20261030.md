@@ -142,6 +142,16 @@ Created independent [draft PR #765](https://github.com/wsg138/EnthusiaStaff/pull
 - **NO-GO**: This combines a broad StaffBot/Velocity/Paper feature stack, not solely the punishment GUI. Independent StaffBot owner review, remaining severity approvals under #616, real Java/Bedrock GUI tests, Folia lifecycle acceptance, and explicit maintenance/deployment authorization remain necessary. Do not treat GitHub mergeability as approval.
 - No server, JAR, database, config file or production service was modified.
 
+## Integrated security and CI evidence — 2026-10-30
+
+- [Draft PR #765](https://github.com/wsg138/EnthusiaStaff/pull/765) exact head `23e66070154eda7b4eb5e682577c4588956887d7` passed dedicated migration safety, Sentinel Artifact, Staff state reset runtime proof, and the disposable MariaDB integration job. **Aggregate coverage still required a final completion read** when this checkpoint was written. Source tree identity is independently recorded above; runtime Java/Bedrock GUI and Folia admission are **not proven**.
+- Codacy compared the entire combined branch against `main` and reported **173 new findings** (its PR summary surfaced 100 including 4 critical, 14 high, 80 medium, 2 minor). This is a broad multi-feature comparison; it does not mean the two manually reconciled sources introduced all findings. Follow-up read-only diagnostics via Codacy's public PR API identified the four *critical* findings: two JUnit XML parser/DTD/XXE warnings in `scripts/qa/punishment_offline_evidence.py`, and two Semgrep variable-argv audit warnings at the intentionally invoked Gradle wrapper in `scripts/qa/punishment_candidate_verify.py`. They are **offline QA tooling**, not the Minecraft enforcement path.
+- [Draft PR #767](https://github.com/wsg138/EnthusiaStaff/pull/767), stacked on #765, replaces permissive JUnit XML parsing with bounded Expat parsing rejecting DTDs/entities, sets byte/depth caps, and validates that the Gradle wrapper is local/non-symlinked and always launched with fixed offline arguments and `shell=False`. Its dedicated [offline QA safety workflow](https://github.com/wsg138/EnthusiaStaff/actions/runs/41098469129) passed **18/18 synthetic tests** at exact head `b3cd0afa190ac7bedb24cc5677028ba9a80a1c58` (11 evidence/XML and 7 verifier tests). This is source QA, **not** runtime approval. Codacy and broad CI for #767 must be rechecked before claiming its security issues resolved.
+- Codacy's GitHub check exposed 50 annotations (mostly complexity and test-code findings), while the public API exposed the full 173 issues. Do not treat GitHub's 50-annotation cap as a complete security audit.
+- Diagnostic [PR #766](https://github.com/wsg138/EnthusiaStaff/pull/766) is temporary, read-only and **must never be merged** into the release stack.
+
+**No production files, servers, databases, credentials, or running services were altered by this integration/security audit. Guided punishment remains OFF and the release is still NO-GO.**
+
 ## Near-term worker queue
 
 - **P0:** Reconcile [#754](https://github.com/wsg138/EnthusiaStaff/pull/754) with newer checked-out/unpublished punishment fixes and establish a single candidate SHA without changing main or live systems.
