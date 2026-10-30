@@ -99,7 +99,7 @@ def verify_case(record: dict, root: Path) -> tuple[tuple[str, str], str]:
     status = record.get("status")
     if status not in STATUSES:
         raise EvidenceInvalid(f"{key}: status must be PASS, FAIL, or BLOCKED")
-    notes = required_text(record.get("notes"), f"{key}.notes", 12)
+    required_text(record.get("notes"), f"{key}.notes", 12)
     if status != "PASS":
         return key, status
 
@@ -113,9 +113,6 @@ def verify_case(record: dict, root: Path) -> tuple[tuple[str, str], str]:
         raise EvidenceInvalid(f"{key}: invalid tested_at ISO timestamp") from exc
     if parsed.tzinfo is None:
         raise EvidenceInvalid(f"{key}: tested_at must have a timezone")
-    if "test" not in notes.lower() and "client" not in notes.lower():
-        # No keyword-based proof, but avoid empty generic claims.
-        pass
     media_digest = check_digest(record.get("media_sha256"), f"{key}.media_sha256")
     evidence_file(root, record.get("media"), media_digest, MEDIA_EXTENSIONS)
     return key, status
