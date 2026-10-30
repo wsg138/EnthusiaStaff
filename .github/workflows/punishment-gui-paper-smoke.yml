@@ -152,6 +152,7 @@ jobs:
           fi
 
           grep -F 'OFF_DUTY_PICKER_BLOCKED=true' "$server/punishment-gui-smoke.txt"
+          grep -F 'LUCKPERMS_OWNER_IDENTITY_HANDLED=true' "$server/punishment-gui-smoke.txt"
           grep -F 'STAFF_COMMAND_ACCEPTED=true' "$server/punishment-gui-smoke.txt"
           grep -F 'PUNISH_COMMAND_ACCEPTED=true' "$server/punishment-gui-smoke.txt"
           grep -F 'PICKER_OPEN=true' "$server/punishment-gui-smoke.txt"
