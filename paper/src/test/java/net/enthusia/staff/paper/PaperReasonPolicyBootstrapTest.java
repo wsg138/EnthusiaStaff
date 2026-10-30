@@ -96,7 +96,7 @@ final class PaperReasonPolicyBootstrapTest {
     void sameVersionCommentsOnlyDoNotTriggerSemanticDriftWarning() throws IOException {
         String bundled = bundledPolicy();
         Path file = directory.resolve(POLICY_FILENAME);
-        Files.writeString(file, bundled + "\\n# Locally documented policy, unchanged sanctions.\\n");
+        Files.writeString(file, bundled + "\n# Locally documented policy, unchanged sanctions.\n");
         List<LogRecord> records = new ArrayList<>();
 
         var result = new PaperReasonPolicyBootstrap(capturingLogger(records),
