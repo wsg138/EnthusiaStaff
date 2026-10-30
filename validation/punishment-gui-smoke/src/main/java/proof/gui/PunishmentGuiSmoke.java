@@ -29,6 +29,7 @@ public final class PunishmentGuiSmoke extends JavaPlugin implements Listener {
     private static final int EXPECTED_TOP_SLOTS = 54;
     private static final String EXPECTED_HOLDER = "PunishmentTargetPickerHolder";
     private final AtomicBoolean started = new AtomicBoolean();
+    private final AtomicBoolean staffAttempted = new AtomicBoolean();
     private UUID targetId;
 
     @Override
@@ -95,6 +96,7 @@ public final class PunishmentGuiSmoke extends JavaPlugin implements Listener {
         }, 75L);
         Bukkit.getScheduler().runTaskLater(this, () -> {
             if (player.isOnline()) {
+                staffAttempted.set(true);
                 marker("STAFF_COMMAND_ACCEPTED=" + player.performCommand("staff"));
             }
         }, 100L);
@@ -128,6 +130,10 @@ public final class PunishmentGuiSmoke extends JavaPlugin implements Listener {
         marker("INVENTORY_OPEN|title=" + title.replace('\n', ' ') + "|size=" + top.getSize()
                 + "|holder=" + holderName(top));
         if (expected(top)) {
+            if (!staffAttempted.get()) {
+                marker("FAIL=off_duty_picker_open");
+                return;
+            }
             marker("PICKER_OPEN=true");
         }
     }
