@@ -15,10 +15,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Read exact-head Codacy annotations
-        if: false  # PR Codacy check pending; public API issue summary is sufficient for targeted triage
         env:
           GH_TOKEN: ${{ github.token }}
-          HEAD_SHA: "5703f0abca2d50c8f0bb5b648dfa24912a5cb426"
+          HEAD_SHA: "b8b24e2351371d1b9bf07cbd3c03ec249ee6a3f3"
         shell: bash
         run: |
           set -Eeuo pipefail
