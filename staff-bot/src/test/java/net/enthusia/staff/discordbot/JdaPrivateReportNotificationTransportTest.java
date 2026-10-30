@@ -14,7 +14,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicReference;
 import net.dv8tion.jda.api.Permission;
 import net.dv8tion.jda.api.entities.Guild;
-import net.dv8tion.jda.api.entities.Member;
+import net.dv8tion.jda.api.entities.SelfMember;
 import net.dv8tion.jda.api.entities.Message;
 import net.dv8tion.jda.api.entities.PermissionOverride;
 import net.dv8tion.jda.api.entities.Role;
@@ -158,7 +158,7 @@ final class JdaPrivateReportNotificationTransportTest {
 
     private static Guild syntheticGuild(
             Role publicRole, Role staffRole, boolean botCanView, boolean botCanSend) {
-        var self = proxy(Member.class, (instance, method, args) -> {
+        var self = proxy(SelfMember.class, (instance, method, args) -> {
             if ("hasPermission".equals(method.getName())) {
                 var requested = (Permission[]) args[1];
                 return java.util.Arrays.stream(requested).allMatch(permission ->
