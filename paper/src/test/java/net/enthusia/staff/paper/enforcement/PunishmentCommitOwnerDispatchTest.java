@@ -119,7 +119,7 @@ class PunishmentCommitOwnerDispatchTest {
         owner.get().run();
         assertEquals(0, eligibilityChecks.get());
         assertEquals(0, effects.get());
-        assertEquals(0, failures.get());
+        assertEquals(1, failures.get(), "Wrong-UUID dispatch must be recorded");
     }
 
     @Test
@@ -173,6 +173,7 @@ class PunishmentCommitOwnerDispatchTest {
         AtomicReference<Runnable> owner = new AtomicReference<>();
         AtomicInteger eligibilityChecks = new AtomicInteger();
         AtomicInteger effects = new AtomicInteger();
+        AtomicReference<RuntimeException> failure = new AtomicReference<>();
 
         PaperPunishmentCommitEffects.routeToPlayer(
                 targetId,
@@ -191,7 +192,7 @@ class PunishmentCommitOwnerDispatchTest {
                     return true;
                 },
                 recipient -> effects.incrementAndGet(),
-                error -> fail("Unexpected failure", error));
+                failure::set);
 
         assertNotNull(global.get());
         global.get().run();
@@ -199,6 +200,8 @@ class PunishmentCommitOwnerDispatchTest {
         owner.get().run();
         assertEquals(0, eligibilityChecks.get());
         assertEquals(0, effects.get());
+        assertNotNull(failure.get(), "Identity corruption must be logged rather than silently dropped");
+        assertTrue(failure.get().getMessage().contains("UUID mismatch"));
     }
 
     @Test
