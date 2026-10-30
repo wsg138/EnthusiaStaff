@@ -106,9 +106,21 @@ jobs:
           if [[ "$ready" != 1 ]]; then tail -n 180 "$evidence/server-console.log" || true; exit 1; fi
           grep -F 'HARNESS_READY=true' "$server/punishment-gui-smoke.txt"
 
+          set +e
           NODE_PATH="$RUNNER_TEMP/gui/mineflayer/node_modules" timeout 80 \
             node validation/punishment-gui-smoke/client.js 25589 \
             | tee "$evidence/client.log"
+          client_status=${PIPESTATUS[0]}
+          set -e
+          echo '===== GUI smoke helper evidence ====='
+          cat "$server/punishment-gui-smoke.txt" || true
+          echo '===== Relevant Paper runtime log ====='
+          grep -Ei 'EnthusiaStaff|Punish|Permission|Authority|GuiSmoke|ERROR|WARN' \
+            "$evidence/server-console.log" | tail -n 110 || true
+          if [[ "$client_status" != 0 ]]; then
+            echo "::error::GUI protocol client failed; server helper evidence printed above"
+            exit "$client_status"
+          fi
 
           grep -F 'PUNISH_COMMAND_ACCEPTED=true' "$server/punishment-gui-smoke.txt"
           grep -F 'PICKER_OPEN=true' "$server/punishment-gui-smoke.txt"
