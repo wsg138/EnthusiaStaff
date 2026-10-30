@@ -58,3 +58,16 @@ jobs:
               "https://api.github.com/repos/${{ github.repository }}/check-runs/$check_run_id/annotations?per_page=100&page=$page" \
               | jq -c '.[] | {path,start_line,end_line,annotation_level,title,message,raw_details}'
           done
+
+      - name: Read public Codacy PR issue summary without credentials
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          url="https://api.codacy.com/api/v3/analysis/organizations/gh/wsg138/repositories/EnthusiaStaff/pull-requests/765/issues?limit=100&status=new"
+          if curl --silent --show-error --fail -H "Accept: application/json" "$url" > /tmp/codacy-issues.json; then
+            echo "CODACY_PUBLIC_API_OK=true"
+            jq -c '{total: (.data | length), sample: (.data // [] | .[:2]), pagination: .pagination}' /tmp/codacy-issues.json
+            jq -c '(.data // [])[] | select((tostring | test("critical";"i"))) ' /tmp/codacy-issues.json
+          else
+            echo "CODACY_PUBLIC_API_UNAVAILABLE=true"
+          fi
