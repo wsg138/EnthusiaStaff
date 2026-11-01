@@ -26,8 +26,6 @@ import java.security.SecureRandom;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
-import java.time.ZoneOffset;
-import java.time.format.DateTimeFormatter;
 import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -106,7 +104,6 @@ import org.slf4j.Logger;
         }
 )
 public final class EnthusiaStaffVelocityPlugin {
-    private static final DateTimeFormatter TIMESTAMP = DateTimeFormatter.ISO_OFFSET_DATE_TIME.withZone(ZoneOffset.UTC);
     private static final Set<SanctionType> LOGIN_BLOCKS = Set.of(
             SanctionType.BAN, SanctionType.NETWORK_BAN, SanctionType.NETWORK_IDENTITY_BAN
     );
@@ -1233,17 +1230,17 @@ public final class EnthusiaStaffVelocityPlugin {
             return;
         }
         try {
+            Instant now = Clock.systemUTC().instant();
             List<ActiveSanction> sanctions = lookup.activeFor(
-                    event.getPlayer().getUniqueId(), LOGIN_BLOCKS, Clock.systemUTC().instant()
+                    event.getPlayer().getUniqueId(), LOGIN_BLOCKS, now
             );
             if (!sanctions.isEmpty()) {
                 ActiveSanction sanction = sanctions.getFirst();
-                String expiration = sanction.expiresAt().map(TIMESTAMP::format).orElse("Permanent");
-                event.setResult(ResultedEvent.ComponentResult.denied(Component.text(
-                        "Network access denied\nCase: " + sanction.caseId() + "\nReason: "
-                                + sanction.publicReason() + "\nExpires: " + expiration
-                                + appealInstructions(sanction)
-                )));
+                event.setResult(ResultedEvent.ComponentResult.denied(
+                        VelocityPunishmentDisconnectRenderer.render(
+                                sanction, now, appealsUrl(), appealCode(sanction)
+                        )
+                ));
             }
         } catch (RuntimeException exception) {
             activeAuthorityObserved = true;
@@ -1938,18 +1935,17 @@ public final class EnthusiaStaffVelocityPlugin {
         return loaded == null ? "https://enthusia.net/appeals" : loaded.appealsUrl();
     }
 
-    private String appealInstructions(ActiveSanction sanction) {
+    private Optional<String> appealCode(ActiveSanction sanction) {
         WebsiteModerationStore store = websiteModerationStore;
         if (store == null) {
-            return "\nAppeal: " + appealsUrl();
+            return Optional.empty();
         }
         try {
             return store.codeForSanction(sanction.sanctionId(), Clock.systemUTC().instant())
-                    .map(code -> "\nAppeal: " + appealsUrl() + "\nPunishment code: " + code.code())
-                    .orElse("\nAppeal: " + appealsUrl());
+                    .map(PunishmentCodeDisplay::code);
         } catch (RuntimeException exception) {
             logger.error("A punishment code could not be prepared for a denied login", exception);
-            return "\nAppeal: " + appealsUrl();
+            return Optional.empty();
         }
     }
 
