@@ -35,8 +35,9 @@ final class VelocityPunishmentDisconnectRenderer {
         Objects.requireNonNull(appealsUrl, "appealsUrl");
         Objects.requireNonNull(appealCode, "appealCode");
 
-        Component message = Component.text("ENTHUSIA | CONNECTION BLOCKED",
-                        NamedTextColor.RED, TextDecoration.BOLD)
+        Component message = Component.empty()
+                .append(Component.text("ENTHUSIA | CONNECTION BLOCKED",
+                        NamedTextColor.RED, TextDecoration.BOLD))
                 .append(Component.text("\n"))
                 .append(Component.text("You cannot join while this ban is active.", NamedTextColor.GRAY))
                 .append(Component.text("\n\n"))
