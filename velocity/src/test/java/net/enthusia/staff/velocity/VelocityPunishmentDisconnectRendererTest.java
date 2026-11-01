@@ -28,7 +28,7 @@ class VelocityPunishmentDisconnectRendererTest {
         String displayed = text(result);
         assertEquals(NamedTextColor.RED, result.children().getFirst().color());
         assertEquals(null, result.color());
-        assertEquals(null, result.children().get(2).color());
+        assertEquals(NamedTextColor.GRAY, result.children().get(2).color());
         assertTrue(displayed.contains("CONNECTION BLOCKED"));
         assertTrue(displayed.contains("Reason: Encouraging self-harm"));
         assertTrue(displayed.contains("Time left: 15h 30m"));
