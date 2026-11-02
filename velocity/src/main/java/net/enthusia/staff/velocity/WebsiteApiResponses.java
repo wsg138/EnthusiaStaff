@@ -33,6 +33,8 @@ final class WebsiteApiResponses {
         response.put("state", punishment.state().name());
         response.put(CASE_ID, punishment.caseId().value());
         response.put("appealAvailable", punishment.appealAvailable());
+        punishment.issuedBy().ifPresent(name -> response.put("issuedBy", name));
+        punishment.endedAt().ifPresent(time -> response.put("endedAt", time.toString()));
         return response;
     }
 

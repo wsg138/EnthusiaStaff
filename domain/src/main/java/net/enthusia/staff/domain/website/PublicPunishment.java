@@ -15,15 +15,25 @@ public record PublicPunishment(
         OptionalLong remainingSeconds,
         PublicPunishmentState state,
         CaseId caseId,
-        boolean appealAvailable
+        boolean appealAvailable,
+        Optional<String> issuedBy,
+        Optional<Instant> endedAt
 ) {
+    public PublicPunishment(String player, String punishmentType, String broadReason, String publicReason,
+            Instant issuedAt, Optional<Instant> expiresAt, OptionalLong remainingSeconds,
+            PublicPunishmentState state, CaseId caseId, boolean appealAvailable) {
+        this(player, punishmentType, broadReason, publicReason, issuedAt, expiresAt, remainingSeconds,
+                state, caseId, appealAvailable, Optional.empty(), Optional.empty());
+    }
+
     public PublicPunishment {
         if (player == null || !player.matches("[A-Za-z0-9_]{3,16}")
                 || punishmentType == null || punishmentType.isBlank()
                 || broadReason == null || broadReason.isBlank()
                 || publicReason == null || publicReason.isBlank()
                 || issuedAt == null || expiresAt == null || remainingSeconds == null
-                || state == null || caseId == null) {
+                || state == null || caseId == null || issuedBy == null || endedAt == null
+                || issuedBy.filter(name -> !name.matches("[A-Za-z0-9_]{3,16}")).isPresent()) {
             throw new IllegalArgumentException("Public punishment fields are invalid");
         }
         if (remainingSeconds.isPresent() && remainingSeconds.getAsLong() < 0) {

@@ -1,0 +1,9 @@
+# Public punishment issuer and end time
+
+Spec: publicly visible punishment rows expose the recorded issuer display name only when it is a safe Minecraft-style name, plus the recorded early end instant when present. Private and fully overturned cases, actor IDs, staff ranks, private evidence and internal notes remain excluded. Older or malformed issuer names are unavailable, never guessed. The v2 compatibility adapter remains issuer-unavailable until it has an explicit public source.
+
+Prove: website public responses currently omit issuer and early-end timestamps. The server persists issuer on cases and `ended_at` on sanctions; the prior public view intentionally omitted issuer. The change adds a forward migration to the public view and explicit fields on the public response, retaining the old constructor for other producers.
+
+Acceptance: domain validation and public API tests, MariaDB-backed public/private view and migration integration, compatibility against the current site contract, and isolated runtime proof before any authorized deployment. No existing migration is changed. No project-local EARS/state helper has yet been identified; this is a manual SPEAR record. User-requested public issuer disclosure changes the existing public view and requires review.
+
+Local verification on 2026-11-02: the focused Velocity public issuer and router tests passed, and integration test sources compiled on Java 25. The MariaDB-backed migration and public/private projection test has been added but was not run because Docker and MariaDB are unavailable in this environment. Runtime/API provider compatibility, migration application, hosted checks and live acceptance remain unverified. The copied `components/enthusia-site` tree is not a Git submodule; confirm its release/build relationship before a combined deployment.

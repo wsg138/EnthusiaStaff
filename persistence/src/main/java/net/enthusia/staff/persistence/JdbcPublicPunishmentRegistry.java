@@ -36,7 +36,7 @@ final class JdbcPublicPunishmentRegistry {
             """;
     private static final String PUBLIC_SELECT = """
             SELECT s.sanction_id, s.case_id, s.sanction_type, s.status, s.issued_at,
-                   s.expiration_at, c.public_reason, c.sanction_family, p.current_username,
+                   s.expiration_at, s.ended_at, c.public_reason, c.sanction_family, c.issued_by, p.current_username,
                    pc.status AS code_status
             FROM public_sanctions s
             JOIN public_cases c ON c.case_id = s.case_id
@@ -207,6 +207,7 @@ final class JdbcPublicPunishmentRegistry {
         Instant issuedAt = result.getTimestamp("issued_at").toInstant();
         Timestamp expirationValue = result.getTimestamp("expiration_at");
         Instant expiration = expirationValue == null ? null : expirationValue.toInstant();
+        Timestamp endedValue = result.getTimestamp("ended_at");
         PublicPunishmentState state = WebsitePunishmentProjection.publicState(
                 result.getString("status"), expiration, now
         );
@@ -225,7 +226,9 @@ final class JdbcPublicPunishmentRegistry {
                         state,
                         sanctionType,
                         result.getString("code_status")
-                )
+                ),
+                Optional.ofNullable(result.getString("issued_by")),
+                Optional.ofNullable(endedValue).map(Timestamp::toInstant)
         );
         return new PublicRow(sanctionId, issuedAt, punishment);
     }

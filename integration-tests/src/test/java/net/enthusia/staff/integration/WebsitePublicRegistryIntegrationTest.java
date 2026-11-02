@@ -96,6 +96,8 @@ class WebsitePublicRegistryIntegrationTest {
 
             assertEquals(2, page.items().size());
             assertTrue(page.nextCursor().isEmpty());
+            assertEquals(Optional.of("P2wn"), page.items().getFirst().issuedBy());
+            assertEquals(Optional.of("P2wn"), page.items().getLast().issuedBy());
             assertActivePunishment(page.items().getFirst(), fixtures.activeCase());
             assertExpiredPunishment(page.items().getLast(), fixtures.expiredCase());
             assertEquals(1, store.listPublic(
@@ -109,6 +111,30 @@ class WebsitePublicRegistryIntegrationTest {
             ).items().isEmpty());
             assertTrue(store.publicCase(fixtures.activeCase(), NOW).isPresent());
             assertTrue(store.publicCase(caseId(3), NOW).isEmpty());
+        }
+    }
+
+    @Test
+    void returnsEarlyEndButNeverPublishesMalformedIssuer() throws SQLException {
+        CaseId caseId = caseId(30);
+        UUID sanctionId = uuid(230);
+        insertPublicPunishment(uuid(30), "EndedPlayer", caseId, sanctionId, BAN_TYPE,
+                PUBLIC_VISIBILITY, NOW.minusSeconds(300), NOW.plusSeconds(300));
+        try (Connection database = connection(DATABASE);
+             PreparedStatement actor = database.prepareStatement("UPDATE cases SET actor_name=? WHERE case_id=?");
+             PreparedStatement end = database.prepareStatement("UPDATE sanctions SET status='ENDED_EARLY', ended_at=? WHERE sanction_id=?")) {
+            actor.setString(1, "Private Staff Name");
+            actor.setString(2, caseId.value());
+            assertEquals(1, actor.executeUpdate());
+            end.setTimestamp(1, Timestamp.from(NOW.minusSeconds(20)));
+            end.setBytes(2, uuidBytes(sanctionId));
+            assertEquals(1, end.executeUpdate());
+        }
+        try (MariaDbRuntime runtime = MariaDb.initialize(databaseConfig(DATABASE))) {
+            PublicPunishment row = runtime.websiteModerationStore(CODE_PROTECTOR).publicCase(caseId, NOW).orElseThrow();
+            assertTrue(row.issuedBy().isEmpty());
+            assertEquals(Optional.of(NOW.minusSeconds(20)), row.endedAt());
+            assertEquals(PublicPunishmentState.REVOKED, row.state());
         }
     }
 
