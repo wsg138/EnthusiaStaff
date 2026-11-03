@@ -147,15 +147,32 @@ public final class DiscordStaffReadRuntime implements AutoCloseable {
 
     /** Bounded, non-evidentiary report queue for the private Discord review surface. */
     public record PendingReport(UUID reportId, UUID targetId, String targetName,
-            String reporterName, String reasonId, String state, long revision) { }
+            String reporterName, String reasonId, String state, long revision,
+            String description) {
+        public PendingReport {
+            description = description == null ? "" : description;
+        }
+
+        /** Keep metadata-only consumers from accidentally reading report descriptions. */
+        public PendingReport(UUID reportId, UUID targetId, String targetName,
+                String reporterName, String reasonId, String state, long revision) {
+            this(reportId, targetId, targetName, reporterName, reasonId, state, revision, "");
+        }
+    }
 
     public List<PendingReport> pendingReports(int limit) {
+        return pendingReports(limit, false);
+    }
+
+    /** Free-form report descriptions are read only for private Mod+ StaffBot review replies. */
+    public List<PendingReport> pendingReports(int limit, boolean includeDescription) {
         if (limit < 1 || limit > 10) {
             throw new IllegalArgumentException("report queue limit is invalid");
         }
         try (var connection = dataSource.getConnection();
              var statement = connection.prepareStatement("""
                     SELECT r.report_id, r.target_id, r.reason_id, r.state, r.revision,
+                           CASE WHEN ? THEN r.description ELSE NULL END AS report_description,
                            target.current_username AS target_name,
                            reporter.current_username AS reporter_name
                       FROM reports r
@@ -165,7 +182,8 @@ public final class DiscordStaffReadRuntime implements AutoCloseable {
                      ORDER BY r.created_at ASC, r.report_id ASC
                      LIMIT ?
                     """)) {
-            statement.setInt(1, limit);
+            statement.setBoolean(1, includeDescription);
+            statement.setInt(2, limit);
             try (var rows = statement.executeQuery()) {
                 var result = new java.util.ArrayList<PendingReport>();
                 while (rows.next()) {
@@ -175,7 +193,7 @@ public final class DiscordStaffReadRuntime implements AutoCloseable {
                             ReportPlayerNames.display(rows.getString("target_name")),
                             ReportPlayerNames.display(rows.getString("reporter_name")),
                             rows.getString("reason_id"), rows.getString("state"),
-                            rows.getLong("revision")));
+                            rows.getLong("revision"), rows.getString("report_description")));
                 }
                 return List.copyOf(result);
             }
