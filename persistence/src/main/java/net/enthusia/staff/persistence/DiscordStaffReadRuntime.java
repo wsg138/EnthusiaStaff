@@ -147,15 +147,32 @@ public final class DiscordStaffReadRuntime implements AutoCloseable {
 
     /** Bounded, non-evidentiary report queue for the private Discord review surface. */
     public record PendingReport(UUID reportId, UUID targetId, String targetName,
-            String reporterName, String reasonId, String state, long revision) { }
+            String reporterName, String reasonId, String state, long revision,
+            String description) {
+        public PendingReport {
+            description = description == null ? "" : description;
+        }
+
+        /** Keep metadata-only consumers from accidentally reading report descriptions. */
+        public PendingReport(UUID reportId, UUID targetId, String targetName,
+                String reporterName, String reasonId, String state, long revision) {
+            this(reportId, targetId, targetName, reporterName, reasonId, state, revision, "");
+        }
+    }
 
     public List<PendingReport> pendingReports(int limit) {
+        return pendingReports(limit, false);
+    }
+
+    /** Free-form report descriptions are read only for private Mod+ StaffBot review replies. */
+    public List<PendingReport> pendingReports(int limit, boolean includeDescription) {
         if (limit < 1 || limit > 10) {
             throw new IllegalArgumentException("report queue limit is invalid");
         }
         try (var connection = dataSource.getConnection();
              var statement = connection.prepareStatement("""
                     SELECT r.report_id, r.target_id, r.reason_id, r.state, r.revision,
+                           CASE WHEN ? THEN r.description ELSE NULL END AS report_description,
                            target.current_username AS target_name,
                            reporter.current_username AS reporter_name
                       FROM reports r
@@ -165,23 +182,59 @@ public final class DiscordStaffReadRuntime implements AutoCloseable {
                      ORDER BY r.created_at ASC, r.report_id ASC
                      LIMIT ?
                     """)) {
-            statement.setInt(1, limit);
+            statement.setBoolean(1, includeDescription);
+            statement.setInt(2, limit);
             try (var rows = statement.executeQuery()) {
                 var result = new java.util.ArrayList<PendingReport>();
                 while (rows.next()) {
-                    result.add(new PendingReport(
-                            UuidBytes.fromBytes(rows.getBytes("report_id")),
-                            UuidBytes.fromBytes(rows.getBytes("target_id")),
-                            ReportPlayerNames.display(rows.getString("target_name")),
-                            ReportPlayerNames.display(rows.getString("reporter_name")),
-                            rows.getString("reason_id"), rows.getString("state"),
-                            rows.getLong("revision")));
+                    result.add(readPendingReport(rows));
                 }
                 return List.copyOf(result);
             }
         } catch (java.sql.SQLException exception) {
             throw new IllegalStateException("Unable to load report review queue", exception);
         }
+    }
+
+    /**
+     * Read only the committed report's original description, by exact case ID.
+     * A trusted caller must validate the private staff destination before
+     * calling, and again before Discord send. No evidence or staff notes load.
+     * Closed cases cannot be queued for automatic notification.
+     */
+    public Optional<PendingReport> reportForPrivateNotification(UUID reportId) {
+        java.util.Objects.requireNonNull(reportId, "reportId");
+        try (var connection = dataSource.getConnection();
+             var statement = connection.prepareStatement("""
+                    SELECT r.report_id, r.target_id, r.reason_id, r.state, r.revision,
+                           LEFT(r.description, 256) AS report_description,
+                           target.current_username AS target_name,
+                           reporter.current_username AS reporter_name
+                      FROM reports r
+                      LEFT JOIN players target ON target.player_id = r.target_id
+                      LEFT JOIN players reporter ON reporter.player_id = r.reporter_id
+                     WHERE r.report_id = ?
+                       AND r.state IN ('OPEN', 'CLAIMED', 'AWAITING_REVIEW')
+                    """)) {
+            statement.setBytes(1, UuidBytes.toBytes(reportId));
+            try (var rows = statement.executeQuery()) {
+                return rows.next() ? Optional.of(readPendingReport(rows)) : Optional.empty();
+            }
+        } catch (java.sql.SQLException exception) {
+            throw new IllegalStateException("Unable to load private report notification", exception);
+        }
+    }
+
+    private static PendingReport readPendingReport(
+            java.sql.ResultSet rows
+    ) throws java.sql.SQLException {
+        return new PendingReport(
+                UuidBytes.fromBytes(rows.getBytes("report_id")),
+                UuidBytes.fromBytes(rows.getBytes("target_id")),
+                ReportPlayerNames.display(rows.getString("target_name")),
+                ReportPlayerNames.display(rows.getString("reporter_name")),
+                rows.getString("reason_id"), rows.getString("state"),
+                rows.getLong("revision"), rows.getString("report_description"));
     }
 
     /** D09-only private alert list. Does not expose raw evidence or the punishment narrative. */

@@ -97,6 +97,7 @@ final class JdbcReportSubmissionStore {
         insertContextSnapshots(connection, reportId, request, evidenceRetention);
         insertSubmissionKey(connection, reportId, request, true);
         insertAudit(connection, reportId, request, "REPORT_MERGED");
+        insertStaffBotNotificationIntent(connection, reportId, request, "REPORT_MERGED");
         connection.commit();
         return new ReportSubmissionResult.Accepted(reportId, true, false);
     }
@@ -131,6 +132,7 @@ final class JdbcReportSubmissionStore {
         insertContextSnapshots(connection, reportId, request, evidenceRetention);
         insertAudit(connection, reportId, request, "REPORT_CREATED");
         insertDiscordOutbox(connection, reportId, request);
+        insertStaffBotNotificationIntent(connection, reportId, request, "REPORT_CREATED");
         connection.commit();
         return new ReportSubmissionResult.Accepted(reportId, false, false);
     }
@@ -288,8 +290,8 @@ final class JdbcReportSubmissionStore {
 
     private static void merge(Connection connection, UUID reportId, CreateReportRequest request) throws SQLException {
         try (PreparedStatement message = connection.prepareStatement("""
-                INSERT INTO report_messages(message_id, report_id, actor_id, body, created_at)
-                VALUES (?, ?, ?, ?, ?)
+                INSERT INTO report_messages(message_id, report_id, actor_id, body, created_at, origin)
+                VALUES (?, ?, ?, ?, ?, 'REPORTER_FOLLOWUP')
                 """);
              PreparedStatement update = connection.prepareStatement("""
                 UPDATE reports SET updated_at = ?, revision = revision + 1 WHERE report_id = ?
@@ -376,6 +378,29 @@ final class JdbcReportSubmissionStore {
             )));
             statement.setTimestamp(7, Timestamp.from(request.createdAt()));
             statement.setString(8, request.idempotencyKey().value());
+            statement.executeUpdate();
+        }
+    }
+
+    /**
+     * Record a reference-only, permanently INERT StaffBot intent in the same
+     * transaction as the report. No Discord description or evidence is stored.
+     * A future owner-approved sender must not treat these historical rows as
+     * armed notifications merely because a config flag changes.
+     */
+    private static void insertStaffBotNotificationIntent(
+            Connection connection, UUID reportId, CreateReportRequest request, String eventType
+    ) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement("""
+                INSERT INTO staffbot_report_notification_intents
+                    (intent_id, idempotency_key, report_id, event_type, created_at)
+                VALUES (?, ?, ?, ?, ?)
+                """)) {
+            statement.setBytes(1, UuidBytes.toBytes(UUID.randomUUID()));
+            statement.setString(2, "staffbot:report:" + request.idempotencyKey().value());
+            statement.setBytes(3, UuidBytes.toBytes(reportId));
+            statement.setString(4, eventType);
+            statement.setTimestamp(5, Timestamp.from(request.createdAt()));
             statement.executeUpdate();
         }
     }

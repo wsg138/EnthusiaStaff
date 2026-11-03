@@ -15,6 +15,8 @@ import java.util.UUID;
 import java.util.function.Supplier;
 import javax.sql.DataSource;
 import net.enthusia.staff.domain.report.ReportDetails;
+import net.enthusia.staff.domain.report.ReportMessage;
+import net.enthusia.staff.domain.report.ReportMessagesPage;
 import net.enthusia.staff.domain.report.ReportPolicy;
 import net.enthusia.staff.domain.report.ReportQueue;
 import net.enthusia.staff.domain.report.ReportState;
@@ -22,6 +24,16 @@ import net.enthusia.staff.domain.report.ReportSummary;
 
 final class JdbcReportQueryStore {
     private static final int ABSOLUTE_QUERY_LIMIT = 100;
+    private static final int MESSAGE_PAGE_SIZE = 5;
+    private static final int MAX_MESSAGE_PAGE = 10_000;
+    private static final String REPORT_EXISTS_SQL = "SELECT 1 FROM reports WHERE report_id = ? LIMIT 1";
+    private static final String MESSAGE_PAGE_SQL = """
+            SELECT message_id, actor_id, body, created_at, origin
+            FROM report_messages
+            WHERE report_id = ?
+            ORDER BY created_at ASC, message_id ASC
+            LIMIT ? OFFSET ?
+            """;
     private static final String ASSIGNED_TO = "assigned_to";
     private static final String REPORT_ID = "report_id";
     private static final String STATE = "state";
@@ -134,6 +146,52 @@ final class JdbcReportQueryStore {
             ));
         } catch (SQLException | IllegalArgumentException exception) {
             throw new ModerationPersistenceException("Unable to read report details", exception);
+        }
+    }
+
+    boolean exists(UUID reportId) {
+        if (reportId == null) {
+            throw new IllegalArgumentException("Report identifier is required");
+        }
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement(REPORT_EXISTS_SQL)) {
+            statement.setBytes(1, UuidBytes.toBytes(reportId));
+            try (ResultSet result = statement.executeQuery()) {
+                return result.next();
+            }
+        } catch (SQLException exception) {
+            throw new ModerationPersistenceException("Unable to check report existence", exception);
+        }
+    }
+
+    ReportMessagesPage messages(UUID reportId, int page) {
+        if (reportId == null || page < 1 || page > MAX_MESSAGE_PAGE) {
+            throw new IllegalArgumentException("Report and a bounded positive page are required");
+        }
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement(MESSAGE_PAGE_SQL)) {
+            statement.setBytes(1, UuidBytes.toBytes(reportId));
+            statement.setInt(2, MESSAGE_PAGE_SIZE + 1);
+            statement.setInt(3, (page - 1) * MESSAGE_PAGE_SIZE);
+            try (ResultSet result = statement.executeQuery()) {
+                List<ReportMessage> messages = new ArrayList<>();
+                while (result.next()) {
+                    messages.add(new ReportMessage(
+                            UuidBytes.fromBytes(result.getBytes("message_id")),
+                            UuidBytes.fromBytes(result.getBytes("actor_id")),
+                            result.getString("body"),
+                            result.getTimestamp("created_at").toInstant(),
+                            ReportMessage.Origin.valueOf(result.getString("origin"))
+                    ));
+                }
+                boolean hasMore = messages.size() > MESSAGE_PAGE_SIZE;
+                if (hasMore) {
+                    messages.removeLast();
+                }
+                return new ReportMessagesPage(page, messages, hasMore);
+            }
+        } catch (SQLException | IllegalArgumentException exception) {
+            throw new ModerationPersistenceException("Unable to read report message history", exception);
         }
     }
 

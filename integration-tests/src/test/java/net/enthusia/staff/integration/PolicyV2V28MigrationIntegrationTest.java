@@ -23,6 +23,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 class PolicyV2V28MigrationIntegrationTest {
     private static final Instant NOW = Instant.parse("2026-10-06T23:00:00Z");
     private static final String LEGACY_CASE = "P2LEGACY00000001";
+    private static final int REQUIRED_SCHEMA_VERSION = 32;
 
     @Container
     private static final MariaDBContainer<?> DATABASE = new MariaDBContainer<>("mariadb:11.8.3")
@@ -51,7 +52,8 @@ class PolicyV2V28MigrationIntegrationTest {
             assertTrue(tableExists("policy_v2_cases"));
             assertTrue(tableExists("policy_v2_remedy_enforcement"));
             assertTrue(tableExists("policy_v2_full_overturns"));
-            assertEquals("31", latestMigrationVersion());
+            assertTrue(Integer.parseInt(latestMigrationVersion()) >= REQUIRED_SCHEMA_VERSION);
+            assertTrue(reportMessageOriginExists());
             assertTrue(tableExists("discord_investigation_cases"));
             assertEquals(1, legacyCaseCount());
             assertEquals(0, policyV2CaseCount());
@@ -103,6 +105,21 @@ class PolicyV2V28MigrationIntegrationTest {
                 result.next();
                 return result.getInt(1) == 1;
             }
+        }
+    }
+
+    private static boolean reportMessageOriginExists() throws Exception {
+        try (Connection connection = MariaDbIntegrationSupport.connection(DATABASE);
+             var statement = connection.prepareStatement("""
+                     SELECT COUNT(*)
+                     FROM information_schema.columns
+                     WHERE table_schema = DATABASE()
+                       AND table_name = 'report_messages'
+                       AND column_name = 'origin'
+                     """);
+             ResultSet result = statement.executeQuery()) {
+            result.next();
+            return result.getInt(1) == 1;
         }
     }
 

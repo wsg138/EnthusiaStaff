@@ -209,10 +209,12 @@ final class ReportGuiRenderer {
                         Component.text(configuration.message("sensitive-evidence"), NamedTextColor.DARK_GRAY)
                 )
         ));
+        List<Component> descriptionLore = descriptionWithHistory(
+                details.description(), details.summary().reportId());
         inventory.setItem(configuration.slot("detail-description"), item(
                 configuration.material("description"),
                 configuration.message("description"),
-                wrap(details.description())
+                List.copyOf(descriptionLore)
         ));
         inventory.setItem(configuration.slot("detail-public-chat"), snapshotItem(
                 configuration.material("public-chat"),
@@ -455,6 +457,29 @@ final class ReportGuiRenderer {
             case CLOSE -> CLOSE_KEY;
             case NO_VIOLATION -> "no-violation";
         };
+    }
+
+    static List<Component> descriptionWithHistory(String description, UUID reportId) {
+        List<Component> lore = new ArrayList<>(descriptionPreview(description, reportId));
+        lore.add(Component.text("Original report text is above.", NamedTextColor.DARK_GRAY));
+        lore.add(Component.text("View reporter follow-ups and staff action history:",
+                NamedTextColor.YELLOW));
+        lore.add(Component.text("/reports messages " + reportId, NamedTextColor.WHITE));
+        return List.copyOf(lore);
+    }
+
+    private static final int DESCRIPTION_PREVIEW_LIMIT = 480;
+
+    // A lore tooltip only previews a bounded amount of text. Make the limit
+    // explicit so a staff reviewer cannot mistake the preview for the full report.
+    static List<Component> descriptionPreview(String value, UUID reportId) {
+        List<Component> lines = new ArrayList<>(wrap(value));
+        String compact = value.replace('\r', ' ').replace('\n', ' ');
+        if (compact.length() > DESCRIPTION_PREVIEW_LIMIT) {
+            lines.add(Component.text("Preview truncated. Read the full description:", NamedTextColor.YELLOW));
+            lines.add(Component.text("/reports view " + reportId, NamedTextColor.WHITE));
+        }
+        return List.copyOf(lines);
     }
 
     private static List<Component> wrap(String value) {

@@ -13,6 +13,7 @@ import net.enthusia.staff.domain.ports.ReportStore;
 import net.enthusia.staff.domain.report.CreateReportRequest;
 import net.enthusia.staff.domain.report.ReportDetails;
 import net.enthusia.staff.domain.report.ReportEvidencePurgeResult;
+import net.enthusia.staff.domain.report.ReportMessagesPage;
 import net.enthusia.staff.domain.report.ReportPolicy;
 import net.enthusia.staff.domain.report.ReportPolicyRuntime;
 import net.enthusia.staff.domain.report.ReportQueue;
@@ -63,6 +64,16 @@ public final class JdbcReportStore implements ReportStore {
     @Override
     public Optional<ReportDetails> details(UUID reportId) {
         return queries.details(reportId);
+    }
+
+    @Override
+    public boolean exists(UUID reportId) {
+        return queries.exists(reportId);
+    }
+
+    @Override
+    public ReportMessagesPage messages(UUID reportId, int page) {
+        return queries.messages(reportId, page);
     }
 
     @Override

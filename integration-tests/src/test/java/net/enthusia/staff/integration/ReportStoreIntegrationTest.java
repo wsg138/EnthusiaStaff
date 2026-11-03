@@ -15,6 +15,7 @@ import static net.enthusia.staff.integration.ReportIntegrationFixtures.request;
 import static net.enthusia.staff.integration.ReportIntegrationFixtures.requestWithEvidence;
 import static net.enthusia.staff.integration.ReportIntegrationFixtures.stateChange;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -40,6 +41,8 @@ import net.enthusia.staff.domain.ports.ReportStore;
 import net.enthusia.staff.domain.report.CreateReportRequest;
 import net.enthusia.staff.domain.report.ReportAction;
 import net.enthusia.staff.domain.report.ReportDetails;
+import net.enthusia.staff.domain.report.ReportMessage;
+import net.enthusia.staff.domain.report.ReportMessagesPage;
 import net.enthusia.staff.domain.report.ReportEvidencePurgeResult;
 import net.enthusia.staff.domain.report.ReportQueue;
 import net.enthusia.staff.domain.report.ReportState;
@@ -49,6 +52,7 @@ import net.enthusia.staff.domain.report.ReportSubmissionResult;
 import net.enthusia.staff.persistence.MariaDb;
 import net.enthusia.staff.persistence.MariaDbRuntime;
 import net.enthusia.staff.persistence.JdbcReportStore;
+import net.enthusia.staff.persistence.JdbcStaffBotReportIntentStore;
 import org.junit.jupiter.api.Test;
 import org.testcontainers.containers.MariaDBContainer;
 import org.testcontainers.junit.jupiter.Container;
@@ -57,6 +61,11 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 @Testcontainers
 class ReportStoreIntegrationTest {
     private static final int CONCURRENT_OPERATION_COUNT = 2;
+    private static final String STAFFBOT_WORKER_A = "worker-a";
+    private static final String STAFFBOT_DISCORD_MESSAGE_ID = "4".repeat(18);
+    private static final String STAFFBOT_WORKER_B = "worker-b";
+    private static final String STAFFBOT_CREATED = "REPORT_CREATED";
+    private static final String STAFFBOT_TEST_BODY = "synthetic";
 
     @Container
     private static final MariaDBContainer<?> DATABASE = new MariaDBContainer<>("mariadb:11.8.3")
@@ -105,7 +114,156 @@ class ReportStoreIntegrationTest {
             assertTrue(details.privateMessageSnapshots().getFirst().contains("Private evidence first"));
             assertEquals(1L, reportCount(accepted.reportId()));
             assertEquals(1L, reportMessageCount(accepted.reportId()));
+            assertTrue(store.exists(accepted.reportId()));
+            assertFalse(store.exists(UUID.randomUUID()));
+            ReportMessagesPage messages = store.messages(accepted.reportId(), 1);
+            assertEquals(1, messages.messages().size());
+            assertEquals(ReportMessage.Origin.REPORTER_FOLLOWUP, messages.messages().getFirst().origin());
+            assertEquals(reporterId, messages.messages().getFirst().actorId());
+            assertEquals("Report description second", messages.messages().getFirst().body());
+            assertFalse(messages.hasMore(), "An idempotent replay must not add duplicate messages");
             assertEquals(1L, discordCreationCount(accepted.reportId()));
+            assertEquals(1L, staffBotIntentCount(accepted.reportId(), STAFFBOT_CREATED));
+            assertEquals(1L, staffBotIntentCount(accepted.reportId(), "REPORT_MERGED"));
+            assertEquals(2L, inertStaffBotIntentCount(accepted.reportId()));
+            assertEquals(0L, armedStaffBotIntentCount(accepted.reportId()));
+        }
+    }
+
+    @Test
+    void staffBotIntentDeliveryIsInertByDefaultAndLeaseRecoveryRequiresReview() throws SQLException {
+        UUID reporterId = UUID.randomUUID();
+        UUID targetId = UUID.randomUUID();
+        UUID reportId;
+        try (MariaDbRuntime runtime = MariaDb.initialize(databaseConfig(DATABASE))) {
+            seedPlayers(reporterId, targetId);
+            reportId = accepted(runtime.reportStore().submit(
+                    request(reporterId, targetId, "report:intent-lease-" + reporterId,
+                            NOW, STAFFBOT_TEST_BODY))).reportId();
+        }
+        try (HikariDataSource pool = MariaDb.open(databaseConfig(DATABASE))) {
+            var intents = new JdbcStaffBotReportIntentStore(pool);
+            assertTrue(intents.claimArmed(STAFFBOT_WORKER_A, 2, Duration.ofSeconds(30), NOW).isEmpty());
+            assertEquals(1L, inertStaffBotIntentCount(reportId));
+            armSyntheticIntent(reportId, NOW);
+
+            var claimed = intents.claimArmed(STAFFBOT_WORKER_A, 2, Duration.ofSeconds(30), NOW);
+            assertEquals(1, claimed.size());
+            assertEquals(reportId, claimed.getFirst().reportId());
+            assertEquals(STAFFBOT_CREATED, claimed.getFirst().eventType());
+            assertEquals(1, claimed.getFirst().attemptCount());
+            assertFalse(intents.delivered(claimed.getFirst().intentId(), STAFFBOT_WORKER_B,
+                    NOW.plusSeconds(2), STAFFBOT_DISCORD_MESSAGE_ID), "Only the lease owner can acknowledge delivery");
+            assertFalse(intents.delivered(claimed.getFirst().intentId(), STAFFBOT_WORKER_A,
+                    NOW.plusSeconds(31), STAFFBOT_DISCORD_MESSAGE_ID), "An expired lease cannot acknowledge a send");
+        }
+        // The original worker has stopped. Reopen a fresh connection pool to
+        // prove an abandoned lease cannot send twice after a real restart.
+        try (HikariDataSource restartedPool = MariaDb.open(databaseConfig(DATABASE))) {
+            var restarted = new JdbcStaffBotReportIntentStore(restartedPool);
+            assertEquals(1, restarted.quarantineExpired(NOW.plusSeconds(31)));
+            assertEquals(0, restarted.quarantineExpired(NOW.plusSeconds(35)));
+            assertTrue(restarted.claimArmed(STAFFBOT_WORKER_B, 2, Duration.ofSeconds(30),
+                    NOW.plusSeconds(40)).isEmpty(), "Ambiguous sends must not auto-retry");
+            assertEquals(1L, staffBotStateCount(reportId, "REVIEW_REQUIRED"));
+        }
+    }
+
+    @Test
+    void staffBotIntentAcknowledgementIsLeaseBoundAndTerminal() throws SQLException {
+        UUID reporterId = UUID.randomUUID();
+        UUID targetId = UUID.randomUUID();
+        UUID reportId;
+        try (MariaDbRuntime runtime = MariaDb.initialize(databaseConfig(DATABASE))) {
+            seedPlayers(reporterId, targetId);
+            reportId = accepted(runtime.reportStore().submit(
+                    request(reporterId, targetId, "report:intent-delivered-" + reporterId,
+                            NOW, STAFFBOT_TEST_BODY))).reportId();
+        }
+        try (HikariDataSource pool = MariaDb.open(databaseConfig(DATABASE))) {
+            var intents = new JdbcStaffBotReportIntentStore(pool);
+            armSyntheticIntent(reportId, NOW);
+            var claim = intents.claimArmed(STAFFBOT_WORKER_A, 1, Duration.ofMinutes(1), NOW)
+                    .getFirst();
+            assertThrows(IllegalArgumentException.class, () ->
+                    intents.delivered(claim.intentId(), STAFFBOT_WORKER_A,
+                            NOW.plusSeconds(1), "not-a-message-id"));
+            assertTrue(intents.delivered(claim.intentId(), STAFFBOT_WORKER_A,
+                    NOW.plusSeconds(1), STAFFBOT_DISCORD_MESSAGE_ID));
+            assertFalse(intents.delivered(claim.intentId(), STAFFBOT_WORKER_A,
+                    NOW.plusSeconds(2), STAFFBOT_DISCORD_MESSAGE_ID));
+            assertFalse(intents.reviewRequired(claim.intentId(), STAFFBOT_WORKER_A));
+            assertEquals(0, intents.quarantineExpired(NOW.plusSeconds(120)));
+            assertEquals(1L, staffBotStateCount(reportId, "DELIVERED"));
+            assertEquals(STAFFBOT_DISCORD_MESSAGE_ID, staffBotDeliveredMessageId(reportId));
+        }
+    }
+
+    @Test
+    void reporterFollowupsAndStaffActionsStayDistinctEvenForSameActor() throws SQLException {
+        UUID reporterId = UUID.randomUUID();
+        UUID targetId = UUID.randomUUID();
+        try (MariaDbRuntime runtime = MariaDb.initialize(databaseConfig(DATABASE))) {
+            seedPlayers(reporterId, targetId);
+            ReportStore store = runtime.reportStore();
+            UUID reportId = accepted(store.submit(
+                    request(reporterId, targetId, "report:message-origin-initial", NOW, "original")
+            )).reportId();
+            accepted(store.submit(request(reporterId, targetId,
+                    "report:message-origin-merged", NOW.plusSeconds(60), "follow-up")));
+            long revision = store.details(reportId).orElseThrow().summary().revision();
+            apply(store, stateChange(reportId, reporterId, ReportAction.CLAIM,
+                    revision, "report-change:same-actor"));
+
+            ReportMessagesPage page = store.messages(reportId, 1);
+            assertEquals(2, page.messages().size());
+            assertEquals(ReportMessage.Origin.STAFF_ACTION, page.messages().getFirst().origin());
+            assertEquals(ReportMessage.Origin.REPORTER_FOLLOWUP, page.messages().getLast().origin());
+            assertEquals(reporterId, page.messages().getFirst().actorId());
+            assertEquals(reporterId, page.messages().getLast().actorId());
+            assertTrue(page.messages().getFirst().body().startsWith("CLAIM:"));
+            assertEquals("Report description follow-up", page.messages().getLast().body());
+            assertFalse(page.hasMore());
+        }
+    }
+
+    @Test
+    void legacyCaseMessagesRemainUnverifiedAndPagesAreBounded() throws SQLException {
+        UUID reporterId = UUID.randomUUID();
+        UUID targetId = UUID.randomUUID();
+        try (MariaDbRuntime runtime = MariaDb.initialize(databaseConfig(DATABASE))) {
+            seedPlayers(reporterId, targetId);
+            ReportStore store = runtime.reportStore();
+            UUID reportId = accepted(store.submit(
+                    request(reporterId, targetId, "report:legacy-messages", NOW, "original")
+            )).reportId();
+            try (Connection connection = connection(DATABASE);
+                 PreparedStatement statement = connection.prepareStatement("""
+                         INSERT INTO report_messages(message_id, report_id, actor_id, body, created_at)
+                         VALUES (?, ?, ?, ?, ?)
+                         """)) {
+                for (int index = 0; index < 7; index++) {
+                    statement.setBytes(1, uuidBytes(UUID.randomUUID()));
+                    statement.setBytes(2, uuidBytes(reportId));
+                    statement.setBytes(3, uuidBytes(reporterId));
+                    statement.setString(4, "legacy-" + index);
+                    statement.setTimestamp(5, java.sql.Timestamp.from(NOW.plusSeconds(10 + index)));
+                    statement.addBatch();
+                }
+                statement.executeBatch();
+            }
+            ReportMessagesPage first = store.messages(reportId, 1);
+            ReportMessagesPage second = store.messages(reportId, 2);
+            assertEquals(5, first.messages().size());
+            assertTrue(first.hasMore());
+            assertEquals(2, second.messages().size());
+            assertFalse(second.hasMore());
+            assertEquals("legacy-0", first.messages().getFirst().body());
+            assertEquals("legacy-6", second.messages().getLast().body());
+            assertTrue(first.messages().stream().allMatch(message ->
+                    message.origin() == ReportMessage.Origin.UNKNOWN));
+            assertThrows(IllegalArgumentException.class, () -> store.messages(reportId, 0));
+            assertThrows(IllegalArgumentException.class, () -> store.messages(reportId, 10_001));
         }
     }
 
@@ -490,6 +648,73 @@ class ReportStoreIntegrationTest {
         try (ResultSet result = statement.executeQuery()) {
             requireRow(result, "The count query returned no row");
             return result.getLong(1);
+        }
+    }
+
+    /** Test-only synthetic activation; production exposes NO activation API. */
+    private static void armSyntheticIntent(UUID reportId, Instant when) throws SQLException {
+        try (Connection connection = connection(DATABASE);
+             PreparedStatement update = connection.prepareStatement("""
+                     UPDATE staffbot_report_notification_intents
+                     SET state = 'ARMED', available_at = ?
+                     WHERE report_id = ? AND state = 'INERT'
+                     """)) {
+            update.setTimestamp(1, java.sql.Timestamp.from(when));
+            update.setBytes(2, uuidBytes(reportId));
+            assertEquals(1, update.executeUpdate());
+        }
+    }
+
+    private static String staffBotDeliveredMessageId(UUID reportId) throws SQLException {
+        try (Connection connection = connection(DATABASE);
+             PreparedStatement query = connection.prepareStatement("""
+                     SELECT discord_message_id
+                       FROM staffbot_report_notification_intents
+                      WHERE report_id = ? AND state = 'DELIVERED'
+                     """)) {
+            query.setBytes(1, uuidBytes(reportId));
+            try (ResultSet rows = query.executeQuery()) {
+                requireRow(rows, "No confirmed StaffBot Discord receipt was recorded");
+                return rows.getString(1);
+            }
+        }
+    }
+
+    private static long staffBotIntentCount(UUID reportId, String eventType) throws SQLException {
+        try (Connection connection = connection(DATABASE);
+             PreparedStatement statement = connection.prepareStatement("""
+                     SELECT COUNT(*) FROM staffbot_report_notification_intents
+                     WHERE report_id = ? AND event_type = ?
+                     """)) {
+            statement.setBytes(1, uuidBytes(reportId));
+            statement.setString(2, eventType);
+            try (ResultSet result = statement.executeQuery()) {
+                requireRow(result, "The StaffBot event count query returned no row");
+                return result.getLong(1);
+            }
+        }
+    }
+
+    private static long inertStaffBotIntentCount(UUID reportId) throws SQLException {
+        return staffBotStateCount(reportId, "INERT");
+    }
+
+    private static long armedStaffBotIntentCount(UUID reportId) throws SQLException {
+        return staffBotStateCount(reportId, "ARMED");
+    }
+
+    private static long staffBotStateCount(UUID reportId, String state) throws SQLException {
+        try (Connection connection = connection(DATABASE);
+             PreparedStatement statement = connection.prepareStatement("""
+                     SELECT COUNT(*) FROM staffbot_report_notification_intents
+                     WHERE report_id = ? AND state = ?
+                     """)) {
+            statement.setBytes(1, uuidBytes(reportId));
+            statement.setString(2, state);
+            try (ResultSet result = statement.executeQuery()) {
+                requireRow(result, "The StaffBot state count query returned no row");
+                return result.getLong(1);
+            }
         }
     }
 
