@@ -74,23 +74,43 @@ public final class ReportCommand implements CommandExecutor, TabCompleter, Liste
 
     public Listener reasonMenu() { return reasonMenu; }
 
+    // "describe" and "cancel" are valid player names. Treat them as draft
+    // commands only when there is an actual draft, except for the explicit
+    // multi-argument description continuation.
+    static boolean isDescriptionContinuation(String[] arguments, boolean hasDraft) {
+        return arguments.length > 0 && arguments[0].equalsIgnoreCase("describe")
+                && (arguments.length > 1 || hasDraft);
+    }
+
+    static boolean isCancelContinuation(String[] arguments, boolean hasDraft) {
+        return hasDraft && arguments.length == 1 && arguments[0].equalsIgnoreCase("cancel");
+    }
+
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] arguments) {
         if (!(sender instanceof Player reporter)) {
             sender.sendMessage(StaffMessageStyle.style(Component.text("Only a player can submit a player report.")));
             return true;
         }
-        if (arguments.length == 1 && !arguments[0].equalsIgnoreCase("describe")) {
+        UUID reporterId = reporter.getUniqueId();
+        boolean hasDraft = pending.containsKey(reporterId);
+        if (isCancelContinuation(arguments, hasDraft)) {
+            pending.remove(reporterId);
+            sender.sendMessage(StaffMessageStyle.style(Component.text(
+                    "Report draft cancelled. Nothing was submitted.")));
+            return true;
+        }
+        if (isDescriptionContinuation(arguments, hasDraft)) {
+            return submitSelectedDescription(reporter, arguments);
+        }
+        if (arguments.length == 1) {
             if (dependencies.mode().get() != OperationalMode.ACTIVE) {
                 sender.sendMessage(StaffMessageStyle.style(Component.text("Reports are temporarily unavailable.")));
             } else {
-                pending.remove(reporter.getUniqueId());
+                pending.remove(reporterId);
                 reasonMenu.open(reporter, arguments[0], 0);
             }
             return true;
-        }
-        if (arguments.length > 0 && arguments[0].equalsIgnoreCase("describe")) {
-            return submitSelectedDescription(reporter, arguments);
         }
         SubmissionContext submission = prepareSubmission(sender, reporter, arguments);
         if (submission != null) {
@@ -114,7 +134,8 @@ public final class ReportCommand implements CommandExecutor, TabCompleter, Liste
                                 .clickEvent(ClickEvent.suggestCommand("/report describe "))
                                 .hoverEvent(Component.text("Type /report describe followed by your explanation")))));
         reporter.sendMessage(StaffMessageStyle.style(Component.text(
-                "Include details that will help staff investigate. Nothing has been submitted yet.",
+                "Include details that will help staff investigate. Nothing has been submitted yet. "
+                        + "Use /report cancel to discard this draft.",
                 NamedTextColor.GRAY)));
     }
 
@@ -170,6 +191,11 @@ public final class ReportCommand implements CommandExecutor, TabCompleter, Liste
             return null;
         }
         String description = description(arguments);
+        if (description.isBlank()) {
+            sender.sendMessage(StaffMessageStyle.style(Component.text(
+                    "A report description is required. Explain what happened.")));
+            return null;
+        }
         if (description.length() > MAX_DESCRIPTION_LENGTH) {
             sender.sendMessage(StaffMessageStyle.style(Component.text("The report description exceeds 4000 characters.")));
             return null;

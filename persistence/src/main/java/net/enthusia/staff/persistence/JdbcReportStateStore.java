@@ -211,8 +211,8 @@ final class JdbcReportStateStore {
     private static void insertReportActionMessage(Connection connection, ReportStateChangeRequest request)
             throws SQLException {
         try (PreparedStatement statement = connection.prepareStatement("""
-                INSERT INTO report_messages(message_id, report_id, actor_id, body, created_at)
-                VALUES (?, ?, ?, ?, ?)
+                INSERT INTO report_messages(message_id, report_id, actor_id, body, created_at, origin)
+                VALUES (?, ?, ?, ?, ?, 'STAFF_ACTION')
                 """)) {
             statement.setBytes(1, UuidBytes.toBytes(UUID.randomUUID()));
             statement.setBytes(2, UuidBytes.toBytes(request.reportId()));

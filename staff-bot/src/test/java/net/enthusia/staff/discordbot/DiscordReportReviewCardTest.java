@@ -67,6 +67,64 @@ class DiscordReportReviewCardTest {
         assertTrue(actionable.getDescription().contains("buttons below"));
     }
 
+    @Test void moderatorEphemeralReportViewIncludesSafeUsefulTextButHelperDoesNot() {
+        var item = new DiscordStaffReadRuntime.PendingReport(
+                UUID.randomUUID(), UUID.randomUUID(), "Target", "Reporter",
+                "chat.spam", "OPEN", 1L, "Harassment by @everyone <@&123> **oops**");
+        var mod = DiscordReportReviewCard.render(PULSE, List.of(item), true);
+        String value = mod.getFields().get(2).getValue();
+        assertTrue(value.contains("Report text"));
+        assertTrue(value.contains("Harassment by"));
+        assertFalse(value.contains("@everyone"));
+        assertFalse(value.contains("<@&123>"));
+        assertFalse(value.contains("**oops**"));
+        assertTrue(value.contains("＠everyone"));
+        assertTrue(value.contains("/reports view " + item.reportId()));
+
+        var helper = DiscordReportReviewCard.render(PULSE, List.of(item), false);
+        assertFalse(helper.getFields().get(2).getValue().contains("Harassment by"));
+        assertFalse(helper.getFields().get(2).getValue().contains("Report text"));
+        assertFalse(helper.getFields().get(2).getValue().contains("/reports view"));
+    }
+
+    @Test void sensitiveCategoriesRemainInGameOnly() {
+        for (String reason : List.of("safety.threat", "privacy.dox", "account.compromise",
+                "personal.information", "harassment.sexual")) {
+            var item = sensitiveReport(reason);
+            var card = DiscordReportReviewCard.render(PULSE, List.of(item), true);
+            String body = card.getFields().get(2).getValue();
+            assertTrue(body.contains("Sensitive report"));
+            assertFalse(body.contains("private-secret-do-not-echo"));
+        }
+    }
+
+    @Test void veryLongUnicodeAndFormattedTextRemainWithinDiscordFieldBounds() {
+        var item = new DiscordStaffReadRuntime.PendingReport(
+                UUID.randomUUID(), UUID.randomUUID(), "Target", "Reporter",
+                "chat.spam", "OPEN", 1L, "😀".repeat(2000) + "\n@here");
+        var result = DiscordReportReviewCard.render(PULSE, List.of(item), true);
+        String body = result.getFields().get(2).getValue();
+        assertTrue(body.length() <= 1024);
+        assertTrue(body.contains("…"));
+        assertFalse(body.contains("@here"));
+    }
+
+    private static DiscordStaffReadRuntime.PendingReport sensitiveReport(String reason) {
+        return new DiscordStaffReadRuntime.PendingReport(
+                UUID.randomUUID(), UUID.randomUUID(), "Target", "Reporter",
+                reason, "OPEN", 1L, "private-secret-do-not-echo");
+    }
+
+    @Test void reportTextCannotRenderMaskedLinksOrRawClickableUrls() {
+        String safe = DiscordReportReviewCard.safeDescription(
+                "[staff notice](https://example.invalid) http://other.invalid @everyone");
+        assertFalse(safe.contains("]("));
+        assertFalse(safe.contains("https://"));
+        assertFalse(safe.contains("http://"));
+        assertFalse(safe.contains("@everyone"));
+        assertTrue(safe.contains("https：∕∕example．invalid"));
+    }
+
     @Test void invalidUnboundedQueueFailsClosed() {
         var item = new DiscordStaffReadRuntime.PendingReport(
                 UUID.randomUUID(), UUID.randomUUID(), "Steve", "Alex",

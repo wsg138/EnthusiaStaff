@@ -288,8 +288,8 @@ final class JdbcReportSubmissionStore {
 
     private static void merge(Connection connection, UUID reportId, CreateReportRequest request) throws SQLException {
         try (PreparedStatement message = connection.prepareStatement("""
-                INSERT INTO report_messages(message_id, report_id, actor_id, body, created_at)
-                VALUES (?, ?, ?, ?, ?)
+                INSERT INTO report_messages(message_id, report_id, actor_id, body, created_at, origin)
+                VALUES (?, ?, ?, ?, ?, 'REPORTER_FOLLOWUP')
                 """);
              PreparedStatement update = connection.prepareStatement("""
                 UPDATE reports SET updated_at = ?, revision = revision + 1 WHERE report_id = ?

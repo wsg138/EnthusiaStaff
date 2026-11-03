@@ -7,10 +7,19 @@ import net.dv8tion.jda.api.entities.MessageEmbed;
 import net.enthusia.staff.domain.report.ReportReasonLabel;
 import net.enthusia.staff.persistence.DiscordStaffReadRuntime;
 
-/** Report-only private review card. Report actions and authorization live elsewhere. */
+/**
+ * Ephemeral report-only review card. Free-form previews are Mod+ only and
+ * intentionally never flow through Velocity's public report webhook.
+ */
 final class DiscordReportReviewCard {
     private static final int COLOR = 0xD69C42;
     private static final int MAX_REPORTS = 5;
+    private static final int MAX_DESCRIPTION_CODEPOINTS = 240;
+    private static final char FULLWIDTH_AT = '＠';
+    private static final int ASCII_AT = '@';
+    private static final String MARKUP_CHARS = "<>[]()*_|~" + (char) 96;
+    private static final String LINK_PUNCTUATION = ".:/";
+    private static final String FULLWIDTH_LINK_PUNCTUATION = "．：∕";
 
     private DiscordReportReviewCard() { }
 
@@ -49,13 +58,71 @@ final class DiscordReportReviewCard {
             String reason = ReportReasonLabel.display(report.reasonId());
             String state = safeState(report.state());
             builder.addField("Report " + index + " • " + reason + " • " + state,
-                    "**Reported player:** " + safeName(report.targetName())
-                            + "\n**Reported by:** " + safeName(report.reporterName())
-                            + "\n**Reference:** `" + report.reportId().toString().substring(0, 8) + "`",
-                    false);
+                    reportField(report, actionsEnabled), false);
             index++;
         }
         return builder.build();
+    }
+
+    private static String reportField(DiscordStaffReadRuntime.PendingReport report,
+                                      boolean actionsEnabled) {
+        StringBuilder details = new StringBuilder(256)
+                .append("**Reported player:** ").append(safeName(report.targetName()))
+                .append("\n**Reported by:** ").append(safeName(report.reporterName()))
+                .append("\n**Reference:** ").append(report.reportId().toString(), 0, 8);
+        if (actionsEnabled && !report.description().isBlank()) {
+            details.append("\n**Report text:** ")
+                    .append(restrictedReason(report.reasonId())
+                            ? "Sensitive report — view full text in-game."
+                            : safeDescription(report.description()));
+        }
+        if (actionsEnabled) {
+            details.append("\n**Full description:** /reports view ").append(report.reportId());
+        }
+        return details.toString();
+    }
+
+    static boolean restrictedReason(String reasonId) {
+        if (reasonId == null) {
+            return true;
+        }
+        return reasonId.startsWith("safety.") || reasonId.startsWith("privacy.")
+                || reasonId.startsWith("account.") || reasonId.startsWith("personal.")
+                || reasonId.startsWith("harassment.sexual");
+    }
+
+    /** Bounded plain text; never emit runnable Discord mentions or Markdown. */
+    static String safeDescription(String description) {
+        if (description == null || description.isBlank()) {
+            return "(No report text)";
+        }
+        StringBuilder cleaned = new StringBuilder();
+        int count = 0;
+        int offset = 0;
+        while (offset < description.length() && count < MAX_DESCRIPTION_CODEPOINTS) {
+            int codePoint = description.codePointAt(offset);
+            offset += Character.charCount(codePoint);
+            count++;
+            appendNeutralized(cleaned, codePoint);
+        }
+        String safe = cleaned.toString().trim().replaceAll("\\s+", " ");
+        return offset < description.length() ? safe + "…" : safe;
+    }
+
+    private static void appendNeutralized(StringBuilder result, int codePoint) {
+        if (Character.isISOControl(codePoint) || Character.isWhitespace(codePoint)
+                || Character.getType(codePoint) == Character.FORMAT) {
+            result.append(' ');
+        } else if (codePoint == ASCII_AT) {
+            result.append(FULLWIDTH_AT);
+        } else if (MARKUP_CHARS.indexOf(codePoint) >= 0) {
+            result.append(' ');
+        } else if (LINK_PUNCTUATION.indexOf(codePoint) >= 0) {
+            result.append(FULLWIDTH_LINK_PUNCTUATION.charAt(
+                    LINK_PUNCTUATION.indexOf(codePoint)));
+        } else {
+            result.appendCodePoint(codePoint);
+        }
     }
 
     private static String safeName(String name) {
