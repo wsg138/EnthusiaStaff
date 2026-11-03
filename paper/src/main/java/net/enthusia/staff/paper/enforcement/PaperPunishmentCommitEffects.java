@@ -168,13 +168,40 @@ public final class PaperPunishmentCommitEffects implements AutoCloseable {
     }
 
     private void dispatchToPlayer(UUID playerId, java.util.function.Consumer<Player> action) {
-        plugin.getServer().getGlobalRegionScheduler().execute(plugin, () -> {
-            Player player = plugin.getServer().getPlayer(playerId);
-            if (player == null || !player.isOnline()) {
-                return;
-            }
-            player.getScheduler().execute(plugin, () -> action.accept(player), null, 1L);
-        });
+        try {
+            routeToPlayer(
+                    playerId,
+                    callback -> plugin.getServer().getGlobalRegionScheduler().execute(plugin, callback),
+                    plugin.getServer()::getPlayer,
+                    (player, callback) -> player.getScheduler().execute(plugin, callback, null, 1L),
+                    player -> !closed && player.isOnline(),
+                    action,
+                    failure -> plugin.getLogger().log(Level.WARNING,
+                            "Online punishment effect could not be delivered safely to " + playerId,
+                            failure)
+            );
+        } catch (RuntimeException failure) {
+            plugin.getLogger().log(Level.WARNING,
+                    "Online punishment effect could not be queued for " + playerId, failure);
+        }
+    }
+
+    /**
+     * Testable production routing boundary: lookup runs after global dispatch,
+     * while player identity, eligibility and effects run on the entity owner.
+     */
+    static void routeToPlayer(
+            UUID playerId,
+            java.util.function.Consumer<Runnable> globalDispatcher,
+            java.util.function.Function<UUID, Player> lookup,
+            PunishmentCommitOwnerDispatch.OwnerScheduler ownerScheduler,
+            java.util.function.Predicate<Player> eligible,
+            java.util.function.Consumer<Player> action,
+            java.util.function.Consumer<RuntimeException> onFailure
+    ) {
+        globalDispatcher.accept(() ->
+                PunishmentCommitOwnerDispatch.forward(
+                        playerId, lookup, ownerScheduler, eligible, action, onFailure));
     }
 
     @Override

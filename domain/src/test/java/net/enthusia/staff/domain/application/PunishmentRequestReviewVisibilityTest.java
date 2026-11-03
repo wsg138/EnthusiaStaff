@@ -66,6 +66,20 @@ final class PunishmentRequestReviewVisibilityTest {
     }
 
     @Test
+    void reviewableQueueDoesNotLoseEligibleRequestsBehindFiveHundredHigherRankRequests() {
+        InMemoryStore store = new InMemoryStore();
+        Instant expires = NOW.plus(Duration.ofDays(1));
+        for (int i = 1; i <= 500; i++) {
+            store.put(pending(i, DEVELOPER, StaffRank.ADMIN, expires));
+        }
+        PunishmentApprovalRequest eligible = pending(501, HELPER, StaffRank.MOD, expires);
+        store.put(eligible);
+
+        assertEquals(List.of(eligible), service(store).reviewable(MOD, 10),
+                "The reviewer filter must run before the 500-row queue cap");
+    }
+
+    @Test
     void requestLookupRemainsReadOnlyUntilBoundedExpirationRuns() {
         InMemoryStore store = new InMemoryStore();
         PunishmentApprovalRequest expired = pending(
@@ -211,6 +225,23 @@ final class PunishmentRequestReviewVisibilityTest {
         public List<PunishmentApprovalRequest> pending(Instant now, int limit) {
             return requests.values().stream()
                     .filter(request -> request.pendingAt(now))
+                    .limit(limit)
+                    .toList();
+        }
+
+        @Override
+        public List<PunishmentApprovalRequest> pendingReviewable(
+                Instant now, UUID reviewerId, StaffRank reviewerRank, int limit
+        ) {
+            return requests.values().stream()
+                    .filter(request -> request.pendingAt(now))
+                    .filter(request -> !request.proposal().requester().id().equals(reviewerId))
+                    .filter(request -> switch (request.proposal().requiredRank()) {
+                        case HELPER, MOD -> reviewerRank.canApprovePunishmentRequests();
+                        case ADMIN -> reviewerRank == StaffRank.ADMIN || reviewerRank == StaffRank.FOUNDER;
+                        case FOUNDER -> reviewerRank == StaffRank.FOUNDER;
+                        case DEVELOPER, SYSTEM -> false;
+                    })
                     .limit(limit)
                     .toList();
         }

@@ -84,8 +84,10 @@ public final class StaffModeManager implements Listener {
     private final StaffModeRecoveryGate recoveryGate = new StaffModeRecoveryGate(transitions);
     private final java.util.Set<UUID> profileApplications = ConcurrentHashMap.newKeySet();
     private final java.util.Set<UUID> snapshotRestorations = ConcurrentHashMap.newKeySet();
-    private final java.util.Set<UUID> pendingRankChecks = ConcurrentHashMap.newKeySet();
-    private final java.util.Set<UUID> scheduledRecoveryRetries = ConcurrentHashMap.newKeySet();
+    private final java.util.concurrent.ConcurrentMap<UUID, Object> pendingRankChecks =
+            new ConcurrentHashMap<>();
+    private final java.util.concurrent.ConcurrentMap<UUID, Object> scheduledRecoveryRetries =
+            new ConcurrentHashMap<>();
     private final StaffModeHandoffIntentRegistry handoffResumes;
     private final StaffModeSourceHandoffRegistry sourceHandoffs = new StaffModeSourceHandoffRegistry();
     private final StaffModeActivationCoordinator activation;
@@ -343,20 +345,20 @@ public final class StaffModeManager implements Listener {
         }
         plugin.getServer().getGlobalRegionScheduler().runAtFixedRate(plugin, task -> {
             for (UUID playerId : active.keySet()) {
-                if (!pendingRankChecks.add(playerId)) {
+                Object ticket = new Object();
+                if (pendingRankChecks.putIfAbsent(playerId, ticket) != null) {
                     continue;
                 }
-                onEntity(
-                        playerId,
-                        player -> {
-                            try {
-                                reconcileActiveRank(player);
-                            } finally {
-                                pendingRankChecks.remove(playerId);
-                            }
-                        },
-                        () -> pendingRankChecks.remove(playerId)
-                );
+                try {
+                    StaffRankReconciliationOwnerDispatcher.forward(
+                            playerId, ticket, pendingRankChecks, this::onEntity, this::reconcileActiveRank
+                    );
+                } catch (RuntimeException failure) {
+                    // One retiring player's scheduler must not terminate the periodic
+                    // rank/permission revocation sweep for all other online staff.
+                    plugin.getLogger().log(Level.WARNING,
+                            "Staff rank owner check could not be scheduled for " + playerId, failure);
+                }
             }
         }, 20L, 20L);
     }
@@ -738,16 +740,19 @@ public final class StaffModeManager implements Listener {
     }
 
     private void scheduleRecoveryRetry(UUID playerId) {
-        if (!scheduledRecoveryRetries.add(playerId)) {
+        Object ticket = new Object();
+        if (scheduledRecoveryRetries.putIfAbsent(playerId, ticket) != null) {
             return;
         }
-        plugin.getServer().getGlobalRegionScheduler().runDelayed(plugin, ignored -> {
-            scheduledRecoveryRetries.remove(playerId);
-            Player player = plugin.getServer().getPlayer(playerId);
-            if (player != null) {
-                recover(player);
-            }
-        }, 20L);
+        try {
+            plugin.getServer().getGlobalRegionScheduler().runDelayed(plugin, ignored ->
+                    StaffRecoveryRetryOwnerDispatcher.forward(
+                            playerId, ticket, scheduledRecoveryRetries, this::onEntity, this::recover
+                    ), 20L);
+        } catch (RuntimeException failure) {
+            scheduledRecoveryRetries.remove(playerId, ticket);
+            throw failure;
+        }
     }
 
     private boolean staleFromPriorRuntime(StaffSessionSnapshot session) {
@@ -1906,6 +1911,7 @@ public final class StaffModeManager implements Listener {
         String toolSession = UUID.randomUUID().toString();
         toolSessions.put(playerId, toolSession);
         try {
+            clearStaffToolCursor(player);
             player.closeInventory();
             player.getInventory().clear();
             player.getActivePotionEffects().forEach(effect -> player.removePotionEffect(effect.getType()));
@@ -2028,6 +2034,7 @@ public final class StaffModeManager implements Listener {
         UUID playerId = player.getUniqueId();
         toolInventoryPreferences.put(playerId, enabled);
         if (authorityActive(playerId)) {
+            clearStaffToolCursor(player);
             player.closeInventory();
             player.getInventory().clear();
             if (enabled) {
@@ -2152,7 +2159,17 @@ public final class StaffModeManager implements Listener {
                 && item.getItemMeta().getPersistentDataContainer().has(staffToolKey, PersistentDataType.STRING);
     }
 
+    private void clearStaffToolCursor(Player player) {
+        // Inventory close, mode exit and tool-layout refresh must never deposit a
+        // tagged session tool left on the cursor into a restored or foreign inventory.
+        // Ordinary items on the cursor remain untouched.
+        if (isStaffTool(player.getItemOnCursor())) {
+            player.setItemOnCursor(null);
+        }
+    }
+
     private void removeStaffTools(Player player) {
+        clearStaffToolCursor(player);
         ItemStack[] contents = player.getInventory().getContents();
         for (int index = 0; index < contents.length; index++) {
             if (isStaffTool(contents[index])) {
@@ -2194,21 +2211,19 @@ public final class StaffModeManager implements Listener {
     }
 
     private void onEntity(UUID playerId, Consumer<Player> operation, Runnable retired) {
-        plugin.getServer().getGlobalRegionScheduler().execute(plugin, () -> {
-            Player player = plugin.getServer().getPlayer(playerId);
-            if (player == null) {
-                retired.run();
-                return;
-            }
-            boolean scheduled = player.getScheduler().execute(
-                    plugin,
-                    () -> operation.accept(player),
-                    retired,
-                    1L
-            );
-            if (!scheduled) {
-                retired.run();
-            }
-        });
+        plugin.getServer().getGlobalRegionScheduler().execute(plugin, () ->
+                StaffEntityOwnerDispatch.forward(
+                        playerId,
+                        id -> plugin.getServer().getPlayer(id),
+                        (player, action, onRetire) ->
+                                player.getScheduler().execute(plugin, action, onRetire, 1L),
+                        operation,
+                        retired,
+                        failure -> plugin.getLogger().log(
+                                Level.WARNING, "Staff Mode entity task could not be scheduled for " + playerId,
+                                failure
+                        )
+                )
+        );
     }
 }

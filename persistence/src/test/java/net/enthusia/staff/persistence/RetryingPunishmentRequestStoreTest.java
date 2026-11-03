@@ -13,6 +13,7 @@ import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Supplier;
 import net.enthusia.staff.common.CaseId;
+import net.enthusia.staff.common.IdempotencyKey;
 import net.enthusia.staff.domain.application.PunishmentApprovalLease;
 import net.enthusia.staff.domain.application.PunishmentApprovalRequest;
 import net.enthusia.staff.domain.application.PunishmentRequestResult;
@@ -34,6 +35,7 @@ class RetryingPunishmentRequestStoreTest {
         );
 
         assertSame(EXPECTED, retrying.submit(null));
+        assertEquals(Optional.empty(), retrying.findBySubmissionKey(new IdempotencyKey("draft-replay")));
         assertEquals(Optional.empty(), retrying.acquire(null, null, null, null));
         assertSame(EXPECTED, retrying.approve(null, null, null, null));
         assertSame(EXPECTED, retrying.deny(null, null, null, null));
@@ -41,6 +43,7 @@ class RetryingPunishmentRequestStoreTest {
         assertEquals(11, retrying.expire(Instant.EPOCH, 20));
 
         assertEquals(2, delegate.submitAttempts.get());
+        assertEquals(1, delegate.lookupAttempts.get());
         assertEquals(2, delegate.acquireAttempts.get());
         assertEquals(2, delegate.approveAttempts.get());
         assertEquals(2, delegate.denyAttempts.get());
@@ -158,6 +161,7 @@ class RetryingPunishmentRequestStoreTest {
 
     private static final class RetryOnceStore implements PunishmentRequestStore {
         private final AtomicInteger submitAttempts = new AtomicInteger();
+        private final AtomicInteger lookupAttempts = new AtomicInteger();
         private final AtomicInteger acquireAttempts = new AtomicInteger();
         private final AtomicInteger approveAttempts = new AtomicInteger();
         private final AtomicInteger denyAttempts = new AtomicInteger();
@@ -171,6 +175,12 @@ class RetryingPunishmentRequestStoreTest {
 
         @Override
         public Optional<PunishmentApprovalRequest> find(UUID requestId) {
+            return Optional.empty();
+        }
+
+        @Override
+        public Optional<PunishmentApprovalRequest> findBySubmissionKey(IdempotencyKey key) {
+            lookupAttempts.incrementAndGet();
             return Optional.empty();
         }
 

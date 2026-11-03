@@ -6,8 +6,12 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.function.Supplier;
 import java.util.logging.Level;
 import net.enthusia.staff.domain.application.PunishmentApprovalRequest;
@@ -17,12 +21,16 @@ import net.enthusia.staff.domain.application.PunishmentRequestStatus;
 import net.enthusia.staff.domain.auth.Actor;
 import net.enthusia.staff.domain.auth.AuthorizationPolicy;
 import net.enthusia.staff.domain.auth.ModerationAction;
+import net.enthusia.staff.paper.auth.PaperActorResolver;
+import net.enthusia.staff.paper.auth.StaffTargetGuard;
+import net.enthusia.staff.paper.auth.LuckPermsStaffTargetGuard;
 import net.enthusia.staff.paper.punishment.PunishmentRequestGuiController;
 import net.enthusia.staff.paper.punishment.PunishmentRequestPresentation;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
+import org.bukkit.plugin.Plugin;
 import org.bukkit.plugin.java.JavaPlugin;
 
 public final class PunishmentRequestCommandHandler {
@@ -40,6 +48,7 @@ public final class PunishmentRequestCommandHandler {
     private final AuthorizationPolicy authorization;
     private final PunishmentRequestGuiController gui;
     private final ExecutorService workers;
+    private final StaffTargetGuard targetGuard;
 
     public PunishmentRequestCommandHandler(
             JavaPlugin plugin,
@@ -47,6 +56,17 @@ public final class PunishmentRequestCommandHandler {
             AuthorizationPolicy authorization,
             PunishmentRequestGuiController gui,
             ExecutorService workers
+    ) {
+        this(plugin, services, authorization, gui, workers, LuckPermsStaffTargetGuard.discover(plugin));
+    }
+
+    PunishmentRequestCommandHandler(
+            JavaPlugin plugin,
+            Supplier<PunishmentRequestService> services,
+            AuthorizationPolicy authorization,
+            PunishmentRequestGuiController gui,
+            ExecutorService workers,
+            StaffTargetGuard targetGuard
     ) {
         if (plugin == null || services == null || authorization == null || gui == null || workers == null) {
             throw new IllegalArgumentException("punishment request command dependencies must be present");
@@ -56,6 +76,7 @@ public final class PunishmentRequestCommandHandler {
         this.authorization = authorization;
         this.gui = gui;
         this.workers = workers;
+        this.targetGuard = java.util.Objects.requireNonNull(targetGuard, "targetGuard");
     }
 
     boolean handles(String commandName, String[] args) {
@@ -114,7 +135,7 @@ public final class PunishmentRequestCommandHandler {
         List<RequestView> pending = service.reviewable(actor, CONSOLE_QUEUE_LIMIT).stream()
                 .map(this::view)
                 .toList();
-        onMain(() -> sendQueue(sender, pending));
+        onSenderThread(sender, () -> sendQueue(sender, pending));
     }
 
     private void review(CommandSender sender, String[] args, Actor actor) {
@@ -136,7 +157,7 @@ public final class PunishmentRequestCommandHandler {
         }
         PunishmentApprovalRequest request = service.find(requestId).orElse(null);
         RequestView view = request != null && service.mayReview(actor, request) ? view(request) : null;
-        onMain(() -> {
+        onSenderThread(sender, () -> {
             if (view == null) {
                 sender.sendMessage(StaffMessageStyle.style(Component.text(
                         "The request does not exist or you are not authorized to review it.",
@@ -167,15 +188,74 @@ public final class PunishmentRequestCommandHandler {
             boolean approve,
             String denialNote
     ) {
+        // Player permission/rank and Staff Mode must be resolved on the owner
+        // entity thread, not read from the queued worker or a captured actor.
+        Actor current = currentDecisionActor(sender, actor);
+        if (current == null) {
+            return;
+        }
         PunishmentRequestService service = readyService(sender);
         if (service == null) {
             return;
         }
-        PunishmentRequestResult acquired = service.acquire(requestId, actor);
-        PunishmentRequestResult result = acquired instanceof PunishmentRequestResult.Leased leased
-                ? decideLeased(service, leased, actor, approve, denialNote)
-                : acquired;
-        onMain(() -> sendDecision(sender, result));
+        PunishmentRequestResult acquired = service.acquire(requestId, current);
+        if (!(acquired instanceof PunishmentRequestResult.Leased leased)) {
+            onSenderThread(sender, () -> sendDecision(sender, acquired));
+            return;
+        }
+        // The first snapshot may have gone stale during database lease
+        // acquisition. Reauthorize before the irreversible approve/deny call.
+        Actor fresh = currentDecisionActor(sender, current);
+        if (fresh == null) {
+            abandonLeaseSafely(service, leased);
+            return;
+        }
+        // A request may have been submitted against a non-staff target who was
+        // promoted while awaiting review. Revalidate the *current* LuckPerms
+        // hierarchy after lease acquisition, before any durable decision.
+        StaffTargetGuard.Result targetCheck = decisionTargetCheck(
+                fresh, leased.lease().request().proposal().targetId(), !(sender instanceof Player));
+        if (!targetCheck.allowed()) {
+            abandonLeaseSafely(service, leased);
+            sendReviewerFailure(sender, "Punishment request decision was not submitted: " + targetCheck.message());
+            return;
+        }
+        PunishmentRequestResult result = decideLeased(service, leased, fresh, approve, denialNote);
+        onSenderThread(sender, () -> sendDecision(sender, result));
+    }
+
+    private StaffTargetGuard.Result decisionTargetCheck(Actor actor, UUID targetId, boolean systemActor) {
+        try {
+            return java.util.Objects.requireNonNull(
+                    targetGuard.check(actor, targetId, systemActor), "target hierarchy check");
+        } catch (RuntimeException exception) {
+            plugin.getLogger().log(Level.WARNING,
+                    "Punishment request target hierarchy verification failed", exception);
+            return StaffTargetGuard.Result.deny(
+                    "Staff-target verification is unavailable; no decision was made.");
+        }
+    }
+
+    private void abandonLeaseSafely(
+            PunishmentRequestService service, PunishmentRequestResult.Leased leased
+    ) {
+        try {
+            service.abandon(leased.lease());
+        } catch (RuntimeException failure) {
+            plugin.getLogger().log(Level.WARNING,
+                    "Unable to abandon punishment request lease after authorization failure", failure);
+        }
+    }
+
+    private void sendReviewerFailure(CommandSender sender, String message) {
+        Runnable action = () -> sender.sendMessage(StaffMessageStyle.style(
+                Component.text(message, NamedTextColor.RED)));
+        try {
+            PunishmentReplyScheduler.onSenderThread(plugin, sender, action);
+        } catch (RuntimeException exception) {
+            plugin.getLogger().log(Level.WARNING,
+                    "Unable to send punishment request failure to retired reviewer", exception);
+        }
     }
 
     private static PunishmentRequestResult decideLeased(
@@ -190,10 +270,70 @@ public final class PunishmentRequestCommandHandler {
                 : service.deny(leased.lease(), actor, denialNote);
     }
 
+    /** Resolve the current player actor on the Folia-safe owner thread. */
+    static CompletableFuture<Actor> requestReviewerSnapshot(
+            Player player, Plugin plugin, AuthorizationPolicy policy
+    ) {
+        CompletableFuture<Actor> checked = new CompletableFuture<>();
+        try {
+            boolean scheduled = player.getScheduler().execute(plugin, () -> {
+                try {
+                    Actor fresh = player.isOnline()
+                            ? PaperActorResolver.resolve(player).orElse(null) : null;
+                    checked.complete(reviewerAuthorized(policy, fresh, player.getUniqueId())
+                            ? fresh : null);
+                } catch (RuntimeException failure) {
+                    checked.complete(null);
+                }
+            }, () -> checked.complete(null), 1L);
+            if (!scheduled) {
+                checked.complete(null);
+            }
+        } catch (RuntimeException failure) {
+            checked.complete(null);
+        }
+        return checked;
+    }
+
+    static boolean reviewerAuthorized(AuthorizationPolicy policy, Actor current, UUID viewerId) {
+        return policy != null && current != null && viewerId != null
+                && current.id().equals(viewerId)
+                && current.rank().canApprovePunishmentRequests()
+                && policy.permits(current, ModerationAction.APPROVE_POLICY_SANCTION);
+    }
+
+    private Actor currentDecisionActor(CommandSender sender, Actor captured) {
+        if (!(sender instanceof Player player)) {
+            // Console/system command authorization is handled on entry.
+            return captured;
+        }
+        try {
+            Actor fresh = requestReviewerSnapshot(player, plugin, authorization)
+                    .get(5, TimeUnit.SECONDS);
+            if (fresh != null) {
+                return fresh;
+            }
+        } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
+        } catch (ExecutionException | TimeoutException | RuntimeException unavailable) {
+            plugin.getLogger().log(Level.WARNING,
+                    "Punishment request command reviewer reauthorization unavailable", unavailable);
+        }
+        // Never use the old click-time actor when owner-thread authorization
+        // was denied, unavailable, or timed out.
+        player.getScheduler().execute(plugin, () ->
+                player.sendMessage(StaffMessageStyle.style(Component.text(
+                        "Punishment request decision was not submitted; current staff authority "
+                                + "could not be verified. Reenter Staff Mode and retry.",
+                        NamedTextColor.RED
+                ))), null, 1L);
+        return null;
+    }
+
     private PunishmentRequestService readyService(CommandSender sender) {
         PunishmentRequestService service = services.get();
         if (service == null) {
-            onMain(() -> sender.sendMessage(StaffMessageStyle.style(Component.text(NOT_READY_MESSAGE, NamedTextColor.RED))));
+            onSenderThread(sender, () -> sender.sendMessage(StaffMessageStyle.style(Component.text(NOT_READY_MESSAGE, NamedTextColor.RED))));
         }
         return service;
     }
@@ -215,15 +355,15 @@ public final class PunishmentRequestCommandHandler {
             operation.run();
         } catch (RuntimeException exception) {
             plugin.getLogger().log(Level.SEVERE, "Punishment request command failed", exception);
-            onMain(() -> sender.sendMessage(StaffMessageStyle.style(Component.text(
-                    "Punishment request storage is unavailable; no decision was made.",
+            onSenderThread(sender, () -> sender.sendMessage(StaffMessageStyle.style(Component.text(
+                    PunishmentOutcomeUnknownNotice.requestDecision(),
                     NamedTextColor.RED
             ))));
         }
     }
 
-    private void onMain(Runnable action) {
-        plugin.getServer().getScheduler().runTask(plugin, action);
+    private void onSenderThread(CommandSender sender, Runnable action) {
+        PunishmentReplyScheduler.onSenderThread(plugin, sender, action);
     }
 
     private static void sendQueue(CommandSender sender, List<RequestView> pending) {

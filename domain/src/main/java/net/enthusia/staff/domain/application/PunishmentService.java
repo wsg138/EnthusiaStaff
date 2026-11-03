@@ -6,10 +6,12 @@ import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.function.Consumer;
+import net.enthusia.staff.common.IdempotencyKey;
 import net.enthusia.staff.common.SecureIdentifiers;
 import net.enthusia.staff.domain.OperationalMode;
 import net.enthusia.staff.domain.auth.Actor;
@@ -104,6 +106,12 @@ public final class PunishmentService {
         return createConfirmed(request, mode, (PunishmentExpectation) null);
     }
 
+    /** Returns only a prior durable result; never applies a new punishment. */
+    Optional<PunishmentResult.Accepted> committedDraftCase(IdempotencyKey key) {
+        return store.committedCase(Objects.requireNonNull(key))
+                .map(caseId -> new PunishmentResult.Accepted(caseId, true));
+    }
+
     public PunishmentResult createConfirmed(
             CreatePunishmentRequest request,
             OperationalMode mode,
@@ -169,7 +177,10 @@ public final class PunishmentService {
                 assessment.sanctions()
         );
         PunishmentResult result = store.createPunishment(plan);
-        if (result instanceof PunishmentResult.Accepted) {
+        if (result instanceof PunishmentResult.Accepted accepted && !accepted.replayed()) {
+            // Replays return the original case ID, while this fresh plan has a
+            // different generated ID. Dispatching it again can duplicate online
+            // warning/kick effects and attribute them to a nonexistent case.
             notifyCommitted(plan);
         }
         return result;
@@ -213,6 +224,15 @@ public final class PunishmentService {
                 ModerationAction.REQUEST_POLICY_SANCTION,
                 enforceReasonRank
         );
+    }
+
+    /** Read-only early policy-drift check for persisted draft replay.
+     * The authoritative create/submit path still revalidates after this check.
+     */
+    boolean currentPolicyMatches(String reasonId, String expectedVersion) {
+        return expectedVersion != null && policies.resolve(reasonId)
+                .map(current -> current.version().equals(expectedVersion))
+                .orElse(false);
     }
 
     public boolean requiresApproval(Actor actor, PunishmentAssessment assessment) {

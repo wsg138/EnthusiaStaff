@@ -11,9 +11,11 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import net.enthusia.staff.common.CaseId;
 import net.enthusia.staff.common.IdempotencyKey;
 import net.enthusia.staff.common.SecureIdentifiers;
 import net.enthusia.staff.domain.OperationalMode;
@@ -122,6 +124,30 @@ class PunishmentServiceTest {
 
         assertInstanceOf(PunishmentResult.Accepted.class, result);
         assertEquals(1, store.plans.size());
+    }
+
+    @Test
+    void replayedPunishmentMustNotDispatchAnotherPostCommitEffect() {
+        CapturingStore store = new CapturingStore(List.of());
+        PunishmentService service = service(new AtomicReasonPolicyRepository(
+                "v1", List.of(policy(StaffRank.MOD, standardSteps()))), store);
+        List<PunishmentPlan> observed = new ArrayList<>();
+        service.addCommittedObserver(observed::add);
+        CreatePunishmentRequest request = request(StaffRank.MOD, List.of());
+
+        PunishmentResult.Accepted first = assertInstanceOf(
+                PunishmentResult.Accepted.class,
+                service.createConfirmed(request, OperationalMode.ACTIVE, (PunishmentExpectation) null));
+        PunishmentResult.Accepted replay = assertInstanceOf(
+                PunishmentResult.Accepted.class,
+                service.createConfirmed(request, OperationalMode.ACTIVE, (PunishmentExpectation) null));
+
+        assertFalse(first.replayed());
+        assertTrue(replay.replayed());
+        assertEquals(first.caseId(), replay.caseId());
+        assertEquals(1, store.plans.size(), "idempotent replay must not create another case");
+        assertEquals(1, observed.size(), "replay must not issue another warning, kick or ban effect");
+        assertEquals(first.caseId(), observed.getFirst().caseId());
     }
 
     @Test
@@ -327,6 +353,7 @@ class PunishmentServiceTest {
     private static final class CapturingStore implements ModerationStore {
         private final List<PriorOffense> history;
         private final List<PunishmentPlan> plans = new ArrayList<>();
+        private final Map<String, CaseId> committedKeys = new HashMap<>();
         private int historyReads;
 
         private CapturingStore(List<PriorOffense> history) {
@@ -341,6 +368,11 @@ class PunishmentServiceTest {
 
         @Override
         public PunishmentResult.Accepted createPunishment(PunishmentPlan plan) {
+            CaseId previous = committedKeys.putIfAbsent(
+                    plan.idempotencyKey().value(), plan.caseId());
+            if (previous != null) {
+                return new PunishmentResult.Accepted(previous, true);
+            }
             plans.add(plan);
             return new PunishmentResult.Accepted(plan.caseId(), false);
         }

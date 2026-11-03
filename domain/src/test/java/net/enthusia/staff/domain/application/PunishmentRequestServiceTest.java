@@ -149,6 +149,47 @@ class PunishmentRequestServiceTest {
         assertEquals(approved.caseId(), approved.request().resultingCaseId());
     }
 
+    @Test
+    void newlyApprovedRequestNotifiesObserversOnceEvenIfAnotherObserverFails() {
+        Fixture fixture = fixture(StaffRank.MOD, SanctionLength.permanent());
+        PunishmentRequestResult.Submitted submitted = submit(fixture, HELPER);
+        PunishmentApprovalLease lease = assertInstanceOf(
+                PunishmentRequestResult.Leased.class,
+                fixture.service().acquire(submitted.request().requestId(), MOD)
+        ).lease();
+        List<CaseId> observed = new ArrayList<>();
+        fixture.service().addApprovedObserver(approved -> {
+            throw new IllegalStateException("simulated broadcast failure");
+        });
+        fixture.service().addApprovedObserver(approved -> observed.add(approved.caseId()));
+
+        PunishmentRequestResult.Approved approved = assertInstanceOf(
+                PunishmentRequestResult.Approved.class,
+                fixture.service().approve(lease, MOD)
+        );
+        assertEquals(List.of(approved.caseId()), observed);
+        assertEquals(PunishmentRequestStatus.APPROVED, approved.request().status());
+        assertInstanceOf(PunishmentRequestResult.Rejected.class,
+                fixture.service().approve(lease, MOD));
+        assertEquals(1, observed.size(), "a repeated decision must not rebroadcast a case");
+    }
+
+    @Test
+    void deniedRequestNeverNotifiesApprovalObservers() {
+        Fixture fixture = fixture(StaffRank.MOD, SanctionLength.permanent());
+        PunishmentRequestResult.Submitted submitted = submit(fixture, HELPER);
+        PunishmentApprovalLease lease = assertInstanceOf(
+                PunishmentRequestResult.Leased.class,
+                fixture.service().acquire(submitted.request().requestId(), MOD)
+        ).lease();
+        List<CaseId> observed = new ArrayList<>();
+        fixture.service().addApprovedObserver(approved -> observed.add(approved.caseId()));
+
+        assertInstanceOf(PunishmentRequestResult.Denied.class,
+                fixture.service().deny(lease, MOD, "Insufficient evidence"));
+        assertEquals(List.of(), observed);
+    }
+
     private static PunishmentRequestResult.Submitted submit(Fixture fixture, Actor requester) {
         return assertInstanceOf(
                 PunishmentRequestResult.Submitted.class,

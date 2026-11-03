@@ -47,6 +47,8 @@ import org.bukkit.entity.Player;
 import org.bukkit.event.inventory.ClickType;
 import org.bukkit.event.inventory.InventoryAction;
 import org.bukkit.event.inventory.InventoryClickEvent;
+import org.bukkit.event.inventory.InventoryCloseEvent;
+import net.enthusia.staff.paper.auth.StaffTargetGuard;
 import org.bukkit.event.inventory.InventoryType;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.InventoryView;
@@ -60,6 +62,24 @@ final class PunishmentRequestControllerHarness {
     static final UUID REVIEWER_ID = UUID.fromString("62000000-0000-0000-0000-000000000004");
 
     static Fixture fixture(PunishmentApprovalRequest request, SchedulerMode mode) {
+        return fixture(request, mode,
+                review -> inventory(new PunishmentRequestGuiHolder(review)));
+    }
+
+    static Fixture fixture(
+            PunishmentApprovalRequest request,
+            SchedulerMode mode,
+            java.util.function.Function<PunishmentRequestGuiState.Review, Inventory> reviewRenderer
+    ) {
+        return fixture(request, mode, reviewRenderer, (actor, target, system) -> StaffTargetGuard.Result.allow());
+    }
+
+    static Fixture fixture(
+            PunishmentApprovalRequest request,
+            SchedulerMode mode,
+            java.util.function.Function<PunishmentRequestGuiState.Review, Inventory> reviewRenderer,
+            StaffTargetGuard targetGuard
+    ) {
         RequestStoreHarness store = new RequestStoreHarness(request);
         DefaultAuthorizationPolicy authorization = new DefaultAuthorizationPolicy();
         PunishmentRequestService service = service(store, authorization);
@@ -73,7 +93,11 @@ final class PunishmentRequestControllerHarness {
                 () -> service,
                 () -> null,
                 authorization,
-                executor
+                executor,
+                details -> inventory(new PunishmentRequestGuiHolder(details)),
+                reviewRenderer,
+                denial -> inventory(new PunishmentRequestGuiHolder(denial)),
+                targetGuard
         );
         return new Fixture(controller, store, scheduler, player, logger, executor, service);
     }
@@ -171,7 +195,15 @@ final class PunishmentRequestControllerHarness {
         );
     }
 
-    private static Inventory inventory(PunishmentRequestGuiHolder holder) {
+    static InventoryCloseEvent close(Player player, PunishmentRequestGuiState state) {
+        return new InventoryCloseEvent(viewForState(player, state));
+    }
+
+    static InventoryView viewForState(Player player, PunishmentRequestGuiState state) {
+        return inventoryView(player, inventory(new PunishmentRequestGuiHolder(state)));
+    }
+
+    static Inventory inventory(PunishmentRequestGuiHolder holder) {
         return proxy(Inventory.class, (method, arguments) -> switch (method.getName()) {
             case "getHolder" -> holder;
             case "getSize" -> 27;
@@ -215,7 +247,9 @@ final class PunishmentRequestControllerHarness {
     enum SchedulerMode {
         RUN,
         HOLD,
+        HOLD_AFTER_FIRST,
         RETIRE,
+        RETIRE_AFTER_FIRST,
         RETIRE_FALSE
     }
 
@@ -231,7 +265,7 @@ final class PunishmentRequestControllerHarness {
                 if (!method.getName().equals("execute")) {
                     return defaultValue(method);
                 }
-                scheduled.incrementAndGet();
+                int scheduledCount = scheduled.incrementAndGet();
                 Runnable action = (Runnable) arguments[1];
                 Runnable retired = (Runnable) arguments[2];
                 return switch (this.mode) {
@@ -241,6 +275,22 @@ final class PunishmentRequestControllerHarness {
                     }
                     case HOLD -> {
                         heldActions.add(action);
+                        yield true;
+                    }
+                    case HOLD_AFTER_FIRST -> {
+                        if (scheduledCount == 1) {
+                            action.run();
+                        } else {
+                            heldActions.add(action);
+                        }
+                        yield true;
+                    }
+                    case RETIRE_AFTER_FIRST -> {
+                        if (scheduledCount == 1) {
+                            action.run();
+                        } else {
+                            retired.run();
+                        }
                         yield true;
                     }
                     case RETIRE -> {
@@ -258,7 +308,14 @@ final class PunishmentRequestControllerHarness {
 
     static final class PlayerHarness {
         final AtomicInteger messages = new AtomicInteger();
+        volatile String lastMessage;
         final AtomicInteger openInventories = new AtomicInteger();
+        final AtomicInteger closedInventories = new AtomicInteger();
+        volatile boolean authorized = true;
+        volatile StaffRank rank = StaffRank.MOD;
+        Runnable onCloseInventory;
+        Runnable onOpenInventory;
+        volatile InventoryView openView;
         private final UUID id;
         private final Player proxy;
 
@@ -268,23 +325,44 @@ final class PunishmentRequestControllerHarness {
                 case "getUniqueId" -> this.id;
                 case "getName" -> "Reviewer";
                 case "getScheduler" -> scheduler.proxy;
-                case "hasPermission" -> permission(arguments[0].toString());
+                case "hasPermission" -> authorized && permission(arguments[0].toString());
                 case "sendMessage" -> {
                     messages.incrementAndGet();
+                    if (arguments.length > 0 && arguments[0] instanceof net.kyori.adventure.text.Component component) {
+                        lastMessage = net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
+                                .plainText().serialize(component);
+                    }
                     yield null;
                 }
                 case "openInventory" -> {
                     openInventories.incrementAndGet();
+                    if (onOpenInventory != null) {
+                        onOpenInventory.run();
+                    }
                     yield null;
                 }
-                case "closeInventory" -> null;
+                case "closeInventory" -> {
+                    closedInventories.incrementAndGet();
+                    if (onCloseInventory != null) {
+                        onCloseInventory.run();
+                    }
+                    yield null;
+                }
+                case "getOpenInventory" -> openView;
                 default -> defaultValue(method);
             });
         }
 
-        private static boolean permission(String permission) {
+        private boolean permission(String permission) {
             return "enthusiastaff.punishment.requests.review".equals(permission)
-                    || "enthusiastaff.rank.mod".equals(permission);
+                    || switch (rank) {
+                        case FOUNDER -> "enthusiastaff.rank.founder".equals(permission);
+                        case ADMIN -> "enthusiastaff.rank.admin".equals(permission);
+                        case MOD -> "enthusiastaff.rank.mod".equals(permission);
+                        case HELPER -> "enthusiastaff.rank.helper".equals(permission);
+                        case DEVELOPER -> "enthusiastaff.rank.developer".equals(permission);
+                        case SYSTEM -> false;
+                    };
         }
 
         Player proxy() {
@@ -317,7 +395,13 @@ final class PunishmentRequestControllerHarness {
 
     static final class WorkerHarness extends AbstractExecutorService {
         boolean reject;
+        boolean hold;
+        final java.util.ArrayDeque<Runnable> heldActions = new java.util.ArrayDeque<>();
         private boolean shutdown;
+
+        void runNext() {
+            heldActions.removeFirst().run();
+        }
 
         @Override
         public void shutdown() {
@@ -350,7 +434,11 @@ final class PunishmentRequestControllerHarness {
             if (reject) {
                 throw new RejectedExecutionException("test rejection");
             }
-            command.run();
+            if (hold) {
+                heldActions.addLast(command);
+            } else {
+                command.run();
+            }
         }
     }
 
@@ -361,7 +449,9 @@ final class PunishmentRequestControllerHarness {
         int pendingReads;
         int findReads;
         int acquireCalls;
+        int abandonCalls;
         int approveTransitions;
+        boolean failAfterApprove;
         int denyTransitions;
         private long fence;
 
@@ -408,6 +498,12 @@ final class PunishmentRequestControllerHarness {
         }
 
         @Override
+        public boolean abandon(PunishmentApprovalLease lease) {
+            abandonCalls++;
+            return true;
+        }
+
+        @Override
         public PunishmentRequestResult approve(
                 PunishmentApprovalLease lease,
                 Actor approver,
@@ -427,6 +523,9 @@ final class PunishmentRequestControllerHarness {
                     caseId,
                     now
             );
+            if (failAfterApprove) {
+                throw new IllegalStateException("synthetic lost acknowledgement after durable approval");
+            }
             return new PunishmentRequestResult.Approved(current, caseId, false);
         }
 

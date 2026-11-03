@@ -1,17 +1,16 @@
 package net.enthusia.staff.paper.auth;
 
-import java.util.HashSet;
 import java.util.Objects;
-import java.util.Set;
-import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.logging.Level;
 import net.enthusia.staff.paper.staff.StaffModeManager;
 import net.luckperms.api.LuckPerms;
 import net.luckperms.api.LuckPermsProvider;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
+import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
+import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.event.server.PluginDisableEvent;
 import org.bukkit.plugin.java.JavaPlugin;
 
@@ -29,7 +28,7 @@ public final class LuckPermsStaffDutyContext implements AutoCloseable, Listener 
     private final LuckPerms luckPerms;
     private final StaffModeManager staffMode;
     private final StaffDutyContextCalculator calculator;
-    private final Set<UUID> activeSnapshot = ConcurrentHashMap.newKeySet();
+    private final StaffDutyOwnerReconciler reconciler = new StaffDutyOwnerReconciler();
     private final AtomicBoolean closed = new AtomicBoolean();
 
     private LuckPermsStaffDutyContext(JavaPlugin plugin, LuckPerms luckPerms, StaffModeManager staffMode) {
@@ -60,34 +59,35 @@ public final class LuckPermsStaffDutyContext implements AutoCloseable, Listener 
         return registration;
     }
 
+    private boolean scheduleOwner(Player player, Runnable operation, Runnable retired) {
+        return player.getScheduler().execute(plugin, operation, retired, 1L);
+    }
+
+    private boolean liveDutyActive(Player player) {
+        // Always refresh unrestricted identity cache, even if Staff Mode is active.
+        boolean unrestricted = staffMode.isUnrestricted(player);
+        return staffMode.authorityActive(player.getUniqueId()) || unrestricted;
+    }
+
     private void reconcileOnlinePlayers() {
         if (closed.get()) {
             return;
         }
-        Set<UUID> online = new HashSet<>();
-        for (Player player : plugin.getServer().getOnlinePlayers()) {
-            UUID playerId = player.getUniqueId();
-            online.add(playerId);
-            boolean unrestricted = staffMode.isUnrestricted(player);
-            boolean active = staffMode.authorityActive(playerId) || unrestricted;
-            boolean wasActive = activeSnapshot.contains(playerId);
-            if (active == wasActive) {
-                continue;
-            }
-            if (active) {
-                activeSnapshot.add(playerId);
-            } else {
-                activeSnapshot.remove(playerId);
-            }
-            signalContextUpdate(player);
-        }
-        activeSnapshot.retainAll(online);
+        // This global-region callback only enumerates UUIDs and queues entity tasks.
+        // All live permission reads and LuckPerms signals execute on the player owner.
+        reconciler.reconcile(
+                plugin.getServer().getOnlinePlayers(),
+                this::scheduleOwner,
+                this::liveDutyActive,
+                player -> luckPerms.getContextManager().signalContextUpdate(player),
+                failure -> plugin.getLogger().log(
+                        Level.WARNING, "Staff Mode LuckPerms duty context owner task failed", failure)
+        );
     }
 
-    private void signalContextUpdate(Player player) {
-        if (!closed.get()) {
-            luckPerms.getContextManager().signalContextUpdate(player);
-        }
+    @EventHandler(priority = EventPriority.MONITOR)
+    public void onQuit(PlayerQuitEvent event) {
+        reconciler.forget(event.getPlayer());
     }
 
     @EventHandler
@@ -102,10 +102,25 @@ public final class LuckPermsStaffDutyContext implements AutoCloseable, Listener 
         if (!closed.compareAndSet(false, true)) {
             return;
         }
+        reconciler.close();
         luckPerms.getContextManager().unregisterCalculator(calculator);
-        activeSnapshot.clear();
+        // Plugin disable can run on the global region. Never call LuckPerms
+        // signalContextUpdate(Player) directly from that thread.
+        // Shutdown scheduling may be rejected: log rather than violating owner safety.
         for (Player player : plugin.getServer().getOnlinePlayers()) {
-            luckPerms.getContextManager().signalContextUpdate(player);
+            try {
+                if (!scheduleOwner(player, () -> {
+                    if (player.isOnline()) {
+                        luckPerms.getContextManager().signalContextUpdate(player);
+                    }
+                }, () -> { })) {
+                    plugin.getLogger().warning(
+                            "LuckPerms duty context shutdown refresh rejected for " + player.getUniqueId());
+                }
+            } catch (RuntimeException failure) {
+                plugin.getLogger().log(
+                        Level.WARNING, "LuckPerms duty context shutdown refresh unavailable", failure);
+            }
         }
     }
 }

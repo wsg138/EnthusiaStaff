@@ -14,10 +14,12 @@ import java.util.Optional;
 import java.util.UUID;
 import javax.sql.DataSource;
 import net.enthusia.staff.common.CaseId;
+import net.enthusia.staff.common.IdempotencyKey;
 import net.enthusia.staff.domain.application.PunishmentApprovalRequest;
 import net.enthusia.staff.domain.application.PunishmentMatchKey;
 import net.enthusia.staff.domain.application.PunishmentProposal;
 import net.enthusia.staff.domain.application.PunishmentRequestStatus;
+import net.enthusia.staff.domain.auth.StaffRank;
 import net.enthusia.staff.domain.escalation.DecayEligibility;
 
 final class JdbcPunishmentRequestRepository {
@@ -55,6 +57,22 @@ final class JdbcPunishmentRequestRepository {
         }
     }
 
+    Optional<PunishmentApprovalRequest> findBySubmissionKey(IdempotencyKey key) {
+        if (key == null) {
+            throw new IllegalArgumentException("submission key must be present");
+        }
+        String sql = SELECT_REQUESTS + "WHERE submission_key = ?";
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, key.value());
+            try (ResultSet result = statement.executeQuery()) {
+                return result.next() ? Optional.of(codec.read(result)) : Optional.empty();
+            }
+        } catch (SQLException exception) {
+            throw new ModerationPersistenceException("Unable to read submitted punishment request", exception);
+        }
+    }
+
     List<PunishmentApprovalRequest> pending(Instant now, int limit) {
         String sql = SELECT_REQUESTS
                 + "WHERE status = 'PENDING' AND expires_at > ? ORDER BY created_at LIMIT ?";
@@ -71,6 +89,38 @@ final class JdbcPunishmentRequestRepository {
             }
         } catch (SQLException exception) {
             throw new ModerationPersistenceException("Unable to list pending punishment requests", exception);
+        }
+    }
+
+    List<PunishmentApprovalRequest> pendingReviewable(
+            Instant now, UUID reviewerId, StaffRank reviewerRank, int limit
+    ) {
+        // The filter must precede LIMIT: fetching the oldest 500 then filtering
+        // can hide all requests a Mod is actually authorized to review.
+        String sql = SELECT_REQUESTS
+                + "WHERE status = 'PENDING' AND expires_at > ? "
+                + "AND requester_id <> ? "
+                + "AND (required_rank IN ('HELPER', 'MOD') "
+                + "OR (required_rank = 'ADMIN' AND ? IN ('ADMIN', 'FOUNDER')) "
+                + "OR (required_rank = 'FOUNDER' AND ? = 'FOUNDER')) "
+                + "ORDER BY created_at, request_id LIMIT ?";
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setTimestamp(1, Timestamp.from(now));
+            statement.setBytes(2, UuidBytes.toBytes(reviewerId));
+            statement.setString(3, reviewerRank.name());
+            statement.setString(4, reviewerRank.name());
+            statement.setInt(5, limit);
+            try (ResultSet result = statement.executeQuery()) {
+                List<PunishmentApprovalRequest> values = new ArrayList<>();
+                while (result.next()) {
+                    values.add(codec.read(result));
+                }
+                return List.copyOf(values);
+            }
+        } catch (SQLException exception) {
+            throw new ModerationPersistenceException(
+                    "Unable to list reviewable punishment requests", exception);
         }
     }
 

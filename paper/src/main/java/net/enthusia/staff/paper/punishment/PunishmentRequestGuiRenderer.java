@@ -81,8 +81,11 @@ final class PunishmentRequestGuiRenderer {
                 Material.LIME_CONCRETE,
                 "Approve Punishment",
                 List.of(
-                        Component.text("Creates the frozen punishment atomically", NamedTextColor.GREEN),
-                        Component.text("The current claim and revision are rechecked", NamedTextColor.GRAY)
+                        Component.text("Applies: "
+                                + PunishmentRequestPresentation.sanctions(request.proposal().sanctions()),
+                                NamedTextColor.GOLD),
+                        Component.text("Target: " + state.targetName(), NamedTextColor.WHITE),
+                        Component.text("The claim and proposal revision are rechecked.", NamedTextColor.GRAY)
                 )
         ));
         inventory.setItem(DENY_SLOT, item(
@@ -175,7 +178,8 @@ final class PunishmentRequestGuiRenderer {
 
     private static List<Component> proposalLore(PunishmentApprovalRequest request) {
         return List.of(
-                Component.text("Reason: " + request.proposal().reasonId(), NamedTextColor.WHITE),
+                Component.text("Reason: " + request.proposal().publicReason(), NamedTextColor.WHITE),
+                Component.text("Policy ID: " + request.proposal().reasonId(), NamedTextColor.DARK_GRAY),
                 Component.text(
                         "Step " + request.proposal().escalation().selectedStep().ordinal()
                                 + ": " + request.proposal().escalation().selectedStep().label(),
@@ -193,8 +197,10 @@ final class PunishmentRequestGuiRenderer {
     private static List<Component> authorityLore(PunishmentApprovalRequest request) {
         return List.of(
                 Component.text(request.proposal().requester().displayName(), NamedTextColor.WHITE),
-                Component.text("Requester rank: " + request.proposal().requester().rank(), NamedTextColor.GRAY),
-                Component.text("Minimum approval: " + request.proposal().requiredRank(), NamedTextColor.GRAY),
+                Component.text("Requester rank: "
+                        + humanize(request.proposal().requester().rank().name()), NamedTextColor.GRAY),
+                Component.text("Minimum approval: "
+                        + humanize(request.proposal().requiredRank().name()), NamedTextColor.GRAY),
                 Component.text("Created: " + request.createdAt(), NamedTextColor.GRAY),
                 Component.text("Expires: " + request.expiresAt(), NamedTextColor.GRAY),
                 Component.text("Revision: " + request.revision(), NamedTextColor.DARK_GRAY)
@@ -212,10 +218,11 @@ final class PunishmentRequestGuiRenderer {
                 Component.text("Target: " + view.targetName(), NamedTextColor.WHITE),
                 Component.text("Requester: " + request.proposal().requester().displayName()
                         + " (" + request.proposal().requester().rank() + ')', NamedTextColor.GRAY),
-                Component.text("Reason: " + request.proposal().reasonId(), NamedTextColor.WHITE),
+                Component.text("Reason: " + request.proposal().publicReason(), NamedTextColor.WHITE),
                 Component.text(PunishmentRequestPresentation.sanctions(request.proposal().sanctions()), NamedTextColor.GOLD),
                 Component.text("Visibility: " + request.proposal().visibility(), NamedTextColor.GRAY),
-                Component.text("Required: " + request.proposal().requiredRank(), NamedTextColor.GRAY),
+                Component.text("Required rank: "
+                        + humanize(request.proposal().requiredRank().name()), NamedTextColor.GRAY),
                 Component.text("Created: " + request.createdAt(), NamedTextColor.GRAY),
                 Component.text("Expires: " + request.expiresAt(), NamedTextColor.GRAY),
                 Component.text("Revision: " + request.revision(), NamedTextColor.DARK_GRAY)

@@ -11,6 +11,7 @@ import java.util.Locale;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import net.enthusia.staff.domain.guided.GuidedIncidentWizard;
 import net.enthusia.staff.domain.application.PunishmentAssessment;
 import net.enthusia.staff.domain.application.PunishmentDraft;
 import net.enthusia.staff.domain.auth.Actor;
@@ -21,6 +22,7 @@ import net.enthusia.staff.domain.history.ModerationHistoryEntry;
 import net.enthusia.staff.domain.sanction.ActiveSanction;
 import net.enthusia.staff.domain.sanction.SanctionLength;
 import net.enthusia.staff.domain.sanction.SanctionSpec;
+import net.enthusia.staff.domain.sanction.SanctionType;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.format.TextDecoration;
@@ -57,6 +59,10 @@ final class PunishmentGuiRenderer {
     private static final int MAX_HEADER_SANCTIONS = 4;
     private static final int MAX_LADDER_SLOTS = 18;
     private static final int MAX_HISTORY_REASON_LENGTH = 64;
+    static final int[] GUIDED_CHOICE_SLOTS = {19, 21, 23, 25, 30, 32, 40};
+    static final int GUIDED_SHORTER_SLOT = 20;
+    static final int GUIDED_SUGGESTED_SLOT = 22;
+    static final int GUIDED_LONGER_SLOT = 24;
     private static final int[] CATEGORY_GRID = {20, 22, 24, 29, 31, 33, 40};
     private static final int FIRST_HISTORY_PAGE = 1;
     private static final String CLOSE_LABEL = "Close";
@@ -78,7 +84,7 @@ final class PunishmentGuiRenderer {
         this.catalog = catalog;
     }
 
-    Inventory render(PunishmentGuiState state, Actor actor) {
+    Inventory render(PunishmentGuiState state, Actor actor, boolean guidedModeEnabled) {
         PunishmentGuiHolder holder = new PunishmentGuiHolder(state);
         Inventory inventory = Bukkit.createInventory(holder, 54, title(state));
         holder.attach(inventory);
@@ -86,12 +92,25 @@ final class PunishmentGuiRenderer {
         renderHeader(inventory, state);
         if (state instanceof PunishmentGuiState.Categories categories) {
             renderCategories(inventory, categories, actor);
+        } else if (state instanceof PunishmentGuiState.Guided guided) {
+            if (guidedModeEnabled) {
+                renderGuided(inventory, guided, actor);
+            } else {
+                inventory.setItem(22, item(Material.GRAY_CONCRETE,
+                        "Guided Mode Disabled", NamedTextColor.RED,
+                        List.of(Component.text("No guided punishment can be prepared now.",
+                                        NamedTextColor.GRAY),
+                                Component.text("Return to categories and use Expert Reasons.",
+                                        NamedTextColor.YELLOW))));
+                inventory.setItem(BACK_SLOT,
+                        button(Material.ARROW, "Back to Categories", NamedTextColor.AQUA));
+            }
         } else if (state instanceof PunishmentGuiState.Reasons reasons) {
             renderReasons(inventory, reasons, actor);
         } else if (state instanceof PunishmentGuiState.Search search) {
             renderSearch(inventory, search, actor);
         } else if (state instanceof PunishmentGuiState.Review review) {
-            renderReview(inventory, review, actor);
+            renderReview(inventory, review, actor, guidedModeEnabled);
         } else if (state instanceof PunishmentGuiState.History history) {
             renderHistory(inventory, history);
         }
@@ -140,9 +159,9 @@ final class PunishmentGuiRenderer {
                     "Choose a Category",
                     NamedTextColor.AQUA,
                     List.of(
-                            Component.text("Pick what happened, not the punishment.", NamedTextColor.WHITE),
-                            Component.text("Each category contains exact rule violations.", NamedTextColor.GRAY),
-                            Component.text("Or use Search below to find one directly.", NamedTextColor.GRAY)
+                            Component.text("Choose what happened, not the punishment.", NamedTextColor.WHITE),
+                            Component.text("Guided mode asks relevant questions when enabled.", NamedTextColor.GRAY),
+                            Component.text("Search below opens exact reasons directly.", NamedTextColor.GRAY)
                     )
             ));
         }
@@ -192,7 +211,7 @@ final class PunishmentGuiRenderer {
                     + (overview.recentCasesTruncated() ? "+" : ""), NamedTextColor.GOLD));
         }
         lore.add(Component.empty());
-        lore.add(Component.text("Click to browse exact violations", NamedTextColor.YELLOW));
+        lore.add(Component.text("Click to continue with this category", NamedTextColor.YELLOW));
         return List.copyOf(lore);
     }
 
@@ -216,6 +235,226 @@ final class PunishmentGuiRenderer {
             }
         }
         return List.copyOf(examples);
+    }
+
+    private void renderGuided(Inventory inventory, PunishmentGuiState.Guided state, Actor actor) {
+        List<ReasonPolicy> authorizedReasons =
+                catalog.reasons(actor, state.commandName(), state.categoryId());
+        var question = state.interview().nextQuestion();
+        if (question.isPresent()) {
+            renderGuidedQuestion(inventory, state, question.orElseThrow());
+        } else {
+            renderGuidedResult(inventory, state, state.interview().finding(), authorizedReasons);
+        }
+        inventory.setItem(BACK_SLOT, button(Material.ARROW,
+                state.interview().answers().isEmpty() ? "Back · Categories" : "Previous Question",
+                NamedTextColor.AQUA));
+        if (authorizedReasons.isEmpty()) {
+            inventory.setItem(SEARCH_SLOT, item(Material.GRAY_DYE,
+                    "Exact Reasons Unavailable", NamedTextColor.GRAY,
+                    List.of(Component.text("No authorized exact reasons in this category.",
+                            NamedTextColor.GRAY))));
+        } else {
+            inventory.setItem(SEARCH_SLOT, item(Material.BOOK,
+                    "Expert: Browse Exact Reasons", NamedTextColor.YELLOW,
+                    List.of(Component.text("Opens the existing authorized policy workflow.",
+                                    NamedTextColor.GRAY),
+                            Component.text("No punishment happens until final confirmation.",
+                                    NamedTextColor.RED))));
+        }
+        inventory.setItem(CLOSE_SLOT, button(Material.BARRIER, CLOSE_LABEL, NamedTextColor.RED));
+    }
+
+    private void renderGuidedQuestion(Inventory inventory, PunishmentGuiState.Guided state,
+                                      GuidedIncidentWizard.Question prompt) {
+        String categoryName = PunishmentGuiCategory.byId(state.categoryId()).title();
+        int answered = state.interview().answers().size();
+        inventory.setItem(13, item(Material.OAK_SIGN, prompt.text(), NamedTextColor.AQUA,
+                List.of(Component.text(categoryName, NamedTextColor.WHITE),
+                        Component.text("Step " + (answered + 1) + " - select one response",
+                                NamedTextColor.YELLOW))));
+        for (int i = 0; i < prompt.choices().size() && i < GUIDED_CHOICE_SLOTS.length; i++) {
+            var choice = prompt.choices().get(i);
+            inventory.setItem(GUIDED_CHOICE_SLOTS[i],
+                    item(guidedAnswerMaterial(prompt.id(), choice.id(), i),
+                            choice.label(), NamedTextColor.WHITE,
+                            guidedAnswerLore(prompt.id(), choice.id())));
+        }
+    }
+
+    /**
+     * The position of an answer does not indicate its seriousness. In particular,
+     * "ignored warning" must never appear as a green/safe response.
+     */
+    static Material guidedAnswerMaterial(String questionId, String choiceId, int index) {
+        if ("continued".equals(questionId)) {
+            return switch (choiceId) {
+                case "yes" -> Material.RED_DYE;
+                case "no" -> Material.LIME_DYE;
+                case "not-applicable" -> Material.LIGHT_GRAY_DYE;
+                default -> Material.YELLOW_DYE;
+            };
+        }
+        if ("extent".equals(questionId)) {
+            return switch (choiceId) {
+                case "few" -> Material.LIME_DYE;
+                case "sustained" -> Material.ORANGE_DYE;
+                case "large-scale" -> Material.RED_DYE;
+                default -> Material.YELLOW_DYE;
+            };
+        }
+        if ("targeting".equals(questionId)) {
+            return switch (choiceId) {
+                case "targeted" -> Material.RED_DYE;
+                case "general" -> Material.LIGHT_BLUE_DYE;
+                default -> Material.YELLOW_DYE;
+            };
+        }
+        return switch (index) {
+            case 0 -> Material.LIGHT_BLUE_DYE;
+            case 1 -> Material.CYAN_DYE;
+            case 2 -> Material.ORANGE_DYE;
+            case 3 -> Material.PURPLE_DYE;
+            case 4 -> Material.WHITE_DYE;
+            case 5 -> Material.MAGENTA_DYE;
+            default -> Material.GRAY_DYE;
+        };
+    }
+
+    static List<Component> guidedAnswerLore(String questionId, String choiceId) {
+        String explanation = switch (questionId) {
+            case "continued" -> switch (choiceId) {
+                case "yes" -> "A verified warning was ignored.";
+                case "no" -> "They stopped after a warning; not defiance.";
+                case "not-applicable" -> "No warning was given; not defiance.";
+                default -> "Warning status uncertain; do not assume defiance.";
+            };
+            case "extent" -> switch (choiceId) {
+                case "few" -> "An isolated or minor incident.";
+                case "sustained" -> "Repeated or sustained behavior.";
+                case "large-scale" -> "An extensive or large-scale incident.";
+                default -> "The incident extent is not established.";
+            };
+            case "targeting" -> switch (choiceId) {
+                case "targeted" -> "Directed at a particular player or group.";
+                case "general" -> "Not specifically directed at a player or group.";
+                default -> "Who was targeted is not established.";
+            };
+            default -> null;
+        };
+        if (explanation == null) {
+            return List.of(Component.text("Click to answer", NamedTextColor.YELLOW));
+        }
+        return List.of(Component.text(explanation, NamedTextColor.GRAY),
+                Component.text("Click to answer", NamedTextColor.YELLOW));
+    }
+
+    /**
+     * The question screen does not manufacture sanctions. Only the
+     * authoritative policy service can calculate a proposed outcome.
+     */
+    private void renderGuidedResult(Inventory inventory, PunishmentGuiState.Guided state,
+                                    GuidedIncidentWizard.Finding finding,
+                                    List<ReasonPolicy> authorizedReasons) {
+        boolean requiresReview = finding.needsReview() || finding.candidateId() == null;
+        boolean available = !requiresReview
+                && guidedCandidateAuthorized(finding.candidateId(), authorizedReasons);
+        boolean ordinaryRemedy = available && authorizedReasons.stream()
+                .filter(policy -> policy.id().equals(finding.candidateId()))
+                .anyMatch(PunishmentGuiRenderer::guidedPolicyHasOrdinaryRemedy);
+        inventory.setItem(13, item(Material.KNOWLEDGE_BOOK,
+                "Review Incident Details", NamedTextColor.AQUA,
+                List.of(Component.text("Conduct: " + humanize(finding.conduct()), NamedTextColor.WHITE),
+                        Component.text("Location: " + humanize(finding.medium()), NamedTextColor.GRAY),
+                        Component.text("Incident answers recorded for assessment.",
+                                NamedTextColor.GOLD),
+                        Component.text("Relevant punishment history is checked automatically.",
+                                NamedTextColor.GRAY),
+                        Component.text(requiresReview
+                                        ? "Uncertain incidents require individual staff review."
+                                        : !available
+                                                ? "Identified reason unavailable for your staff access."
+                                                : ordinaryRemedy
+                                                        ? "Exact sanction and duration appear in final review."
+                                                        : "Configured sanctions require individual review.",
+                                NamedTextColor.YELLOW))));
+        inventory.setItem(31, item(Material.WRITABLE_BOOK, "Incident Factors", NamedTextColor.AQUA,
+                finding.facts().isEmpty()
+                        ? List.of(Component.text("No additional factors selected.",
+                                NamedTextColor.GRAY))
+                        : finding.facts().stream()
+                                .<Component>map(value -> Component.text(value, NamedTextColor.WHITE))
+                                .toList()));
+        if (requiresReview) {
+            inventory.setItem(22, item(Material.SHIELD, "Needs Staff Review", NamedTextColor.GOLD,
+                    List.of(Component.text("These answers are not sufficient for automatic classification.",
+                                    NamedTextColor.GRAY),
+                            Component.text("Use Expert Reasons for a reviewed action.", NamedTextColor.YELLOW))));
+            return;
+        }
+        if (!available) {
+            inventory.setItem(22, item(Material.GRAY_CONCRETE,
+                    "Reason Unavailable", NamedTextColor.RED,
+                    List.of(Component.text("Your current rank or route cannot select this reason.",
+                                    NamedTextColor.GRAY),
+                            Component.text("Browse permitted reasons or ask authorized staff.",
+                                    NamedTextColor.YELLOW))));
+            return;
+        }
+        if (!ordinaryRemedy) {
+            inventory.setItem(22, item(Material.SHIELD,
+                    "Manual Sanction Review", NamedTextColor.GOLD,
+                    List.of(Component.text("No ordinary warning or temporary mute is configured.",
+                                    NamedTextColor.GRAY),
+                            Component.text("Use Expert Reasons for protected sanction types.",
+                                    NamedTextColor.YELLOW))));
+            return;
+        }
+        inventory.setItem(GUIDED_SHORTER_SLOT, guidedPreference(
+                "Conservative", -1, state.durationChoice()));
+        inventory.setItem(GUIDED_SUGGESTED_SLOT, guidedPreference(
+                "Balanced", 0, state.durationChoice()));
+        inventory.setItem(GUIDED_LONGER_SLOT, guidedPreference(
+                "Stronger", 1, state.durationChoice()));
+        inventory.setItem(CONFIRM_SLOT, item(Material.EMERALD,
+                "Calculate Punishment Type and Length", NamedTextColor.GREEN,
+                List.of(Component.text("Uses current policy and relevant player history.",
+                                NamedTextColor.WHITE),
+                        Component.text("Opens final review; no punishment is applied yet.",
+                                NamedTextColor.YELLOW))));
+    }
+
+    /** Presentation-only check; draft preparation repeats authorization against current policy. */
+    static boolean guidedCandidateAuthorized(String candidateId, List<ReasonPolicy> authorizedReasons) {
+        return candidateId != null && authorizedReasons.stream()
+                .anyMatch(policy -> policy.id().equals(candidateId));
+    }
+
+    /**
+     * Preview only: policies containing exclusively bans, confiscation, permanent or
+     * mixed sanctions can never succeed in the current ordinary guided resolver.
+     * This does not predict the history-selected step or bypass the actual resolver.
+     */
+    static boolean guidedPolicyHasOrdinaryRemedy(ReasonPolicy policy) {
+        return policy.steps().stream().anyMatch(step -> {
+            if (step.sanctions().size() != 1) {
+                return false;
+            }
+            SanctionSpec spec = step.sanctions().getFirst();
+            return (spec.type() == SanctionType.WARNING
+                        && spec.length().isInstant())
+                    || (spec.type() == SanctionType.MUTE
+                        && spec.length().temporary().isPresent());
+        });
+    }
+
+    private static ItemStack guidedPreference(String name, int value, int selected) {
+        return item(value == selected ? Material.LIME_CONCRETE : Material.CLOCK,
+                name + " assessment", value == selected ? NamedTextColor.GREEN : NamedTextColor.WHITE,
+                List.of(Component.text(value == selected ? "Selected" : "Click to choose",
+                                NamedTextColor.YELLOW),
+                        Component.text("Outcome must remain within configured policy limits.",
+                                NamedTextColor.GRAY)));
     }
 
     private void renderReasons(Inventory inventory, PunishmentGuiState.Reasons state, Actor actor) {
@@ -272,7 +511,8 @@ final class PunishmentGuiRenderer {
         ));
     }
 
-    private void renderReview(Inventory inventory, PunishmentGuiState.Review state, Actor actor) {
+    private void renderReview(Inventory inventory, PunishmentGuiState.Review state, Actor actor,
+                              boolean guidedModeEnabled) {
         PunishmentDraft draft = state.draft();
         Optional<PunishmentAssessment> assessment = state.assessment();
         ReasonPolicy policy = assessment.map(PunishmentAssessment::policy)
@@ -282,7 +522,9 @@ final class PunishmentGuiRenderer {
         inventory.setItem(12, escalationItem(state));
         inventory.setItem(14, recommendationItem(state, policy));
         inventory.setItem(16, safetyItem(state, catalog.activeVersion()));
-        if (assessment.isPresent()) {
+        if (draft.internalExplanation().startsWith("Guided incident v1")) {
+            renderGuidedReviewFactors(inventory, draft);
+        } else if (assessment.isPresent()) {
             renderLadder(inventory, assessment.orElseThrow());
         } else if (policy != null) {
             renderLadder(inventory, policy.steps(), draft.expectation().stepOrdinal(), true);
@@ -293,23 +535,93 @@ final class PunishmentGuiRenderer {
         inventory.setItem(41, historySummaryItem(state));
         inventory.setItem(43, authorityItem(actor, policy));
 
-        inventory.setItem(BACK_SLOT, button(Material.ARROW, "Back · Reasons", NamedTextColor.AQUA));
+        boolean guidedReview = draft.internalExplanation().startsWith("Guided incident v1");
+        inventory.setItem(BACK_SLOT, guidedReview
+                ? item(Material.ARROW, "Back · Edit or Browse", NamedTextColor.AQUA,
+                        List.of(Component.text("Returns to answers while the session is active.",
+                                        NamedTextColor.GRAY),
+                                Component.text("Otherwise opens exact reasons.", NamedTextColor.GRAY)))
+                : button(Material.ARROW, "Back · Reasons", NamedTextColor.AQUA));
         footerHistory(inventory);
-        inventory.setItem(CONFIRM_SLOT, policy == null
+        boolean rationaleRequired = PunishmentGuiController.guidedNeedsStaffRationale(
+                draft.internalExplanation());
+        boolean stalePolicy = !reviewPolicyCurrent(
+                draft.expectation().configurationVersion(), catalog.activeVersion());
+        boolean guidedDisabled = guidedReview && !guidedModeEnabled;
+        boolean reasonUnauthorized = !catalog.maySelectReason(
+                actor, state.commandName(), draft.reasonId());
+        inventory.setItem(CONFIRM_SLOT, guidedDisabled
+                ? item(Material.GRAY_CONCRETE, "Guided Mode Disabled", NamedTextColor.RED,
+                        List.of(Component.text("The guided punishment feature was disabled.",
+                                        NamedTextColor.GRAY),
+                                Component.text("This saved draft cannot be submitted.",
+                                        NamedTextColor.YELLOW)))
+                : policy == null
                 ? item(Material.GRAY_DYE, "Reason Unavailable", NamedTextColor.RED,
                         List.of(Component.text("Go back and choose a current reason.", NamedTextColor.YELLOW)))
-                : item(Material.LIME_CONCRETE, "Submit Punishment", NamedTextColor.GREEN,
-                        List.of(
-                                Component.text("Applies this sanction or requests approval", NamedTextColor.WHITE),
-                                Component.text("depending on your rank.", NamedTextColor.GRAY),
-                                Component.text("The reason and outcome are checked again.", NamedTextColor.GRAY)
-                        )));
+                : reasonUnauthorized
+                        ? item(Material.GRAY_CONCRETE, "Reason Not Authorized", NamedTextColor.RED,
+                                List.of(Component.text("Your current rank or command cannot select this reason.",
+                                                NamedTextColor.GRAY),
+                                        Component.text("Return to categories and choose an available reason.",
+                                                NamedTextColor.YELLOW)))
+                : stalePolicy
+                        ? item(Material.GRAY_CONCRETE, "Reassessment Required", NamedTextColor.RED,
+                                List.of(Component.text("Rules changed since this draft was prepared.",
+                                                NamedTextColor.GRAY),
+                                        Component.text("Go back and assess against the current policy.",
+                                                NamedTextColor.YELLOW)))
+                : rationaleRequired
+                        ? item(Material.GRAY_CONCRETE, "Staff Rationale Required", NamedTextColor.YELLOW,
+                                List.of(
+                                        Component.text("Submission is blocked until you add a note.",
+                                                NamedTextColor.RED),
+                                        Component.text("Use Internal Explanation to justify your adjustment.",
+                                                NamedTextColor.WHITE)))
+                        : item(Material.LIME_CONCRETE, "Submit Punishment", NamedTextColor.GREEN,
+                                List.of(
+                                        Component.text("Applies this sanction or requests approval",
+                                                NamedTextColor.WHITE),
+                                        Component.text("depending on your rank.", NamedTextColor.GRAY),
+                                        Component.text("The reason and outcome are checked again.",
+                                                NamedTextColor.GRAY))));
+
         inventory.setItem(CLOSE_SLOT, item(
                 Material.BARRIER,
                 "Save Draft & Close",
                 NamedTextColor.RED,
                 List.of(Component.text("The draft remains resumable for its configured lifetime.", NamedTextColor.GRAY))
         ));
+    }
+
+    /** Guided reviews emphasize factual answers and the calculated sanction, not a fixed ladder. */
+    private static void renderGuidedReviewFactors(Inventory inventory, PunishmentDraft draft) {
+        List<Component> answers = java.util.Arrays.stream(draft.internalExplanation()
+                        .split(" [|] "))
+                .filter(value -> value.startsWith("medium=") || value.startsWith("conduct=")
+                        || value.startsWith("detail=") || value.startsWith("extent=")
+                        || value.startsWith("continued=") || value.startsWith("targeting=")
+                        || value.startsWith("persistence="))
+                .limit(8)
+                .<Component>map(PunishmentGuiRenderer::guidedAnswerLine)
+                .toList();
+        inventory.setItem(22, item(Material.WRITABLE_BOOK, "Incident Answers",
+                NamedTextColor.AQUA, answers));
+        inventory.setItem(24, item(Material.CLOCK, "Contextual Calculation",
+                NamedTextColor.GOLD, List.of(
+                        Component.text("Type and duration use the live configured policy.", NamedTextColor.WHITE),
+                        Component.text("Relevant past cases influence escalation automatically.", NamedTextColor.GRAY),
+                        Component.text("The requested outcome is shown above.", NamedTextColor.YELLOW),
+                        Component.text("Confirm only after verifying the incident details.", NamedTextColor.GRAY))));
+    }
+
+    private static Component guidedAnswerLine(String value) {
+        int separator = value.indexOf('=');
+        if (separator < 0) {
+            return Component.text(humanize(value), NamedTextColor.WHITE);
+        }
+        return Component.text(humanize(value.substring(0, separator)) + ": "
+                + humanize(value.substring(separator + 1)), NamedTextColor.WHITE);
     }
 
     private void renderHistory(Inventory inventory, PunishmentGuiState.History state) {
@@ -517,17 +829,30 @@ final class PunishmentGuiRenderer {
         PunishmentDraft draft = state.draft();
         int total = policy == null ? 0 : policy.steps().size();
         List<Component> lore = new ArrayList<>();
-        lore.add(Component.text(
-                "Step " + (draft.expectation().stepOrdinal() + 1) + (total > 0 ? "/" + total : ""),
-                NamedTextColor.GOLD
-        ));
+        boolean guided = draft.internalExplanation().startsWith("Guided incident v1");
+        if (guided) {
+            lore.add(Component.text("Calculated from incident details and related history.",
+                    NamedTextColor.GRAY));
+        } else {
+            lore.add(Component.text(
+                    "Step " + (draft.expectation().stepOrdinal() + 1)
+                            + (total > 0 ? "/" + total : ""), NamedTextColor.GOLD));
+        }
         lore.add(Component.text(describe(draft.expectation().sanctions()), NamedTextColor.WHITE));
-        lore.add(Component.text("This is what confirmation will submit.", NamedTextColor.GRAY));
-        return item(Material.GOLD_INGOT, "03 | Recommended Outcome", NamedTextColor.GOLD, lore);
+        lore.add(Component.text("This is what confirmation will submit.", NamedTextColor.YELLOW));
+        return item(Material.GOLD_INGOT,
+                guided ? "03 | Calculated Type & Length" : "03 | Recommended Outcome",
+                NamedTextColor.GOLD, lore);
+    }
+
+    /** GUI affordance only; the domain confirmation revalidates the version atomically. */
+    static boolean reviewPolicyCurrent(String draftVersion, String activeVersion) {
+        return draftVersion != null && draftVersion.equals(activeVersion);
     }
 
     private static ItemStack safetyItem(PunishmentGuiState.Review state, String activePolicyVersion) {
-        boolean currentVersion = state.draft().expectation().configurationVersion().equals(activePolicyVersion);
+        boolean currentVersion = reviewPolicyCurrent(
+                state.draft().expectation().configurationVersion(), activePolicyVersion);
         return item(
                 Material.CLOCK,
                 "04 | Draft & Policy",
@@ -536,7 +861,7 @@ final class PunishmentGuiRenderer {
                         Component.text("Expires: " + formatInstant(state.draft().expiresAt(), state.overview()),
                                 NamedTextColor.GRAY),
                         Component.text(currentVersion ? "Matches the current rules"
-                                        : "Rules changed; confirm will recheck this draft",
+                                        : "Rules changed; reassessment required before submission",
                                 currentVersion ? NamedTextColor.GREEN : NamedTextColor.YELLOW),
                         Component.text("You can resume this draft after leaving.", NamedTextColor.GRAY)
                 )
@@ -561,12 +886,28 @@ final class PunishmentGuiRenderer {
 
     private static ItemStack noteItem(PunishmentDraft draft) {
         List<Component> lore = new ArrayList<>();
-        if (draft.internalExplanation().isBlank()) {
-            lore.add(Component.text("No internal explanation entered.", NamedTextColor.RED));
+        String explanation = draft.internalExplanation();
+        if (explanation.startsWith("Guided incident v1")) {
+            if (PunishmentGuiController.guidedNeedsStaffRationale(explanation)) {
+                lore.add(Component.text("Required: justify the changed assessment.", NamedTextColor.GOLD));
+            }
+            int noteStart = explanation.indexOf(" | Staff note: ");
+            if (noteStart >= 0) {
+                lore.addAll(wrapped(explanation.substring(noteStart + " | Staff note: ".length()),
+                        48, 3, NamedTextColor.GRAY));
+            } else {
+                lore.add(Component.text("No additional staff note yet.", NamedTextColor.GRAY));
+            }
+            lore.add(Component.text("Incident answers remain preserved in the audit.", NamedTextColor.GRAY));
+            lore.add(Component.text("Click to add or edit the private rationale.", NamedTextColor.YELLOW));
         } else {
-            lore.addAll(wrapped(draft.internalExplanation(), 48, 3, NamedTextColor.GRAY));
+            if (explanation.isBlank()) {
+                lore.add(Component.text("No internal explanation entered.", NamedTextColor.RED));
+            } else {
+                lore.addAll(wrapped(explanation, 48, 3, NamedTextColor.GRAY));
+            }
+            lore.add(Component.text("Click to edit the private internal explanation.", NamedTextColor.YELLOW));
         }
-        lore.add(Component.text("Click to edit the private internal explanation.", NamedTextColor.YELLOW));
         return item(Material.NAME_TAG, "Internal Explanation", NamedTextColor.AQUA, lore);
     }
 
@@ -850,6 +1191,9 @@ final class PunishmentGuiRenderer {
 
     private static Component title(PunishmentGuiState state) {
         String target = targetName(state.target());
+        if (state instanceof PunishmentGuiState.Guided guided) {
+            return Component.text("Guided · " + targetName(guided.target()), NamedTextColor.DARK_AQUA);
+        }
         if (state instanceof PunishmentGuiState.Reasons reasons) {
             PunishmentGuiCategory category = PunishmentGuiCategory.byId(reasons.categoryId());
             return Component.text("Punish · " + (category == null ? "Reasons" : category.title()),

@@ -72,9 +72,55 @@ public final class PunishmentDraftWorkflow {
         }
     }
 
+    /**
+     * Authoritative, read-only assessment with current policy, current history,
+     * and the same rank/mode gates as the persistent draft preparation path.
+     */
+    public PunishmentEvaluation preview(PreparePunishmentDraftRequest request,
+                                       OperationalMode mode) {
+        Objects.requireNonNull(request);
+        return punishments.evaluateRequestProposal(punishmentRequest(
+                Objects.requireNonNull(identifiers.get(), "preview identifier"),
+                request.targetId(), request.actor(), request.reasonId(),
+                request.internalExplanation(), request.visibility(),
+                request.overrideSanctions()), mode);
+    }
+
     public PunishmentDraftEvaluation prepare(
             PreparePunishmentDraftRequest request,
             OperationalMode mode
+    ) {
+        return prepare(request, mode, null);
+    }
+
+    /**
+     * Guided preparation must use the same policy and escalation facts as its
+     * earlier read-only preview. The proposed sanctions may intentionally
+     * differ (staff selected a configured tier), so compare the baseline
+     * decision rather than the resulting sanction list.
+     *
+     * Reject drift before saving any draft; confirmation independently
+     * rechecks the recommendation before applying or requesting approval.
+     */
+    public PunishmentDraftEvaluation prepare(
+            PreparePunishmentDraftRequest request,
+            OperationalMode mode,
+            PunishmentAssessment expectedPreview
+    ) {
+        return prepare(request, mode, expectedPreview, null);
+    }
+
+    /**
+     * Re-preparation of an already reviewed guided draft (notes/visibility only)
+     * must preserve its exact approved outcome. A resumed review may not have an
+     * in-memory assessment, so its durable expectation is independently checked.
+     * A fresh guided calculation can also pass the complete preview snapshot.
+     */
+    public PunishmentDraftEvaluation prepare(
+            PreparePunishmentDraftRequest request,
+            OperationalMode mode,
+            PunishmentAssessment expectedPreview,
+            PunishmentExpectation expectedReviewed
     ) {
         Objects.requireNonNull(request);
         UUID draftId = Objects.requireNonNull(identifiers.get(), "generated draft identifier");
@@ -92,6 +138,21 @@ public final class PunishmentDraftWorkflow {
             return new PunishmentDraftEvaluation.Rejected(rejected.code(), rejected.message());
         }
         PunishmentAssessment assessment = ((PunishmentEvaluation.Allowed) evaluation).assessment();
+        if (expectedPreview != null
+                && (!expectedPreview.configurationVersion().equals(assessment.configurationVersion())
+                || !expectedPreview.policy().equals(assessment.policy())
+                || !expectedPreview.escalation().equals(assessment.escalation()))) {
+            return new PunishmentDraftEvaluation.Rejected(
+                    "RECOMMENDATION_CHANGED",
+                    "The policy or punishment history changed during guided calculation; recalculate before saving"
+            );
+        }
+        if (expectedReviewed != null && !expectedReviewed.matches(assessment)) {
+            return new PunishmentDraftEvaluation.Rejected(
+                    "RECOMMENDATION_CHANGED",
+                    "The reviewed punishment changed while editing this draft; reassess before saving"
+            );
+        }
         Instant createdAt = clock.instant();
         PunishmentDraft draft = new PunishmentDraft(
                 draftId,
@@ -123,6 +184,24 @@ public final class PunishmentDraftWorkflow {
         if (draft == null) {
             return draftNotFound();
         }
+        PunishmentResult.Accepted committed = committedDraftCase(draft);
+        if (committed != null) {
+            deleteAppliedDraft(draft, actor, committed);
+            return committed;
+        }
+        // A prior routed submission may have committed while draft cleanup failed.
+        // Never bypass that approval request through the direct confirmation API,
+        // including after the actor has since been promoted.
+        if (existingSubmittedRequest(draft) != null) {
+            return new PunishmentResult.Rejected(
+                    "REQUEST_ALREADY_SUBMITTED",
+                    "An approval request already exists for this draft; use routed confirmation to recover it"
+            );
+        }
+        if (!punishments.currentPolicyMatches(
+                draft.reasonId(), draft.expectation().configurationVersion())) {
+            return staleDraft();
+        }
         CreatePunishmentRequest request = requestFor(draft, actor);
         PunishmentResult result = punishments.createConfirmed(request, mode, draft.expectation());
         if (result instanceof PunishmentResult.Accepted accepted) {
@@ -136,6 +215,29 @@ public final class PunishmentDraftWorkflow {
         PunishmentDraft draft = drafts.find(draftId, actor.id(), clock.instant()).orElse(null);
         if (draft == null) {
             PunishmentResult.Rejected rejected = draftNotFound();
+            return new PunishmentDraftConfirmation.Rejected(rejected.code(), rejected.message());
+        }
+        PunishmentResult.Accepted committed = committedDraftCase(draft);
+        if (committed != null) {
+            deleteAppliedDraft(draft, actor, committed);
+            return new PunishmentDraftConfirmation.Applied(committed);
+        }
+        PunishmentApprovalRequest existingRequest = existingSubmittedRequest(draft);
+        if (existingRequest != null) {
+            if (!sameDraftSubmission(draft, existingRequest)) {
+                return new PunishmentDraftConfirmation.Rejected(
+                        "IDEMPOTENCY_CONFLICT",
+                        "The existing approval request does not match this saved punishment draft"
+                );
+            }
+            PunishmentRequestResult.Submitted replay =
+                    new PunishmentRequestResult.Submitted(existingRequest, true);
+            deleteSubmittedDraft(draft, actor, replay);
+            return new PunishmentDraftConfirmation.Requested(replay);
+        }
+        if (!punishments.currentPolicyMatches(
+                draft.reasonId(), draft.expectation().configurationVersion())) {
+            PunishmentResult.Rejected rejected = staleDraft();
             return new PunishmentDraftConfirmation.Rejected(rejected.code(), rejected.message());
         }
         CreatePunishmentRequest request = requestFor(draft, actor);
@@ -177,15 +279,48 @@ public final class PunishmentDraftWorkflow {
                 draft.expectation()
         );
         if (result instanceof PunishmentRequestResult.Submitted submitted) {
-            try {
-                drafts.delete(draft.draftId(), actor.id());
-            } catch (RuntimeException exception) {
-                throw new PunishmentRequestDraftCleanupException(submitted, exception);
-            }
+            deleteSubmittedDraft(draft, actor, submitted);
             return new PunishmentDraftConfirmation.Requested(submitted);
         }
         PunishmentRequestResult.Rejected rejected = (PunishmentRequestResult.Rejected) result;
         return new PunishmentDraftConfirmation.Rejected(rejected.code(), rejected.message());
+    }
+
+    private PunishmentApprovalRequest existingSubmittedRequest(PunishmentDraft draft) {
+        if (punishmentRequests == null) {
+            return null;
+        }
+        return punishmentRequests.findSubmitted(
+                new IdempotencyKey("punishment-draft:" + draft.draftId())).orElse(null);
+    }
+
+    private static boolean sameDraftSubmission(
+            PunishmentDraft draft, PunishmentApprovalRequest existing) {
+        PunishmentProposal proposal = existing.proposal();
+        return proposal.requester().id().equals(draft.actorId())
+                && proposal.targetId().equals(draft.targetId())
+                && proposal.reasonId().equals(draft.reasonId())
+                && proposal.internalExplanation().equals(draft.internalExplanation())
+                && proposal.visibility() == draft.visibility()
+                && proposal.configurationVersion().equals(draft.expectation().configurationVersion())
+                && proposal.sanctions().equals(draft.expectation().sanctions());
+    }
+
+    private void deleteSubmittedDraft(
+            PunishmentDraft draft, Actor actor, PunishmentRequestResult.Submitted submitted) {
+        try {
+            drafts.delete(draft.draftId(), actor.id());
+        } catch (RuntimeException exception) {
+            throw new PunishmentRequestDraftCleanupException(submitted, exception);
+        }
+    }
+
+    private PunishmentResult.Accepted committedDraftCase(PunishmentDraft draft) {
+        // Ownership and expiry were checked by drafts.find before this lookup.
+        // Only recover the exact persisted draft key; do not re-evaluate or
+        // create a second case after a previous transaction already committed.
+        return punishments.committedDraftCase(
+                new IdempotencyKey("punishment-draft:" + draft.draftId())).orElse(null);
     }
 
     private void deleteAppliedDraft(
@@ -204,6 +339,13 @@ public final class PunishmentDraftWorkflow {
         return PunishmentApprovalRules.requiresApproval(actor.rank(), expectation.customDuration());
     }
 
+    private static PunishmentResult.Rejected staleDraft() {
+        return new PunishmentResult.Rejected(
+                "RECOMMENDATION_CHANGED",
+                "The punishment policy has changed; reassess the draft before confirming"
+        );
+    }
+
     private static PunishmentResult.Rejected draftNotFound() {
         return new PunishmentResult.Rejected(
                 "DRAFT_NOT_FOUND",
@@ -219,9 +361,12 @@ public final class PunishmentDraftWorkflow {
                 draft.reasonId(),
                 draft.internalExplanation(),
                 draft.visibility(),
-                draft.expectation().customDuration()
-                        ? draft.expectation().sanctions()
-                        : List.of()
+                // Replay the complete reviewed outcome, including a higher or lower
+                // configured step. An exact policy tier is not a custom duration,
+                // but omitting it here silently falls back to history's step.
+                // PunishmentService reauthorizes every explicit selection against
+                // current rank, history and policy before creating a case/request.
+                draft.expectation().sanctions()
         );
     }
 

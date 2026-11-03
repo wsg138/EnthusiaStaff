@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.logging.Logger;
 import net.enthusia.staff.domain.auth.Actor;
 import net.enthusia.staff.domain.auth.StaffRank;
@@ -31,6 +32,61 @@ class LuckPermsStaffTargetGuardTest {
         StaffTargetGuard guard = guard(StaffRank.MOD, Optional.of(StaffRank.ADMIN));
 
         assertFalse(guard.check(staleAdmin, TARGET_ID, false).allowed());
+    }
+
+    @Test
+    void downgradeCannotReuseStaleHigherRankAgainstOrdinaryPlayer() {
+        Actor staleAdmin = new Actor(ACTOR_ID, "FormerAdmin", StaffRank.ADMIN);
+        StaffTargetGuard guard = guard(StaffRank.MOD, Optional.empty());
+
+        StaffTargetGuard.Result result = guard.check(staleAdmin, TARGET_ID, false);
+
+        assertFalse(result.allowed(),
+                "Current lower rank must not authorize a queued punishment using older admin actor");
+    }
+
+    @Test
+    void promotionAlsoRequiresNewCommandAuthoritySnapshot() {
+        Actor staleMod = new Actor(ACTOR_ID, "FormerMod", StaffRank.MOD);
+        StaffTargetGuard guard = guard(StaffRank.ADMIN, Optional.empty());
+
+        assertFalse(guard.check(staleMod, TARGET_ID, false).allowed(),
+                "Rank drift in either direction must require a new authorization snapshot");
+    }
+
+    @Test
+    void unchangedStaffRankRetainsNormalOrdinaryTargetAccess() {
+        assertTrue(guard(StaffRank.MOD, Optional.empty()).check(
+                new Actor(ACTOR_ID, "ActiveMod", StaffRank.MOD), TARGET_ID, false).allowed());
+    }
+
+    @Test
+    void repeatedRankValidationRejectsMutationBetweenPreviewAndWrite() {
+        AtomicReference<StaffRank> current = new AtomicReference<>(StaffRank.ADMIN);
+        StaffTargetGuard guard = LuckPermsStaffTargetGuard.forTesting(
+                id -> id.equals(ACTOR_ID) ? Optional.of(current.get()) : Optional.empty(),
+                LOGGER
+        );
+        Actor queued = new Actor(ACTOR_ID, "AdminAtClick", StaffRank.ADMIN);
+        assertTrue(guard.check(queued, TARGET_ID, false).allowed());
+        current.set(StaffRank.MOD);
+        assertFalse(guard.check(queued, TARGET_ID, false).allowed(),
+                "Repeating the guard after a slow read must reject an actor demoted in the meantime");
+    }
+
+    @Test
+    void targetPromotionDuringSlowOverviewRequiresSecondHierarchyCheck() {
+        AtomicReference<StaffRank> currentTarget = new AtomicReference<>();
+        StaffTargetGuard guard = LuckPermsStaffTargetGuard.forTesting(
+                id -> id.equals(ACTOR_ID) ? Optional.of(StaffRank.MOD)
+                        : Optional.ofNullable(currentTarget.get()),
+                LOGGER
+        );
+        Actor actor = new Actor(ACTOR_ID, "ModAtOpen", StaffRank.MOD);
+        assertTrue(guard.check(actor, TARGET_ID, false).allowed());
+        currentTarget.set(StaffRank.ADMIN);
+        assertFalse(guard.check(actor, TARGET_ID, false).allowed(),
+                "A target promoted while overview loads must not be shown as an ordinary player");
     }
 
     @Test

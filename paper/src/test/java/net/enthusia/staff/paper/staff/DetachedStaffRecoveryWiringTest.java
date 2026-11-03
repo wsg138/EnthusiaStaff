@@ -29,8 +29,12 @@ class DetachedStaffRecoveryWiringTest {
         int end = source.indexOf("private boolean staleFromPriorRuntime", start);
         String method = source.substring(start, end);
 
-        assertTrue(method.contains("if (!scheduledRecoveryRetries.add(playerId))"));
-        assertTrue(method.contains("scheduledRecoveryRetries.remove(playerId)"));
+        assertTrue(method.contains("scheduledRecoveryRetries.putIfAbsent(playerId, ticket) != null"),
+                "One pending recovery token per player must reject duplicate retries");
+        assertTrue(method.contains("StaffRecoveryRetryOwnerDispatcher.forward("),
+                "Global timer must hand permission-sensitive recovery to the entity owner");
+        assertTrue(method.contains("scheduledRecoveryRetries.remove(playerId, ticket)"),
+                "Scheduling errors must release only the matching retry token");
         assertTrue(method.contains("20L"));
     }
 }

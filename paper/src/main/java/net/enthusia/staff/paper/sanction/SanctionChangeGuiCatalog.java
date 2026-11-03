@@ -2,6 +2,7 @@ package net.enthusia.staff.paper.sanction;
 
 import java.util.Arrays;
 import java.util.List;
+import java.util.Set;
 import java.util.function.Predicate;
 import net.enthusia.staff.domain.auth.Actor;
 import net.enthusia.staff.domain.auth.AuthorizationPolicy;
@@ -10,6 +11,7 @@ import net.enthusia.staff.domain.casefile.CaseState;
 import net.enthusia.staff.domain.casefile.SanctionReview;
 import net.enthusia.staff.domain.sanction.SanctionChangeAction;
 import net.enthusia.staff.domain.sanction.SanctionStatus;
+import net.enthusia.staff.domain.sanction.SanctionType;
 
 final class SanctionChangeGuiCatalog {
     private final AuthorizationPolicy authorization;
@@ -34,20 +36,25 @@ final class SanctionChangeGuiCatalog {
         SanctionChangeAction aliasAction = "removepunishment".equalsIgnoreCase(commandName)
                 ? null
                 : SanctionChangeAccess.aliasAction(commandName);
+        Set<SanctionType> eligibleTypes = SanctionChangeAccess.aliasTypes(commandName);
         return Arrays.stream(SanctionChangeAction.values())
                 .filter(action -> aliasAction == null || action == aliasAction)
                 .filter(action -> authorization.permits(actor, action.requiredModerationAction()))
                 .filter(action -> hasPermission.test(SanctionChangeAccess.permissionFor(action)))
-                .filter(action -> relevant(action, review))
+                .filter(action -> relevant(action, review, eligibleTypes))
                 .toList();
     }
 
-    private static boolean relevant(SanctionChangeAction action, CaseReview review) {
-        boolean pendingOrActive = review.sanctions().stream().anyMatch(sanction ->
+    private static boolean relevant(
+            SanctionChangeAction action, CaseReview review, Set<SanctionType> eligibleTypes
+    ) {
+        List<SanctionReview> eligible = review.sanctions().stream()
+                .filter(sanction -> eligibleTypes.contains(sanction.type())).toList();
+        boolean pendingOrActive = eligible.stream().anyMatch(sanction ->
                 sanction.status() == SanctionStatus.PENDING || sanction.status() == SanctionStatus.ACTIVE
         );
-        boolean revocable = review.sanctions().stream().anyMatch(SanctionReview::active);
-        boolean active = review.sanctions().stream()
+        boolean revocable = eligible.stream().anyMatch(SanctionReview::active);
+        boolean active = eligible.stream()
                 .anyMatch(sanction -> sanction.status() == SanctionStatus.ACTIVE);
         return switch (action) {
             case END_EARLY -> pendingOrActive;

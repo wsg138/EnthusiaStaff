@@ -1,6 +1,7 @@
 package net.enthusia.staff.paper.inventory;
 
 import net.enthusia.staff.paper.presentation.StaffMessageStyle;
+import net.enthusia.staff.paper.alert.StaffAlertOwnerDispatch;
 import io.papermc.paper.threadedregions.scheduler.ScheduledTask;
 import java.time.Clock;
 import java.time.Duration;
@@ -1830,10 +1831,11 @@ public final class ConfiscationCoordinator implements Listener, AutoCloseable {
     }
 
     private void alertStaff(String body) {
-        plugin.getServer().getGlobalRegionScheduler().execute(plugin, () ->
-                plugin.getServer().getOnlinePlayers().stream()
-                        .filter(player -> player.hasPermission("enthusiastaff.alerts"))
-                        .forEach(player -> player.sendMessage(StaffMessageStyle.style(Component.text(body)))));
+        StaffAlertOwnerDispatch.alert(
+                plugin,
+                StaffMessageStyle.style(Component.text(body)),
+                player -> player.hasPermission("enthusiastaff.alerts")
+        );
     }
 
     private boolean authorize(Player player, ModerationAction action) {

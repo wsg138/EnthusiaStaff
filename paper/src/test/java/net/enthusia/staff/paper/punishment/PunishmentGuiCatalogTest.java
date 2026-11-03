@@ -50,6 +50,57 @@ class PunishmentGuiCatalogTest {
     }
 
     @Test
+    void guidedProposalVisibilityUsesTheSameFilteredReasonListAsExpertMode() {
+        PunishmentGuiCatalog catalog = catalog();
+        var helperChat = catalog.reasons(actor(StaffRank.HELPER), "punish", CHAT);
+        assertTrue(PunishmentGuiRenderer.guidedCandidateAuthorized(CHAT_MOD, helperChat));
+        assertFalse(PunishmentGuiRenderer.guidedCandidateAuthorized(SAFETY_ADMIN, helperChat));
+        assertFalse(PunishmentGuiRenderer.guidedCandidateAuthorized("chat.unknown", helperChat));
+        assertFalse(PunishmentGuiRenderer.guidedCandidateAuthorized(null, helperChat));
+        assertFalse(PunishmentGuiRenderer.guidedCandidateAuthorized(CHAT_MOD, List.of()));
+    }
+
+    @Test
+    void guidedResultDoesNotOfferAutomaticActionForBanOrMixedOnlyPolicies() {
+        assertTrue(PunishmentGuiRenderer.guidedPolicyHasOrdinaryRemedy(
+                policy(CHAT_MOD, CHAT, StaffRank.MOD, SanctionType.MUTE)));
+        assertTrue(PunishmentGuiRenderer.guidedPolicyHasOrdinaryRemedy(
+                policy("chat.warning", CHAT, StaffRank.MOD, SanctionType.WARNING)));
+        assertFalse(PunishmentGuiRenderer.guidedPolicyHasOrdinaryRemedy(
+                policy("cheating.xray", "cheating", StaffRank.MOD, SanctionType.NETWORK_BAN)));
+
+        var ban = new SanctionSpec(SanctionType.NETWORK_BAN,
+                SanctionLength.temporary(Duration.ofDays(30)));
+        var confiscation = new SanctionSpec(SanctionType.INVENTORY_CONFISCATION,
+                SanctionLength.instant());
+        var mixed = new ReasonPolicy("cheating.xray", "cheating", "X-ray", 80, true,
+                List.of(new PunishmentStep(0, "Ban and confiscation",
+                        List.of(ban, confiscation))));
+        assertFalse(PunishmentGuiRenderer.guidedPolicyHasOrdinaryRemedy(mixed));
+
+        var permanentMute = new ReasonPolicy("hate.permanent-mute", "hate", "Permanent mute",
+                90, true, List.of(new PunishmentStep(0, "Permanent",
+                        List.of(new SanctionSpec(SanctionType.MUTE, SanctionLength.permanent())))));
+        assertFalse(PunishmentGuiRenderer.guidedPolicyHasOrdinaryRemedy(permanentMute));
+    }
+
+    @Test
+    void savedReviewReasonEligibilityRespondsToRankAndCommandChanges() {
+        PunishmentGuiCatalog catalog = catalog();
+        // A previously valid administrative draft cannot stay actionable when
+        // the viewer loses the policy-required rank.
+        assertTrue(catalog.maySelectReason(actor(StaffRank.ADMIN), "punish", SAFETY_ADMIN));
+        assertFalse(catalog.maySelectReason(actor(StaffRank.MOD), "punish", SAFETY_ADMIN));
+        assertFalse(catalog.maySelectReason(actor(StaffRank.HELPER), "punish", SAFETY_ADMIN));
+        // Developer is request-only, but still can select policy reasons.
+        assertTrue(catalog.maySelectReason(actor(StaffRank.DEVELOPER), "punish", SAFETY_ADMIN));
+        // Command-specific screens must not offer an incompatible saved reason.
+        assertTrue(catalog.maySelectReason(actor(StaffRank.MOD), MUTE_COMMAND, CHAT_MOD));
+        assertFalse(catalog.maySelectReason(actor(StaffRank.ADMIN), MUTE_COMMAND, SAFETY_ADMIN));
+        assertFalse(catalog.maySelectReason(actor(StaffRank.ADMIN), "punish", "missing.reason"));
+    }
+
+    @Test
     void helperSeesModeratorReasonsButNotAdministrativeReasons() {
         PunishmentGuiCatalog catalog = catalog();
 

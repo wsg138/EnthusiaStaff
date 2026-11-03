@@ -4,6 +4,12 @@ config-version: 1
 # ACTIVE is refused until a successful cutover record exists.
 operational-mode: BOOTSTRAP
 
+# OFF by default: guided punishment recommendations require policy review and
+# in-game acceptance testing before they replace normal /punish reason browsing.
+# This flag is read when opening a category. Prefer a normal restart when changing.
+guided-punishment:
+  enabled: false
+
 # The storage, workers, network, inventory, and channel sections are captured at
 # startup. Changing them requires a full server restart; /estaff reload rejects
 # the entire candidate when any of these values differ from the active snapshot.

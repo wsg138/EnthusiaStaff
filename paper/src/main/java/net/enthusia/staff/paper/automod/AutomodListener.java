@@ -1,6 +1,7 @@
 package net.enthusia.staff.paper.automod;
 
 import net.enthusia.staff.paper.presentation.StaffMessageStyle;
+import net.enthusia.staff.paper.PlayerMessageDispatcher;
 import io.papermc.paper.event.player.AsyncChatEvent;
 import java.time.Clock;
 import java.time.Duration;
@@ -23,7 +24,6 @@ import net.enthusia.staff.domain.auth.StaffRank;
 import net.enthusia.staff.domain.casefile.CaseVisibility;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
-import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
@@ -37,6 +37,7 @@ public final class AutomodListener implements Listener {
     private static final Actor SYSTEM_ACTOR = new Actor(new UUID(0L, 0L), "Enthusia Automod", StaffRank.SYSTEM);
 
     private final JavaPlugin plugin;
+    private final PlayerMessageDispatcher messages;
     private final Clock clock;
     private final StrictVariantMatcher matcher;
     private final Supplier<OperationalMode> mode;
@@ -55,6 +56,7 @@ public final class AutomodListener implements Listener {
             Consumer<UUID> invalidateMute
     ) {
         this.plugin = plugin;
+        this.messages = new PlayerMessageDispatcher(plugin);
         this.clock = clock;
         this.matcher = matcher;
         this.mode = mode;
@@ -125,14 +127,30 @@ public final class AutomodListener implements Listener {
     }
 
     private void alertStaff(String message) {
-        plugin.getServer().getGlobalRegionScheduler().execute(plugin, () ->
-                plugin.getServer().getOnlinePlayers().stream()
-                        .filter(player -> player.hasPermission("enthusiastaff.alerts"))
-                        .forEach(player -> player.sendMessage(StaffMessageStyle.style(Component.text(message)))));
+        Component styled = StaffMessageStyle.style(Component.text(message));
+        try {
+            plugin.getServer().getGlobalRegionScheduler().execute(plugin, () -> {
+                try {
+                    AutomodOwnerAlertDispatch.dispatch(
+                            plugin.getServer().getOnlinePlayers(),
+                            (player, delivery) -> player.getScheduler().execute(
+                                    plugin, delivery, null, 1L),
+                            player -> player.isOnline() && player.hasPermission("enthusiastaff.alerts"),
+                            player -> player.sendMessage(styled),
+                            failure -> plugin.getLogger().log(
+                                    Level.WARNING, "Automod staff alert delivery failed", failure)
+                    );
+                } catch (RuntimeException failure) {
+                    plugin.getLogger().log(Level.WARNING, "Automod staff alert enumeration failed", failure);
+                }
+            });
+        } catch (RuntimeException failure) {
+            plugin.getLogger().log(Level.WARNING, "Automod staff alert scheduling failed", failure);
+        }
     }
 
-    private void notify(CommandSender sender, String message) {
-        plugin.getServer().getGlobalRegionScheduler().execute(plugin, () -> sender.sendMessage(StaffMessageStyle.style(Component.text(message))));
+    private void notify(Player sender, String message) {
+        messages.send(sender, StaffMessageStyle.style(Component.text(message)));
     }
 
     private record Detection(int fingerprint, Instant detectedAt) {

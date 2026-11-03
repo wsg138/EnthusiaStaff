@@ -17,6 +17,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -30,6 +31,7 @@ import net.enthusia.staff.domain.sanction.SanctionChangeAction;
 import net.enthusia.staff.domain.sanction.SanctionChangeExpectation;
 import net.enthusia.staff.domain.sanction.SanctionChangeRequest;
 import net.enthusia.staff.domain.sanction.SanctionChangeResult;
+import net.enthusia.staff.domain.sanction.SanctionType;
 import net.enthusia.staff.persistence.MariaDb;
 import net.enthusia.staff.persistence.MariaDbRuntime;
 import org.junit.jupiter.api.BeforeAll;
@@ -149,6 +151,79 @@ class CaseSanctionHierarchyIntegrationTest {
         assertEquals(2, count(AUDIT_EVENTS));
         assertEquals(2, count("network_outbox"));
         assertEquals(2, count("discord_outbox"));
+    }
+
+    @Test
+    void aliasTypeScopeChangesOnlyMatchingSanctionsWithinMixedCase() throws Exception {
+        Fixture mixed = seed(40, HELPER_RANK);
+        UUID mute = uuid(940);
+        UUID warning = uuid(941);
+        insertAdditionalSanction(mixed, mute, SanctionType.MUTE, "ACTIVE");
+        insertAdditionalSanction(mixed, warning, SanctionType.WARNING, "APPLIED");
+
+        try (MariaDbRuntime runtime = MariaDb.initialize(databaseConfig())) {
+            SanctionChangeRequest endBan = new SanctionChangeRequest(
+                    new IdempotencyKey("scoped-unban-mixed-case"),
+                    mixed.caseId(), MODERATOR, SanctionChangeAction.END_EARLY,
+                    Optional.empty(), "Only end the ban",
+                    Optional.empty(), Optional.of(Set.of(
+                            SanctionType.BAN, SanctionType.NETWORK_BAN,
+                            SanctionType.NETWORK_IDENTITY_BAN))
+            );
+            assertApplied(runtime.sanctionMutationStore().apply(endBan), 1, false);
+            assertEquals("ENDED_EARLY", sanctionStatus(mixed));
+            assertEquals("ACTIVE", sanctionStatus(mute));
+            assertEquals("APPLIED", sanctionStatus(warning));
+
+            SanctionChangeRequest unmute = new SanctionChangeRequest(
+                    new IdempotencyKey("scoped-unmute-mixed-case"),
+                    mixed.caseId(), MODERATOR, SanctionChangeAction.END_EARLY,
+                    Optional.empty(), "Only end the mute",
+                    Optional.empty(), Optional.of(Set.of(SanctionType.MUTE, SanctionType.PUBLIC_MUTE))
+            );
+            assertApplied(runtime.sanctionMutationStore().apply(unmute), 1, false);
+            assertEquals("ENDED_EARLY", sanctionStatus(mute));
+            assertEquals("APPLIED", sanctionStatus(warning));
+
+            SanctionChangeRequest unwarn = new SanctionChangeRequest(
+                    new IdempotencyKey("scoped-unwarn-mixed-case"),
+                    mixed.caseId(), MODERATOR, SanctionChangeAction.REVOKE,
+                    Optional.empty(), "Only revoke the warning",
+                    Optional.empty(), Optional.of(Set.of(SanctionType.WARNING))
+            );
+            assertApplied(runtime.sanctionMutationStore().apply(unwarn), 1, false);
+            assertEquals("REVOKED", sanctionStatus(warning));
+            assertEquals("ENDED_EARLY", sanctionStatus(mixed));
+            assertEquals("ENDED_EARLY", sanctionStatus(mute));
+
+            SanctionChangeRequest unmatched = new SanctionChangeRequest(
+                    new IdempotencyKey("scoped-no-matching-active-sanctions"),
+                    mixed.caseId(), MODERATOR, SanctionChangeAction.END_EARLY,
+                    Optional.empty(), "Do not mutate other types",
+                    Optional.empty(), Optional.of(Set.of(SanctionType.PUBLIC_MUTE))
+            );
+            SanctionChangeResult.Rejected rejected = assertInstanceOf(
+                    SanctionChangeResult.Rejected.class,
+                    runtime.sanctionMutationStore().apply(unmatched)
+            );
+            assertEquals("NO_ACTIVE_SANCTIONS", rejected.code());
+        }
+        assertEquals(3, count(SANCTION_EVENTS));
+        assertEquals(3, count(AUDIT_EVENTS));
+    }
+
+    @Test
+    void explicitCaseWideEndStillChangesEveryEligibleSanctionType() throws Exception {
+        Fixture mixed = seed(42, HELPER_RANK);
+        UUID mute = uuid(942);
+        insertAdditionalSanction(mixed, mute, SanctionType.MUTE, "ACTIVE");
+        try (MariaDbRuntime runtime = MariaDb.initialize(databaseConfig())) {
+            assertApplied(runtime.sanctionMutationStore().apply(
+                    request(mixed, MODERATOR, "explicit-case-wide-end")), 2, false);
+        }
+        assertEquals("ENDED_EARLY", sanctionStatus(mixed));
+        assertEquals("ENDED_EARLY", sanctionStatus(mute));
+        assertEquals(2, count(SANCTION_EVENTS));
     }
 
     @Test
@@ -362,6 +437,43 @@ class CaseSanctionHierarchyIntegrationTest {
                 """)) {
             statement.setString(1, fixture.caseId().value());
             assertEquals(1, statement.executeUpdate());
+        }
+    }
+
+    private static void insertAdditionalSanction(
+            Fixture fixture, UUID sanctionId, SanctionType type, String status
+    ) throws SQLException {
+        try (HikariDataSource dataSource = MariaDb.open(databaseConfig());
+             Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement("""
+                     INSERT INTO sanctions(
+                         sanction_id, case_id, target_id, sanction_type, status,
+                         issued_at, activated_at, expiration_at, ended_at, revision)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, 0)
+                     """)) {
+            Instant issued = Instant.now().minusSeconds(3600);
+            statement.setBytes(1, MariaDbIntegrationSupport.uuidBytes(sanctionId));
+            statement.setString(2, fixture.caseId().value());
+            statement.setBytes(3, MariaDbIntegrationSupport.uuidBytes(fixture.subjectId()));
+            statement.setString(4, type.name());
+            statement.setString(5, status);
+            statement.setTimestamp(6, Timestamp.from(issued));
+            statement.setTimestamp(7, Timestamp.from(issued));
+            statement.setTimestamp(8, Timestamp.from(Instant.now().plusSeconds(7200)));
+            assertEquals(1, statement.executeUpdate());
+        }
+    }
+
+    private static String sanctionStatus(UUID sanctionId) throws SQLException {
+        try (HikariDataSource dataSource = MariaDb.open(databaseConfig());
+             Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement(
+                     "SELECT status FROM sanctions WHERE sanction_id = ?")) {
+            statement.setBytes(1, MariaDbIntegrationSupport.uuidBytes(sanctionId));
+            try (ResultSet result = statement.executeQuery()) {
+                assertTrue(result.next());
+                return result.getString(1);
+            }
         }
     }
 

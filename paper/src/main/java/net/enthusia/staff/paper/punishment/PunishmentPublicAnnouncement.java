@@ -2,6 +2,9 @@ package net.enthusia.staff.paper.punishment;
 
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
+import net.enthusia.staff.domain.application.PunishmentDraft;
+import net.enthusia.staff.domain.ports.ReasonPolicyRepository;
 import java.util.stream.Collectors;
 import net.enthusia.staff.domain.casefile.CaseVisibility;
 import net.enthusia.staff.domain.sanction.SanctionSpec;
@@ -27,6 +30,24 @@ final class PunishmentPublicAnnouncement {
         plugin.getServer().getGlobalRegionScheduler().execute(
                 plugin, () -> plugin.getServer().broadcast(notice)
         );
+    }
+
+    /**
+     * A resumed GUI review does not retain its transient assessment. Resolve
+     * only the original policy version before announcing a newly committed
+     * public draft; never substitute a different reason after a policy reload.
+     */
+    static Optional<String> publicReasonForConfirmedDraft(
+            PunishmentDraft draft, ReasonPolicyRepository policies) {
+        Objects.requireNonNull(draft, "draft");
+        Objects.requireNonNull(policies, "policies");
+        if (draft.visibility() != CaseVisibility.PUBLIC) {
+            return Optional.empty();
+        }
+        return policies.resolve(draft.reasonId())
+                .filter(current -> current.version().equals(
+                        draft.expectation().configurationVersion()))
+                .map(current -> current.policy().publicReason());
     }
 
     static Component message(String playerName, List<SanctionSpec> sanctions, String publicReason) {

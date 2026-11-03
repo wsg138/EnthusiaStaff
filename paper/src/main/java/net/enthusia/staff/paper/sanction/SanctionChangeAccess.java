@@ -4,6 +4,7 @@ import java.util.Arrays;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Optional;
 import java.util.Set;
 import net.enthusia.staff.domain.auth.Actor;
 import net.enthusia.staff.domain.auth.AuthorizationPolicy;
@@ -38,6 +39,20 @@ public final class SanctionChangeAccess {
             case "unmute" -> Set.of(SanctionType.MUTE, SanctionType.PUBLIC_MUTE);
             case "removewarning", "unwarn" -> Set.of(SanctionType.WARNING);
             default -> ALL_TYPES;
+        };
+    }
+
+    /**
+     * Shortcuts operate only on their named sanction family; the explicit
+     * /removepunishment command intentionally remains case-wide.
+     */
+    public static Optional<Set<SanctionType>> typeScopeForCommand(String commandName) {
+        return switch (commandName.toLowerCase(Locale.ROOT)) {
+            case "removepunishment" -> Optional.empty();
+            case "unban", "unmute", "unwarn", "removewarning" ->
+                    Optional.of(aliasTypes(commandName));
+            default -> throw new IllegalArgumentException(
+                    "Unsupported sanction-change command: " + commandName);
         };
     }
 

@@ -6,6 +6,8 @@ import static net.enthusia.staff.paper.punishment.PunishmentRequestControllerHar
 import static net.enthusia.staff.paper.punishment.PunishmentRequestControllerHarness.REVIEWER_ID;
 import static net.enthusia.staff.paper.punishment.PunishmentRequestControllerHarness.acquire;
 import static net.enthusia.staff.paper.punishment.PunishmentRequestControllerHarness.click;
+import static net.enthusia.staff.paper.punishment.PunishmentRequestControllerHarness.close;
+import static net.enthusia.staff.paper.punishment.PunishmentRequestControllerHarness.viewForState;
 import static net.enthusia.staff.paper.punishment.PunishmentRequestControllerHarness.deniedRequest;
 import static net.enthusia.staff.paper.punishment.PunishmentRequestControllerHarness.fixture;
 import static net.enthusia.staff.paper.punishment.PunishmentRequestControllerHarness.pending;
@@ -20,6 +22,8 @@ import net.enthusia.staff.paper.punishment.PunishmentRequestControllerHarness.Pl
 import net.enthusia.staff.paper.punishment.PunishmentRequestControllerHarness.SchedulerHarness;
 import net.enthusia.staff.paper.punishment.PunishmentRequestControllerHarness.SchedulerMode;
 import org.bukkit.event.inventory.InventoryClickEvent;
+import org.bukkit.event.player.PlayerQuitEvent;
+import net.kyori.adventure.text.Component;
 import org.junit.jupiter.api.Test;
 
 class PunishmentRequestControllerSchedulingIntegrationTest {
@@ -135,9 +139,9 @@ class PunishmentRequestControllerSchedulingIntegrationTest {
         assertEquals(1, fixture.store().approveTransitions);
         assertEquals(PunishmentRequestStatus.APPROVED, fixture.store().current.status());
         assertEquals(1, fixture.player().messages.get());
-        assertEquals(1, fixture.scheduler().scheduled.get());
+        assertEquals(2, fixture.scheduler().scheduled.get(),
+                "Worker authorization and result presentation each use the entity scheduler");
 
-        fixture.scheduler().mode = SchedulerMode.HOLD;
         fixture.controller().onInventoryClick(click(
                 fixture.player().proxy(),
                 review(lease),
@@ -146,7 +150,145 @@ class PunishmentRequestControllerSchedulingIntegrationTest {
 
         assertEquals(1, fixture.store().approveTransitions);
         assertEquals(PunishmentRequestStatus.APPROVED, fixture.store().current.status());
-        assertEquals(2, fixture.scheduler().scheduled.get());
+        assertEquals(4, fixture.scheduler().scheduled.get());
+    }
+
+    @Test
+    void completedDecisionAcknowledgesCommitWithoutReplacingUnrelatedInventory() {
+        Fixture fixture = fixture(pending(StaffRank.MOD), SchedulerMode.HOLD_AFTER_FIRST);
+        PunishmentApprovalLease lease = acquire(fixture);
+        fixture.controller().onInventoryClick(click(
+                fixture.player().proxy(), review(lease), PunishmentRequestGuiRenderer.APPROVE_SLOT
+        ));
+        assertEquals(1, fixture.store().approveTransitions);
+        assertEquals(1, fixture.scheduler().heldActions.size(),
+                "Authorization completed, but decision presentation is queued");
+
+        // Staff opened a different inventory before the scheduled acknowledgement.
+        fixture.player().openView = viewForState(fixture.player().proxy(),
+                new PunishmentRequestGuiState.Details(
+                        new PunishmentRequestGuiState.RequestView(deniedRequest(), "Other"), 0));
+        fixture.scheduler().heldActions.removeFirst().run();
+
+        assertEquals(1, fixture.player().messages.get(),
+                "Committed decision still requires its acknowledgement");
+        assertEquals(0, fixture.player().openInventories.get(),
+                "A delayed decision must not overwrite the inventory opened afterward");
+        assertEquals(PunishmentRequestStatus.APPROVED, fixture.store().current.status());
+    }
+
+    @Test
+    void closedLaterPunishmentPageIsNotReopenedByOlderDecisionAcknowledgement() {
+        for (boolean approve : new boolean[]{true, false}) {
+            Fixture fixture = fixture(pending(StaffRank.MOD), SchedulerMode.HOLD_AFTER_FIRST);
+            PunishmentApprovalLease lease = acquire(fixture);
+            PunishmentRequestGuiState state = approve
+                    ? review(lease) : new PunishmentRequestGuiState.Denial(lease, "Target", 0);
+            fixture.controller().onInventoryClick(click(
+                    fixture.player().proxy(), state,
+                    approve ? PunishmentRequestGuiRenderer.APPROVE_SLOT
+                            : PunishmentRequestDenialPreset.values()[0].slot()
+            ));
+            assertEquals(1, fixture.scheduler().heldActions.size());
+
+            // Staff opens and closes another page before the older decision
+            // acknowledgement arrives. No inventory remains open to compare.
+            var laterPage = new PunishmentRequestGuiState.Details(
+                    new PunishmentRequestGuiState.RequestView(deniedRequest(), "Other"), 0);
+            fixture.player().openView = viewForState(fixture.player().proxy(), laterPage);
+            fixture.controller().onInventoryClose(close(fixture.player().proxy(), laterPage));
+            fixture.player().openView = null;
+            fixture.scheduler().heldActions.removeFirst().run();
+
+            assertEquals(1, fixture.player().messages.get(),
+                    "The durable decision must still be acknowledged");
+            assertEquals(0, fixture.player().openInventories.get(),
+                    "A delayed decision must not reopen after a newer page was closed");
+            assertEquals(approve ? PunishmentRequestStatus.APPROVED : PunishmentRequestStatus.DENIED,
+                    fixture.store().current.status());
+        }
+    }
+
+    @Test
+    void ownDecisionCloseStillAllowsDelayedDetailsPresentation() {
+        for (boolean approve : new boolean[]{true, false}) {
+            Fixture fixture = fixture(pending(StaffRank.MOD), SchedulerMode.HOLD_AFTER_FIRST);
+            PunishmentApprovalLease lease = acquire(fixture);
+            PunishmentRequestGuiState state = approve
+                    ? review(lease) : new PunishmentRequestGuiState.Denial(lease, "Target", 0);
+            fixture.player().onCloseInventory = () ->
+                    fixture.controller().onInventoryClose(close(fixture.player().proxy(), state));
+
+            fixture.controller().onInventoryClick(click(
+                    fixture.player().proxy(), state,
+                    approve ? PunishmentRequestGuiRenderer.APPROVE_SLOT
+                            : PunishmentRequestDenialPreset.values()[0].slot()
+            ));
+            assertEquals(1, fixture.scheduler().heldActions.size());
+            fixture.scheduler().heldActions.removeFirst().run();
+
+            assertEquals(1, fixture.player().openInventories.get(),
+                    "Closing the original leased page must not suppress its own acknowledgement");
+            assertEquals(1, fixture.player().messages.get());
+        }
+    }
+
+    @Test
+    void laterQueueNavigationIsNotOverwrittenByEarlierDecisionAcknowledgement() {
+        Fixture fixture = fixture(pending(StaffRank.MOD), SchedulerMode.HOLD_AFTER_FIRST);
+        PunishmentApprovalLease lease = acquire(fixture);
+        fixture.controller().onInventoryClick(click(
+                fixture.player().proxy(), review(lease), PunishmentRequestGuiRenderer.APPROVE_SLOT
+        ));
+        assertEquals(1, fixture.scheduler().heldActions.size());
+
+        assertTrue(fixture.controller().openQueue(fixture.player().proxy()));
+        assertEquals(2, fixture.scheduler().heldActions.size());
+        // A later queue page is already visible when the older decision arrives.
+        // The static queue renderer needs a live Bukkit registry, so model the
+        // newly opened queue inventory directly in this controller harness.
+        fixture.player().openView = viewForState(fixture.player().proxy(),
+                PunishmentRequestGuiState.Queue.page(java.util.List.of(), 0,
+                        PunishmentRequestGuiRenderer.QUEUE_CONTENT_SIZE));
+        fixture.scheduler().heldActions.removeFirst().run();
+
+        assertEquals(0, fixture.player().openInventories.get());
+        assertEquals(1, fixture.player().messages.get());
+        assertEquals(1, fixture.store().approveTransitions);
+    }
+
+    @Test
+    void sameLeasedReviewCanReceiveImmediateDecisionPresentation() {
+        Fixture fixture = fixture(pending(StaffRank.MOD), SchedulerMode.RUN);
+        PunishmentApprovalLease lease = acquire(fixture);
+        fixture.player().openView = viewForState(fixture.player().proxy(), review(lease));
+
+        fixture.controller().onInventoryClick(click(
+                fixture.player().proxy(), review(lease), PunishmentRequestGuiRenderer.APPROVE_SLOT
+        ));
+
+        assertEquals(1, fixture.store().approveTransitions);
+        assertEquals(1, fixture.player().openInventories.get(),
+                "An immediate acknowledgement must still display its own completed review");
+    }
+
+    @Test
+    void lostAcknowledgementAfterDurableApprovalDoesNotFalselyClaimNoAction() {
+        Fixture fixture = fixture(pending(StaffRank.MOD), SchedulerMode.RUN);
+        PunishmentApprovalLease lease = acquire(fixture);
+        fixture.store().failAfterApprove = true;
+
+        fixture.controller().onInventoryClick(click(
+                fixture.player().proxy(), review(lease), PunishmentRequestGuiRenderer.APPROVE_SLOT
+        ));
+
+        assertEquals(1, fixture.store().approveTransitions);
+        assertEquals(PunishmentRequestStatus.APPROVED, fixture.store().current.status());
+        assertEquals(1, fixture.player().messages.get());
+        assertEquals(1, fixture.logger().severe.get());
+        assertTrue(fixture.player().lastMessage.contains("may have been committed"));
+        assertTrue(fixture.player().lastMessage.contains("Check case history"));
+        assertTrue(!fixture.player().lastMessage.contains("no action was taken"));
     }
 
     @Test
@@ -173,12 +315,12 @@ class PunishmentRequestControllerSchedulingIntegrationTest {
         assertEquals(1, fixture.store().approveTransitions);
         assertEquals(0, fixture.store().denyTransitions);
         assertEquals(PunishmentRequestStatus.APPROVED, fixture.store().current.status());
-        assertEquals(2, fixture.scheduler().scheduled.get());
+        assertEquals(3, fixture.scheduler().scheduled.get());
     }
 
     @Test
     void deniedDecisionSurvivesPresentationRetirementAndRetryDoesNotDuplicateIt() {
-        Fixture fixture = fixture(pending(StaffRank.MOD), SchedulerMode.RETIRE);
+        Fixture fixture = fixture(pending(StaffRank.MOD), SchedulerMode.RETIRE_AFTER_FIRST);
         PunishmentApprovalLease lease = acquire(fixture);
         PunishmentRequestGuiState.Denial denial = new PunishmentRequestGuiState.Denial(lease, "Target", 0);
         int presetSlot = PunishmentRequestDenialPreset.values()[0].slot();
@@ -188,13 +330,568 @@ class PunishmentRequestControllerSchedulingIntegrationTest {
         assertEquals(1, fixture.store().denyTransitions);
         assertEquals(PunishmentRequestStatus.DENIED, fixture.store().current.status());
         assertEquals(0, fixture.player().messages.get());
-        assertEquals(1, fixture.scheduler().scheduled.get());
+        assertEquals(2, fixture.scheduler().scheduled.get());
 
         fixture.controller().onInventoryClick(click(fixture.player().proxy(), denial, presetSlot));
 
         assertEquals(1, fixture.store().denyTransitions);
         assertEquals(PunishmentRequestStatus.DENIED, fixture.store().current.status());
-        assertEquals(2, fixture.scheduler().scheduled.get());
+        assertEquals(3, fixture.scheduler().scheduled.get());
+    }
+
+    @Test
+    void queuedApprovalListDoesNotRenderAfterReviewerLosesPermission() {
+        Fixture fixture = fixture(pending(StaffRank.MOD), SchedulerMode.HOLD);
+        assertTrue(fixture.controller().openQueue(fixture.player().proxy()));
+        assertEquals(1, fixture.scheduler().heldActions.size());
+
+        fixture.player().authorized = false;
+        fixture.scheduler().heldActions.removeFirst().run();
+
+        assertEquals(0, fixture.player().openInventories.get());
+        assertEquals(1, fixture.player().closedInventories.get());
+        assertEquals(1, fixture.player().messages.get());
+        assertEquals(1, fixture.store().pendingReads);
+    }
+
+    @Test
+    void resolvedRequestDetailsDoNotRenderAfterReviewerLosesPermission() {
+        Fixture fixture = fixture(deniedRequest(), SchedulerMode.HOLD);
+        assertTrue(fixture.controller().openReview(fixture.player().proxy(), REQUEST_ID));
+        assertEquals(1, fixture.scheduler().heldActions.size());
+
+        fixture.player().authorized = false;
+        fixture.scheduler().heldActions.removeFirst().run();
+
+        assertEquals(0, fixture.player().openInventories.get());
+        assertEquals(1, fixture.player().closedInventories.get());
+        assertEquals(1, fixture.player().messages.get());
+    }
+
+    @Test
+    void pendingReviewDoesNotRenderAndReleasesLeaseAfterReviewerLosesPermission() {
+        Fixture fixture = fixture(pending(StaffRank.MOD), SchedulerMode.HOLD);
+        assertTrue(fixture.controller().openReview(fixture.player().proxy(), REQUEST_ID));
+        assertEquals(1, fixture.store().acquireCalls);
+        assertEquals(1, fixture.scheduler().heldActions.size());
+
+        fixture.player().authorized = false;
+        fixture.scheduler().heldActions.removeFirst().run();
+
+        assertEquals(0, fixture.player().openInventories.get());
+        assertEquals(1, fixture.player().closedInventories.get());
+        assertEquals(1, fixture.player().messages.get());
+        assertEquals(1, fixture.store().abandonCalls);
+    }
+
+    @Test
+    void retiredReviewerReleasesUnpresentedLeaseExactlyOnce() {
+        Fixture fixture = fixture(pending(StaffRank.MOD), SchedulerMode.RETIRE_FALSE);
+        assertTrue(fixture.controller().openReview(fixture.player().proxy(), REQUEST_ID));
+
+        assertEquals(1, fixture.store().acquireCalls);
+        assertEquals(1, fixture.store().abandonCalls);
+        assertEquals(0, fixture.player().openInventories.get());
+        assertEquals(1, fixture.logger().retired.get());
+    }
+
+    @Test
+    void committedDecisionIsAcknowledgedWithoutRevealingDetailsAfterDemotion() {
+        Fixture fixture = fixture(pending(StaffRank.MOD), SchedulerMode.HOLD_AFTER_FIRST);
+        PunishmentApprovalLease lease = acquire(fixture);
+        fixture.controller().onInventoryClick(click(
+                fixture.player().proxy(), review(lease), PunishmentRequestGuiRenderer.APPROVE_SLOT));
+        assertEquals(PunishmentRequestStatus.APPROVED, fixture.store().current.status());
+        assertEquals(1, fixture.scheduler().heldActions.size());
+
+        fixture.player().authorized = false;
+        fixture.scheduler().heldActions.removeFirst().run();
+
+        assertEquals(1, fixture.store().approveTransitions);
+        assertEquals(0, fixture.player().openInventories.get());
+        assertTrue(fixture.player().messages.get() >= 1);
+        assertTrue(fixture.player().closedInventories.get() >= 2);
+    }
+
+    @Test
+    void alreadyOpenReviewCannotBeClickedAfterReviewerLosesPermission() {
+        Fixture fixture = fixture(pending(StaffRank.MOD), SchedulerMode.RUN);
+        PunishmentApprovalLease lease = acquire(fixture);
+        fixture.player().authorized = false;
+
+        fixture.controller().onInventoryClick(click(
+                fixture.player().proxy(), review(lease), PunishmentRequestGuiRenderer.DENY_SLOT));
+
+        assertEquals(0, fixture.store().approveTransitions);
+        assertEquals(0, fixture.store().denyTransitions);
+        assertEquals(1, fixture.player().closedInventories.get());
+        assertEquals(1, fixture.player().messages.get());
+    }
+
+    @Test
+    void adminOnlyPendingRequestIsNotPresentedAfterReviewerDemotesToMod() {
+        Fixture fixture = fixture(pending(StaffRank.ADMIN), SchedulerMode.HOLD);
+        fixture.player().rank = StaffRank.ADMIN;
+        assertTrue(fixture.controller().openReview(fixture.player().proxy(), REQUEST_ID));
+        assertEquals(1, fixture.store().acquireCalls);
+        assertEquals(1, fixture.scheduler().heldActions.size());
+
+        fixture.player().rank = StaffRank.MOD; // Still has review permission, not required rank.
+        fixture.scheduler().heldActions.removeFirst().run();
+
+        assertEquals(0, fixture.player().openInventories.get());
+        assertEquals(1, fixture.player().closedInventories.get());
+        assertEquals(1, fixture.store().abandonCalls);
+    }
+
+    @Test
+    void adminOnlyResolvedDetailsAreNotPresentedAfterReviewerDemotesToMod() {
+        var adminRequest = pending(StaffRank.ADMIN);
+        var resolved = new PunishmentApprovalRequest(
+                adminRequest.requestId(), adminRequest.submissionKey(),
+                adminRequest.proposal(), adminRequest.createdAt(), adminRequest.expiresAt(),
+                PunishmentRequestStatus.DENIED, 1, REVIEWER_ID, "Test denial", null,
+                PunishmentRequestControllerHarness.NOW.plusSeconds(1));
+        Fixture fixture = fixture(resolved, SchedulerMode.HOLD);
+        fixture.player().rank = StaffRank.ADMIN;
+        assertTrue(fixture.controller().openReview(fixture.player().proxy(), REQUEST_ID));
+        assertEquals(1, fixture.scheduler().heldActions.size());
+
+        fixture.player().rank = StaffRank.MOD;
+        fixture.scheduler().heldActions.removeFirst().run();
+
+        assertEquals(0, fixture.player().openInventories.get());
+        assertEquals(1, fixture.player().closedInventories.get());
+    }
+
+    @Test
+    void queueSnapshotIsFilteredAgainstCurrentRankBeforePresentation() {
+        PunishmentApprovalRequest adminOnly = pending(StaffRank.ADMIN);
+        Fixture fixture = fixture(adminOnly, SchedulerMode.HOLD);
+        var loaded = java.util.List.of(
+                new PunishmentRequestGuiState.RequestView(adminOnly, "Target"));
+        var admin = new net.enthusia.staff.domain.auth.Actor(REVIEWER_ID, "Reviewer", StaffRank.ADMIN);
+        var mod = new net.enthusia.staff.domain.auth.Actor(REVIEWER_ID, "Reviewer", StaffRank.MOD);
+
+        assertEquals(1, PunishmentRequestGuiController.visibleRequestsForActor(
+                loaded, admin, fixture.service()).size());
+        assertEquals(0, PunishmentRequestGuiController.visibleRequestsForActor(
+                loaded, mod, fixture.service()).size());
+    }
+
+    @Test
+    void alreadyOpenAdminOnlyReviewCannotBeDecidedAfterDemotionToMod() {
+        Fixture fixture = fixture(pending(StaffRank.ADMIN), SchedulerMode.RUN);
+        fixture.player().rank = StaffRank.ADMIN;
+        var admin = new net.enthusia.staff.domain.auth.Actor(REVIEWER_ID, "Reviewer", StaffRank.ADMIN);
+        PunishmentApprovalLease lease = org.junit.jupiter.api.Assertions.assertInstanceOf(
+                net.enthusia.staff.domain.application.PunishmentRequestResult.Leased.class,
+                fixture.service().acquire(REQUEST_ID, admin)).lease();
+        fixture.player().rank = StaffRank.MOD;
+
+        fixture.controller().onInventoryClick(click(
+                fixture.player().proxy(), review(lease), PunishmentRequestGuiRenderer.APPROVE_SLOT));
+
+        assertEquals(0, fixture.store().approveTransitions);
+        assertEquals(0, fixture.store().denyTransitions);
+        assertEquals(1, fixture.player().closedInventories.get());
+        assertEquals(0, fixture.scheduler().scheduled.get(),
+                "A revoked rank must not enqueue an approval decision worker");
+    }
+
+    @Test
+    void approvedAdminOnlyDecisionAcknowledgesCommitWithoutDetailsAfterDemotion() {
+        Fixture fixture = fixture(pending(StaffRank.ADMIN), SchedulerMode.HOLD_AFTER_FIRST);
+        fixture.player().rank = StaffRank.ADMIN;
+        var admin = new net.enthusia.staff.domain.auth.Actor(REVIEWER_ID, "Reviewer", StaffRank.ADMIN);
+        PunishmentApprovalLease lease = org.junit.jupiter.api.Assertions.assertInstanceOf(
+                net.enthusia.staff.domain.application.PunishmentRequestResult.Leased.class,
+                fixture.service().acquire(REQUEST_ID, admin)).lease();
+
+        fixture.controller().onInventoryClick(click(
+                fixture.player().proxy(), review(lease), PunishmentRequestGuiRenderer.APPROVE_SLOT));
+        assertEquals(1, fixture.store().approveTransitions);
+        assertEquals(1, fixture.scheduler().heldActions.size());
+
+        fixture.player().rank = StaffRank.MOD;
+        fixture.scheduler().heldActions.removeFirst().run();
+
+        assertEquals(1, fixture.store().approveTransitions);
+        assertEquals(0, fixture.player().openInventories.get());
+        assertTrue(fixture.player().messages.get() >= 1);
+    }
+
+    @Test
+    void retiredReviewerBeforeWorkerPreflightCannotCommitAndReleasesLease() {
+        Fixture fixture = fixture(pending(StaffRank.MOD), SchedulerMode.RETIRE);
+        PunishmentApprovalLease lease = acquire(fixture);
+
+        fixture.controller().onInventoryClick(click(
+                fixture.player().proxy(), review(lease), PunishmentRequestGuiRenderer.APPROVE_SLOT));
+
+        assertEquals(0, fixture.store().approveTransitions);
+        assertEquals(PunishmentRequestStatus.PENDING, fixture.store().current.status());
+        assertEquals(1, fixture.store().abandonCalls);
+    }
+
+    @Test
+    void queuedApprovalMustRecheckPermissionAfterClickBeforeWorkerCommits() {
+        Fixture fixture = fixture(pending(StaffRank.MOD), SchedulerMode.RUN);
+        PunishmentApprovalLease lease = acquire(fixture);
+        fixture.executor().hold = true;
+
+        fixture.controller().onInventoryClick(click(
+                fixture.player().proxy(), review(lease), PunishmentRequestGuiRenderer.APPROVE_SLOT));
+        assertEquals(0, fixture.store().approveTransitions);
+        assertEquals(1, fixture.executor().heldActions.size());
+
+        fixture.player().authorized = false;
+        fixture.executor().hold = false;
+        fixture.executor().runNext();
+
+        assertEquals(0, fixture.store().approveTransitions,
+                "A revoked reviewer must not approve with the Actor captured at click time");
+        assertEquals(PunishmentRequestStatus.PENDING, fixture.store().current.status());
+        assertEquals(1, fixture.store().abandonCalls,
+                "Rejected queued decisions should release the held lease");
+    }
+
+    @Test
+    void queuedApprovalAndDenialMustRecheckRequestRankAfterClick() {
+        for (boolean approve : new boolean[]{true, false}) {
+            Fixture fixture = fixture(pending(StaffRank.ADMIN), SchedulerMode.RUN);
+            fixture.player().rank = StaffRank.ADMIN;
+            var admin = new net.enthusia.staff.domain.auth.Actor(
+                    REVIEWER_ID, "Reviewer", StaffRank.ADMIN);
+            PunishmentApprovalLease lease = org.junit.jupiter.api.Assertions.assertInstanceOf(
+                    net.enthusia.staff.domain.application.PunishmentRequestResult.Leased.class,
+                    fixture.service().acquire(REQUEST_ID, admin)).lease();
+            fixture.executor().hold = true;
+
+            if (approve) {
+                fixture.controller().onInventoryClick(click(
+                        fixture.player().proxy(), review(lease), PunishmentRequestGuiRenderer.APPROVE_SLOT));
+            } else {
+                fixture.controller().onInventoryClick(click(
+                        fixture.player().proxy(),
+                        new PunishmentRequestGuiState.Denial(lease, "Target", 0),
+                        PunishmentRequestDenialPreset.values()[0].slot()));
+            }
+            assertEquals(1, fixture.executor().heldActions.size());
+
+            fixture.player().rank = StaffRank.MOD; // Generic review permission remains.
+            fixture.executor().hold = false;
+            fixture.executor().runNext();
+
+            assertEquals(0, fixture.store().approveTransitions);
+            assertEquals(0, fixture.store().denyTransitions);
+            assertEquals(PunishmentRequestStatus.PENDING, fixture.store().current.status());
+            assertEquals(1, fixture.store().abandonCalls);
+        }
+    }
+
+    @Test
+    void rejectedDecisionWorkerAdmissionKeepsLeasedReviewOpenForSafeRetry() {
+        for (boolean approve : new boolean[]{true, false}) {
+            Fixture fixture = fixture(pending(StaffRank.MOD), SchedulerMode.RUN);
+            PunishmentApprovalLease lease = acquire(fixture);
+            PunishmentRequestGuiState state = approve
+                    ? review(lease)
+                    : new PunishmentRequestGuiState.Denial(lease, "Target", 0);
+            int slot = approve
+                    ? PunishmentRequestGuiRenderer.APPROVE_SLOT
+                    : PunishmentRequestDenialPreset.values()[0].slot();
+            fixture.executor().reject = true;
+
+            fixture.controller().onInventoryClick(click(fixture.player().proxy(), state, slot));
+
+            assertEquals(0, fixture.player().closedInventories.get(),
+                    "A rejected decision worker must leave the leased review open for retry");
+            assertEquals(1, fixture.player().messages.get());
+            assertEquals(0, fixture.store().approveTransitions);
+            assertEquals(0, fixture.store().denyTransitions);
+            assertEquals(0, fixture.store().abandonCalls);
+            assertEquals(PunishmentRequestStatus.PENDING, fixture.store().current.status());
+
+            fixture.executor().reject = false;
+            fixture.controller().onInventoryClick(click(fixture.player().proxy(), state, slot));
+
+            assertEquals(1, fixture.player().closedInventories.get(),
+                    "Only an admitted decision should close the review");
+            assertEquals(approve ? 1 : 0, fixture.store().approveTransitions);
+            assertEquals(approve ? 0 : 1, fixture.store().denyTransitions);
+            assertEquals(approve ? PunishmentRequestStatus.APPROVED : PunishmentRequestStatus.DENIED,
+                    fixture.store().current.status());
+            assertEquals(0, fixture.store().abandonCalls);
+        }
+    }
+
+    @Test
+    void closingLeasedReviewOrDenialReleasesFenceOnWorkerNotEntityThread() {
+        for (boolean denial : new boolean[]{false, true}) {
+            Fixture fixture = fixture(pending(StaffRank.MOD), SchedulerMode.RUN);
+            PunishmentApprovalLease lease = acquire(fixture);
+            PunishmentRequestGuiState state = denial
+                    ? new PunishmentRequestGuiState.Denial(lease, "Target", 0)
+                    : review(lease);
+            fixture.executor().hold = true;
+
+            fixture.controller().onInventoryClose(close(fixture.player().proxy(), state));
+
+            assertEquals(0, fixture.store().abandonCalls,
+                    "Inventory close must never perform database release on the entity thread");
+            assertEquals(1, fixture.executor().heldActions.size());
+            fixture.executor().runNext();
+            assertEquals(1, fixture.store().abandonCalls);
+        }
+    }
+
+    @Test
+    void reviewDenialNavigationKeepsSameLeaseAndDoesNotQueueAbandon() {
+        Fixture fixture = fixture(pending(StaffRank.MOD), SchedulerMode.RUN);
+        PunishmentApprovalLease lease = acquire(fixture);
+        var reviewState = review(lease);
+        var denialState = new PunishmentRequestGuiState.Denial(lease, "Target", 0);
+        fixture.player().onOpenInventory = () ->
+                fixture.controller().onInventoryClose(close(fixture.player().proxy(), reviewState));
+
+        fixture.controller().onInventoryClick(click(
+                fixture.player().proxy(), reviewState, PunishmentRequestGuiRenderer.DENY_SLOT));
+
+        assertEquals(0, fixture.store().abandonCalls,
+                "Review to denial is a lease-preserving page transition");
+        fixture.player().onOpenInventory = () ->
+                fixture.controller().onInventoryClose(close(fixture.player().proxy(), denialState));
+        fixture.controller().onInventoryClick(click(
+                fixture.player().proxy(), denialState, PunishmentRequestGuiRenderer.BACK_SLOT));
+        assertEquals(0, fixture.store().abandonCalls,
+                "Denial to review must preserve the same fenced lease");
+    }
+
+    @Test
+    void admittedDecisionCloseCannotReleaseFenceWhileWorkerIsQueued() {
+        for (boolean approve : new boolean[]{true, false}) {
+            Fixture fixture = fixture(pending(StaffRank.MOD), SchedulerMode.RUN);
+            PunishmentApprovalLease lease = acquire(fixture);
+            PunishmentRequestGuiState state = approve
+                    ? review(lease) : new PunishmentRequestGuiState.Denial(lease, "Target", 0);
+            fixture.player().onCloseInventory = () ->
+                    fixture.controller().onInventoryClose(close(fixture.player().proxy(), state));
+            fixture.executor().hold = true;
+            fixture.controller().onInventoryClick(click(fixture.player().proxy(), state,
+                    approve ? PunishmentRequestGuiRenderer.APPROVE_SLOT
+                            : PunishmentRequestDenialPreset.values()[0].slot()));
+
+            assertEquals(0, fixture.store().abandonCalls);
+            assertEquals(1, fixture.executor().heldActions.size(),
+                    "The only queued work should be the durable decision");
+            fixture.executor().hold = false;
+            fixture.executor().runNext();
+            assertEquals(approve ? 1 : 0, fixture.store().approveTransitions);
+            assertEquals(approve ? 0 : 1, fixture.store().denyTransitions);
+            assertEquals(0, fixture.store().abandonCalls);
+        }
+    }
+
+    @Test
+    void reviewerDisconnectReleasesOpenLeaseWithoutWaitingForExpiry() {
+        Fixture fixture = fixture(pending(StaffRank.MOD), SchedulerMode.RUN);
+        PunishmentApprovalLease lease = acquire(fixture);
+        fixture.player().openView = viewForState(fixture.player().proxy(), review(lease));
+        fixture.executor().hold = true;
+
+        fixture.controller().onPlayerQuit(new PlayerQuitEvent(fixture.player().proxy(), Component.empty(), PlayerQuitEvent.QuitReason.DISCONNECTED));
+
+        assertEquals(0, fixture.store().abandonCalls);
+        assertEquals(1, fixture.executor().heldActions.size());
+        fixture.executor().runNext();
+        assertEquals(1, fixture.store().abandonCalls);
+    }
+
+    @Test
+    void immediateDecisionCompletionStillSuppressesItsOwnCloseEvent() {
+        Fixture fixture = fixture(pending(StaffRank.MOD), SchedulerMode.RUN);
+        PunishmentApprovalLease lease = acquire(fixture);
+        var state = review(lease);
+        fixture.player().onCloseInventory = () ->
+                fixture.controller().onInventoryClose(close(fixture.player().proxy(), state));
+
+        fixture.controller().onInventoryClick(click(
+                fixture.player().proxy(), state, PunishmentRequestGuiRenderer.APPROVE_SLOT));
+
+        assertEquals(1, fixture.store().approveTransitions);
+        assertEquals(0, fixture.store().abandonCalls,
+                "An inline worker may commit before closeInventory is called");
+    }
+
+    @Test
+    void failedDecisionAdmissionStillReleasesLeaseIfReviewerThenCloses() {
+        Fixture fixture = fixture(pending(StaffRank.MOD), SchedulerMode.RUN);
+        PunishmentApprovalLease lease = acquire(fixture);
+        var state = review(lease);
+        fixture.executor().reject = true;
+        fixture.controller().onInventoryClick(click(
+                fixture.player().proxy(), state, PunishmentRequestGuiRenderer.APPROVE_SLOT));
+        assertEquals(0, fixture.store().abandonCalls);
+        assertEquals(0, fixture.player().closedInventories.get());
+
+        fixture.executor().reject = false;
+        fixture.controller().onInventoryClose(close(fixture.player().proxy(), state));
+
+        assertEquals(1, fixture.store().abandonCalls,
+                "Rejected admission must clear the in-flight guard for a later close");
+        assertEquals(0, fixture.store().approveTransitions);
+    }
+
+    @Test
+    void disconnectWhileDecisionQueuedMustNotReleaseItsFenceBeforeCommit() {
+        Fixture fixture = fixture(pending(StaffRank.MOD), SchedulerMode.RUN);
+        PunishmentApprovalLease lease = acquire(fixture);
+        var state = review(lease);
+        fixture.player().openView = viewForState(fixture.player().proxy(), state);
+        fixture.executor().hold = true;
+        fixture.controller().onInventoryClick(click(
+                fixture.player().proxy(), state, PunishmentRequestGuiRenderer.APPROVE_SLOT));
+
+        fixture.controller().onPlayerQuit(new PlayerQuitEvent(
+                fixture.player().proxy(), Component.empty(), PlayerQuitEvent.QuitReason.DISCONNECTED));
+
+        assertEquals(0, fixture.store().abandonCalls);
+        assertEquals(1, fixture.executor().heldActions.size());
+        fixture.executor().hold = false;
+        fixture.executor().runNext();
+        assertEquals(1, fixture.store().approveTransitions);
+        assertEquals(0, fixture.store().abandonCalls);
+    }
+
+    @Test
+    void closingQueueBeforePendingReviewCallbackReleasesUnshownLease() {
+        Fixture fixture = fixture(pending(StaffRank.MOD), SchedulerMode.HOLD);
+        var queue = PunishmentRequestGuiState.Queue.page(
+                java.util.List.of(), 0, PunishmentRequestGuiRenderer.QUEUE_CONTENT_SIZE);
+
+        assertTrue(fixture.controller().openReview(fixture.player().proxy(), REQUEST_ID));
+        assertEquals(1, fixture.store().acquireCalls);
+        assertEquals(1, fixture.scheduler().heldActions.size());
+
+        fixture.controller().onInventoryClose(close(fixture.player().proxy(), queue));
+        fixture.scheduler().heldActions.removeFirst().run();
+
+        assertEquals(0, fixture.player().openInventories.get(),
+                "A completed worker must not reopen the GUI after staff closed it");
+        assertEquals(1, fixture.store().abandonCalls,
+                "A lease acquired for a cancelled presentation must be released");
+    }
+
+    @Test
+    void closingQueueBeforeItsWorkerCallbackMustNotReopenIt() {
+        Fixture fixture = fixture(pending(StaffRank.MOD), SchedulerMode.HOLD);
+        var queue = PunishmentRequestGuiState.Queue.page(
+                java.util.List.of(), 0, PunishmentRequestGuiRenderer.QUEUE_CONTENT_SIZE);
+
+        assertTrue(fixture.controller().openQueue(fixture.player().proxy()));
+        assertEquals(1, fixture.scheduler().heldActions.size());
+        fixture.controller().onInventoryClose(close(fixture.player().proxy(), queue));
+        fixture.scheduler().heldActions.removeFirst().run();
+
+        assertEquals(0, fixture.player().openInventories.get(),
+                "Stale queue data must not reopen an inventory the reviewer closed");
+    }
+
+    @Test
+    void newerReviewNavigationMustNotBeOverwrittenByOlderQueueCallback() {
+        Fixture fixture = fixture(pending(StaffRank.MOD), SchedulerMode.HOLD);
+
+        assertTrue(fixture.controller().openQueue(fixture.player().proxy()));
+        assertTrue(fixture.controller().openReview(fixture.player().proxy(), REQUEST_ID));
+        assertEquals(2, fixture.scheduler().heldActions.size());
+        fixture.scheduler().heldActions.remove(1).run();
+        assertEquals(1, fixture.player().openInventories.get());
+        fixture.scheduler().heldActions.remove(0).run();
+
+        assertEquals(1, fixture.player().openInventories.get(),
+                "Earlier queue callback must not replace the newer review");
+        assertEquals(0, fixture.store().abandonCalls);
+    }
+
+    @Test
+    void unrelatedInventoryOpenedDuringReviewLoadPreventsStaleReviewPresentation() {
+        Fixture fixture = fixture(pending(StaffRank.MOD), SchedulerMode.HOLD);
+        var original = PunishmentRequestGuiState.Queue.page(
+                java.util.List.of(), 0, PunishmentRequestGuiRenderer.QUEUE_CONTENT_SIZE);
+        var unrelated = new PunishmentRequestGuiState.Details(
+                new PunishmentRequestGuiState.RequestView(deniedRequest(), "Target"), 0);
+        fixture.player().openView = viewForState(fixture.player().proxy(), original);
+
+        assertTrue(fixture.controller().openReview(fixture.player().proxy(), REQUEST_ID));
+        fixture.player().openView = viewForState(fixture.player().proxy(), unrelated);
+        fixture.scheduler().heldActions.removeFirst().run();
+
+        assertEquals(0, fixture.player().openInventories.get(),
+                "Opening another GUI without a close callback must invalidate the old review");
+        assertEquals(1, fixture.store().abandonCalls);
+        assertEquals(0, fixture.player().closedInventories.get(),
+                "A stale callback must not close the unrelated inventory");
+    }
+
+    @Test
+    void quittingBeforeQueuedReviewCallbackReleasesUnshownLease() {
+        Fixture fixture = fixture(pending(StaffRank.MOD), SchedulerMode.HOLD);
+        assertTrue(fixture.controller().openReview(fixture.player().proxy(), REQUEST_ID));
+        assertEquals(1, fixture.store().acquireCalls);
+
+        fixture.controller().onPlayerQuit(new PlayerQuitEvent(
+                fixture.player().proxy(), Component.empty(), PlayerQuitEvent.QuitReason.DISCONNECTED));
+        fixture.scheduler().heldActions.removeFirst().run();
+
+        assertEquals(0, fixture.player().openInventories.get());
+        assertEquals(1, fixture.store().abandonCalls);
+    }
+
+    @Test
+    void queuedReviewWorkerMustNotAcquireAfterStaffClosesQueue() {
+        Fixture fixture = fixture(pending(StaffRank.MOD), SchedulerMode.RUN);
+        var queue = PunishmentRequestGuiState.Queue.page(
+                java.util.List.of(), 0, PunishmentRequestGuiRenderer.QUEUE_CONTENT_SIZE);
+        fixture.executor().hold = true;
+
+        assertTrue(fixture.controller().openReview(fixture.player().proxy(), REQUEST_ID));
+        assertEquals(0, fixture.store().acquireCalls);
+        fixture.controller().onInventoryClose(close(fixture.player().proxy(), queue));
+        fixture.executor().hold = false;
+        fixture.executor().runNext();
+
+        assertEquals(0, fixture.store().acquireCalls,
+                "Do not acquire a fenced lease for a navigation cancelled before worker admission");
+        assertEquals(0, fixture.player().openInventories.get());
+    }
+
+    @Test
+    void failedReviewRenderingReleasesAcquiredLeaseInsteadOfHoldingItUntilTimeout() {
+        Fixture fixture = fixture(pending(StaffRank.MOD), SchedulerMode.RUN,
+                review -> { throw new IllegalStateException("render failed"); });
+
+        assertTrue(fixture.controller().openReview(fixture.player().proxy(), REQUEST_ID));
+
+        assertEquals(1, fixture.store().acquireCalls);
+        assertEquals(1, fixture.store().abandonCalls,
+                "A failed owner-thread renderer must release the unpresented fenced lease");
+        assertEquals(0, fixture.player().openInventories.get());
+    }
+
+    @Test
+    void failedInventoryOpeningReleasesAcquiredReviewLease() {
+        Fixture fixture = fixture(pending(StaffRank.MOD), SchedulerMode.RUN);
+        fixture.player().onOpenInventory = () -> {
+            throw new IllegalStateException("inventory view could not open");
+        };
+
+        assertTrue(fixture.controller().openReview(fixture.player().proxy(), REQUEST_ID));
+
+        assertEquals(1, fixture.store().acquireCalls);
+        assertEquals(1, fixture.store().abandonCalls,
+                "A Bukkit inventory-opening exception must not strand an acquired review fence");
+        assertEquals(1, fixture.logger().severe.get());
     }
 
     @Test

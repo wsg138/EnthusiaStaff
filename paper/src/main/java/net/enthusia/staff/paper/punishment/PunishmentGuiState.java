@@ -6,6 +6,7 @@ import net.enthusia.staff.domain.application.PunishmentAssessment;
 import net.enthusia.staff.domain.application.PunishmentDraft;
 import net.enthusia.staff.domain.history.ModerationHistoryPage;
 import net.enthusia.staff.domain.player.PlayerIdentity;
+import net.enthusia.staff.domain.guided.GuidedIncidentWizard;
 
 sealed interface PunishmentGuiState {
     UUID viewerId();
@@ -25,6 +26,29 @@ sealed interface PunishmentGuiState {
     ) implements PunishmentGuiState {
         public Categories {
             validate(viewerId, target, commandName, overview, page);
+        }
+    }
+
+    /**
+     * A non-enforcing guided interview and recommendation preview.
+     * The live punishment draft workflow remains authoritative.
+     */
+    record Guided(
+            UUID viewerId,
+            PlayerIdentity target,
+            String commandName,
+            PunishmentGuiOverview overview,
+            String categoryId,
+            GuidedIncidentWizard interview,
+            int durationChoice
+    ) implements PunishmentGuiState {
+        public Guided {
+            validate(viewerId, target, commandName, overview, 0);
+            if (categoryId == null || interview == null
+                    || !categoryId.equals(interview.category())
+                    || durationChoice < -1 || durationChoice > 1) {
+                throw new IllegalArgumentException("Guided state must match its category and adjustment");
+            }
         }
     }
 

@@ -1,8 +1,11 @@
 package net.enthusia.staff.persistence.migration;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import javax.sql.DataSource;
+import net.enthusia.staff.common.CaseId;
+import net.enthusia.staff.common.IdempotencyKey;
 import net.enthusia.staff.domain.application.PunishmentPlan;
 import net.enthusia.staff.domain.application.PunishmentResult;
 import net.enthusia.staff.domain.escalation.PriorOffense;
@@ -24,6 +27,12 @@ public final class FencedModerationStore implements ModerationStore {
     @Override
     public List<PriorOffense> relatedHistory(UUID targetId, String family) {
         return delegate.relatedHistory(targetId, family);
+    }
+
+    @Override
+    public Optional<CaseId> committedCase(IdempotencyKey key) {
+        // Read-only recovery does not bypass the fenced write path.
+        return delegate.committedCase(key);
     }
 
     @Override
