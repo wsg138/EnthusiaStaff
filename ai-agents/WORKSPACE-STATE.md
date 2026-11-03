@@ -1,5 +1,9 @@
 # Workspace state
 
+2026-10-14 explicit owner review/upstream assignment: continue only `OWNER-OFFLINE-DISCORD-MUTE` via Staff #339 + RoseChat #22, preserving all other coordinator work. Both existing PRs remain OPEN/DRAFT; reconcile `af2b4437` / `818e3eb`, repair valid provider review findings and record new exact-head validation in PR evidence. Local 1,290 Paper + 3 contract + 155 provider tests pass. Required hosted/static/review and isolated offline/mute/vanish acceptance are not replaced by these local checks. No production activation or default-branch push.
+
+This worker is explicitly assigned `OWNER-OFFLINE-DISCORD-MUTE` at Staff base `ceb12e0f`; it does not take over the investigation-tools package or parked external work. Scope: bounded authoritative async Discord mute verification, paired existing-provider callback, no source import or production change.
+
 2026-10-05 owner extension: continue the same PR #322 with automatic fresh-entry vanish and player-name completion (IT-09..10). Current main `ba6dcabc9a731e7e3e21c8405778764abdc626f4` includes merged cross-server PR #321 and is normally incorporated as `ebff2f09`; previous assumptions that #321 is unmerged are historical. Preserve transfer/recovery visibility and existing exit policy. No new migration/provider API; validation remains pending for the new product head.
 
 Last updated: 2026-09-22
