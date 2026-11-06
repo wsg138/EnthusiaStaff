@@ -18,6 +18,7 @@ import net.enthusia.staff.domain.staff.StaffSessionState;
 
 public final class JdbcStaffSessionStore implements StaffSessionStore {
     private static final int SINGLE_ROW_UPDATE = 1;
+    private static final String STAFF_MODE_EXITED = "STAFF_MODE_EXITED";
 
     private final DataSource dataSource;
 
@@ -134,6 +135,11 @@ public final class JdbcStaffSessionStore implements StaffSessionStore {
         } catch (SQLException exception) {
             throw new ModerationPersistenceException("Unable to read active staff session", exception);
         }
+    }
+
+    @Override
+    public Optional<net.enthusia.staff.domain.staff.StaffSessionInspection> inspect(UUID staffId) {
+        return JdbcStaffSessionInspection.inspect(dataSource, staffId);
     }
 
     @Override
@@ -322,6 +328,74 @@ public final class JdbcStaffSessionStore implements StaffSessionStore {
         );
     }
 
+    @Override
+    public boolean retireDetached(StaffSessionSnapshot expected, Instant now) {
+        validateDetachedRetirement(expected, now);
+        try (Connection connection = dataSource.getConnection()) {
+            connection.setAutoCommit(false);
+            try {
+                return retireDetachedTransaction(connection, expected, now);
+            } catch (SQLException | RuntimeException exception) {
+                try {
+                    connection.rollback();
+                } catch (SQLException rollbackFailure) {
+                    exception.addSuppressed(rollbackFailure);
+                }
+                throw exception;
+            }
+            // Closing the owned connection avoids enabling auto-commit after uncertain rollback.
+        } catch (SQLException exception) {
+            throw new ModerationPersistenceException("Unable to retire detached Staff Mode session", exception);
+        }
+    }
+
+    private static void validateDetachedRetirement(StaffSessionSnapshot expected, Instant now) {
+        if (expected == null || now == null
+                || !StaffSessionOwnership.detached(expected.serverId())
+                || expected.state() == StaffSessionState.ENTERING
+                || expected.state() == StaffSessionState.CLOSED) {
+            throw new IllegalArgumentException("an exact restored detached lease is required");
+        }
+    }
+
+    private static boolean retireDetachedTransaction(Connection connection,
+            StaffSessionSnapshot expected, Instant now) throws SQLException {
+        StaffSessionSnapshot current = active(connection, expected.staffId(), true);
+        if (!sameDetachedLease(current, expected) || !markDetachedExiting(connection, expected)) {
+            connection.rollback();
+            return false;
+        }
+        JdbcStaffSessionTransitions.closeSession(connection, expected.sessionId(), now);
+        insertAudit(connection, expected.staffId(), expected.sessionId(), STAFF_MODE_EXITED,
+                "Detached source restoration verified; destination snapshot was not applied", now);
+        insertDiscord(connection, expected.staffId(), expected.sessionId(), STAFF_MODE_EXITED, now);
+        connection.commit();
+        return true;
+    }
+
+    private static boolean markDetachedExiting(Connection connection,
+            StaffSessionSnapshot expected) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement("""
+                UPDATE staff_sessions SET state = 'EXITING', revision = revision + 1
+                WHERE session_id = ? AND revision = ? AND server_id = ?
+                  AND state IN ('ACTIVE', 'EXITING', 'RECOVERY_REQUIRED')
+                """)) {
+            statement.setBytes(1, UuidBytes.toBytes(expected.sessionId()));
+            statement.setLong(2, expected.revision());
+            statement.setString(3, expected.serverId());
+            return statement.executeUpdate() == SINGLE_ROW_UPDATE;
+        }
+    }
+
+    private static boolean sameDetachedLease(StaffSessionSnapshot current, StaffSessionSnapshot expected) {
+        return current != null
+                && StaffSessionOwnership.detached(current.serverId())
+                && current.sessionId().equals(expected.sessionId())
+                && current.revision() == expected.revision()
+                && current.state() == expected.state()
+                && current.checksum().equals(expected.checksum());
+    }
+
     private Optional<StaffSessionSnapshot> beginExitOnce(UUID staffId) {
         try (Connection connection = dataSource.getConnection()) {
             connection.setAutoCommit(false);
@@ -396,11 +470,11 @@ public final class JdbcStaffSessionStore implements StaffSessionStore {
                 connection,
                 session.staffId(),
                 sessionId,
-                "STAFF_MODE_EXITED",
+                STAFF_MODE_EXITED,
                 "Restoration verified",
                 now
         );
-        insertDiscord(connection, session.staffId(), sessionId, "STAFF_MODE_EXITED", now);
+        insertDiscord(connection, session.staffId(), sessionId, STAFF_MODE_EXITED, now);
         connection.commit();
         return true;
     }

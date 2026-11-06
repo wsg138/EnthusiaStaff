@@ -97,6 +97,9 @@ commands:
     usage: /staff [recover|-v|vanish|-nv|visible|inventory|tab <show|hide>]
     aliases: [sm, staffmode]
     permission: enthusiastaff.staffmode
+  staffsession:
+    description: Console-only read-only inspection of one durable Staff session UUID
+    usage: /staffsession inspect <canonical-uuid>
   staffinv:
     description: Toggle the persistent Staff Mode tools inventory on or off
     usage: /staffinv

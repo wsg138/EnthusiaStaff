@@ -239,3 +239,26 @@ Canonical ES-P12 terminal handoff: `ai-agents/reports/package-handoffs/2026-09-2
 ## Next sequential action
 
 X03 remains `PARTIAL` / `ACTIONABLE_CONTINUATION`: complete only bounded paired remediation while preserving Market #7, Staff #139, and exact component parity. D09 remains `BLOCKED` / `PARKED_BLOCKED`: keep PR #203 frozen/open at `a48390c50c6968e75437abd2dd05c0faeece355d` until legitimate X03 V21 reaches `main`, then reconcile D09 normally and rerun every invalidated exact-head gate. D08 remains `PLANNED`; D10 and D12 remain gated by incomplete D09; D13 remains independently parked. Do not activate a replacement D09 implementation while #203 is preserved.
+
+
+## Owner-directed MARKET-02 continuation (2026-10-25 UTC)
+
+The owner continued the existing PR #647 lane for the diagnosed Staff Mode
+retryable transition and rankless detached-session repair. This does not activate
+another registry package or alter historical package states. Status is REVIEW /
+ACTIONABLE_CONTINUATION; local units/build passed with disclosed skips, MariaDB
+execution and exact-head hosted/runtime acceptance remain open. See the existing
+`reports/agent-handoffs/2026-10-20-market-orphan-staff-tools.md` handoff.
+
+
+2026-10-28 MARKET-02 continuation: rankless destination join with a consumed
+handoff hint must still run fenced durable recovery (SJ-01). Same PR #647 and
+existing handoff; main 9efaa056 incorporated normally. Event-path regression
+confirmed; final exact-head checks/review/publication pending. No new package,
+shared TEST/client use or live recovery authorization is implied.
+
+
+2026-10-28 SD-01..05 owner continuation in same MARKET-02 / PR647 adds private
+console-only read-only offline session inspection. Existing fixes retained;
+local/source review and exact-head hosted/artifact gates recorded in existing
+handoff. REVIEW / ACTIONABLE_CONTINUATION; no new package or live authority.

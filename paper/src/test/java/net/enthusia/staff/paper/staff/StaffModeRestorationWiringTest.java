@@ -53,13 +53,15 @@ class StaffModeRestorationWiringTest {
         int catchRetention = method.indexOf("retainRecoveryAfterRuntimeExit(playerId)", verification);
         int mismatch = method.indexOf("if (!closed)", catchRetention);
         int mismatchRetention = method.indexOf("retainRecoveryAfterRuntimeExit(playerId)", mismatch);
-        int successCleanup = method.indexOf("completeRuntimeExit(playerId)", mismatchRetention);
+        int mismatchReturn = method.indexOf("return;", mismatchRetention);
+        int successCleanup = method.indexOf("finishVerifiedExit(playerId, session, restorationAttempt)", mismatchReturn);
 
         assertTrue(verification >= 0);
         assertTrue(catchRetention > verification);
         assertTrue(mismatch > catchRetention);
         assertTrue(mismatchRetention > mismatch);
-        assertTrue(successCleanup > mismatchRetention);
+        assertTrue(mismatchReturn > mismatchRetention);
+        assertTrue(successCleanup > mismatchReturn);
     }
 
     @Test
@@ -122,15 +124,23 @@ class StaffModeRestorationWiringTest {
 
     @Test
     void cleanExitSuccessMessageIsOnlyEmittedAfterVerificationPasses() throws IOException {
-        String method = method(COMPLETE_RESTORATION, "private void retainRecoveryAfterRuntimeExit");
-        int mismatch = method.indexOf("if (!closed)");
-        int mismatchReturn = method.indexOf("return;", mismatch);
-        int cleanup = method.indexOf("completeRuntimeExit(playerId)", mismatchReturn);
-        int success = method.indexOf("Staff mode exited; your exact saved state was restored and verified.");
+        String completion = method(COMPLETE_RESTORATION, "private void finishVerifiedExit");
+        int mismatch = completion.indexOf("if (!closed)");
+        int mismatchReturn = completion.indexOf("return;", mismatch);
+        int scheduled = completion.indexOf("finishVerifiedExit(playerId, session, restorationAttempt)", mismatchReturn);
+        String cleanup = method("private void finishVerifiedExitOnEntity", "private boolean ownsClosingSession");
+        int ownership = cleanup.indexOf("ownsClosingSession(playerId, session.sessionId())");
+        int removedTools = cleanup.indexOf("removeStaffTools(player)");
+        int removedRuntime = cleanup.indexOf("removeCompletedRuntimeState(playerId)");
+        int completed = cleanup.indexOf("if (completed)");
+        int success = cleanup.indexOf("Staff mode exited; your exact saved state was restored and verified.");
 
         assertTrue(mismatch >= 0 && mismatchReturn > mismatch);
-        assertTrue(cleanup > mismatchReturn);
-        assertTrue(success > cleanup);
+        assertTrue(scheduled > mismatchReturn);
+        assertTrue(ownership >= 0 && removedTools > ownership);
+        assertTrue(removedRuntime > removedTools);
+        assertTrue(completed > removedRuntime);
+        assertTrue(success > completed);
     }
 
     private static String method(String startMarker, String endMarker) throws IOException {
