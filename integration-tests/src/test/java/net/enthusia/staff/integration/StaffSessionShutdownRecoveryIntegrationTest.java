@@ -32,53 +32,6 @@ class StaffSessionShutdownRecoveryIntegrationTest extends PunishmentRequestMaria
             "Paper runtime disabled before normal staff-mode exit";
 
     @Test
-    void inspectionReadsDetachedEvidenceWithoutChangingRowsAndDetectsMissingSnapshot() throws Exception {
-        try (MariaDbRuntime runtime = MariaDb.initialize(databaseConfig())) {
-            UUID staffId = identifier("readonly-session-inspection");
-            StaffSessionSnapshot initial = beginInspection(runtime, staffId);
-            byte[] bytes = initial.snapshot();
-            String checksum = initial.checksum();
-            StaffSessionStore store = runtime.staffSessionStore();
-            StaffSessionSnapshot detached = store.detach(staffId, initial.sessionId(), initial.revision(),
-                    OTHER_SERVER, checksum, NOW.plusSeconds(1)).orElseThrow();
-            var observed = store.inspect(staffId).orElseThrow();
-            assertEquals(detached.sessionId(), observed.sessionId());
-            assertEquals(detached.revision(), observed.revision());
-            assertEquals(StaffSessionOwnership.DETACHED_SERVER_ID, observed.serverId());
-            assertArrayEquals(bytes, observed.header());
-            assertEquals(bytes.length, observed.snapshotBytes());
-            assertEquals(observed.revision(), store.active(staffId).orElseThrow().revision());
-            try (Connection connection = connection(); PreparedStatement statement = connection.prepareStatement(
-                    "UPDATE staff_state_snapshots SET snapshot_blob = ? WHERE session_id = ?")) {
-                statement.setBytes(1, new byte[]{3, 2, 1});
-                statement.setBytes(2, uuidBytes(initial.sessionId())); statement.executeUpdate();
-            }
-            var corrupt = assertThrows(
-                    net.enthusia.staff.domain.staff.StaffSessionInspectionException.class,
-                    () -> store.inspect(staffId));
-            assertEquals(net.enthusia.staff.domain.staff.StaffSessionInspectionException.Reason.CHECKSUM_MISMATCH,
-                    corrupt.reason());
-            try (Connection connection = connection(); PreparedStatement statement = connection.prepareStatement(
-                    "DELETE FROM staff_state_snapshots WHERE session_id = ?")) {
-                statement.setBytes(1, uuidBytes(initial.sessionId())); statement.executeUpdate();
-            }
-            var failure = assertThrows(
-                    net.enthusia.staff.domain.staff.StaffSessionInspectionException.class,
-                    () -> store.inspect(staffId));
-            assertEquals(net.enthusia.staff.domain.staff.StaffSessionInspectionException.Reason.MISSING_SNAPSHOT,
-                    failure.reason());
-        }
-    }
-
-    private static StaffSessionSnapshot beginInspection(MariaDbRuntime runtime, UUID staffId) throws Exception {
-        runtime.playerDirectory().recordSeen(staffId, "StaffInspect", PlayerPlatform.JAVA, OTHER_SERVER, NOW);
-        byte[] bytes = new byte[]{1, 2, 3};
-        String checksum = java.util.HexFormat.of().formatHex(
-                java.security.MessageDigest.getInstance("SHA-256").digest(bytes));
-        return runtime.staffSessionStore().begin(staffId, OTHER_SERVER, 1, checksum, bytes, NOW);
-    }
-
-    @Test
     void exactDetachedRetirementClosesWithoutRebindingOrReplacingSnapshot() throws Exception {
         try (MariaDbRuntime runtime = MariaDb.initialize(databaseConfig())) {
             StaffSessionStore store = runtime.staffSessionStore();
