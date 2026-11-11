@@ -471,8 +471,9 @@ public final class StaffModeManager implements Listener {
                 player.sendMessage(StaffMessageStyle.style(Component.text(
                         "Staff Mode could not resume because your explicit staff rank is unavailable."
                 )));
-                return;
             }
+            // Rank loss cannot authorize a fresh entry, but it must not skip durable
+            // recovery of an existing detached or closing session.
             // PREPARE is only a fast-path hint. The source detach may still be committing,
             // so use durable recovery/rebind instead of a one-shot new Staff entry.
             recover(playerId, rank);
