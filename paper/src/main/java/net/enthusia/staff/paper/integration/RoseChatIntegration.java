@@ -401,9 +401,7 @@ public final class RoseChatIntegration implements AutoCloseable {
                         ? ModerationDecision.block("You are muted from public chat.")
                         : ModerationDecision.allow();
                 case MUTED -> ModerationDecision.block("You are muted.");
-                case UNVERIFIED -> ModerationDecision.block(
-                        "Your moderation status is still being verified. Please try again shortly."
-                );
+                case UNVERIFIED -> unverifiedDecision(context);
             };
         }
 
