@@ -4,6 +4,8 @@
 
 This page answers: **what is present on merged `main`, and what kind of proof exists?** It deliberately avoids package-worker percentages and does not describe draft PR behavior as available.
 
+> **Deployment note — November 11, 2026 (owner-reported):** After [PR #787](https://github.com/wsg138/EnthusiaStaff/pull/787) merged, the owner reported installing an EnthusiaStaff **Paper 0.1.1** JAR on the live server. That is an installation report, **not independent confirmation of the live artifact hash, end-to-end behavior, or replacement moderation authority**. It does **not** establish that Velocity, StaffBot, Cloudflare/site/API components, providers, or Discord enforcement were deployed. Verify each component and the corresponding cutover/acceptance evidence separately. The [build version](https://github.com/wsg138/EnthusiaStaff/blob/main/build.gradle.kts) is 0.1.1 by default.
+
 ## Status language
 
 - **Available** — implemented and verified in the environment relevant to the claim.

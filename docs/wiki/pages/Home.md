@@ -1,51 +1,41 @@
 # EnthusiaStaff Wiki
 
-EnthusiaStaff is the distributed moderation and staff platform for the Enthusia Network. This Wiki is the human-facing guide to staff procedure, administration, operations, development, review, and recovery.
+EnthusiaStaff is the Enthusia Network's staff and moderation platform. Choose a guide for your role; start with [[Implementation Status]] when you need to distinguish merged code, reported deployment, and verified operational authority.
 
-> **Authority boundary:** merged implementation is not automatically permission to replace the currently approved production moderation authority. Check [[Implementation Status]] before treating a documented workflow as production-accepted.
+> **Deployment is component-specific.** The owner reports installing the Paper 0.1.1 JAR on the live server following [PR #787](https://github.com/wsg138/EnthusiaStaff/pull/787). This is not independent server verification, and does not establish that Velocity, StaffBot, web services, or a replacement moderation authority are live. See [[Implementation Status]].
 
-## Choose what you are doing
+## Start with your role
 
-| I am... | Start here | Then continue to... |
+| Audience | First step | Next steps |
 | --- | --- | --- |
-| **Staff** | [[Staff Handbook]] | [[Moderator-Quick-Start]], [[Punishment System]], [[Reports and Evidence]], [[Discord Moderation Platform]], [[Staff-Mode-Vanish-and-Freeze]] |
-| **Administrator** | [[Commands and Permissions]] | [[Rank-Authority]], [[Configuration]], [[Integrations]], [[Discord Moderation Platform]], [[Website and Web API]] |
-| **Operator** | [[Installation]] | [[Implementation Status]], [[Staff Bot Runtime and Operations]], [[Recovery and Troubleshooting]], [[Shadow Mode and Cutover]] |
-| **Developer** | [[Developer Guide Index]] | [[Architecture]], [[Discord Moderation Platform]], [[Website and Web API]], [[Developer Code Guide]], [[Build and Testing]] |
-| **Code reviewer** | [[Code Review Guide]] | [[Architecture]], [[Discord Moderation Platform]], [[Website and Web API]], [[Build and Testing]] |
-| **Troubleshooter** | [[Recovery and Troubleshooting]] | the affected feature hub, [[Staff Bot Runtime and Operations]], [[Protocol and Network Traffic]], or a focused safety page |
+| **Players and staff** | [[Staff Handbook]] and [[Moderator-Quick-Start]] | [[Helper Guide]], [[Reports and Evidence]], [[Punishment System]], [[Staff-Mode-Vanish-and-Freeze]] |
+| **Server operators and administrators** | [[Installation]] and [[Configuration]] | [[Commands and Permissions]], [[Rank-Authority]], [[Staff Bot Runtime and Operations]], [[Recovery and Troubleshooting]], [[Shadow Mode and Cutover]] |
+| **Contributors and reviewers** | [[Developer Guide Index]] | [[Development Setup]], [[Architecture]], [[Developer Code Guide]], [[Code Review Guide]], [[Build and Testing]] |
+
+The [[_Sidebar]] groups links by audience. A feature page describes behavior and limitations; the developer source guide is the detailed code map.
 
 ## Quick answers
 
-- **What is actually merged and how proven is it?** [[Implementation Status]]
-- **How does Discord moderation work now?** [[Discord Moderation Platform]]
-- **How do I run or recover StaffBot?** [[Staff Bot Runtime and Operations]]
-- **What is the public site versus the moderation web/API?** [[Website and Web API]]
-- **Where does a feature live in source?** [[Developer Code Guide]]
-- **What should I verify in a PR?** [[Code Review Guide]]
-- **How do I build and validate it?** [[Build and Testing]]
-- **How do Paper and Velocity communicate?** [[Protocol and Network Traffic]]
-- **How should a failure be recovered?** [[Recovery and Troubleshooting]]
-- **How is the Wiki maintained and published?** [[Wiki Maintenance]]
+- **What is implemented, deployed, or still unverified?** [[Implementation Status]]
+- **Which commands and permissions are relevant?** [[Commands and Permissions]] and [[Rank-Authority]]
+- **How do staff handle reports and sanctions?** [[Reports and Evidence]] and [[Punishment System]]
+- **How does Discord moderation work?** [[Discord Moderation Platform]]
+- **How do operators run or recover StaffBot?** [[Staff Bot Runtime and Operations]]
+- **What are the website and browser moderation boundaries?** [[Website and Web API]]
+- **How do Paper and Velocity exchange messages?** [[Protocol and Network Traffic]]
+- **Where does a feature live in the source?** [[Developer Code Guide]]
+- **How do I build, test, and review a change?** [[Build and Testing]] and [[Code Review Guide]]
+- **How is the Wiki published and restored?** [[Wiki Maintenance]]
 
-## Feature hubs
+## Feature guides
 
-Use a feature hub when you need the plain-language purpose, current limitations, important source paths, and links to focused procedures.
+- [[Core Platform and Infrastructure]] — modules, infrastructure, identity, runtime and health.
+- [[Moderation, Punishments, and Reports]] — cases, sanctions, reports, evidence and appeals.
+- [[Staff Tools, Investigations, and Player-State Safety]] — staff mode, vanish, freeze, inspection, inventory and confiscation.
+- [[Integrations, Migration, and Release Readiness]] — providers, Discord, site/API, migration, acceptance and rollback.
 
-- [[Core Platform and Infrastructure]] — runtime artifacts, architecture, MariaDB, protocol, lifecycle, configuration, identity, health.
-- [[Moderation, Punishments, and Reports]] — cases, sanctions, punishment workflows, history, reports, evidence, appeals, automod.
-- [[Staff Tools, Investigations, and Player-State Safety]] — staff mode, vanish, freeze, inventory, confiscation, economy, alts, inspector, staff tools.
-- [[Integrations, Migration, and Release Readiness]] — providers, StaffBot/Discord, website/API surfaces, LiteBans migration, shadow/cutover, acceptance and release evidence.
+Use these hubs for the overview, then follow links to the focused procedure or source trace. Historical worker records are not a substitute for merged-source verification.
 
-The hubs intentionally avoid being package-worker logs. Exact orchestration history belongs in `ai-agents/`; the Wiki describes the product and the evidence needed to trust it.
+## Evidence and authority
 
-## Information authority
-
-When sources disagree, use this order:
-
-1. [`ENTHUSIASTAFF-GOALS.md`](https://github.com/wsg138/EnthusiaStaff/blob/main/ENTHUSIASTAFF-GOALS.md) for intended finished behavior, with approved focused specifications defining newer extensions where applicable.
-2. Current merged code, configuration, tests, migrations, and runtime evidence for implemented behavior.
-3. [Requirements matrix](https://github.com/wsg138/EnthusiaStaff/blob/main/reports/REQUIREMENTS-MATRIX.md) and current legitimate review evidence for exact proof/blockers; reconcile them with live `main` when one has not yet caught up with a recent merge.
-4. This Wiki for readable staff, operator, developer, and reviewer guidance.
-
-A class, command, test, merged PR, or successful staging run by itself does not establish broader production readiness. See [[Build and Testing]] for what each validation layer can and cannot prove.
+[Product goals](https://github.com/wsg138/EnthusiaStaff/blob/main/ENTHUSIASTAFF-GOALS.md) describe intended behavior. Current merged source, configuration, migrations and tests establish implementation; [requirements/evidence](https://github.com/wsg138/EnthusiaStaff/blob/main/reports/REQUIREMENTS-MATRIX.md) and exact-candidate runtime records qualify what is proven. This Wiki summarizes those sources; it does not itself authorize production cutover.

@@ -2,6 +2,14 @@
 
 Start here when you need to change, review, debug, or validate EnthusiaStaff. This page stays intentionally shallow: choose the task, get the answer you need, then follow the focused page into deeper source/evidence detail.
 
+## First five minutes
+
+1. Follow [[Development Setup]] to clone the repository, confirm the JDK/Gradle environment and locate the relevant test commands.
+2. Check [[Implementation Status]] to distinguish merged behavior from in-progress PRs and owner-reported deployment.
+3. Use the table below to choose a focused feature guide, then [[Developer Code Guide]] for precise source ownership.
+4. Before changing code, read [[Code Review Guide]] for authorization, state/retry/recovery and public-response boundaries.
+5. Use [[Build and Testing]] for the clean validation gate and record evidence for the exact candidate revision; a green build alone is not a production acceptance test.
+
 ## Where do I start?
 
 | I need to... | Start with | Go deeper when needed |
@@ -55,6 +63,7 @@ common/                shared identifiers, validation, security, bounded utiliti
 domain/                business policy, authorization, state machines and ports
 integration-contracts/ supported compile-time contracts for Enthusia-owned providers
 discord-platform-api/  provider-neutral managed-role API
+moderation-platform-api/ provider-neutral moderation contracts
 persistence/           MariaDB/Flyway/JDBC stores, leases, journals, inboxes/outboxes
 protocol/              authenticated Paper-Velocity transport
 paper/                 commands, GUIs, listeners and server-local player state

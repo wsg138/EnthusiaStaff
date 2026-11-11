@@ -4,7 +4,7 @@ EnthusiaStaff writes legacy Discord **webhook notification** intent to MariaDB i
 
 > This page describes the webhook-notification subsystem only. The standalone interactive StaffBot, account linking and Discord punishment/reconciliation runtime are now merged and documented in [[Discord Moderation Platform]] and [[Staff Bot Runtime and Operations]]. Do not use this page as the StaffBot architecture guide.
 
-For the source-oriented webhook contract and full event matrix, see [`docs/discord-delivery.md`](../../../docs/discord-delivery.md).
+For the source-oriented webhook contract and full event matrix, see [`docs/discord-delivery.md`](https://github.com/wsg138/EnthusiaStaff/blob/main/docs/discord-delivery.md).
 
 ## Safety defaults
 
