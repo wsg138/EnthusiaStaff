@@ -37,8 +37,7 @@ final class VelocitabStaffBridge implements AutoCloseable {
     private final Object integration;
     private final Class<?> integrationType;
     private ScheduledTask task;
-    private volatile StaffTabPresence presence;
-    private volatile long verifiedAt;
+    private volatile VerifiedPresence verifiedPresence;
     private volatile boolean closed;
     private Map<UUID, StaffRank> lastRanks = Map.of();
     private volatile Set<UUID> lastPlayers = Set.of();
@@ -124,22 +123,36 @@ final class VelocitabStaffBridge implements AutoCloseable {
     }
 
     private boolean fresh() {
-        return presence != null && System.nanoTime() - verifiedAt <= MAX_AGE;
+        return fresh(verifiedPresence);
+    }
+
+    private static boolean fresh(VerifiedPresence current) {
+        return current != null && System.nanoTime() - current.verifiedAt() <= MAX_AGE;
+    }
+
+    private static boolean verifiedOrdinaryPlayer(VerifiedPresence current, Player player) {
+        UUID id = player.getUniqueId();
+        return current != null && current.playerIds().contains(id)
+                && !current.ranks().containsKey(id)
+                && !current.presence().vanished().containsKey(id)
+                && !current.presence().staffMode().contains(id)
+                && !player.hasPermission(VelocityStaffDutyContext.UNRESTRICTED_PERMISSION)
+                && rank(player) == null;
     }
 
     int publicOnlineCount() {
-        StaffTabPresence current = presence;
-        Set<UUID> vanished = current == null ? Set.of() : current.vanished().keySet();
-        return PublicOnlineCountPolicy.count(fresh(), lastPlayers, vanished);
+        VerifiedPresence current = verifiedPresence;
+        Set<UUID> vanished = current == null ? Set.of() : current.presence().vanished().keySet();
+        return PublicOnlineCountPolicy.count(fresh(current), current == null ? Set.of() : current.playerIds(), vanished);
     }
 
     int localPublicOnlineCount(Player viewer) {
-        StaffTabPresence current = presence;
-        Set<UUID> vanished = current == null ? Set.of() : current.vanished().keySet();
+        VerifiedPresence current = verifiedPresence;
+        Set<UUID> vanished = current == null ? Set.of() : current.presence().vanished().keySet();
         String backend = viewer == null ? null : viewer.getCurrentServer()
                 .map(connection -> connection.getServerInfo().getName())
                 .orElse(null);
-        return LocalPublicOnlineCountPolicy.count(fresh(), backend, currentBackends(), vanished);
+        return LocalPublicOnlineCountPolicy.count(fresh(current), backend, currentBackends(), vanished);
     }
 
     private Map<UUID, String> currentBackends() {
@@ -160,16 +173,26 @@ final class VelocitabStaffBridge implements AutoCloseable {
         if (viewer.get().getUniqueId().equals(target.get().getUniqueId())) {
             return true;
         }
-        return fresh() && presence.canSee(viewer.get().getUniqueId(), rank(viewer.get()),
-                target.get().getUniqueId(), rank(target.get()))
+        VerifiedPresence current = verifiedPresence;
+        boolean permitted = fresh(current)
+                ? current.presence().canSee(viewer.get().getUniqueId(), rank(viewer.get()),
+                        target.get().getUniqueId(), rank(target.get()))
+                : verifiedOrdinaryPlayer(current, target.get());
+        return permitted
                 && (boolean) integrationType.getMethod("canSee", String.class, String.class)
                         .invoke(previous, viewerName, targetName);
     }
 
     private boolean isVanished(String name) throws ReflectiveOperationException {
         Optional<Player> player = proxy.getPlayer(name);
-        return !fresh() || player.isEmpty() || presence.vanished().containsKey(player.get().getUniqueId())
-                || (boolean) integrationType.getMethod("isVanished", String.class).invoke(previous, name);
+        if (player.isEmpty()) {
+            return true;
+        }
+        VerifiedPresence current = verifiedPresence;
+        boolean hidden = fresh(current)
+                ? current.presence().vanished().containsKey(player.get().getUniqueId())
+                : !verifiedOrdinaryPlayer(current, player.get());
+        return hidden || (boolean) integrationType.getMethod("isVanished", String.class).invoke(previous, name);
     }
 
     private void refresh() {
@@ -257,7 +280,8 @@ final class VelocitabStaffBridge implements AutoCloseable {
     }
 
     private boolean presenceChanged(PresenceSnapshot snapshot, Map<UUID, Object> users) {
-        return !snapshot.presence().equals(presence) || !snapshot.ranks().equals(lastRanks)
+        VerifiedPresence current = verifiedPresence;
+        return current == null || !snapshot.presence().equals(current.presence()) || !snapshot.ranks().equals(lastRanks)
                 || !snapshot.playerIds().equals(lastPlayers) || !users.keySet().equals(lastUsers) || !fresh();
     }
 
@@ -265,8 +289,8 @@ final class VelocitabStaffBridge implements AutoCloseable {
         lastRanks = snapshot.ranks();
         lastPlayers = snapshot.playerIds();
         lastUsers = Set.copyOf(users.keySet());
-        presence = snapshot.presence();
-        verifiedAt = System.nanoTime();
+        verifiedPresence = new VerifiedPresence(snapshot.presence(), snapshot.ranks(),
+                snapshot.playerIds(), System.nanoTime());
         failureReported = false;
     }
 
@@ -364,6 +388,15 @@ final class VelocitabStaffBridge implements AutoCloseable {
     }
 
     private static StaffRank rank(Player player) {
+        // Permanent identity remains present while active-duty permission bundles change.
+        for (StaffRank rank : new StaffRank[]{StaffRank.FOUNDER, StaffRank.DEVELOPER,
+                StaffRank.ADMIN, StaffRank.MOD, StaffRank.HELPER}) {
+            String identity = rank == StaffRank.FOUNDER ? "owner"
+                    : rank.name().toLowerCase(java.util.Locale.ROOT);
+            if (player.hasPermission("enthusiastaff.identity." + identity)) {
+                return rank;
+            }
+        }
         for (StaffRank rank : new StaffRank[]{StaffRank.FOUNDER, StaffRank.DEVELOPER,
                 StaffRank.ADMIN, StaffRank.MOD, StaffRank.HELPER}) {
             if (player.hasPermission("enthusiastaff.rank." + rank.name().toLowerCase(java.util.Locale.ROOT))) {
@@ -397,6 +430,15 @@ final class VelocitabStaffBridge implements AutoCloseable {
             if (logger.isWarnEnabled()) {
                 logger.warn("Staff tab integration cleanup unavailable ({})", exception.getClass().getSimpleName());
             }
+        }
+    }
+
+    /** One immutable generation for callback decisions, including membership and verification time. */
+    record VerifiedPresence(StaffTabPresence presence, Map<UUID, StaffRank> ranks,
+            Set<UUID> playerIds, long verifiedAt) {
+        VerifiedPresence {
+            ranks = Map.copyOf(ranks);
+            playerIds = Set.copyOf(playerIds);
         }
     }
 
