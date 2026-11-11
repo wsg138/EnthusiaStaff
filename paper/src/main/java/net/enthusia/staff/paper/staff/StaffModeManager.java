@@ -255,6 +255,28 @@ public final class StaffModeManager implements Listener {
     }
 
     /**
+     * Logs a successfully committed vanish state transition without requiring
+     * an online player callback. Runs from VanishManager's persistence worker;
+     * actor identity was captured on the player owner thread before dispatch.
+     */
+    public void logCommittedVisibilityTransition(
+            UUID playerId, String playerName, StaffRank rank, boolean vanished
+    ) {
+        net.enthusia.staff.paper.audit.StaffActionLogger logger = actionLogger;
+        if (logger == null) {
+            return;
+        }
+        try {
+            logger.recordStaffAction(playerId, playerName, rank, vanished,
+                    authorityActive(playerId),
+                    vanished ? "vanish-enabled" : "vanish-disabled",
+                    "durable-visibility-transition");
+        } catch (RuntimeException exception) {
+            plugin.getLogger().log(Level.WARNING, "Committed vanish transition audit failed", exception);
+        }
+    }
+
+    /**
      * Writes one staff-action audit line for an allowed on-duty world/inventory interaction
      * (Mod logged-not-blocked, Developer/Admin/Founder unrestricted-but-logged). Never throws.
      */
