@@ -53,7 +53,7 @@ KNOWN_JAR_SHA256 = {
 }
 MODERATION_WEB_DIR = Path(__file__).resolve().parent
 DEPLOY_PRODUCTION_SCRIPT = MODERATION_WEB_DIR / "deploy-production.ps1"
-LOCAL_JAR = MODERATION_WEB_DIR.parent / "staff-bot/build/libs/EnthusiaStaff-StaffBot-0.1.0-SNAPSHOT.jar"
+LOCAL_JAR = MODERATION_WEB_DIR.parent / "staff-bot/build/libs/EnthusiaStaff-StaffBot-0.1.1.jar"
 DETAILS_FILES = (
     Path.home() / "OneDrive/Desktop/SFTP Details- ENTHUSIA NETWORK.md",
     Path.home() / "OneDrive/Desktop/EnthusiaNetworkCredentials.md",
