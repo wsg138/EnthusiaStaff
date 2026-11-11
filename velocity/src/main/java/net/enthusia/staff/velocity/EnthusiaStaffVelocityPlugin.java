@@ -95,7 +95,7 @@ import org.slf4j.Logger;
 @Plugin(
         id = "enthusiastaff",
         name = "EnthusiaStaff",
-        version = "0.1.0-SNAPSHOT",
+        version = "0.1.1",
         description = "Enthusia Network staff and moderation runtime for Velocity",
         authors = {"P2wn"},
         dependencies = {
