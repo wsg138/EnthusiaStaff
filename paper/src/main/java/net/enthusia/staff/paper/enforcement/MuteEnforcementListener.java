@@ -187,6 +187,12 @@ public final class MuteEnforcementListener implements Listener, AutoCloseable {
         }
         Entry entry = cache.get(player.getUniqueId());
         if (entry == null || entry.validUntil().isBefore(clock.instant())) {
+            if (player.hasPermission(VERIFICATION_OVERRIDE_PERMISSION)) {
+                // Explicit operator override applies only while verification is unavailable,
+                // not when an authoritative MUTE or PUBLIC_MUTE has been confirmed.
+                refresh(player);
+                return;
+            }
             cancellation.accept(true);
             notifyPlayer(player, "Your moderation status is still being verified. Please try again shortly.");
             refresh(player);
