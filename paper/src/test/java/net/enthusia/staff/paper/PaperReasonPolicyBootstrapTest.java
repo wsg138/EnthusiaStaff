@@ -69,6 +69,45 @@ final class PaperReasonPolicyBootstrapTest {
     }
 
     @Test
+    void sameVersionChangedSanctionLadderWarnsWithoutOverwritingIt() throws IOException {
+        String bundled = bundledPolicy();
+        String originalStep = "label: \"6 hour mute\", sanctions: [{ type: MUTE, duration: 6h }]";
+        String changedStep = "label: \"8 hour mute\", sanctions: [{ type: MUTE, duration: 8h }]";
+        assertTrue(bundled.contains(originalStep), "Test fixture must contain the expected sanction");
+        String installed = bundled.replace(originalStep, changedStep);
+        Path file = directory.resolve(POLICY_FILENAME);
+        Files.writeString(file, installed);
+        List<LogRecord> records = new ArrayList<>();
+        AtomicReference<String> degraded = new AtomicReference<>();
+
+        var result = new PaperReasonPolicyBootstrap(capturingLogger(records),
+                () -> inputStream(bundled)).load(file, degraded::set);
+
+        assertTrue(result.isPresent(), "A customized valid policy must remain usable");
+        assertEquals(installed, Files.readString(file), "Never overwrite the installed policy");
+        assertEquals(null, degraded.get());
+        assertTrue(records.stream().anyMatch(r -> r.getLevel() == Level.WARNING
+                && r.getMessage().contains("content differs")
+                && r.getMessage().contains("identical version")
+                && r.getMessage().contains("Existing settings remain unchanged")));
+    }
+
+    @Test
+    void sameVersionCommentsOnlyDoNotTriggerSemanticDriftWarning() throws IOException {
+        String bundled = bundledPolicy();
+        Path file = directory.resolve(POLICY_FILENAME);
+        Files.writeString(file, bundled + "\n# Locally documented policy, unchanged sanctions.\n");
+        List<LogRecord> records = new ArrayList<>();
+
+        var result = new PaperReasonPolicyBootstrap(capturingLogger(records),
+                () -> inputStream(bundled)).load(file, reason -> { throw new AssertionError(reason); });
+
+        assertTrue(result.isPresent());
+        assertFalse(records.stream().anyMatch(r -> r.getLevel() == Level.WARNING),
+                "Comments should not be treated as changed punishment policy");
+    }
+
+    @Test
     void missingPackagedPolicyDoesNotDisableExistingValidConfiguration() throws IOException {
         Path file = directory.resolve(POLICY_FILENAME);
         Files.writeString(file, bundledPolicy());
