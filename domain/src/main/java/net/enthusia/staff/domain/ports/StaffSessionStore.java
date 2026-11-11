@@ -34,6 +34,14 @@ public interface StaffSessionStore {
 
     Optional<StaffSessionSnapshot> beginExit(UUID staffId, Instant now);
 
+    /**
+     * Closes only the exact detached lease whose source backend already verified restoration.
+     * No destination player snapshot is applied. Older adapters fail closed.
+     */
+    default boolean retireDetached(StaffSessionSnapshot expected, Instant now) {
+        return false;
+    }
+
     boolean completeExit(UUID sessionId, String restoredChecksum, Instant now);
 
     void recoveryRequired(UUID sessionId, String reason, Instant now);
