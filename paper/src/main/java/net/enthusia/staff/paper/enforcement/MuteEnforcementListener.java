@@ -10,6 +10,7 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CompletionStage;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
@@ -61,6 +62,7 @@ public final class MuteEnforcementListener implements Listener, AutoCloseable {
     private final ConcurrentHashMap<UUID, Instant> lastMuteEvasionAlert = new ConcurrentHashMap<>();
     private final PaperPlayerPlatformResolver platforms;
     private final PlayerMessageDispatcher messages;
+    private final DiscordMuteVerifier discordMutes;
     private final ConcurrentHashMap<UUID, Entry> cache = new ConcurrentHashMap<>();
     private ScheduledTask refreshTask;
 
@@ -96,6 +98,8 @@ public final class MuteEnforcementListener implements Listener, AutoCloseable {
         this.muteEvasionAlerts = Objects.requireNonNull(muteEvasionAlerts, "muteEvasionAlerts");
         this.platforms = PaperPlayerPlatformResolver.discover(plugin);
         this.messages = new PlayerMessageDispatcher(plugin);
+        this.discordMutes = new DiscordMuteVerifier(
+                mode, sanctions, workers, clock, plugin.getLogger(), Duration.ofSeconds(2), 32);
     }
 
     public void start() {
@@ -285,6 +289,10 @@ public final class MuteEnforcementListener implements Listener, AutoCloseable {
                 : CachedMuteStatus.PUBLIC_MUTED;
     }
 
+    public CompletionStage<CachedMuteStatus> verifyDiscordStatus(UUID playerId) {
+        return discordMutes.verify(playerId);
+    }
+
     private void refresh(UUID playerId) {
         submit(() -> refreshNow(playerId));
     }
@@ -318,6 +326,7 @@ public final class MuteEnforcementListener implements Listener, AutoCloseable {
 
     @Override
     public void close() {
+        discordMutes.close();
         if (refreshTask != null) {
             refreshTask.cancel();
         }

@@ -1,5 +1,7 @@
 # Latest agent handoff
 
+2026-10-14 owner-directed review: continue [offline Discord mute verification](../package-handoffs/2026-10-06-owner-offline-discord-mute.md) in existing Staff PR #339 and RoseChat PR #22. Preserve the coordinator's separate work below. This review does not authorize production deployment or merge incomplete gates.
+
 Current coordinator handoff: **Configurability / repository cleanup / production acceptance — ACTIONABLE_CONTINUATION**.
 
 Canonical handoff:
