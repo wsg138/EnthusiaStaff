@@ -18,7 +18,7 @@ This page describes **private staging installation and topology**, not permissio
 
 Depending on the staging group being exercised:
 
-- Java 25;
+- Java 25 for the build and Paper 26.2-based backend runtime; the standalone StaffBot targets Java 21 bytecode (verify the exact runtime's dependencies and deployment environment independently);
 - supported Paper/Leaf/Purpur backend(s);
 - supported Velocity proxy;
 - MariaDB;

@@ -41,7 +41,7 @@ java -version
 ./gradlew --version
 ```
 
-Both should use Java 25.
+Use a **Java 25 JDK for the Gradle build**. The [root Gradle configuration](https://github.com/wsg138/EnthusiaStaff/blob/main/build.gradle.kts) sets a Java 25 toolchain but normally emits Java 21 bytecode; the [Paper module](https://github.com/wsg138/EnthusiaStaff/blob/main/paper/build.gradle.kts) overrides its target to Java 25 for the Paper 26.2 API. This build requirement is not a claim that every separately deployed runtime requires Java 25.
 
 Complete Java validation is documented in [[Build and Testing]]. The root `runtimeJars` task builds/verifies four Java runtimes:
 
@@ -89,6 +89,7 @@ common/
 domain/
 integration-contracts/
 discord-platform-api/
+moderation-platform-api/
 persistence/
 protocol/
 paper/
