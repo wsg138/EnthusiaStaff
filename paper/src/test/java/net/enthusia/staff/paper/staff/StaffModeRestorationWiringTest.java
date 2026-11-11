@@ -98,6 +98,18 @@ class StaffModeRestorationWiringTest {
     }
 
     @Test
+    void ranklessDestinationHandoffDoesNotSkipDurableSessionRecovery() throws IOException {
+        String join = method("public void onJoin(PlayerJoinEvent event)", "public void recover(Player player)");
+        int rankCheck = join.indexOf("if (rank == null)");
+        int recovery = join.indexOf("recover(playerId, rank);", rankCheck);
+
+        assertTrue(rankCheck >= 0, "join must check the current rank");
+        assertTrue(recovery > rankCheck, "durable recovery must run after the rank check");
+        assertTrue(!join.substring(rankCheck, recovery).contains("return;"),
+                "rank loss must not abandon a saved Staff session before recovery");
+    }
+
+    @Test
     void backendHandoffRestoresLocalStateThenDetachesNetworkSession() throws IOException {
         String completion = method("private void completeBackendHandoff", "private void retainCancelledHandoffRecovery");
 
