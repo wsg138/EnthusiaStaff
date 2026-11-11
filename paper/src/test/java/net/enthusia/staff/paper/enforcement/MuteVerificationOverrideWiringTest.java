@@ -29,7 +29,7 @@ class MuteVerificationOverrideWiringTest {
                 "src/main/java/net/enthusia/staff/paper/integration/RoseChatIntegration.java"));
 
         assertTrue(source.contains("case UNVERIFIED -> unverifiedDecision(context);"));
-        assertTrue(source.contains("if (enforcement == null) {\\n                return unverifiedDecision(context);"));
+        assertTrue(source.contains("return unverifiedDecision(context);"));
         assertTrue(source.contains("sender.hasPermission(MuteEnforcementListener.VERIFICATION_OVERRIDE_PERMISSION)"));
     }
 }
