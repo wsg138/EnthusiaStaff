@@ -1907,6 +1907,7 @@ public final class StaffModeManager implements Listener {
         String toolSession = UUID.randomUUID().toString();
         toolSessions.put(playerId, toolSession);
         try {
+            clearStaffToolCursor(player);
             player.closeInventory();
             player.getInventory().clear();
             player.getActivePotionEffects().forEach(effect -> player.removePotionEffect(effect.getType()));
@@ -2029,6 +2030,7 @@ public final class StaffModeManager implements Listener {
         UUID playerId = player.getUniqueId();
         toolInventoryPreferences.put(playerId, enabled);
         if (authorityActive(playerId)) {
+            clearStaffToolCursor(player);
             player.closeInventory();
             player.getInventory().clear();
             if (enabled) {
@@ -2153,7 +2155,17 @@ public final class StaffModeManager implements Listener {
                 && item.getItemMeta().getPersistentDataContainer().has(staffToolKey, PersistentDataType.STRING);
     }
 
+    private void clearStaffToolCursor(Player player) {
+        // Inventory close, mode exit and tool-layout refresh must never deposit a
+        // tagged session tool left on the cursor into a restored or foreign inventory.
+        // Ordinary items on the cursor remain untouched.
+        if (isStaffTool(player.getItemOnCursor())) {
+            player.setItemOnCursor(null);
+        }
+    }
+
     private void removeStaffTools(Player player) {
+        clearStaffToolCursor(player);
         ItemStack[] contents = player.getInventory().getContents();
         for (int index = 0; index < contents.length; index++) {
             if (isStaffTool(contents[index])) {
