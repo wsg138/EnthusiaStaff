@@ -13,7 +13,7 @@ EnthusiaStaff is a **live network plugin under active development**. Use this in
 | Work on moderation/staff behavior | [Feature reference](feature-reference.md) | [Punishment workflow](punishment-workflow.md), [inventory safety](inventory-safety.md), [security](security.md) |
 | Integrate providers, APIs, web or bot | [External component catalog](repository-cleanup/EXTERNAL-COMPONENT-CATALOG.md) | [Discord platform](discord-moderation-platform.md), [website/API wiki](wiki/pages/Website-and-Web-API.md) |
 | Understand intended versus implemented behavior | [Specifications index](specifications/README.md) | [Product goals](../ENTHUSIASTAFF-GOALS.md), merged code and tests |
-| Understand why something changed | [History timeline](history/TIMELINE.md) | [Historical source catalog](history/SOURCE-CATALOG.md), [ADRs](decisions/) |
+| Understand why something changed | [History timeline](history/TIMELINE.md) | [Historical archive](history/archive/README.md), [source catalog](history/SOURCE-CATALOG.md), [ADRs](decisions/) |
 | Contribute to the repository cleanup | [Cleanup status and review queue](repository-cleanup/STATUS.md) | [Execution plan](repository-cleanup/README.md), [tracking issue #426](https://github.com/wsg138/EnthusiaStaff/issues/426) |
 
 ## Current code locations
