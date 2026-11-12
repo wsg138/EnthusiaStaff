@@ -114,7 +114,7 @@ public final class PunishmentRequestCommandHandler {
         List<RequestView> pending = service.reviewable(actor, CONSOLE_QUEUE_LIMIT).stream()
                 .map(this::view)
                 .toList();
-        onMain(() -> sendQueue(sender, pending));
+        onSender(sender, () -> sendQueue(sender, pending));
     }
 
     private void review(CommandSender sender, String[] args, Actor actor) {
@@ -136,7 +136,7 @@ public final class PunishmentRequestCommandHandler {
         }
         PunishmentApprovalRequest request = service.find(requestId).orElse(null);
         RequestView view = request != null && service.mayReview(actor, request) ? view(request) : null;
-        onMain(() -> {
+        onSender(sender, () -> {
             if (view == null) {
                 sender.sendMessage(StaffMessageStyle.style(Component.text(
                         "The request does not exist or you are not authorized to review it.",
@@ -175,7 +175,7 @@ public final class PunishmentRequestCommandHandler {
         PunishmentRequestResult result = acquired instanceof PunishmentRequestResult.Leased leased
                 ? decideLeased(service, leased, actor, approve, denialNote)
                 : acquired;
-        onMain(() -> sendDecision(sender, result));
+        onSender(sender, () -> sendDecision(sender, result));
     }
 
     private static PunishmentRequestResult decideLeased(
@@ -193,7 +193,7 @@ public final class PunishmentRequestCommandHandler {
     private PunishmentRequestService readyService(CommandSender sender) {
         PunishmentRequestService service = services.get();
         if (service == null) {
-            onMain(() -> sender.sendMessage(StaffMessageStyle.style(Component.text(NOT_READY_MESSAGE, NamedTextColor.RED))));
+            onSender(sender, () -> sender.sendMessage(StaffMessageStyle.style(Component.text(NOT_READY_MESSAGE, NamedTextColor.RED))));
         }
         return service;
     }
@@ -215,15 +215,15 @@ public final class PunishmentRequestCommandHandler {
             operation.run();
         } catch (RuntimeException exception) {
             plugin.getLogger().log(Level.SEVERE, "Punishment request command failed", exception);
-            onMain(() -> sender.sendMessage(StaffMessageStyle.style(Component.text(
+            onSender(sender, () -> sender.sendMessage(StaffMessageStyle.style(Component.text(
                     "Punishment request storage is unavailable; no decision was made.",
                     NamedTextColor.RED
             ))));
         }
     }
 
-    private void onMain(Runnable action) {
-        plugin.getServer().getScheduler().runTask(plugin, action);
+    private void onSender(CommandSender sender, Runnable action) {
+        new CommandResponseDispatcher(plugin).execute(sender, action);
     }
 
     private static void sendQueue(CommandSender sender, List<RequestView> pending) {
