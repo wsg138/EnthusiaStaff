@@ -34,6 +34,7 @@ public final class PunishmentGuiSmoke extends JavaPlugin implements Listener {
     private static final String EXPECTED_HOLDER = "PunishmentTargetPickerHolder";
     private static final int REFRESH_SLOT = 49;
     private static final int CLOSE_SLOT = 51;
+    private static final int REFRESHED_PICKER_OPEN_COUNT = 2;
     private final AtomicBoolean started = new AtomicBoolean();
     private final AtomicBoolean staffAttempted = new AtomicBoolean();
     private final AtomicInteger pickerOpens = new AtomicInteger();
@@ -153,7 +154,7 @@ public final class PunishmentGuiSmoke extends JavaPlugin implements Listener {
                 return;
             }
             marker("PICKER_OPEN=true");
-            if (pickerOpens.incrementAndGet() == 2) {
+            if (pickerOpens.incrementAndGet() == REFRESHED_PICKER_OPEN_COUNT) {
                 marker("PICKER_REFRESH_OPEN=true");
             }
         }
@@ -162,30 +163,45 @@ public final class PunishmentGuiSmoke extends JavaPlugin implements Listener {
     /** Observe only the two non-sanctioning picker controls. Do not cancel or inject clicks. */
     @EventHandler(priority = EventPriority.LOWEST)
     public void onPickerControl(InventoryClickEvent event) {
-        if (!(event.getWhoClicked() instanceof Player player)
-                || !player.getUniqueId().equals(targetId)
-                || !expected(event.getView().getTopInventory())) {
+        if (!isProofPickerControl(event)) {
             return;
         }
         int slot = event.getRawSlot();
         if (slot == REFRESH_SLOT) {
-            if (event.getCurrentItem() == null
-                    || event.getCurrentItem().getType() != Material.CLOCK) {
-                marker("FAIL=refresh_control_material_changed");
-                return;
-            }
-            marker("REFRESH_CLICK_OBSERVED=true");
+            recordRefreshControl(event);
         } else if (slot == CLOSE_SLOT) {
-            if (event.getCurrentItem() == null
-                    || event.getCurrentItem().getType() != Material.BARRIER) {
-                marker("FAIL=close_control_material_changed");
-                return;
-            }
-            closeControlClicked.set(true);
-            marker("CLOSE_CLICK_OBSERVED=true");
+            recordCloseControl(event);
         } else {
             marker("FAIL=unapproved_picker_slot_clicked");
         }
+    }
+
+    private boolean isProofPickerControl(InventoryClickEvent event) {
+        return event.getWhoClicked() instanceof Player player
+                && player.getUniqueId().equals(targetId)
+                && expected(event.getView().getTopInventory());
+    }
+
+    private static boolean matchesControl(InventoryClickEvent event, Material expectedMaterial) {
+        return event.getCurrentItem() != null
+                && event.getCurrentItem().getType() == expectedMaterial;
+    }
+
+    private void recordRefreshControl(InventoryClickEvent event) {
+        if (!matchesControl(event, Material.CLOCK)) {
+            marker("FAIL=refresh_control_material_changed");
+            return;
+        }
+        marker("REFRESH_CLICK_OBSERVED=true");
+    }
+
+    private void recordCloseControl(InventoryClickEvent event) {
+        if (!matchesControl(event, Material.BARRIER)) {
+            marker("FAIL=close_control_material_changed");
+            return;
+        }
+        closeControlClicked.set(true);
+        marker("CLOSE_CLICK_OBSERVED=true");
     }
 
     @EventHandler(priority = EventPriority.MONITOR)
