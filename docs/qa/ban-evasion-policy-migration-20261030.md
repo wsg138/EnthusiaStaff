@@ -16,6 +16,15 @@
 - Refuses symlinks, wrong path equality, unexpected version/ladder, missing reason IDs and divergent policies. Refuses to replace the installed policy if the staged file's POSIX user/group ownership differs from the original; use the existing server file owner for the migration. Preserves the original POSIX permission bits. Already-migrated identical content is a no-op.
 - The script is **not concurrency-safe against arbitrary other writers during the last byte check and replace**. Stop or isolate the server/plugin and coordinate all operators before applying. Do not run it while policy files may be edited by an independent process.
 
+## Failure statuses and post-replacement uncertainty
+
+The CLI uses distinct exit codes so operators must not infer that all failures mean the installed policy stayed unchanged:
+
+- **Exit 2, `REJECTED`:** validation, backup preparation or pre-replacement checks failed. Inspect the filesystem and logs before retrying; a verified backup may already exist if replacement itself failed.
+- **Exit 3, `POST_REPLACE_UNCERTAIN`:** `os.replace` returned successfully, but directory fsync or the post-replacement readback failed. **The installed policy may already contain the new candidate even though the command exited nonzero.** Never treat this as a safe no-write rejection and never automatically rerun `--apply`.
+
+On exit 3 the CLI re-reads the installed file (if possible), classifies it as `CANDIDATE_PRESENT`, `ORIGINAL_PRESENT`, `UNEXPECTED_BYTES` or `UNREADABLE`, reports the observed SHA-256 and expected original/candidate hashes, and checks the recovery backup as `ORIGINAL_VERIFIED`, `MISMATCH` or `UNREADABLE`. Keep every writer isolated; independently verify those checksums and the backup before deciding whether to repair durability, restore atomically or escalate. `CANDIDATE_PRESENT` is a content check, **not proof of fsync durability or of the currently loaded plugin policy**. Reconcile the disk and loaded state through a separately authorized staging/maintenance procedure. The script never performs automatic rollback or a restart.
+
 ## Staging-only example
 
 Run these commands **only in an explicitly isolated disposable staging folder** after obtaining the candidate YAML from an exact reviewed commit:
