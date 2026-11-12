@@ -117,12 +117,20 @@ def write_exclusive_backup(source: Path, backup: Path, original: bytes, mode: in
     """Remove an incomplete *new* backup; never overwrite an existing one."""
     created = False
     try:
-        with backup.open("xb") as output:
-            created = True
+        # Create owner-only even when process umask is permissive. Do not make
+        # original bytes group/world readable while writing a partial backup.
+        descriptor = os.open(backup, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        created = True
+        with os.fdopen(descriptor, "wb") as output:
             output.write(original)
             output.flush()
             os.fsync(output.fileno())
-        os.chmod(backup, mode)
+            # The completed bytes are durable before restoring the source mode.
+            if os.name == "nt":
+                os.chmod(backup, mode)
+            else:
+                os.fchmod(output.fileno(), mode)
+            os.fsync(output.fileno())
         require_same_owner(source, backup)
         if backup.read_bytes() != original:
             raise MigrationRejected("backup verification failed before policy replacement")
@@ -155,8 +163,12 @@ def stage_and_replace(path: Path, before: bytes, after: bytes, mode: int) -> Non
         with os.fdopen(fd, "wb") as output:
             output.write(after)
             output.flush()
+            # Persist the original file mode before the last file fsync.
+            if os.name == "nt":
+                os.chmod(temp_name, mode)
+            else:
+                os.fchmod(output.fileno(), mode)
             os.fsync(output.fileno())
-        os.chmod(temp_name, mode)
         require_same_owner(path, Path(temp_name))
         if path.read_bytes() != before:
             raise MigrationRejected("installed policy changed during staging; original retained")
