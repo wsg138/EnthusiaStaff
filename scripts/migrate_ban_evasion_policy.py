@@ -43,6 +43,10 @@ class MigrationRejected(ValueError):
     """An unexpected input must never be written to the installed policy."""
 
 
+class ReplacementStateUncertain(RuntimeError):
+    """The atomic replacement succeeded, but subsequent verification did not."""
+
+
 def digest(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
@@ -158,9 +162,16 @@ def stage_and_replace(path: Path, before: bytes, after: bytes, mode: int) -> Non
             raise MigrationRejected("installed policy changed during staging; original retained")
         os.replace(temp_name, path)
         temp_name = None
-        sync_directory(path.parent)
-        if path.read_bytes() != after:
-            raise MigrationRejected("post-replacement verification failed; restore from backup")
+        # After a successful swap, an fsync or readback failure is NOT a rejection:
+        # the installed policy may already contain the candidate. Keep its backup.
+        try:
+            sync_directory(path.parent)
+            if path.read_bytes() != after:
+                raise ReplacementStateUncertain("post-replacement content differs from candidate")
+        except OSError as error:
+            raise ReplacementStateUncertain(
+                "post-replacement directory sync or verification failed"
+            ) from error
     finally:
         if temp_name is not None:
             Path(temp_name).unlink(missing_ok=True)
@@ -206,6 +217,36 @@ def main(argv: list[str] | None = None) -> int:
         print(f"MIGRATION_APPLIED; backup={backup}")
         print("Restart/reload is NOT performed. Verify runtime policy separately.")
         return 0
+    except ReplacementStateUncertain as error:
+        # Never claim "no write" once os.replace() has returned successfully.
+        # Read actual disk state again, including the pre-existing verified backup.
+        backup = args.installed.with_name(
+            args.installed.name + ".before-ban-evasion-" + digest(before)[:16] + ".bak"
+        )
+        try:
+            installed_now = args.installed.read_bytes()
+            observed_sha = digest(installed_now)
+            if installed_now == after:
+                installed_state = "CANDIDATE_PRESENT"
+            elif installed_now == before:
+                installed_state = "ORIGINAL_PRESENT"
+            else:
+                installed_state = "UNEXPECTED_BYTES"
+        except OSError:
+            installed_state, observed_sha = "UNREADABLE", "UNAVAILABLE"
+        try:
+            backup_state = "ORIGINAL_VERIFIED" if backup.read_bytes() == before else "MISMATCH"
+        except OSError:
+            backup_state = "UNREADABLE"
+        print(
+            "POST_REPLACE_UNCERTAIN: " + str(error)
+            + f"; installed_state={installed_state}; installed_sha256={observed_sha}"
+            + f"; original_sha256={digest(before)}; candidate_sha256={digest(after)}"
+            + f"; backup={backup}; backup_state={backup_state}"
+            + "; do not retry automatically; isolate all writers and verify/restore using the runbook",
+            file=sys.stderr,
+        )
+        return 3
     except (MigrationRejected, OSError) as error:
         print(f"REJECTED: {error}", file=sys.stderr)
         return 2
