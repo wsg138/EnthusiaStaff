@@ -18,6 +18,7 @@ import java.util.logging.Level;
 import java.util.regex.Pattern;
 import net.enthusia.staff.domain.auth.StaffRank;
 import net.enthusia.staff.protocol.StaffAuthorityHttpSigning;
+import net.enthusia.staff.paper.alert.StaffAlertOwnerDispatch;
 import net.kyori.adventure.text.Component;
 import net.luckperms.api.LuckPerms;
 import net.luckperms.api.LuckPermsProvider;
@@ -498,13 +499,12 @@ public final class DiscordStaffAuthorityEndpoint implements AutoCloseable {
     }
 
     private void scheduleStaffAlert(UUID alertId) {
-        plugin.getServer().getGlobalRegionScheduler().execute(plugin, () -> {
-            Component message = Component.text("Linked-alt investigation alert " + alertId
-                    + ". Review private Discord moderation tools; no automatic punishment was applied.");
-            plugin.getServer().getOnlinePlayers().stream()
-                    .filter(player -> PaperStaffRankResolver.resolve(player::hasPermission).isPresent())
-                    .forEach(player -> player.sendMessage(message));
-        });
+        StaffAlertOwnerDispatch.alert(
+                plugin,
+                Component.text("Linked-alt investigation alert " + alertId
+                        + ". Review private Discord moderation tools; no automatic punishment was applied."),
+                player -> PaperStaffRankResolver.resolve(player::hasPermission).isPresent()
+        );
     }
 
     private static UUID queryUuid(String rawQuery, String key) {
