@@ -122,6 +122,20 @@ class VanishStaffModeRestorationWiringTest {
         assertFalse(method.contains("reconcileVanishGameMode(player)"));
     }
 
+    @Test
+    void missingDurableVanishCannotOverrideStaffSessionRecoveryGameMode() throws IOException {
+        String source = Files.readString(SOURCE).replace("\r\n", "\n");
+        int start = source.indexOf("private void applyDurableVanishRecovery(");
+        int absence = source.indexOf("if (record == null)", start);
+        int restoration = source.indexOf("restoreSelectedGameMode(player);", absence);
+        assertTrue(start >= 0 && absence > start && restoration > absence);
+        String decision = source.substring(absence, restoration);
+        assertTrue(decision.contains("!staffMode.transitioning(playerId)"),
+                "durable absence must not restore a mode while Staff recovery is in flight");
+        assertTrue(decision.contains("!staffMode.active(playerId)"),
+                "durable absence must not overwrite a live Staff session mode");
+    }
+
     private static String method(String startMarker, String endMarker) throws IOException {
         String source = Files.readString(SOURCE).replace("\r\n", "\n");
         int start = source.indexOf(startMarker);
