@@ -260,7 +260,7 @@ public final class InteractiveChatStagingArtifactProvider
                     return;
                 }
                 Player player = plugin.getServer().getPlayer(request.minecraftPlayerId());
-                if (player == null || !player.isOnline()) {
+                if (player == null) {
                     result.complete(List.of());
                     return;
                 }
