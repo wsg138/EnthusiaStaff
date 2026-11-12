@@ -7,13 +7,17 @@ import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 import org.bukkit.Bukkit;
+import org.bukkit.Material;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.inventory.InventoryOpenEvent;
+import org.bukkit.event.inventory.InventoryClickEvent;
+import org.bukkit.event.inventory.InventoryCloseEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.InventoryHolder;
@@ -28,8 +32,12 @@ public final class PunishmentGuiSmoke extends JavaPlugin implements Listener {
     private static final Path PROOF = Path.of("punishment-gui-smoke.txt");
     private static final int EXPECTED_TOP_SLOTS = 54;
     private static final String EXPECTED_HOLDER = "PunishmentTargetPickerHolder";
+    private static final int REFRESH_SLOT = 49;
+    private static final int CLOSE_SLOT = 51;
     private final AtomicBoolean started = new AtomicBoolean();
     private final AtomicBoolean staffAttempted = new AtomicBoolean();
+    private final AtomicInteger pickerOpens = new AtomicInteger();
+    private final AtomicBoolean closeControlClicked = new AtomicBoolean();
     private UUID targetId;
 
     @Override
@@ -135,6 +143,48 @@ public final class PunishmentGuiSmoke extends JavaPlugin implements Listener {
                 return;
             }
             marker("PICKER_OPEN=true");
+            if (pickerOpens.incrementAndGet() == 2) {
+                marker("PICKER_REFRESH_OPEN=true");
+            }
+        }
+    }
+
+    /** Observe only the two non-sanctioning picker controls. Do not cancel or inject clicks. */
+    @EventHandler(priority = EventPriority.LOWEST)
+    public void onPickerControl(InventoryClickEvent event) {
+        if (!(event.getWhoClicked() instanceof Player player)
+                || !player.getUniqueId().equals(targetId)
+                || !expected(event.getView().getTopInventory())) {
+            return;
+        }
+        int slot = event.getRawSlot();
+        if (slot == REFRESH_SLOT) {
+            if (event.getCurrentItem() == null
+                    || event.getCurrentItem().getType() != Material.CLOCK) {
+                marker("FAIL=refresh_control_material_changed");
+                return;
+            }
+            marker("REFRESH_CLICK_OBSERVED=true");
+        } else if (slot == CLOSE_SLOT) {
+            if (event.getCurrentItem() == null
+                    || event.getCurrentItem().getType() != Material.BARRIER) {
+                marker("FAIL=close_control_material_changed");
+                return;
+            }
+            closeControlClicked.set(true);
+            marker("CLOSE_CLICK_OBSERVED=true");
+        } else {
+            marker("FAIL=unapproved_picker_slot_clicked");
+        }
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR)
+    public void onPickerClose(InventoryCloseEvent event) {
+        if (event.getPlayer() instanceof Player player
+                && player.getUniqueId().equals(targetId)
+                && expected(event.getView().getTopInventory())
+                && closeControlClicked.get()) {
+            marker("PICKER_CLOSED_AFTER_CONTROL=true");
         }
     }
 
