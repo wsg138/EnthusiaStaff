@@ -17,7 +17,7 @@ class FoliaAdmissionTests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
-        self.jar = self.root / "paper/build/libs/EnthusiaStaff-Paper-0.1.0-SNAPSHOT.jar"
+        self.jar = self.root / "paper/build/libs/EnthusiaStaff-Paper-0.1.1.jar"
         self.jar.parent.mkdir(parents=True)
         self.src = self.root / "paper/src/main/java/net/enthusia/staff/paper"
         self.src.mkdir(parents=True)
@@ -143,6 +143,30 @@ class FoliaAdmissionTests(unittest.TestCase):
         result = audit.inspect(self.root)
         self.assertIn("legacy_bukkit_scheduler",
                       [b["id"] for b in result["known_source_blockers"]])
+
+    def test_runtime_artifact_version_is_not_hardcoded(self):
+        renamed = self.jar.with_name("EnthusiaStaff-Paper-0.1.2.jar")
+        self.jar.rename(renamed)
+        result = audit.inspect(self.root)
+        self.assertEqual(
+            "paper/build/libs/EnthusiaStaff-Paper-0.1.2.jar!/plugin.yml",
+            result["packaged_plugin_yml"],
+        )
+
+    def test_missing_or_ambiguous_runtime_jar_fails_closed(self):
+        with self.assertRaises(audit.AdmissionError):
+            audit.inspect(self.root / "missing")
+        (self.jar.parent / "EnthusiaStaff-Paper-0.1.2.jar").write_bytes(self.jar.read_bytes())
+        with self.assertRaises(audit.AdmissionError):
+            audit.inspect(self.root)
+
+    def test_source_archive_does_not_confuse_runtime_jar_selection(self):
+        (self.jar.parent / "EnthusiaStaff-Paper-0.1.1-sources.jar").write_bytes(b"source archive")
+        result = audit.inspect(self.root)
+        self.assertEqual(
+            "paper/build/libs/EnthusiaStaff-Paper-0.1.1.jar!/plugin.yml",
+            result["packaged_plugin_yml"],
+        )
 
     def test_duplicate_or_invalid_marker_fails_closed(self):
         for yaml in ("folia-supported: true\nfolia-supported: false\n",
