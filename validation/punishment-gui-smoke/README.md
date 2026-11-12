@@ -9,7 +9,7 @@ The test explicitly checks:
 - The plugin is enabled only with an isolated-test JVM flag, `server-ip=127.0.0.1`, `online-mode=false` and at most two players.
 - The server's `PunishmentTargetPickerHolder` opens with exactly **54 slots**.
 - The client receives a matching top-inventory window with 54 slots.
-- **Only two non-sanctioning player-click controls are permitted:** slot 49 must contain a CLOCK and refresh the picker; slot 51 must contain a BARRIER and close it. The client refuses to click when a slot's item changes, never selects player heads/reasons, and never invokes an approval.
+- **Strictly scoped clicks:** slot 49 must contain a CLOCK and refresh the picker; slot 51 must contain a BARRIER and close it. After those controls and an independently verified two-player checkpoint, the client may click **only slot 9 PLAYER_HEAD**, representing the single disposable `GuiTarget`. Every delayed click requires the exact active inventory window and expected item type; no other player head, category, reason or approval is selected.
 - Server-side `InventoryClickEvent` and `InventoryCloseEvent` must independently show the Refresh click, refreshed picker opening, Close click, and final window closure. The client must also observe the second window and close packet.
 - No category, reason, sanction, or confirmation action is sent; player-head navigation is restricted to the unique disposable target, and the server has no configured production integrations.
 - Server and client evidence logs are attached to the CI run, including failures.
