@@ -1,0 +1,55 @@
+name: Folia source admission preflight
+
+on:
+  pull_request:
+    paths:
+      - "paper/src/main/java/net/enthusia/staff/paper/integration/RoseChatInboundBridgeIntegration.java"
+      - "paper/src/main/java/net/enthusia/staff/paper/staff/StaffStateCodec.java"
+      - "paper/src/main/java/net/enthusia/staff/paper/staff/StaffModeManager.java"
+      - "paper/src/main/resources/plugin.yml"
+      - "scripts/qa/paper_folia_admission.py"
+      - "scripts/qa/test_paper_folia_admission.py"
+      - ".github/workflows/folia-source-admission-preflight.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  source-admission:
+    name: Check known Folia blockers without opting in
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Run Folia admission scanner regression tests
+        run: python3 -m unittest discover -s scripts/qa -p 'test_paper_folia_admission.py' -v
+      - name: Guard against legacy scheduler regression and accidental Folia opt-in
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          from scripts.qa.paper_folia_admission import (
+              known_source_blockers, metadata_opt_in,
+          )
+
+          root = Path(".")
+          blockers = known_source_blockers(root)
+          metadata = (root / "paper/src/main/resources/plugin.yml").read_text(encoding="utf-8")
+          rosechat_legacy = [
+              b for b in blockers
+              if b["id"] == "legacy_bukkit_scheduler"
+              and b["path"].endswith("/RoseChatInboundBridgeIntegration.java")
+          ]
+          assert not rosechat_legacy, "RoseChat bridge still uses legacy Bukkit scheduling"
+          assert not metadata_opt_in(metadata), (
+              "Folia opt-in must remain disabled until full threading/runtime acceptance"
+          )
+          print("RoseChat legacy scheduler findings: 0")
+          print(f"Other known Folia source blockers: {len(blockers)}")
+          for blocker in blockers:
+              print(f'BLOCKER {blocker["id"]} {blocker["path"]}:{blocker["line"]}')
+          print("Folia runtime acceptance: NOT PROVEN; release NO_GO")
+          PY
