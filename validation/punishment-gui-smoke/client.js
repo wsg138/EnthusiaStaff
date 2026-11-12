@@ -37,12 +37,19 @@ function fail (reason) {
 
 function clickSafeControl (window, slot, itemName, marker) {
   if (ended) return
+  // clickWindow operates on the currently open inventory, not the window
+  // object passed to this helper. Never click when a delayed picker is stale.
+  if (bot.currentWindow !== window) {
+    fail('picker changed before approved control click')
+    return
+  }
   const item = window.slots[slot]
   if (!item || item.name !== itemName) {
     fail('unexpected item at ' + slot + ' expected ' + itemName +
       ' got ' + String(item?.name))
     return
   }
+  if (slot === CLOSE_SLOT) closeRequested = true
   console.log(marker)
   // The click can resolve after the server replaces/closes its inventory.
   // The actual proof is a subsequent window event, not clickWindow's return.
@@ -72,10 +79,8 @@ bot.on('windowOpen', window => {
       'GUI_CLIENT_REFRESH_CLICK=true'), 120)
   } else if (pickerOpens === 2) {
     console.log('GUI_CLIENT_REFRESHED_PICKER=true')
-    setTimeout(() => {
-      closeRequested = true
-      clickSafeControl(window, CLOSE_SLOT, 'barrier', 'GUI_CLIENT_CLOSE_CLICK=true')
-    }, 120)
+    setTimeout(() => clickSafeControl(window, CLOSE_SLOT, 'barrier',
+      'GUI_CLIENT_CLOSE_CLICK=true'), 120)
   } else {
     fail('unexpected third picker opening')
   }
