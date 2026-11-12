@@ -7,9 +7,10 @@ from pathlib import Path
 
 SCRIPT = Path(__file__).with_name("paper_folia_admission.py")
 spec = importlib.util.spec_from_file_location("paper_folia_admission", SCRIPT)
+if spec is None or spec.loader is None:
+    raise RuntimeError("Folia admission test module could not be loaded")
 audit = importlib.util.module_from_spec(spec)
-if spec.loader is not None:
-    spec.loader.exec_module(audit)
+spec.loader.exec_module(audit)
 
 
 class FoliaAdmissionTests(unittest.TestCase):
