@@ -48,14 +48,20 @@ public final class StaffAlertOwnerDispatch {
                     }
                 });
                 if (!accepted) {
-                    onFailure.accept(new IllegalStateException(
-                            "Staff alert recipient owner scheduler declined delivery"));
+                    reportDeclinedOwner(onFailure);
                 }
             } catch (RuntimeException failure) {
                 // One retired region must not suppress other staff alerts.
                 onFailure.accept(failure);
             }
         }
+    }
+
+    private static void reportDeclinedOwner(Consumer<RuntimeException> onFailure) {
+        // Allocate failure detail only for a declined scheduler, never for a
+        // successful recipient fanout.
+        onFailure.accept(new IllegalStateException(
+                "Staff alert recipient owner scheduler declined delivery"));
     }
 
     /**
