@@ -35,10 +35,15 @@ public final class PunishmentGuiSmoke extends JavaPlugin implements Listener {
     private static final int REFRESH_SLOT = 49;
     private static final int CLOSE_SLOT = 51;
     private static final int REFRESHED_PICKER_OPEN_COUNT = 2;
+    private static final int TARGET_PICKER_OPEN_COUNT = 3;
+    private static final int TARGET_HEAD_SLOT = 9;
+    private static final String TEST_TARGET = "GuiTarget";
     private final AtomicBoolean started = new AtomicBoolean();
     private final AtomicBoolean staffAttempted = new AtomicBoolean();
     private final AtomicInteger pickerOpens = new AtomicInteger();
     private final AtomicBoolean closeControlClicked = new AtomicBoolean();
+    private final AtomicBoolean closeConfirmed = new AtomicBoolean();
+    private final AtomicBoolean targetHeadClicked = new AtomicBoolean();
     private UUID targetId;
 
     @Override
@@ -49,6 +54,12 @@ public final class PunishmentGuiSmoke extends JavaPlugin implements Listener {
             return;
         }
         Plugin staff = getServer().getPluginManager().getPlugin("EnthusiaStaff");
+        Plugin luckPerms = getServer().getPluginManager().getPlugin("LuckPerms");
+        if (luckPerms == null || !luckPerms.isEnabled()) {
+            getLogger().severe("Real LuckPerms is required for hierarchy proof");
+            getServer().getPluginManager().disablePlugin(this);
+            return;
+        }
         if (staff == null || !staff.isEnabled()) {
             getLogger().severe("EnthusiaStaff unavailable");
             getServer().getPluginManager().disablePlugin(this);
@@ -81,18 +92,35 @@ public final class PunishmentGuiSmoke extends JavaPlugin implements Listener {
         }
         Player player = event.getPlayer();
         targetId = player.getUniqueId();
-        // Permission attachments apply ONLY to the disposable proof identity.
+        // Permissions affect only this disposable proof owner, never production.
         player.addAttachment(this, "enthusiastaff.identity.owner", true);
         player.addAttachment(this, "enthusiastaff.rank.founder", true);
         player.addAttachment(this, "enthusiastaff.punish", true);
         player.addAttachment(this, "enthusiastaff.staffmode", true);
         marker("CLIENT_JOIN=true");
-        // Schedule the same five tests in order; defer state checks to their tasks.
+        // Real local LuckPerms identity is required for actual rank hierarchy.
+        Bukkit.getScheduler().runTaskLater(this, () -> provisionOwnerLuckPerms(player), 12L);
         Bukkit.getScheduler().runTaskLater(this, () -> attemptOffDutyPunish(player), 35L);
         Bukkit.getScheduler().runTaskLater(this, () -> confirmOffDutyBlocked(player), 75L);
         Bukkit.getScheduler().runTaskLater(this, () -> enterStaffMode(player), 100L);
         Bukkit.getScheduler().runTaskLater(this, () -> attemptOnDutyPunish(player), 200L);
-        Bukkit.getScheduler().runTaskLater(this, () -> verifyPickerOpen(player), 310L);
+        Bukkit.getScheduler().runTaskLater(this, () -> verifyPickerClosedBeforeReopen(player), 310L);
+        Bukkit.getScheduler().runTaskLater(this, () -> reopenForDisposableTarget(player), 370L);
+        // Category validity is checked synchronously in onInventoryOpen,
+        // rather than in a task that could outlive the protocol client.
+    }
+
+    private void provisionOwnerLuckPerms(Player player) {
+        if (!player.isOnline()) {
+            marker("FAIL=owner_left_before_luckperms_identity");
+            return;
+        }
+        boolean accepted = getServer().dispatchCommand(
+                getServer().getConsoleSender(),
+                "lp user " + player.getUniqueId()
+                        + " permission set enthusiastaff.identity.owner true"
+        );
+        marker("LUCKPERMS_OWNER_IDENTITY_HANDLED=" + accepted);
     }
 
     private void attemptOffDutyPunish(Player player) {
@@ -100,7 +128,6 @@ public final class PunishmentGuiSmoke extends JavaPlugin implements Listener {
             marker("FAIL=proof_player_left_before_denial");
             return;
         }
-        // performCommand() reports command handling, not authorization.
         marker("OFF_DUTY_PUNISH_HANDLED=" + player.performCommand("punish"));
     }
 
@@ -124,19 +151,33 @@ public final class PunishmentGuiSmoke extends JavaPlugin implements Listener {
             marker("FAIL=proof_player_left");
             return;
         }
-        boolean accepted = player.performCommand("punish");
-        marker("PUNISH_COMMAND_ACCEPTED=" + accepted);
+        marker("PUNISH_COMMAND_ACCEPTED=" + player.performCommand("punish"));
     }
 
-    private void verifyPickerOpen(Player player) {
+    private void verifyPickerClosedBeforeReopen(Player player) {
         if (!player.isOnline()) {
             marker("FAIL=proof_player_disconnected");
             return;
         }
         Inventory top = player.getOpenInventory().getTopInventory();
-        if (!expected(top)) {
-            marker("FAIL=expected_target_picker_not_open");
+        if (expected(top) || !closeConfirmed.get()
+                || pickerOpens.get() != REFRESHED_PICKER_OPEN_COUNT) {
+            marker("FAIL=picker_close_not_confirmed_before_reopen");
+            return;
         }
+        marker("PICKER_CLOSED_AT_CHECKPOINT=true");
+    }
+
+    private void reopenForDisposableTarget(Player player) {
+        Player disposableTarget = getServer().getPlayerExact(TEST_TARGET);
+        if (!player.isOnline() || disposableTarget == null || !disposableTarget.isOnline()
+                || getServer().getOnlinePlayers().size() != 2 || !closeConfirmed.get()) {
+            marker("FAIL=dedicated_target_not_connected");
+            return;
+        }
+        marker("DEDICATED_TARGET_ONLINE=true");
+        marker("DISPOSABLE_TARGET_UUID=" + disposableTarget.getUniqueId());
+        marker("TARGET_PICKER_REOPEN_HANDLED=" + player.performCommand("punish"));
     }
 
     @EventHandler(priority = EventPriority.MONITOR)
@@ -148,6 +189,14 @@ public final class PunishmentGuiSmoke extends JavaPlugin implements Listener {
         String title = PlainTextComponentSerializer.plainText().serialize(event.getView().title());
         marker("INVENTORY_OPEN|title=" + title.replace('\n', ' ') + "|size=" + top.getSize()
                 + "|holder=" + holderName(top));
+        if ("PunishmentGuiHolder".equals(holderName(top))) {
+            if (!targetHeadClicked.get() || !expectedCategoryTitle(title)
+                    || top.getSize() != EXPECTED_TOP_SLOTS) {
+                marker("FAIL=unapproved_category_navigation");
+            } else {
+                marker("TARGET_CATEGORIES_OPEN=true");
+            }
+        }
         if (expected(top)) {
             if (!staffAttempted.get()) {
                 marker("FAIL=off_duty_picker_open");
@@ -160,7 +209,7 @@ public final class PunishmentGuiSmoke extends JavaPlugin implements Listener {
         }
     }
 
-    /** Observe only the two non-sanctioning picker controls. Do not cancel or inject clicks. */
+    /** Observe only Refresh, Close and one known disposable target-head click. */
     @EventHandler(priority = EventPriority.LOWEST)
     public void onPickerControl(InventoryClickEvent event) {
         if (!isProofPickerControl(event)) {
@@ -171,6 +220,8 @@ public final class PunishmentGuiSmoke extends JavaPlugin implements Listener {
             recordRefreshControl(event);
         } else if (slot == CLOSE_SLOT) {
             recordCloseControl(event);
+        } else if (slot == TARGET_HEAD_SLOT) {
+            recordDisposableTargetClick(event);
         } else {
             marker("FAIL=unapproved_picker_slot_clicked");
         }
@@ -204,14 +255,36 @@ public final class PunishmentGuiSmoke extends JavaPlugin implements Listener {
         marker("CLOSE_CLICK_OBSERVED=true");
     }
 
+    private void recordDisposableTargetClick(InventoryClickEvent event) {
+        Player target = getServer().getPlayerExact(TEST_TARGET);
+        if (!closeConfirmed.get() || pickerOpens.get() != TARGET_PICKER_OPEN_COUNT
+                || getServer().getOnlinePlayers().size() != 2
+                || target == null || !target.isOnline()
+                || !matchesControl(event, Material.PLAYER_HEAD)) {
+            marker("FAIL=disposable_target_head_not_verified");
+            return;
+        }
+        targetHeadClicked.set(true);
+        marker("TARGET_HEAD_CLICK_OBSERVED=true");
+    }
+
     @EventHandler(priority = EventPriority.MONITOR)
     public void onPickerClose(InventoryCloseEvent event) {
         if (event.getPlayer() instanceof Player player
                 && player.getUniqueId().equals(targetId)
                 && expected(event.getView().getTopInventory())
-                && closeControlClicked.get()) {
+                && closeControlClicked.compareAndSet(true, false)) {
+            closeConfirmed.set(true);
             marker("PICKER_CLOSED_AFTER_CONTROL=true");
         }
+    }
+
+    /** Offline Paper has no proxy observation; the directory may only know the UUID. */
+    private boolean expectedCategoryTitle(String title) {
+        Player target = getServer().getPlayerExact(TEST_TARGET);
+        return target != null && (
+                ("Punish · " + TEST_TARGET).equals(title)
+                || ("Punish · " + target.getUniqueId()).equals(title));
     }
 
     private static boolean expected(Inventory inventory) {
