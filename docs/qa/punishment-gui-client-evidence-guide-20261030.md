@@ -2,6 +2,8 @@
 
 **State:** NO-GO; no client sessions have been run or claimed as passing by this document. This supplements, but does not replace, the [existing A01–A20 client checklist](../implementation-plans/staff-punishment-gui-ux-acceptance-20261015.md).
 
+**Historical preflight boundary:** The `bloom-test1` server observations and versions in this guide are dated **October 30, 2026**. They have **not** been freshly verified in this cleanup. Do not infer the environment is currently isolated or available, or that a successful fixture gate establishes genuine Java/Bedrock client gameplay. The manifest generator remains BLOCKED by default, and the evidence verifier only checks submitted files and recorded metadata; independent human review and explicit isolated staging permission remain separate prerequisites.
+
 The release candidate must be installed only in an explicitly authorized **disposable Paper staging environment**. This evidence tool does not connect to any Minecraft server, download software, apply sanctions or change the live SMP.
 
 ## Available test server preflight (read-only, 2026-10-30)
