@@ -13,7 +13,25 @@ import sys
 import zipfile
 from pathlib import Path
 
-JAR_PATH = Path("paper/build/libs/EnthusiaStaff-Paper-0.1.0-SNAPSHOT.jar")
+PAPER_JAR_DIR = Path("paper/build/libs")
+PAPER_JAR_GLOB = "EnthusiaStaff-Paper-*.jar"
+
+
+def packaged_jar(root: Path) -> Path:
+    """Fail closed if the build produced zero or multiple runtime Paper JARs."""
+    folder = root / PAPER_JAR_DIR
+    candidates = sorted(
+        path for path in folder.glob(PAPER_JAR_GLOB)
+        if path.is_file()
+        and not path.name.endswith(("-sources.jar", "-javadoc.jar", "-plain.jar"))
+    )
+    if len(candidates) != 1:
+        raise AdmissionError(
+            f"Expected one deployable Paper JAR in {folder}, found {len(candidates)}"
+        )
+    return candidates[0].relative_to(root)
+
+
 SOURCE_ROOT = Path("paper/src/main/java")
 FLAG = re.compile(r"^folia-supported\s*:\s*(.*?)\s*$")
 LEGACY = re.compile(r"\.getScheduler\(\)\s*\.runTask(?:Later|Timer|Asynchronously|LaterAsynchronously|TimerAsynchronously)?\s*\(")
@@ -113,7 +131,8 @@ def known_source_blockers(root: Path) -> list[dict]:
 
 def inspect(root: Path) -> dict:
     root = root.resolve()
-    jar = root / JAR_PATH
+    jar_relative = packaged_jar(root)
+    jar = root / jar_relative
     try:
         with zipfile.ZipFile(jar) as z:
             matches = [v for v in z.infolist() if v.filename == "plugin.yml"]
@@ -125,7 +144,7 @@ def inspect(root: Path) -> dict:
     opted_in = metadata_opt_in(yaml)
     blockers = known_source_blockers(root)
     return {
-        "packaged_plugin_yml": JAR_PATH.as_posix() + "!/plugin.yml",
+        "packaged_plugin_yml": jar_relative.as_posix() + "!/plugin.yml",
         "folia_metadata_opt_in": opted_in,
         "known_source_blockers": blockers,
         "unsafe_opt_in": opted_in and bool(blockers),
