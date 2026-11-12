@@ -276,7 +276,10 @@ public final class SanctionChangeCommand implements CommandExecutor, TabComplete
     }
 
     private void send(CommandSender sender, String message) {
-        plugin.getServer().getGlobalRegionScheduler().execute(plugin, () -> sender.sendMessage(StaffMessageStyle.style(Component.text(message))));
+        // A player sender's response must run on their entity scheduler, not the global region.
+        // Preserve the established command message styling for both player and console senders.
+        new CommandResponseDispatcher(plugin).execute(
+                sender, () -> sender.sendMessage(StaffMessageStyle.style(Component.text(message))));
     }
 
     @Override
