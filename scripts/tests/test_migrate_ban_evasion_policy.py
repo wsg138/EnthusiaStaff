@@ -144,6 +144,52 @@ class PolicyMigrationTests(unittest.TestCase):
         self.assertEqual(self.installed, self.backups()[0].read_bytes())
         self.assertEqual([], list(Path(self.tmp.name).glob(".reason-policies-migrate-*")))
 
+    def test_post_replace_directory_sync_failure_is_not_a_rejection(self):
+        original_sync = migration.sync_directory
+        calls = 0
+
+        def fail_after_successful_replace(directory):
+            nonlocal calls
+            calls += 1
+            if calls == 2:
+                raise OSError("post-replace directory fsync failed")
+            return original_sync(directory)
+
+        with mock.patch.object(migration, "sync_directory",
+                               side_effect=fail_after_successful_replace):
+            status, _, error = self.run_cli(
+                "--apply", "--expected-sha256", migration.digest(self.installed)
+            )
+        self.assertEqual(3, status)
+        self.assertIn("POST_REPLACE_UNCERTAIN", error)
+        self.assertIn("installed_state=CANDIDATE_PRESENT", error)
+        self.assertIn("backup_state=ORIGINAL_VERIFIED", error)
+        self.assertNotIn("REJECTED:", error)
+        self.assertEqual(self.candidate, self.installed_path.read_bytes())
+        self.assertEqual(self.installed, self.backups()[0].read_bytes())
+
+    def test_post_replace_mismatched_bytes_require_manual_recovery(self):
+        original_sync = migration.sync_directory
+        calls = 0
+
+        def mutate_after_successful_replace(directory):
+            nonlocal calls
+            calls += 1
+            original_sync(directory)
+            if calls == 2:
+                self.installed_path.write_bytes(self.candidate + b"\n# external tamper\n")
+
+        with mock.patch.object(migration, "sync_directory",
+                               side_effect=mutate_after_successful_replace):
+            status, _, error = self.run_cli(
+                "--apply", "--expected-sha256", migration.digest(self.installed)
+            )
+        self.assertEqual(3, status)
+        self.assertIn("POST_REPLACE_UNCERTAIN", error)
+        self.assertIn("installed_state=UNEXPECTED_BYTES", error)
+        self.assertIn("backup_state=ORIGINAL_VERIFIED", error)
+        self.assertEqual(self.installed, self.backups()[0].read_bytes())
+
     def test_concurrent_change_after_backup_refuses_replacement(self):
         original_write_backup = migration.write_exclusive_backup
         def backup_then_external_edit(source, backup, before, mode):
