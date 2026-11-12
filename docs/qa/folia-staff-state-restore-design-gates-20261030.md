@@ -42,6 +42,12 @@ Sources:
 
 The existing Java/Bedrock 20-row GUI acceptance matrix is a separate obligation. The Folia scanner is a **heuristic**, not a full proof of thread safety.
 
+## November 11 source-audit integration note
+
+The historical design and NO-GO boundaries below remain in force. The RoseChat ingress scheduler fix was integrated onto current `main` in [PR #807](https://github.com/wsg138/EnthusiaStaff/pull/807); the separate Folia audit script now discovers the single versioned Paper runtime artifact rather than relying on the retired `0.1.0-SNAPSHOT` JAR name. Its regression suite covers missing, ambiguous, and source-only JAR cases. This improves audit reproducibility, **not** Folia runtime compatibility.
+
+The scanner is a bounded source heuristic. `release_status` remains `NO_GO` even if no known blocker matches. `folia-supported` must not be enabled until the Staff Mode quit/teleport redesign, dependent plugins, region ownership, live reconnection behavior and real-player staging acceptance are independently verified. The built Paper JAR version, deployed artifact, and current runtime state are separate concerns.
+
 ## Current change
 
 The accompanying static audit now detects `player.teleport()` and `player.teleportAsync()` **within `StaffModeManager.onQuit`**, even if a developer removes the `restoreSavedState` call. Regression fixtures ensure that directly teleporting during quit cannot falsely clear the scanner. This hardens the NO-GO boundary; it is not the lifecycle redesign.
