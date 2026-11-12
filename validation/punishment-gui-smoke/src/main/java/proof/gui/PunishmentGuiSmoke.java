@@ -78,46 +78,56 @@ public final class PunishmentGuiSmoke extends JavaPlugin implements Listener {
         player.addAttachment(this, "enthusiastaff.punish", true);
         player.addAttachment(this, "enthusiastaff.staffmode", true);
         marker("CLIENT_JOIN=true");
-        // Deliberately test the real off-duty denial before entering Staff Mode.
-        // Player.performCommand() reports command handling, not authorization.
-        Bukkit.getScheduler().runTaskLater(this, () -> {
-            if (!player.isOnline()) {
-                marker("FAIL=proof_player_left_before_denial");
-                return;
-            }
-            marker("OFF_DUTY_PUNISH_HANDLED=" + player.performCommand("punish"));
-        }, 35L);
-        Bukkit.getScheduler().runTaskLater(this, () -> {
-            if (!player.isOnline() || expected(player.getOpenInventory().getTopInventory())) {
-                marker("FAIL=off_duty_picker_open_or_player_left");
-                return;
-            }
-            marker("OFF_DUTY_PICKER_BLOCKED=true");
-        }, 75L);
-        Bukkit.getScheduler().runTaskLater(this, () -> {
-            if (player.isOnline()) {
-                staffAttempted.set(true);
-                marker("STAFF_COMMAND_ACCEPTED=" + player.performCommand("staff"));
-            }
-        }, 100L);
-        Bukkit.getScheduler().runTaskLater(this, () -> {
-            if (!player.isOnline()) {
-                marker("FAIL=proof_player_left");
-                return;
-            }
-            boolean accepted = player.performCommand("punish");
-            marker("PUNISH_COMMAND_ACCEPTED=" + accepted);
-        }, 200L);
-        Bukkit.getScheduler().runTaskLater(this, () -> {
-            if (!player.isOnline()) {
-                marker("FAIL=proof_player_disconnected");
-                return;
-            }
-            Inventory top = player.getOpenInventory().getTopInventory();
-            if (!expected(top)) {
-                marker("FAIL=expected_target_picker_not_open");
-            }
-        }, 310L);
+        // Schedule the same five tests in order; defer state checks to their tasks.
+        Bukkit.getScheduler().runTaskLater(this, () -> attemptOffDutyPunish(player), 35L);
+        Bukkit.getScheduler().runTaskLater(this, () -> confirmOffDutyBlocked(player), 75L);
+        Bukkit.getScheduler().runTaskLater(this, () -> enterStaffMode(player), 100L);
+        Bukkit.getScheduler().runTaskLater(this, () -> attemptOnDutyPunish(player), 200L);
+        Bukkit.getScheduler().runTaskLater(this, () -> verifyPickerOpen(player), 310L);
+    }
+
+    private void attemptOffDutyPunish(Player player) {
+        if (!player.isOnline()) {
+            marker("FAIL=proof_player_left_before_denial");
+            return;
+        }
+        // performCommand() reports command handling, not authorization.
+        marker("OFF_DUTY_PUNISH_HANDLED=" + player.performCommand("punish"));
+    }
+
+    private void confirmOffDutyBlocked(Player player) {
+        if (!player.isOnline() || expected(player.getOpenInventory().getTopInventory())) {
+            marker("FAIL=off_duty_picker_open_or_player_left");
+            return;
+        }
+        marker("OFF_DUTY_PICKER_BLOCKED=true");
+    }
+
+    private void enterStaffMode(Player player) {
+        if (player.isOnline()) {
+            staffAttempted.set(true);
+            marker("STAFF_COMMAND_ACCEPTED=" + player.performCommand("staff"));
+        }
+    }
+
+    private void attemptOnDutyPunish(Player player) {
+        if (!player.isOnline()) {
+            marker("FAIL=proof_player_left");
+            return;
+        }
+        boolean accepted = player.performCommand("punish");
+        marker("PUNISH_COMMAND_ACCEPTED=" + accepted);
+    }
+
+    private void verifyPickerOpen(Player player) {
+        if (!player.isOnline()) {
+            marker("FAIL=proof_player_disconnected");
+            return;
+        }
+        Inventory top = player.getOpenInventory().getTopInventory();
+        if (!expected(top)) {
+            marker("FAIL=expected_target_picker_not_open");
+        }
     }
 
     @EventHandler(priority = EventPriority.MONITOR)
