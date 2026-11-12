@@ -1491,13 +1491,19 @@ public final class VanishManager implements Listener {
         return !writePending && readRevision == currentRevision;
     }
 
+    static boolean shouldRestoreSelectedGameMode(boolean wasVanished, boolean hasSelection,
+            boolean transitioning, boolean active) {
+        return wasVanished && hasSelection && !transitioning && !active;
+    }
+
     private void applyDurableVanishRecovery(Player player, VanishRecord record) {
         UUID playerId = player.getUniqueId();
         if (record == null) {
             boolean wasVanished = visibility.isVanished(playerId);
             durableVanishedRanks.remove(playerId);
             visibility.setVanished(playerId, null, false);
-            if (wasVanished && selectedGameModes.containsKey(playerId)) {
+            if (shouldRestoreSelectedGameMode(wasVanished, selectedGameModes.containsKey(playerId),
+                    staffMode.transitioning(playerId), staffMode.active(playerId))) {
                 restoreSelectedGameMode(player);
             } else {
                 selectedGameModes.remove(playerId);

@@ -54,6 +54,7 @@ final class AllFeatureSurfaceContractTest {
             "freeze",
             "unfreeze",
             "staff",
+            "staffsession",
             "staffinv",
             "stafftools",
             "staffflags",
@@ -73,6 +74,7 @@ final class AllFeatureSurfaceContractTest {
     );
 
     private static final Set<String> COMMANDS_WITHOUT_OUTER_PERMISSION = Set.of(
+            "staffsession",
             "estaff",
             "report",
             "case",

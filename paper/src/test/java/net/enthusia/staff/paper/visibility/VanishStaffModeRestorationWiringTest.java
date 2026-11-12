@@ -122,6 +122,34 @@ class VanishStaffModeRestorationWiringTest {
         assertFalse(method.contains("reconcileVanishGameMode(player)"));
     }
 
+    @Test
+    void missingDurableVanishCannotOverrideStaffSessionRecoveryGameMode() throws IOException {
+        String source = Files.readString(SOURCE).replace("\r\n", "\n");
+        int start = source.indexOf("private void applyDurableVanishRecovery(");
+        int absence = source.indexOf("if (record == null)", start);
+        int restoration = source.indexOf("restoreSelectedGameMode(player);", absence);
+        assertTrue(start >= 0 && absence > start && restoration > absence);
+        String decision = source.substring(absence, restoration);
+        assertTrue(decision.contains("shouldRestoreSelectedGameMode(wasVanished, selectedGameModes.containsKey(playerId),"),
+                "the no-record branch must retain the vanished/selection prerequisites");
+        assertTrue(decision.contains("staffMode.transitioning(playerId), staffMode.active(playerId))"),
+                "the no-record branch must use the live Staff transition and active states");
+    }
+
+    @Test
+    void gameModeRecoveryDecisionCoversActiveTransitioningAndNormalState() {
+        for (int flags = 0; flags < 16; flags++) {
+            boolean wasVanished = (flags & 1) != 0;
+            boolean hasSelection = (flags & 2) != 0;
+            boolean transitioning = (flags & 4) != 0;
+            boolean active = (flags & 8) != 0;
+            boolean expected = wasVanished && hasSelection && !transitioning && !active;
+            assertEquals(expected, VanishManager.shouldRestoreSelectedGameMode(
+                    wasVanished, hasSelection, transitioning, active),
+                    "incorrect game-mode restoration decision for state mask " + flags);
+        }
+    }
+
     private static String method(String startMarker, String endMarker) throws IOException {
         String source = Files.readString(SOURCE).replace("\r\n", "\n");
         int start = source.indexOf(startMarker);

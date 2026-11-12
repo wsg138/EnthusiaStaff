@@ -45,6 +45,7 @@ import net.enthusia.staff.paper.command.StaffApiCommand;
 import net.enthusia.staff.paper.command.StaffChatCommand;
 import net.enthusia.staff.paper.command.StaffInventoryCommand;
 import net.enthusia.staff.paper.command.StaffModeCommand;
+import net.enthusia.staff.paper.command.StaffSessionInspectionCommand;
 import net.enthusia.staff.paper.command.StaffModeVanishEntryCoordinator;
 import net.enthusia.staff.paper.command.StaffWhoCommand;
 import net.enthusia.staff.paper.command.VanishCommand;
@@ -311,6 +312,10 @@ final class PaperCommandRegistrar {
                 dependencies.players().vanish()
         );
         bindCompleting("staff", staffMode, staffMode);
+        bind("staffsession", new StaffSessionInspectionCommand(
+                storage(PaperStorageBindings::staffSessionStore), workers(),
+                task -> plugin().getServer().getGlobalRegionScheduler().execute(plugin(), task),
+                clock(), dependencies.environment().serverId()));
         bind("staffinv", new StaffInventoryCommand(dependencies.players().staffMode()));
         VanishCommand vanish = new VanishCommand(writeMode(), dependencies.players().vanish());
         vanish.configureMessages(MessageConfigurationRuntime::catalog);

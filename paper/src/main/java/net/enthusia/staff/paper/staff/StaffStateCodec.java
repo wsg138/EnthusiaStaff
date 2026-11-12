@@ -183,6 +183,24 @@ public final class StaffStateCodec {
         }
     }
 
+    /** Header inspection only; the read-only store separately verifies the full database digest. */
+    public String inspectedBackend(int schema, byte[] header) {
+        if (schema != SCHEMA_VERSION || header == null || header.length == 0 || header.length > 74) {
+            throw new IllegalArgumentException("snapshot header or schema mismatch");
+        }
+        try (DataInputStream input = new DataInputStream(new ByteArrayInputStream(header))) {
+            validateHeader(input);
+            String backend = input.readUTF();
+            if (!backend.matches("[A-Za-z0-9_-]{1,64}")
+                    || net.enthusia.staff.domain.staff.StaffSessionOwnership.detached(backend)) {
+                throw new IllegalArgumentException("snapshot backend is invalid");
+            }
+            return backend;
+        } catch (IOException exception) {
+            throw new IllegalArgumentException("snapshot header is incomplete", exception);
+        }
+    }
+
     private Decoded readDecoded(Player player, DataInputStream input) throws IOException {
         String serverId = input.readUTF();
         ItemStack[] inventory = ItemStack.deserializeItemsFromBytes(readBytes(input));
