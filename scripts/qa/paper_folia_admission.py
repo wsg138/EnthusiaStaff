@@ -52,19 +52,78 @@ class AdmissionError(ValueError):
     """Missing, malformed, or incomplete admission evidence."""
 
 
+def _top_level_folia_flag(line: str) -> str | None:
+    """Ignore nested/comment metadata but reject malformed top-level opt-in."""
+    if line.lstrip() != line or line.lstrip().startswith("#"):
+        return None
+    if not line.startswith("folia-supported"):
+        return None
+    match = FLAG.fullmatch(line.split("#", 1)[0].rstrip())
+    if match is None:
+        raise AdmissionError("Invalid folia-supported declaration in packaged plugin.yml")
+    return match.group(1).lower()
+
+
 def metadata_opt_in(yaml: str) -> bool:
-    flags = []
-    for line in yaml.splitlines():
-        if line.lstrip() != line or line.lstrip().startswith("#"):
-            continue
-        if line.startswith("folia-supported"):
-            match = FLAG.fullmatch(line.split("#", 1)[0].rstrip())
-            if match is None:
-                raise AdmissionError("Invalid folia-supported declaration in packaged plugin.yml")
-            flags.append(match.group(1).lower())
-    if len(flags) > 1 or any(v not in ("true", "false") for v in flags):
+    flags = [
+        value for line in yaml.splitlines()
+        if (value := _top_level_folia_flag(line)) is not None
+    ]
+    if len(flags) > 1 or any(value not in ("true", "false") for value in flags):
         raise AdmissionError("Duplicate/invalid folia-supported metadata in packaged plugin.yml")
     return flags == ["true"]
+
+
+def _source_matches(
+    content: str, path: Path, root: Path, pattern: re.Pattern[str],
+    identifier: str, reason: str, start: int = 0, end: int | None = None,
+) -> list[dict]:
+    """Emit path/line evidence without executing code or player operations."""
+    stop = len(content) if end is None else end
+    return [
+        {
+            "id": identifier,
+            "path": path.relative_to(root).as_posix(),
+            "line": content.count("\n", 0, match.start()) + 1,
+            "reason": reason,
+        }
+        for match in pattern.finditer(content, start, stop)
+    ]
+
+
+def _quit_handler_bounds(content: str, handler: re.Match[str]) -> tuple[int, int]:
+    opened = content.index("{", handler.start(), handler.end())
+    depth = 1
+    end = opened + 1
+    while end < len(content) and depth > 0:
+        if content[end] == "{":
+            depth += 1
+        elif content[end] == "}":
+            depth -= 1
+        end += 1
+    if depth != 0:
+        raise AdmissionError("Unbalanced StaffModeManager.onQuit handler")
+    return opened + 1, end - 1
+
+
+def _quit_source_blockers(content: str, path: Path, root: Path) -> list[dict]:
+    blockers = []
+    for handler in QUIT_HANDLER.finditer(content):
+        start, end = _quit_handler_bounds(content, handler)
+        blockers.extend(_source_matches(
+            content, path, root, QUIT_RESTORE,
+            "quit_event_synchronous_staff_restore",
+            "Quit-event state restore assumes immediate completion before player save",
+            start, end,
+        ))
+        # Both synchronous and asynchronous teleport during quit are unsafe.
+        blockers.extend(_source_matches(
+            content, path, root, quit_teleport_pattern(handler.group("event_var")),
+            "quit_event_teleport",
+            "Player teleport during quit is unsafe; restore prior to disconnect",
+            start, end,
+        ))
+    return blockers
 
 
 def known_source_blockers(root: Path) -> list[dict]:
@@ -77,55 +136,17 @@ def known_source_blockers(root: Path) -> list[dict]:
     blockers = []
     for path in files:
         content = path.read_text(encoding="utf-8")
-        for match in LEGACY.finditer(content):
-            blockers.append({
-                "id": "legacy_bukkit_scheduler",
-                "path": path.relative_to(root).as_posix(),
-                "line": content.count("\n", 0, match.start()) + 1,
-                "reason": "Legacy Bukkit scheduler is not valid for Folia's regionized runtime",
-            })
+        blockers.extend(_source_matches(
+            content, path, root, LEGACY, "legacy_bukkit_scheduler",
+            "Legacy Bukkit scheduler is not valid for Folia's regionized runtime",
+        ))
         if path.name == "StaffStateCodec.java":
-            for match in TELEPORT.finditer(content):
-                blockers.append({
-                    "id": "synchronous_staff_state_teleport",
-                    "path": path.relative_to(root).as_posix(),
-                    "line": content.count("\n", 0, match.start()) + 1,
-                    "reason": "Synchronous staff-state teleport needs cross-region runtime review",
-                })
+            blockers.extend(_source_matches(
+                content, path, root, TELEPORT, "synchronous_staff_state_teleport",
+                "Synchronous staff-state teleport needs cross-region runtime review",
+            ))
         if path.name == "StaffModeManager.java":
-            # PlayerQuitEvent requires restoration before the server persists
-            # the player's native state. Merely making codec.teleport async
-            # would silently violate this existing synchronous lifecycle.
-            for handler in QUIT_HANDLER.finditer(content):
-                opened = content.index("{", handler.start(), handler.end())
-                depth = 1
-                end = opened + 1
-                while end < len(content) and depth > 0:
-                    if content[end] == "{":
-                        depth += 1
-                    elif content[end] == "}":
-                        depth -= 1
-                    end += 1
-                if depth != 0:
-                    raise AdmissionError("Unbalanced StaffModeManager.onQuit handler")
-                for match in QUIT_RESTORE.finditer(content, opened + 1, end - 1):
-                    blockers.append({
-                        "id": "quit_event_synchronous_staff_restore",
-                        "path": path.relative_to(root).as_posix(),
-                        "line": content.count("\n", 0, match.start()) + 1,
-                        "reason": "Quit-event state restore assumes immediate completion before player save",
-                    })
-                # Folia disallows teleporting during PlayerQuitEvent, even via
-                # teleportAsync. A future "fix" that directly moves the player
-                # during quit must not accidentally clear admission.
-                pattern = quit_teleport_pattern(handler.group("event_var"))
-                for match in pattern.finditer(content, opened + 1, end - 1):
-                    blockers.append({
-                        "id": "quit_event_teleport",
-                        "path": path.relative_to(root).as_posix(),
-                        "line": content.count("\n", 0, match.start()) + 1,
-                        "reason": "Player teleport during quit is unsafe; restore prior to disconnect",
-                    })
+            blockers.extend(_quit_source_blockers(content, path, root))
     return blockers
 
 
