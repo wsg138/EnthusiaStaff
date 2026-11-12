@@ -216,7 +216,7 @@ class PunishmentCommitOwnerDispatchTest {
     }
 
     private static Player player(UUID id) {
-        return (Player) Proxy.newProxyInstance(Player.class.getClassLoader(),
+        return (Player) Proxy.newProxyInstance(Thread.currentThread().getContextClassLoader(),
                 new Class<?>[]{Player.class},
                 (self, method, args) -> {
                     if (method.getName().equals("getUniqueId")) {
