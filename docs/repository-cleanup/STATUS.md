@@ -14,6 +14,11 @@
 - [#794](https://github.com/wsg138/EnthusiaStaff/pull/794) — [W3 audit: 35 issues and 213 branch refs in its own snapshot](W3-ISSUES-AND-BRANCHES-2026-11-11.md). This count includes newly created worker branches; original kickoff had 208.
 - [#795](https://github.com/wsg138/EnthusiaStaff/pull/795) — concise root README, role-based [documentation index](../README.md), and this coordinator status page; 103 internal links checked against merged sources.
 - [#796](https://github.com/wsg138/EnthusiaStaff/pull/796) — preserved unique historical Velocitab handoffs from old #517 under [the historical archive](../history/archive/velocitab-cache-2026-10-11/) before closing the superseded PR.
+- [#798](https://github.com/wsg138/EnthusiaStaff/pull/798) — Folia-safe sanction-change replies; three head workflows passed, source merged but no live release or JAR deployment.
+- [#799](https://github.com/wsg138/EnthusiaStaff/pull/799) — preserved Policy v2 OTHER-remedy design proposal from retired #467 without activating Policy v2.
+- [#801](https://github.com/wsg138/EnthusiaStaff/pull/801) — Staff session read-only console inspector, rankless-handoff tests, and vanish-restoration guard; final-head Coverage/MariaDB, protocol and Sentinel workflows passed. Runtime TEST/production acceptance still unverified.
+- [#802](https://github.com/wsg138/EnthusiaStaff/pull/802) — classified five PR #53 historical handoffs and indexed their provenance; 289-path baseline now has 124 `UNKNOWN` files.
+- [#803](https://github.com/wsg138/EnthusiaStaff/pull/803) — preserved byte-identical 445-line MARKET-02 PR #647 handoff and original registry/status provenance in the [Staff recovery historical archive](../history/archive/staff-recovery-market02-2026-10-20/).
 
 The six original worker deliverables are **fully reported and reviewable on `main`**. Audits are provisional evidence records, not blanket permission for deletion or merging.
 
@@ -26,25 +31,30 @@ The six original worker deliverables are **fully reported and reviewable on `mai
 | [#573](https://github.com/wsg138/EnthusiaStaff/pull/573) | [#785](https://github.com/wsg138/EnthusiaStaff/pull/785) | Closed as superseded; [audit issue #488](https://github.com/wsg138/EnthusiaStaff/issues/488) still needs end-to-end acceptance |
 | [#517](https://github.com/wsg138/EnthusiaStaff/pull/517) | [#781](https://github.com/wsg138/EnthusiaStaff/pull/781) + archive [#796](https://github.com/wsg138/EnthusiaStaff/pull/796) | Closed after mainline source/test parity review and preservation of unique historical notes |
 | [#762](https://github.com/wsg138/EnthusiaStaff/pull/762) | [#780](https://github.com/wsg138/EnthusiaStaff/pull/780) | Closed after full unified diffs matched byte-for-byte and current `main` has both resulting file blobs; dependent #763 base branch kept |
+| [#467](https://github.com/wsg138/EnthusiaStaff/pull/467) | historical design preserved via [#799](https://github.com/wsg138/EnthusiaStaff/pull/799) | Closed without activating policy or provider operations |
+| [#479](https://github.com/wsg138/EnthusiaStaff/pull/479) | equivalent current-main CRLF test helper | Closed after four-file content comparison; branch preserved |
+| [#480](https://github.com/wsg138/EnthusiaStaff/pull/480) | [#798](https://github.com/wsg138/EnthusiaStaff/pull/798) | Closed as semantically superseded; dependent #481 base branch retained |
+| [#777](https://github.com/wsg138/EnthusiaStaff/pull/777) | [#801](https://github.com/wsg138/EnthusiaStaff/pull/801) | GitHub closed alongside #801 merge; all 16 original inspector changed-file additions accounted for and final-head tests passed |
+| [#647](https://github.com/wsg138/EnthusiaStaff/pull/647) | [#778](https://github.com/wsg138/EnthusiaStaff/pull/778), [#787](https://github.com/wsg138/EnthusiaStaff/pull/787), [#801](https://github.com/wsg138/EnthusiaStaff/pull/801) + archive [#803](https://github.com/wsg138/EnthusiaStaff/pull/803) | Closed after source/test lineage reconciliation and unique historical handoff preservation; original branch retained |
 
 Original PR branches have **not** been deleted. The PR closure comments explain the evidence. These dispositions close PR conversations, **not** unreviewed issue acceptance or dependent branch history.
 
 ## Important unmerged / blocked work
 
-- **Recovery and read-only diagnostics:** [#647](https://github.com/wsg138/EnthusiaStaff/pull/647) is only partly superseded by merged [#787](https://github.com/wsg138/EnthusiaStaff/pull/787). [#777](https://github.com/wsg138/EnthusiaStaff/pull/777) contains a separable console session inspector. The unmatched rankless-recovery test and vanish restoration guard need exact-head behavioral review before closure/merge.
+- **Recovery and read-only diagnostics:** #647 and #777 are closed as superseded/archived. Merged [#801](https://github.com/wsg138/EnthusiaStaff/pull/801) now carries the console-only inspector, missing-vanish restoration guard and rankless-handoff regression tests on current `main`, without overwriting #787 recovery leases. Source CI passed; real client TEST/BUILD and production acceptance have not occurred. Historical [MARKET-02 handoff](../history/archive/staff-recovery-market02-2026-10-20/README.md) is archived.
 - **Velocitab:** #517 is closed. The functional changes are on `main` via [#781](https://github.com/wsg138/EnthusiaStaff/pull/781), and unique historical handoffs were retained by [#796](https://github.com/wsg138/EnthusiaStaff/pull/796). No Velocity runtime or deployment acceptance is implied.
 - **Policy drift:** #762 is closed after its entire two-file unified diff was confirmed identical to merged [#780](https://github.com/wsg138/EnthusiaStaff/pull/780), with both result blobs present on current `main`. Its branch remains because [#763](https://github.com/wsg138/EnthusiaStaff/pull/763) targets it, and #764 is stacked on #763. Do not delete/rebase those branches without independent dependency reconciliation.
 - **Offline mute and unlink:** [#339](https://github.com/wsg138/EnthusiaStaff/pull/339) depends on external [RoseChat #22](https://github.com/wsg138/Enthusia-RoseChat/pull/22); [#486](https://github.com/wsg138/EnthusiaStaff/pull/486) has unique derived-alt sanction revocation. Both require source/database and dependency review.
-- **Punishment stack:** [#765](https://github.com/wsg138/EnthusiaStaff/pull/765) is a large, unready integration of dependent drafts. Do not merge the whole stack as one shortcut.
+- **Punishment stack:** [W9 #800](https://github.com/wsg138/EnthusiaStaff/pull/800) ports owner-thread/target-UUID checks and has passing exact-head Actions but **one unresolved HIGH ErrorProne Codacy finding**; it remains draft and unmerged. [#764](https://github.com/wsg138/EnthusiaStaff/pull/764) has a separate migration-tool failure-boundary concern. [#765](https://github.com/wsg138/EnthusiaStaff/pull/765) is a large, unready integration of dependent drafts. Do not merge the whole stack or apply a production migration as a shortcut.
 - **Branches:** W3 recorded 65 distinct non-open-PR branches with unmerged commits; only six branches had `ahead_by=0` and were *conditional candidates*, not approved deletions.
-- **Documentation:** 129 catalogued paths remain `UNKNOWN` for content-level archival classification. Historical records are kept rather than wholesale rewritten or discarded.
+- **Documentation:** 124 original scoped paths remain `UNKNOWN` following W8's five-file classification. Historical records and active agent files remain preserved; original branch/handoff sources have not been mass-deleted.
 - **External source:** Site, Currency and Commend aggregate copies differ from standalone repository heads; links-only replacement and source relocation need an explicit policy change and consumer/rights review. RoseChat mirror redistribution has a separate license restriction.
 
 ## Next coordinated phases
 
 1. **Navigation and status:** keep root README concise, link this index and the [documentation guide](../README.md). Reconcile the old operational manifests only with a tested consumer migration.
-2. **PR disposition:** close more items only on a per-PR mainline equivalence and branch-dependency record; review the narrow correctness-sensitive PRs independently, especially #777 and #647.
-3. **Archive:** identify content-level unique material among the 129 unknown files; move completed handoffs into `docs/history/archive/` with redirects/index updates and preserved CI/tooling references.
+2. **PR disposition:** close more items only on a per-PR mainline equivalence and branch-dependency record; resolve #800's exact static finding before its merge, then separately reconcile #754/#764 and preserved punishment stack branches.
+3. **Archive:** classify the remaining 124 `UNKNOWN` baseline paths in small reviewed batches; retain originals and preserve CI/tooling references, using source-linked historical archive indexes rather than wholesale deletion.
 4. **Repo layout:** adopt the [staged module plan](MODULE-RELOCATION-PLAN.md) only with exact Gradle, CI, package, server deployment name, external repo and rollback tests. Do not touch running Paper 0.1.1.
 5. **Wiki:** keep the source-controlled wiki current; protected live publication is a distinct operation and must be verified.
 
