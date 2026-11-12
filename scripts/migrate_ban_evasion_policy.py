@@ -201,6 +201,68 @@ def apply_migration(path: Path, expected_sha256: str, before: bytes, after: byte
     return backup
 
 
+def report_post_replace_uncertainty(
+    path: Path, before: bytes, after: bytes, error: ReplacementStateUncertain
+) -> None:
+    """Report independently re-read disk and backup state after a successful swap."""
+    backup = path.with_name(
+        path.name + ".before-ban-evasion-" + digest(before)[:16] + ".bak"
+    )
+    try:
+        installed_now = path.read_bytes()
+        observed_sha = digest(installed_now)
+        if installed_now == after:
+            installed_state = "CANDIDATE_PRESENT"
+        elif installed_now == before:
+            installed_state = "ORIGINAL_PRESENT"
+        else:
+            installed_state = "UNEXPECTED_BYTES"
+    except OSError:
+        installed_state, observed_sha = "UNREADABLE", "UNAVAILABLE"
+    try:
+        backup_state = "ORIGINAL_VERIFIED" if backup.read_bytes() == before else "MISMATCH"
+    except OSError:
+        backup_state = "UNREADABLE"
+    print(
+        "POST_REPLACE_UNCERTAIN: " + str(error)
+        + f"; installed_state={installed_state}; installed_sha256={observed_sha}"
+        + f"; original_sha256={digest(before)}; candidate_sha256={digest(after)}"
+        + f"; backup={backup}; backup_state={backup_state}"
+        + "; do not retry automatically; isolate all writers and verify/restore using the runbook",
+        file=sys.stderr,
+    )
+
+
+def run_migration(args: argparse.Namespace) -> int:
+    """Validate the exact policy and run an operator-acknowledged migration."""
+    safe_regular(args.installed)
+    safe_regular(args.candidate)
+    if args.installed.resolve() == args.candidate.resolve():
+        raise MigrationRejected("installed and candidate cannot refer to the same file")
+    before = args.installed.read_bytes()
+    after, already = prepare(before, args.candidate.read_bytes())
+    print(f"installed_sha256={digest(before)}")
+    print(f"candidate_sha256={digest(after)}")
+    if already:
+        print("ALREADY_CURRENT; no changes needed")
+        return 0
+    if not args.apply:
+        print("DRY_RUN_OK; no files changed. Explicit --apply and --expected-sha256 required.")
+        return 0
+    if not args.expected_sha256:
+        raise MigrationRejected("--apply requires --expected-sha256 from dry-run")
+    try:
+        backup = apply_migration(args.installed, args.expected_sha256, before, after)
+    except ReplacementStateUncertain as error:
+        # Only this branch follows a confirmed os.replace() return. Do not claim
+        # an untouched installed file when later durability verification fails.
+        report_post_replace_uncertainty(args.installed, before, after, error)
+        return 3
+    print(f"MIGRATION_APPLIED; backup={backup}")
+    print("Restart/reload is NOT performed. Verify runtime policy separately.")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--installed", required=True, type=Path, help="installed reason-policies.yml")
@@ -209,56 +271,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--expected-sha256", help="SHA-256 from the preceding dry run, required for --apply")
     args = parser.parse_args(argv)
     try:
-        safe_regular(args.installed)
-        safe_regular(args.candidate)
-        if args.installed.resolve() == args.candidate.resolve():
-            raise MigrationRejected("installed and candidate cannot refer to the same file")
-        before = args.installed.read_bytes()
-        after, already = prepare(before, args.candidate.read_bytes())
-        print(f"installed_sha256={digest(before)}")
-        print(f"candidate_sha256={digest(after)}")
-        if already:
-            print("ALREADY_CURRENT; no changes needed")
-            return 0
-        if not args.apply:
-            print("DRY_RUN_OK; no files changed. Explicit --apply and --expected-sha256 required.")
-            return 0
-        if not args.expected_sha256:
-            raise MigrationRejected("--apply requires --expected-sha256 from dry-run")
-        backup = apply_migration(args.installed, args.expected_sha256, before, after)
-        print(f"MIGRATION_APPLIED; backup={backup}")
-        print("Restart/reload is NOT performed. Verify runtime policy separately.")
-        return 0
-    except ReplacementStateUncertain as error:
-        # Never claim "no write" once os.replace() has returned successfully.
-        # Read actual disk state again, including the pre-existing verified backup.
-        backup = args.installed.with_name(
-            args.installed.name + ".before-ban-evasion-" + digest(before)[:16] + ".bak"
-        )
-        try:
-            installed_now = args.installed.read_bytes()
-            observed_sha = digest(installed_now)
-            if installed_now == after:
-                installed_state = "CANDIDATE_PRESENT"
-            elif installed_now == before:
-                installed_state = "ORIGINAL_PRESENT"
-            else:
-                installed_state = "UNEXPECTED_BYTES"
-        except OSError:
-            installed_state, observed_sha = "UNREADABLE", "UNAVAILABLE"
-        try:
-            backup_state = "ORIGINAL_VERIFIED" if backup.read_bytes() == before else "MISMATCH"
-        except OSError:
-            backup_state = "UNREADABLE"
-        print(
-            "POST_REPLACE_UNCERTAIN: " + str(error)
-            + f"; installed_state={installed_state}; installed_sha256={observed_sha}"
-            + f"; original_sha256={digest(before)}; candidate_sha256={digest(after)}"
-            + f"; backup={backup}; backup_state={backup_state}"
-            + "; do not retry automatically; isolate all writers and verify/restore using the runbook",
-            file=sys.stderr,
-        )
-        return 3
+        return run_migration(args)
     except (MigrationRejected, OSError) as error:
         print(f"REJECTED: {error}", file=sys.stderr)
         return 2
