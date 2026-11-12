@@ -54,14 +54,14 @@ public final class StaffSessionInspectionCommand implements CommandExecutor {
             return true;
         }
         if (!busy.compareAndSet(false, true)) {
-            sender.sendMessage(Component.text(PREFIX + "status=BUSY recovery=NOT_AUTHORIZED"));
+            sender.sendMessage(Component.text(response(target, "status=BUSY recovery=NOT_AUTHORIZED")));
             return true;
         }
         try {
             workers.execute(() -> inspectAndReply(sender, target));
         } catch (RuntimeException exception) {
             busy.set(false);
-            sender.sendMessage(Component.text(PREFIX + "status=UNAVAILABLE recovery=NOT_AUTHORIZED"));
+            sender.sendMessage(Component.text(response(target, "status=UNAVAILABLE recovery=NOT_AUTHORIZED")));
         }
         return true;
     }
@@ -92,9 +92,13 @@ public final class StaffSessionInspectionCommand implements CommandExecutor {
         } finally {
             busy.set(false);
         }
-        String output = PREFIX + "player_uuid=" + target + " runtime_backend=" + backend
-                + " observed_at=" + clock.instant() + ' ' + result;
+        String output = response(target, result);
         replies.accept(() -> sender.sendMessage(Component.text(output)));
+    }
+
+    private String response(UUID target, String result) {
+        return PREFIX + "player_uuid=" + target + " runtime_backend=" + backend
+                + " observed_at=" + clock.instant() + ' ' + result;
     }
 
     private String verified(StaffSessionInspection snapshot, UUID target) {

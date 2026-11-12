@@ -130,10 +130,24 @@ class VanishStaffModeRestorationWiringTest {
         int restoration = source.indexOf("restoreSelectedGameMode(player);", absence);
         assertTrue(start >= 0 && absence > start && restoration > absence);
         String decision = source.substring(absence, restoration);
-        assertTrue(decision.contains("!staffMode.transitioning(playerId)"),
-                "durable absence must not restore a mode while Staff recovery is in flight");
-        assertTrue(decision.contains("!staffMode.active(playerId)"),
-                "durable absence must not overwrite a live Staff session mode");
+        assertTrue(decision.contains("shouldRestoreSelectedGameMode(wasVanished, selectedGameModes.containsKey(playerId),"),
+                "the no-record branch must retain the vanished/selection prerequisites");
+        assertTrue(decision.contains("staffMode.transitioning(playerId), staffMode.active(playerId))"),
+                "the no-record branch must use the live Staff transition and active states");
+    }
+
+    @Test
+    void gameModeRecoveryDecisionCoversActiveTransitioningAndNormalState() {
+        for (int flags = 0; flags < 16; flags++) {
+            boolean wasVanished = (flags & 1) != 0;
+            boolean hasSelection = (flags & 2) != 0;
+            boolean transitioning = (flags & 4) != 0;
+            boolean active = (flags & 8) != 0;
+            boolean expected = wasVanished && hasSelection && !transitioning && !active;
+            assertEquals(expected, VanishManager.shouldRestoreSelectedGameMode(
+                    wasVanished, hasSelection, transitioning, active),
+                    "incorrect game-mode restoration decision for state mask " + flags);
+        }
     }
 
     private static String method(String startMarker, String endMarker) throws IOException {

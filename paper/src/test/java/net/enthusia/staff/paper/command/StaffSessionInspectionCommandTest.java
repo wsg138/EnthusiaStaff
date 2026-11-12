@@ -88,6 +88,9 @@ class StaffSessionInspectionCommandTest {
         fixture.invoke(INSPECT, TARGET.toString());
         assertEquals(1, fixture.work.size());
         assertTrue(fixture.output.getFirst().contains("BUSY"));
+        assertTrue(fixture.output.getFirst().contains("player_uuid=" + TARGET));
+        assertTrue(fixture.output.getFirst().contains("runtime_backend=TEST"));
+        assertTrue(fixture.output.getFirst().contains("observed_at=" + Instant.EPOCH));
         fixture.finish();
         assertTrue(fixture.output.getLast().contains("UNAVAILABLE"));
         assertFalse(fixture.output.toString().contains("password"));
@@ -126,7 +129,10 @@ class StaffSessionInspectionCommandTest {
         }
         assertEquals(0, fixture.reads);
         assertEquals(2, fixture.output.size());
-        assertTrue(fixture.output.stream().allMatch(line -> line.contains("UNAVAILABLE")));
+        assertTrue(fixture.output.stream().allMatch(line -> line.contains("UNAVAILABLE")
+                && line.contains("player_uuid=" + TARGET)
+                && line.contains("runtime_backend=TEST")
+                && line.contains("observed_at=")));
     }
 
     private static StaffSessionInspection snapshot(String owner, String source) throws Exception {
