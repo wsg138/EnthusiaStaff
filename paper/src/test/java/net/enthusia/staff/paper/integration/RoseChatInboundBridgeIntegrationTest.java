@@ -25,6 +25,8 @@ import org.junit.jupiter.api.Test;
 class RoseChatInboundBridgeIntegrationTest {
     private static final long NOW = 1_800_000_000_000L;
     private static final Clock CLOCK = Clock.fixed(Instant.ofEpochMilli(NOW), ZoneOffset.UTC);
+    private static final String BACKEND_ID = "SMP";
+    private static final String PROXY_ID = "VELOCITY";
 
     @Test
     void serverWideInboundUsesGlobalRegionSchedulerRatherThanLegacyBukkitScheduler() {
@@ -72,7 +74,7 @@ class RoseChatInboundBridgeIntegrationTest {
         AtomicInteger attempts = new AtomicInteger();
         AtomicReference<Runnable> deferred = new AtomicReference<>();
         RoseChatInboundBridgeIntegration bridge = new RoseChatInboundBridgeIntegration(
-                "SMP", CLOCK,
+                BACKEND_ID, CLOCK,
                 callback -> {
                     if (attempts.getAndIncrement() == 0) {
                         throw new IllegalStateException("scheduler rejected");
@@ -82,11 +84,11 @@ class RoseChatInboundBridgeIntegrationTest {
                 ignored -> true,
                 1, 32
         );
-        ChatBridgeInboundMessage message = message("SMP", NOW, NOW + 30_000);
-        ProtocolEnvelope envelope = envelope("VELOCITY", message, message.eventId());
+        ChatBridgeInboundMessage message = message(BACKEND_ID, NOW, NOW + 30_000);
+        ProtocolEnvelope envelope = envelope(PROXY_ID, message, message.eventId());
 
-        assertFalse(bridge.accept("VELOCITY", envelope));
-        assertTrue(bridge.accept("VELOCITY", envelope),
+        assertFalse(bridge.accept(PROXY_ID, envelope));
+        assertTrue(bridge.accept(PROXY_ID, envelope),
                 "Rejected scheduler must not consume dedupe key or queue slot");
         assertNotNull(deferred.get());
         deferred.get().run();
@@ -98,7 +100,7 @@ class RoseChatInboundBridgeIntegrationTest {
         AtomicReference<Runnable> scheduled = new AtomicReference<>();
         AtomicReference<InboundChatMessage> delivered = new AtomicReference<>();
         RoseChatInboundBridgeIntegration bridge = new RoseChatInboundBridgeIntegration(
-                "SMP",
+                BACKEND_ID,
                 CLOCK,
                 scheduled::set,
                 message -> {
@@ -108,9 +110,9 @@ class RoseChatInboundBridgeIntegrationTest {
                 8,
                 32
         );
-        ChatBridgeInboundMessage message = message("SMP", NOW, NOW + 30_000);
+        ChatBridgeInboundMessage message = message(BACKEND_ID, NOW, NOW + 30_000);
 
-        assertTrue(bridge.accept("VELOCITY", envelope("VELOCITY", message, message.eventId())));
+        assertTrue(bridge.accept(PROXY_ID, envelope(PROXY_ID, message, message.eventId())));
         assertNotNull(scheduled.get());
         scheduled.get().run();
 
@@ -127,22 +129,22 @@ class RoseChatInboundBridgeIntegrationTest {
     @Test
     void rejectsWrongProxyTargetExpiryAndEnvelopeIdentity() {
         RoseChatInboundBridgeIntegration bridge = new RoseChatInboundBridgeIntegration(
-                "SMP",
+                BACKEND_ID,
                 CLOCK,
                 ignored -> { },
                 ignored -> true,
                 8,
                 32
         );
-        ChatBridgeInboundMessage valid = message("SMP", NOW, NOW + 30_000);
+        ChatBridgeInboundMessage valid = message(BACKEND_ID, NOW, NOW + 30_000);
 
-        assertFalse(bridge.accept("VELOCITY", envelope("OTHER", valid, valid.eventId())));
-        assertFalse(bridge.accept("VELOCITY", envelope(
-                "VELOCITY", message("HUB", NOW, NOW + 30_000), UUID.randomUUID())));
-        assertFalse(bridge.accept("VELOCITY", envelope(
-                "VELOCITY", message("SMP", NOW - 30_000, NOW - 1), UUID.randomUUID())));
-        assertFalse(bridge.accept("VELOCITY", envelope(
-                "VELOCITY", valid, UUID.randomUUID())));
+        assertFalse(bridge.accept(PROXY_ID, envelope("OTHER", valid, valid.eventId())));
+        assertFalse(bridge.accept(PROXY_ID, envelope(
+                PROXY_ID, message("HUB", NOW, NOW + 30_000), UUID.randomUUID())));
+        assertFalse(bridge.accept(PROXY_ID, envelope(
+                PROXY_ID, message(BACKEND_ID, NOW - 30_000, NOW - 1), UUID.randomUUID())));
+        assertFalse(bridge.accept(PROXY_ID, envelope(
+                PROXY_ID, valid, UUID.randomUUID())));
 
         bridge.close();
     }
@@ -152,7 +154,7 @@ class RoseChatInboundBridgeIntegrationTest {
         AtomicInteger scheduled = new AtomicInteger();
         AtomicReference<Runnable> first = new AtomicReference<>();
         RoseChatInboundBridgeIntegration bridge = new RoseChatInboundBridgeIntegration(
-                "SMP",
+                BACKEND_ID,
                 CLOCK,
                 task -> {
                     scheduled.incrementAndGet();
@@ -162,17 +164,17 @@ class RoseChatInboundBridgeIntegrationTest {
                 1,
                 32
         );
-        ChatBridgeInboundMessage one = message("SMP", NOW, NOW + 30_000);
-        ChatBridgeInboundMessage two = message("SMP", NOW, NOW + 30_000);
-        ProtocolEnvelope firstEnvelope = envelope("VELOCITY", one, one.eventId());
+        ChatBridgeInboundMessage one = message(BACKEND_ID, NOW, NOW + 30_000);
+        ChatBridgeInboundMessage two = message(BACKEND_ID, NOW, NOW + 30_000);
+        ProtocolEnvelope firstEnvelope = envelope(PROXY_ID, one, one.eventId());
 
-        assertTrue(bridge.accept("VELOCITY", firstEnvelope));
-        assertTrue(bridge.accept("VELOCITY", firstEnvelope));
-        assertFalse(bridge.accept("VELOCITY", envelope("VELOCITY", two, two.eventId())));
+        assertTrue(bridge.accept(PROXY_ID, firstEnvelope));
+        assertTrue(bridge.accept(PROXY_ID, firstEnvelope));
+        assertFalse(bridge.accept(PROXY_ID, envelope(PROXY_ID, two, two.eventId())));
         assertEquals(1, scheduled.get());
 
         first.get().run();
-        assertTrue(bridge.accept("VELOCITY", envelope("VELOCITY", two, two.eventId())));
+        assertTrue(bridge.accept(PROXY_ID, envelope(PROXY_ID, two, two.eventId())));
 
         bridge.close();
     }
