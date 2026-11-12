@@ -52,7 +52,7 @@ class PluginMetadataIntegrityTest {
         });
 
         assertEquals(Set.of(
-                "estaff", "report", "case", "link", "unlink", "staffchat", "staffapi", "staffflags",
+                "estaff", "report", "case", "link", "unlink", "staffchat", "staffapi", "staffflags", "staffsession",
                 "punish", "ban", "mute", "warn", "kick", "ipban"
         ), withoutOuterPermission);
     }

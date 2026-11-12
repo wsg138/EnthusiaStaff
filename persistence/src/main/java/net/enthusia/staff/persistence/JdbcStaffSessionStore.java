@@ -138,6 +138,11 @@ public final class JdbcStaffSessionStore implements StaffSessionStore {
     }
 
     @Override
+    public Optional<net.enthusia.staff.domain.staff.StaffSessionInspection> inspect(UUID staffId) {
+        return JdbcStaffSessionInspection.inspect(dataSource, staffId);
+    }
+
+    @Override
     public Optional<StaffSessionSnapshot> detach(
             UUID staffId,
             UUID expectedSessionId,

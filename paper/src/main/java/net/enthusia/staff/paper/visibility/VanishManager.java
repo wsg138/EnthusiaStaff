@@ -1497,7 +1497,8 @@ public final class VanishManager implements Listener {
             boolean wasVanished = visibility.isVanished(playerId);
             durableVanishedRanks.remove(playerId);
             visibility.setVanished(playerId, null, false);
-            if (wasVanished && selectedGameModes.containsKey(playerId)) {
+            if (wasVanished && selectedGameModes.containsKey(playerId)
+                    && !staffMode.transitioning(playerId) && !staffMode.active(playerId)) {
                 restoreSelectedGameMode(player);
             } else {
                 selectedGameModes.remove(playerId);
