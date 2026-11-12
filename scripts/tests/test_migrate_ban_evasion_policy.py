@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import contextlib
 import io
+import stat
 from pathlib import Path
 import tempfile
 import unittest
@@ -96,6 +97,39 @@ class PolicyMigrationTests(unittest.TestCase):
             self.assertEqual((previous.st_uid, previous.st_gid),
                              (current.st_uid, current.st_gid))
             self.assertEqual(0o640, current.st_mode & 0o777)
+
+    def test_backup_never_created_with_broader_mode_and_stage_mode_is_synced(self):
+        if migration.os.name == "nt":
+            self.skipTest("POSIX permission assertions")
+        self.installed_path.chmod(0o640)
+        original_open = migration.os.open
+        original_fsync = migration.os.fsync
+        created_modes = []
+        synced_regular_files = []
+
+        def inspect_open(path, flags, *args, **kwargs):
+            fd = original_open(path, flags, *args, **kwargs)
+            if str(path).endswith(".bak") and flags & migration.os.O_EXCL:
+                created_modes.append(stat.S_IMODE(migration.os.fstat(fd).st_mode))
+            return fd
+
+        def inspect_sync(fd):
+            info = migration.os.fstat(fd)
+            if stat.S_ISREG(info.st_mode):
+                synced_regular_files.append((stat.S_IMODE(info.st_mode), info.st_size))
+            return original_fsync(fd)
+
+        with mock.patch.object(migration.os, "open", side_effect=inspect_open), \
+             mock.patch.object(migration.os, "fsync", side_effect=inspect_sync):
+            status, _, error = self.run_cli(
+                "--apply", "--expected-sha256", migration.digest(self.installed)
+            )
+        self.assertEqual(0, status, error)
+        self.assertEqual([0o600], created_modes, "backup must start owner-only")
+        self.assertEqual((0o600, len(self.installed)), synced_regular_files[0])
+        self.assertEqual((0o640, len(self.installed)), synced_regular_files[1])
+        self.assertEqual((0o640, len(self.candidate)), synced_regular_files[-1])
+        self.assertEqual(0o640, self.backups()[0].stat().st_mode & 0o777)
 
     def test_existing_backup_causes_safe_rejection(self):
         backup = self.installed_path.with_name(
