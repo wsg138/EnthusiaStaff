@@ -1,0 +1,26 @@
+name: Punishment policy migration safety
+
+on:
+  pull_request:
+    paths:
+      - "scripts/migrate_ban_evasion_policy.py"
+      - "scripts/tests/test_migrate_ban_evasion_policy.py"
+      - "paper/src/main/resources/reason-policies.yml"
+      - ".github/workflows/punishment-policy-migration.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  dry-run-migration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Exercise fail-closed migration against generated historical fixture
+        run: python -m unittest discover -s scripts/tests -p "test_migrate_ban_evasion_policy.py" -v
