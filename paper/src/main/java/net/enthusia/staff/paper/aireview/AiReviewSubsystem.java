@@ -25,6 +25,7 @@ import net.enthusia.staff.domain.auth.StaffRank;
 import net.enthusia.staff.paper.aireview.AiReviewModels.Correction;
 import net.enthusia.staff.paper.aireview.AiReviewModels.CorrectionAuthority;
 import net.enthusia.staff.paper.aireview.AiReviewModels.CorrectionDecision;
+import net.enthusia.staff.paper.aireview.AiReviewModels.DecisionHistoryPage;
 import net.enthusia.staff.paper.aireview.AiReviewModels.EventDetails;
 import net.enthusia.staff.paper.aireview.AiReviewModels.ReviewItem;
 import net.enthusia.staff.paper.aireview.AiReviewModels.ReviewPriority;
@@ -248,6 +249,15 @@ public final class AiReviewSubsystem implements AutoCloseable, Listener {
         completions.forEach(Runnable::run);
     }
 
+    void loadDecisions(
+            int limit,
+            String cursor,
+            Consumer<DecisionHistoryPage> success,
+            Consumer<String> failure
+    ) {
+        submit(() -> client.listDecisions(limit, cursor), success, failure);
+    }
+
     void loadEvent(
             String eventId,
             Consumer<EventDetails> success,
@@ -350,7 +360,14 @@ public final class AiReviewSubsystem implements AutoCloseable, Listener {
                         }
                     });
                 } catch (AiReviewClientException exception) {
-                    if (exception.category() == AiReviewClientException.Category.CONFLICT) {
+                    if (exception.category() == AiReviewClientException.Category.INVALID_CURSOR) {
+                        // Bad user input must not poison global queue/correction backoff.
+                        schedule(() -> {
+                            if (!closed.get()) {
+                                failure.accept("invalid history cursor; restart with /aireview history");
+                            }
+                        });
+                    } else if (exception.category() == AiReviewClientException.Category.CONFLICT) {
                         backoff.success();
                         schedule(() -> {
                             if (!closed.get()) {
