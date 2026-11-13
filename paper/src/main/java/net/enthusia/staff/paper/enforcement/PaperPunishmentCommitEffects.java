@@ -63,7 +63,8 @@ public final class PaperPunishmentCommitEffects implements AutoCloseable {
         if (effect == CommitEffect.NONE) {
             return;
         }
-        dispatchToPlayer(plan.targetId(), player -> applyOnlineEffect(player, plan.caseId(), plan.publicReason(), effect));
+        dispatchToPlayer(plan.targetId(), player -> applyOnlineEffect(
+                player, plan.caseId(), plan.publicReason(), effect, plan.issuedAt()));
     }
 
     public void onNetworkPunishmentCommitted(net.enthusia.staff.domain.network.PunishmentCommitNotification notification) {
@@ -80,7 +81,7 @@ public final class PaperPunishmentCommitEffects implements AutoCloseable {
                     .noneMatch(sanction -> sanction.caseId().equals(notification.caseId()))) return;
         }
         dispatchToPlayer(notification.targetId(), player -> applyOnlineEffect(player,
-                notification.caseId(), notification.publicReason(), effect));
+                notification.caseId(), notification.publicReason(), effect, notification.issuedAt()));
     }
 
     static boolean recent(java.time.Instant issuedAt, java.time.Instant now) {
@@ -115,8 +116,9 @@ public final class PaperPunishmentCommitEffects implements AutoCloseable {
         }
     }
 
-    private void applyOnlineEffect(Player player, net.enthusia.staff.common.CaseId caseId, String reason, CommitEffect effect) {
-        if (!delivered.claim(caseId, player.getUniqueId(), java.time.Instant.now())) return;
+    private void applyOnlineEffect(Player player, net.enthusia.staff.common.CaseId caseId,
+            String reason, CommitEffect effect, java.time.Instant issuedAt) {
+        if (!delivered.claim(caseId, player.getUniqueId(), issuedAt, java.time.Instant.now())) return;
         switch (effect) {
             case BAN -> player.kick(Component.text(
                     "You are banned. " + reason + " (case " + caseId + ')'
@@ -133,14 +135,23 @@ public final class PaperPunishmentCommitEffects implements AutoCloseable {
 
     static final class DeliveryClaims {
         private final java.util.Map<DeliveryKey, java.time.Instant> cases = new java.util.HashMap<>();
-        private record DeliveryKey(net.enthusia.staff.common.CaseId caseId, UUID playerId) { }
+        private record DeliveryKey(
+                net.enthusia.staff.common.CaseId caseId, UUID playerId, java.time.Instant issuedAt
+        ) { }
         private final Object lock = new Object();
 
         boolean claim(net.enthusia.staff.common.CaseId caseId, UUID playerId, java.time.Instant now) {
-            if (caseId == null || playerId == null || now == null) {
+            return claim(caseId, playerId, java.time.Instant.EPOCH, now);
+        }
+
+        boolean claim(net.enthusia.staff.common.CaseId caseId, UUID playerId,
+                java.time.Instant issuedAt, java.time.Instant now) {
+            if (caseId == null || playerId == null || issuedAt == null || now == null) {
                 throw new IllegalArgumentException("online punishment claim fields must be present");
             }
-            DeliveryKey key = new DeliveryKey(caseId, playerId);
+            // Multiple delivery attempts of the same action share a key, but a distinct
+            // authenticated relink/reactivation event gets a fresh issuedAt and online effect.
+            DeliveryKey key = new DeliveryKey(caseId, playerId, issuedAt);
             synchronized (lock) {
                 cases.entrySet().removeIf(entry -> entry.getValue().isBefore(now.minusSeconds(300)));
                 if (cases.containsKey(key) || cases.size() >= 10_000) return false;
