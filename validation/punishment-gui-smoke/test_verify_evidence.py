@@ -32,7 +32,7 @@ def valid_server() -> str:
 
 
 def valid_client() -> str:
-    stages = list(gate.CLIENT_STAGES)
+    stages: list[str] = list(gate.CLIENT_STAGES)
     stages.insert(stages.index("GUI_CLIENT_TARGET_CATEGORIES_OPEN=true"), CATEGORY_PACKET)
     return "\n".join(stages)
 
