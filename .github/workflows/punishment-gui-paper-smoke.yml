@@ -38,6 +38,8 @@ jobs:
       ES_DATABASE_USER: gui_smoke
       ES_DATABASE_PASSWORD: gui-${{ github.run_id }}-${{ github.run_attempt }}
       PAPER_SHA256: b1d8f6bfa1b6101fa8e947b53041cb3bdf5540e7b83b6547ca19ba7edefeb083
+      # Official Modrinth v5.5.71 Bukkit release, SHA-1 pinned from release metadata.
+      LUCKPERMS_SHA1: fc8bb9919fa77c670b7ed5c284bcb66770ea71fc
       MINEFLAYER_COMMIT: f9e7db4447afda7838f08aa13430ec768738c178
       PAPER_USER_AGENT: EnthusiaStaff-gui-protocol-smoke/1.0.0
     steps:
@@ -61,6 +63,12 @@ jobs:
         with:
           node-version: "22"
 
+      - name: Prove failed and inconsistent evidence cannot go green
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          (cd validation/punishment-gui-smoke && python3 -m unittest -v test_verify_evidence.py)
+
       - name: Build candidate and isolated probe
         shell: bash
         run: |
@@ -73,6 +81,11 @@ jobs:
           test -n "$jar_path"
           cp "$jar_path" "$RUNNER_TEMP/gui/server/plugins/EnthusiaStaff-Paper.jar"
           cp validation/punishment-gui-smoke/target/punishment-gui-smoke-1.0.0.jar "$RUNNER_TEMP/gui/server/plugins/"
+          # Real LuckPerms is required: target hierarchy must never be bypassed.
+          curl --fail --location --retry 4 --retry-all-errors \
+            "https://cdn.modrinth.com/data/Vebnzrzj/versions/b0mk8uS6/LuckPerms-Bukkit-5.5.71.jar" \
+            -o "$RUNNER_TEMP/gui/server/plugins/LuckPerms.jar"
+          echo "$LUCKPERMS_SHA1  $RUNNER_TEMP/gui/server/plugins/LuckPerms.jar" | sha1sum --check -
           sha256sum "$RUNNER_TEMP/gui/server/plugins/"*.jar | tee "$RUNNER_TEMP/gui/evidence/jar-sha256.txt"
           git rev-parse HEAD | tee "$RUNNER_TEMP/gui/evidence/source-sha.txt"
 
@@ -145,6 +158,7 @@ jobs:
           fi
 
           grep -F 'OFF_DUTY_PICKER_BLOCKED=true' "$server/punishment-gui-smoke.txt"
+          grep -F 'LUCKPERMS_OWNER_IDENTITY_HANDLED=true' "$server/punishment-gui-smoke.txt"
           grep -F 'STAFF_COMMAND_ACCEPTED=true' "$server/punishment-gui-smoke.txt"
           grep -F 'PUNISH_COMMAND_ACCEPTED=true' "$server/punishment-gui-smoke.txt"
           grep -F 'PICKER_OPEN=true' "$server/punishment-gui-smoke.txt"
@@ -153,23 +167,35 @@ jobs:
           grep -F 'PICKER_REFRESH_OPEN=true' "$server/punishment-gui-smoke.txt"
           grep -F 'CLOSE_CLICK_OBSERVED=true' "$server/punishment-gui-smoke.txt"
           grep -F 'PICKER_CLOSED_AFTER_CONTROL=true' "$server/punishment-gui-smoke.txt"
+          grep -F 'PICKER_CLOSED_AT_CHECKPOINT=true' "$server/punishment-gui-smoke.txt"
           grep -F 'GUI_CLIENT_REFRESH_CLICK=true' "$evidence/client.log"
           grep -F 'GUI_CLIENT_REFRESHED_PICKER=true' "$evidence/client.log"
           grep -F 'GUI_CLIENT_CLOSE_CLICK=true' "$evidence/client.log"
           grep -F 'GUI_CLIENT_REFRESH_AND_CLOSE=true' "$evidence/client.log"
+          grep -F 'GUI_DISPOSABLE_TARGET_SPAWN=true' "$evidence/client.log"
+          grep -F 'DEDICATED_TARGET_ONLINE=true' "$server/punishment-gui-smoke.txt"
+          grep -F 'TARGET_PICKER_REOPEN_HANDLED=true' "$server/punishment-gui-smoke.txt"
+          grep -F 'GUI_CLIENT_TARGET_PICKER_REOPEN=true' "$evidence/client.log"
+          grep -F 'TARGET_HEAD_CLICK_OBSERVED=true' "$server/punishment-gui-smoke.txt"
+          grep -F 'GUI_CLIENT_TARGET_HEAD_CLICK=true' "$evidence/client.log"
+          grep -F 'TARGET_CATEGORIES_OPEN=true' "$server/punishment-gui-smoke.txt"
+          grep -F 'GUI_CLIENT_TARGET_CATEGORIES_OPEN=true' "$evidence/client.log"
           grep -F 'INVENTORY_OPEN|' "$server/punishment-gui-smoke.txt"
-          # A negated grep is exempt from Bash errexit: use explicit guards.
+          # Do NOT use a bare `! grep` here: Bash exempts negated
+          # pipelines from errexit, so a matching FAIL= previously went green.
           if grep -qF 'FAIL=' "$server/punishment-gui-smoke.txt" || \
              grep -qF 'GUI_PACKET_FAIL=' "$evidence/client.log"; then
-            echo "::error::GUI smoke recorded a server/client failure marker."
+            echo "::error::A server/client FAIL marker was recorded; refusing a green smoke."
             exit 1
           fi
           if grep -Eq 'NoSuchMethodError|NoSuchFieldError|ClassNotFoundException|LinkageError' \
              "$evidence/server-console.log"; then
-            echo "::error::GUI smoke encountered a server linkage failure."
+            echo "::error::The Paper server encountered a plugin linkage failure."
             exit 1
           fi
           cp "$server/punishment-gui-smoke.txt" "$evidence/server-proof.txt"
+          python3 validation/punishment-gui-smoke/verify_evidence.py \
+            "$evidence/server-proof.txt" "$evidence/client.log"
           echo 'GUI_PROTOCOL_SMOKE_PASS=true' | tee "$evidence/result.txt"
 
       - name: Preserve isolated evidence
