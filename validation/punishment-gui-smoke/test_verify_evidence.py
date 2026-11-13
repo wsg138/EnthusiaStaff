@@ -2,14 +2,22 @@
 from __future__ import annotations
 
 import unittest
+import json
 
 import verify_evidence as gate
 
 TARGET_UUID = "1f4333cd-0425-35ab-b679-0cc1ba8393a3"
 CATEGORY_LINE = ("INVENTORY_OPEN|title=Punish · " + TARGET_UUID
                  + "|size=54|holder=PunishmentGuiHolder")
-CATEGORY_PACKET = ("GUI_PACKET_OPEN|inventoryStart=54|slotCount=90|title=Punish · "
-                   + TARGET_UUID)
+CATEGORY_TITLE = "Punish · " + TARGET_UUID
+CATEGORY_PACKET = (
+    "GUI_PACKET_OPEN|inventoryStart=54|slotCount=90|title="
+    + json.dumps(
+        {"json": {"color": "dark_aqua", "text": CATEGORY_TITLE},
+         "text": CATEGORY_TITLE, "color": "dark_aqua"},
+        ensure_ascii=False, separators=(",", ":")
+    )
+)
 
 
 def valid_server() -> str:
@@ -104,7 +112,7 @@ class SmokeEvidenceTests(unittest.TestCase):
     def test_client_category_uuid_suffix_does_not_match(self):
         with self.assertRaisesRegex(gate.EvidenceFailure, "category window"):
             gate.validate(valid_server(),
-                          valid_client().replace(CATEGORY_PACKET, CATEGORY_PACKET + "Other"))
+                          valid_client().replace(CATEGORY_TITLE, CATEGORY_TITLE + "Other"))
 
     def test_server_category_before_target_head_fails(self):
         lines = valid_server().splitlines()
@@ -133,6 +141,26 @@ class SmokeEvidenceTests(unittest.TestCase):
         lines.append(CATEGORY_PACKET)
         with self.assertRaisesRegex(gate.EvidenceFailure, "outside target navigation"):
             gate.validate(valid_server(), "\n".join(lines))
+
+    def test_json_title_nested_conflict_fails(self):
+        payload = json.loads(CATEGORY_PACKET.split("|title=", 1)[1])
+        payload["json"]["text"] = CATEGORY_TITLE + "Other"
+        altered = "GUI_PACKET_OPEN|inventoryStart=54|slotCount=90|title=" + json.dumps(
+            payload, ensure_ascii=False, separators=(",", ":"))
+        with self.assertRaisesRegex(gate.EvidenceFailure, "conflicting"):
+            gate.validate(valid_server(), valid_client().replace(CATEGORY_PACKET, altered))
+
+    def test_json_title_extra_component_fails(self):
+        payload = json.loads(CATEGORY_PACKET.split("|title=", 1)[1])
+        payload["extra"] = [{"text": "Other"}]
+        altered = "GUI_PACKET_OPEN|inventoryStart=54|slotCount=90|title=" + json.dumps(
+            payload, ensure_ascii=False, separators=(",", ":"))
+        with self.assertRaisesRegex(gate.EvidenceFailure, "unsupported extra"):
+            gate.validate(valid_server(), valid_client().replace(CATEGORY_PACKET, altered))
+
+    def test_plain_string_title_can_still_match_exactly(self):
+        plain = "GUI_PACKET_OPEN|inventoryStart=54|slotCount=90|title=" + CATEGORY_TITLE
+        gate.validate(valid_server(), valid_client().replace(CATEGORY_PACKET, plain))
 
     def test_client_category_packet_wrong_slot_count_fails(self):
         with self.assertRaisesRegex(gate.EvidenceFailure, "category window"):
