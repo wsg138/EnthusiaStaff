@@ -79,26 +79,44 @@ def authoritative_disposable_uuid(server: list[str]) -> str:
     return target_id
 
 
+def stage_position(lines: list[str], stage: str) -> int:
+    # check_sequence already ensures the marker occurs exactly once.
+    return lines.index(stage)
+
+
 def actual_category_title(server: list[str], target_id: str) -> str:
     possible_titles = ("Punish · GuiTarget", "Punish · " + target_id)
-    titles = [
-        line.removeprefix("INVENTORY_OPEN|title=").removesuffix(
-            "|size=54|holder=PunishmentGuiHolder")
-        for line in server if line.startswith("INVENTORY_OPEN|title=")
-        and line.endswith("|size=54|holder=PunishmentGuiHolder")
+    prefix = "INVENTORY_OPEN|title="
+    suffix = "|size=54|holder=PunishmentGuiHolder"
+    records = [
+        (index, line[len(prefix):-len(suffix)])
+        for index, line in enumerate(server)
+        if line.startswith(prefix) and line.endswith(suffix)
     ]
-    matches = [title for title in titles if title in possible_titles]
-    if len(matches) != 1:
+    if len(records) != 1 or records[0][1] not in possible_titles:
         raise EvidenceFailure("real Paper category title does not match disposable target")
-    return matches[0]
+    position, title = records[0]
+    if not (stage_position(server, "TARGET_HEAD_CLICK_OBSERVED=true")
+            < position < stage_position(server, "TARGET_CATEGORIES_OPEN=true")):
+        raise EvidenceFailure("Paper category inventory was outside target navigation sequence")
+    return title
 
 
 def verify_client_category_packet(client: list[str], expected_title: str) -> None:
-    if not any(
-        line.startswith("GUI_PACKET_OPEN|inventoryStart=54|")
-        and expected_title in line for line in client
-    ):
+    prefix = "GUI_PACKET_OPEN|inventoryStart=54|slotCount=90|title="
+    records = [
+        (index, line[len(prefix):])
+        for index, line in enumerate(client)
+        if line.startswith(prefix)
+    ]
+    matching = [(index, title) for index, title in records
+                if title.startswith("Punish · ") and "Select Player" not in title]
+    if len(matching) != 1 or matching[0][1] != expected_title:
         raise EvidenceFailure("Java protocol category window does not match Paper title")
+    position = matching[0][0]
+    if not (stage_position(client, "GUI_CLIENT_TARGET_HEAD_CLICK=true")
+            < position < stage_position(client, "GUI_CLIENT_TARGET_CATEGORIES_OPEN=true")):
+        raise EvidenceFailure("Java protocol category packet was outside target navigation sequence")
 
 
 def validate(server_text: str, client_text: str) -> None:
