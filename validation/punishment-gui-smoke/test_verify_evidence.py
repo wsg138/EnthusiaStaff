@@ -19,12 +19,14 @@ def valid_server() -> str:
     stages.insert(stages.index("TARGET_HEAD_CLICK_OBSERVED=true"), "PICKER_OPEN=true")
     stages.insert(stages.index("TARGET_PICKER_REOPEN_HANDLED=true"),
                   "DISPOSABLE_TARGET_UUID=" + TARGET_UUID)
-    stages.append(CATEGORY_LINE)
+    stages.insert(stages.index("TARGET_CATEGORIES_OPEN=true"), CATEGORY_LINE)
     return "\n".join(stages)
 
 
 def valid_client() -> str:
-    return "\n".join((*gate.CLIENT_STAGES, CATEGORY_PACKET))
+    stages = list(gate.CLIENT_STAGES)
+    stages.insert(stages.index("GUI_CLIENT_TARGET_CATEGORIES_OPEN=true"), CATEGORY_PACKET)
+    return "\n".join(stages)
 
 
 class SmokeEvidenceTests(unittest.TestCase):
@@ -90,6 +92,56 @@ class SmokeEvidenceTests(unittest.TestCase):
     def test_duplicate_success_marker_fails(self):
         with self.assertRaisesRegex(gate.EvidenceFailure, "expected one"):
             gate.validate(valid_server() + "\nTARGET_CATEGORIES_OPEN=true", valid_client())
+
+    def test_client_category_suffix_does_not_match_name(self):
+        named_server = valid_server().replace("Punish · " + TARGET_UUID,
+                                             "Punish · GuiTarget")
+        named_client = valid_client().replace("Punish · " + TARGET_UUID,
+                                             "Punish · GuiTargetOther")
+        with self.assertRaisesRegex(gate.EvidenceFailure, "category window"):
+            gate.validate(named_server, named_client)
+
+    def test_client_category_uuid_suffix_does_not_match(self):
+        with self.assertRaisesRegex(gate.EvidenceFailure, "category window"):
+            gate.validate(valid_server(),
+                          valid_client().replace(CATEGORY_PACKET, CATEGORY_PACKET + "Other"))
+
+    def test_server_category_before_target_head_fails(self):
+        lines = valid_server().splitlines()
+        lines.remove(CATEGORY_LINE)
+        lines.insert(lines.index("TARGET_HEAD_CLICK_OBSERVED=true"), CATEGORY_LINE)
+        with self.assertRaisesRegex(gate.EvidenceFailure, "outside target navigation"):
+            gate.validate("\n".join(lines), valid_client())
+
+    def test_server_category_after_success_fails(self):
+        lines = valid_server().splitlines()
+        lines.remove(CATEGORY_LINE)
+        lines.append(CATEGORY_LINE)
+        with self.assertRaisesRegex(gate.EvidenceFailure, "outside target navigation"):
+            gate.validate("\n".join(lines), valid_client())
+
+    def test_client_category_before_target_click_fails(self):
+        lines = valid_client().splitlines()
+        lines.remove(CATEGORY_PACKET)
+        lines.insert(lines.index("GUI_CLIENT_TARGET_HEAD_CLICK=true"), CATEGORY_PACKET)
+        with self.assertRaisesRegex(gate.EvidenceFailure, "outside target navigation"):
+            gate.validate(valid_server(), "\n".join(lines))
+
+    def test_client_category_after_completion_fails(self):
+        lines = valid_client().splitlines()
+        lines.remove(CATEGORY_PACKET)
+        lines.append(CATEGORY_PACKET)
+        with self.assertRaisesRegex(gate.EvidenceFailure, "outside target navigation"):
+            gate.validate(valid_server(), "\n".join(lines))
+
+    def test_client_category_packet_wrong_slot_count_fails(self):
+        with self.assertRaisesRegex(gate.EvidenceFailure, "category window"):
+            gate.validate(valid_server(),
+                          valid_client().replace("slotCount=90", "slotCount=91"))
+
+    def test_duplicate_category_packet_fails(self):
+        with self.assertRaisesRegex(gate.EvidenceFailure, "category window"):
+            gate.validate(valid_server(), valid_client() + "\n" + CATEGORY_PACKET)
 
     def test_missing_close_checkpoint_fails(self):
         with self.assertRaisesRegex(gate.EvidenceFailure, "expected one"):
