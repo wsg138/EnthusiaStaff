@@ -11,6 +11,7 @@ import java.util.Locale;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import net.enthusia.staff.domain.guided.GuidedIncidentWizard;
 import net.enthusia.staff.domain.application.PunishmentAssessment;
 import net.enthusia.staff.domain.application.PunishmentDraft;
 import net.enthusia.staff.domain.auth.Actor;
@@ -57,6 +58,10 @@ final class PunishmentGuiRenderer {
     private static final int MAX_HEADER_SANCTIONS = 4;
     private static final int MAX_LADDER_SLOTS = 18;
     private static final int MAX_HISTORY_REASON_LENGTH = 64;
+    static final int[] GUIDED_CHOICE_SLOTS = {19, 21, 23, 25, 30, 32, 40};
+    static final int GUIDED_SHORTER_SLOT = 20;
+    static final int GUIDED_SUGGESTED_SLOT = 22;
+    static final int GUIDED_LONGER_SLOT = 24;
     private static final int[] CATEGORY_GRID = {20, 22, 24, 29, 31, 33, 40};
     private static final int FIRST_HISTORY_PAGE = 1;
     private static final String CLOSE_LABEL = "Close";
@@ -86,6 +91,8 @@ final class PunishmentGuiRenderer {
         renderHeader(inventory, state);
         if (state instanceof PunishmentGuiState.Categories categories) {
             renderCategories(inventory, categories, actor);
+        } else if (state instanceof PunishmentGuiState.Guided guided) {
+            renderGuided(inventory, guided);
         } else if (state instanceof PunishmentGuiState.Reasons reasons) {
             renderReasons(inventory, reasons, actor);
         } else if (state instanceof PunishmentGuiState.Search search) {
@@ -141,7 +148,7 @@ final class PunishmentGuiRenderer {
                     NamedTextColor.AQUA,
                     List.of(
                             Component.text("Pick what happened, not the punishment.", NamedTextColor.WHITE),
-                            Component.text("Each category contains exact rule violations.", NamedTextColor.GRAY),
+                            Component.text("A guided questionnaire asks what happened.", NamedTextColor.GRAY),
                             Component.text("Or use Search below to find one directly.", NamedTextColor.GRAY)
                     )
             ));
@@ -218,6 +225,98 @@ final class PunishmentGuiRenderer {
         return List.copyOf(examples);
     }
 
+    private void renderGuided(Inventory inventory, PunishmentGuiState.Guided state) {
+        var question = state.interview().nextQuestion();
+        if (question.isPresent()) {
+            renderGuidedQuestion(inventory, state, question.orElseThrow());
+        } else {
+            renderGuidedResult(inventory, state, state.interview().finding());
+        }
+        inventory.setItem(BACK_SLOT, button(Material.ARROW,
+                "Previous Question", NamedTextColor.AQUA));
+        inventory.setItem(SEARCH_SLOT, item(Material.BOOK,
+                "Expert: Browse Exact Reasons", NamedTextColor.YELLOW,
+                List.of(Component.text("Opens the existing authorized policy workflow.", NamedTextColor.GRAY),
+                        Component.text("No punishment happens until final confirmation.", NamedTextColor.RED))));
+        inventory.setItem(CLOSE_SLOT, button(Material.BARRIER, CLOSE_LABEL, NamedTextColor.RED));
+    }
+
+    private void renderGuidedQuestion(Inventory inventory, PunishmentGuiState.Guided state,
+                                      GuidedIncidentWizard.Question prompt) {
+        String categoryName = PunishmentGuiCategory.byId(state.categoryId()).title();
+        int answered = state.interview().answers().size();
+        inventory.setItem(13, item(Material.OAK_SIGN, prompt.text(), NamedTextColor.AQUA,
+                List.of(Component.text(categoryName, NamedTextColor.WHITE),
+                        Component.text("Step " + (answered + 1) + " - select one response",
+                                NamedTextColor.YELLOW))));
+        for (int i = 0; i < prompt.choices().size() && i < GUIDED_CHOICE_SLOTS.length; i++) {
+            var choice = prompt.choices().get(i);
+            inventory.setItem(GUIDED_CHOICE_SLOTS[i],
+                    item(guidedAnswerMaterial(i), choice.label(), NamedTextColor.WHITE,
+                            List.of(Component.text("Click to answer", NamedTextColor.YELLOW))));
+        }
+    }
+
+    private static Material guidedAnswerMaterial(int index) {
+        return switch (index) {
+            case 0 -> Material.LIME_DYE;
+            case 1 -> Material.LIGHT_BLUE_DYE;
+            case 2 -> Material.ORANGE_DYE;
+            case 3 -> Material.PURPLE_DYE;
+            case 4 -> Material.CYAN_DYE;
+            case 5 -> Material.MAGENTA_DYE;
+            default -> Material.GRAY_DYE;
+        };
+    }
+
+    /**
+     * The question screen does not manufacture sanctions. Only the
+     * authoritative policy service can calculate a proposed outcome.
+     */
+    private void renderGuidedResult(Inventory inventory, PunishmentGuiState.Guided state,
+                                    GuidedIncidentWizard.Finding finding) {
+        inventory.setItem(13, item(Material.KNOWLEDGE_BOOK,
+                "Review Incident Details", NamedTextColor.AQUA,
+                List.of(Component.text("Conduct: " + finding.conduct(), NamedTextColor.WHITE),
+                        Component.text("Location: " + finding.medium(), NamedTextColor.GRAY),
+                        Component.text("Incident impact: " + finding.preliminaryImpact(),
+                                NamedTextColor.GOLD),
+                        Component.text("Relevant punishment history is checked automatically.",
+                                NamedTextColor.GRAY))));
+        inventory.setItem(31, item(Material.WRITABLE_BOOK, "Incident Factors", NamedTextColor.AQUA,
+                finding.facts().stream()
+                        .<Component>map(value -> Component.text(value, NamedTextColor.WHITE))
+                        .toList()));
+        if (finding.needsReview() || finding.candidateId() == null) {
+            inventory.setItem(22, item(Material.SHIELD, "Needs Staff Review", NamedTextColor.GOLD,
+                    List.of(Component.text("These answers are not sufficient for automatic classification.",
+                                    NamedTextColor.GRAY),
+                            Component.text("Use Expert Reasons for a reviewed action.", NamedTextColor.YELLOW))));
+            return;
+        }
+        inventory.setItem(GUIDED_SHORTER_SLOT, guidedPreference(
+                "Conservative", -1, state.durationChoice()));
+        inventory.setItem(GUIDED_SUGGESTED_SLOT, guidedPreference(
+                "Balanced", 0, state.durationChoice()));
+        inventory.setItem(GUIDED_LONGER_SLOT, guidedPreference(
+                "Stronger", 1, state.durationChoice()));
+        inventory.setItem(CONFIRM_SLOT, item(Material.EMERALD,
+                "Calculate Punishment Type and Length", NamedTextColor.GREEN,
+                List.of(Component.text("Uses current policy and relevant player history.",
+                                NamedTextColor.WHITE),
+                        Component.text("Opens final review; no punishment is applied yet.",
+                                NamedTextColor.YELLOW))));
+    }
+
+    private static ItemStack guidedPreference(String name, int value, int selected) {
+        return item(value == selected ? Material.LIME_CONCRETE : Material.CLOCK,
+                name + " assessment", value == selected ? NamedTextColor.GREEN : NamedTextColor.WHITE,
+                List.of(Component.text(value == selected ? "Selected" : "Click to choose",
+                                NamedTextColor.YELLOW),
+                        Component.text("Outcome must remain within configured policy limits.",
+                                NamedTextColor.GRAY)));
+    }
+
     private void renderReasons(Inventory inventory, PunishmentGuiState.Reasons state, Actor actor) {
         List<ReasonPolicy> reasons = catalog.reasons(actor, state.commandName(), state.categoryId());
         int offset = state.page() * CONTENT_SIZE;
@@ -282,7 +381,9 @@ final class PunishmentGuiRenderer {
         inventory.setItem(12, escalationItem(state));
         inventory.setItem(14, recommendationItem(state, policy));
         inventory.setItem(16, safetyItem(state, catalog.activeVersion()));
-        if (assessment.isPresent()) {
+        if (draft.internalExplanation().startsWith("Guided incident v1")) {
+            renderGuidedReviewFactors(inventory, draft);
+        } else if (assessment.isPresent()) {
             renderLadder(inventory, assessment.orElseThrow());
         } else if (policy != null) {
             renderLadder(inventory, policy.steps(), draft.expectation().stepOrdinal(), true);
@@ -293,7 +394,9 @@ final class PunishmentGuiRenderer {
         inventory.setItem(41, historySummaryItem(state));
         inventory.setItem(43, authorityItem(actor, policy));
 
-        inventory.setItem(BACK_SLOT, button(Material.ARROW, "Back · Reasons", NamedTextColor.AQUA));
+        inventory.setItem(BACK_SLOT, button(Material.ARROW,
+                draft.internalExplanation().startsWith("Guided incident v1")
+                        ? "Back · Incident Answers" : "Back · Reasons", NamedTextColor.AQUA));
         footerHistory(inventory);
         inventory.setItem(CONFIRM_SLOT, policy == null
                 ? item(Material.GRAY_DYE, "Reason Unavailable", NamedTextColor.RED,
@@ -310,6 +413,27 @@ final class PunishmentGuiRenderer {
                 NamedTextColor.RED,
                 List.of(Component.text("The draft remains resumable for its configured lifetime.", NamedTextColor.GRAY))
         ));
+    }
+
+    /** Guided reviews emphasize factual answers and the calculated sanction, not a fixed ladder. */
+    private static void renderGuidedReviewFactors(Inventory inventory, PunishmentDraft draft) {
+        List<Component> answers = java.util.Arrays.stream(draft.internalExplanation()
+                        .split(" [|] "))
+                .filter(value -> value.startsWith("medium=") || value.startsWith("conduct=")
+                        || value.startsWith("detail=") || value.startsWith("extent=")
+                        || value.startsWith("continued=") || value.startsWith("targeting=")
+                        || value.startsWith("persistence=") || value.startsWith("incidentImpact="))
+                .limit(8)
+                .<Component>map(value -> Component.text(value.replace('=', ':'), NamedTextColor.WHITE))
+                .toList();
+        inventory.setItem(22, item(Material.WRITABLE_BOOK, "Incident Answers",
+                NamedTextColor.AQUA, answers));
+        inventory.setItem(24, item(Material.CLOCK, "Contextual Calculation",
+                NamedTextColor.GOLD, List.of(
+                        Component.text("Type and duration use the live configured policy.", NamedTextColor.WHITE),
+                        Component.text("Relevant past cases influence escalation automatically.", NamedTextColor.GRAY),
+                        Component.text("The requested outcome is shown above.", NamedTextColor.YELLOW),
+                        Component.text("Confirm only after verifying the incident details.", NamedTextColor.GRAY))));
     }
 
     private void renderHistory(Inventory inventory, PunishmentGuiState.History state) {
@@ -517,13 +641,20 @@ final class PunishmentGuiRenderer {
         PunishmentDraft draft = state.draft();
         int total = policy == null ? 0 : policy.steps().size();
         List<Component> lore = new ArrayList<>();
-        lore.add(Component.text(
-                "Step " + (draft.expectation().stepOrdinal() + 1) + (total > 0 ? "/" + total : ""),
-                NamedTextColor.GOLD
-        ));
+        boolean guided = draft.internalExplanation().startsWith("Guided incident v1");
+        if (guided) {
+            lore.add(Component.text("Calculated from incident details and related history.",
+                    NamedTextColor.GRAY));
+        } else {
+            lore.add(Component.text(
+                    "Step " + (draft.expectation().stepOrdinal() + 1)
+                            + (total > 0 ? "/" + total : ""), NamedTextColor.GOLD));
+        }
         lore.add(Component.text(describe(draft.expectation().sanctions()), NamedTextColor.WHITE));
-        lore.add(Component.text("This is what confirmation will submit.", NamedTextColor.GRAY));
-        return item(Material.GOLD_INGOT, "03 | Recommended Outcome", NamedTextColor.GOLD, lore);
+        lore.add(Component.text("This is what confirmation will submit.", NamedTextColor.YELLOW));
+        return item(Material.GOLD_INGOT,
+                guided ? "03 | Calculated Type & Length" : "03 | Recommended Outcome",
+                NamedTextColor.GOLD, lore);
     }
 
     private static ItemStack safetyItem(PunishmentGuiState.Review state, String activePolicyVersion) {
@@ -850,6 +981,9 @@ final class PunishmentGuiRenderer {
 
     private static Component title(PunishmentGuiState state) {
         String target = targetName(state.target());
+        if (state instanceof PunishmentGuiState.Guided guided) {
+            return Component.text("Guided · " + targetName(guided.target()), NamedTextColor.DARK_AQUA);
+        }
         if (state instanceof PunishmentGuiState.Reasons reasons) {
             PunishmentGuiCategory category = PunishmentGuiCategory.byId(reasons.categoryId());
             return Component.text("Punish · " + (category == null ? "Reasons" : category.title()),
