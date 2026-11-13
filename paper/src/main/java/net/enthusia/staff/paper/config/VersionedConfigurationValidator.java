@@ -53,6 +53,12 @@ public final class VersionedConfigurationValidator implements ConfigurationValid
             return "schema " + messages.schemaVersion();
         }, entries, errors);
 
+        validateSource("ranks.yml", () -> {
+            RankConfigurationSnapshot ranks =
+                    new RankConfigurationLoader().load(dataDirectory.resolve("ranks.yml"));
+            return "schema " + ranks.schemaVersion() + " (preview only; not active authority)";
+        }, entries, errors);
+
         validateReports(entries, errors);
 
         validateSource("policy-v2.yml", () -> {
