@@ -7,6 +7,7 @@ record. It never contacts a Minecraft server or mutates a file.
 from __future__ import annotations
 
 import argparse
+import json
 from pathlib import Path
 import uuid
 import sys
@@ -102,6 +103,28 @@ def actual_category_title(server: list[str], target_id: str) -> str:
     return title
 
 
+def normalized_client_title(raw: str) -> str:
+    """Mineflayer may serialize Adventure titles as JSON, not plain strings."""
+    if not raw.startswith("{"):
+        return raw
+    try:
+        component = json.loads(raw)
+    except (TypeError, ValueError) as exc:
+        raise EvidenceFailure("malformed Java protocol window title JSON") from exc
+    if not isinstance(component, dict) or not isinstance(component.get("text"), str):
+        raise EvidenceFailure("unsupported Java protocol window title component")
+    # A title with additional components may render extra text after .text.
+    if component.get("extra") or component.get("translate"):
+        raise EvidenceFailure("Java protocol title includes unsupported extra components")
+    nested = component.get("json")
+    if nested is not None:
+        if (not isinstance(nested, dict)
+                or nested.get("text") != component["text"]
+                or nested.get("extra") or nested.get("translate")):
+            raise EvidenceFailure("conflicting Java protocol window title components")
+    return component["text"]
+
+
 def verify_client_category_packet(client: list[str], expected_title: str) -> None:
     prefix = "GUI_PACKET_OPEN|inventoryStart=54|slotCount=90|title="
     records = [
@@ -109,8 +132,11 @@ def verify_client_category_packet(client: list[str], expected_title: str) -> Non
         for index, line in enumerate(client)
         if line.startswith(prefix)
     ]
-    matching = [(index, title) for index, title in records
-                if title.startswith("Punish · ") and "Select Player" not in title]
+    # Only category packets are relevant: preserve the earlier target-picker
+    # windows, but reject any ambiguous or mismatched category title.
+    matching = [(index, normalized_client_title(raw))
+                for index, raw in records
+                if "Select Player" not in raw and "Punish · " in raw]
     if len(matching) != 1 or matching[0][1] != expected_title:
         raise EvidenceFailure("Java protocol category window does not match Paper title")
     position = matching[0][0]
