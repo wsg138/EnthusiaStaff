@@ -10,6 +10,8 @@ import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
 
 class ClientEvidenceOwnerCaptureTest {
+    private static final String SNAPSHOT = "snapshot";
+    private static final String UNEXPECTED_FAILURE = "unexpected failure";
     @Test
     void captureOnlyRunsOnTargetOwnerCallback() {
         AtomicReference<Runnable> owner = new AtomicReference<>();
@@ -18,10 +20,10 @@ class ClientEvidenceOwnerCaptureTest {
         ClientEvidenceOwnerCapture.capture(
                 (callback, retired) -> { owner.set(callback); return true; },
                 () -> true,
-                () -> { captures.incrementAndGet(); return "snapshot"; },
-                result -> { assertEquals("snapshot", result); deliveries.incrementAndGet(); },
+                () -> { captures.incrementAndGet(); return SNAPSHOT; },
+                result -> { assertEquals(SNAPSHOT, result); deliveries.incrementAndGet(); },
                 () -> fail("unexpected retirement"),
-                error -> fail("unexpected failure", error));
+                error -> fail(UNEXPECTED_FAILURE, error));
         assertNotNull(owner.get());
         assertEquals(0, captures.get());
         assertEquals(0, deliveries.get());
@@ -39,10 +41,10 @@ class ClientEvidenceOwnerCaptureTest {
         ClientEvidenceOwnerCapture.capture(
                 (callback, retired) -> { owner.set(callback); return true; },
                 online::get,
-                () -> { captures.incrementAndGet(); return "snapshot"; },
+                () -> { captures.incrementAndGet(); return SNAPSHOT; },
                 result -> fail("should not deliver"),
                 unavailable::incrementAndGet,
-                error -> fail("unexpected failure", error));
+                error -> fail(UNEXPECTED_FAILURE, error));
         online.set(false);
         owner.get().run();
         assertEquals(0, captures.get());
@@ -56,17 +58,17 @@ class ClientEvidenceOwnerCaptureTest {
         ClientEvidenceOwnerCapture.capture(
                 (callback, retired) -> { retired.run(); return true; },
                 () -> true,
-                () -> { captures.incrementAndGet(); return "snapshot"; },
+                () -> { captures.incrementAndGet(); return SNAPSHOT; },
                 result -> fail("should not deliver"),
                 unavailable::incrementAndGet,
-                error -> fail("unexpected failure", error));
+                error -> fail(UNEXPECTED_FAILURE, error));
         ClientEvidenceOwnerCapture.capture(
                 (callback, retired) -> false,
                 () -> true,
-                () -> { captures.incrementAndGet(); return "snapshot"; },
+                () -> { captures.incrementAndGet(); return SNAPSHOT; },
                 result -> fail("should not deliver"),
                 unavailable::incrementAndGet,
-                error -> fail("unexpected failure", error));
+                error -> fail(UNEXPECTED_FAILURE, error));
         assertEquals(0, captures.get());
         assertEquals(2, unavailable.get());
     }
@@ -84,10 +86,10 @@ class ClientEvidenceOwnerCaptureTest {
                     return true;
                 },
                 () -> true,
-                () -> { captures.incrementAndGet(); return "snapshot"; },
+                () -> { captures.incrementAndGet(); return SNAPSHOT; },
                 result -> fail("stale target cannot disclose"),
                 unavailable::incrementAndGet,
-                error -> fail("unexpected failure", error));
+                error -> fail(UNEXPECTED_FAILURE, error));
         retired.get().run();
         owner.get().run();
         assertEquals(0, captures.get());
@@ -99,7 +101,7 @@ class ClientEvidenceOwnerCaptureTest {
         AtomicInteger failures = new AtomicInteger();
         ClientEvidenceOwnerCapture.capture(
                 (callback, retired) -> { throw new IllegalStateException("retired"); },
-                () -> true, () -> "snapshot", result -> fail("no delivery"),
+                () -> true, () -> SNAPSHOT, result -> fail("no delivery"),
                 () -> fail("no retirement"), error -> failures.incrementAndGet());
         ClientEvidenceOwnerCapture.capture(
                 (callback, retired) -> { callback.run(); return true; },
