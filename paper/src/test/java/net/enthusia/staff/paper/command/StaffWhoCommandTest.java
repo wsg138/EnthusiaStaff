@@ -21,8 +21,8 @@ class StaffWhoCommandTest {
     @Test
     void rendersOnlyAllowlistedOperationalFields() {
         List<String> lines = StaffWhoCommand.render(List.of(
-                new StaffWhoCommand.Entry("Alpha", StaffRank.MOD, true, true),
-                new StaffWhoCommand.Entry("Bravo", StaffRank.ADMIN, false, false)
+                new StaffWhoCommand.Entry(UUID.fromString("20000000-0000-0000-0000-000000000011"), "Alpha", StaffRank.MOD, true, true),
+                new StaffWhoCommand.Entry(UUID.fromString("20000000-0000-0000-0000-000000000012"), "Bravo", StaffRank.ADMIN, false, false)
         ), "3");
 
         assertEquals("Online staff: 2 | pending punishment requests: 3", lines.get(0));
@@ -72,7 +72,7 @@ class StaffWhoCommandTest {
                 player(scheduler),
                 () -> {
                     snapshot.set(true);
-                    return new StaffWhoCommand.Entry("Alpha", StaffRank.MOD, false, false);
+                    return new StaffWhoCommand.Entry(UUID.fromString("20000000-0000-0000-0000-000000000011"), "Alpha", StaffRank.MOD, false, false);
                 },
                 ignored -> accepted.set(true),
                 () -> finished.set(true)
