@@ -29,6 +29,7 @@ import net.enthusia.staff.paper.aireview.AiReviewModels.EventDetails;
 import net.enthusia.staff.paper.aireview.AiReviewModels.ReviewItem;
 import net.enthusia.staff.paper.aireview.AiReviewModels.ReviewPriority;
 import net.enthusia.staff.paper.presentation.StaffMessageStyle;
+import net.enthusia.staff.paper.alert.StaffAlertOwnerDispatch;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.command.PluginCommand;
@@ -417,20 +418,15 @@ public final class AiReviewSubsystem implements AutoCloseable, Listener {
                         + ". Use /aireview.",
                 urgent > 0 ? NamedTextColor.RED : NamedTextColor.GOLD
         );
-        for (Player player : plugin.getServer().getOnlinePlayers()) {
-            if (!activeDuty(player)
-                    || !AiReviewPermissions.queue(player)
-                    || !player.hasPermission(configuration.notificationPermission())) {
-                continue;
-            }
-            player.getScheduler().execute(plugin, () -> {
-                if (activeDuty(player)
+        // The polling completion runs on the global region. Permission and
+        // duty checks belong exclusively on each recipient's entity owner.
+        StaffAlertOwnerDispatch.alert(
+                plugin,
+                StaffMessageStyle.style(message),
+                player -> activeDuty(player)
                         && AiReviewPermissions.queue(player)
-                        && player.hasPermission(configuration.notificationPermission())) {
-                    player.sendMessage(StaffMessageStyle.style(message));
-                }
-            }, null, 1L);
-        }
+                        && player.hasPermission(configuration.notificationPermission())
+        );
     }
 
     @EventHandler(priority = EventPriority.MONITOR)
