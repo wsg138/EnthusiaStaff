@@ -86,7 +86,8 @@ public final class StaffModeManager implements Listener {
     private final StaffModeRecoveryGate recoveryGate = new StaffModeRecoveryGate(transitions);
     private final java.util.Set<UUID> profileApplications = ConcurrentHashMap.newKeySet();
     private final java.util.Set<UUID> snapshotRestorations = ConcurrentHashMap.newKeySet();
-    private final java.util.Set<UUID> pendingRankChecks = ConcurrentHashMap.newKeySet();
+    private final java.util.concurrent.ConcurrentMap<UUID, Object> pendingRankChecks =
+            new ConcurrentHashMap<>();
     private final java.util.Set<UUID> scheduledRecoveryRetries = ConcurrentHashMap.newKeySet();
     private final StaffModeHandoffIntentRegistry handoffResumes;
     private final StaffModeSourceHandoffRegistry sourceHandoffs = new StaffModeSourceHandoffRegistry();
@@ -378,24 +379,36 @@ public final class StaffModeManager implements Listener {
         }
         plugin.getServer().getGlobalRegionScheduler().runAtFixedRate(plugin, task -> {
             for (UUID playerId : active.keySet()) {
-                if (!pendingRankChecks.add(playerId)) {
+                Object ticket = beginRankCheck(playerId);
+                if (ticket == null) {
                     continue;
                 }
-                onEntity(
-                        playerId,
-                        player -> {
-                            try {
-                                reconcileActiveRank(player);
-                            } finally {
-                                pendingRankChecks.remove(playerId);
-                            }
-                        },
-                        () -> pendingRankChecks.remove(playerId)
-                );
+                try {
+                    StaffRankReconciliationOwnerDispatcher.forward(
+                            playerId, ticket, pendingRankChecks, this::onEntity, this::reconcileActiveRank
+                    );
+                } catch (RuntimeException failure) {
+                    // One retiring player's scheduler must not terminate the periodic
+                    // rank/permission revocation sweep for all other online staff.
+                    plugin.getLogger().log(Level.WARNING,
+                            "Staff rank owner check could not be scheduled for " + playerId, failure);
+                }
             }
         }, 20L, 20L);
     }
 
+    /**
+     * Reserve one unique reconciliation ticket only when there is no in-flight
+     * check for this UUID. The compare-and-insert still handles concurrent
+     * quit/rejoin/retirement; the fast precheck avoids repeated allocations.
+     */
+    private Object beginRankCheck(UUID playerId) {
+        if (pendingRankChecks.containsKey(playerId)) {
+            return null;
+        }
+        Object ticket = new Object();
+        return pendingRankChecks.putIfAbsent(playerId, ticket) == null ? ticket : null;
+    }
     public void enter(Player player, StaffRank rank) {
         java.util.Objects.requireNonNull(rank, "rank");
         UUID playerId = player.getUniqueId();
