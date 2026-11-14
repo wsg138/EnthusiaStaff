@@ -32,6 +32,16 @@
 - [#815](https://github.com/wsg138/EnthusiaStaff/pull/815) — safe 49/CLOCK Refresh and 51/BARRIER Close protocol proof, with delayed-click active-window race safeguard; exact-head CI and review passed.
 - [#816](https://github.com/wsg138/EnthusiaStaff/pull/816) — one disposable target PLAYER_HEAD click, owner hierarchy via isolated LuckPerms, category screen and exact/ordered Paper–Mineflayer evidence validation. **24/24** Python verifier tests and final-head Paper smoke, Coverage/MariaDB, Sentinel and Codacy zero issues passed; this is **not** actual human Java/Bedrock acceptance.
 
+### November 13–14 continuation (post-#816)
+
+- [#818](https://github.com/wsg138/EnthusiaStaff/pull/818) — exact-UUID/revision sanction selector regression: revoking one warning leaves its sibling active; standalone MariaDB and full hosted CI succeeded. Test-only; merged as `ee0a592b`.
+- [#819](https://github.com/wsg138/EnthusiaStaff/pull/819) — Staff Mode rank reconciliation uses per-attempt tickets to fence stale quit/rejoin callbacks and isolate scheduling failures; local Paper and exact-head hosted CI, Codacy, CodeRabbit succeeded. Merged as `371e406c`; no Folia opt-in.
+- [#820](https://github.com/wsg138/EnthusiaStaff/pull/820) — `/client` target-owner capture and sender-owner reauthorization/response; retains six regression cases. Exact-head CI and review passed; merged as `8e113795`. Stronger whole-command behavioral acceptance remains follow-up rather than claimed complete.
+- [#821](https://github.com/wsg138/EnthusiaStaff/pull/821) — delayed `/staffwho` delivery rechecks viewer permission and current vanish visibility on the owning player thread; CI and CodeRabbit passed. Merged as `a14fb199`.
+- [#822](https://github.com/wsg138/EnthusiaStaff/pull/822) — AI-review alerts and delayed `/aireview list` responses now recheck permission/duty on the player-owned scheduler. Exact-head Coverage/MariaDB, protocol-state, Sentinel, Codacy and CodeRabbit passed; merged as `e115870f`. A non-blocking execution-level test-quality suggestion remains recorded on #822.
+
+The completed merges above are source-level and test evidence only. They neither install a Paper/Velocity plugin JAR nor approve real Java/Bedrock acceptance, guided punishments, migration or Folia admission.
+
 The six original worker deliverables are **fully reported and reviewable on `main`**. Audits are provisional evidence records, not blanket permission for deletion or merging.
 
 ### Evidence-backed closures
@@ -58,6 +68,11 @@ The six original worker deliverables are **fully reported and reviewable on `mai
 | [#771](https://github.com/wsg138/EnthusiaStaff/pull/771) | [#813](https://github.com/wsg138/EnthusiaStaff/pull/813) | Closed; five of six files byte-identical, refactored test helper retains timing and evidence markers; branch retained for old #772 |
 | [#772](https://github.com/wsg138/EnthusiaStaff/pull/772), [#814](https://github.com/wsg138/EnthusiaStaff/pull/814) | [#815](https://github.com/wsg138/EnthusiaStaff/pull/815) | Both closed; safe Refresh/Close smoke and current-window guard retained, old branches preserved |
 | [#773](https://github.com/wsg138/EnthusiaStaff/pull/773) | [#816](https://github.com/wsg138/EnthusiaStaff/pull/816) | Closed; historical workflow byte-identical, all 13 original verifier tests and 11 new negative cases; old branch preserved |
+| [#748](https://github.com/wsg138/EnthusiaStaff/pull/748) | [#819](https://github.com/wsg138/EnthusiaStaff/pull/819) | Closed; same three changed paths, five original ticket regression tests preserved, stale callback protection on main. Head branch retained for historical #749 |
+| [#749](https://github.com/wsg138/EnthusiaStaff/pull/749) | existing mainline alert fanout / [#806](https://github.com/wsg138/EnthusiaStaff/pull/806) | Closed; all five original paths reconciled, mainline additionally reports rejected owner scheduler; branch retained for historical #750 |
+| [#750](https://github.com/wsg138/EnthusiaStaff/pull/750) | [#820](https://github.com/wsg138/EnthusiaStaff/pull/820) | Closed; two production file blobs byte-identical, all six original tests retained, branch kept for historical #751 |
+| [#751](https://github.com/wsg138/EnthusiaStaff/pull/751) | [#821](https://github.com/wsg138/EnthusiaStaff/pull/821) | Closed; three changed files byte-identical, fourth test retains all four original cases, branch kept for historical #752 |
+| [#752](https://github.com/wsg138/EnthusiaStaff/pull/752) | [#822](https://github.com/wsg138/EnthusiaStaff/pull/822) | Closed; three production blobs byte-identical, all five original test methods retained, branch preserved for historical #753–#754 lineage |
 
 Original PR branches have **not** been deleted. The PR closure comments explain the evidence. These dispositions close PR conversations, **not** unreviewed issue acceptance or dependent branch history.
 
