@@ -37,7 +37,7 @@ final class StaffRankReconciliationOwnerDispatcher {
             ownerDispatch.execute(playerId, player -> {
                 try {
                     // Quit invalidates the ticket; later joins receive a new identity.
-                    if (pending.get(playerId) == ticket) {
+                    if (Objects.equals(pending.get(playerId), ticket)) {
                         reconcile.accept(player);
                     }
                 } finally {

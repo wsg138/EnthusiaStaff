@@ -379,8 +379,8 @@ public final class StaffModeManager implements Listener {
         }
         plugin.getServer().getGlobalRegionScheduler().runAtFixedRate(plugin, task -> {
             for (UUID playerId : active.keySet()) {
-                Object ticket = new Object();
-                if (pendingRankChecks.putIfAbsent(playerId, ticket) != null) {
+                Object ticket = beginRankCheck(playerId);
+                if (ticket == null) {
                     continue;
                 }
                 try {
@@ -397,6 +397,18 @@ public final class StaffModeManager implements Listener {
         }, 20L, 20L);
     }
 
+    /**
+     * Reserve one unique reconciliation ticket only when there is no in-flight
+     * check for this UUID. The compare-and-insert still handles concurrent
+     * quit/rejoin/retirement; the fast precheck avoids repeated allocations.
+     */
+    private Object beginRankCheck(UUID playerId) {
+        if (pendingRankChecks.containsKey(playerId)) {
+            return null;
+        }
+        Object ticket = new Object();
+        return pendingRankChecks.putIfAbsent(playerId, ticket) == null ? ticket : null;
+    }
     public void enter(Player player, StaffRank rank) {
         java.util.Objects.requireNonNull(rank, "rank");
         UUID playerId = player.getUniqueId();

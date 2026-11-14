@@ -103,7 +103,7 @@ class StaffRankReconciliationOwnerDispatchTest {
     }
 
     private static Player player() {
-        return (Player) Proxy.newProxyInstance(Player.class.getClassLoader(),
+        return (Player) Proxy.newProxyInstance(Thread.currentThread().getContextClassLoader(),
                 new Class<?>[]{Player.class}, (self, method, args) -> {
                     if (method.getName().equals("getUniqueId")) return ID;
                     throw new AssertionError("Unexpected Player access: " + method.getName());
