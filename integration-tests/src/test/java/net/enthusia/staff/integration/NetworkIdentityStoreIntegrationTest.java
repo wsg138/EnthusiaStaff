@@ -359,6 +359,71 @@ class NetworkIdentityStoreIntegrationTest {
     }
 
     @Test
+    void repeatedVerifiedUnlinkAfterRelinkRevokesAgainWithDistinctAuditKeys() throws SQLException {
+        Instant now = Instant.parse("2026-10-10T22:00:00Z");
+        UUID reviewer = UUID.randomUUID();
+        UUID source = UUID.randomUUID();
+        UUID linkedAlt = UUID.randomUUID();
+        UUID sanction = UUID.randomUUID();
+        MariaDbIntegrationSupport.insertPlayer(DATABASE, reviewer, "CycleStaff", now.minusSeconds(100));
+        MariaDbIntegrationSupport.insertPlayer(DATABASE, source, "CycleSource", now.minusSeconds(100));
+        MariaDbIntegrationSupport.insertPlayer(DATABASE, linkedAlt, "CycleAlt", now.minusSeconds(100));
+        String caseId = "ALTLINKCYCLE001";
+        MariaDbIntegrationSupport.insertCase(DATABASE, caseId, source, reviewer, now.minusSeconds(40));
+        MariaDbIntegrationSupport.insertSanction(DATABASE, sanction, caseId, source,
+                "BAN", "ACTIVE", now.minusSeconds(30), now.plusSeconds(900));
+
+        var accounts = new JdbcDiscordModerationPersistenceStore(dataSource);
+        var discord = new DiscordUserId("18446744073709550073");
+        accounts.link(discord, source, DiscordMinecraftLinkSource.STAFF_RECOVERY,
+                "cycle-source-" + source, now);
+        var firstLink = accounts.link(discord, linkedAlt, DiscordMinecraftLinkSource.STAFF_RECOVERY,
+                "cycle-first-link-" + linkedAlt, now.plusSeconds(1));
+        assertEquals(1, store().observeConnectedAlts(linkedAlt, now.plusSeconds(2), false).inheritedSanctions());
+        accounts.unlink(discord, linkedAlt, firstLink.revision(),
+                "cycle-first-unlink-" + linkedAlt, now.plusSeconds(3));
+
+        var secondLink = accounts.link(discord, linkedAlt, DiscordMinecraftLinkSource.STAFF_RECOVERY,
+                "cycle-second-link-" + linkedAlt, now.plusSeconds(4));
+        assertEquals(1, store().observeConnectedAlts(linkedAlt, now.plusSeconds(5), false).inheritedSanctions());
+        // A second unlink is a NEW transition, not a replay of the first unlink.
+        var secondUnlink = accounts.unlink(discord, linkedAlt, secondLink.revision(),
+                "cycle-second-unlink-" + linkedAlt, now.plusSeconds(6));
+        assertTrue(secondUnlink.link().unlinkedAt().isPresent());
+        assertTrue(accounts.unlink(discord, linkedAlt, secondLink.revision(),
+                "cycle-second-unlink-" + linkedAlt, now.plusSeconds(6)).replayed());
+        assertTrue(accounts.currentLink(linkedAlt).isEmpty());
+
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement state = connection.prepareStatement("""
+                    SELECT status, revision FROM sanctions WHERE target_id = ? AND inherited_from = ?
+                    """);
+             PreparedStatement events = connection.prepareStatement("""
+                    SELECT COUNT(*) AS total, COUNT(DISTINCT idempotency_key) AS unique_keys
+                    FROM sanction_events
+                    WHERE sanction_id IN (
+                      SELECT sanction_id FROM sanctions WHERE target_id = ? AND inherited_from = ?)
+                      AND event_type = 'DISCORD_LINK_SANCTION_REVOKED'
+                    """)) {
+            state.setBytes(1, MariaDbIntegrationSupport.uuidBytes(linkedAlt));
+            state.setBytes(2, MariaDbIntegrationSupport.uuidBytes(sanction));
+            try (ResultSet rows = state.executeQuery()) {
+                assertTrue(rows.next());
+                assertEquals("REVOKED", rows.getString("status"));
+                assertEquals(3L, rows.getLong("revision"));
+                assertFalse(rows.next(), "relinks must reuse the same derived sanction row");
+            }
+            events.setBytes(1, MariaDbIntegrationSupport.uuidBytes(linkedAlt));
+            events.setBytes(2, MariaDbIntegrationSupport.uuidBytes(sanction));
+            try (ResultSet rows = events.executeQuery()) {
+                assertTrue(rows.next());
+                assertEquals(2, rows.getInt("total"));
+                assertEquals(2, rows.getInt("unique_keys"));
+            }
+        }
+        assertEquals(0, store().observeConnectedAlts(linkedAlt, now.plusSeconds(7), false).inheritedSanctions());
+    }
+    @Test
     void manuallyConfirmedAltRelationshipContinuesToSupportInheritanceAfterDiscordUnlink() throws SQLException {
         Instant now = Instant.parse("2026-10-10T21:10:00Z");
         UUID reviewer = UUID.randomUUID();

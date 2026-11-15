@@ -490,10 +490,10 @@ public final class JdbcNetworkIdentityStore implements NetworkIdentityStore {
             Connection connection, ObjectMapper json, PlayerPair pair, UUID actorId, Instant now,
             String reasonCode, String eventType
     ) throws SQLException, JsonProcessingException {
-        record Derived(UUID sanctionId, UUID targetId, String caseId) { }
+        record Derived(UUID sanctionId, UUID targetId, String caseId, long revision) { }
         List<Derived> inherited = new ArrayList<>();
         try (PreparedStatement statement = connection.prepareStatement("""
-                SELECT child.sanction_id, child.target_id, child.case_id
+                SELECT child.sanction_id, child.target_id, child.case_id, child.revision
                   FROM sanctions child
                   JOIN sanctions source ON child.inherited_from = source.sanction_id
                  WHERE child.status = 'ACTIVE'
@@ -510,23 +510,27 @@ public final class JdbcNetworkIdentityStore implements NetworkIdentityStore {
                     inherited.add(new Derived(
                             UuidBytes.fromBytes(result.getBytes("sanction_id")),
                             UuidBytes.fromBytes(result.getBytes("target_id")),
-                            result.getString("case_id")));
+                            result.getString("case_id"), result.getLong("revision")));
                 }
             }
         }
         for (Derived derived : inherited) {
             try (PreparedStatement update = connection.prepareStatement("""
                     UPDATE sanctions SET status = 'REVOKED', ended_at = ?, revision = revision + 1
-                    WHERE sanction_id = ? AND status = 'ACTIVE'
+                    WHERE sanction_id = ? AND status = 'ACTIVE' AND revision = ?
                     """)) {
                 update.setTimestamp(1, Timestamp.from(now));
                 update.setBytes(2, UuidBytes.toBytes(derived.sanctionId()));
+                update.setLong(3, derived.revision());
                 if (update.executeUpdate() != 1) {
                     continue;
                 }
             }
+            // A relink can reactivate the same sanction row. Key each revocation by
+            // its exact new revision so later unlink cycles remain distinct.
             String key = "alt-exception:" + UUID.nameUUIDFromBytes(
-                    (derived.sanctionId() + ":" + reasonCode).getBytes(java.nio.charset.StandardCharsets.UTF_8));
+                    (derived.sanctionId() + ":" + reasonCode + ":revision:"
+                            + (derived.revision() + 1)).getBytes(java.nio.charset.StandardCharsets.UTF_8));
             String payload = json.writeValueAsString(Map.of(
                     "caseId", derived.caseId(),
                     "targetId", derived.targetId().toString(),
