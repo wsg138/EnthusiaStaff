@@ -8,6 +8,21 @@ import org.junit.jupiter.api.Test;
 class PaperIntegrationManagerRoseChatLifecycleTest {
 
     @Test
+    void addonPresentAlwaysWinsAndIndependentFallbackRequiresExplicitOptIn() {
+        // Preserve the existing addon texture/tooltip fidelity even when the
+        // independent slot-card renderer has been explicitly enabled.
+        assertTrue(PaperIntegrationManager.chooseRichRenderer(true, false)
+                == PaperIntegrationManager.RichRendererChoice.ADDON);
+        assertTrue(PaperIntegrationManager.chooseRichRenderer(true, true)
+                == PaperIntegrationManager.RichRendererChoice.ADDON);
+        // An absent/unusable addon uses opt-in native cards only when enabled.
+        assertTrue(PaperIntegrationManager.chooseRichRenderer(false, true)
+                == PaperIntegrationManager.RichRendererChoice.INDEPENDENT);
+        assertTrue(PaperIntegrationManager.chooseRichRenderer(false, false)
+                == PaperIntegrationManager.RichRendererChoice.DISABLED);
+    }
+
+    @Test
     void richRendererLifecycleMatcherAcceptsOnlyExactUpstreamPluginNames() {
         assertTrue(PaperIntegrationManager.isInteractiveChatRendererDependency("InteractiveChat"));
         assertTrue(PaperIntegrationManager.isInteractiveChatRendererDependency(
