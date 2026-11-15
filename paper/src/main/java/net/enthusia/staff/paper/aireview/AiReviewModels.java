@@ -41,6 +41,49 @@ public final class AiReviewModels {
         }
     }
 
+    /** All-decisions audit contains no raw chat, sender, or neighbor context. */
+    public record DecisionHistoryItem(
+            String eventId,
+            Instant occurredAt,
+            Instant finalizedAt,
+            String platform,
+            String channelProfile,
+            String ingestionStatus,
+            MessageAction messageAction,
+            String semanticLabel,
+            ReviewPriority reviewPriority,
+            List<String> reasonCodes,
+            String localModelVersion,
+            String policyVersion,
+            boolean degraded,
+            boolean corrected
+    ) {
+        public DecisionHistoryItem {
+            eventId = required(eventId, "eventId");
+            occurredAt = Objects.requireNonNull(occurredAt, "occurredAt");
+            finalizedAt = Objects.requireNonNull(finalizedAt, "finalizedAt");
+            platform = required(platform, "platform");
+            channelProfile = required(channelProfile, "channelProfile");
+            ingestionStatus = required(ingestionStatus, "ingestionStatus");
+            messageAction = Objects.requireNonNull(messageAction, "messageAction");
+            semanticLabel = required(semanticLabel, "semanticLabel");
+            reviewPriority = Objects.requireNonNull(reviewPriority, "reviewPriority");
+            reasonCodes = List.copyOf(reasonCodes == null ? List.of() : reasonCodes);
+            localModelVersion = required(localModelVersion, "localModelVersion");
+            policyVersion = required(policyVersion, "policyVersion");
+        }
+    }
+
+    public record DecisionHistoryPage(
+            List<DecisionHistoryItem> items,
+            String nextCursor
+    ) {
+        public DecisionHistoryPage {
+            items = List.copyOf(items == null ? List.of() : items);
+            nextCursor = nextCursor == null || nextCursor.isBlank() ? null : nextCursor;
+        }
+    }
+
     public record MessageReference(
             String platform,
             String scopeId,

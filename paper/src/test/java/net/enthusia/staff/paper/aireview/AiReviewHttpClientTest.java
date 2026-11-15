@@ -51,6 +51,73 @@ class AiReviewHttpClientTest {
     }
 
     @Test
+    void historyIncludesAllowAndBlockWithoutRawTextAndEncodesCursor() throws Exception {
+        String response = """
+                {"items":[
+                    {"event_id":"abc","occurred_at":"2026-10-09T10:00:00Z",
+                     "finalized_at":"2026-10-09T10:00:01Z","platform":"minecraft",
+                     "channel_profile":"minecraft_private","ingestion_status":"INGESTED",
+                     "message_action":"ALLOW","semantic_label":"SAFE","review_priority":"NONE",
+                     "reason_codes":["safe"],"local_model_version":"m1",
+                     "policy_version":"v1","degraded":false,"corrected":false},
+                    {"event_id":"def","occurred_at":"2026-10-09T10:00:02Z",
+                     "finalized_at":"2026-10-09T10:00:03Z","platform":"discord",
+                     "channel_profile":"discord_general","ingestion_status":"INGESTED",
+                     "message_action":"BLOCK","semantic_label":"SLUR_USE","review_priority":"NORMAL",
+                     "reason_codes":["slur"],"local_model_version":"m1",
+                     "policy_version":"v1","degraded":false,"corrected":true}
+                ],"next_cursor":"def"}
+                """;
+        try (MiniServer server = new MiniServer(request -> Response.json(200, response))) {
+            AiReviewHttpClient client = client(server, 64 * 1024, 2_000);
+            var page = client.listDecisions(5, "prior-id");
+            assertEquals(2, page.items().size());
+            assertEquals("def", page.nextCursor());
+            assertEquals(MessageAction.ALLOW, page.items().get(0).messageAction());
+            assertEquals(MessageAction.BLOCK, page.items().get(1).messageAction());
+            assertTrue(page.items().get(1).corrected());
+            assertEquals("minecraft_private", page.items().get(0).channelProfile());
+            var request = server.awaitRequest();
+            assertEquals("/v1/decisions?limit=5&cursor=prior-id", request.target());
+            assertEquals("staff-test", request.headers().get("x-client-id"));
+            assertEquals("Bearer super-secret", request.headers().get("authorization"));
+        }
+    }
+
+    @Test
+    void historyRejectsMalformedOrUnboundedPage() throws Exception {
+        try (MiniServer server = new MiniServer(request ->
+                Response.json(200, "{\"items\":[{}],\"next_cursor\":null}"))) {
+            AiReviewHttpClient client = client(server, 64 * 1024, 2_000);
+            assertEquals(Category.MALFORMED,
+                    assertThrows(AiReviewClientException.class,
+                            () -> client.listDecisions(10, null)).category());
+        }
+    }
+
+    @Test
+    void historyMissingCursorIsInputFailureNotSharedServiceOutage() throws Exception {
+        try (MiniServer server = new MiniServer(request -> Response.json(404, "{}"))) {
+            AiReviewHttpClient client = client(server, 64 * 1024, 2_000);
+            var failure = assertThrows(AiReviewClientException.class,
+                    () -> client.listDecisions(10, "missing-cursor"));
+            assertEquals(Category.INVALID_CURSOR, failure.category());
+            assertEquals("/v1/decisions?limit=10&cursor=missing-cursor",
+                    server.awaitRequest().target());
+        }
+    }
+
+    @Test
+    void unrelatedEventNotFoundRemainsOrdinaryServiceError() throws Exception {
+        try (MiniServer server = new MiniServer(request -> Response.json(404, "{}"))) {
+            AiReviewHttpClient client = client(server, 64 * 1024, 2_000);
+            assertEquals(Category.NOT_FOUND,
+                    assertThrows(AiReviewClientException.class,
+                            () -> client.event("no-such-event")).category());
+        }
+    }
+
+    @Test
     void eventParsingUsesOnlyTypedAllowlistedFields() throws Exception {
         try (MiniServer server = new MiniServer(request -> Response.json(200, eventJson()))) {
             var details = client(server, 64 * 1024, 2_000).event("event-1");
