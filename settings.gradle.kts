@@ -29,4 +29,5 @@ include(
     "velocity",
     "staff-bot",
     "integration-tests",
+    "punishment-simulator",
 )
