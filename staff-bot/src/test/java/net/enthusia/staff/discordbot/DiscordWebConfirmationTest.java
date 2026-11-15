@@ -57,6 +57,45 @@ class DiscordWebConfirmationTest {
         assertEquals(0,fixture.writes.get());
     }
 
+    @Test
+    void cancellingPreviewConsumesConfirmationWithoutCreatingPunishment() {
+        Fixture fixture = new Fixture();
+        UUID token = fixture.service.prepareIssue(123, STAFF_ROLE, 999, warning()).token();
+
+        fixture.service.cancelConfirmation(123, STAFF_ROLE, token);
+
+        assertThrows(IllegalStateException.class,
+                () -> fixture.service.confirmIssue(123, STAFF_ROLE, token));
+        assertEquals(0, fixture.writes.get());
+        assertTrue(fixture.stored.isEmpty());
+    }
+
+    @Test
+    void statusCheckIsReadOnlyAndRejectsAnotherIssuer() {
+        Fixture fixture = new Fixture();
+        UUID token = fixture.service.prepareIssue(123, STAFF_ROLE, 999, warning()).token();
+        UUID ownId = fixture.service.confirmIssue(123, STAFF_ROLE, token).punishmentId();
+
+        assertEquals(ownId, fixture.service.issuerStatus(123, STAFF_ROLE, ownId)
+                .punishment().punishmentId());
+
+        UUID differentId = UUID.randomUUID();
+        DiscordPunishment otherIssuer = DiscordPunishment.pending(
+                differentId,
+                new ModerationSubjectId(UUID.randomUUID()),
+                new DiscordUserId("999"),
+                new DiscordGuildId("456"),
+                new Actor(UUID.randomUUID(), "other staff", StaffRank.ADMIN),
+                warning(),
+                Instant.parse("2026-09-30T00:00:00Z"),
+                "other-issue");
+        fixture.stored.put(differentId, new StoredPunishment(otherIssuer, 0, false));
+
+        assertThrows(IllegalArgumentException.class,
+                () -> fixture.service.issuerStatus(123, STAFF_ROLE, differentId));
+        assertEquals(1, fixture.writes.get());
+    }
+
     private static DiscordPunishmentIntent warning() {
         return new DiscordPunishmentIntent(DiscordConsequenceType.WARNING,SanctionLength.instant(),false,false,
                 Optional.empty(),"Authorized test","Test explanation",0,true);
