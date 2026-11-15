@@ -394,6 +394,11 @@ class NetworkIdentityStoreIntegrationTest {
                 "cycle-second-unlink-" + linkedAlt, now.plusSeconds(6)).replayed());
         assertTrue(accounts.currentLink(linkedAlt).isEmpty());
 
+        assertTwoDistinctUnlinkRevocations(linkedAlt, sanction);
+        assertEquals(0, store().observeConnectedAlts(linkedAlt, now.plusSeconds(7), false).inheritedSanctions());
+    }
+
+    private void assertTwoDistinctUnlinkRevocations(UUID linkedAlt, UUID sanction) throws SQLException {
         try (Connection connection = dataSource.getConnection();
              PreparedStatement state = connection.prepareStatement("""
                     SELECT status, revision FROM sanctions WHERE target_id = ? AND inherited_from = ?
@@ -421,8 +426,8 @@ class NetworkIdentityStoreIntegrationTest {
                 assertEquals(2, rows.getInt("unique_keys"));
             }
         }
-        assertEquals(0, store().observeConnectedAlts(linkedAlt, now.plusSeconds(7), false).inheritedSanctions());
     }
+
     @Test
     void manuallyConfirmedAltRelationshipContinuesToSupportInheritanceAfterDiscordUnlink() throws SQLException {
         Instant now = Instant.parse("2026-10-10T21:10:00Z");
