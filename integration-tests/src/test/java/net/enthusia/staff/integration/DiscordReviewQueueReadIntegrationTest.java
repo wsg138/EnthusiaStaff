@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.time.Clock;
 import java.time.Instant;
+import java.util.UUID;
 import net.enthusia.staff.persistence.DiscordStaffReadRuntime;
 import net.enthusia.staff.persistence.MariaDb;
 import org.junit.jupiter.api.BeforeAll;
@@ -32,7 +33,7 @@ class DiscordReviewQueueReadIntegrationTest {
     }
 
     @Test
-    void emptyQueueAndReviewPulseAreReadableUsingReadOnlyDatabasePool() {
+    void emptyQueueAndReviewPulseAreReadableUsingReadOnlyDatabasePool() throws Exception {
         try (DiscordStaffReadRuntime read = DiscordStaffReadRuntime.open(
                 MariaDbIntegrationSupport.databaseConfig(DATABASE), Clock.systemUTC())) {
             Instant now = Instant.now();
@@ -44,6 +45,29 @@ class DiscordReviewQueueReadIntegrationTest {
             assertEquals(0L, pulse.openReports());
             assertEquals(0L, pulse.claimedReports());
             assertEquals(0L, pulse.altSignalsInLastDay());
+        }
+        UUID reporter = UUID.randomUUID();
+        UUID target = UUID.randomUUID();
+        MariaDbIntegrationSupport.insertPlayer(DATABASE, reporter, "PreviewReporter",
+                ReportIntegrationFixtures.NOW);
+        MariaDbIntegrationSupport.insertPlayer(DATABASE, target, "PreviewTarget",
+                ReportIntegrationFixtures.NOW);
+        try (var write = MariaDb.initialize(MariaDbIntegrationSupport.databaseConfig(DATABASE))) {
+            ReportIntegrationFixtures.accepted(write.reportStore().submit(
+                    ReportIntegrationFixtures.request(reporter, target,
+                            "report:private-preview-" + reporter,
+                            ReportIntegrationFixtures.NOW, "private test body")));
+        }
+        try (DiscordStaffReadRuntime read = DiscordStaffReadRuntime.open(
+                MariaDbIntegrationSupport.databaseConfig(DATABASE), Clock.systemUTC())) {
+            var metadata = read.pendingReports(4);
+            assertEquals(1, metadata.size());
+            assertEquals("", metadata.getFirst().description());
+            var ephemeral = read.pendingReports(4, true);
+            assertEquals(1, ephemeral.size());
+            assertEquals("Report description private test body", ephemeral.getFirst().description());
+            assertEquals("PreviewReporter", ephemeral.getFirst().reporterName());
+            assertEquals("PreviewTarget", ephemeral.getFirst().targetName());
         }
     }
 }
