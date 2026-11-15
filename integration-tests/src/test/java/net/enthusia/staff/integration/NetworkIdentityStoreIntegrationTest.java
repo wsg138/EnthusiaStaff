@@ -241,6 +241,233 @@ class NetworkIdentityStoreIntegrationTest {
     }
 
     @Test
+    void verifiedDiscordUnlinkAtomicallyRevokesUnsupportedInheritedBanAndEmitsEffects() throws SQLException {
+        Instant now = Instant.parse("2026-10-10T21:00:00Z");
+        UUID reviewer = UUID.randomUUID();
+        UUID source = UUID.randomUUID();
+        UUID linkedAlt = UUID.randomUUID();
+        UUID sanction = UUID.randomUUID();
+        MariaDbIntegrationSupport.insertPlayer(DATABASE, reviewer, "UnlinkStaff", now.minusSeconds(100));
+        MariaDbIntegrationSupport.insertPlayer(DATABASE, source, "UnlinkSource", now.minusSeconds(100));
+        MariaDbIntegrationSupport.insertPlayer(DATABASE, linkedAlt, "UnlinkAlt", now.minusSeconds(100));
+        String caseId = "ALTLINKUNLINK001";
+        MariaDbIntegrationSupport.insertCase(DATABASE, caseId, source, reviewer, now.minusSeconds(40));
+        MariaDbIntegrationSupport.insertSanction(DATABASE, sanction, caseId, source,
+                "BAN", "ACTIVE", now.minusSeconds(30), now.plusSeconds(900));
+
+        var accounts = new JdbcDiscordModerationPersistenceStore(dataSource);
+        var discord = new DiscordUserId("18446744073709550071");
+        accounts.link(discord, source, DiscordMinecraftLinkSource.STAFF_RECOVERY,
+                "unlink-source-" + source, now);
+        var altLink = accounts.link(discord, linkedAlt, DiscordMinecraftLinkSource.STAFF_RECOVERY,
+                "unlink-alt-" + linkedAlt, now.plusSeconds(1));
+        assertEquals(1, store().observeConnectedAlts(linkedAlt, now.plusSeconds(2), false).inheritedSanctions());
+        assertEquals(1, inheritedSanctionCount(linkedAlt, sanction));
+
+        var result = accounts.unlink(discord, linkedAlt, altLink.revision(),
+                "unlink-derived-" + linkedAlt, now.plusSeconds(3));
+        assertTrue(result.link().unlinkedAt().isPresent());
+        assertTrue(accounts.currentLink(linkedAlt).isEmpty());
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement derived = connection.prepareStatement("""
+                    SELECT status FROM sanctions WHERE target_id = ? AND inherited_from = ?
+                    """);
+             PreparedStatement events = connection.prepareStatement("""
+                    SELECT COUNT(*) FROM sanction_events
+                    WHERE sanction_id IN (
+                      SELECT sanction_id FROM sanctions WHERE target_id = ? AND inherited_from = ?)
+                      AND event_type = 'DISCORD_LINK_SANCTION_REVOKED'
+                    """)) {
+            derived.setBytes(1, MariaDbIntegrationSupport.uuidBytes(linkedAlt));
+            derived.setBytes(2, MariaDbIntegrationSupport.uuidBytes(sanction));
+            try (ResultSet rows = derived.executeQuery()) {
+                assertTrue(rows.next());
+                assertEquals("REVOKED", rows.getString("status"));
+            }
+            events.setBytes(1, MariaDbIntegrationSupport.uuidBytes(linkedAlt));
+            events.setBytes(2, MariaDbIntegrationSupport.uuidBytes(sanction));
+            assertEquals(1, readCount(events));
+        }
+        // Idempotent unlink replay cannot re-revoke or emit a second action.
+        assertTrue(accounts.unlink(discord, linkedAlt, altLink.revision(),
+                "unlink-derived-" + linkedAlt, now.plusSeconds(3)).replayed());
+        assertEquals(0, store().observeConnectedAlts(linkedAlt, now.plusSeconds(4), false).inheritedSanctions());
+
+        // The unique target/source row must reactivate after a fresh verified link,
+        // not get stuck REVOKED behind INSERT IGNORE.
+        accounts.link(discord, linkedAlt, DiscordMinecraftLinkSource.STAFF_RECOVERY,
+                "relink-after-unlink-" + linkedAlt, now.plusSeconds(5));
+        assertEquals(1, store().observeConnectedAlts(linkedAlt, now.plusSeconds(6), false).inheritedSanctions());
+        assertEquals(0, store().observeConnectedAlts(linkedAlt, now.plusSeconds(7), false).inheritedSanctions());
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement state = connection.prepareStatement("""
+                    SELECT status, revision FROM sanctions WHERE target_id = ? AND inherited_from = ?
+                    """);
+             PreparedStatement eventCount = connection.prepareStatement("""
+                    SELECT COUNT(*) FROM sanction_events WHERE event_type = 'INHERITED'
+                    AND sanction_id IN (
+                      SELECT sanction_id FROM sanctions WHERE target_id = ? AND inherited_from = ?)
+                    """)) {
+            state.setBytes(1, MariaDbIntegrationSupport.uuidBytes(linkedAlt));
+            state.setBytes(2, MariaDbIntegrationSupport.uuidBytes(sanction));
+            try (ResultSet rows = state.executeQuery()) {
+                assertTrue(rows.next());
+                assertEquals("ACTIVE", rows.getString("status"));
+                assertEquals(2L, rows.getLong("revision"));
+            }
+            eventCount.setBytes(1, MariaDbIntegrationSupport.uuidBytes(linkedAlt));
+            eventCount.setBytes(2, MariaDbIntegrationSupport.uuidBytes(sanction));
+            assertEquals(2, readCount(eventCount));
+        }
+
+        // Explicit staff revocation must remain terminal even while the verified link exists.
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement revoke = connection.prepareStatement("""
+                    UPDATE sanctions SET status = 'REVOKED', ended_at = ?, revision = revision + 1
+                    WHERE target_id = ? AND inherited_from = ? AND status = 'ACTIVE'
+                    """);
+             PreparedStatement manualEvent = connection.prepareStatement("""
+                    INSERT INTO sanction_events(event_id, sanction_id, event_type, actor_id,
+                        occurred_at, reason, event_json, idempotency_key)
+                    SELECT ?, sanction_id, 'MANUAL_REVOKED', ?, ?, 'Staff override', '{}', ?
+                    FROM sanctions WHERE target_id = ? AND inherited_from = ?
+                    """)) {
+            revoke.setTimestamp(1, java.sql.Timestamp.from(now.plusSeconds(8)));
+            revoke.setBytes(2, MariaDbIntegrationSupport.uuidBytes(linkedAlt));
+            revoke.setBytes(3, MariaDbIntegrationSupport.uuidBytes(sanction));
+            assertEquals(1, revoke.executeUpdate());
+            manualEvent.setBytes(1, MariaDbIntegrationSupport.uuidBytes(UUID.randomUUID()));
+            manualEvent.setBytes(2, MariaDbIntegrationSupport.uuidBytes(reviewer));
+            manualEvent.setTimestamp(3, java.sql.Timestamp.from(now.plusSeconds(8)));
+            manualEvent.setString(4, "manual-override-" + linkedAlt);
+            manualEvent.setBytes(5, MariaDbIntegrationSupport.uuidBytes(linkedAlt));
+            manualEvent.setBytes(6, MariaDbIntegrationSupport.uuidBytes(sanction));
+            assertEquals(1, manualEvent.executeUpdate());
+        }
+        assertEquals(0, store().observeConnectedAlts(linkedAlt, now.plusSeconds(9), false).inheritedSanctions());
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement("""
+                    SELECT status FROM sanctions WHERE target_id = ? AND inherited_from = ?
+                    """)) {
+            statement.setBytes(1, MariaDbIntegrationSupport.uuidBytes(linkedAlt));
+            statement.setBytes(2, MariaDbIntegrationSupport.uuidBytes(sanction));
+            try (ResultSet rows = statement.executeQuery()) {
+                assertTrue(rows.next());
+                assertEquals("REVOKED", rows.getString("status"));
+            }
+        }
+    }
+
+    @Test
+    void repeatedVerifiedUnlinkAfterRelinkRevokesAgainWithDistinctAuditKeys() throws SQLException {
+        Instant now = Instant.parse("2026-10-10T22:00:00Z");
+        UUID reviewer = UUID.randomUUID();
+        UUID source = UUID.randomUUID();
+        UUID linkedAlt = UUID.randomUUID();
+        UUID sanction = UUID.randomUUID();
+        MariaDbIntegrationSupport.insertPlayer(DATABASE, reviewer, "CycleStaff", now.minusSeconds(100));
+        MariaDbIntegrationSupport.insertPlayer(DATABASE, source, "CycleSource", now.minusSeconds(100));
+        MariaDbIntegrationSupport.insertPlayer(DATABASE, linkedAlt, "CycleAlt", now.minusSeconds(100));
+        String caseId = "ALTLINKCYCLE001";
+        MariaDbIntegrationSupport.insertCase(DATABASE, caseId, source, reviewer, now.minusSeconds(40));
+        MariaDbIntegrationSupport.insertSanction(DATABASE, sanction, caseId, source,
+                "BAN", "ACTIVE", now.minusSeconds(30), now.plusSeconds(900));
+
+        var accounts = new JdbcDiscordModerationPersistenceStore(dataSource);
+        var discord = new DiscordUserId("18446744073709550073");
+        accounts.link(discord, source, DiscordMinecraftLinkSource.STAFF_RECOVERY,
+                "cycle-source-" + source, now);
+        var firstLink = accounts.link(discord, linkedAlt, DiscordMinecraftLinkSource.STAFF_RECOVERY,
+                "cycle-first-link-" + linkedAlt, now.plusSeconds(1));
+        assertEquals(1, store().observeConnectedAlts(linkedAlt, now.plusSeconds(2), false).inheritedSanctions());
+        accounts.unlink(discord, linkedAlt, firstLink.revision(),
+                "cycle-first-unlink-" + linkedAlt, now.plusSeconds(3));
+
+        var secondLink = accounts.link(discord, linkedAlt, DiscordMinecraftLinkSource.STAFF_RECOVERY,
+                "cycle-second-link-" + linkedAlt, now.plusSeconds(4));
+        assertEquals(1, store().observeConnectedAlts(linkedAlt, now.plusSeconds(5), false).inheritedSanctions());
+        // A second unlink is a NEW transition, not a replay of the first unlink.
+        var secondUnlink = accounts.unlink(discord, linkedAlt, secondLink.revision(),
+                "cycle-second-unlink-" + linkedAlt, now.plusSeconds(6));
+        assertTrue(secondUnlink.link().unlinkedAt().isPresent());
+        assertTrue(accounts.unlink(discord, linkedAlt, secondLink.revision(),
+                "cycle-second-unlink-" + linkedAlt, now.plusSeconds(6)).replayed());
+        assertTrue(accounts.currentLink(linkedAlt).isEmpty());
+
+        assertTwoDistinctUnlinkRevocations(linkedAlt, sanction);
+        assertEquals(0, store().observeConnectedAlts(linkedAlt, now.plusSeconds(7), false).inheritedSanctions());
+    }
+
+    private void assertTwoDistinctUnlinkRevocations(UUID linkedAlt, UUID sanction) throws SQLException {
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement state = connection.prepareStatement("""
+                    SELECT status, revision FROM sanctions WHERE target_id = ? AND inherited_from = ?
+                    """);
+             PreparedStatement events = connection.prepareStatement("""
+                    SELECT COUNT(*) AS total, COUNT(DISTINCT idempotency_key) AS unique_keys
+                    FROM sanction_events
+                    WHERE sanction_id IN (
+                      SELECT sanction_id FROM sanctions WHERE target_id = ? AND inherited_from = ?)
+                      AND event_type = 'DISCORD_LINK_SANCTION_REVOKED'
+                    """)) {
+            state.setBytes(1, MariaDbIntegrationSupport.uuidBytes(linkedAlt));
+            state.setBytes(2, MariaDbIntegrationSupport.uuidBytes(sanction));
+            try (ResultSet rows = state.executeQuery()) {
+                assertTrue(rows.next());
+                assertEquals("REVOKED", rows.getString("status"));
+                assertEquals(3L, rows.getLong("revision"));
+                assertFalse(rows.next(), "relinks must reuse the same derived sanction row");
+            }
+            events.setBytes(1, MariaDbIntegrationSupport.uuidBytes(linkedAlt));
+            events.setBytes(2, MariaDbIntegrationSupport.uuidBytes(sanction));
+            try (ResultSet rows = events.executeQuery()) {
+                assertTrue(rows.next());
+                assertEquals(2, rows.getInt("total"));
+                assertEquals(2, rows.getInt("unique_keys"));
+            }
+        }
+    }
+
+    @Test
+    void manuallyConfirmedAltRelationshipContinuesToSupportInheritanceAfterDiscordUnlink() throws SQLException {
+        Instant now = Instant.parse("2026-10-10T21:10:00Z");
+        UUID reviewer = UUID.randomUUID();
+        UUID source = UUID.randomUUID();
+        UUID linkedAlt = UUID.randomUUID();
+        UUID sanction = UUID.randomUUID();
+        MariaDbIntegrationSupport.insertPlayer(DATABASE, reviewer, "ManualUnlinkStaff", now.minusSeconds(100));
+        MariaDbIntegrationSupport.insertPlayer(DATABASE, source, "ManualUnlinkSource", now.minusSeconds(100));
+        MariaDbIntegrationSupport.insertPlayer(DATABASE, linkedAlt, "ManualUnlinkAlt", now.minusSeconds(100));
+        String caseId = "ALTLINKMANUAL001";
+        MariaDbIntegrationSupport.insertCase(DATABASE, caseId, source, reviewer, now.minusSeconds(40));
+        MariaDbIntegrationSupport.insertSanction(DATABASE, sanction, caseId, source,
+                "BAN", "ACTIVE", now.minusSeconds(30), now.plusSeconds(900));
+        var accounts = new JdbcDiscordModerationPersistenceStore(dataSource);
+        var discord = new DiscordUserId("18446744073709550072");
+        accounts.link(discord, source, DiscordMinecraftLinkSource.STAFF_RECOVERY,
+                "manual-source-" + source, now);
+        var altLink = accounts.link(discord, linkedAlt, DiscordMinecraftLinkSource.STAFF_RECOVERY,
+                "manual-alt-" + linkedAlt, now.plusSeconds(1));
+        assertTrue(store().setRelationship(source, linkedAlt,
+                AltRelationshipState.CONFIRMED_ALT, reviewer, now.plusSeconds(2),
+                "Independently verified account ownership"));
+        assertEquals(1, store().observeConnectedAlts(linkedAlt, now.plusSeconds(3), false).inheritedSanctions());
+        accounts.unlink(discord, linkedAlt, altLink.revision(),
+                "manual-unlink-" + linkedAlt, now.plusSeconds(4));
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement("""
+                    SELECT status FROM sanctions WHERE target_id = ? AND inherited_from = ?
+                    """)) {
+            statement.setBytes(1, MariaDbIntegrationSupport.uuidBytes(linkedAlt));
+            statement.setBytes(2, MariaDbIntegrationSupport.uuidBytes(sanction));
+            try (ResultSet rows = statement.executeQuery()) {
+                assertTrue(rows.next());
+                assertEquals("ACTIVE", rows.getString("status"));
+            }
+        }
+    }
+
+    @Test
     void manuallyConfirmedSiblingsOverrideCurrentVerifiedDiscordLink() throws SQLException {
         Instant now = Instant.parse("2026-10-10T20:00:00Z");
         UUID moderator = UUID.randomUUID();
