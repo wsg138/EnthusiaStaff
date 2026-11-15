@@ -1372,7 +1372,7 @@ final class JdaStaffModerationListener extends ListenerAdapter {
                             + prepared.content() + "\nConfirm here only after reviewing the notice below.")
                     .setAllowedMentions(List.of())
                     .addEmbeds(embed)
-                    .addComponents(controls)
+                    .addComponents(controls, PunishmentNotificationDiscordPresentation.appealRow())
                     .complete();
             hook.sendMessage("I sent the proposed player notification to your DMs. "
                     + "Confirm or cancel there; no punishment has been created yet.").queue();
@@ -1383,7 +1383,7 @@ final class JdaStaffModerationListener extends ListenerAdapter {
                     + "Review the proposed player notification here instead. Nothing has been applied.")
                     .setAllowedMentions(List.of())
                     .addEmbeds(embed)
-                    .addComponents(controls)
+                    .addComponents(controls, PunishmentNotificationDiscordPresentation.appealRow())
                     .queue();
         }
     }
