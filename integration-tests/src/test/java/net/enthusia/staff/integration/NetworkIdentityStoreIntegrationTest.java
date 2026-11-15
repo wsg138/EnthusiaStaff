@@ -21,6 +21,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.Arrays;
 import java.util.HashSet;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
@@ -35,6 +36,8 @@ import net.enthusia.staff.domain.alt.NetworkIdentityObservationResult;
 import net.enthusia.staff.domain.alt.NetworkIdentityRetentionResult;
 import net.enthusia.staff.domain.moderation.DiscordMinecraftLinkSource;
 import net.enthusia.staff.domain.moderation.DiscordUserId;
+import net.enthusia.staff.domain.moderation.MainAccountSelectionSource;
+import net.enthusia.staff.domain.moderation.MainMinecraftAccount;
 import net.enthusia.staff.persistence.JdbcDiscordModerationPersistenceStore;
 import net.enthusia.staff.persistence.JdbcNetworkIdentityStore;
 import net.enthusia.staff.persistence.MariaDb;
@@ -265,8 +268,10 @@ class NetworkIdentityStoreIntegrationTest {
         assertDerivedEventCount(pair, "INHERITED", 2);
 
         manuallyRevoke(pair, now.plusSeconds(8), now.plusSeconds(8), UUID.randomUUID());
+        OutboxKeys before = outboxKeys();
         assertEquals(0, store().observeConnectedAlts(pair.alt(), now.plusSeconds(9), false).inheritedSanctions());
         assertDerivedState(pair, "REVOKED", 3);
+        assertEquals(before, outboxKeys(), "manual revocation must not emit new enforcement");
     }
 
     @Test
@@ -294,10 +299,12 @@ class NetworkIdentityStoreIntegrationTest {
         skewAutomaticUnlinkEventTimestamp(pair, now.plusSeconds(automaticEventOffset));
         assertAutomaticEventSortsAfterManualRevocation(pair);
         assertDerivedState(pair, "REVOKED", 3);
+        OutboxKeys before = outboxKeys();
         assertEquals(0, store().observeConnectedAlts(pair.alt(), now.plusSeconds(32), false)
                 .inheritedSanctions(), "Manual revocation must remain terminal despite clock skew");
         assertDerivedState(pair, "REVOKED", 3);
         assertDerivedEventCount(pair, "INHERITED", 2);
+        assertEquals(before, outboxKeys(), "manual revocation must not emit new enforcement");
     }
 
     @Test
@@ -305,14 +312,19 @@ class NetworkIdentityStoreIntegrationTest {
         Instant now = Instant.parse("2026-10-10T23:20:00Z");
         VerifiedPair pair = verifiedPair(now, "ALTLINKSOURCE001", "Source", "18446744073709550075");
         assertEquals(1, store().observeConnectedAlts(pair.alt(), now.plusSeconds(2), false).inheritedSanctions());
+        assertEquals(pair.source(), pair.accounts().subjectForDiscord(pair.discord()).orElseThrow()
+                .subject().mainMinecraftAccount().orElseThrow().playerId());
+        var replacement = Optional.of(new MainMinecraftAccount(pair.alt(), MainAccountSelectionSource.AUTOMATIC));
         var unlinked = pair.accounts().unlink(pair.discord(), pair.source(), pair.sourceRevision(),
-                "unlink-original-" + pair.source(), now.plusSeconds(3));
+                replacement, "unlink-original-" + pair.source(), now.plusSeconds(3));
         assertTrue(unlinked.link().unlinkedAt().isPresent());
         assertTrue(pair.accounts().currentLink(pair.source()).isEmpty());
+        assertEquals(pair.alt(), pair.accounts().subjectForDiscord(pair.discord()).orElseThrow()
+                .subject().mainMinecraftAccount().orElseThrow().playerId());
         assertDerivedState(pair, "REVOKED", 1);
         assertOriginalSanctionActive(pair.sanction());
         assertTrue(pair.accounts().unlink(pair.discord(), pair.source(), pair.sourceRevision(),
-                "unlink-original-" + pair.source(), now.plusSeconds(3)).replayed());
+                replacement, "unlink-original-" + pair.source(), now.plusSeconds(3)).replayed());
         assertOutboxRevocations(1);
 
         pair.accounts().link(pair.discord(), pair.source(), DiscordMinecraftLinkSource.STAFF_RECOVERY,
@@ -490,13 +502,19 @@ class NetworkIdentityStoreIntegrationTest {
     }
 
     private void assertOutboxRevocations(int expected) throws SQLException {
-        Set<String> network = readOutboxKeys("""
-                SELECT idempotency_key FROM network_outbox WHERE message_type = 'SANCTION_CHANGED'
-                """);
-        Set<String> discord = readOutboxKeys("""
-                SELECT idempotency_key FROM discord_outbox
-                WHERE event_type = 'DISCORD_LINK_SANCTION_REVOKED'
-                """);
+        OutboxKeys all = outboxKeys();
+        Set<String> network = new HashSet<>();
+        Set<String> discord = new HashSet<>();
+        for (String key : all.network()) {
+            if (key.startsWith("alt-exception:")) {
+                network.add(key);
+            }
+        }
+        for (String key : all.discord()) {
+            if (key.startsWith("alt-exception:")) {
+                discord.add(key);
+            }
+        }
         assertEquals(expected, network.size(), "network outbox revocation count");
         assertEquals(expected, discord.size(), "Discord outbox revocation count");
         Set<String> roots = new HashSet<>();
@@ -511,14 +529,32 @@ class NetworkIdentityStoreIntegrationTest {
         assertTrue(roots.isEmpty(), "every revocation must have a distinct paired network/Discord key");
     }
 
-    private Set<String> readOutboxKeys(String query) throws SQLException {
-        Set<String> keys = new HashSet<>();
+    private OutboxKeys outboxKeys() throws SQLException {
+        return new OutboxKeys(networkOutboxKeys(), discordOutboxKeys());
+    }
+
+    private Set<String> networkOutboxKeys() throws SQLException {
         try (Connection connection = dataSource.getConnection();
-             PreparedStatement statement = connection.prepareStatement(query);
+             PreparedStatement statement = connection.prepareStatement(
+                     "SELECT idempotency_key FROM network_outbox");
              ResultSet rows = statement.executeQuery()) {
-            while (rows.next()) {
-                assertTrue(keys.add(rows.getString("idempotency_key")), "duplicate outbox key");
-            }
+            return readOutboxKeys(rows);
+        }
+    }
+
+    private Set<String> discordOutboxKeys() throws SQLException {
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement(
+                     "SELECT idempotency_key FROM discord_outbox");
+             ResultSet rows = statement.executeQuery()) {
+            return readOutboxKeys(rows);
+        }
+    }
+
+    private static Set<String> readOutboxKeys(ResultSet rows) throws SQLException {
+        Set<String> keys = new HashSet<>();
+        while (rows.next()) {
+            assertTrue(keys.add(rows.getString("idempotency_key")), "duplicate outbox key");
         }
         return keys;
     }
@@ -1212,6 +1248,9 @@ class NetworkIdentityStoreIntegrationTest {
             long sourceRevision,
             long altRevision
     ) {
+    }
+
+    private record OutboxKeys(Set<String> network, Set<String> discord) {
     }
 
     private static HikariDataSource dataSource() {
