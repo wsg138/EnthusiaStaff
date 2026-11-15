@@ -14,6 +14,7 @@
 - Result: **BUILD SUCCESSFUL**, 21 actionable tasks (five executed; 16 up-to-date). The new cancellation, issuer-scoping and notification-preview tests passed. Real Python AI API and POSIX-only tests were skipped by their existing platform/dependency conditions.
 - Local artifact: `staff-bot/build/libs/EnthusiaStaff-StaffBot-0.1.1.jar`; **19,090,554 bytes**, SHA-256 `10dbea62fa7b2e17a786fd8e86eb3e2bbce5e195bc8e69e34ccff1f88fea0f31`.
 - Gradle's `verifyStaffBotRuntime` passed executable manifest, required JDA classes, pinned Jackson 2.22.1 versions and excluded native audio class checks.
+- Additional offline checks on the same checkout: `:paper:test :velocity:test` **BUILD SUCCESSFUL** (Paper results from verified Gradle cache; Velocity tests executed; one pre-existing Windows symlink case skipped). `:staff-bot:check` **BUILD SUCCESSFUL** including the AI-mirror crash/recovery probe; the probe intentionally prints a synthetic post-fsync exception before recovery succeeds. Gradle 10 deprecation warnings remain outside this feature.
 - This JAR is a local candidate, **not a released or installed artifact**. Do not confuse its path with Bloom or the live bot container.
 
 ## What the flow actually guarantees
