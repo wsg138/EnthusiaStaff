@@ -37,6 +37,7 @@ public final class JdbcNetworkIdentityStore implements NetworkIdentityStore {
     private static final int MATCH_QUERY_LIMIT = MAX_AUTOMATED_MATCHES + 1;
     private static final int MAX_VERIFIED_LINKED_ACCOUNTS = 100;
     private static final int MAX_RETENTION_BATCH_SIZE = 5_000;
+    private static final String SANCTION_EVENT_KEY_SUFFIX = ":event";
     private static final Duration EVIDENCE_REFRESH_INTERVAL = Duration.ofHours(24);
     private static final List<SanctionType> INHERITABLE_SANCTION_TYPES = Arrays.stream(SanctionType.values())
             .filter(SanctionType::inheritsAcrossAltRelationships)
@@ -485,13 +486,23 @@ public final class JdbcNetworkIdentityStore implements NetworkIdentityStore {
         }
     }
 
+    private record DerivedSanction(UUID sanctionId, UUID targetId, String caseId, long revision) { }
+
     /** Revoke derived sanctions for one relationship with transactional network/Discord audit. */
     private static void revokeExemptedInheritedSanctions(
             Connection connection, ObjectMapper json, PlayerPair pair, UUID actorId, Instant now,
             String reasonCode, String eventType
     ) throws SQLException, JsonProcessingException {
-        record Derived(UUID sanctionId, UUID targetId, String caseId, long revision) { }
-        List<Derived> inherited = new ArrayList<>();
+        for (DerivedSanction derived : activeInheritedSanctionsForPair(connection, pair)) {
+            if (revokeInheritedSanction(connection, derived, now)) {
+                writeInheritedRevocation(connection, json, derived, actorId, now, reasonCode, eventType);
+            }
+        }
+    }
+
+    private static List<DerivedSanction> activeInheritedSanctionsForPair(Connection connection, PlayerPair pair)
+            throws SQLException {
+        List<DerivedSanction> inherited = new ArrayList<>();
         try (PreparedStatement statement = connection.prepareStatement("""
                 SELECT child.sanction_id, child.target_id, child.case_id, child.revision
                   FROM sanctions child
@@ -507,80 +518,97 @@ public final class JdbcNetworkIdentityStore implements NetworkIdentityStore {
             statement.setBytes(4, UuidBytes.toBytes(pair.lower()));
             try (ResultSet result = statement.executeQuery()) {
                 while (result.next()) {
-                    inherited.add(new Derived(
+                    inherited.add(new DerivedSanction(
                             UuidBytes.fromBytes(result.getBytes("sanction_id")),
                             UuidBytes.fromBytes(result.getBytes("target_id")),
                             result.getString("case_id"), result.getLong("revision")));
                 }
             }
         }
-        for (Derived derived : inherited) {
-            try (PreparedStatement update = connection.prepareStatement("""
-                    UPDATE sanctions SET status = 'REVOKED', ended_at = ?, revision = revision + 1
-                    WHERE sanction_id = ? AND status = 'ACTIVE' AND revision = ?
-                    """)) {
-                update.setTimestamp(1, Timestamp.from(now));
-                update.setBytes(2, UuidBytes.toBytes(derived.sanctionId()));
-                update.setLong(3, derived.revision());
-                if (update.executeUpdate() != 1) {
-                    continue;
-                }
-            }
-            // A relink can reactivate the same sanction row. Key each revocation by
-            // its exact new revision so later unlink cycles remain distinct.
-            String key = "alt-exception:" + UUID.nameUUIDFromBytes(
-                    (derived.sanctionId() + ":" + reasonCode + ":revision:"
-                            + (derived.revision() + 1)).getBytes(java.nio.charset.StandardCharsets.UTF_8));
-            String payload = json.writeValueAsString(Map.of(
-                    "caseId", derived.caseId(),
-                    "targetId", derived.targetId().toString(),
-                    "sanctionId", derived.sanctionId().toString(),
-                    "action", eventType,
-                    "relationshipState", reasonCode
-            ));
-            try (PreparedStatement network = connection.prepareStatement("""
+        return List.copyOf(inherited);
+    }
+
+    private static boolean revokeInheritedSanction(Connection connection, DerivedSanction derived, Instant now)
+            throws SQLException {
+        try (PreparedStatement update = connection.prepareStatement("""
+                UPDATE sanctions SET status = 'REVOKED', ended_at = ?, revision = revision + 1
+                WHERE sanction_id = ? AND status = 'ACTIVE' AND revision = ?
+                """)) {
+            update.setTimestamp(1, Timestamp.from(now));
+            update.setBytes(2, UuidBytes.toBytes(derived.sanctionId()));
+            update.setLong(3, derived.revision());
+            return update.executeUpdate() == 1;
+        }
+    }
+
+    private static void writeInheritedRevocation(
+            Connection connection, ObjectMapper json, DerivedSanction derived, UUID actorId, Instant now,
+            String reasonCode, String eventType
+    ) throws SQLException, JsonProcessingException {
+        // The event's idempotency key is bound to the sanction revision in this transaction.
+        String key = inheritedRevocationKey(derived.sanctionId(), reasonCode, derived.revision() + 1);
+        String payload = json.writeValueAsString(Map.of(
+                "caseId", derived.caseId(),
+                "targetId", derived.targetId().toString(),
+                "sanctionId", derived.sanctionId().toString(),
+                "action", eventType,
+                "relationshipState", reasonCode
+        ));
+        insertInheritedRevocationOutboxes(connection, key, payload, eventType, now);
+        insertInheritedRevocationEvent(connection, derived, actorId, now, reasonCode, eventType, key, payload);
+    }
+
+    private static void insertInheritedRevocationOutboxes(
+            Connection connection, String key, String payload, String eventType, Instant now
+    ) throws SQLException {
+        try (PreparedStatement network = connection.prepareStatement("""
                     INSERT INTO network_outbox(message_id, idempotency_key, destination, message_type,
                         protocol_version, payload_json, available_at, created_at)
                     VALUES (?, ?, 'broadcast', 'SANCTION_CHANGED', ?, ?, ?, ?)
                     """);
-                 PreparedStatement discord = connection.prepareStatement("""
+             PreparedStatement discord = connection.prepareStatement("""
                     INSERT INTO discord_outbox(message_id, idempotency_key, destination, event_type,
                         payload_json, available_at, created_at)
                     VALUES (?, ?, 'punishments', ?, ?, ?, ?)
-                    """);
-                 PreparedStatement event = connection.prepareStatement("""
-                    INSERT INTO sanction_events(event_id, sanction_id, event_type, actor_id,
-                        occurred_at, reason, event_json, idempotency_key, case_id, subject_id)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """)) {
-                network.setBytes(1, UuidBytes.toBytes(UUID.randomUUID()));
-                network.setString(2, key + ":network");
-                network.setInt(3, PROTOCOL_VERSION);
-                network.setString(4, payload);
-                network.setTimestamp(5, Timestamp.from(now));
-                network.setTimestamp(6, Timestamp.from(now));
-                network.executeUpdate();
+            network.setBytes(1, UuidBytes.toBytes(UUID.randomUUID()));
+            network.setString(2, key + ":network");
+            network.setInt(3, PROTOCOL_VERSION);
+            network.setString(4, payload);
+            network.setTimestamp(5, Timestamp.from(now));
+            network.setTimestamp(6, Timestamp.from(now));
+            network.executeUpdate();
 
-                discord.setBytes(1, UuidBytes.toBytes(UUID.randomUUID()));
-                discord.setString(2, key + ":discord");
-                discord.setString(3, eventType);
-                discord.setString(4, payload);
-                discord.setTimestamp(5, Timestamp.from(now));
-                discord.setTimestamp(6, Timestamp.from(now));
-                discord.executeUpdate();
+            discord.setBytes(1, UuidBytes.toBytes(UUID.randomUUID()));
+            discord.setString(2, key + ":discord");
+            discord.setString(3, eventType);
+            discord.setString(4, payload);
+            discord.setTimestamp(5, Timestamp.from(now));
+            discord.setTimestamp(6, Timestamp.from(now));
+            discord.executeUpdate();
+        }
+    }
 
-                event.setBytes(1, UuidBytes.toBytes(UUID.randomUUID()));
-                event.setBytes(2, UuidBytes.toBytes(derived.sanctionId()));
-                event.setString(3, eventType);
-                event.setBytes(4, UuidBytes.toBytes(actorId));
-                event.setTimestamp(5, Timestamp.from(now));
-                event.setString(6, "Inherited sanction reconciled: " + reasonCode);
-                event.setString(7, payload);
-                event.setString(8, key + ":event");
-                event.setString(9, derived.caseId());
-                event.setBytes(10, UuidBytes.toBytes(derived.targetId()));
-                event.executeUpdate();
-            }
+    private static void insertInheritedRevocationEvent(
+            Connection connection, DerivedSanction derived, UUID actorId, Instant now,
+            String reasonCode, String eventType, String key, String payload
+    ) throws SQLException {
+        try (PreparedStatement event = connection.prepareStatement("""
+                INSERT INTO sanction_events(event_id, sanction_id, event_type, actor_id,
+                    occurred_at, reason, event_json, idempotency_key, case_id, subject_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """)) {
+            event.setBytes(1, UuidBytes.toBytes(UUID.randomUUID()));
+            event.setBytes(2, UuidBytes.toBytes(derived.sanctionId()));
+            event.setString(3, eventType);
+            event.setBytes(4, UuidBytes.toBytes(actorId));
+            event.setTimestamp(5, Timestamp.from(now));
+            event.setString(6, "Inherited sanction reconciled: " + reasonCode);
+            event.setString(7, payload);
+            event.setString(8, key + SANCTION_EVENT_KEY_SUFFIX);
+            event.setString(9, derived.caseId());
+            event.setBytes(10, UuidBytes.toBytes(derived.targetId()));
+            event.executeUpdate();
         }
     }
 
@@ -970,8 +998,8 @@ public final class JdbcNetworkIdentityStore implements NetworkIdentityStore {
 
     /**
      * Preserve the unique target/source inherited row across relinks. A child can only
-     * be reactivated if its latest terminal event was an automatic relationship exemption
-     * or verified Discord unlink, never a manual revocation or overturned sanction.
+     * be reactivated only when the current sanction revision has a matching automatic
+     * revocation event. Wall clocks and random event IDs cannot establish this ordering.
      */
     private static Optional<InheritedActivation> activateInheritedSanction(
             Connection connection, UUID joiningPlayerId, SourceSanction source, Instant now
@@ -987,33 +1015,42 @@ public final class JdbcNetworkIdentityStore implements NetworkIdentityStore {
             try (ResultSet rows = existing.executeQuery()) {
                 if (rows.next()) {
                     UUID id = UuidBytes.fromBytes(rows.getBytes("sanction_id"));
-                    if (!"REVOKED".equals(rows.getString("status"))
-                            || !lastEventWasAutomaticExemption(connection, id)) {
-                        return Optional.empty();
-                    }
-                    long revision = rows.getLong("revision");
-                    try (PreparedStatement update = connection.prepareStatement("""
-                            UPDATE sanctions
-                            SET status = 'ACTIVE', activated_at = ?, ended_at = NULL,
-                                expiration_at = ?, revision = revision + 1
-                            WHERE sanction_id = ? AND revision = ? AND status = 'REVOKED'
-                            """)) {
-                        update.setTimestamp(1, Timestamp.from(now));
-                        if (source.expiration().isPresent()) {
-                            update.setTimestamp(2, Timestamp.from(source.expiration().orElseThrow()));
-                        } else {
-                            update.setNull(2, Types.TIMESTAMP);
-                        }
-                        update.setBytes(3, UuidBytes.toBytes(id));
-                        update.setLong(4, revision);
-                        JdbcTransactionSupport.requireSingleUpdate(
-                                update.executeUpdate(), "Inherited sanction reactivation lost its version"
-                        );
-                    }
-                    return Optional.of(new InheritedActivation(id, baseKey + ":reactivate:" + (revision + 1)));
+                    return reactivateInheritedSanction(
+                            connection, id, rows.getString("status"), rows.getLong("revision"), source, now, baseKey
+                    );
                 }
             }
         }
+        return insertNewInheritedSanction(connection, joiningPlayerId, source, now, baseKey);
+    }
+
+    private static Optional<InheritedActivation> reactivateInheritedSanction(
+            Connection connection, UUID id, String status, long revision,
+            SourceSanction source, Instant now, String baseKey
+    ) throws SQLException {
+        if (!"REVOKED".equals(status) || !hasAutomaticRevocationProof(connection, id, revision)) {
+            return Optional.empty();
+        }
+        try (PreparedStatement update = connection.prepareStatement("""
+                UPDATE sanctions
+                SET status = 'ACTIVE', activated_at = ?, ended_at = NULL,
+                    expiration_at = ?, revision = revision + 1
+                WHERE sanction_id = ? AND revision = ? AND status = 'REVOKED'
+                """)) {
+            update.setTimestamp(1, Timestamp.from(now));
+            setOptionalExpiration(update, 2, source.expiration());
+            update.setBytes(3, UuidBytes.toBytes(id));
+            update.setLong(4, revision);
+            JdbcTransactionSupport.requireSingleUpdate(
+                    update.executeUpdate(), "Inherited sanction reactivation lost its version"
+            );
+        }
+        return Optional.of(new InheritedActivation(id, baseKey + ":reactivate:" + (revision + 1)));
+    }
+
+    private static Optional<InheritedActivation> insertNewInheritedSanction(
+            Connection connection, UUID joiningPlayerId, SourceSanction source, Instant now, String baseKey
+    ) throws SQLException {
         UUID sanctionId = UUID.randomUUID();
         try (PreparedStatement insert = connection.prepareStatement("""
                 INSERT IGNORE INTO sanctions(sanction_id, case_id, target_id, sanction_type, status,
@@ -1026,11 +1063,7 @@ public final class JdbcNetworkIdentityStore implements NetworkIdentityStore {
             insert.setString(4, source.type().name());
             insert.setTimestamp(5, Timestamp.from(now));
             insert.setTimestamp(6, Timestamp.from(now));
-            if (source.expiration().isPresent()) {
-                insert.setTimestamp(7, Timestamp.from(source.expiration().orElseThrow()));
-            } else {
-                insert.setNull(7, Types.TIMESTAMP);
-            }
+            setOptionalExpiration(insert, 7, source.expiration());
             insert.setBytes(8, UuidBytes.toBytes(source.sanctionId()));
             if (insert.executeUpdate() == 0) {
                 return Optional.empty();
@@ -1039,23 +1072,46 @@ public final class JdbcNetworkIdentityStore implements NetworkIdentityStore {
         return Optional.of(new InheritedActivation(sanctionId, baseKey));
     }
 
-    private static boolean lastEventWasAutomaticExemption(Connection connection, UUID sanctionId)
+    private static void setOptionalExpiration(
+            PreparedStatement statement, int index, Optional<Instant> expiration
+    ) throws SQLException {
+        if (expiration.isPresent()) {
+            statement.setTimestamp(index, Timestamp.from(expiration.orElseThrow()));
+        } else {
+            statement.setNull(index, Types.TIMESTAMP);
+        }
+    }
+
+    /** Fail closed for legacy events lacking the transaction-generated, revision-bound key. */
+    private static boolean hasAutomaticRevocationProof(Connection connection, UUID sanctionId, long revision)
             throws SQLException {
-        try (PreparedStatement statement = connection.prepareStatement("""
-                SELECT event_type FROM sanction_events WHERE sanction_id = ?
-                ORDER BY occurred_at DESC, event_id DESC LIMIT 1
-                """)) {
+        AltRelationshipState[] states = AltRelationshipState.values();
+        String placeholders = String.join(",", Collections.nCopies(states.length, "?"));
+        String sql = """
+                SELECT COUNT(*) FROM sanction_events
+                WHERE sanction_id = ?
+                  AND ((event_type = 'ALT_RELATIONSHIP_EXEMPTION' AND idempotency_key IN (%s))
+                    OR (event_type = 'DISCORD_LINK_SANCTION_REVOKED' AND idempotency_key = ?))
+                """.formatted(placeholders);
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
             statement.setBytes(1, UuidBytes.toBytes(sanctionId));
+            int index = 2;
+            for (AltRelationshipState state : states) {
+                statement.setString(index++, inheritedRevocationKey(sanctionId, state.name(), revision)
+                        + SANCTION_EVENT_KEY_SUFFIX);
+            }
+            statement.setString(index, inheritedRevocationKey(
+                    sanctionId, "DISCORD_VERIFIED_LINK_REMOVED", revision) + SANCTION_EVENT_KEY_SUFFIX);
             try (ResultSet result = statement.executeQuery()) {
-                if (!result.next()) {
-                    return false;
-                }
-                return switch (result.getString("event_type")) {
-                    case "ALT_RELATIONSHIP_EXEMPTION", "DISCORD_LINK_SANCTION_REVOKED" -> true;
-                    default -> false;
-                };
+                return result.next() && result.getLong(1) == 1;
             }
         }
+    }
+
+    private static String inheritedRevocationKey(UUID sanctionId, String reasonCode, long revision) {
+        String rawKey = sanctionId + ":" + reasonCode + ":revision:" + revision;
+        return "alt-exception:" + UUID.nameUUIDFromBytes(
+                rawKey.getBytes(java.nio.charset.StandardCharsets.UTF_8));
     }
 
     private void insertInheritedEvent(
@@ -1075,7 +1131,7 @@ public final class JdbcNetworkIdentityStore implements NetworkIdentityStore {
             statement.setBytes(3, UuidBytes.toBytes(SYSTEM_ACTOR));
             statement.setTimestamp(4, Timestamp.from(now));
             statement.setString(5, payload);
-            statement.setString(6, key + ":event");
+            statement.setString(6, key + SANCTION_EVENT_KEY_SUFFIX);
             statement.executeUpdate();
         }
     }
