@@ -423,9 +423,8 @@ public final class AiReviewSubsystem implements AutoCloseable, Listener {
         StaffAlertOwnerDispatch.alert(
                 plugin,
                 StaffMessageStyle.style(message),
-                player -> activeDuty(player)
-                        && AiReviewPermissions.queue(player)
-                        && player.hasPermission(configuration.notificationPermission())
+                player -> AiReviewQueueDelivery.notificationAuthorized(
+                        player, () -> activeDuty(player), configuration.notificationPermission())
         );
     }
 

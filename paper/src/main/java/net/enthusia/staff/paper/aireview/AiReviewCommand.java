@@ -95,7 +95,7 @@ final class AiReviewCommand implements CommandExecutor, TabCompleter {
             // render any line until the queued owner callback rechecks authority.
             onPlayer(player, () -> AiReviewQueueDelivery.deliverIfAuthorized(
                     player,
-                    () -> subsystem.activeDuty(player) && AiReviewPermissions.queue(player),
+                    () -> AiReviewQueueDelivery.queueAuthorized(player, () -> subsystem.activeDuty(player)),
                     () -> renderList((text, color) -> player.sendMessage(
                             StaffMessageStyle.style(Component.text(text, color)))),
                     exception -> plugin.getLogger().log(Level.WARNING,

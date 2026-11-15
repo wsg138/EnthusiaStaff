@@ -11,6 +11,7 @@ import org.bukkit.entity.Player;
 import org.junit.jupiter.api.Test;
 
 class AiReviewQueueDeliveryTest {
+    private static final String NOTIFICATION_PERMISSION = "enthusiastaff.ai-review.notify";
     @Test
     void authorizedQueueSnapshotDeliversOnlyWhenOwnerCallbackRuns() {
         AtomicBoolean online = new AtomicBoolean(true);
@@ -66,6 +67,71 @@ class AiReviewQueueDeliveryTest {
     }
 
     @Test
+    void queuedListUsesCurrentDutyAndQueuePermissionAtDelivery() {
+        AtomicBoolean online = new AtomicBoolean(true);
+        AtomicBoolean duty = new AtomicBoolean(true);
+        AtomicBoolean queuePermission = new AtomicBoolean(true);
+        Player viewer = permissionedViewer(online, queuePermission, new AtomicBoolean(true));
+        AtomicInteger deliveries = new AtomicInteger();
+        Runnable ownerDelivery = () -> AiReviewQueueDelivery.deliverIfAuthorized(
+                viewer, () -> AiReviewQueueDelivery.queueAuthorized(viewer, duty::get),
+                deliveries::incrementAndGet, failure -> fail("Unexpected authorization failure", failure));
+
+        duty.set(false);
+        ownerDelivery.run();
+        assertEquals(0, deliveries.get(), "revoking active duty must block queued list output");
+
+        duty.set(true);
+        queuePermission.set(false);
+        ownerDelivery.run();
+        assertEquals(0, deliveries.get(), "revoking queue permission must block queued list output");
+
+        queuePermission.set(true);
+        ownerDelivery.run();
+        assertEquals(1, deliveries.get(), "authorized active staff may receive queued output");
+
+        online.set(false);
+        ownerDelivery.run();
+        assertEquals(1, deliveries.get(), "disconnected viewers must receive no further output");
+    }
+
+    @Test
+    void notificationPredicateChecksCurrentDutyQueueAndNotificationPermission() {
+        AtomicBoolean online = new AtomicBoolean(true);
+        AtomicBoolean duty = new AtomicBoolean(true);
+        AtomicBoolean queuePermission = new AtomicBoolean(true);
+        AtomicBoolean notificationPermission = new AtomicBoolean(true);
+        Player viewer = permissionedViewer(online, queuePermission, notificationPermission);
+        AtomicInteger notifications = new AtomicInteger();
+        Runnable ownerDelivery = () -> AiReviewQueueDelivery.deliverIfAuthorized(
+                viewer, () -> AiReviewQueueDelivery.notificationAuthorized(
+                        viewer, duty::get, NOTIFICATION_PERMISSION),
+                notifications::incrementAndGet,
+                failure -> fail("Unexpected authorization failure", failure));
+
+        notificationPermission.set(false);
+        ownerDelivery.run();
+        assertEquals(0, notifications.get(), "removed notification permission must suppress an alert");
+
+        notificationPermission.set(true);
+        queuePermission.set(false);
+        ownerDelivery.run();
+        assertEquals(0, notifications.get(), "removed queue permission must suppress an alert");
+
+        queuePermission.set(true);
+        duty.set(false);
+        ownerDelivery.run();
+        assertEquals(0, notifications.get(), "off-duty staff must not receive an alert");
+
+        duty.set(true);
+        ownerDelivery.run();
+        assertEquals(1, notifications.get(), "fully authorized staff may receive one alert");
+
+        online.set(false);
+        ownerDelivery.run();
+        assertEquals(1, notifications.get(), "a departed staff member must not receive another alert");
+    }
+    @Test
     void queueCommandAndNotificationsUseOwnerSafeDispatch() throws Exception {
         String command = Files.readString(Path.of(
                 "src/main/java/net/enthusia/staff/paper/aireview/AiReviewCommand.java"));
@@ -79,6 +145,25 @@ class AiReviewQueueDeliveryTest {
         assertFalse(notifications.contains("for (Player player : plugin.getServer().getOnlinePlayers())"));
     }
 
+    private static Player permissionedViewer(
+            AtomicBoolean online, AtomicBoolean queuePermission, AtomicBoolean notificationPermission) {
+        return (Player) Proxy.newProxyInstance(Thread.currentThread().getContextClassLoader(),
+                new Class<?>[]{Player.class},
+                (self, method, args) -> switch (method.getName()) {
+                    case "isOnline" -> online.get();
+                    case "hasPermission" -> {
+                        String permission = (String) args[0];
+                        if (AiReviewPermissions.QUEUE.equals(permission)) {
+                            yield queuePermission.get();
+                        }
+                        if (NOTIFICATION_PERMISSION.equals(permission)) {
+                            yield notificationPermission.get();
+                        }
+                        throw new AssertionError("Unexpected permission check: " + permission);
+                    }
+                    default -> throw new AssertionError("Unexpected player operation: " + method.getName());
+                });
+    }
     private static Player viewer(AtomicBoolean online) {
         return (Player) Proxy.newProxyInstance(Thread.currentThread().getContextClassLoader(),
                 new Class<?>[]{Player.class},
