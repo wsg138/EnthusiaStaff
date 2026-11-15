@@ -843,7 +843,8 @@ final class JdaStaffModerationListener extends ListenerAdapter {
             unavailable(event);
             return;
         }
-        dispatchPunishment(event, quickWork(punishment, event, actorId, actorName));
+        dispatchPunishment(event, event.getJDA(), actorId,
+                quickWork(punishment, event, actorId, actorName));
     }
 
     private static Supplier<DiscordPunishmentCommandController.Prepared> quickWork(
@@ -970,6 +971,20 @@ final class JdaStaffModerationListener extends ListenerAdapter {
 
     @Override
     public void onButtonInteraction(ButtonInteractionEvent event) {
+        if (event.getGuild() == null) {
+            // Only the staff-owned, one-use punishment controls are accepted in DMs.
+            // The service rechecks the linked staff actor at the moment of confirmation.
+            String component = event.getComponentId();
+            if (enabled.get() && punishments.isPresent()
+                    && (DiscordPunishmentCommandController.isConfirmation(component)
+                    || DiscordPunishmentCommandController.isCancellation(component)
+                    || DiscordPunishmentCommandController.isStatus(component))) {
+                handlePunishmentButton(event);
+            } else {
+                event.reply("This private moderation control is unavailable.").queue();
+            }
+            return;
+        }
         if (!accepted(guildId(event.getGuild()))) {
             unavailable(event);
             return;
@@ -1051,6 +1066,18 @@ final class JdaStaffModerationListener extends ListenerAdapter {
             return false;
         }
         String customId = event.getComponentId();
+        if (DiscordPunishmentCommandController.isStatus(customId)) {
+            dispatchCommitted(event, () -> punishment.status(
+                    event.getUser().getIdLong(), event.getUser().getName(), customId),
+                    event.getGuild() != null);
+            return true;
+        }
+        if (DiscordPunishmentCommandController.isCancellation(customId)) {
+            dispatchCommitted(event, () -> punishment.cancel(
+                    event.getUser().getIdLong(), event.getUser().getName(), customId),
+                    event.getGuild() != null);
+            return true;
+        }
         if (DiscordPunishmentCommandController.isConfirmation(customId)) {
             dispatchConfirmation(event, punishment);
             return true;
@@ -1074,7 +1101,7 @@ final class JdaStaffModerationListener extends ListenerAdapter {
         String actorName = event.getUser().getName();
         dispatchCommitted(event, () -> punishment.confirm(
                 actorId, actorName, event.getComponentId()
-        ));
+        ), event.getGuild() != null);
     }
 
     private void showPunishmentPanel(ButtonInteractionEvent event) {
@@ -1129,7 +1156,7 @@ final class JdaStaffModerationListener extends ListenerAdapter {
         DiscordPunishmentCommandController.PanelDraft draft =
                 DiscordPunishmentCommandController.modalDraft(event.getModalId());
         DiscordPunishmentCommandController punishment = punishments.orElseThrow();
-        dispatchPunishment(event, () -> punishment.preparePanel(
+        dispatchPunishment(event, event.getJDA(), event.getUser().getIdLong(), () -> punishment.preparePanel(
                 draft,
                 event.getUser().getIdLong(),
                 event.getUser().getName(),
@@ -1210,6 +1237,8 @@ final class JdaStaffModerationListener extends ListenerAdapter {
 
     private void dispatchPunishment(
             IReplyCallback event,
+            JDA jda,
+            long actorId,
             Supplier<DiscordPunishmentCommandController.Prepared> work
     ) {
         long interactionId = event.getIdLong();
@@ -1217,20 +1246,21 @@ final class JdaStaffModerationListener extends ListenerAdapter {
             return;
         }
         event.deferReply(true).queue(
-                hook -> schedulePunishment(hook, work),
+                hook -> schedulePunishment(hook, jda, actorId, work),
                 failure -> interactions.release(interactionId)
         );
     }
 
     private void dispatchCommitted(
             IReplyCallback event,
-            Supplier<DiscordPunishmentCommandController.Committed> work
+            Supplier<DiscordPunishmentCommandController.Committed> work,
+            boolean ephemeral
     ) {
         long interactionId = event.getIdLong();
         if (!claim(interactionId, event)) {
             return;
         }
-        event.deferReply(true).queue(
+        event.deferReply(ephemeral).queue(
                 hook -> scheduleCommitted(hook, work),
                 failure -> interactions.release(interactionId)
         );
@@ -1270,9 +1300,11 @@ final class JdaStaffModerationListener extends ListenerAdapter {
 
     private void schedulePunishment(
             InteractionHook hook,
+            JDA jda,
+            long actorId,
             Supplier<DiscordPunishmentCommandController.Prepared> work
     ) {
-        boolean scheduled = workers.tryExecute(() -> executePunishment(hook, work));
+        boolean scheduled = workers.tryExecute(() -> executePunishment(hook, jda, actorId, work));
         if (!scheduled) {
             hook.sendMessage("The moderation action queue is busy. Try again shortly.").queue();
         }
@@ -1300,15 +1332,59 @@ final class JdaStaffModerationListener extends ListenerAdapter {
 
     private void executePunishment(
             InteractionHook hook,
+            JDA jda,
+            long actorId,
             Supplier<DiscordPunishmentCommandController.Prepared> work
     ) {
         try {
             DiscordPunishmentCommandController.Prepared prepared = work.get();
+            if (prepared.previewIntent().isPresent()) {
+                sendPreparedPreview(hook, jda, actorId, prepared);
+                return;
+            }
             hook.sendMessage(prepared.content())
+                    .setAllowedMentions(List.of())
                     .addComponents(ActionRow.of(Button.danger(prepared.confirmationCustomId(), "Confirm")))
                     .queue();
         } catch (RuntimeException exception) {
             actionFailure(hook, exception);
+        }
+    }
+
+    private static void sendPreparedPreview(
+            InteractionHook hook,
+            JDA jda,
+            long actorId,
+            DiscordPunishmentCommandController.Prepared prepared
+    ) {
+        var intent = prepared.previewIntent().orElseThrow();
+        String preview = JdaPunishmentNotifier.previewMessage(intent, Instant.now());
+        var embed = PunishmentNotificationDiscordPresentation.embed(
+                preview, PunishmentNotificationDiscordPresentation.color(intent.type()),
+                PunishmentNotificationDiscordPresentation.guildIconUrl(jda));
+        ActionRow controls = ActionRow.of(
+                Button.danger(prepared.confirmationCustomId(), "Confirm punishment"),
+                Button.secondary(prepared.cancellationCustomId(), "Cancel"));
+        try {
+            jda.retrieveUserById(Long.toUnsignedString(actorId)).complete()
+                    .openPrivateChannel().complete()
+                    .sendMessage("**PUNISHMENT PREVIEW — NOT SENT TO THE PLAYER**\n"
+                            + prepared.content() + "\nConfirm here only after reviewing the notice below.")
+                    .setAllowedMentions(List.of())
+                    .addEmbeds(embed)
+                    .addComponents(controls)
+                    .complete();
+            hook.sendMessage("I sent the proposed player notification to your DMs. "
+                    + "Confirm or cancel there; no punishment has been created yet.").queue();
+        } catch (RuntimeException dmUnavailable) {
+            // Discord users can close DMs; retain the same confirmation token and
+            // allow an ephemeral guild-only fallback instead of silently losing it.
+            hook.sendMessage("I could not deliver the preview to your DMs. "
+                    + "Review the proposed player notification here instead. Nothing has been applied.")
+                    .setAllowedMentions(List.of())
+                    .addEmbeds(embed)
+                    .addComponents(controls)
+                    .queue();
         }
     }
 
@@ -1317,7 +1393,13 @@ final class JdaStaffModerationListener extends ListenerAdapter {
             Supplier<DiscordPunishmentCommandController.Committed> work
     ) {
         try {
-            hook.sendMessage(work.get().content()).queue();
+            DiscordPunishmentCommandController.Committed result = work.get();
+            var reply = hook.sendMessage(result.content()).setAllowedMentions(List.of());
+            if (result.statusCustomId().isPresent()) {
+                reply = reply.addComponents(ActionRow.of(
+                        Button.secondary(result.statusCustomId().orElseThrow(), "Check status")));
+            }
+            reply.queue();
         } catch (RuntimeException exception) {
             actionFailure(hook, exception);
         }

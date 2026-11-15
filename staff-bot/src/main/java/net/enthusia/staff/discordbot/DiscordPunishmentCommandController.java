@@ -6,6 +6,7 @@ import java.util.Optional;
 import java.util.UUID;
 import net.enthusia.staff.domain.auth.DiscordConsequenceType;
 import net.enthusia.staff.domain.discord.DiscordPunishmentIntent;
+import net.enthusia.staff.domain.discord.DiscordPunishment;
 import net.enthusia.staff.domain.discord.DiscordPunishmentTermination;
 import net.enthusia.staff.domain.discord.DiscordRestrictionTarget;
 import net.enthusia.staff.domain.sanction.SanctionLength;
@@ -14,6 +15,8 @@ import net.enthusia.staff.domain.sanction.SanctionLength;
 final class DiscordPunishmentCommandController {
     private static final String CONFIRM_ISSUE_PREFIX = "d07ci:";
     private static final String CONFIRM_REMOVE_PREFIX = "d07cr:";
+    private static final String CANCEL_PREFIX = "d07cancel:";
+    private static final String STATUS_PREFIX = "d07s:";
     private static final String PANEL_ROOT_PREFIX = "d07p:r:";
     private static final String PANEL_ACTION_PREFIX = "d07p:";
     private static final String PANEL_MODAL_PREFIX = "d07m:";
@@ -53,10 +56,20 @@ final class DiscordPunishmentCommandController {
     record PanelDraft(PanelAction action, long targetId) {
     }
 
-    record Prepared(String content, String confirmationCustomId) {
+    record Prepared(String content, String confirmationCustomId, Optional<DiscordPunishmentIntent> previewIntent) {
+        Prepared(String content, String confirmationCustomId) {
+            this(content, confirmationCustomId, Optional.empty());
+        }
+
+        String cancellationCustomId() {
+            return CANCEL_PREFIX + confirmationCustomId.substring(confirmationCustomId.indexOf(':') + 1);
+        }
     }
 
-    record Committed(String content) {
+    record Committed(String content, Optional<String> statusCustomId) {
+        Committed(String content) {
+            this(content, Optional.empty());
+        }
     }
 
     record RestrictionInput(String scopeKind, String scopeId, String mode) {
@@ -231,14 +244,64 @@ final class DiscordPunishmentCommandController {
             throw new IllegalArgumentException("confirmation id must be present");
         }
         DiscordPunishmentService.MutationResult result;
+        boolean removal = false;
         if (customId.startsWith(CONFIRM_ISSUE_PREFIX)) {
             result = service.confirmIssue(actorId, actorName, token(customId, CONFIRM_ISSUE_PREFIX));
         } else if (customId.startsWith(CONFIRM_REMOVE_PREFIX)) {
             result = service.confirmRemoval(actorId, actorName, token(customId, CONFIRM_REMOVE_PREFIX));
+            removal = true;
         } else {
             throw new IllegalArgumentException("unknown punishment confirmation");
         }
-        return new Committed("Discord moderation intent accepted. Enforcement state: " + result.state() + ".");
+        return new Committed(
+                "Discord moderation request recorded (`" + result.punishmentId() + "`). "
+                        + "Current state: **" + result.state() + "**. This does not confirm "
+                        + "that the action or target DM succeeded. "
+                        + (removal ? "Use /history to verify the removal outcome."
+                        : "Use Check status to verify the outcome."),
+                removal ? Optional.empty() : Optional.of(STATUS_PREFIX + result.punishmentId())
+        );
+    }
+
+    Committed status(long actorId, String actorName, String customId) {
+        if (!isStatus(customId)) {
+            throw new IllegalArgumentException("invalid punishment status control");
+        }
+        UUID punishmentId = token(customId, STATUS_PREFIX);
+        DiscordPunishment punishment = service.issuerStatus(actorId, actorName, punishmentId).punishment();
+        return new Committed(statusMessage(punishment), Optional.of(STATUS_PREFIX + punishmentId));
+    }
+
+    Committed cancel(long actorId, String actorName, String customId) {
+        if (!isCancellation(customId)) {
+            throw new IllegalArgumentException("invalid punishment cancellation control");
+        }
+        service.cancelConfirmation(actorId, actorName, token(customId, CANCEL_PREFIX));
+        return new Committed("Cancelled. No new punishment was issued by this confirmation.");
+    }
+
+    static String statusMessage(DiscordPunishment punishment) {
+        String effect = punishment.intent().type() == DiscordConsequenceType.WARNING
+                ? "A warning is COMPLETED only after Discord accepts the target DM."
+                : "Discord effect applied: **" + (punishment.externalApplied() ? "YES" : "NOT CONFIRMED") + "**.";
+        String removal = punishment.termination() == DiscordPunishmentTermination.NONE
+                ? ""
+                : "\nRemoval type: **" + punishment.termination() + "**"
+                        + "\nRemoval DM: **" + punishment.removalDmOutcome() + "**";
+        return "Discord " + display(punishment.intent().type()) + " status for <@"
+                + punishment.targetUserId().value() + ">\n"
+                + "Enforcement: **" + punishment.state() + "**\n"
+                + "Target DM: **" + punishment.dmOutcome() + "**\n"
+                + effect + removal
+                + "\nThis is a read-only status check; no additional punishment was issued.";
+    }
+
+    static boolean isStatus(String customId) {
+        return customId != null && customId.startsWith(STATUS_PREFIX);
+    }
+
+    static boolean isCancellation(String customId) {
+        return customId != null && customId.startsWith(CANCEL_PREFIX);
     }
 
     static String panelRootId(long targetId) {
@@ -304,7 +367,8 @@ final class DiscordPunishmentCommandController {
         return new Prepared(
                 "Confirm Discord " + display(confirmation.type()) + " for <@" + confirmation.targetUserId()
                         + "> (" + confirmation.duration() + ").",
-                CONFIRM_ISSUE_PREFIX + confirmation.token()
+                CONFIRM_ISSUE_PREFIX + confirmation.token(),
+                Optional.of(intent)
         );
     }
 

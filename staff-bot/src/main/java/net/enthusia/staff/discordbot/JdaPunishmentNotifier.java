@@ -11,6 +11,7 @@ import net.dv8tion.jda.api.exceptions.ErrorResponseException;
 import net.enthusia.staff.domain.auth.DiscordConsequenceType;
 import net.enthusia.staff.domain.discord.DiscordDeliveryOutcome;
 import net.enthusia.staff.domain.discord.DiscordPunishment;
+import net.enthusia.staff.domain.discord.DiscordPunishmentIntent;
 import net.enthusia.staff.domain.sanction.SanctionType;
 
 /** Sends player-facing moderation notifications without changing enforcement state. */
@@ -159,6 +160,21 @@ final class JdaPunishmentNotifier {
             );
             default -> throw new IllegalArgumentException("notification preview type is unsupported");
         };
+    }
+
+    /** Simulates the exact pending player's notice, without creating or sending an action. */
+    static String previewMessage(DiscordPunishmentIntent intent, Instant now) {
+        if (intent == null || now == null) {
+            throw new IllegalArgumentException("punishment preview requires an intent and current time");
+        }
+        String duration = switch (intent.length().kind()) {
+            case INSTANT -> "instant";
+            case PERMANENT -> "permanent";
+            case TEMPORARY -> friendlyDuration(intent.length().temporary().orElseThrow());
+        };
+        return appliedMessage(
+                intent.type(), duration, intent.publicReason(), intent.internalExplanation(),
+                intent.length().expirationFrom(now));
     }
 
     private static String appliedMessage(

@@ -115,6 +115,12 @@ final class DiscordPunishmentService {
         return confirmIssue(actorDiscordId, actorName, token, UUID.randomUUID(), Optional.empty());
     }
 
+    /** Consume a staff-owned confirmation without creating or mutating a punishment. */
+    void cancelConfirmation(long actorDiscordId, String actorName, UUID token) {
+        Actor actor = actor(actorDiscordId, actorName);
+        confirmations.claimForActor(token, actor.id());
+    }
+
     MutationResult confirmWebIssue(long actorDiscordId, String actorName, long targetDiscordId, UUID token) {
         synchronized (webConfirmationLock) {
             Optional<StoredPunishment> existing = webPunishment(actorDiscordId, actorName, targetDiscordId, token);
@@ -251,6 +257,21 @@ final class DiscordPunishmentService {
                 now
         );
         return project(stored);
+    }
+
+    /** Issuer-scoped, live-authority-checked view of a previously accepted Discord action. */
+    StoredPunishment issuerStatus(long actorDiscordId, String actorName, UUID punishmentId) {
+        if (punishmentId == null) {
+            throw new IllegalArgumentException("punishment identifier is required");
+        }
+        Actor actor = actor(actorDiscordId, actorName);
+        StoredPunishment stored = punishments.find(punishmentId)
+                .orElseThrow(() -> new IllegalArgumentException("punishment is unavailable"));
+        DiscordPunishment punishment = stored.punishment();
+        if (!punishment.guildId().equals(guildId) || !punishment.issuer().id().equals(actor.id())) {
+            throw new IllegalArgumentException("punishment is unavailable");
+        }
+        return stored;
     }
 
     void requireConcreteApproval(

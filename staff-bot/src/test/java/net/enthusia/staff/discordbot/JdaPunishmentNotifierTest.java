@@ -118,6 +118,29 @@ class JdaPunishmentNotifierTest {
     }
 
     @Test
+    void proposedPunishmentPreviewMatchesTheExactTargetNotificationTemplate() {
+        for (DiscordConsequenceType type : java.util.List.of(
+                DiscordConsequenceType.WARNING, DiscordConsequenceType.MUTE,
+                DiscordConsequenceType.KICK, DiscordConsequenceType.BAN)) {
+            SanctionLength length = switch (type) {
+                case WARNING, KICK -> SanctionLength.instant();
+                default -> SanctionLength.temporary(Duration.ofHours(3));
+            };
+            DiscordPunishmentIntent intent = new DiscordPunishmentIntent(
+                    type, length, false, false, Optional.empty(),
+                    "Real staff reason", "Public explanation", 0, true);
+            DiscordPunishment punishment = DiscordPunishment.pending(
+                    UUID.randomUUID(), new ModerationSubjectId(UUID.randomUUID()),
+                    new DiscordUserId(TARGET_USER_ID), new DiscordGuildId(GUILD_ID),
+                    new Actor(UUID.randomUUID(), "Staff", StaffRank.ADMIN),
+                    intent, NOW, "issue");
+
+            assertEquals(new JdaPunishmentNotifier(configuration()).appliedMessage(punishment),
+                    JdaPunishmentNotifier.previewMessage(intent, NOW));
+        }
+    }
+
+    @Test
     void previewPresentationUsesBrandingFieldsAndAccentColor() {
         String message = JdaPunishmentNotifier.previewMessage(DiscordConsequenceType.MUTE, NOW);
         String icon = "https://cdn.discordapp.com/icons/1410303324745371709/example.png";

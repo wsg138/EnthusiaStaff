@@ -124,6 +124,25 @@ Configured offense families may be shared between Discord and Minecraft while ea
 
 Direct/quick commands and panels always call the same application/domain services.
 
+For direct Discord sanction commands and the built-in Discord moderation panel,
+the prepared action first sends the acting staff member a DM preview rendered
+from the **proposed real punishment intent** using the same target-notice template.
+That staff-only preview is marked NOT SENT and carries Confirm/Cancel controls.
+If the staff member has closed DMs, the same preview and controls appear as an
+ephemeral response to the original guild interaction. A preview or cancellation
+never creates a punishment, and confirmation still consumes a short-lived,
+single-use, actor-bound token with fresh permission checks.
+
+Confirmation records the durable request but does **not** mean Discord enforced
+it or accepted the player's DM. The Check status control reads the request's
+current `state`, original target-DM outcome, and (for removals) removal-DM
+outcome without reissuing any action. `PENDING_APPLY` is queued, not success.
+For warnings, successful target-DM delivery is the effect: a failed DM ends in
+`RETRY_APPLY` or `FAILED_APPLY`, not a silently successful warning. A returned
+`DELIVERED` state means Discord accepted the notification, not that the recipient
+read it. The website moderation workflow continues to use its existing
+independent prepare/confirm/status interface.
+
 ### Rank policy for Discord
 
 This is an explicit Discord-only exception to the existing Minecraft Developer rules.
