@@ -72,6 +72,20 @@ public final class PunishmentDraftWorkflow {
         }
     }
 
+    /**
+     * Authoritative, read-only assessment with current policy, current history,
+     * and the same rank/mode gates as the persistent draft preparation path.
+     */
+    public PunishmentEvaluation preview(PreparePunishmentDraftRequest request,
+                                       OperationalMode mode) {
+        Objects.requireNonNull(request);
+        return punishments.evaluateRequestProposal(punishmentRequest(
+                Objects.requireNonNull(identifiers.get(), "preview identifier"),
+                request.targetId(), request.actor(), request.reasonId(),
+                request.internalExplanation(), request.visibility(),
+                request.overrideSanctions()), mode);
+    }
+
     public PunishmentDraftEvaluation prepare(
             PreparePunishmentDraftRequest request,
             OperationalMode mode
