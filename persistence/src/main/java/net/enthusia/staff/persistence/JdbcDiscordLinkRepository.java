@@ -26,6 +26,7 @@ final class JdbcDiscordLinkRepository {
     private static final int SUBJECT_ALLOCATION_ATTEMPTS = 4;
     private static final int MAX_OPERATION_KEY_LENGTH = 128;
     private static final int MAX_BASE_OPERATION_KEY_LENGTH = 116;
+    private static final int MAX_VERIFIED_DISCORD_PEERS = 100;
 
     private final DataSource dataSource;
     private final JdbcDeadlockRetry deadlockRetry;
@@ -298,11 +299,42 @@ final class JdbcDiscordLinkRepository {
         VersionedLink current = requireCurrentUnlink(
                 connection, discordUserId, minecraftPlayerId, expectedRevision, unlinkedAt);
         ModerationSubjectId sharedSubjectId = current.subjectId();
+        // Capture active verified peers before removing the link; the reconciliation must
+        // commit atomically with the identity mutation (also used by staff reassignment).
+        Set<UUID> formerPeers = currentDiscordPeers(connection, discordUserId, minecraftPlayerId);
         prepareRemainingMain(connection, sharedSubjectId, minecraftPlayerId, replacementMain, unlinkedAt);
         closeLink(connection, current.linkId(), expectedRevision, operationKey, unlinkedAt);
+        JdbcNetworkIdentityStore.revokeUnsupportedAfterDiscordUnlink(
+                connection, minecraftPlayerId, formerPeers, unlinkedAt);
         detachMinecraftIdentity(connection, sharedSubjectId, minecraftPlayerId, unlinkedAt);
         bumpSubject(connection, sharedSubjectId, unlinkedAt);
         return unlinkedVersion(current, discordUserId, minecraftPlayerId, expectedRevision, unlinkedAt);
+    }
+
+    private static Set<UUID> currentDiscordPeers(
+            Connection connection, DiscordUserId discordUserId, UUID removingPlayerId
+    ) throws SQLException {
+        // A pathological linked identity graph must not silently leave derived sanctions
+        // active; fail the unlink transaction for manual investigation instead.
+        try (PreparedStatement statement = connection.prepareStatement("""
+                SELECT minecraft_player_id FROM discord_minecraft_links
+                WHERE discord_user_id = ? AND unlinked_at IS NULL AND minecraft_player_id <> ?
+                ORDER BY minecraft_player_id ASC
+                LIMIT 101 FOR UPDATE
+                """)) {
+            statement.setBigDecimal(1, discordId(discordUserId));
+            statement.setBytes(2, UuidBytes.toBytes(removingPlayerId));
+            Set<UUID> result = new HashSet<>();
+            try (ResultSet rows = statement.executeQuery()) {
+                while (rows.next()) {
+                    result.add(UuidBytes.fromBytes(rows.getBytes("minecraft_player_id")));
+                }
+            }
+            if (result.size() > MAX_VERIFIED_DISCORD_PEERS) {
+                throw new SQLException("Too many verified Discord-linked peers for automatic unlink reconciliation");
+            }
+            return result;
+        }
     }
 
     private static VersionedLink requireCurrentUnlink(
