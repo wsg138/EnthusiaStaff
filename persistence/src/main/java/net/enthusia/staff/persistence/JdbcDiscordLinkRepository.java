@@ -26,6 +26,7 @@ final class JdbcDiscordLinkRepository {
     private static final int SUBJECT_ALLOCATION_ATTEMPTS = 4;
     private static final int MAX_OPERATION_KEY_LENGTH = 128;
     private static final int MAX_BASE_OPERATION_KEY_LENGTH = 116;
+    private static final int MAX_VERIFIED_DISCORD_PEERS = 100;
 
     private final DataSource dataSource;
     private final JdbcDeadlockRetry deadlockRetry;
@@ -329,7 +330,7 @@ final class JdbcDiscordLinkRepository {
                     result.add(UuidBytes.fromBytes(rows.getBytes("minecraft_player_id")));
                 }
             }
-            if (result.size() > 100) {
+            if (result.size() > MAX_VERIFIED_DISCORD_PEERS) {
                 throw new SQLException("Too many verified Discord-linked peers for automatic unlink reconciliation");
             }
             return result;

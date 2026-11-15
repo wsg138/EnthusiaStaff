@@ -5,7 +5,10 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
+import java.util.UUID;
+import net.enthusia.staff.common.CaseId;
 import net.enthusia.staff.domain.sanction.SanctionLength;
 import net.enthusia.staff.domain.sanction.SanctionSpec;
 import net.enthusia.staff.domain.sanction.SanctionType;
@@ -41,6 +44,26 @@ class PaperPunishmentCommitEffectsTest {
         assertFalse(claims.claim(caseId, target, reactivatedAt, reactivatedAt.plusSeconds(1)));
         assertFalse(claims.claim(caseId, target, firstIssuedAt, reactivatedAt.plusSeconds(2)),
                 "a late replay of the original enforcement must remain suppressed");
+    }
+
+    @Test
+    void distinctSanctionIssuanceInSameCaseIsDeliveredWhileExactRetriesAreDeduplicated() {
+        var claims = new PaperPunishmentCommitEffects.DeliveryClaims();
+        var caseId = new CaseId("TESTCASE00000003");
+        var target = UUID.randomUUID();
+        var firstIssuedAt = Instant.parse("2026-10-10T21:00:00Z");
+        var secondIssuedAt = firstIssuedAt.plusSeconds(10);
+        var deliveryAt = firstIssuedAt.plusSeconds(60);
+
+        assertTrue(claims.claim(caseId, target, firstIssuedAt, deliveryAt));
+        assertFalse(claims.claim(caseId, target, firstIssuedAt, deliveryAt.plusSeconds(1)),
+                "retrying the same issuance must not repeat its online effect");
+        assertTrue(claims.claim(caseId, target, secondIssuedAt, deliveryAt.plusSeconds(2)),
+                "a new issuance in the same case must not be blocked by the five-minute claim window");
+        assertFalse(claims.claim(caseId, target, secondIssuedAt, deliveryAt.plusSeconds(3)),
+                "retrying the second issuance must also be suppressed");
+        assertFalse(claims.claim(caseId, target, firstIssuedAt, deliveryAt.plusSeconds(4)),
+                "a late retry of the first issuance must remain suppressed");
     }
 
     @Test
