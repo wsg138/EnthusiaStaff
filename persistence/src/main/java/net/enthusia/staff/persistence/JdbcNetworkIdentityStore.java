@@ -37,6 +37,7 @@ public final class JdbcNetworkIdentityStore implements NetworkIdentityStore {
     private static final int MATCH_QUERY_LIMIT = MAX_AUTOMATED_MATCHES + 1;
     private static final int MAX_VERIFIED_LINKED_ACCOUNTS = 100;
     private static final int MAX_RETENTION_BATCH_SIZE = 5_000;
+    private static final String SANCTION_EVENT_KEY_SUFFIX = ":event";
     private static final Duration EVIDENCE_REFRESH_INTERVAL = Duration.ofHours(24);
     private static final List<SanctionType> INHERITABLE_SANCTION_TYPES = Arrays.stream(SanctionType.values())
             .filter(SanctionType::inheritsAcrossAltRelationships)
@@ -604,7 +605,7 @@ public final class JdbcNetworkIdentityStore implements NetworkIdentityStore {
             event.setTimestamp(5, Timestamp.from(now));
             event.setString(6, "Inherited sanction reconciled: " + reasonCode);
             event.setString(7, payload);
-            event.setString(8, key + ":event");
+            event.setString(8, key + SANCTION_EVENT_KEY_SUFFIX);
             event.setString(9, derived.caseId());
             event.setBytes(10, UuidBytes.toBytes(derived.targetId()));
             event.executeUpdate();
@@ -1096,10 +1097,11 @@ public final class JdbcNetworkIdentityStore implements NetworkIdentityStore {
             statement.setBytes(1, UuidBytes.toBytes(sanctionId));
             int index = 2;
             for (AltRelationshipState state : states) {
-                statement.setString(index++, inheritedRevocationKey(sanctionId, state.name(), revision) + ":event");
+                statement.setString(index++, inheritedRevocationKey(sanctionId, state.name(), revision)
+                        + SANCTION_EVENT_KEY_SUFFIX);
             }
             statement.setString(index, inheritedRevocationKey(
-                    sanctionId, "DISCORD_VERIFIED_LINK_REMOVED", revision) + ":event");
+                    sanctionId, "DISCORD_VERIFIED_LINK_REMOVED", revision) + SANCTION_EVENT_KEY_SUFFIX);
             try (ResultSet result = statement.executeQuery()) {
                 return result.next() && result.getLong(1) == 1;
             }
@@ -1129,7 +1131,7 @@ public final class JdbcNetworkIdentityStore implements NetworkIdentityStore {
             statement.setBytes(3, UuidBytes.toBytes(SYSTEM_ACTOR));
             statement.setTimestamp(4, Timestamp.from(now));
             statement.setString(5, payload);
-            statement.setString(6, key + ":event");
+            statement.setString(6, key + SANCTION_EVENT_KEY_SUFFIX);
             statement.executeUpdate();
         }
     }
