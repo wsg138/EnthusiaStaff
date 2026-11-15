@@ -16,6 +16,7 @@
 - Gradle's `verifyStaffBotRuntime` passed executable manifest, required JDA classes, pinned Jackson 2.22.1 versions and excluded native audio class checks.
 - Additional offline checks on the same checkout: `:paper:test :velocity:test` **BUILD SUCCESSFUL** (Paper results from verified Gradle cache; Velocity tests executed; one pre-existing Windows symlink case skipped). `:staff-bot:check` **BUILD SUCCESSFUL** including the AI-mirror crash/recovery probe; the probe intentionally prints a synthetic post-fsync exception before recovery succeeds. Gradle 10 deprecation warnings remain outside this feature.
 - This JAR is a local candidate, **not a released or installed artifact**. Do not confuse its path with Bloom or the live bot container.
+- Read-only Blackboard SFTP inventory found Bloom's currently named `EnthusiaStaff-StaffBot.jar` at **19,071,893 bytes**, distinct from this candidate's **19,090,554 bytes**. No service restart, replacement, runtime-version assertion or confidential configuration read occurred; filesystem size alone does not prove which code is currently running.
 
 ## What the flow actually guarantees
 
@@ -57,3 +58,5 @@ For every case record the exact commit, JAR SHA, staging application/guild IDs (
 ## Separate open issue: `[inventory]` preview missing
 
 This is Paper/InteractiveChat rich-chat transport work under issue #264 and draft PR #759, not an excuse to modify StaffBot punishment logic. The observed `interactivechat.module.inventory` permission was effectively `true` in the tested context, and `[item]` and `[ender]` artifacts worked. The exact installed TEST Paper lineage needs an approved, reversible diagnostic run to distinguish keyword/flag, capture, rendering, timeout or size failures. Do not change LuckPerms or deploy the TEST-only PR to production by inference.
+
+Read-only Blackboard SFTP inventory on TEST1 still identified `plugins/EnthusiaStaff-Paper-CI-383859b5740f-UNMERGED-TEST.jar`, together with InteractiveChat `2026.1.3.0` and a separate InteractiveChatDiscordSrvAddon TEST JAR. That is the pre-diagnostic installed lineage targeted by PR #759; listing files does not verify which plugins are loaded or supply runtime failure reasons.
